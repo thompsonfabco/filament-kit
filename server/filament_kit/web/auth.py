@@ -46,10 +46,8 @@ REUSE_GRACE = 30  # a rotated refresh token seen again later than this means it 
 LOCK_MAX, LOCK_WINDOW = 5, 600
 MIN_PASSPHRASE = 12
 SCRYPT = {"n": 2 ** 15, "r": 8, "p": 1, "maxmem": 2 ** 26}
-# "sessions" held the phone web app's sign-ins (gone: the app has no sign-in); kept so old files load and
-# the entries expire away.
-_KEYS = ("clients", "codes", "access", "refresh", "used", "sessions")
-_EXPIRING = ("codes", "access", "refresh", "used", "sessions")
+_KEYS = ("clients", "codes", "access", "refresh", "used")
+_EXPIRING = ("codes", "access", "refresh", "used")
 
 
 def _h(token: str) -> str:
@@ -69,12 +67,14 @@ from ..lan import IPV6_HINT, Networks, is_lan, over_ipv6, parse_lan  # noqa: E40
 
 class Store:
     """Clients, codes and hashed tokens in one JSON file (single user, tiny volume). Same format as ops oauth.json:
-    clients, codes, access, refresh, used (rotated-out refresh token hashes), sessions (web app sign-ins)."""
+    clients, codes, access, refresh, used (rotated-out refresh token hashes). An old file's "sessions" (the phone
+    web app's sign-ins, gone) is dropped on load."""
 
     def __init__(self, path: Path | str):
         self.path, self.lock = Path(path), threading.Lock()
         self.d: dict[str, dict[str, Any]] = (json.loads(self.path.read_text(encoding="utf-8"))
                                              if self.path.exists() else {})
+        self.d.pop("sessions", None)
         for k in _KEYS:
             self.d.setdefault(k, {})
         self.pending: dict[str, dict[str, Any]] = {}  # authorize requests waiting on /login (memory only)
@@ -255,8 +255,8 @@ def check_passphrase(text: str, file: Path | str) -> bool | None:
 
 
 class Lockout:
-    """At most LOCK_MAX wrong passphrases per LOCK_WINDOW seconds, counted across every sign-in form (one shared
-    instance for /login and the web app). Global, not per IP: only the LAN can reach the forms anyway.
+    """At most LOCK_MAX wrong passphrases per LOCK_WINDOW seconds, counted over the whole web module (one shared
+    instance for /login). Global, not per IP: only the LAN can reach the forms anyway.
 
     A sign-in calls attempt() before the (slow) passphrase check: the attempt is counted at once, under the lock,
     so parallel guesses cannot all pass the check-then-count gap (A-M1); a right passphrase release()s it."""
@@ -269,11 +269,6 @@ class Lockout:
     def _prune(self) -> None:
         now = time.time()
         self.fails[:] = [f for f in self.fails if f[0] > now - self.window]
-
-    def blocked(self) -> bool:
-        with self._lock:
-            self._prune()
-            return len(self.fails) >= self.max
 
     def attempt(self) -> int | None:
         """Count one sign-in attempt; None (and nothing counted) when locked out. Pass the result to release()
@@ -289,10 +284,6 @@ class Lockout:
     def release(self, attempt: int | None) -> None:
         with self._lock:
             self.fails[:] = [f for f in self.fails if f[1] != attempt]
-
-    def fail(self) -> None:
-        with self._lock:
-            self.fails.append((time.time(), next(self._ids)))
 
 
 # ---------- sign-in page (LAN only) ----------
@@ -343,8 +334,7 @@ def lan_only(app: Any, lan_cidrs: Iterable[str]) -> Any:
 def login_routes(store: Store, public_url: str, passphrase_file: Path | str, *, lan_cidrs: Iterable[str] = (),
                  lockout: Lockout) -> list[Route]:
     """The /login page that turns a pending /authorize request into a code. It checks the LAN itself too (with no
-    lan_cidrs only loopback counts as home). `lockout` is the web app's own Lockout, so both forms share one
-    failure count (required: a private count per form would double the guesses)."""
+    lan_cidrs only loopback counts as home). `lockout` is the web module's one Lockout, which counts every wrong passphrase."""
     nets, origin = parse_lan(lan_cidrs), _origin(public_url)
 
     async def login(request: Request) -> Response:

@@ -212,8 +212,10 @@ let webQrUrls = [];
 // module at its public address, when that is on).
 function webAppCard() {
   const body = h("div");
-  const el = card("iPhone: the web app", body);
-  api("webapp").then((r) => {
+  const err = h("div");               // a wrong code says so here: the card (home address, QR) stays
+  const el = card("iPhone: the web app", body, err);
+  const load = (whole) => (whole ? api("webapp", { code: codeIn.value }) : api("webapp")).then((r) => {
+    err.replaceChildren();
     webQrUrls.forEach((u) => URL.revokeObjectURL(u));
     webQrUrls = [];
     const qr = (svg, alt) => {
@@ -228,8 +230,11 @@ function webAppCard() {
       h("p", { class: "muted", textContent: "Safari warns once about the server's own certificate: accept it to go on. It works on the home network only." }),
       r.public_url ? h("p", {}, "Away from home too (the web module): ", h("b", { textContent: r.public_url })) : null,
       r.public_url ? qr(r.public_qr_svg, "QR code of the web app's public address") : null,
+      r.public_hidden ? h("p", { class: "muted", textContent: "The public address is hidden until the setup code is given." }) : null,
+      r.public_hidden ? h("button", { class: "secondary", textContent: "Show the public address", on: { click: () => load(true).catch((e) => say(err, e.message, false)) } }) : null,
       h("p", { textContent: "To keep it on the iPhone: tap Share, then Add to Home Screen." }));
-  }).catch((e) => say(body, e.message, false));
+  });
+  load(false).catch((e) => say(body, e.message, false));
   return el;
 }
 
@@ -266,9 +271,12 @@ function modulesCard() {
 // ----- addresses -----
 function addressCard() {
   const box = boxFor("address");
-  const web = h("input", { value: S.web.public_url || "", placeholder: "https://mcp.example.com/filament" });
+  // the state leaves the address out (owner data): a set one shows as a blank box that a blank Save does not clear
+  const web = h("input", { placeholder: S.web.public_set ? "set (hidden); type a new address to replace it" : "https://mcp.example.com/filament" });
   const st = h("input", { value: S.station.url || "", placeholder: "http://station.local:5003 (blank: none)" });
-  const save = (key, inp) => change(box, "settings", { key, value: inp.value.trim() }, () => { say(box, "Saved; applying…", true); followApply(); });
+  const save = (key, inp) => key === "web.public_url" && S.web.public_set && !inp.value.trim()
+    ? say(box, "The address is hidden here: type the new one to replace it.", false)
+    : change(box, "settings", { key, value: inp.value.trim() }, () => { say(box, "Saved; applying…", true); followApply(); });
   return card("Addresses",
     h("p", { class: "muted", textContent: "Web public address: the https address of the web app and Claude's connector." }),
     h("div", { class: "row" }, web, h("button", { textContent: "Save", on: { click: () => save("web.public_url", web) } })),

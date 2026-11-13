@@ -13,6 +13,8 @@ WorkingDirectory=/var/lib/filament-kit-web
 ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.web
 Restart=on-failure
 RestartSec=5
+# exit 2 = not configured (web.public_url missing): a restart cannot fix it; applying the config starts the unit again
+RestartPreventExitStatus=2
 ProtectSystem=strict
 # nothing of the kit's is writable by it, so it cannot plant a link the kit or root would follow: its own
 # folder only; its writes in the kit's state go through the kit API, and the shared locks are taken on read-only files

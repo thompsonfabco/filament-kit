@@ -179,6 +179,13 @@ def test_failed_reads_go_to_the_web_units_own_folder(kit, monkeypatch, tmp_path)
     assert "Environment=FK_FAILED_DIR=/var/lib/filament-kit-web/failed\n" in unit
 
 
+def test_an_unconfigured_web_unit_is_not_restarted_forever():
+    """FA-044: __main__ exits 2 when web.public_url is missing; a restart every 5 s would only repeat it."""
+    unit = (ROOT / "install/systemd/filament-kit-web.service").read_text(encoding="utf-8")
+    assert "RestartPreventExitStatus=2\n" in unit and "return 2" in (
+        ROOT / "server/filament_kit/web/__main__.py").read_text(encoding="utf-8")
+
+
 # ---------- preset writes through the kit ----------
 
 def test_kit_routes_for_the_webs_preset_writes(kit, monkeypatch):

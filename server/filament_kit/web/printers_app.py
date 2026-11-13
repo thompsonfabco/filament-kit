@@ -1,5 +1,5 @@
-"""The Printers tab of the phone web app: routes under `<public path>/intake/api/printers`, on the intake app's
-session (cookie), LAN check, exact-Origin POSTs and CSP.
+"""The Printers tab of the phone web app: routes under `<public path>/intake/api/printers`, guarded like the
+intake app (no sign-in): LAN check, Host check, exact-Origin POSTs and CSP.
 
 The web process never talks to a printer. Everything goes to the kit server's own API on 127.0.0.1 through
 `slots.KitApi` (this unit's self-paired token):
@@ -12,6 +12,7 @@ The web process never talks to a printer. Everything goes to the kit server's ow
                                         confirm: true
     GET  printers/{id}/usage            filament usage log;  POST printers/{id}/usage/{entry}/undo
     POST printers/{id}/map              re-map the printer's slots;  GET printers/{id}/map  its progress
+    POST printers/{id}/report           the printer report: an XML file with no owner data, to share
     GET  printers/{id}/manual-map       Map by loading filament: the session's state (the kit's, shared with the
     POST printers/{id}/manual-map/{step}  setup page and the Android app); step = start | confirm | skip | stop | offer,
                                         body keys as the kit's (session, position, reported, nozzle, by_hand, share)
@@ -155,12 +156,12 @@ class PrintersApp:
                       ("/push/unsubscribe", g(self.push_unsubscribe), ["POST"]),
                       ("/push/test", g(self.push_test), ["POST"])]
         routes = [Route("/intake/api/printers" + p, fn, methods=m) for p, fn, m in table]
-        if self.push_on:   # the service worker: served from the app's path so its scope is the app (LAN + session)
+        if self.push_on:   # the service worker: served from the app's path so its scope is the app (same checks)
             routes.append(Route("/intake/sw.js", g(self.service_worker), methods=["GET"]))
         return routes
 
     def guard(self, fn):
-        """Session, LAN and Origin checks (the intake app's), plus the kit's refusals as readable errors."""
+        """LAN, Host and Origin checks (the intake app's), plus the kit's refusals as readable errors."""
         async def inner(request: Request):
             try:
                 return await fn(request)

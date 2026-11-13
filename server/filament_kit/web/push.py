@@ -205,6 +205,8 @@ class Watcher(threading.Thread):
             except Exception:  # noqa: BLE001 - one unreachable printer
                 continue
             cur = brief(p, st)
+            if cur["gcode_state"] in (None, "", "UNKNOWN"):
+                continue  # not online: judge the next tick against the last live state, not against this gap
             try:
                 mapping = (self.kit.get(f"/api/printers/{p['id']}/map") or {}).get("state") == "running"
             except Exception:  # noqa: BLE001 - unknown: treat as not mapping

@@ -683,6 +683,22 @@ def test_push_watcher_reads_the_map_state(env, kit):
     assert sent == ["Print finished"]
 
 
+def test_push_watcher_keeps_the_last_live_state_while_the_printer_is_away(env, kit):
+    from filament_kit.web import push
+    store = push.Store(config.paths().web / "push.json")
+    store.add({"endpoint": "https://fcm.googleapis.com/a", "keys": {"p256dh": "k", "auth": "a"}})
+    sent = []
+    w = push.Watcher(kit, store, lambda info, payload: sent.append(json.loads(payload)["title"]) or 201, "/x")
+    kit.status["gcode_state"] = "RUNNING"
+    w.tick()
+    kit.status["gcode_state"] = "UNKNOWN"                 # Moonraker dropped; the print ends meanwhile
+    w.tick()
+    assert sent == [] and w.prev[next(iter(w.prev))]["gcode_state"] == "RUNNING"
+    kit.status["gcode_state"] = "FINISH"
+    w.tick()
+    assert sent == ["Print finished"]
+
+
 # ---------- load / unload (queue item 4: the Android app's slot actions, through the kit API) ----------
 
 LOAD_PLAN = {"spool": {"id": 9, "name": "Acme PLA Black", "location": "Rack 1"},
