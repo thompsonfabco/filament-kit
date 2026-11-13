@@ -260,8 +260,9 @@ def _load_devices() -> list:
     return kept
 
 
-def issue(device_hint: str = "", role: str | None = None) -> Pairing:
-    """A new pairing for a device named `device_hint`. `role` marks what the device is for routes that serve only
+def issue(device_hint: str = "", role: str | None = None, scope: str | None = None) -> Pairing:
+    """A new pairing for a device named `device_hint`. `scope` ("station") limits its token to that scope's routes; it is
+    given here, never read from the name. `role` marks what the device is for routes that serve only
     one kind of device ("web": the web unit's pairing, made by `modules apply` as root; see role_of)."""
     cert = config.paths().etc / "cert.pem"
     try:
@@ -289,7 +290,7 @@ def issue(device_hint: str = "", role: str | None = None) -> Pairing:
             "expires": expires,
             "claimed": None,
             # the intake station's token reaches only /api/station/* (api._authed); phones and the PC sync: all
-            **({"scope": "station"} if device_hint == "station" else {}),
+            **({"scope": scope} if scope else {}),
             **({"role": role} if role else {}),
         })
         _write("devices.json", devs)

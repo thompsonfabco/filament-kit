@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import threading
 import time
 import unicodedata
@@ -253,7 +254,7 @@ def ask_to_pair() -> bool:
         if on:
             go("pairing" if pair_request.status["state"] in ("asking", "code") else "idle",
                message=pair_request.status["message"])
-    started = pair_request.ask(name="station", say=speech.say, show=show)
+    started = pair_request.ask(name=socket.gethostname(), say=speech.say, show=show)
     if not started:
         beep.beep("nothing")
         go("idle", message="No server set" if pair_request.server_address() is None else "Already asking")

@@ -3,7 +3,9 @@ the owner compares six digits and approves."""
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
+import time
 from pathlib import Path
 
 import pytest
@@ -77,8 +79,30 @@ def test_commit_reveal_approve_and_the_token_goes_out_once(env, kit):  # noqa: F
     got = kit.get(f"/api/station/pair-request/{r}")
     assert got.status_code == 200
     assert pairing.authorize(got.json()["token"])[1] == "station"
-    assert kit.get(f"/api/station/pair-request/{r}").status_code == 410
     assert sr.pending() == []
+
+
+def test_a_paired_station_is_named_after_its_machine_with_the_scope_given_as_an_argument(env, kit):  # noqa: F811
+    r, _, _ = station(kit)
+    sr.decide(sr.pending()[0]["id"], True)
+    token = kit.get(f"/api/station/pair-request/{r}").json()["token"]
+    [dev] = [d for d in pairing._load_devices() if d["name"].startswith("station")]
+    assert dev["name"] == "station: Bench" and dev["scope"] == "station"
+    assert pairing.authorize(token) == (dev["id"], "station")
+    assert pairing.issue(device_hint="station").token     # the name alone gives no scope
+    assert [d.get("scope") for d in pairing._load_devices() if d["name"] == "station"] == [None]
+
+
+def test_the_token_is_given_again_for_a_lost_reply_within_the_grace_then_only_gone(env, kit, monkeypatch):  # noqa: F811
+    r, _, _ = station(kit)
+    sr.decide(sr.pending()[0]["id"], True)
+    t0 = time.time()
+    first = sr._poll(r, now=t0)
+    assert first[0] == 200
+    assert sr._poll(r, now=t0 + sr.GRACE - 1) == first
+    assert sr._poll(r, now=t0 + sr.GRACE + 1)[0] == 410
+    assert "token" not in json.dumps(pairing._read(sr.FILE))
+    assert sr._poll(r, now=t0 + 2)[0] == 410
 
 
 def test_a_request_is_shown_only_after_the_reveal(env, kit):  # noqa: F811
