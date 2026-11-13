@@ -510,7 +510,7 @@ class RecordViewModel(
         viewModelScope.launch {
             guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f)).failed(f) } }, auth) {
                 val p = backend.revise(id, n, null)
-                _state.update { it.copy(ask = if (p.changes.isEmpty()) Ask.NoChange else Ask.Proposal(p), error = null) }
+                _state.update { it.copy(ask = if (p.changes.isEmpty()) Ask.NoChange else Ask.Proposal(p), error = null, unauthorized = false, mismatch = null) }
             }
         }
     }
@@ -537,7 +537,7 @@ class RecordViewModel(
         viewModelScope.launch {
             guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f, p)).failed(f) } }, auth) {
                 val r = backend.applyProposal(id, p.proposal)
-                _state.update { it.copy(record = r, error = null, ask = Ask.Accepted(p.changes.size, r.revisions.lastOrNull()?.n ?: 0)) }
+                _state.update { it.copy(record = r, error = null, unauthorized = false, mismatch = null, ask = Ask.Accepted(p.changes.size, r.revisions.lastOrNull()?.n ?: 0)) }
             }
             _state.update { it.copy(applyBusy = false) }
         }
@@ -594,7 +594,7 @@ class RecordViewModel(
                 val r = backend.applyValues(id, e.item, JsonObject(changes.mapKeys { it.key.wire }))
                 sealed = e.item
                 _state.update {
-                    it.copy(record = r, error = null, edit = null, saved = SavedEdit(e.item, changes.keys.toList()), ask = Ask.Idle)
+                    it.copy(record = r, error = null, unauthorized = false, mismatch = null, edit = null, saved = SavedEdit(e.item, changes.keys.toList()), ask = Ask.Idle)
                 }
                 onDone()
             }
@@ -616,7 +616,7 @@ class RecordViewModel(
                 val r = backend.undo(id, target.n)
                 // the Hub's answer carries what the undo did to the filaments (undo_to, orphaned_by_undo)
                 val done = r.revisions.firstOrNull { rev -> rev.n == target.n } ?: target
-                _state.update { it.copy(record = r, error = null, undone = done, ask = Ask.Idle) }
+                _state.update { it.copy(record = r, error = null, undone = done, unauthorized = false, mismatch = null, ask = Ask.Idle) }
             }
             _state.update { it.copy(undoBusy = false, undoAsk = false) }
         }

@@ -22,7 +22,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -198,6 +202,18 @@ internal fun rereadText(reader: String?, confidence: Double?): String? {
 private const val READER_LOCAL = "local"
 private const val READER_CLOUD = "cloud"
 private const val PERCENT = 100
+
+/** Runs [reload] when the session's client changes (paired again, a certificate trusted), not on the first composition. */
+@Composable
+internal fun ReloadOnNewClient(client: Any?, reload: () -> Unit) {
+    var seen by remember { mutableStateOf(client) }
+    LaunchedEffect(client) {
+        if (client !== seen) {
+            seen = client
+            reload()
+        }
+    }
+}
 
 /** A dashed `border` outline in [shape] (the box that stands for a photo that is not there). */
 internal fun Modifier.dashedOutline(colour: Color, shape: Shape, dash: Dp, width: Dp): Modifier =

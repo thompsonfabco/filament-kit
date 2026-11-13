@@ -89,6 +89,7 @@ import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 internal fun RecordScreen(
     vm: RecordViewModel,
     list: HistoryListViewModel,
+    client: Any?,
     onBack: () -> Unit,
     onOpenRecord: (String) -> Unit,
     onEdit: (Int) -> Unit,
@@ -102,6 +103,10 @@ internal fun RecordScreen(
     LaunchedEffect(vm) {
         vm.ensureLoaded()
         list.ensureLoaded()
+    }
+    ReloadOnNewClient(client) {
+        vm.load()
+        list.refresh()
     }
     var note by rememberSaveable { mutableStateOf("") }
     val space = SpoolwardenTheme.space

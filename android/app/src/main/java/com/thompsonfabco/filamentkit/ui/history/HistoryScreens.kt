@@ -52,9 +52,9 @@ import kotlinx.serialization.json.JsonObject
 
 /** Recently added (05-android-app 10.1): the list of intake records. */
 @Composable
-fun HistoryListEntry(current: () -> Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+fun HistoryListEntry(current: () -> Api, client: Any?, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
     val list = viewModel { HistoryListViewModel(HistoryBackend.of(current)) }
-    HistoryListScreen(list, onOpen = onOpen, onPairAgain = onPairAgain)
+    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain)
 }
 
 /**
@@ -64,6 +64,7 @@ fun HistoryListEntry(current: () -> Api, onOpen: (String) -> Unit, onPairAgain: 
 @Composable
 fun HistoryRecordEntry(
     current: () -> Api,
+    client: Any?,
     id: String,
     listOwner: ViewModelStoreOwner,
     onBack: () -> Unit,
@@ -76,19 +77,20 @@ fun HistoryRecordEntry(
     val list = viewModel(viewModelStoreOwner = listOwner) { HistoryListViewModel(HistoryBackend.of(current)) }
     val vm = viewModel(key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
     RecordScreen(
-        vm, list, onBack = { list.refresh(); onBack() }, onOpenRecord = onOpenRecord, onEdit = onEdit,
+        vm, list, client, onBack = { list.refresh(); onBack() }, onOpenRecord = onOpenRecord, onEdit = onEdit,
         onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun HistoryListScreen(vm: HistoryListViewModel, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
     val s by vm.state.collectAsState()
     LifecycleStartEffect(vm) {
         vm.refresh()
         onStopOrDispose { }
     }
+    ReloadOnNewClient(client) { vm.refresh() }
     val space = SpoolwardenTheme.space
     val h = s.history
     val failure = s.error

@@ -171,7 +171,11 @@ private fun EditFields(vm: RecordViewModel, s: RecordState, e: EditUi) {
 
 /** What each complaint says: the rule, in the words of 05-android-app 6.3 where it has them. */
 private fun errorText(error: FieldError, field: RecentField): Int = when (error) {
-    FieldError.Required -> if (field == RecentField.Vendor) R.string.add_review_pick_brand else R.string.common_error_name
+    FieldError.Required -> when (field) {
+        RecentField.Vendor -> R.string.recent_error_brand
+        RecentField.Material -> R.string.recent_error_material
+        else -> R.string.common_error_name
+    }
     FieldError.Whole -> R.string.add_review_error_whole
     FieldError.Degrees -> R.string.add_review_error_degrees
     FieldError.DegreesMax -> R.string.recent_error_degrees_max

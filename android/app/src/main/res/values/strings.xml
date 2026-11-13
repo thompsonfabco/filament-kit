@@ -3121,8 +3121,10 @@
     <string name="recent_change">%1$s %2$s → %3$s</string>
     <!-- 1=field 2=old 3=new 4=unit -->
     <string name="recent_change_unit">%1$s %2$s → %3$s %4$s</string>
+    <string name="recent_error_brand">Enter a brand.</string>
     <string name="recent_error_colour">Enter 6 hex digits, like 2B2B2E.</string>
     <string name="recent_error_degrees_max">Enter degrees below 500.</string>
+    <string name="recent_error_material">Enter a material.</string>
     <string name="recent_error_price">Enter a price above 0.</string>
     <string name="recent_error_range">Enter a range like 190-230.</string>
     <string name="recent_keep_none">The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page.</string>

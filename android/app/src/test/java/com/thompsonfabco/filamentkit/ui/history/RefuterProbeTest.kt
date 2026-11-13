@@ -129,7 +129,7 @@ class RefuterProbeTest {
         val list = HistoryListViewModel(fake)
         rule.setContent {
             SpoolwardenTheme(Look.Console, Appearance.Light) {
-                RecordScreen(vm, list, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
+                RecordScreen(vm, list, null, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
             }
         }
         rule.waitForIdle()

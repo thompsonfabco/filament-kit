@@ -716,7 +716,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             return@composable
                         }
                         HistoryListEntry(
-                            ::currentApi,
+                            ::currentApi, a,
                             onOpen = { nav.navigate(RecordRoute(it)) },
                             onPairAgain = app.router::pairAgain,
                         )
@@ -730,7 +730,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         }
                         val list = remember(e) { nav.getBackStackEntry<RecentRoute>() }
                         HistoryRecordEntry(
-                            ::currentApi, e.toRoute<RecordRoute>().hid, listOwner = list,
+                            ::currentApi, a, e.toRoute<RecordRoute>().hid, listOwner = list,
                             onBack = { if (nav.currentBackStackEntry?.id == e.id) nav.popBackStack() },
                             // Newer and Older record step through the list without going back
                             onOpenRecord = { hid -> nav.navigate(RecordRoute(hid)) { popUpTo<RecordRoute> { inclusive = true } } },

@@ -770,14 +770,14 @@ class ScreenSemanticsTest {
     @Test fun recentList() {
         val history = FakeHistory()
         val vm = HistoryListViewModel(history)
-        host("Recently added") { HistoryListScreen(vm, onOpen = {}, onPairAgain = {}) }
+        host("Recently added") { HistoryListScreen(vm, null, onOpen = {}, onPairAgain = {}) }
         auditAllFour("Polymaker PolyTerra PLA Charcoal Black")
     }
 
     @Test fun recentListWhenEmptyAndTheReaderIsOff() {
         val history = FakeHistory(records = emptyList(), ai = false)
         val vm = HistoryListViewModel(history)
-        host("Recently added") { HistoryListScreen(vm, onOpen = {}, onPairAgain = {}) }
+        host("Recently added") { HistoryListScreen(vm, null, onOpen = {}, onPairAgain = {}) }
         rule.waitForIdle()
         rule.onNodeWithText("Nothing added yet").assertExists()
         rule.onNodeWithText("The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page.").assertExists()
@@ -789,7 +789,7 @@ class ScreenSemanticsTest {
         val list = HistoryListViewModel(history)
         val vm = RecordViewModel(history, "a1")
         host("Recently added") {
-            RecordScreen(vm, list, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
+            RecordScreen(vm, list, null, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
         }
         auditAllFour("Fields")
     }
@@ -799,7 +799,7 @@ class ScreenSemanticsTest {
         val list = HistoryListViewModel(history)
         val vm = RecordViewModel(history, "a1")
         host("Recently added") {
-            RecordScreen(vm, list, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
+            RecordScreen(vm, list, null, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
         }
         rule.waitForIdle()
         vm.ask("brand is Polymaker")

@@ -667,4 +667,23 @@ class HistoryTest {
             vm.state.value.edit!!.errors,
         )
     }
+
+    @Test fun aSuccessfulSaveAfterA401ClearsTheNotice() = runTest(dispatcher) {
+        val vm = loaded()
+        edited(vm, RecentField.Vendor to "X")
+        fake.error = ApiError(401, "unauthorized", "x")
+        vm.saveEdit {}; runCurrent()
+        assertTrue(vm.state.value.unauthorized)
+        fake.error = null
+        vm.saveEdit {}; runCurrent()
+        assertFalse(vm.state.value.unauthorized)
+        assertNull(vm.state.value.mismatch)
+        vm.ask("x"); runCurrent()
+        fake.error = com.thompsonfabco.filamentkit.net.FingerprintMismatch("AA", "BB")
+        vm.accept(); runCurrent()
+        assertEquals("AA" to "BB", vm.state.value.mismatch)
+        fake.error = null
+        vm.retry(); runCurrent()
+        assertNull(vm.state.value.mismatch)
+    }
 }
