@@ -611,10 +611,10 @@ copy you downloaded earlier keeps being used when the kit is upgraded.
 - `sudo filament-kit library status`: shows the library version (or that none is downloaded), the last check, and any
   entries and fields left out of it because this kit can't read them.
 - `sudo filament-kit library update`: downloads the library, or a newer version, now.
-- `sudo filament-kit library rollback`: goes back to the version before the last update. The next daily check
-  installs the newer version again. To keep the rolled-back version, turn the daily check off first: in
-  `/etc/filament-kit/config.json` set `"library": {"schedule": "off"}` (or `"weekly"`; the default is
-  `"daily"`), then roll back. Set it back to `"daily"` to get updates again.
+- `sudo filament-kit library rollback`: goes back to the version before the last update, and says so. The daily
+  check then skips the version you left until a newer one is published; `library update` by hand still installs it.
+  Rolling back again goes forward and clears that. To stop checks altogether, set
+  `/etc/filament-kit/config.json` to `"library": {"schedule": "off"}` (or `"weekly"`; the default is `"daily"`).
 - `sudo filament-kit library add <file>`: adds or replaces your own entry from a JSON file.
 
 The download is the `library.tar.gz` asset of the latest release (`library.url` in the config can point to

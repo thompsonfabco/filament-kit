@@ -138,6 +138,22 @@ def test_rollback_ok(capsys, monkeypatch, rebuilds):
     assert len(rebuilds) == 1
 
 
+def test_rollback_says_scheduled_updates_skip_it(capsys, monkeypatch, rebuilds):
+    monkeypatch.setattr(library, "rollback", lambda: 3)
+    monkeypatch.setattr(library, "rolled_back_from", lambda: 4)
+    assert cli.main(["library", "rollback"]) == 0
+    assert "skip version 4" in capsys.readouterr().out
+
+
+def test_scheduled_update_held_after_rollback(capsys, monkeypatch, rebuilds):
+    monkeypatch.setattr(library, "due", lambda cfg, now: True)
+    monkeypatch.setattr(library, "update", lambda url=None, **k: library.UpdateResult(
+        False, 3, 0, None, held_from=4 if k.get("scheduled") else None))
+    assert cli.main(["library", "update", "--scheduled"]) == 0
+    assert "rolled back" in capsys.readouterr().out
+    assert rebuilds == []
+
+
 # ---------- fix round 1 ----------
 
 def _404_update(monkeypatch):

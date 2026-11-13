@@ -13,6 +13,7 @@ Layout in the state directory:
   library/current.json            {"dir", "version", "at"}: the version directory in use (absent = none)
   library/previous.json           the current.json before the last update (absent = none)
   library/last_check.json         {"at", "ok", "error", "last_ok_at"}
+  library/rolled_back.json        {"from", "at"}: the version a rollback left; scheduled updates skip it (absent = none)
   library/versions/<v>-<stamp>/   index.json + library/<vendor>/<product>.json
   library-local/<vslug>/<pslug>.json   the owner's own additions; never touched by `update`
 
@@ -542,6 +543,7 @@ class UpdateResult:
     error: str | None
     http_status: int | None = None     # set when the error was an HTTP status (401/403/404: maybe private)
     note: str | None = None            # e.g. a custom URL that is not signature-checked
+    held_from: int | None = None       # a scheduled update left alone: the published version is the one rolled back from
 
 
 class _Abort(Exception):
@@ -916,11 +918,13 @@ def _file_sha(path: Path) -> str | None:
         return None
 
 
-def update(url: str | None = None, *, opener=None, now: float | None = None) -> UpdateResult:
+def update(url: str | None = None, *, opener=None, now: float | None = None, scheduled: bool = False) -> UpdateResult:
     """Fetch the index at `url` (default: config, else DEFAULT_LIBRARY_URL) and swap to it only if every entry
     downloads, matches its sha256, validates and sits at its own path. Raises LibraryError for an unusable URL;
     every other failure is returned in `error` (and recorded in last_check.json) with the current version kept.
-    `opener` (urlopen-like) defaults to one that speaks only http(s) and refuses redirects away from https."""
+    `opener` (urlopen-like) defaults to one that speaks only http(s) and refuses redirects away from https.
+    A `scheduled` run installs nothing at or below the version a rollback left (`rolled_back_from`) and says so in
+    `held_from`; an update asked for by hand installs it."""
     base = _check_url(configured_url() if url is None else url)
     now = time.time() if now is None else now
     with _locked():
@@ -949,6 +953,10 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
             new_rows = {r["path"]: r["sha256"] for r in rows}
             # what this kit dropped from a signed library is on disk changed: compare with what was published, and this kit
             # (a newer one may read more of it)
+            held = rolled_back_from()
+            if scheduled and held is not None and idx["library_version"] <= held:
+                _record_check(now, None)
+                return UpdateResult(False, cur_version, 0, None, note=note, held_from=held)
             read_before = cur_idx.get("signed_rows") == new_rows and cur_idx.get("read_by") == __version__
             if idx["library_version"] == cur_version and (new_rows == cur_rows or read_before):
                 _record_check(now, None)
@@ -1018,6 +1026,7 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
             else:
                 (_dir() / "previous.json").unlink(missing_ok=True)
             _write_json(_dir() / "current.json", {"dir": name, "version": idx["library_version"], "at": now})
+            (_dir() / "rolled_back.json").unlink(missing_ok=True)
             _prune({name} | ({old["dir"]} if old else set()))
             _record_check(now, None)
             return UpdateResult(True, idx["library_version"], downloaded, None, note=note)
@@ -1036,7 +1045,8 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
 
 def rollback() -> int:
     """Go back to the version before the last update (none if there was no earlier one); returns it.
-    The two are swapped, so a second rollback goes forward again."""
+    The two are swapped, so a second rollback goes forward again. Going back to an older version records the one
+    left (`rolled_back_from`), so a scheduled update does not bring it straight back; going forward clears that."""
     with _locked():
         cur = _pointer("current.json")
         prev = _pointer("previous.json")
@@ -1050,7 +1060,20 @@ def rollback() -> int:
             _write_json(_dir() / "previous.json", cur)
         else:
             (_dir() / "previous.json").unlink(missing_ok=True)
-        return _current()[1]["library_version"]
+        version = _current()[1]["library_version"]
+        left = cur.get("version") if cur is not None else None
+        if isinstance(left, int) and not isinstance(left, bool) and left > version:
+            _write_json(_dir() / "rolled_back.json", {"from": left, "at": time.time()})
+        else:
+            (_dir() / "rolled_back.json").unlink(missing_ok=True)
+        return version
+
+
+def rolled_back_from() -> int | None:
+    """The library version the last rollback went back from, until an update installs something newer; else None."""
+    got = _read_json(_dir() / "rolled_back.json")
+    v = got.get("from") if isinstance(got, dict) else None
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
 
 
 # ---------- schedule / status ----------
