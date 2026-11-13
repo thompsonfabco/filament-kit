@@ -41,6 +41,10 @@ class FakeClient:
         self._outbox = collections.deque()
         self._outbox_lock = threading.Lock()
         self._sending = False
+        # one publish at a time from answer to queue: a printer's answers go out in the order it made them. Without
+        # it, a pushall answered on a timer thread and held before queueing let a newer write's report out first,
+        # and the older full report then undid it (the flaky misaddressed_write tests)
+        self._publish_lock = threading.RLock()
 
     def username_pw_set(self, username, password):
         self.username, self.password = username, password
@@ -69,12 +73,13 @@ class FakeClient:
 
     def publish(self, topic, payload, qos=0):
         body = json.loads(payload)
-        self.published.append((topic, body))
-        if self.responder:
-            reply = self.responder(topic, body)
-            if reply is not None:
-                replies = reply if isinstance(reply, list) else [reply]
-                self._send_later(replies)
+        with self._publish_lock:
+            self.published.append((topic, body))
+            if self.responder:
+                reply = self.responder(topic, body)
+                if reply is not None:
+                    replies = reply if isinstance(reply, list) else [reply]
+                    self._send_later(replies)
 
     def _send_later(self, replies):
         """In the order they were asked for, as a broker's one stream is: a report from before a write never lands after it."""
