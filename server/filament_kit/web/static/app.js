@@ -22,8 +22,26 @@ function densityFor(material) {
 const MAX_EDGE = 1568, QUALITY = 0.85; // Claude reads labels well at this size; keeps uploads ~300 KB per photo
 const app = document.getElementById("app");
 
+// The phone's status bar and the home-screen manifest follow the active appearance (F5, 08 13): both theme-color metas
+// take the computed --surface, and the manifest link points at the light or dark manifest, at load, whenever the
+// appearance attribute changes (a stored or new choice) and whenever the phone's own setting changes.
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+function followAppearance() {
+  const root = document.documentElement, chosen = root.getAttribute("data-theme");
+  const active = chosen === "light" || chosen === "dark" ? chosen : (darkQuery.matches ? "dark" : "light");
+  const surface = getComputedStyle(root).getPropertyValue("--surface").trim();
+  if (surface) for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = surface;
+  const link = document.querySelector('link[rel="manifest"]');
+  if (link) link.href = `${BASE}/manifest-${active}.webmanifest`;
+}
+followAppearance();
+darkQuery.addEventListener("change", followAppearance);
+new MutationObserver(followAppearance).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-look"] });
+
 function h(tag, props, ...kids) {
   const el = document.createElement(tag);
+  // the main button look (CON-9) for a button without a class; a tab keeps the tab bar's own look
+  if (tag === "button" && !(props && (props.class || props.role === "tab"))) el.className = "btn--primary";
   for (const [k, v] of Object.entries(props || {})) {
     if (v === undefined) continue;
     if (k === "on") for (const [ev, fn] of Object.entries(v)) el.addEventListener(ev, fn);
@@ -207,7 +225,7 @@ function addTab() {
   const photoPart = AI ? [
     h("h2", { textContent: "From label photos" }),
     h("p", { class: "muted", textContent: "Photograph each label (several photos of one spool are fine). The label reader (Claude or a local one) reads them; you check and edit before anything is saved." }),
-    h("label", { class: "filebtn", style: "display:flex" }, h("button", { textContent: "Take or choose photos", tabIndex: -1 }), picker),
+    h("label", { class: "filebtn wide" }, h("button", { textContent: "Take or choose photos", tabIndex: -1 }), picker),
     thumbs, hint, h("p", {}, readBtn), readBox] : [];
   const el = h("section", {},
     h("h1", { textContent: "Add spools" }), byHand, ...photoPart, itemsBox, actBox);
@@ -399,7 +417,7 @@ function openTab() {
   const form = h("div", { class: "card hidden" }, h("h3", { textContent: "Selected spool" }), h("p", { class: "picked" }),
     h("div", { class: "grid" }, h("label", { class: "wide" }, "Gross weight (with spool)", gross),
       h("label", { class: "wide" }, "Location", loc), h("label", { class: "wide" }, "Humidity", hum)),
-    h("div", { class: "row", style: "margin-top:.6rem" }, h("button", { class: "secondary", textContent: "Check", on: { click: () => submit(true) } }), linkBtn),
+    h("div", { class: "row spaced" }, h("button", { class: "secondary", textContent: "Check", on: { click: () => submit(true) } }), linkBtn),
     actBox);
   for (const inp of [gross, loc, hum]) inp.addEventListener("input", () => { linkBtn.disabled = true; });
   const el = h("section", { class: "hidden" },

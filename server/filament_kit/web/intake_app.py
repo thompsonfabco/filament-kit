@@ -329,8 +329,11 @@ class IntakeApp:
             f"<meta name=theme-color content='{dark}' media='(prefers-color-scheme: dark)'>"
             f"<meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-title content='{name}'>"
             "<meta name=apple-mobile-web-app-status-bar-style content=default><title>Spool intake</title>"
-            f"<link rel=stylesheet href='{b}/app.css'><link rel=apple-touch-icon href='{b}/icon.png'>"
-            f"<link rel=manifest href='{b}/manifest-light.webmanifest'>"
+            # 08 13: manifest and icon, then the appearance script before any stylesheet, then tokens, components, own
+            f"<link rel=manifest href='{b}/manifest-light.webmanifest'><link rel=apple-touch-icon href='{b}/icon.png'>"
+            f"<script src='{b}/shared/theme-init.js'></script>"
+            f"<link rel=stylesheet href='{b}/shared/tokens.css'><link rel=stylesheet href='{b}/shared/components.css'>"
+            f"<link rel=stylesheet href='{b}/app.css'>"
             + body + (("" if not self.printers else f"<script src='{b}/printers.js'></script>")
                       + f"<script src='{b}/app.js'></script>" if app else ""),
             status_code=status, headers=self.headers())
