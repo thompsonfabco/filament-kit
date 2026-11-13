@@ -1794,6 +1794,7 @@ def _server_addr_error(addr: str) -> str | None:
 
 
 def cmd_modules_set(mode: str, server: str | None = None) -> int:
+    mode = modules.canonical_mode(mode)
     if not _require_root():
         return 1
     try:
@@ -2803,11 +2804,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     mm = mdsub.add_parser("menu", help="the module checklist (cursor keys move, Space switches, a/s/t presets, Enter applies)")
     mm.add_argument("--raw", action="store_true", help="print the chosen modules as a comma list; change nothing")
     ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
-    ms.add_argument("mode", choices=list(modules.MODES))
-    ms.add_argument("--server", help="the kit server's name or IP (station mode)")
+    ms.add_argument("mode", choices=[*modules.MODES, *modules.MODE_ALIASES])
+    ms.add_argument("--server", "--hub", dest="server", help="the kit server's name or IP (station mode)")
     me = mdsub.add_parser("enable", help="turn a module on and apply (root)")
     me.add_argument("name")
-    me.add_argument("--server", help="the kit server's name or IP (when enabling station without a server)")
+    me.add_argument("--server", "--hub", dest="server", help="the kit server's name or IP (when enabling station without a server)")
     mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
     mx.add_argument("name")
     mdsub.add_parser("units", help="print every systemd unit of every module, one per line")

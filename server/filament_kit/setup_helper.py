@@ -657,7 +657,7 @@ def _spoolman_url(req: dict) -> dict:
 
 def _mode(req: dict) -> dict:
     """A mode preset, as `modules set` does it (a module switched on by hand stays on, see modules.set_mode)."""
-    mode = req.get("mode")
+    mode = modules.canonical_mode(req.get("mode"))
     if mode not in modules.MODES:
         raise Refused(400, "mode must be one of: " + ", ".join(modules.MODES))
     if "server" not in modules.MODES[mode]:
