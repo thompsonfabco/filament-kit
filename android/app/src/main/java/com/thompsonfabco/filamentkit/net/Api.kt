@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.net
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -209,7 +210,9 @@ class Api(
                 execute(request("app.apk", auth = false).get().build(), DOWNLOAD_S).use { resp ->
                     if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string())
                     val total = resp.body.contentLength()
-                    resp.body.byteStream().use { src -> copyToDisk(src, part) { done -> onProgress(done, total) } }
+                    resp.body.byteStream().use { src ->
+                        copyToDisk(src, part, check = { ensureActive() }) { done -> onProgress(done, total) }
+                    }
                 }
                 to.delete()
                 if (!part.renameTo(to)) throw storageError("Could not write ${to.name}")
@@ -465,13 +468,17 @@ class Api(
     private fun offline(message: String): ApiError =
         if (localNetworkMissing()) ApiError(0, "local_network", LOCAL_NETWORK_MESSAGE) else ApiError(0, "offline", message)
 
-    /** Network read errors are `offline`; errors writing [part] (disk full, no folder) are `storage`. */
-    private fun copyToDisk(src: java.io.InputStream, part: File, onWritten: (Long) -> Unit) {
+    /**
+     * Network read errors are `offline`; errors writing [part] (disk full, no folder) are `storage`. [check] runs before
+     * each chunk and throws when the caller has cancelled, so a cancelled download stops at the next chunk.
+     */
+    private fun copyToDisk(src: java.io.InputStream, part: File, check: () -> Unit = {}, onWritten: (Long) -> Unit) {
         try {
             part.outputStream().use { out ->
                 val buf = ByteArray(64 * 1024)
                 var done = 0L
                 while (true) {
+                    check()
                     val n = try {
                         src.read(buf)
                     } catch (e: IOException) {

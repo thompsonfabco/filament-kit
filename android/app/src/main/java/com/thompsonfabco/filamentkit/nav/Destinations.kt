@@ -37,6 +37,10 @@ import kotlinx.serialization.Serializable
 @Serializable data object SettingsGraph
 @Serializable data object SettingsRoute
 @Serializable data object LicencesRoute
+@Serializable data object SettingsAppearanceRoute
+@Serializable data object SettingsHubRoute
+@Serializable data object SettingsUpdatesRoute
+@Serializable data object SettingsDeveloperRoute
 
 /** The five destinations of the bottom bar and the rail, in their order (05-android-app 2.3). */
 enum class Tab(

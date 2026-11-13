@@ -173,8 +173,14 @@
     <string name="settings_developer_title">Developer</string>
     <string name="settings_licences_summary">Free software under GPL-3.0-or-later</string>
     <string name="settings_developer_summary">Debug build tools</string>
+    <!-- 1=appearance 2=theme -->
+    <string name="settings_summary_appearance">%1$s · %2$s</string>
+    <!-- 1=hub 2=state -->
+    <string name="settings_summary_hub">%1$s · %2$s</string>
     <!-- 1=app_version -->
     <string name="settings_updates_current">App %1$s · up to date</string>
+    <!-- 1=app_version -->
+    <string name="settings_updates_unchecked">App %1$s</string>
     <!-- 1=version -->
     <string name="settings_updates_ready">Update ready: %1$s</string>
     <string name="settings_hub_none">No Hub is paired.</string>
@@ -188,6 +194,8 @@
     <string name="settings_hub_page_error_address">The Hub\'s address isn\'t known yet.</string>
     <string name="settings_hub_security_title">Security</string>
     <string name="settings_hub_check_title">Check the fingerprint when pairing by address</string>
+    <string name="settings_hub_check_on">On</string>
+    <string name="settings_hub_check_off">Off</string>
     <string name="settings_hub_check_help">When this is off, the app trusts the certificate a Hub presents when you pair by typing its address. A scanned QR code is always checked.</string>
     <string name="settings_hub_skip_title">Skip the fingerprint check?</string>
     <string name="settings_hub_skip_body">Only do this on a network you trust.</string>
@@ -199,6 +207,7 @@
     <string name="settings_updates_this_app">This app</string>
     <string name="settings_updates_on_hub">On the Hub</string>
     <string name="settings_updates_check">Check for updates</string>
+    <string name="settings_updates_check_unpaired">Pair with a Hub first: updates come from the Hub.</string>
     <string name="settings_updates_up_to_date">This app is up to date.</string>
     <string name="settings_licences_line">filament-kit is free software under GPL-3.0-or-later. It comes with no warranty.</string>
     <string name="settings_licences_show">Show the GPL-3.0 text</string>
@@ -207,6 +216,7 @@
     <string name="settings_licences_missing">%1$s is missing from this build.</string>
     <string name="settings_developer_tag_id">Tag ID</string>
     <string name="settings_developer_simulate">Simulate a tag tap</string>
+    <string name="settings_developer_tag_example">4:77:90:e</string>
     <!-- 1=choice -->
     <string name="appearance_name">Appearance: %1$s</string>
     <!-- 1=choice -->
@@ -2679,6 +2689,9 @@
     <string name="app_update_fail_none">The Hub has no app update to download.</string>
     <string name="app_update_fail_storage">Not enough storage on this phone.</string>
     <string name="app_update_fail_timeout">The download timed out. Try again.</string>
+    <string name="app_update_cancel_writing">Handing the update to Android. This can\'t be cancelled.</string>
+    <string name="app_update_fail_network">Android needs your permission before the app can reach the Hub on your network.</string>
+    <string name="app_update_fail_check">Could not check for updates. Try again.</string>
     <string name="app_update_hub_newer">Update the app: the Hub is newer than this app, so some things may not work.</string>
     <string name="app_update_install">Install update</string>
     <!-- 1=version -->
@@ -2687,8 +2700,9 @@
     <!-- 1=version 2=app_version -->
     <string name="app_update_offered">filament-kit %1$s is on your Hub. This app is %2$s.</string>
     <string name="app_update_permission">Allow filament-kit to install apps, then tap Install update again.</string>
-    <string name="app_update_signature">Android refused this update: it is signed by a different key than the installed app.</string>
-    <string name="app_update_signature_body">The app on your Hub was built by someone else than the app on this phone. To switch, uninstall this app and install the one from the Hub. Drafts on this phone are lost.</string>
+    <string name="app_update_signature">Android refused this update because it is not signed like the app on this phone. Do not install it; check where the app on your Hub came from.</string>
+    <string name="app_update_signature_body">An update signed with a different key is what a forged app looks like, so Android refuses it and the app on this phone stays as it is. If you built or replaced the app on your Hub yourself, that is the reason. If you did not, do not install it: check where the app on your Hub came from.</string>
+    <string name="app_update_signature_title">An update signed with a different key</string>
     <string name="app_update_signature_more">What this means</string>
     <string name="app_update_tap_install">Tap to install</string>
     <string name="catalog_add_line">Add a line to the Filament Catalog</string>

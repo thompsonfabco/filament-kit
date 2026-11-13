@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.session
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.update.ApkInstall
+import com.thompsonfabco.filamentkit.update.UpdateFailure
 import com.thompsonfabco.filamentkit.update.UpdateSource
 import com.thompsonfabco.filamentkit.update.Updater
 import java.io.File
@@ -50,7 +51,7 @@ class ApiOwnedTest {
         override suspend fun install(apk: File) = Unit
         override val confirmPending: Flow<Boolean> = flowOf(false)
         override fun showConfirm() = Unit
-        override val failure: Flow<String?> = flowOf(null)
+        override val failure: Flow<UpdateFailure?> = flowOf(null)
     }
 
     private val day = 24L * 60 * 60 * 1000
@@ -60,7 +61,7 @@ class ApiOwnedTest {
         val new = Client("bb")
         val apis = MutableStateFlow<Client?>(old)
         val owned = ApiOwned(CoroutineScope(dispatcher), apis, Updater::class) { client ->
-            Updater(client, NoInstall, currentVersion = 1, apkFile = File("unused.apk"), onProblem = {})
+            Updater(client, NoInstall, currentVersion = 1, apkFile = File("unused.apk"), onProblem = {}, words = { it.name })
         }
         scheduler.runCurrent()
         val first = owned.current.value!!
@@ -86,7 +87,7 @@ class ApiOwnedTest {
         val client = Client("aa")
         val apis = MutableStateFlow<Client?>(client)
         val owned = ApiOwned(CoroutineScope(dispatcher), apis, Updater::class) { c ->
-            Updater(c, NoInstall, currentVersion = 1, apkFile = File("unused.apk"), onProblem = {})
+            Updater(c, NoInstall, currentVersion = 1, apkFile = File("unused.apk"), onProblem = {}, words = { it.name })
         }
         scheduler.runCurrent()
         val first = owned.current.value!!
