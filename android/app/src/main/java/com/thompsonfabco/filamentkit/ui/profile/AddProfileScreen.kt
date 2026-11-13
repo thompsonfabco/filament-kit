@@ -263,7 +263,7 @@ private fun Group(@StringRes title: Int, s: AddProfileUiState, vm: AddProfileVie
             style = MaterialTheme.typography.titleSmall, color = SpoolwardenTheme.colors.muted,
         )
         fields.forEach { f ->
-            val error = if (f in s.badRange) stringResource(R.string.catalog_error_range) else s.fieldProblems[f]
+            val error = if (f in s.badRange) stringResource(R.string.common_error_range) else s.fieldProblems[f]
             if (f == ProfileField.Parent) {
                 CatalogParentField(s.values[f].orEmpty(), s.parents, !s.saving, onPick = { vm.set(f, it) }, error = error)
             } else {
