@@ -59,6 +59,6 @@ internal fun ColorSwatch(hex: String?, size: Dp, modifier: Modifier = Modifier, 
         val blackRadius = (if (halo) outer - ring else outer) - ring / 2
         if (look is SwatchLook.Filled) drawCircle(look.color, blackRadius)
         if (halo) drawCircle(outline, outer - ring / 2, style = Stroke(ring))
-        drawCircle(Color.Black, blackRadius, style = Stroke(ring))
+        drawCircle(outline, blackRadius, style = Stroke(ring))
     }
 }

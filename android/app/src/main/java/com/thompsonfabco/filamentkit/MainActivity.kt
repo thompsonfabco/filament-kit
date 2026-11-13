@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,6 +93,7 @@ import com.thompsonfabco.filamentkit.ui.settings.SetupPageTexts
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import com.thompsonfabco.filamentkit.ui.theme.resolveDark
 import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
 import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
 import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
@@ -99,6 +101,7 @@ import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -107,13 +110,17 @@ class MainActivity : ComponentActivity() {
         appEdgeToEdge()
         setContent {
             val app: AppViewModel = viewModel()
-            val appearance by app.settings.appearance.collectAsStateWithLifecycle(initialValue = Appearance.System)
-            // The bars and the next launch follow the app's appearance, not only the phone's.
-            LaunchedEffect(appearance) {
-                appEdgeToEdge(appearance)
-                applyNightMode(appearance)
+            val stored by app.settings.appearance.map<Appearance, Appearance?> { it }
+                .collectAsStateWithLifecycle(initialValue = null)
+            // Nothing is drawn (the window background shows) until the stored appearance has been read.
+            stored?.let { appearance ->
+                val dark = resolveDark(appearance, isSystemInDarkTheme())
+                // The bars follow the resolved appearance, also after the phone flips while System is chosen.
+                LaunchedEffect(dark) { appEdgeToEdge(if (dark) Appearance.Dark else Appearance.Light) }
+                // The next launch follows the choice.
+                LaunchedEffect(appearance) { applyNightMode(appearance) }
+                AppFrame(appearance) { FilamentKitApp(app) }
             }
-            AppFrame(appearance) { FilamentKitApp(app) }
         }
     }
 

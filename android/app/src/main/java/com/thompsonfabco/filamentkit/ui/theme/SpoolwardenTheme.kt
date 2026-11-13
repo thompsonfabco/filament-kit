@@ -179,10 +179,12 @@ internal object SpoolwardenTheme {
 
 /** True when [appearance] resolves to dark; System follows the phone. */
 @Composable
-internal fun isDark(appearance: Appearance): Boolean = when (appearance) {
+internal fun isDark(appearance: Appearance): Boolean = resolveDark(appearance, isSystemInDarkTheme())
+
+internal fun resolveDark(appearance: Appearance, systemDark: Boolean): Boolean = when (appearance) {
     Appearance.Light -> false
     Appearance.Dark -> true
-    Appearance.System -> isSystemInDarkTheme()
+    Appearance.System -> systemDark
 }
 
 @Composable

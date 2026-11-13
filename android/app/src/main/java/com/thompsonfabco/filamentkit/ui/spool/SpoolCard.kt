@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.printers.MismatchNotice
 import com.thompsonfabco.filamentkit.ui.printers.UnpairedNotice
@@ -105,7 +106,7 @@ fun SpoolSummaryRow(spool: SpoolSummary) {
 private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -> Unit, onLoad: (() -> Unit)?) {
     var gross by remember(card.rev) { mutableStateOf("") }
     SpoolSummaryRow(card.spool)
-    card.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+    card.message?.let { Text(it, color = SpoolwardenTheme.colors.ok) }
 
     OutlinedTextField(
         value = gross,

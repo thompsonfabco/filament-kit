@@ -40,6 +40,13 @@ class ColorSchemeTest {
         c.bad, c.badSoft, c.onBad, c.info, c.infoSoft, c.focus, c.scrim, c.code,
     )
 
+    @Test fun appearanceResolvesToDarkOrLight() {
+        assertEquals(false, resolveDark(Appearance.Light, systemDark = true))
+        assertEquals(true, resolveDark(Appearance.Dark, systemDark = false))
+        assertEquals(true, resolveDark(Appearance.System, systemDark = true))
+        assertEquals(false, resolveDark(Appearance.System, systemDark = false))
+    }
+
     @Test fun everyRoleIsAColourOfTheTheme() {
         for (look in Look.entries) {
             val t = SpoolwardenTokens.of(look)
