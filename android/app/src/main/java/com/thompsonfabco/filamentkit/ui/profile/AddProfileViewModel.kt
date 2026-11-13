@@ -75,6 +75,8 @@ data class AddProfileUiState(
     val problems: List<String> = emptyList(),
     val error: String? = null,
     val pairAgain: Boolean = false,
+    /** With [pairAgain]: the server's certificate changed (else the phone is no longer paired). */
+    val certChanged: Boolean = false,
     val lines: List<ProfileLine> = emptyList(),
     val editing: LineParentEdit? = null,
     val lineError: String? = null,
@@ -157,7 +159,7 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
     }
 
     fun set(field: ProfileField, value: String) {
-        _state.update { it.copy(values = it.values + (field to value), problems = emptyList(), error = null, saved = null) }
+        _state.update { it.copy(values = it.values + (field to value), problems = emptyList(), error = null, saved = null, pairAgain = false, certChanged = false) }
         if (field == ProfileField.Material) loadParents(value.trim())
     }
 
@@ -168,11 +170,11 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
         val s = _state.value
         if (!s.canSave) return
         val entry = buildProfileEntry(s.values)
-        _state.update { it.copy(saving = true, problems = emptyList(), error = null, saved = null) }
+        _state.update { it.copy(saving = true, problems = emptyList(), error = null, saved = null, pairAgain = false, certChanged = false) }
         viewModelScope.launch {
             try {
                 api.addLocalProfile(entry)
-                _state.update { it.copy(saving = false, saved = SAVED) }
+                _state.update { it.copy(saving = false, saved = SAVED, pairAgain = false, certChanged = false) }
                 loadLines() // the new line shows up in "Existing lines"
             } catch (e: CancellationException) {
                 throw e
@@ -200,7 +202,7 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
     }
 
     private fun failed(s: AddProfileUiState, e: Exception): AddProfileUiState = when {
-        e is FingerprintMismatch -> s.copy(error = CERT_CHANGED, pairAgain = true)
+        e is FingerprintMismatch -> s.copy(error = CERT_CHANGED, pairAgain = true, certChanged = true)
         e !is ApiError -> s.copy(error = "Unexpected response from the server")
         e.code == "invalid_entry" -> {
             val list = (e.extra["problems"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
@@ -208,7 +210,7 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
         }
         e.code == "offline" -> s.copy(error = OFFLINE)
         e.code == "local_network" -> s.copy(error = LOCAL_NETWORK_MESSAGE)
-        e.code == "unauthorized" -> s.copy(error = "This phone is no longer paired with the server. Pair it again.", pairAgain = true)
+        e.code == "unauthorized" -> s.copy(error = "This phone is no longer paired with the server. Pair it again.", pairAgain = true, certChanged = false)
         else -> s.copy(error = e.message)
     }
 

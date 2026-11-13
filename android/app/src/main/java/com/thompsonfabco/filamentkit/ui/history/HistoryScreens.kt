@@ -109,7 +109,7 @@ private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, onClick: () -
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (r.photos > 0) Photo(vm, r.id, 1, Modifier.size(64.dp), thumb = true)
-            else ColorSwatch(r.spools.firstOrNull()?.colorHex, 64.dp)
+            else ColorSwatch(r.spools.firstOrNull()?.colorHex, head = true)
             Column(Modifier.weight(1f)) {
                 Text(HistoryTexts.spools(r.spools))
                 Text("${HistoryTexts.state(r.state)} · ${HistoryTexts.source(r.source)}", style = MaterialTheme.typography.bodySmall)

@@ -12,8 +12,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +33,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.ui.components.HubNotice
+import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 
 /**
  * "Add profile": the owner's own spec values for a product line (saved on the server as a local library entry, from
@@ -99,15 +101,16 @@ fun AddProfileScreen(vm: AddProfileViewModel, onBack: () -> Unit, onPairAgain: (
             s.lineError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
         if (s.problems.isNotEmpty()) {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("The server could not use these values", fontWeight = FontWeight.Bold)
-                    s.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
-                }
-            }
+            NoticeCard(
+                NoticeKind.Bad, s.problems.joinToString(System.lineSeparator()) { "• $it" },
+                title = "The server could not use these values",
+            )
         }
-        s.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (s.pairAgain) Button(onClick = onPairAgain) { Text("Pair again") }
+        if (s.pairAgain) {
+            HubNotice(if (s.certChanged) HubNoticeKind.CertificateChanged else HubNoticeKind.NoLongerPaired, onPairAgain)
+        } else {
+            s.error?.let { NoticeCard(NoticeKind.Bad, it) }
+        }
         s.saved?.let { Text(it, fontWeight = FontWeight.Bold) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onBack) { Text(if (s.saved != null) "Done" else "Back") }

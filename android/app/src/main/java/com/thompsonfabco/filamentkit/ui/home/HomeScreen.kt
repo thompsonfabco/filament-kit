@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.drafts.Draft
@@ -34,6 +36,12 @@ import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.update.UpdateTexts
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwDialog
+import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import java.text.DateFormat
@@ -166,7 +174,7 @@ private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
                 Text(UpdateTexts.bannerTitle(update.offeredVersion), style = MaterialTheme.typography.titleMedium)
             }
             if (update.needsPermission) Text("Allow filament-kit to install apps, then tap Install again.")
-            update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            update.error?.let { NoticeCard(NoticeKind.Bad, it) }
             val refused = UpdateTexts.refused(update)
             if (refused) {
                 val links = LocalUriHandler.current
@@ -192,23 +200,26 @@ private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
 @Composable
 private fun DraftRow(draft: Draft, onClick: () -> Unit, onDiscard: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
+    val opener = remember { FocusRequester() }
     val photos = if (draft.photos.size == 1) "1 photo" else "${draft.photos.size} photos"
     val detail = listOfNotNull(photos, draft.hint.ifBlank { null }, draft.tag?.let { "tag $it" }).joinToString(" · ")
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(Modifier.padding(12.dp)) {
             Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(draft.created)))
             Text(detail, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { confirming = true }) { Text("Discard") }
+            TextButton(onClick = { confirming = true }, modifier = Modifier.focusRequester(opener)) { Text("Discard") }
         }
     }
     if (confirming) {
-        AlertDialog(
-            onDismissRequest = { confirming = false },
-            title = { Text("Discard this unfinished add?") },
-            text = { Text("Its $photos will be deleted from this phone. Nothing is removed from the server.") },
-            confirmButton = { TextButton(onClick = { confirming = false; onDiscard() }) { Text("Discard") } },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Keep") } },
-        )
+        SwDialog(
+            title = "Discard this unfinished add?",
+            onClose = { confirming = false },
+            confirm = SwDialogButton("Discard", onClick = { confirming = false; onDiscard() }, kind = SwButtonKind.DestructiveFilled),
+            cancel = SwAction("Keep") { confirming = false },
+            returnFocusTo = opener,
+        ) {
+            Text("Its $photos will be deleted from this phone. Nothing is removed from the server.")
+        }
     }
 }
 

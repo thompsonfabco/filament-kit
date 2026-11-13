@@ -14,10 +14,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
+
+/** The semantics tag of the top bar, for the semantics tests (AUT-8). */
+internal enum class SwTag { TopBar }
+
+internal val TOP_BAR_TAG = SwTag.TopBar.name
 
 /**
  * The top bar (05-android-app 2.2): the place as title, with the Hub's name under it where a screen gives one, the
@@ -39,12 +47,12 @@ internal fun SwTopBar(
         containerColor = colors.surface, scrolledContainerColor = colors.surface, navigationIconContentColor = colors.text,
         titleContentColor = colors.text, actionIconContentColor = colors.muted, subtitleContentColor = colors.muted,
     )
-    Column(modifier) {
+    Column(modifier.testTag(TOP_BAR_TAG)) {
         TopAppBar(
             title = {
                 Column {
                     Text(
-                        title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        title, modifier = Modifier.semantics { heading() }, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = if (SpoolwardenTheme.window == WindowClass.Phone) {
                             MaterialTheme.typography.titleMedium
                         } else {
