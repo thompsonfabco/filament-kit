@@ -1989,7 +1989,6 @@ window.SW_TEXT = Object.freeze({
   "recent_error_degrees_max": "Enter degrees below 500.",
   "recent_error_material": "Enter a material.",
   "recent_error_price": "Enter a price above 0.",
-  "recent_error_range": "Enter a range like 190-230.",
   "recent_keep_none": "The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page.",
   "recent_leave_thing": "this record",
   "recent_mark_estimated": "Estimated: check this",

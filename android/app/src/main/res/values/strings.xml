@@ -2708,7 +2708,6 @@
     <string name="recent_error_degrees_max">Enter degrees below 500.</string>
     <string name="recent_error_material">Enter a material.</string>
     <string name="recent_error_price">Enter a price above 0.</string>
-    <string name="recent_error_range">Enter a range like 190-230.</string>
     <string name="recent_keep_none">The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page.</string>
     <string name="recent_leave_thing">this record</string>
     <string name="recent_mark_estimated">Estimated: check this</string>

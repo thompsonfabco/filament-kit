@@ -206,4 +206,12 @@ class PairNavTest {
         assertEquals(false, leaveSettings())
         assertAt<SettingsRoute>()
     }
+
+    @Test fun leavingSettingsForPairingSaysNoWhenNoSettingsEntryWasPopped() {
+        appGraph(PairGraph)
+        go(PairCodeRoute)
+        go(PrintersGraph)
+        assertEquals("pairing is below but no Settings is over it", false, leaveSettings())
+        assertTrue(nav.currentDestination?.hasRoute(PrintersRoute::class) == true)
+    }
 }
