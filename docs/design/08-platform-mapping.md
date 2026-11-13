@@ -23,8 +23,9 @@ two scripts, so there is nothing to keep in step. Values quoted in the design do
 time of writing; where they differ, `tokens/tokens.json` is right for a value, and a change of the design starts
 there (README, "Changing the design").
 
-The files marked "exists" are the token schema and tooling as they are today. The files marked "proposed" are
-additions this mapping needs; they are specified in section 3.4 and are not yet in the files.
+Every file in the table exists once the groundwork steps of `09-implementation-order.md` (stage 0) are in; the
+"Status" column says which were there before them ("Exists") and which those steps added ("Proposed", specified
+in section 3.4).
 
 | File (repository path) | Kind | Status | Written by | Read by |
 |---|---|---|---|---|
@@ -60,7 +61,7 @@ identical `:root` blocks) and the Android app uses the stock Material 3 scheme w
 
 ### 2.1 The file
 
-`tokens/tokens.json` is the only source of every token value. Its shape is version 1. The top level holds two
+`tokens/tokens.json` is the only source of every token value. Its shape is version 2. The top level holds two
 keys, `version` and `themes`; everything else is inside a theme. A value is changed in this file and nowhere else,
 and `build_tokens.py` is run afterwards (section 3.1).
 
@@ -94,7 +95,7 @@ The Console entry as it is in the file; the other three themes have the same key
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "themes": {
     "console": {
       "label": "Console",
@@ -313,14 +314,14 @@ Two checks exist and run in the project's normal test run:
 | Check | Command | Fails when |
 |---|---|---|
 | **`tokens.css` equals `tokens.json`** | `python tokens/build_tokens.py --check` | `tokens.css` was edited by hand, or `tokens.json` changed without running the script (exit 1, message as in 3.1). |
-| **Contrast** (AUT-1 of `07-accessibility.md`) | `python tokens/check_contrast.py` (optionally with the path of a `tokens.json`) | For any theme in light or dark, a required pair is below its ratio. Required at 4.5:1: `text`, `muted`, `accent-text`, `ok`, `warn`, `bad`, `info` on `bg`, `surface` and `surface-2`; `ok`, `warn`, `bad`, `info` each on its `-soft` ground; `on-accent` on `accent`; `on-bad` on `bad`. Required at 3:1: `border-strong` and `focus` against `surface` and `bg`. It prints one table row per pair and exits 1 on a failure. `accent-text` on `accent-soft` and `text` on `surface-3` are advisory: printed as WARN, never a failure. `contrast-report.txt` beside it holds its last output and `ADJUSTMENTS.md` lists any colour changed to meet a ratio. |
+| **Contrast** (AUT-1 of `07-accessibility.md`) | `python tokens/check_contrast.py` (optionally with the path of a `tokens.json`) | For any theme in light or dark, a required pair is below its ratio. Required at 4.5:1: `text`, `muted`, `accent-text`, `ok`, `warn`, `bad`, `info` on `bg`, `surface` and `surface-2`; `ok`, `warn`, `bad`, `info` each on its `-soft` ground; `on-accent` on `accent`; `on-bad` on `bad`. Required at 3:1: `border-strong` and `focus` against `surface` and `bg`. It prints one table row per pair and exits 1 on a failure. `accent-text` on `accent-soft` and `text` on `surface-3` were advisory in the first version and are required since the check covers every pair of `07-accessibility.md` sections 3.1 and 3.2 (test 3 below). `ADJUSTMENTS.md` lists any colour changed to meet a ratio; the check writes no report file. |
 
 The first check is the equality test of the web side today: a `tokens.css` that differs from its source cannot
 pass.
 
 ### 3.4 Proposed additions to the token tooling
 
-**Not yet in the files.** Everything in this subsection is an addition this mapping needs; `tokens.json`,
+**Added by the groundwork steps.** Everything in this subsection is an addition this mapping needs beyond the first token files; `tokens.json`,
 `build_tokens.py` and `check_contrast.py` do not do it today. Until the Kotlin output exists, the Android token
 values are copied from `tokens.json` by hand into `SpoolwardenTokens.kt`, in the shape given below.
 
@@ -345,7 +346,7 @@ files marked "proposed" in section 1; `--check` then covers every output.
 
 | Output | Content |
 |---|---|
-| Preview tile blocks in `tokens.css` | For the theme preview tiles (section 9), after the theme blocks: every theme's light colour, type and radius tokens again under `[data-look="<key>"]` (without `:root`), and its dark colours under `:root:not([data-theme="light"]) [data-look="<key>"]` inside the dark media query and under `:root[data-theme="dark"] [data-look="<key>"]`. These blocks hold no size, elevation or motion token. On `<html>` such a block (0,1,0) competes with `:root` (0,1,0) harmlessly: it repeats the same theme's values and carries no `--ctl`, so it cannot undo a phone block. |
+| Preview tile blocks in `tokens.css` | For the theme preview tiles (section 9), after the theme blocks: every theme's light colour, type and radius tokens again under `[data-look="<key>"]` (without `:root`), and its dark colours under `:root:not([data-theme="light"]) [data-look="<key>"]` inside the dark media query and under `:root[data-theme="dark"] [data-look="<key>"]`. These blocks may also repeat the theme's `extra` colour, type and radius properties. They hold no size, elevation or motion token. On `<html>` such a block (0,1,0) competes with `:root` (0,1,0) harmlessly: it repeats the same theme's values and carries no `--ctl`, so it cannot undo a phone block. |
 | `tokens/theme-init.js` | Section 8 |
 | `SpoolwardenTokens.kt` | Below |
 | `sw_window.xml` | Below |
@@ -399,7 +400,7 @@ internal object SpoolwardenTokens {
         profile = LayoutProfile(NavStyle.Rail, CollectionStyle.Table, DetailStyle.Inline),
     )
     val workbench = ThemeTokens(/* … */)
-    val spool = ThemeTokens(/* … */)
+    val palette = ThemeTokens(/* … */)
     val panes = ThemeTokens(/* … */)
 
     fun of(look: Look): ThemeTokens = when (look) {
@@ -519,7 +520,7 @@ Rules:
   AI" note is `info` on `infoSoft` (the current app uses `primary` and `tertiaryContainer` for these, in
   `ui/spool/SpoolCard.kt` and `ui/add/ReviewScreen.kt`).
 - Text selection: web `::selection { background: var(--accent-soft); color: var(--text); }`; Android
-  `LocalTextSelectionColors provides TextSelectionColors(handleColor = accent, backgroundColor = accentSoft)`.
+  `LocalTextSelectionColors provides TextSelectionColors(handleColor = accentText, backgroundColor = accentSoft)` (the handle is a mark on a surface, so it is `accentText`, not `accent`).
 - Filament colours come from the data on both platforms (foundations section 4.1) and never pass through
   `SpoolwardenColors`.
 
@@ -832,7 +833,7 @@ fun SpoolwardenTheme(look: Look, appearance: Appearance, content: @Composable ()
         LocalDetailStyle provides t.profile.detail,
     ) {
         MaterialTheme(
-            colorScheme = colors.toColorScheme(dark = dark, inversePrimary = other.accent),
+            colorScheme = colors.toColorScheme(dark = dark, inversePrimary = other.accentText),
             typography = t.type.toTypography(),
             shapes = t.radius.toShapes(),
         ) {
@@ -994,7 +995,7 @@ and the generated sprite and drawables are proposed additions to the tooling (se
 | | Source | Web | Android |
 |---|---|---|---|
 | Files | `icons/src/<name>.svg` per icon and `icons/status/<shape>.svg` per status shape, names in lower case with hyphens | One generated `icons/sprite.svg` with a `<symbol id="i-<name>" viewBox="0 0 24 24">` per icon and a `<symbol id="s-<shape>" viewBox="0 0 24 24">` per status shape (`02-components.md` 1.1) | One generated `res/drawable/sw_ic_<name>.xml` per icon and `sw_st_<shape>.xml` per status shape (hyphens become underscores) |
-| Drawing | Icons: `viewBox="0 0 24 24"`, `<path>` elements only (circles, lines and rectangles are written as paths), `fill="none"`, `stroke="currentColor"`, `stroke-width="1.75"`, `stroke-linecap="round"`, `stroke-linejoin="round"`. Status shapes: `viewBox="0 0 24 24"`, `<path>` elements only, filled or stroked with `currentColor` | The attributes sit on each `<symbol>`; the colour follows the text through `currentColor` | `<vector android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">` with one `<path>` per source path: `pathData` copied from `d`; a stroked path gets `strokeWidth`, round `strokeLineCap` and `strokeLineJoin` and `strokeColor="#FF000000"`; a filled path gets `fillColor="#FF000000"`; the other colour is `#00000000` |
+| Drawing | Icons: `viewBox="0 0 24 24"`, `<path>` elements only (circles, lines and rectangles are written as paths), `fill="none"`, `stroke="currentColor"`, `stroke-width="1.75"`, `stroke-linecap="round"`, `stroke-linejoin="round"`. Status shapes: `viewBox="0 0 24 24"`, `<path>` elements only, filled or stroked with `currentColor`; the two stroked shapes (`hollow`, `half`) use `stroke-width="2"`, so they hold at badge size. No path of an icon or a status shape sets a colour, a fill or a stroke width of its own other than these; the icon test checks the paths as well as the root | The attributes sit on each `<symbol>`; the colour follows the text through `currentColor` | `<vector android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">` with one `<path>` per source path: `pathData` copied from `d`; a stroked path gets `strokeWidth`, round `strokeLineCap` and `strokeLineJoin` and `strokeColor="#FF000000"`; a filled path gets `fillColor="#FF000000"`; the other colour is `#00000000` |
 | Placed by | | The Hub places the sprite inline as the first child of `<body>` in every page it serves, as `<svg class="sprite" aria-hidden="true" width="0" height="0">` (no `style` attribute: the Content-Security-Policy forbids inline style) | Bundled in the app |
 | Used as | | `<svg class="icon" aria-hidden="true"><use href="#i-printer"/></svg>`; `<svg class="status__shape" aria-hidden="true"><use href="#s-filled"/></svg>` | `SwIcon(R.drawable.sw_ic_printer, contentDescription, size)`, built on `Icon(painterResource(…), tint = LocalContentColor.current)`; `StatusLabel` draws `sw_st_<shape>` the same way. The tint recolours the black drawing as `currentColor` does |
 | Sizes | | `icon` 20 px, `icon--s` 16 px, `icon--l` 28 px, status shape `--s2`, all as the `calc()` expressions of `02-components.md` 1.2 | `SwIcon` `size = Normal` (`space.s4 + space.s1`), `Small` (`space.s4`), `Large` (`space.s5 + space.s1`); status shape as `StatusLabel` (10.6) |
@@ -1078,7 +1079,7 @@ storage keys, file and package names) are not part of the catalogue and do not f
 |---|---|---|
 | Form | `window.SW_TEXT = Object.freeze({ … })`, keys and texts as in the source | `<string name="key">…</string>`; plurals as `<plurals name="key">` with `<item quantity="one">` and `<item quantity="other">` |
 | Placeholders | Kept as `{name}`; the shared page script's `t(key, values)` replaces them and picks the plural form with `Intl.PluralRules("en")` | Numbered in order of first appearance: `{count}` becomes `%n$d`, every other placeholder `%n$s`; a comment above the string lists the order (`<!-- 1=printer -->`); read with `stringResource` / `pluralStringResource` |
-| Escaping | JSON string escaping | `'` and `"` escaped with a backslash, `&` and `<` as XML entities, a literal `%` as `%%`, a leading `@` or `?` escaped |
+| Escaping | JSON string escaping | `'` and `"` escaped with a backslash, `&` and `<` as XML entities, a a leading `@` or `?` escaped, a backslash and a line break escaped, leading, trailing and double spaces kept by quoting. A literal `%` is written `%%` in a string that has placeholders; a string without placeholders keeps the bare `%` and is marked `formatted="false"`, because Android reads it without formatting |
 | Loaded | With `<script src defer>` after `theme-init.js` | Bundled; it is the app's only string file, so every text the app shows, including the app's name, comes from it |
 
 - Proposed test 7 of section 3.4 parses both generated files and compares them with the source: same keys, same

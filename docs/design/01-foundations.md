@@ -243,7 +243,7 @@ On phones Console, Workbench and Palette use a bottom bar; Panes opens on the li
 The full values for Workbench, Palette and Panes, light and dark, are in `tokens/tokens.json` and shown in
 `mockups/a-workbench.html`, `mockups/b-palette.html` and `mockups/d-panes.html`. Their light accents: Workbench
 `#3949C0` (white text on it), Palette `#F59A2E` (dark text `#2A1806` on it; links and accent text use `#9A4700`),
-Panes `#1b7a43` (white text on it). Palette uses a rounded system stack
+Panes `#19763f` (white text on it). Palette uses a rounded system stack
 (`ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", "Segoe UI", system-ui, …`) and a type scale one step
 larger than Console; Workbench and Panes use `--fs-b` 0.9375rem (15 px) as body size.
 

@@ -138,7 +138,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `klipper add-on` | Prints the commands that install the Klipper add-on | Klipper add-on |
 | `recent` (same as `recent history`) | Recently added records (9.3) | Recently added |
 | `recent show <record> [--photos]` | One record: fields, confidence, revisions | Record detail |
-| `recent revise <record> --note TEXT [--item N]` | Ask the AI to correct it | Ask the AI to correct it |
+| `recent revise <record> --note TEXT [--item N]` | Ask the Label Reader to correct it | Ask the Label Reader to correct it |
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
 | `devices` (same as `devices list`) | Paired devices (9.4) | Devices |
@@ -463,7 +463,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | Map slots | `◐ Mapping the slots of Workshop X1… step 2 of 4` |
 | Collect a report | `◐ Collecting a report from Workshop X1…` |
 | Check the Anthropic API key | `◐ Checking the API key…` |
-| Ask the AI to correct a record | `◐ Asking the AI… (up to a minute)` |
+| Ask the Label Reader to correct a record | `◐ Asking the Label Reader… (up to a minute)` |
 | Label Reader test | `◐ Reading 2 photos with On this Hub…` |
 | Apply features | `◐ Applying the changes…` |
 | Update, roll back, check | `◐ Updating to 0.5.3…`, `◐ Rolling back to 0.5.1…`, `◐ Checking for updates…` |
@@ -1220,7 +1220,7 @@ Photos open on the Hub page: https://192.0.2.10:8710/setup#recent/35
 
 ```
 $ sudo spoolwarden recent revise 35 --note "it is the matte one"
-◐ Asking the AI… (up to a minute) 6 s
+◐ Asking the Label Reader… (up to a minute) 6 s
 The Label Reader suggests:
   Name: PolyTerra PLA Charcoal Black
      → PolyTerra PLA Charcoal Black (Matte)
