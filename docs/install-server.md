@@ -222,7 +222,7 @@ you trusted stay trusted (the command says so and how many), unless you add `--r
 | **Web passphrase** | Set the passphrase that approves Claude's connector at its sign-in page. |
 | **Library token** | Optional. A GitHub token that lets the filament library download from a private repository. |
 | **Phones, PC and station** | Make the pairing QR code and code for a phone, or the link for the PC sync or the intake station, and remove a paired device. |
-| **NFC readers** | Make a token for a bench NFC reader (shown once) and revoke one. |
+| **NFC readers** | Make a token for a Printer Station (shown once) and revoke one. |
 | **Modules** | Switch modules on or off and set the addresses they need (for example the web public address). Changes are applied in the background and the page waits while the server restarts. |
 
 Secrets are write-only: after you save one, the page only says it is set. Each change is written to the server's

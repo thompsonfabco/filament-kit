@@ -48,8 +48,8 @@ Then, on your phone:
   [Set up a printer](docs/android-app.md#2-set-up-a-printer).
 
 Optional afterwards: the PC sync for Bambu Studio presets ([Pair your PC](#pair-your-pc)), an intake station with
-a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the bench
-[reader](#the-reader).
+a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the
+[Printer Station](#the-reader).
 
 Your spool list is also in any web browser at home, at `http://<computer name>.local:7912` (the installer prints
 the address). Spoolman has no sign-in, so it answers only this computer and your home network (by default
@@ -65,7 +65,7 @@ access) is in the **[user guide](docs/user-guide.md)**.
 
 - **Add spools** from the Android app or the phone web app: type them in, or pick a filament you already have.
   Reading the label from a photo is **optional AI** (your own Anthropic API key); everything else works without it.
-- **Load a spool into a printer slot** from the app, or tap its NFC tag on the bench reader: the printer gets the
+- **Load a spool into a printer slot** from the app, or tap its NFC tag on the Printer Station: the printer gets the
   right filament setting and Spoolman the spool's new location. Filament used in a print comes off the right
   spools, after a one-time slot mapping.
 - **Build slicer presets**: a Bambu Studio (and, if you like, Orca Slicer) preset for every filament line you own

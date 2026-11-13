@@ -349,8 +349,8 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit web status` | Checks the web part: public address, passphrase, the service, signed-in connectors. |
 | `sudo filament-kit remote firewall` | Prints the firewall and port-forward rules remote access needs (it changes nothing; see [Remote access](#remote-access)). |
 | `sudo filament-kit remote issue` | Gets the https certificate with certbot (port 80 must reach this computer while it runs). |
-| `sudo filament-kit reader token --name <name>` | Makes a token for the bench NFC reader, shown once ([reader/README.md](../reader/README.md)); `reader tokens` lists them, `sudo filament-kit reader revoke <id>` removes one. |
-| `sudo filament-kit reader setup --source <checkout>/reader` | Sets up a bench reader plugged in by USB: makes its token, asks which USB board to flash (`[y/N]`, unless `--port` names it; a board that answers as the station's button panel is refused), asks the Wi-Fi name and password, and builds and flashes it with PlatformIO. A script that pipes the Wi-Fi name in must pass `--port` or answer that prompt first. `--out <file>` only writes its `secrets.h` (mode 600) for a build elsewhere ([reader/README.md](../reader/README.md)). |
+| `sudo filament-kit reader token --name <name>` | Makes a token for a Printer Station, shown once ([reader/README.md](../reader/README.md)); `reader tokens` lists them, `sudo filament-kit reader revoke <id>` removes one. |
+| `sudo filament-kit reader setup --source <checkout>/reader` | Sets up a Printer Station plugged in by USB: makes its token, asks which USB board to flash (`[y/N]`, unless `--port` names it; a board that answers as the station's button panel is refused), asks the Wi-Fi name and password, and builds and flashes it with PlatformIO. A script that pipes the Wi-Fi name in must pass `--port` or answer that prompt first. `--out <file>` only writes its `secrets.h` (mode 600) for a build elsewhere ([reader/README.md](../reader/README.md)). |
 | `sudo filament-kit update` / `update --check` / `update --rollback` | Installs the newest signed release, only checks, or goes back (see [Update](#update)). |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
@@ -489,7 +489,7 @@ A backup is **one zip file** with everything the kit keeps, so a new machine can
 
 - the Spoolman database (your spools and filaments);
 - the settings, the setup code, the trusted computers, the printers and their slot maps, the server's certificate;
-- the paired phones and the PC sync, the bench readers' tokens, the web unit's sign-ins, the intake station's pairing;
+- the paired phones and the PC sync, the Printer Stations' tokens, the web unit's sign-ins, the intake station's pairing;
 - `manifest.xml`, which lists every file with its checksum, and the kit version and modules it came from.
 
 Not in it: the program itself, the downloaded releases, the logs, the Bambu system presets the PC sync uploads and
