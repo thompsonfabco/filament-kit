@@ -690,7 +690,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         AlertDialog(
             onDismissRequest = { leaveAddFor = null },
             title = { Text(stringResource(R.string.common_leave_title)) },
-            text = { Text(stringResource(R.string.common_leave_body, stringResource(R.string.web_card_new_spool))) },
+            text = { Text(stringResource(R.string.common_leave_body, stringResource(R.string.add_card_new_spool))) },
             dismissButton = { TextButton(onClick = { leaveAddFor = null }) { Text(stringResource(R.string.common_stay)) } },
             confirmButton = {
                 TextButton(

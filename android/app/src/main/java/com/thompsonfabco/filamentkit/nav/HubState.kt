@@ -15,7 +15,7 @@ internal enum class HubState(val badge: StatusKind?, @StringRes val sentence: In
     Connected(StatusKind.Connected, R.string.hub_state_connected),
     Offline(StatusKind.Offline, R.string.hub_state_offline),
     CertificateChanged(StatusKind.NeedsLook, R.string.hub_state_certificate),
-    NoLongerPaired(StatusKind.NeedsLook, R.string.hub_state_unpaired),
+    NoLongerPaired(StatusKind.NeedsLook, R.string.common_not_paired_notice),
     NeedsLocalNetwork(StatusKind.NeedsLook, R.string.hub_state_network),
 }
 

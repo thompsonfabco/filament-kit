@@ -36,7 +36,7 @@ internal val Appearance.icon: Int
 internal fun AppearanceMenu(current: Appearance, onChoose: (Appearance) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        SwIconButton(current.icon, stringResource(R.string.a11y_appearance, stringResource(current.label)), { open = true })
+        SwIconButton(current.icon, stringResource(R.string.appearance_name, stringResource(current.label)), { open = true })
         SwMenu(open, { open = false }) {
             Appearance.entries.forEach { choice ->
                 SwMenuItem(
