@@ -22,13 +22,13 @@ internal object SemanticsAudit {
 
     /**
      * [merged] is the root of the merged tree, [unmerged] of the unmerged one; [density] is pixels per dp; [title] is
-     * the top bar's title; [sectionTitles] are the section titles the screen shows.
+     * the top bar's title (null: the screen is drawn without a top bar); [sectionTitles] are the section titles the screen shows.
      */
     fun findings(
         merged: SemanticsNode,
         unmerged: SemanticsNode,
         density: Float,
-        title: String,
+        title: String?,
         sectionTitles: List<String> = emptyList(),
     ): List<String> = buildList {
         val all = merged.flatten()
@@ -49,6 +49,7 @@ internal object SemanticsAudit {
         val bar = all2.firstOrNull { it.config.getOrNull(SemanticsProperties.TestTag) == TOP_BAR_TAG }
         val inBar = bar?.flatten().orEmpty().filter { it.isHeading() }
         when {
+            title == null -> if (bar != null) add("a top app bar where the screen has none")
             bar == null -> add("no top app bar in the screen")
             inBar.size != 1 -> add("expected exactly one heading in the top app bar, found ${inBar.size}")
             inBar[0].name() != title -> add("the top bar heading is \"${inBar[0].name()}\", not the title \"$title\"")

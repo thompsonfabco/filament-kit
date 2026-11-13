@@ -1,10 +1,10 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.data.SettingsStore
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
-import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -92,12 +92,13 @@ class PairViewModelTest {
         assertFalse(backend.calls.any { it.startsWith("pair") })
     }
 
-    @Test fun declineReturnsToAddressWithoutSendingACode() {
+    @Test fun declineReturnsToTheFirstScreenWithoutSendingACode() {
         vm.submitAddress("10.0.0.2", "9000")
         vm.rejectFingerprint()
-        assertEquals(Step.Address, ui.step)
+        assertEquals(Step.Choose, ui.step)
         assertNull(ui.fingerprint)
-        assertEquals(PairTexts.FINGERPRINT_REJECTED, ui.error)
+        assertEquals(PairMessage.Res(R.string.pair_fingerprint_rejected), ui.error)
+        assertNull("no field: the notice sits under the button", ui.errorField)
         assertFalse(backend.calls.any { it.startsWith("pair") })
     }
 
@@ -149,7 +150,7 @@ class PairViewModelTest {
         vm.confirmFingerprint()
         vm.submitCode("000000")
         assertEquals(Step.Code, ui.step)
-        assertEquals("That code is wrong or has expired", ui.error)
+        assertEquals(PairMessage.Res(R.string.pair_error_refused), ui.error)
         assertFalse(ui.busy)
         assertNull(settings.saved)
         backend.pairResult = { "token-2" }
@@ -188,14 +189,72 @@ class PairViewModelTest {
         backend.probeResult = { throw IOException("boom") }
         vm.submitAddress("10.0.0.2", "")
         assertEquals(Step.Address, ui.step)
-        assertTrue(ui.error!!.contains("10.0.0.2"))
+        assertEquals(PairMessage.Res(R.string.common_hub_unreachable), ui.error)
+        assertNull("a connection failure belongs under the button", ui.errorField)
     }
 
-    @Test fun badPortIsRejected() {
+    @Test fun badPortIsRejectedUnderThePortField() {
         vm.submitAddress("10.0.0.2", "99999")
         assertEquals(Step.Address, ui.step)
-        assertNotNull(ui.error)
+        assertEquals(PairMessage.Res(R.string.pair_address_error_port), ui.error)
+        assertEquals(PairField.Port, ui.errorField)
         assertTrue(backend.calls.isEmpty())
+    }
+
+    @Test fun anEmptyAddressIsRejectedUnderTheAddressField() {
+        vm.submitAddress("  ", "")
+        assertEquals(PairMessage.Res(R.string.pair_address_error_empty), ui.error)
+        assertEquals(PairField.Address, ui.errorField)
+        assertTrue(backend.calls.isEmpty())
+    }
+
+    @Test fun somethingThatIsNotAHubIsNamedAsSuch() {
+        backend.pairResult = { throw ApiError(404, "not_found", "Not Found") }
+        vm.submitAddress("10.0.0.2", "")
+        vm.confirmFingerprint()
+        vm.submitCode("123456")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+    }
+
+    @Test fun anErrorPageWithNoHubMessageIsNotAHub() {
+        // the shape Api.errorFor gives a non-JSON error page
+        val page = ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
+        backend.pairResult = { throw page }
+        vm.submitAddress("10.0.0.2", "")
+        vm.confirmFingerprint()
+        vm.submitCode("123456")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+    }
+
+    @Test fun aNonJsonUnauthorizedPageIsNotAHubEither() {
+        backend.pairResult = { throw ApiError(401, "unauthorized", "The server returned an error (401)", noHubMessage = true) }
+        vm.submitAddress("10.0.0.2", "")
+        vm.confirmFingerprint()
+        vm.submitCode("123456")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+    }
+
+    @Test fun aServiceThatDoesNotSpeakTlsOnTheProbeIsNotAHub() {
+        backend.probeResult = { throw javax.net.ssl.SSLException("Unable to parse TLS packet header") }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+        backend.probeResult = { throw javax.net.ssl.SSLHandshakeException("handshake failure") }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+    }
+
+    @Test fun aTimeoutOnTheProbeIsStillUnreachable() {
+        backend.probeResult = { throw java.net.SocketTimeoutException("timeout") }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(PairMessage.Res(R.string.common_hub_unreachable), ui.error)
+    }
+
+    @Test fun whatTheHubSaysItselfIsShownWhenTheTableHasNoRowForIt() {
+        backend.pairResult = { throw ApiError(429, "rate_limited", "Too many tries. Wait a minute.") }
+        vm.submitAddress("10.0.0.2", "")
+        vm.confirmFingerprint()
+        vm.submitCode("123456")
+        assertEquals(PairMessage.Raw("Too many tries. Wait a minute."), ui.error)
     }
 
     @Test fun unexpectedExceptionDoesNotCrash() {
@@ -203,7 +262,7 @@ class PairViewModelTest {
         vm.submitAddress("10.0.0.2", "")
         vm.confirmFingerprint()
         vm.submitCode("123456")
-        assertEquals("Unexpected response from the server", ui.error)
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
         assertFalse(ui.busy)
     }
 
@@ -262,8 +321,7 @@ class PairViewModelTest {
         assertNull(settings.saved)
         assertEquals(0, settings.saves)
         assertEquals(Step.Choose, ui.step)
-        assertEquals(QR_EXPIRED, ui.error)
-        assertTrue(ui.error!!.contains("sudo filament-kit pair"))
+        assertEquals(PairMessage.Res(R.string.pair_error_expired), ui.error)
     }
 
     @Test fun qrClaimAnsweredWithAnotherServerErrorStillCountsAsClaimed() {
@@ -285,12 +343,14 @@ class PairViewModelTest {
         val blocked = PairViewModel(settings, backend, CoroutineScope(UnconfinedTestDispatcher()), localNetworkMissing = { true })
         backend.probeResult = { throw IOException("EPERM") }
         blocked.submitAddress("10.0.0.2", "")
-        assertEquals(LOCAL_NETWORK_MESSAGE, blocked.state.value.error)
+        assertEquals(PairMessage.LocalNetwork, blocked.state.value.error)
+        blocked.localNetworkGranted()
+        assertNull("the notice is over once access is granted", blocked.state.value.error)
     }
 
     @Test fun qrParseErrorIsAFixedMessage() {
         vm.onQrScanned("fkit://pair?h=x")
-        assertEquals("That is not a filament-kit pairing code", ui.error)
+        assertEquals(PairMessage.Res(R.string.pair_error_not_code), ui.error)
     }
 
     @Test fun qrVerifyMismatchShowsBothFingerprints() {
@@ -302,6 +362,13 @@ class PairViewModelTest {
 
     @Test fun fingerprintGroupsOfFour() {
         assertEquals("0123 4567 89ab", groupFingerprint("0123456789ab"))
+    }
+
+    @Test fun fingerprintLinesHoldFourGroupsEach() {
+        val lines = fingerprintLines(FP)
+        assertEquals(4, lines.size)
+        assertEquals("0123 4567 89ab cdef", lines[0])
+        assertEquals(FP, lines.joinToString(" ").replace(" ", ""))
     }
 
     @Test fun discoveredServerGoesStraightToTheFingerprintCheck() {
@@ -319,14 +386,27 @@ class PairViewModelTest {
         assertEquals(Step.Confirm, ui.step)
     }
 
-    @Test fun discoveredServerThatDoesNotAnswerLandsOnTheFilledAddressForm() {
+    @Test fun discoveredServerThatDoesNotAnswerStaysOnTheFirstScreenAndSaysWhy() {
         backend.probeResult = { throw IOException("refused") }
         vm.connectDiscovered("kit.local", 8443)
-        assertEquals(Step.Address, ui.step)
-        assertEquals("kit.local", ui.host)
-        assertEquals(8443, ui.port)
-        assertEquals("Could not reach kit.local on port 8443. Check the address and that this phone is on the same network.",
-            ui.error)
+        assertEquals(Step.Choose, ui.step)
+        assertEquals(PairMessage.Res(R.string.common_hub_unreachable), ui.error)
+        assertFalse(ui.busy)
+    }
+
+    @Test fun backFromTheCheckOfAFoundHubReturnsToTheFirstScreen() {
+        vm.connectDiscovered("kit.local", 8443)
+        assertEquals(Step.Confirm, ui.step)
+        vm.back()
+        assertEquals(PairUi(), ui)
+    }
+
+    @Test fun backFromTheCodeOfAFoundHubReturnsToTheFirstScreenToo() {
+        settings.skip = true
+        vm.connectDiscovered("kit.local", 8443)
+        assertEquals(Step.Code, ui.step)
+        vm.back()
+        assertEquals(PairUi(), ui)
     }
 
     @Test fun startManualCanBePrefilled() {

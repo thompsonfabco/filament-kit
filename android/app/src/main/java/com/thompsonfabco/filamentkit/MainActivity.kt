@@ -63,6 +63,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
@@ -80,7 +81,13 @@ import com.thompsonfabco.filamentkit.nav.HomeGraph
 import com.thompsonfabco.filamentkit.nav.HomeRoute
 import com.thompsonfabco.filamentkit.nav.LicencesRoute
 import com.thompsonfabco.filamentkit.nav.PairGraph
+import com.thompsonfabco.filamentkit.nav.PairAddressRoute
+import com.thompsonfabco.filamentkit.nav.PairCertificateRoute
+import com.thompsonfabco.filamentkit.nav.PairCodeRoute
+import com.thompsonfabco.filamentkit.nav.PairFingerprintRoute
+import com.thompsonfabco.filamentkit.nav.PairNetworkAccessRoute
 import com.thompsonfabco.filamentkit.nav.PairRoute
+import com.thompsonfabco.filamentkit.nav.PairScanRoute
 import com.thompsonfabco.filamentkit.nav.PrinterMapRoute
 import com.thompsonfabco.filamentkit.nav.PrinterRoute
 import com.thompsonfabco.filamentkit.nav.PrintersGraph
@@ -120,7 +127,6 @@ import com.thompsonfabco.filamentkit.session.CONNECTION_POLL_MS
 import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.session.PairNotice
-import com.thompsonfabco.filamentkit.session.UNPAIRED_MESSAGE
 import com.thompsonfabco.filamentkit.session.canTrust
 import com.thompsonfabco.filamentkit.session.isPaired
 import com.thompsonfabco.filamentkit.tags.TagEvents
@@ -158,9 +164,17 @@ import com.thompsonfabco.filamentkit.ui.home.VersionLine
 import com.thompsonfabco.filamentkit.ui.home.labelReaderOff
 import com.thompsonfabco.filamentkit.ui.home.showLabelPhotos
 import com.thompsonfabco.filamentkit.ui.home.versionLine
-import com.thompsonfabco.filamentkit.ui.pair.NetPairingBackend
-import com.thompsonfabco.filamentkit.ui.pair.PairScreen
-import com.thompsonfabco.filamentkit.ui.pair.PairViewModel
+import com.thompsonfabco.filamentkit.ui.pair.MismatchSource
+import com.thompsonfabco.filamentkit.ui.pair.PairAddressScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairCertificateScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairCodeScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairFingerprintScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairNetworkAccessScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairRouteSync
+import com.thompsonfabco.filamentkit.ui.pair.PairStartScreen
+import com.thompsonfabco.filamentkit.ui.pair.QrScanner
+import com.thompsonfabco.filamentkit.ui.pair.pairViewModel
+import com.thompsonfabco.filamentkit.ui.pair.routeSource
 import com.thompsonfabco.filamentkit.ui.printers.ManualMapEntry
 import com.thompsonfabco.filamentkit.ui.printers.PrinterEntry
 import com.thompsonfabco.filamentkit.ui.printers.PrintersListEntry
@@ -190,6 +204,7 @@ import com.thompsonfabco.filamentkit.update.UpdateUi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -299,6 +314,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         nav.navigate(PairGraph) { launchSingleTop = true }
     }
     val pairScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // The user asked to pair again (a screen's button, or the Hub sheet). A 401 or a changed certificate on its own
     // only changes the connection state (05 2.7): it never moves the user or clears a screen.
@@ -312,12 +328,18 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         }
     }
 
-    // Pairing or trusting worked: back to the screen pairing was opened over, else (first start) to Home.
+    // Pairing or trusting worked: back to the screen pairing was opened over, else (first start) to Home; the toast says so.
     fun finishPairing(sameHub: Boolean) {
         app.router.clear()
         pairScope.launch {
             // a read error keeps the stacks: it says nothing about which Hub is stored
-            val hubNow = try { hubIdentity(app.settings.server.first()) } catch (e: java.io.IOException) { hubBefore }
+            val saved = try { app.settings.server.first() } catch (e: java.io.IOException) { null }
+            val hubNow = if (saved != null) hubIdentity(saved) else hubBefore
+            val said = if (sameHub) {
+                context.getString(R.string.pair_cert_stored_trusted)
+            } else {
+                context.getString(R.string.pair_done, saved?.name.orEmpty())
+            }
             if (nav.previousBackStackEntry == null || (!sameHub && hubNow != hubBefore)) {
                 // first start, or another Hub: nothing of the old one stays (stacks, saved stacks, their view models)
                 nav.clearSavedStacks()
@@ -328,7 +350,17 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             } else {
                 nav.popBackStack<PairGraph>(inclusive = true)
             }
+            launch { toast.show(said) }
         }
+    }
+
+    // The pairing destinations follow the pairing steps (05 4); done leaves through finishPairing.
+    val pairOwner = if (inPairing) runCatching { nav.getBackStackEntry<PairGraph>() }.getOrNull() else null
+    if (pairOwner != null) {
+        PairRouteSync(
+            nav, pairViewModel(pairOwner, app.settings), localNetwork.granted, notice,
+            onPaired = { finishPairing(sameHub = false) },
+        )
     }
 
     // Tag taps open the spool card anywhere except pairing and the add flow (AddViewModel takes taps itself).
@@ -356,7 +388,11 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val pairingOverMain = remember(entry) { nav.previousBackStackEntry != null }
-    val showBack = showsBackArrow(destination.isTabRoot(), inPairing, pairingOverMain)
+    val atPairStart = destination?.hasRoute(PairRoute::class) == true || destination?.hasRoute(PairNetworkAccessRoute::class) == true
+    val showBack = showsBackArrow(destination.isTabRoot(), inPairing, pairingOverMain, atPairStart)
+    val scanning = destination?.hasRoute(PairScanRoute::class) == true
+    val storedCertificate = destination?.hasRoute(PairCertificateRoute::class) == true &&
+        entry?.toRoute<PairCertificateRoute>()?.source == MismatchSource.STORED.routeSource()
     val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
 
     val tabTapped: (Tab) -> Unit = { tapped ->
@@ -377,8 +413,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         Scaffold(
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
             topBar = {
-                SwTopBar(
-                    title = placeTitle(destination),
+                if (!scanning) SwTopBar(
+                    title = placeTitle(destination, storedCertificate),
                     subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
                     onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                     scrollBehavior = scroll,
@@ -390,6 +426,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             snackbarHost = { SwToastHost(toast) },
             containerColor = SpoolwardenTheme.colors.bg,
             contentWindowInsets = when {
+                scanning -> WindowInsets(0)
                 !navVisible -> WindowInsets.safeDrawing
                 phone -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
                 else -> WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom)
@@ -398,50 +435,60 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             NavHost(nav, startDestination = if (paired) HomeGraph else PairGraph, modifier = Modifier.padding(padding)) {
                 navigation<PairGraph>(startDestination = PairRoute) {
                     composable<PairRoute> {
-                        val pairVm: PairViewModel = viewModel(factory = viewModelFactory {
-                            initializer { PairViewModel(app.settings, NetPairingBackend()) }
-                        })
-                        var mismatchShown by rememberSaveable { mutableStateOf(false) }
-                        LaunchedEffect(notice) {
-                            val n = notice
-                            if (n is PairNotice.CertChanged && !mismatchShown) {
-                                mismatchShown = true
-                                pairVm.showMismatch(n.expected, n.actual)
-                            }
-                        }
-                        Column(Modifier.fillMaxSize()) {
-                            if (notice is PairNotice.Unpaired || (config != null && !config.isPaired())) {
-                                Text(
-                                    UNPAIRED_MESSAGE,
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
-                                )
-                            }
-                            if (!localNetwork.granted) {
-                                // No NSD browse, probe, verify or pair until the permission is granted.
-                                Column(Modifier.weight(1f).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    Column {
-                                        Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
-                                        VersionLine(version)
-                                    }
-                                    LocalNetworkNotice(localNetwork)
-                                }
-                            } else {
-                                val servers = remember { app.discovery.servers() }
-                                val discovered by servers.collectAsStateWithLifecycle(emptyList())
-                                PairScreen(
-                                    viewModel = pairVm,
-                                    discovered = discovered,
-                                    onPaired = { finishPairing(sameHub = false) },
-                                    modifier = Modifier.weight(1f),
-                                    skipCheck = skipFingerprintCheck,
-                                    onSkipCheck = app::setSkipFingerprintCheck,
-                                    canTrust = { config.canTrust(it.expected) },
-                                    onTrust = { m -> app.trustCertificate(m.expected, m.actual) { finishPairing(sameHub = true) } },
-                                    version = version,
-                                )
-                            }
+                        val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
+                        val ui by pairVm.state.collectAsStateWithLifecycle()
+                        // no NSD browse until the local network permission is granted
+                        val servers = remember(localNetwork.granted) { if (localNetwork.granted) app.discovery.servers() else flowOf(emptyList()) }
+                        val discovered by servers.collectAsStateWithLifecycle(emptyList())
+                        PairStartScreen(
+                            ui = ui,
+                            discovered = discovered,
+                            appVersion = BuildConfig.VERSION_NAME,
+                            onScan = { nav.navigate(PairScanRoute) },
+                            onPick = { pairVm.connectDiscovered(it.host, it.port) },
+                            onEnterAddress = { pairVm.startManual() },
+                            unpairedBanner = notice is PairNotice.Unpaired || (config != null && !config.isPaired()),
+                            access = localNetwork,
+                        )
+                    }
+                    composable<PairNetworkAccessRoute> { PairNetworkAccessScreen(localNetwork, BuildConfig.VERSION_NAME) }
+                    composable<PairScanRoute> {
+                        val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
+                        // closing, a result and "enter the address" may arrive twice; only the entry on screen is popped
+                        val leave = { nav.currentDestination?.hasRoute(PairScanRoute::class) == true && nav.popBackStack() }
+                        QrScanner(
+                            onResult = { text -> if (leave()) pairVm.onQrScanned(text) },
+                            onClose = { leave() },
+                            onEnterAddress = { if (leave()) pairVm.startManual() },
+                        )
+                    }
+                    composable<PairAddressRoute> {
+                        val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
+                        val ui by pairVm.state.collectAsStateWithLifecycle()
+                        PairAddressScreen(ui, pairVm::submitAddress, pairVm::back, localNetwork)
+                    }
+                    composable<PairFingerprintRoute> {
+                        val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
+                        val ui by pairVm.state.collectAsStateWithLifecycle()
+                        PairFingerprintScreen(ui, pairVm::confirmFingerprint, pairVm::rejectFingerprint, pairVm::back)
+                    }
+                    composable<PairCodeRoute> {
+                        val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
+                        val ui by pairVm.state.collectAsStateWithLifecycle()
+                        PairCodeScreen(ui, pairVm::submitCode, pairVm::back, localNetwork)
+                    }
+                    composable<PairCertificateRoute> {
+                        val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
+                        val ui by pairVm.state.collectAsStateWithLifecycle()
+                        // gone while the screen leaves: nothing is asked then
+                        ui.mismatch?.let { m ->
+                            PairCertificateScreen(
+                                mismatch = m,
+                                canTrust = config.canTrust(m.expected),
+                                onTrust = { app.trustCertificate(m.expected, m.actual) { finishPairing(sameHub = true) } },
+                                onPairAgain = pairVm::pairAgain,
+                                onBack = pairVm::back,
+                            )
                         }
                     }
                 }
@@ -823,10 +870,11 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
 
 /** The place the top bar names (05-android-app 2.2): the screen, not the product. */
 @Composable
-private fun placeTitle(destination: NavDestination?): String = stringResource(
+private fun placeTitle(destination: NavDestination?, storedCertificate: Boolean): String = stringResource(
     when {
         destination == null -> R.string.nav_home
-        destination.hasRoute(PairRoute::class) -> R.string.pair_title
+        storedCertificate -> R.string.pair_cert_top_title
+        destination.inPairing() -> R.string.pair_title
         destination.hasRoute(AddRoute::class) -> R.string.home_add_title
         destination.hasRoute(AddProfileRoute::class) -> AddProfileTitle
         destination.hasRoute(LicencesRoute::class) -> R.string.settings_licences_title

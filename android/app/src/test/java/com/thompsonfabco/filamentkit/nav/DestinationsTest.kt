@@ -50,6 +50,7 @@ class DestinationsTest {
         assertTrue("a screen inside a destination", showsBackArrow(atTabRoot = false, inPairing = false, pairingOverMain = true))
         assertFalse("the first pairing screen", showsBackArrow(atTabRoot = false, inPairing = true, pairingOverMain = false))
         assertTrue("pairing opened over a screen", showsBackArrow(atTabRoot = false, inPairing = true, pairingOverMain = true))
+        assertTrue("a later pairing step", showsBackArrow(atTabRoot = false, inPairing = true, pairingOverMain = false, atPairStart = false))
     }
 
     private fun controller(): NavHostController {

@@ -16,6 +16,14 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object PairGraph
 @Serializable data object PairRoute
+@Serializable data object PairNetworkAccessRoute
+@Serializable data object PairScanRoute
+@Serializable data object PairAddressRoute
+@Serializable data object PairFingerprintRoute
+@Serializable data object PairCodeRoute
+
+/** `pair/certificate/{source}`: [source] is `stored`, `qr` or `manual` (05-android-app 4.8). */
+@Serializable data class PairCertificateRoute(val source: String)
 
 @Serializable data object HomeGraph
 @Serializable data object HomeRoute
@@ -88,11 +96,12 @@ fun tabTap(current: Tab?, tapped: Tab, atRoot: Boolean): TabTap = when {
 }
 
 /**
- * The top bar's back arrow (05-android-app 2.2): on every screen except the five roots and the first pairing screen.
- * Pairing opened over the main graph has one, because Back returns to the screen it was opened from.
+ * The top bar's back arrow (05-android-app 2.2): on every screen except the five roots and the first pairing screen
+ * ([atPairStart]: `pair` or its network access step). Pairing opened over the main graph has one there too, because
+ * Back returns to the screen it was opened from; the later pairing steps always have one (05 4).
  */
-fun showsBackArrow(atTabRoot: Boolean, inPairing: Boolean, pairingOverMain: Boolean): Boolean =
-    !atTabRoot && (!inPairing || pairingOverMain)
+fun showsBackArrow(atTabRoot: Boolean, inPairing: Boolean, pairingOverMain: Boolean, atPairStart: Boolean = true): Boolean =
+    !atTabRoot && (!inPairing || pairingOverMain || !atPairStart)
 
 /** Goes to [tab], keeping every tab's stack as it was left (saved and restored). */
 fun NavController.selectTab(tab: Tab) = navigate(tab.graph) {

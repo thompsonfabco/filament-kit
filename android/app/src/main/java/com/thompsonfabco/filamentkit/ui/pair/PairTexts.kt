@@ -1,75 +1,73 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
-import java.io.IOException
-import java.net.ConnectException
-import java.net.UnknownHostException
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.LocalNetworkAccess
+import com.thompsonfabco.filamentkit.ui.components.LocalNetworkNotice
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 
-/** What the mismatch panel says, by [MismatchSource]. */
-data class MismatchText(
+/** What the certificate question says (05-android-app 4.8), by [MismatchSource]. */
+internal class MismatchText(
     val title: String,
     val body: String,
-    /** Null: only the certificate the server shows now is listed. */
+    /** Null: no earlier fingerprint is listed. */
     val expectedLabel: String?,
     val actualLabel: String,
+    /** The fingerprints are listed under their labels; false when the question is about the check just made. */
+    val showsFingerprints: Boolean,
     val button: String,
     /** The one-tap "keep this pairing" button; only a saved pairing has one. */
     val trustButton: String? = null,
-    /** Where the fingerprint above can be compared. */
+    /** Where the fingerprints above can be compared. */
     val whereToCheck: String? = null,
 )
 
-/** Texts of the pairing screens. Where a pairing code comes from is said here, so it changes in one place. */
-object PairTexts {
-    const val SCAN_INTRO = "Show a pairing code on your server's setup page, or run \"sudo filament-kit pair\" on the " +
-        "server. Then scan its QR code with this phone."
-    const val CODE_INTRO = "Type the 6-digit code shown on the server."
+@Composable
+internal fun mismatchText(source: MismatchSource): MismatchText = when (source) {
+    MismatchSource.STORED -> MismatchText(
+        title = stringResource(R.string.pair_cert_stored_title),
+        body = stringResource(R.string.pair_cert_stored_body),
+        expectedLabel = stringResource(R.string.pair_cert_stored_paired_with),
+        actualLabel = stringResource(R.string.pair_cert_stored_now_shows),
+        showsFingerprints = true,
+        button = stringResource(R.string.common_pair_again),
+        trustButton = stringResource(R.string.pair_cert_stored_trust),
+        whereToCheck = stringResource(R.string.pair_cert_stored_hint),
+    )
+    MismatchSource.QR -> MismatchText(
+        title = stringResource(R.string.pair_cert_qr_title),
+        body = stringResource(R.string.pair_cert_qr_body),
+        expectedLabel = stringResource(R.string.pair_cert_qr_expects),
+        actualLabel = stringResource(R.string.pair_cert_qr_shows),
+        showsFingerprints = true,
+        button = stringResource(R.string.pair_cert_start_again),
+    )
+    MismatchSource.MANUAL -> MismatchText(
+        title = stringResource(R.string.pair_cert_manual_title),
+        body = stringResource(R.string.pair_cert_manual_body),
+        expectedLabel = null,
+        actualLabel = "",
+        showsFingerprints = false,
+        button = stringResource(R.string.pair_cert_start_again),
+    )
+}
 
-    fun confirmIntro(host: String) = "$host presented this certificate fingerprint. Compare it with the fingerprint " +
-        "shown with the pairing code on the server before you continue."
+/** The sentence of a [PairMessage] (05-android-app 4.9). */
+@Composable
+internal fun PairMessage.text(): String = when (this) {
+    is PairMessage.Res -> stringResource(id, *args.toTypedArray())
+    is PairMessage.Raw -> text
+    PairMessage.LocalNetwork -> stringResource(R.string.network_text)
+}
 
-    const val FINGERPRINT_REJECTED = "The fingerprint didn't match, so something else may be answering at this address."
-
-    const val NONE_FOUND = "Still looking. A VPN or a guest Wi-Fi can hide the server; you can enter its address below."
-    const val EMPTY_HOST = "Type the server's name or IP address"
-
-    /** Why the address could not be reached, as far as the phone can tell. */
-    fun unreachable(e: IOException, host: String, port: Int): String = when {
-        e is UnknownHostException ->
-            "Could not find $host. Check the name, or use the server's IP address."
-        e is ConnectException && e.message.orEmpty().contains("refused", ignoreCase = true) ->
-            "$host answered, but not on port $port. Check the port; the kit's usual one is $DEFAULT_PORT."
-        else -> "Could not reach $host on port $port. Check the address and that this phone is on the same network."
-    }
-
-    const val SKIP_CHECK_LABEL = "Skip the fingerprint check for new servers"
-    const val SKIP_CHECK_HELP = "When you pair by address, the app trusts the certificate the server presents; a " +
-        "scanned QR code is checked either way."
-
-    fun mismatch(m: Mismatch, host: String): MismatchText = when (m.source) {
-        MismatchSource.STORED -> MismatchText(
-            title = "The server's certificate has changed",
-            body = "If you didn't reinstall or move the server, another device may be answering at this address, and " +
-                "trusting it gives that device this phone's access.",
-            expectedLabel = null,
-            actualLabel = "New fingerprint",
-            button = "Pair again",
-            trustButton = "Trust the new certificate",
-            whereToCheck = "To check it, compare it with the fingerprint shown with a pairing code on the server.",
-        )
-        MismatchSource.QR -> MismatchText(
-            title = "This pairing code doesn't match the server",
-            body = "The server at $host shows a different certificate than this pairing code names. Make a new code " +
-                "and scan that. If it still differs, something else may be answering at that address.",
-            expectedLabel = "Fingerprint in the code",
-            actualLabel = "Fingerprint the server shows",
-            button = "Start again",
-        )
-        MismatchSource.MANUAL -> MismatchText(
-            title = "The server's certificate changed while pairing",
-            body = "Start again. If it happens again, something else may be answering at $host.",
-            expectedLabel = "Fingerprint seen first",
-            actualLabel = "Fingerprint now",
-            button = "Start again",
-        )
+/** A failure under a step's button: the notice line, or for a missing local network permission the panel of 05 3.3. */
+@Composable
+internal fun PairErrorLine(message: PairMessage, access: LocalNetworkAccess?) {
+    if (message == PairMessage.LocalNetwork && access != null) {
+        LocalNetworkNotice(access)
+    } else {
+        NoticeCard(NoticeKind.Bad, message.text())
     }
 }
