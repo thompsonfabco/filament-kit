@@ -111,7 +111,7 @@ class AddFlowTest {
 
         override suspend fun retry(readId: String): ReadResult = error("not used")
 
-        override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?): AddResult {
+        override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String?): AddResult {
             adds += items to dryRun
             return if (dryRun) {
                 AddResult(emptyList(), listOf("SUNLU PLA+ Silver (new filament): 1 spool(s)", "would link tag $tag"), true)

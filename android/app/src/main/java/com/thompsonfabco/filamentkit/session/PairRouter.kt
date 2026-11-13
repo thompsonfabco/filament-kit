@@ -30,9 +30,11 @@ sealed interface PairNotice {
 }
 
 /**
- * The app-wide "go to pairing" signal. Any 401 on an authenticated call, or a [report]ed `unauthorized` /
- * [FingerprintMismatch], bumps [requests] (the navigation host moves to the Pair screen) and sets [notice]
- * (what the Pair screen explains). [clear] after a successful pairing.
+ * The app-wide pairing signals. Any 401 on an authenticated call, or a [report]ed `unauthorized` /
+ * [FingerprintMismatch], bumps [requests] and sets [notice] (what the Pair screen explains, and what the connection
+ * chip says); the app never moves the user for it (05-android-app 2.7). The user's own "Pair again" or "Review the
+ * certificate" ([pairAgain]) also bumps [pairAgainRequests], and the navigation host then opens the pairing graph.
+ * [clear] after a successful pairing.
  *
  * A 401 routes only when the token its request was sent with is still [currentToken]: a late answer to a request
  * sent before a re-pair finished is stale and ignored.
@@ -48,8 +50,12 @@ class PairRouter {
     val notice: StateFlow<PairNotice?> = _notice.asStateFlow()
 
     private val _requests = MutableStateFlow(0)
-    /** Increases by one per request to show the Pair screen. */
+    /** Increases by one per reason to pair (a 401, a changed certificate, a screen asking); nothing navigates by it. */
     val requests: StateFlow<Int> = _requests.asStateFlow()
+
+    private val _pairAgainRequests = MutableStateFlow(0)
+    /** Increases by one each time the user asks to pair again; the only signal that opens the pairing graph. */
+    val pairAgainRequests: StateFlow<Int> = _pairAgainRequests.asStateFlow()
 
     @Volatile private var lastMismatch: FingerprintMismatch? = null
 
@@ -89,6 +95,7 @@ class PairRouter {
     fun pairAgain() {
         val m = lastMismatch
         route(m?.let { PairNotice.CertChanged(it.expected, it.actual) } ?: _notice.value)
+        _pairAgainRequests.update { it + 1 }
     }
 
     fun clear() {

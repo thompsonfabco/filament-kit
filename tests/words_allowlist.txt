@@ -1,7 +1,6 @@
 # Banned words in UI strings (AUT-7): internal words, old names, "color", "OK" and "here" as whole texts. One line each:
 #   <path from the repository root> | <finding> | <reason>
 # A line whose finding is gone must be dropped (09 open point 4); a rewritten file removes its lines.
-android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | profile | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | dry run | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | job id | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
