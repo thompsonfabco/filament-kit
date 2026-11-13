@@ -1348,7 +1348,7 @@ def cmd_library_update(scheduled: bool) -> int:
             if not library.due(cfg, time.time()):
                 print("library update not due yet")
                 return 0
-        r = library.update(cfg["library"].get("url") or None)
+        r = library.update(cfg["library"].get("url") or None, scheduled=scheduled)
     except (library.LibraryError, ValueError) as e:
         _err_line(str(e))
         return 1
@@ -1362,6 +1362,10 @@ def cmd_library_update(scheduled: bool) -> int:
             return 0
         _err_line(r.error)
         return 1
+    if r.held_from is not None:
+        print(f"library version {r.version} kept: version {r.held_from} was rolled back and is the newest published; "
+              "scheduled updates wait for a newer one (run: sudo filament-kit library update to install it anyway)")
+        return 0
     if not r.changed:
         print(f"library version {r.version} is up to date")
         return 0
@@ -1392,6 +1396,10 @@ def cmd_library_rollback() -> int:
         _err_line(str(e))
         return 1
     print(f"rolled back to library version {v}")
+    left = library.rolled_back_from()
+    if left is not None:
+        print(f"scheduled updates will skip version {left} until a newer one is published "
+              "(run: sudo filament-kit library update to install it anyway)")
     _request_rebuild(f"library rolled back to version {v}")
     return 0
 

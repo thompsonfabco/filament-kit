@@ -369,6 +369,38 @@ def test_rollback_after_failed_update_still_works(served):
     assert library.rollback() == _next()
 
 
+def _two_versions(served):
+    assert library.update(served.url).version == _next()
+    edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "v4"}))
+    reindex(served.root, _next() + 1)
+    assert library.update(served.url).version == _next() + 1
+
+
+def test_rollback_sticks_against_scheduled_update(served):
+    _two_versions(served)
+    assert library.rollback() == _next()
+    assert library.rolled_back_from() == _next() + 1
+    r = library.update(served.url, scheduled=True)
+    assert (r.changed, r.version, r.held_from, r.error) == (False, _next(), _next() + 1, None)
+    assert library.load().version == _next()
+    # a newer version is installed again, and the mark goes
+    edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "v5"}))
+    reindex(served.root, _next() + 2)
+    assert library.update(served.url, scheduled=True).version == _next() + 2
+    assert library.rolled_back_from() is None
+
+
+def test_rollback_mark_does_not_stop_a_manual_update_or_a_second_rollback(served):
+    _two_versions(served)
+    library.rollback()
+    assert library.update(served.url).version == _next() + 1
+    assert library.rolled_back_from() is None
+    library.rollback()
+    assert library.rollback() == _next() + 1     # forward again
+    assert library.rolled_back_from() is None
+    assert library.update(served.url, scheduled=True).held_from is None
+
+
 # ---------- lookup / local additions ----------
 
 def test_lookup_case_and_slug():

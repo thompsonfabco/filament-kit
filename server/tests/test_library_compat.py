@@ -204,7 +204,7 @@ def test_library_update_says_how_many(fresh, key, capsys, monkeypatch):  # noqa:
     _change(files, _paths(files)[0], lambda e: e["fields"].update(a_new_field=["1"]))
     web = release_web(key, tar_bytes(_rehash(files)))
     real = library.update
-    monkeypatch.setattr(library, "update", lambda url=None: real(URL, opener=web))
+    monkeypatch.setattr(library, "update", lambda url=None, **k: real(URL, opener=web, **k))
     monkeypatch.setattr(cli, "_request_rebuild", lambda why: None)
     capsys.readouterr()
     assert cli.main(["library", "update"]) == 0
