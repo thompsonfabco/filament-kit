@@ -70,10 +70,6 @@
     </plurals>
     <string name="nav_settings_update">Settings, update available</string>
     <string name="nav_printers_off">Printers, switched off on this Hub</string>
-    <string name="topbar_title_recent">Recently added</string>
-    <string name="hub_chip_connected">Connected</string>
-    <string name="hub_chip_offline">Offline</string>
-    <string name="hub_chip_needs_look">Needs a look</string>
     <string name="hub_chip_checking">Hub connection: checking</string>
     <!-- 1=hub 2=address -->
     <string name="hub_state_connected">Connected to %1$s at %2$s.</string>
@@ -169,7 +165,6 @@
     <string name="home_printers_more">and %1$d more</string>
     <string name="home_printers_empty">No printers yet.</string>
     <string name="home_printers_add">Add a printer</string>
-    <string name="home_presets_title">Slicer presets</string>
     <string name="settings_title">Settings</string>
     <string name="settings_hub_title">Hub connection</string>
     <string name="settings_updates_title">App updates</string>
@@ -471,8 +466,8 @@
     <string name="nav_label">Sections</string>
     <string name="nav_logs">Logs</string>
     <string name="nav_more">More</string>
-    <!-- 1=name -->
-    <string name="nav_more_current">, current: %1$s</string>
+    <!-- 1=section -->
+    <string name="nav_more_current">More, current: %1$s</string>
     <string name="nav_more_sections">More sections</string>
     <string name="nav_off_suffix">, switched off</string>
     <string name="nav_overview">Overview</string>
@@ -913,9 +908,6 @@
     <string name="logs_truncated">Only the end is shown: the rest is too long for this page.</string>
     <string name="logs_unlock_show">Unlock and show</string>
     <string name="nav_flash">Flash a device</string>
-    <!-- 1=section -->
-    <string name="nav_more_current_hub">More, current: %1$s</string>
-    <string name="nav_presets">Slicer presets</string>
     <string name="nav_summary_all_ok">All checks OK</string>
     <!-- 1=paired 2=count -->
     <plurals name="nav_summary_devices">
@@ -987,7 +979,6 @@
     <string name="overview_run_checks">Run the checks again</string>
     <!-- 1=count -->
     <string name="overview_show_ok">Show %1$d checks that are OK</string>
-    <string name="overview_status_fail">Needs a look</string>
     <!-- 1=count -->
     <string name="overview_tile_devices_paired">%1$d paired</string>
     <!-- 1=count -->
@@ -1017,7 +1008,7 @@
     <string name="overview_todo_title">Still to do</string>
     <string name="presets_build_asked">A build was asked for. It runs in a moment.</string>
     <!-- 1=error -->
-    <string name="presets_build_failed">The last build failed: %1$s</string>
+    <string name="presets_build_failed">The last preset build failed: %1$s</string>
     <string name="presets_build_none">No build yet.</string>
     <string name="presets_build_now">Build now</string>
     <!-- 1=stamp 2=presets 3=orca 4=problems -->
@@ -1063,7 +1054,6 @@
     <string name="presets_sync_ok">Slicer Sync has reported in.</string>
     <string name="presets_target_bambu">Bambu Studio</string>
     <string name="presets_target_orca">Orca Slicer</string>
-    <string name="presets_title">Slicer presets</string>
     <string name="presets_updates_accept">Accept these</string>
     <!-- 1=count -->
     <string name="presets_updates_accepted">, %1$d accepted: Slicer Sync writes them next</string>
@@ -1348,19 +1338,19 @@
     <string name="recent_error">Could not read the additions. %1$s</string>
     <string name="recent_error_no_photo">No photo was kept for this record, and the On this Hub engine needs one. Switch on Cloud in Features, or correct the fields by hand.</string>
     <string name="recent_error_note">Say what is wrong first, for example: brand is Polymaker.</string>
-    <string name="recent_field_bed">Bed (°C)</string>
-    <string name="recent_field_bed_range">Bed range (°C)</string>
+    <string name="recent_field_bed">Bed</string>
+    <string name="recent_field_bed_range">Bed range</string>
     <string name="recent_field_brand">Brand</string>
     <string name="recent_field_colour">Colour</string>
-    <string name="recent_field_density">Density (g/cm³)</string>
+    <string name="recent_field_density">Density</string>
     <string name="recent_field_empty">(empty)</string>
-    <string name="recent_field_empty_weight">Empty spool weight (g)</string>
+    <string name="recent_field_empty_weight">Empty spool weight</string>
     <string name="recent_field_line">Line</string>
     <string name="recent_field_material">Material</string>
     <string name="recent_field_name">Name</string>
-    <string name="recent_field_net_weight">Net weight (g)</string>
-    <string name="recent_field_nozzle">Nozzle (°C)</string>
-    <string name="recent_field_nozzle_range">Nozzle range (°C)</string>
+    <string name="recent_field_net_weight">Net weight</string>
+    <string name="recent_field_nozzle">Nozzle</string>
+    <string name="recent_field_nozzle_range">Nozzle range</string>
     <string name="recent_field_price">Price per kg</string>
     <string name="recent_fields_title">Fields</string>
     <!-- 1=count -->
@@ -1391,7 +1381,7 @@
     <string name="recent_photos_none">No photo was taken for this addition.</string>
     <!-- 1=count -->
     <string name="recent_photos_title">Photos (%1$d)</string>
-    <string name="recent_reader_off">The Label Reader is switched off, so corrections are by hand.</string>
+    <string name="recent_reader_off">The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page.</string>
     <string name="recent_record_added">Added</string>
     <string name="recent_record_photos">Photos</string>
     <string name="recent_record_source">Source</string>
@@ -1761,8 +1751,6 @@
     <string name="common_error_address">Enter the printer\'s address.</string>
     <string name="common_error_port">Enter a port from 1 to 65535.</string>
     <string name="common_feature_off_hint">Switch it on on the Hub page under Features.</string>
-    <!-- 1=feature -->
-    <string name="common_feature_off_title_web">%1$s is switched off on this Hub.</string>
     <string name="common_field_bed">Bed</string>
     <string name="common_field_bed_range">Bed range</string>
     <string name="common_field_brand">Brand</string>
@@ -2706,7 +2694,7 @@
     <string name="catalog_field_brand">Brand *</string>
     <string name="catalog_field_line">Line *</string>
     <string name="catalog_field_material">Material *</string>
-    <string name="catalog_field_max_speed">Max volumetric speed (mm³/s)</string>
+    <string name="catalog_field_max_speed">Max volumetric speed</string>
     <string name="catalog_fill">Fill in Brand, Line and Material.</string>
     <string name="catalog_group_line">Line</string>
     <string name="catalog_group_material">Material</string>
@@ -2727,21 +2715,13 @@
     <string name="common_error_name">Enter a name.</string>
     <string name="common_field_access_code">Access Code</string>
     <string name="common_field_bambu_parent">Bambu Studio parent</string>
-    <string name="common_field_bed_app">Bed (°C)</string>
-    <string name="common_field_bed_optional">Bed (°C, optional)</string>
-    <string name="common_field_bed_range_app">Bed range (°C)</string>
-    <string name="common_field_colour_hex">Colour (hex)</string>
-    <string name="common_field_density_app">Density (g/cm³)</string>
-    <string name="common_field_empty_weight">Empty spool weight (g)</string>
+    <string name="common_field_bed_optional">Bed (optional)</string>
     <string name="common_field_name">Name</string>
     <string name="common_field_name_optional">Name (optional)</string>
-    <string name="common_field_net_weight_app">Net weight (g)</string>
     <string name="common_field_notes">Notes</string>
-    <string name="common_field_nozzle_app">Nozzle (°C)</string>
-    <string name="common_field_nozzle_optional">Nozzle (°C, optional)</string>
-    <string name="common_field_nozzle_range_app">Nozzle range (°C)</string>
-    <string name="common_field_weight_with_spool">Weight with spool (g)</string>
-    <string name="common_field_weight_with_spool_optional">Weight with spool (g, optional)</string>
+    <string name="common_field_nozzle_optional">Nozzle (optional)</string>
+    <string name="common_field_weight_with_spool">Weight with spool</string>
+    <string name="common_field_weight_with_spool_optional">Weight with spool (optional)</string>
     <string name="common_group_temperatures">Temperatures</string>
     <string name="common_hint_access_code">On the printer: Settings > Network/LAN > Access Code.</string>
     <string name="common_hint_leave_empty_auto">Leave empty to choose automatically.</string>
@@ -2752,8 +2732,6 @@
     <!-- 1=tag -->
     <string name="common_tag">Tag %1$s</string>
     <string name="common_yes">Yes</string>
-    <!-- 1=error -->
-    <string name="presets_build_failed_app">The last preset build failed: %1$s</string>
     <!-- 1=presets 2=lines 3=time -->
     <string name="presets_built">%1$s for %2$s, built %3$s</string>
     <!-- 1=count -->
@@ -3014,7 +2992,6 @@
     </plurals>
     <string name="recent_ask_discarded">Proposal discarded. Nothing changed.</string>
     <string name="recent_ask_error_empty">Say what is wrong first, e.g. brand is Polymaker.</string>
-    <string name="recent_ask_hint_app">The Label Reader reads the photos again with your note and proposes changes. Nothing changes until you accept.</string>
     <string name="recent_ask_no_change">The Label Reader changed nothing.</string>
     <string name="recent_ask_no_photo">No photo was kept: it worked from the saved values and your note.</string>
     <string name="recent_ask_off">The Label Reader is switched off on this Hub. Edit by hand, or switch it on on the Hub page under Features.</string>
@@ -3024,7 +3001,6 @@
         <item quantity="other">Proposal: %1$d changes</item>
     </plurals>
     <string name="recent_ask_waiting">Asking the Label Reader… (up to a minute)</string>
-    <string name="recent_edit_app">Edit</string>
     <string name="recent_edit_nothing">Nothing changed.</string>
     <string name="recent_edit_save">Save changes</string>
     <!-- 1=count 2=fields -->
@@ -3033,7 +3009,6 @@
         <item quantity="other">Saved %1$d changes: %2$s. Only these were sent.</item>
     </plurals>
     <string name="recent_edit_title">Edit by hand</string>
-    <string name="recent_empty_text_app">No spool has been added since the history started.</string>
     <!-- 1=keep 2=size -->
     <string name="recent_facts">The newest %1$s spool additions are kept with their photos (%2$s MB now).</string>
     <string name="recent_fields_confidence">Read confidence is high unless marked</string>
@@ -3050,15 +3025,11 @@
     <string name="recent_photo_loading">Loading photo…</string>
     <!-- 1=n 2=total -->
     <string name="recent_photo_position">Photo %1$s of %2$s</string>
-    <string name="recent_photos_title_app">Photos</string>
-    <string name="recent_reader_off_app">The Label Reader is switched off on this Hub. Correct by hand, or switch it on on the Hub page under Features.</string>
     <!-- 1=n 2=time 3=change -->
     <string name="recent_revision_by_hand">Revision %1$s, %2$s, by hand: %3$s</string>
     <!-- 1=n -->
     <string name="recent_revision_undo">Undo revision %1$s</string>
-    <string name="recent_revision_undone_app">Undone</string>
     <string name="recent_revisions_none">No revisions. Corrections by hand or by the Label Reader appear here.</string>
-    <string name="recent_revisions_title_app">Revisions</string>
     <!-- 1=ids -->
     <plurals name="recent_spool_label">
         <item quantity="one">Spool %1$s</item>
@@ -4001,4 +3972,9 @@
     <!-- 1=url -->
     <string name="cli_where_spool">Spools are opened and tagged in the web app or app: %1$s</string>
     <string name="cli_yes_no">[y/N]</string>
+    <string name="unit_g">g</string>
+    <string name="unit_c">°C</string>
+    <string name="unit_g_cm3">g/cm³</string>
+    <string name="unit_mm3_s">mm³/s</string>
+    <string name="unit_days">days</string>
 </resources>
