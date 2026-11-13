@@ -9,7 +9,7 @@ format, `KEY=value` lines as systemd's EnvironmentFile reads them), connects to 
 
 The printer's self-signed certificate is pinned as the kit does (bridge/tlspin.py): its SHA-256 is read first and printed,
 and the access code is sent only over a connection that presents that same certificate (--fingerprint HEX also requires
-a value you know; --no-pin turns the check off).
+a value you know; --no-pin turns the check off and cannot be combined with --fingerprint).
 
 The fixture (JSON) holds every message received (`messages`: topic, seconds since connect, payload) and the
 `print` payloads merged in order (`report`). The serial is replaced by SERIAL0000000000 everywhere (keys, topics,
@@ -351,6 +351,10 @@ def main(argv: list[str] | None = None, *, client_factory: Callable[[str], Any] 
     ap.add_argument("--fingerprint", help="require the printer's certificate to have this SHA-256 (hex)")
     ap.add_argument("--no-pin", action="store_true", help="do not pin the printer's certificate before sending the code")
     args = ap.parse_args(argv)
+    if args.no_pin and args.fingerprint:
+        print("error: --fingerprint cannot be used with --no-pin (no pin would be checked); drop one of them",
+              file=sys.stderr)
+        return 2
     out = Path(args.out)
     if inside_tests(out) and not args.force:
         print(f"error: {out} is inside {TESTS}; write it elsewhere, review it, then copy it in "
@@ -368,7 +372,10 @@ def main(argv: list[str] | None = None, *, client_factory: Callable[[str], Any] 
                 raise CaptureError(f"the printer's certificate is {pin}, not the --fingerprint given; "
                                    "the access code was not sent")
             check_leaf_name(der, serial)
-            print(f"printer certificate SHA-256 {pin}; the access code goes only to this certificate")
+            mode = "the --fingerprint given" if want else "trust on first use, for this run only"
+            print(f"printer certificate SHA-256 {pin} (pin: {mode}); the access code goes only to this certificate")
+        if pin is None:
+            print("certificate pin: OFF (--no-pin); the access code goes to whatever answers at the address")
         print(f"capturing from the printer for {args.seconds:g} s (pushall + get_version only) ...")
         raw = capture(host, serial, code, args.seconds, client_factory, sleep, pin)
     except CaptureError as e:
