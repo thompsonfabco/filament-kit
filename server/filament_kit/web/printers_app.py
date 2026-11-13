@@ -60,7 +60,8 @@ MAX_STREAMS = 12          # open status streams (a phone or two per printer)
 MAX_CAMERAS = 4           # open MJPEG relays
 BUSY = "too many open views of the printers; close one (another phone or tab) and this one will retry"
 ACTIONS = ("pause", "resume", "stop", "light_on", "light_off")
-SERIAL = re.compile(r"[A-Za-z0-9]{1,32}")
+# A printer id as the kit names it: a Bambu serial, or a Klipper printer's slug ("sv08-max", registry.slug). One
+# check for every printer route: a Bambu-only one refused Klipper printers before the kit was asked.
 ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
 HLS_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}\.(ts|m3u8)")
 HLS_TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
@@ -173,10 +174,8 @@ class PrintersApp:
 
     @staticmethod
     def _serial(request: Request) -> str:
-        s = request.path_params["id"]
-        if not SERIAL.fullmatch(s):
-            raise Problem("no such printer")
-        return s
+        """The printer id of a per-printer route (_entry's check: Bambu serials and Klipper slugs)."""
+        return PrintersApp._entry(request)
 
     async def _kit_call(self, fn, *args):
         return await anyio.to_thread.run_sync(fn, *args)

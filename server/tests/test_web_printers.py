@@ -968,3 +968,41 @@ def test_the_printers_tab_has_manage_printers():
     # address with its code, a Klipper move with its key
     assert "edit({ unpin: true, access_code: c }" in text
     assert "edit({ address: a, access_code: c }" in text and "edit({ address: a, api_key: k }" in text
+
+
+# ---------- a Klipper printer's id is a slug (user report: SV08 MAX "no such printer", "Reconnecting...") ----------
+
+def test_a_klipper_printer_is_reachable_by_its_slug(app, kit, monkeypatch):
+    """A Klipper printer's id is its name as a slug ("sv08-max"); the Bambu-serial check refused it before the kit was
+    asked, so state, events (the "Reconnecting..." stream), usage and slots all said "no such printer"."""
+    slug = "sv08-max"
+    real_get = kit.get
+
+    def get(path):
+        if path == f"/api/printers/{slug}":
+            kit.calls.append(("GET", path))
+            return {"printer": {"id": slug, "name": "SV08 MAX", "family": "klipper", "state": "connected",
+                                "camera": None}, "status": {"ams": []}}
+        if path.startswith(f"/api/printers/{slug}/usage"):
+            kit.calls.append(("GET", path))
+            return {"entries": []}
+        return real_get(path)
+    monkeypatch.setattr(kit, "get", get)
+    c = signed(app)
+    r = c.get(P + f"/{slug}/state")
+    assert r.status_code == 200, r.text
+    assert r.json()["printer"]["name"] == "SV08 MAX"
+    r = c.get(P + f"/{slug}/usage")
+    assert r.status_code == 200 and r.json() == {"entries": []}
+    assert ("GET", f"/api/printers/{slug}") in kit.calls and ("GET", f"/api/printers/{slug}/usage") in kit.calls
+
+
+def test_every_printer_route_takes_the_id_shape_the_kit_makes():
+    """One id check for all of them: the kit's Bambu serials and Klipper slugs (registry.slug), never a path."""
+    from filament_kit.bridge import registry
+    from filament_kit.web import printers_app as pa
+    for good in ("0948ZZ0A0000001", registry.slug("SV08 MAX", set()), registry.slug("Voron 2.4 #1", set()), "printer-2"):
+        assert pa.ENTRY.fullmatch(good), good
+    for bad in ("..", "a/b", "a b", "x" * 65, ""):
+        assert not pa.ENTRY.fullmatch(bad), bad
+    assert not hasattr(pa, "SERIAL")
