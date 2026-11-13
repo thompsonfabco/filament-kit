@@ -238,8 +238,8 @@ class Releases:
         """dist/ of a release built from a copy of this checkout carrying the throwaway key and `version`."""
         tree = self.copy_tree(self.work / f"tree-{version}")
         sign_release.set_pubkey(tree, self.pub)
-        for rel, pat in (("server/filament_kit/__init__.py", r'^__version__ = "[^"]+"'),
-                         ("server/pyproject.toml", r'^version = "[^"]+"')):
+        # server/pyproject.toml takes its version from __version__ (dynamic), so only this file carries it
+        for rel, pat in (("server/filament_kit/__init__.py", r'^__version__ = "[^"]+"'),):
             f = tree / rel
             text = f.read_text(encoding="utf-8")
             new = re.sub(pat, pat.split(" = ")[0].lstrip("^") + f' = "{version}"', text, count=1, flags=re.M)
