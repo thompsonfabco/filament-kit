@@ -135,6 +135,21 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.thompsonfabco.filamentkit.net.HistoryChange
+import com.thompsonfabco.filamentkit.net.HistoryRead
+import com.thompsonfabco.filamentkit.net.HistoryRecord
+import com.thompsonfabco.filamentkit.net.HistoryRevision
+import com.thompsonfabco.filamentkit.net.HistorySaved
+import com.thompsonfabco.filamentkit.net.HistorySpool
+import com.thompsonfabco.filamentkit.net.HistorySummary
+import com.thompsonfabco.filamentkit.net.IntakeHistory
+import com.thompsonfabco.filamentkit.net.RevisionProposal
+import com.thompsonfabco.filamentkit.ui.history.EditScreen
+import com.thompsonfabco.filamentkit.ui.history.HistoryBackend
+import com.thompsonfabco.filamentkit.ui.history.HistoryListScreen
+import com.thompsonfabco.filamentkit.ui.history.HistoryListViewModel
+import com.thompsonfabco.filamentkit.ui.history.RecordScreen
+import com.thompsonfabco.filamentkit.ui.history.RecordViewModel
 
 /**
  * AUT-8 (07-accessibility 15): Home (with the Label Reader on and off, with printers loading, empty and listed), Spools, Printers, Printer and the pairing screens as they are, Settings as rebuilt (S4.15), drawn under the top bar that
@@ -749,6 +764,54 @@ class ScreenSemanticsTest {
         auditAllFour("Enter the address instead")
     }
 
+    @Test fun recentList() {
+        val history = FakeHistory()
+        val vm = HistoryListViewModel(history)
+        host("Recently added") { HistoryListScreen(vm, null, onOpen = {}, onPairAgain = {}) }
+        auditAllFour("Polymaker PolyTerra PLA Charcoal Black")
+    }
+
+    @Test fun recentListWhenEmptyAndTheReaderIsOff() {
+        val history = FakeHistory(records = emptyList(), ai = false)
+        val vm = HistoryListViewModel(history)
+        host("Recently added") { HistoryListScreen(vm, null, onOpen = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Nothing added yet").assertExists()
+        rule.onNodeWithText("The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page.").assertExists()
+        assertEquals(emptyList<String>(), audit())
+    }
+
+    @Test fun recentRecord() {
+        val history = FakeHistory()
+        val list = HistoryListViewModel(history)
+        val vm = RecordViewModel(history, "a1")
+        host("Recently added") {
+            RecordScreen(vm, list, null, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
+        }
+        auditAllFour("Fields")
+    }
+
+    @Test fun recentRecordWithAProposalToAccept() {
+        val history = FakeHistory()
+        val list = HistoryListViewModel(history)
+        val vm = RecordViewModel(history, "a1")
+        host("Recently added") {
+            RecordScreen(vm, list, null, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
+        }
+        rule.waitForIdle()
+        vm.ask("brand is Polymaker")
+        rule.waitForIdle()
+        rule.onNodeWithText("Proposal: 1 change").assertExists()
+        auditAllFour("Accept")
+    }
+
+    @Test fun recentEdit() {
+        val history = FakeHistory()
+        val vm = RecordViewModel(history, "a1")
+        host("Recently added") { EditScreen(vm, item = 0, onClose = {}, onPairAgain = {}) }
+        auditAllFour("Save changes")
+    }
+
     // The audit itself: each rule fails on a planted violation.
 
     @Test fun anUnnamedClickableFails() {
@@ -810,6 +873,58 @@ class ScreenSemanticsTest {
             Row { Checkbox(checked = false, onCheckedChange = {}); Text("Sealed spools only") }
         }
         assertTrue(audit().any { "own click" in it })
+    }
+
+    private class FakeHistory(
+        val records: List<HistorySummary> = listOf(
+            HistorySummary(
+                "a1", "2026-11-12T14:05:00+00:00", "phone", "detected", photos = 2, undoable = true,
+                spools = listOf(HistorySpool(214, 41, "Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "2B2B2E")),
+            ),
+            HistorySummary(
+                "a2", "2026-11-12T09:41:00+00:00", "station", "revised_ai", photos = 1,
+                spools = listOf(
+                    HistorySpool(212, 40, "Bambu Lab", "PETG HF Orange", "PETG", "F2701D"),
+                    HistorySpool(213, 40, "Bambu Lab", "PETG HF Orange", "PETG", "F2701D"),
+                ),
+            ),
+            HistorySummary(
+                "a3", "2026-11-11T18:20:00+00:00", "web", "edited", photos = 0,
+                spools = listOf(HistorySpool(210, 39, "Example Filaments", "Silk Blue", "PLA", "1E50A0")),
+            ),
+        ),
+        val ai: Boolean = true,
+    ) : HistoryBackend {
+        private val values = buildJsonObject {
+            put("vendor", "Polymaker"); put("name", "PolyTerra PLA Charcoal Black"); put("material", "PLA")
+            put("color_hex", "2B2B2E"); put("tare", 140); put("density", 1.24)
+            put("nozzle_range", JsonArray(listOf(JsonPrimitive(190), JsonPrimitive(230))))
+        }
+        private val record = HistoryRecord(
+            id = "a1", at = "2026-11-12T14:05:00+00:00", source = "phone", state = "edited", photos = 2, undoable = true,
+            spools = listOf(HistorySpool(214, 41, "Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "2B2B2E")),
+            read = HistoryRead(listOf(buildJsonObject {
+                put("vendor", "Polymaker"); put("name", "PolyTerra PLA Charcoal Black"); put("material", "PLA")
+                put("density", 1.24); put("estimates", JsonArray(listOf(JsonPrimitive("density"))))
+            })),
+            saved = listOf(HistorySaved(0, listOf(214), values)),
+            revisions = listOf(
+                HistoryRevision(
+                    1, "2026-11-12T14:09:00+00:00", "hand",
+                    changes = listOf(HistoryChange(214, "tare", JsonPrimitive(150), JsonPrimitive(140))),
+                ),
+            ),
+        )
+
+        override suspend fun list() = IntakeHistory(20, records.size, 14_900_000L, ai, records)
+        override suspend fun record(id: String) = record
+        override suspend fun photo(id: String, n: Int) = ByteArray(0)
+        override suspend fun revise(id: String, note: String, item: Int?) = RevisionProposal(
+            "p-1", 0, buildJsonObject { put("vendor", "Polymaker") }, buildJsonObject { put("vendor", "Polymaker Ltd") }, listOf("vendor"),
+        )
+        override suspend fun applyProposal(id: String, proposal: String) = record
+        override suspend fun applyValues(id: String, item: Int, values: JsonObject) = record
+        override suspend fun undo(id: String, revision: Int) = record
     }
 
     private class FakePrinters(private val list: List<Printer>? = null) : PrinterBackend {

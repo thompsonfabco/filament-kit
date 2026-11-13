@@ -45,6 +45,8 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 @Serializable data object RecentGraph
 @Serializable data object RecentRoute
 @Serializable data class RecordRoute(val hid: String)
+@Serializable data class RecordEditRoute(val hid: String, val item: Int)
+@Serializable data class RecordPhotoRoute(val hid: String, val n: Int)
 
 @Serializable data object SettingsGraph
 @Serializable data object SettingsRoute

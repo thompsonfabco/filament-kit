@@ -3063,7 +3063,7 @@
     <string name="recent_ask_discarded">Proposal discarded. Nothing changed.</string>
     <string name="recent_ask_error_empty">Say what is wrong first, e.g. brand is Polymaker.</string>
     <string name="recent_ask_no_change">The Label Reader changed nothing.</string>
-    <string name="recent_ask_no_photo">No photo was kept: it worked from the saved values and your note.</string>
+    <string name="recent_ask_no_photo">No photo was kept for this record: the Label Reader worked from the saved values and your note.</string>
     <string name="recent_ask_off">The Label Reader is switched off on this Hub. Edit by hand, or switch it on on the Hub page under Features.</string>
     <!-- 1=count -->
     <plurals name="recent_ask_proposal">
@@ -3116,6 +3116,57 @@
     <!-- 1=n -->
     <string name="recent_undo_title">Undo revision %1$s?</string>
     <string name="recent_value_empty">(empty)</string>
+    <string name="recent_arrow">→</string>
+    <!-- 1=field 2=old 3=new -->
+    <string name="recent_change">%1$s %2$s → %3$s</string>
+    <!-- 1=change 2=spools -->
+    <string name="recent_change_for">%1$s (%2$s)</string>
+    <!-- 1=field 2=old 3=new 4=unit -->
+    <string name="recent_change_unit">%1$s %2$s → %3$s %4$s</string>
+    <string name="recent_edit_gone">This record has no spools to edit now.</string>
+    <string name="recent_error_brand">Enter a brand.</string>
+    <string name="recent_error_colour">Enter 6 hex digits, like 2B2B2E.</string>
+    <string name="recent_error_degrees_max">Enter degrees below 500.</string>
+    <string name="recent_error_material">Enter a material.</string>
+    <string name="recent_error_price">Enter a price above 0.</string>
+    <string name="recent_error_range">Enter a range like 190-230.</string>
+    <string name="recent_keep_none">The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page.</string>
+    <string name="recent_leave_thing">this record</string>
+    <string name="recent_mark_estimated">Estimated: check this</string>
+    <!-- 1=name -->
+    <string name="recent_read_colour">Colour: %1$s</string>
+    <!-- 1=name 2=family -->
+    <string name="recent_read_colour_family">Colour: %1$s (%2$s)</string>
+    <string name="recent_read_colour_unknown">Colour: no name found</string>
+    <!-- 1=fields -->
+    <string name="recent_read_least_sure">Least sure: %1$s</string>
+    <!-- 1=percent -->
+    <string name="recent_read_sure">%1$s %% sure</string>
+    <!-- 1=engine -->
+    <string name="recent_reread">Read again by the Label Reader (%1$s).</string>
+    <!-- 1=engine 2=percent -->
+    <string name="recent_reread_sure">Read again by the Label Reader (%1$s), %2$s %% sure.</string>
+    <!-- 1=id -->
+    <string name="recent_relink_other">The spools now use filament %1$s.</string>
+    <!-- 1=time 2=source -->
+    <string name="recent_meta_line">%1$s · %2$s</string>
+    <!-- 1=time 2=spools -->
+    <string name="recent_row_meta">%1$s · %2$s</string>
+    <!-- 1=device -->
+    <string name="recent_revision_device">From %1$s</string>
+    <!-- 1=note -->
+    <string name="recent_revision_note">Note: %1$s</string>
+    <string name="recent_tag_read">Tag read</string>
+    <!-- 1=count -->
+    <string name="recent_times">×%1$d</string>
+    <!-- 1=field 2=value -->
+    <string name="recent_undo_again">%1$s is %2$s again.</string>
+    <!-- 1=weight -->
+    <string name="recent_weighed">Weighed %1$s</string>
+    <!-- 1=details -->
+    <string name="recent_when_read">When read: %1$s</string>
+    <!-- 1=value 2=unit -->
+    <string name="recent_value_unit">%1$s %2$s</string>
     <string name="spool_details_title">Details</string>
     <!-- 1=name 2=id -->
     <string name="spool_empty_body">%1$s (spool %2$s) will be marked as used up.</string>
