@@ -37,7 +37,10 @@
 :where(.page) button:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
 .row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin: var(--s1) 0; }
 .row > input, .row > select { flex: 1 1 calc(var(--s7) * 3); min-width: 0; width: auto; }
-.row > button { flex: 0 0 auto; }
+/* a long label (Flash: "Printer Station (build ...)") wraps inside the row instead of pushing the page past 320 px */
+.row > button { flex: 0 1 auto; max-width: 100%; white-space: normal; }
+/* the bold names and addresses in a sentence (the web app address, printer names) break instead of widening the page */
+:where(.page) p > b { overflow-wrap: anywhere; }
 /* cards (the group look) */
 .card { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r); padding: var(--s3) var(--s4);
         margin: var(--s3) 0; }

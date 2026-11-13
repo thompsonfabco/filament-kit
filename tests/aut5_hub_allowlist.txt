@@ -1,0 +1,53 @@
+# AUT-5 findings on the Hub page that a later step removes (tests/aut5_run.mjs --allow). One line each:
+#   <view> | <check> | <where, as the audit prints it> | <count> | <reason: the step that removes that markup>
+# <view> is the section the finding is in: the same finding in another section is not covered, so it fails. <count> is
+# how often the finding appears in the test's whole run (10 sections x 1280/320 x light/dark = 40 passes, so a visible
+# finding counts 4): a run that finds it more often fails, and one that finds it less often fails as stale, so a rebuilt
+# section has to lower or drop its lines (09 S1.11). The Hub page's selectors are generic (div.row > input), so the same
+# selector appears under several sections. The audit also reads the fields of hidden regions. S1.11 changes no shipped
+# file; the Hub page steps S2.x rebuild each section on the shared components (labelled fields, 44 px controls) and
+# delete their lines.
+#overview | sideways scroll | page | 2 | Overview at 320 px: the certificate fingerprint (64 characters, no break) is wider than the page (today's markup); removed by S2.2
+#printers | field without a label | div > section.card > div.row > input | 4 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | field without a label | section.card > div > div.row > input | 16 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | field without a label | section.card > div.item > div.row > input | 8 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | field without a label | section.card > div.item > div.row > select | 4 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 4 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | hit area under 44 x 44 | div > section.card > div.row > input | 2 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 2 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | hit area under 44 x 44 | section.card > div > div.row > input | 8 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | hit area under 44 x 44 | section.card > div.item > div.row > button.btn--primary | 4 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | hit area under 44 x 44 | section.card > div.item > div.row > button.secondary | 28 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | hit area under 44 x 44 | section.card > div.item > div.row > input | 4 | Printers (today's markup); removed by S2.4 and S2.5
+#printers | hit area under 44 x 44 | section.card > div.item > div.row > select | 2 | Printers (today's markup); removed by S2.4 and S2.5
+#recent | hit area under 44 x 44 | div > div.item > div.row > button.secondary | 2 | Recently added (today's markup); removed by S2.7
+#recent | img alt is "photo N" | div > div.item > div.row > img | 4 | Recently added (today's markup); removed by S2.7
+#devices | field without a label | div > section.card > div.row > input | 4 | Devices (today's markup); removed by S2.9
+#devices | hit area under 44 x 44 | div > section.card > div.row > button.btn--primary | 4 | Devices (today's markup); removed by S2.9
+#devices | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 14 | Devices (today's markup); removed by S2.9
+#devices | hit area under 44 x 44 | div > section.card > div.row > input | 2 | Devices (today's markup); removed by S2.9
+#presets | hit area under 44 x 44 | div > section.card > div.row > button.btn--primary | 2 | Slicer presets (today's markup); removed by S2.10
+#presets | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 2 | Slicer presets (today's markup); removed by S2.10
+#presets | hit area under 44 x 44 | section.card > div.item > div.row > button.secondary | 2 | Slicer presets (today's markup); removed by S2.10
+#features | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 34 | Features (today's markup); removed by S2.12
+#settings | field attribute differs from 07 9.1 | div > div.row > label > input | 12 | Settings (today's markup); removed by S2.19
+#settings | field without a label | div > div > div.row > input | 4 | Settings (today's markup); removed by S2.19
+#settings | field without a label | div > section.card > div.row > input | 24 | Settings (today's markup); removed by S2.19
+#settings | field without a label | section.card > div > div.row > input | 4 | Settings (today's markup); removed by S2.19
+#settings | field without a label | section.page > div > section.card > textarea | 4 | Settings (today's markup); removed by S2.19
+#settings | hit area under 44 x 44 | div > div > div.row > button.secondary | 2 | Settings (today's markup); removed by S2.19
+#settings | hit area under 44 x 44 | div > div > div.row > input | 2 | Settings (today's markup); removed by S2.19
+#settings | hit area under 44 x 44 | div > section.card > div.row > button.btn--primary | 12 | Settings (today's markup); removed by S2.19
+#settings | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 6 | Settings (today's markup); removed by S2.19
+#settings | hit area under 44 x 44 | div > section.card > div.row > input | 12 | Settings (today's markup); removed by S2.19
+#settings | hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 2 | Settings (today's markup); removed by S2.19
+#settings | hit area under 44 x 44 | section.card > div > div.row > button.secondary | 24 | Settings (today's markup); removed by S2.19
+#settings | hit area under 44 x 44 | section.card > div > div.row > input | 2 | Settings (today's markup); removed by S2.19
+#flash | field without a label | section.card > div > div.row > input | 16 | Flash a device (today's markup); removed by S2.16
+#flash | hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 4 | Flash a device (today's markup); removed by S2.16
+#flash | hit area under 44 x 44 | section.card > div > div.row > button.secondary | 4 | Flash a device (today's markup); removed by S2.16
+#flash | hit area under 44 x 44 | section.card > div > div.row > input | 8 | Flash a device (today's markup); removed by S2.16
+#updates | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 2 | Updates (today's markup); removed by S2.13
+#logs | field without a label | section.card > div > div.row > select | 8 | Logs (today's markup); removed by S2.14
+#logs | hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 2 | Logs (today's markup); removed by S2.14
+#logs | hit area under 44 x 44 | section.card > div > div.row > select | 4 | Logs (today's markup); removed by S2.14

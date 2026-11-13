@@ -3,14 +3,25 @@
 // tests/page_audit.js in it and prints the findings as JSON. Test-only: never shipped, never run on a Hub.
 //
 //   node tests/aut5_run.mjs --url http://127.0.0.1:8799/intake --views "#add,#spools" [--widths 1280,320]
-//        [--schemes light,dark] [--browser <path>] [--settle 400] [--allow tests/aut5_allowlist.txt]
+//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/aut5_allowlist.txt] [--wide-font] [--font-dir <dir>]
 //
 // Besides the audit's own checks, each pass fails on: sideways scroll (content wider than the layout viewport), a view
 // that did not open (the address or title is not the one asked for), and an uncaught error in the page.
 // --allow: findings of today's markup that a later step removes, one per line "<check> | <where> | <count> | <reason>";
 // <count> is how many times that finding appears in the whole run (every view, width and appearance). A run that finds
 // it more often fails (a new finding hides behind no line), and a line found less often is stale and fails too, so a
-// rebuilt screen has to drop or lower its lines.
+// rebuilt screen has to drop or lower its lines. A line may start with the view it belongs to ("#settings | <check> |
+// ..."): it then matches that view only, so a finding that moves to another view fails; a line without a view matches
+// in every view.
+// After a view is opened the runner waits --settle ms (a floor), then until no region is aria-busy (at most 10 s; a
+// region still busy after that is a finding of the audit). At 600 px or narrower the page is a touch device (mobile
+// metrics and touch emulation, so (pointer: coarse) is true); "passes" in the output gives innerWidth, dark and coarse
+// of every pass. --wide-font swaps the page's two font tokens (--sans, --mono) for wide faces (Verdana and Lucida
+// Console, or DejaVu Sans and Sans Mono where those are installed): a Linux runner falls back to DejaVu, which is wider
+// than the fonts a Windows or Mac machine has, so this shows there what a layout does when the text is wider. A
+// --font-dir <dir> loads DejaVuSans*.ttf and DejaVuSansMono*.ttf from that folder as DejaVu Sans / DejaVu Sans Mono (what
+// a Linux runner falls back to; the files are not in the repository) and points both tokens at them. A
+// "sideways scroll" finding names the widest element that reaches past the viewport.
 // Exit 0: no findings; 1: findings, or allow-list counts that do not match (printed); 2: the run itself failed (no
 // browser found, the browser closed, a call timed out); 3: a browser was found but could not start headless here
 // (its last error lines are printed). The browser is driven over the DevTools protocol with Node's own
@@ -30,18 +41,59 @@ const URL_BASE = args.url;
 const VIEWS = (args.views || "").split(",").map((v) => v.trim()).filter(Boolean);
 const WIDTHS = (args.widths || "1280,320").split(",").map(Number);
 const SCHEMES = (args.schemes || "light,dark").split(",");
-const SETTLE = Number(args.settle || 400);
+const SETTLE = Number(args.settle || 100);
+// a constructed style sheet, not a <style> element: the page's content security policy refuses inline styles
+const WIDE_FONT = "document.addEventListener('DOMContentLoaded', () => { const s = new CSSStyleSheet(); " +
+  "s.replaceSync(':root{--sans:Verdana,\"DejaVu Sans\",sans-serif !important;" +
+  "--mono:\"Lucida Console\",\"DejaVu Sans Mono\",\"Courier New\",monospace !important}'); " +
+  "document.adoptedStyleSheets = [...document.adoptedStyleSheets, s]; });";
+// the same, with the DejaVu files of --font-dir (read here, loaded in the page as FontFace objects: the page's content
+// security policy does not apply to them); the page waits for them through window.__fonts
+function dejavuScript(dir) {
+  const face = (family, file, weight) => `faces.push(new FontFace(${JSON.stringify(family)}, Uint8Array.from(atob("${
+    readFileSync(join(dir, file)).toString("base64")}"), (c) => c.charCodeAt(0)).buffer, { weight: "${weight}" }));`;
+  return `(() => { const faces = [];
+    ${face("DejaVu Sans", "DejaVuSans.ttf", 400)} ${face("DejaVu Sans", "DejaVuSans-Bold.ttf", 700)}
+    ${face("DejaVu Sans Mono", "DejaVuSansMono.ttf", 400)} ${face("DejaVu Sans Mono", "DejaVuSansMono-Bold.ttf", 700)}
+    window.__fonts = Promise.all(faces.map((f) => f.load().then(() => document.fonts.add(f))));
+    document.addEventListener("DOMContentLoaded", () => { const s = new CSSStyleSheet();
+      s.replaceSync(':root{--sans:"DejaVu Sans",sans-serif !important;--mono:"DejaVu Sans Mono",monospace !important}');
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, s]; }); })();`;
+}
+// the element that makes the page wider than the viewport: the one whose right edge goes furthest past it (selector
+// path, how far, its text); elements inside a box that scrolls or clips on their own do not count, and a box
+// is skipped when a child of it reaches past too (the grid or flex parent that only grew with its content)
+const WIDEST = `(() => {
+  const vw = document.documentElement.clientWidth, name = (e) => e.tagName.toLowerCase() + (e.id ? "#" + e.id : "") +
+    [...e.classList].slice(0, 2).map((c) => "." + c).join("");
+  let best = null;
+  for (const e of document.body.querySelectorAll("*")) {
+    const r = e.getBoundingClientRect();
+    if (!r.width || r.right <= vw + 0.5 || getComputedStyle(e).visibility === "hidden") continue;
+    let clipped = getComputedStyle(e).position === "fixed";      // a fixed box never widens the page
+    for (let p = e.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+      if (getComputedStyle(p).position === "fixed" || /auto|scroll|hidden|clip/.test(getComputedStyle(p).overflowX) && p.getBoundingClientRect().right <= vw + 0.5) { clipped = true; break; }
+    }
+    if (clipped || [...e.children].some((c) => c.getBoundingClientRect().right > vw + 0.5)) continue;      // the innermost element
+    if (!best || r.right > best.right) best = { e, right: r.right };
+  }
+  if (!best) return "";
+  const path = []; for (let e = best.e; e && e !== document.body && path.length < 4; e = e.parentElement) path.unshift(name(e));
+  return path.join(" > ") + " reaches " + Math.round(best.right) + " px: " + (best.e.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
+})()`;
+const BUSY_LIMIT = 10000;
 const CALL_TIMEOUT = 30000;
 const PROFILE_PREFIX = "aut5-";
 const AUDIT = readFileSync(join(HERE, "page_audit.js"), "utf8");
 
-// allow-list: "check | where" -> { want, seen }
+// allow-list: "view | check | where" -> { want, seen }; a line without a view has an empty view (matches in every view)
 const ALLOW = new Map();
 for (const line of args.allow ? readFileSync(args.allow, "utf8").split(/\r?\n/) : []) {
-  if (!line.trim() || line.startsWith("#")) continue;
-  const [check, where, count] = line.split("|").map((x) => x.trim());
+  if (!line.trim() || /^#(\s|$)/.test(line)) continue;      // "# ..." is a comment, "#view | ..." a line
+  const f = line.split("|").map((x) => x.trim());
+  const [view, check, where, count] = f[0].startsWith("#") ? f : ["", ...f];
   if (!/^\d+$/.test(count || "")) throw new Error(`allow-list line without a count: ${line}`);
-  ALLOW.set(`${check} | ${where}`, { want: Number(count), seen: 0 });
+  ALLOW.set(`${view} | ${check} | ${where}`, { want: Number(count), seen: 0 });
 }
 
 function findBrowser() {
@@ -143,47 +195,68 @@ async function main() {
       }
       throw new Error("the page did not finish loading");
     };
+    // wait until no region is aria-busy (two looks 100 ms apart), so a section that loads its data is ready; the bound
+    // only stops a region that never finishes (the audit then reports it)
+    const settled = async () => {
+      const busy = `!!document.querySelector('[aria-busy="true"]:not(button)')`;
+      for (let t = 0, calm = 0; t < BUSY_LIMIT && calm < 2; t += 100) {
+        calm = await evaluate(busy) ? 0 : calm + 1;
+        await sleep(100);
+      }
+    };
     await send("Page.enable");
     await send("Runtime.enable");
-    const report = [];
+    if (args["font-dir"]) await send("Page.addScriptToEvaluateOnNewDocument", { source: dejavuScript(args["font-dir"]) });
+    else if (args["wide-font"]) await send("Page.addScriptToEvaluateOnNewDocument", { source: WIDE_FONT });
+    const report = [], passes = [];
     let pass = 0;
     for (const scheme of SCHEMES) {
       await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
       for (const width of WIDTHS) {
         await send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width <= 600 });
+        await send("Emulation.setTouchEmulationEnabled", { enabled: width <= 600, maxTouchPoints: 1 });
         // a fresh load for each width and appearance (a new query string, so the browser really loads the page again);
         // the views of one load share the audit's title memory (SR-2)
         const url = new URL(URL_BASE);
         url.searchParams.set("aut5", String(++pass));
+        errors.length = 0;
         await send("Page.navigate", { url: url.href + VIEWS[0] });
         await loaded();
+        if (args["font-dir"]) await send("Runtime.evaluate", { expression: "window.__fonts", awaitPromise: true });
         for (const view of VIEWS) {
-          errors.length = 0;
+          // errors are taken when the view is reported: what the page threw while loading is the first view's, and
+          // what arrives later belongs to the view open at that time
           await evaluate(`location.hash = ${JSON.stringify(view)}`);
           await sleep(SETTLE);
+          await settled();
           const found = (await evaluate(AUDIT)) || [];      // page_audit.js: one expression, the findings list
           const page = await evaluate(`({ hash: location.hash, title: document.title,
             sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-            width: document.documentElement.clientWidth })`);
+            width: document.documentElement.clientWidth, innerWidth: innerWidth,
+            dark: matchMedia("(prefers-color-scheme: dark)").matches, coarse: matchMedia("(pointer: coarse)").matches })`);
           const extra = [];
           if (page.hash !== view) extra.push({ check: "view did not open", where: "page", detail: `asked ${view}, shows ${page.hash}` });
-          if (page.sideways) extra.push({ check: "sideways scroll", where: "page", detail: `${page.width} px` });
-          for (const e of errors) extra.push({ check: "page error", where: "page", detail: String(e).split("\n")[0] });
+          if (page.sideways) {
+            const widest = await evaluate(WIDEST);
+            extra.push({ check: "sideways scroll", where: "page", detail: `${page.width} px${widest ? "; " + widest : ""}` });
+          }
+          for (const e of errors.splice(0)) extra.push({ check: "page error", where: "page", detail: String(e).split("\n")[0] });
           const findings = [...found, ...extra].filter((f) => {
-            const a = ALLOW.get(`${f.check} | ${f.where}`);
+            const a = ALLOW.get(`${view} | ${f.check} | ${f.where}`) || ALLOW.get(` | ${f.check} | ${f.where}`);
             if (!a) return true;
             a.seen += 1;
             return false;
           });
           report.push({ view, width, scheme, title: page.title, findings });
+          passes.push({ view, width, scheme, innerWidth: page.innerWidth, dark: page.dark, coarse: page.coarse });
         }
       }
     }
     ws.close();
     const bad = report.filter((r) => r.findings.length);
-    const counts = [...ALLOW].filter(([, a]) => a.seen !== a.want).map(([k, a]) => `${k}: allowed ${a.want}, found ${a.seen}`);
+    const counts = [...ALLOW].filter(([, a]) => a.seen !== a.want).map(([k, a]) => `${k.replace(/^ \| /, "")}: allowed ${a.want}, found ${a.seen}`);
     console.log(JSON.stringify({ views: report.length, failing: bad.length,
-      allowed: [...ALLOW.values()].reduce((n, a) => n + a.seen, 0), counts: counts.length ? counts : undefined,
+      allowed: [...ALLOW.values()].reduce((n, a) => n + a.seen, 0), passes, counts: counts.length ? counts : undefined,
       report: bad.length ? bad : undefined }, null, 1));
     return bad.length || counts.length ? 1 : 0;
   } finally {
