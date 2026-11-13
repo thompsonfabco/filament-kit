@@ -2155,7 +2155,14 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     if was_active:
         run(["systemctl", "stop", service], check=False, capture_output=True)
     try:
-        result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run)
+        # the station's button panel is an ESP32-C3 too, and with the Printer Station unplugged it is the lone board
+        # (FA-040): one that answers as the panel is never written
+        if _answers_as_panel(port):
+            result = rf.Result(False, f"the board on {port} answers as the intake station's button panel, not a "
+                                      "Printer Station; nothing was written. Plug the Printer Station in, or name its "
+                                      "port with --port.")
+        else:
+            result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run)
     finally:
         if was_active:
             run(["systemctl", "start", service], check=False, capture_output=True)

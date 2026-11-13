@@ -190,6 +190,7 @@ def _answers(*items):
 def usb(env, monkeypatch):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader("/dev/ttyACM0", None, "USB JTAG/serial debug unit")])
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: False)    # no real board is asked
     got = {}
 
     def setup(port, settings, reflash=False, run=None):
@@ -235,6 +236,18 @@ def test_a_failed_setup_removes_the_new_token(usb, capsys):
     assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers(), _answers("p", "p"), run=run) == 1
     assert reader_tokens.TokenStore().list() == []
     assert "could not join" in capsys.readouterr().err
+
+
+def test_a_board_that_answers_as_the_panel_is_never_written(usb, monkeypatch, capsys):
+    """FA-040 for this path too: with the Printer Station unplugged, the station's button panel is the lone ESP32-C3."""
+    asked = []
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: asked.append(port) or True)
+    run, _ = _run()
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers(), _answers("p", "p"), run=run) == 1
+    assert asked == ["/dev/ttyACM0"] and "settings" not in usb           # nothing flashed, no settings sent
+    err = capsys.readouterr().err
+    assert "answers as the intake station's button panel" in err and "nothing was written" in err
+    assert reader_tokens.TokenStore().list() == []                       # the new token was removed
 
 
 def test_two_boards_ask_which_and_none_says_plug_it_in(usb, monkeypatch, capsys):
