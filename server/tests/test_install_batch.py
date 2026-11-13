@@ -315,7 +315,7 @@ def test_silent_server_at_a_terminal_only_ends_the_wait(finish_env, monkeypatch,
 def test_modules_apply_exits_1_when_the_server_stays_silent(finish_env, monkeypatch, capsys):
     """install.sh runs this under set -e: exit 1 fails the install, and the updater then puts the earlier version back."""
     monkeypatch.setattr(cli, "_require_root", lambda: True)
-    monkeypatch.setattr(apply, "execute", lambda actions: None)
+    monkeypatch.setattr(apply, "execute", lambda actions, step=None: None)
 
     def silent(cfg, pairing=True):
         raise apply.ApplyError("filament-kit did not answer on port 8710 within 120 s; see: journalctl -u filament-kit")

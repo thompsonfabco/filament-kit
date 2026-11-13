@@ -241,3 +241,15 @@ def test_one_bad_limit_takes_the_other_with_it(fresh):
 def test_salvage_leaves_nothing_invalid():
     assert library.salvage("nope") == (None, 0)
     assert library.salvage({"vendor": "x"})[0] is None
+
+
+def test_an_update_tells_its_download_check_and_install_steps(fresh, key):  # noqa: F811
+    told = []
+    files = _rehash(fixture_files())
+    r = library.update(URL, opener=release_web(key, tar_bytes(files)), step=told.append)
+    assert r.error is None and r.changed
+    assert told == ["Downloading the Filament Catalog", "Checking its signature", "Putting it in place"]
+    told.clear()                                    # the same library again: nothing to put in place
+    r = library.update(URL, opener=release_web(key, tar_bytes(files)), step=told.append)
+    assert r.error is None and not r.changed
+    assert told == ["Downloading the Filament Catalog", "Checking its signature"]

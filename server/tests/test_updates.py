@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from filament_kit import apply, cli, config, modules, release, updates
+from step_lines import sentences
 from test_release import FakeRelease
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -682,3 +683,41 @@ def test_no_systemd_touches_no_unit_file(env, srv, key, unit_dir, monkeypatch):
     run = Runner({"filament-kit-1.0.0": _ships_then(env, 0, "filament-kit.service")})
     assert updates.rollback(cfg, run=run) == 0
     assert (unit_dir / "filament-kit-new.timer").exists()
+
+
+# ---------------------------------------------------------------- the job's step lines (docs/design 02 8.4)
+
+def test_an_update_writes_its_three_steps_with_the_version_it_installs(env, srv, capsys):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=Runner()) == 0
+    assert sentences(capsys.readouterr().out, 3) == ["Downloading 1.1.0", "Checking its signature", "Installing"]
+
+
+def test_an_update_that_finds_nothing_new_writes_no_step_lines(env, srv, capsys):
+    srv.add("1.0.0")
+    assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=Runner()) == 0
+    assert "==> step" not in capsys.readouterr().out
+
+
+def test_the_installing_step_starts_after_the_check_and_before_the_first_command(env, srv, capsys):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    seen = []
+
+    def run(cmd):
+        seen.append(capsys.readouterr().out.count("==> step"))     # the step lines written when this command starts
+        return 0
+    assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=run) == 0
+    assert seen[0] == 3         # downloading, checking and installing are all announced before install.sh runs
+
+
+def test_a_rollback_writes_its_two_steps(env, srv, monkeypatch, capsys):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    cfg = _cfg(env)
+    assert updates.update(cfg, fetcher=srv.fetcher(), run=Runner()) == 0
+    monkeypatch.setattr(updates, "current_version", lambda: "1.1.0")
+    capsys.readouterr()
+    assert updates.rollback(cfg, run=Runner()) == 0
+    assert sentences(capsys.readouterr().out, 2) == ["Finding the kept version", "Installing 1.0.0"]

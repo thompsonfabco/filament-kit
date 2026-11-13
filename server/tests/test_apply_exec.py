@@ -8,6 +8,7 @@ import pytest
 
 from filament_kit import apply, cli, config, modules, secret_input
 from filament_kit.apply import Action
+from step_lines import sentences
 
 INSTALL = Path(__file__).resolve().parents[2] / "install"
 
@@ -371,3 +372,47 @@ def test_prints_reach_the_output_before_each_command(tmp_path, monkeypatch):
     apply.execute([Action("first_build")], run=lambda cmd: seen.append(out.flushed),
                   resources=_res(tmp_path), root=tmp_path)
     assert "==> Building presets" in seen[0]
+
+
+# ---------------------------------------------------------------- the job's step lines (docs/design 02 8.4)
+
+def test_execute_tells_one_step_where_the_sentence_changes(tmp_path, monkeypatch):
+    told = []
+    acts = [Action("apt", "a"), Action("apt_lean", "b"), Action("daemon_reload"), Action("enable", "spoolman.service"),
+            Action("wait_http", apply.SPOOLMAN_INFO), Action("enable", "filament-kit.service"),
+            Action("enable", "filament-kit-backup.timer"), Action("enable", "filament-kit-station.service")]
+    monkeypatch.setattr(apply, "_http_ok", lambda url: True)
+    apply.execute(acts, run=Recorder(), resources=_res(tmp_path), root=tmp_path / "root", step=told.append)
+    assert told == ["Installing the packages the features need", "Writing the service files and settings",
+                    "Starting Spoolman", "Restarting the Hub service", "Starting the other services"]
+    assert told == apply.step_names(acts)
+
+
+def test_modules_apply_writes_its_steps_and_a_last_one_for_the_check(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FK_NO_SYSTEMD", "1")
+    monkeypatch.setattr(cli, "cmd_cert", lambda: 0)
+    monkeypatch.setattr(apply, "_tty", lambda: False)
+    monkeypatch.setattr(apply, "_http_ok", lambda url: True)
+    monkeypatch.setattr(apply, "finish", lambda cfg, **kw: None)
+    real, seen = apply.execute, []
+
+    def execute(acts, **kw):
+        seen.append(acts)
+        real(acts, run=Recorder(), resources=INSTALL, root=tmp_path / "root", **kw)
+    monkeypatch.setattr(apply, "execute", execute)
+    assert cli.main(["modules", "apply", "--no-pair"]) == 0
+    names = apply.step_names(seen[0])
+    got = sentences(capsys.readouterr().out, len(names) + 1)
+    assert got == names + ["Checking that everything answers"] and len(names) >= 3
+
+
+def test_a_failed_apply_stops_at_the_step_it_was_in(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_require_root", lambda: True)
+    monkeypatch.setattr(cli, "cmd_cert", lambda: 0)
+    monkeypatch.setattr(apply, "_tty", lambda: False)
+    real = apply.execute
+    monkeypatch.setattr(apply, "execute", lambda acts, **kw: real(
+        acts, run=Recorder(fail=["daemon-reload"]), resources=INSTALL, root=tmp_path / "root", **kw))
+    assert cli.main(["modules", "apply", "--no-pair"]) == 1
+    out = capsys.readouterr().out
+    assert sentences(out, whole=False)[-1] == "Writing the service files and settings" and "Checking that" not in out

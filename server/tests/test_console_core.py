@@ -347,16 +347,56 @@ def test_job_progress_follows_the_newest_complete_step_line(app):
     head = setup_helper.header("update") + "\n"
     write_log(head + "==> step 1 of 4 downloading\nsome output\n==> step 3 of 4 installing\n==> step 4 of")
     r = c.get("/setup/api/job").json()
-    assert r["running"] is True and r["progress"] == 0.75                         # the half-written line is not read
+    assert r["running"] is True and r["progress"] == 0.5                          # the half-written line is not read
     write_log(head + "==> step 1 of 3 a\n==> step 2 of 3 b\n")
-    assert c.get("/setup/api/job").json()["progress"] == 0.667
+    assert c.get("/setup/api/job").json()["progress"] == 0.333                    # (K - 1) / N: step 2 of 3 is running
     write_log(head + "==> step 9 of 3 too far\n")
     assert c.get("/setup/api/job").json()["progress"] == 1.0                      # clamped
     write_log(head + "==> step 1 of 3 a\n\n==> finished (exit 0)\n")
     assert c.get("/setup/api/job").json()["progress"] == 1.0                      # done counts as all steps
-    write_log(head + "==> step 1 of 4 a\n\n==> finished (exit 2)\n")
+    write_log(head + "==> step 2 of 4 a\n\n==> finished (exit 2)\n")
     r = c.get("/setup/api/job").json()
     assert r["exit"] == 2 and r["progress"] == 0.25                               # a failure stays where it stopped
+    write_log(head + "==> step 1 of 4 a\n")
+    assert c.get("/setup/api/job").json()["progress"] == 0.0                      # the first step: counted, nothing done yet
+
+
+def test_job_reply_has_the_step_at_step_2_of_4_and_at_the_end(app):
+    c = client(app)
+    head = setup_helper.header("update") + "\n"
+    assert c.get("/setup/api/job").json()["step"] is None                         # no job at all
+    write_log(head + "==> step 1 of 4 Downloading 1.2.3\nsome output\n==> step 2 of 4 Checking its signature\n")
+    r = c.get("/setup/api/job").json()
+    assert r["progress"] == 0.25 and r["running"] is True
+    assert r["step"] == {"index": 2, "count": 4, "text": "Checking its signature"}
+    write_log(head + "==> step 4 of 4 Checking that it answers\n\n==> finished (exit 0)\n")
+    r = c.get("/setup/api/job").json()
+    assert r["progress"] == 1 and r["running"] is False
+    assert r["step"] == {"index": 4, "count": 4, "text": "Checking that it answers"}
+    write_log(head + "==> step 3 of 4 Installing\n\n==> finished (exit 1)\n")
+    r = c.get("/setup/api/job").json()
+    assert r["progress"] == 0.5 and r["step"]["index"] == 3                       # a failed job stays in its step
+    write_log(head + "just output\n")
+    r = c.get("/setup/api/job").json()
+    assert r["progress"] is None and r["step"] is None                            # not counted: both null
+
+
+def test_job_step_text_is_redacted_like_the_log(app):
+    c = client(app)
+    write_log(setup_helper.header("update") + "\n==> step 1 of 2 Asking 192.0.2.41\n")
+    r = c.get("/setup/api/job").json()
+    assert "192.0.2.41" not in json.dumps(r["step"]) and "192.0.2.41" not in r["text"]
+
+
+def test_a_step_sentence_with_an_address_fails_the_step_check():
+    from step_lines import sentences
+    assert sentences("==> step 1 of 2 Asking the Hub\n==> step 2 of 2 Saving the pairing\n", 2)
+    with pytest.raises(AssertionError, match="redaction"):
+        sentences("==> step 1 of 1 Asking 192.0.2.41\n")
+    with pytest.raises(AssertionError, match="N changed"):
+        sentences("==> step 1 of 2 a\n==> step 2 of 3 b\n")
+    with pytest.raises(AssertionError, match="in order"):
+        sentences("==> step 1 of 3 a\n==> step 3 of 3 b\n", whole=False)
 
 
 PLANTED_LOG = [
