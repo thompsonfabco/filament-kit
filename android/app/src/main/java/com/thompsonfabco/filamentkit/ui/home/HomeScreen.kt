@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.drafts.Draft
@@ -198,13 +200,14 @@ private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
 @Composable
 private fun DraftRow(draft: Draft, onClick: () -> Unit, onDiscard: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
+    val opener = remember { FocusRequester() }
     val photos = if (draft.photos.size == 1) "1 photo" else "${draft.photos.size} photos"
     val detail = listOfNotNull(photos, draft.hint.ifBlank { null }, draft.tag?.let { "tag $it" }).joinToString(" · ")
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(Modifier.padding(12.dp)) {
             Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(draft.created)))
             Text(detail, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { confirming = true }) { Text("Discard") }
+            TextButton(onClick = { confirming = true }, modifier = Modifier.focusRequester(opener)) { Text("Discard") }
         }
     }
     if (confirming) {
@@ -213,6 +216,7 @@ private fun DraftRow(draft: Draft, onClick: () -> Unit, onDiscard: () -> Unit) {
             onClose = { confirming = false },
             confirm = SwDialogButton("Discard", onClick = { confirming = false; onDiscard() }, kind = SwButtonKind.DestructiveFilled),
             cancel = SwAction("Keep") { confirming = false },
+            returnFocusTo = opener,
         ) {
             Text("Its $photos will be deleted from this phone. Nothing is removed from the server.")
         }

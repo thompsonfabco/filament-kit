@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.addOutline
@@ -48,10 +50,15 @@ internal fun ColorSwatch(hex: String?, modifier: Modifier = Modifier, head: Bool
     val box = if (head) Modifier.size(sizes.swatchHead) else Modifier.size(sizes.swatchRowW, sizes.swatchRowH)
     Canvas(modifier.then(box)) {
         val ring = sizes.hairline.toPx()
-        val path = Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@Canvas)) }
+        // the stroke is centred on the path, so the path is inset by half of it: the whole 1 dp outline is inside the box
+        val inset = Size(this.size.width - ring, this.size.height - ring)
+        val path = Path().apply {
+            addOutline(shape.createOutline(inset, layoutDirection, this@Canvas))
+            translate(Offset(ring / 2, ring / 2))
+        }
         if (look is SwatchLook.Filled) {
             drawPath(path, look.color)
-            drawPath(path, outline, style = Stroke(ring * 2))
+            drawPath(path, outline, style = Stroke(ring))
         } else {
             val dash = dashLength.toPx()
             drawPath(path, outline, style = Stroke(ring, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash))))

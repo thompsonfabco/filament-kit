@@ -187,6 +187,37 @@ class AddProfileViewModelTest {
         assertTrue(vm.state.value.pairAgain)
     }
 
+    @Test fun theHubNoticeFollowsTheLatestFailureAndGoesOnEditAndSuccess() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        filled(vm)
+        api.failure = FingerprintMismatch("aa", "bb")
+        vm.save()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.pairAgain && vm.state.value.certChanged)
+        api.failure = ApiError(401, "unauthorized", "x")
+        vm.save()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.pairAgain && !vm.state.value.certChanged)
+        api.failure = ApiError(0, "offline", "socket")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(OFFLINE, vm.state.value.error)
+        assertFalse(vm.state.value.pairAgain || vm.state.value.certChanged)
+        api.failure = FingerprintMismatch("aa", "bb")
+        vm.save()
+        advanceUntilIdle()
+        vm.set(Notes, "edited")
+        assertFalse(vm.state.value.pairAgain || vm.state.value.certChanged)
+        api.failure = FingerprintMismatch("aa", "bb")
+        vm.save()
+        advanceUntilIdle()
+        api.failure = null
+        vm.save()
+        advanceUntilIdle()
+        assertNull(vm.state.value.error)
+        assertFalse(vm.state.value.pairAgain || vm.state.value.certChanged)
+    }
+
     @Test fun parentsAreLoadedForTheMaterialAfterAPause() = runTest(dispatcher) {
         api.parentLists["PETG"] = ParentList(listOf("Generic PETG", "SUNLU PETG"), synced = true)
         val vm = AddProfileViewModel(api)

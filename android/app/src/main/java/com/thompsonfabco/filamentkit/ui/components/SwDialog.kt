@@ -24,9 +24,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -64,9 +66,15 @@ internal fun SwDialog(
     confirm: SwDialogButton,
     modifier: Modifier = Modifier,
     cancel: SwAction? = null,
+    /** The control that opened the dialog: it gets focus back when the dialog closes (AND-12). */
+    returnFocusTo: FocusRequester? = null,
     body: @Composable ColumnScope.() -> Unit,
 ) {
     val space = SpoolwardenTheme.space
+    DisposableEffect(returnFocusTo) {
+        // the trigger may have left the screen meanwhile; then there is nothing to focus
+        onDispose { returnFocusTo?.let { runCatching { it.requestFocus() } } }
+    }
     if (SpoolwardenTheme.window == WindowClass.Phone) {
         SwSheet(onClose) {
             Column(
@@ -97,7 +105,7 @@ internal fun SwDialog(
         ) {
             Surface(
                 modifier.padding(space.s4).widthIn(max = maxWidth).heightIn(max = this.maxHeight - space.s4 * 2)
-                    .pointerInput(Unit) { detectTapGestures { } },
+                    .semantics { paneTitle = title }.pointerInput(Unit) { detectTapGestures { } },
                 shape = SpoolwardenTheme.shapes.rL,
                 color = colors.surface,
                 contentColor = colors.text,

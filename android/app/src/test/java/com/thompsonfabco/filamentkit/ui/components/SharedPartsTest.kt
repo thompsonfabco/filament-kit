@@ -12,10 +12,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasProgressBarRangeInfo
@@ -347,6 +351,36 @@ class SharedPartsTest {
         assertEquals(1, stayed)
     }
 
+    private fun focusReturns() {
+        val opener = FocusRequester()
+        var open by mutableStateOf(false)
+        themed {
+            Column {
+                SwButton("Open it", { open = true }, Modifier.focusRequester(opener))
+                if (open) {
+                    SwDialog(
+                        title = "Leave without saving?", onClose = { open = false },
+                        confirm = SwDialogButton("Leave", { open = false }),
+                        cancel = SwAction("Stay") { open = false }, returnFocusTo = opener,
+                    ) { Text("Your changes are not saved.") }
+                }
+            }
+        }
+        rule.onNodeWithText("Open it").performClick()
+        rule.onNodeWithText("Your changes are not saved.").assertExists()
+        rule.onNodeWithText("Stay").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Your changes are not saved.").assertDoesNotExist()
+        rule.onNodeWithText("Open it").assertIsFocused()
+    }
+
+    @Test fun closingTheDialogOnAPhoneGivesFocusBackToItsOpener() = focusReturns()
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w900dp-h700dp")
+    @Test fun closingTheDialogOnATabletGivesFocusBackAndNamesThePane() {
+        focusReturns()
+    }
+
     @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w900dp-h700dp")
     @Test fun onATabletTheDialogIsACentredPanelWithTheConfirmingButtonLast() {
         var left = 0
@@ -359,6 +393,7 @@ class SharedPartsTest {
         val panel = rule.onNodeWithText("Leave without saving?").fetchSemanticsNode().boundsInWindow
         assertTrue("at most 30 rem (480 dp) wide", leave.right - stay.left <= 480f)
         assertTrue(panel.left > 100f)
+        rule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Leave without saving?")).assertExists()
         rule.onNodeWithText("Leave").performClick()
         assertEquals(1, left)
     }
