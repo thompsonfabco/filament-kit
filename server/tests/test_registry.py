@@ -305,3 +305,17 @@ def test_detected_klipper_can_leave_the_lookups_to_its_caller(monkeypatch):
     monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: pytest.fail("no lookups were asked for"))
     registry.add_klipper("Voron", "voron.local")
     assert not registry.detected_klipper("192.0.2.20", 7125, lookups=False).configured
+
+
+def test_load_reuses_the_parsed_registry_until_a_file_changes(monkeypatch):
+    registry.upsert(Printer(serial="AAA", name="One"))
+    registry.load()
+    reads = []
+    real = registry._read
+    monkeypatch.setattr(registry, "_read", lambda *a, **k: reads.append(1) or real(*a, **k))
+    first = registry.load()
+    first["AAA"].name = "changed by a caller"
+    assert registry.load()["AAA"].name == "One" and reads == []     # served from memory, as a copy
+    registry.rename("AAA", "Two")                                    # a write replaces the file
+    assert registry.load()["AAA"].name == "Two"
+    assert len(reads) >= 1
