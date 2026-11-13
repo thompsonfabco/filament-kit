@@ -201,7 +201,7 @@ def _decide(rid: str, approve: bool, now: float | None = None) -> dict:
         name = mine["name"]
     token = None
     if approve:
-        p = pairing.issue(device_hint=f"station: {name}", scope="station")
+        p = pairing.issue(device_hint="station" if name == "station" else f"station: {name}", scope="station")
         token = pairing.redeem_code(p.code)          # claimed now: the device shows as paired at once
     with pairing._locked():
         rows = _live(pairing._read(FILE), now)

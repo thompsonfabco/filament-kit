@@ -70,6 +70,12 @@ def test_the_code_is_six_digits_from_the_fingerprint_the_secret_and_the_nonce():
     assert sr.commitment(s) == hashlib.sha256(("filament-kit station pairing commit\n" + s).encode()).hexdigest()
 
 
+def test_a_host_name_that_cleans_to_nothing_gives_the_plain_device_name(env, kit):  # noqa: F811
+    station(kit, name="!!!")
+    sr.decide(sr.pending()[0]["id"], True)
+    assert [d["name"] for d in pairing._load_devices() if d.get("scope") == "station"] == ["station"]
+
+
 def test_commit_reveal_approve_and_the_token_goes_out_once(env, kit):  # noqa: F811
     r, s, nonce = station(kit)
     assert kit.get(f"/api/station/pair-request/{r}").status_code == 202
