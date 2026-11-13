@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 
 from . import config, library, locks, placement, tags
 from .profiles import builds, lines as lines_mod
+from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
 
 log = logging.getLogger(__name__)
@@ -131,10 +132,12 @@ def check_line_text(label: str, key: str, value) -> None:
 def _validate(items: list[dict]) -> None:
     if not isinstance(items, list) or not items:
         raise ValueError("no items to add")
-    for it in items:
-        if not isinstance(it, dict):
-            raise ValueError("each item must be an object")
-    problems = [{"item": i, "field": f, "message": m} for i, it in enumerate(items) for f, m in _item_problems(it)]
+    problems = []
+    for i, it in enumerate(items):
+        if isinstance(it, dict):
+            problems += [{"item": i, "field": f, "message": m} for f, m in _item_problems(it)]
+        else:
+            problems.append({"item": i, "field": None, "message": "each item must be an object"})
     if problems:
         raise ItemsInvalid(problems[0]["message"], problems)
 
@@ -174,6 +177,8 @@ def _item_problems(it: dict) -> list[tuple[str, str]]:
     if _is_num(it.get("gross")) and (it.get("count") != 1 or not _is_num(it.get("tare")) or it["gross"] <= it["tare"]):
         bad("gross", f"gross {it['gross']} g needs count 1 and a weight above the spool")
     for k in ("line", "bambu_parent"):
+        if not isinstance(it.get(k), str):                  # None, or not text: reported above
+            continue
         try:
             check_line_text(label, k, it.get(k))
         except ValueError as e:
@@ -191,8 +196,15 @@ def _check_parents(items: list[dict]) -> None:
     if not wanted:
         return
     store = builds.system_store()
-    for p in wanted:
-        lines_mod.check_parent(p, store)
+    for i, it in enumerate(items):
+        p = _parent(it)
+        try:
+            lines_mod.check_parent(p, store)
+        except ProfileError as e:                            # name the item and the field, as a refused add does
+            problems = [{"item": i, "field": "bambu_parent", "message": e.message}]
+            e.field, e.problems = "items", problems
+            e.extra.update(field="items", problems=problems)
+            raise
 
 
 def _used_locations(sm: Spoolman) -> set[str]:
@@ -215,8 +227,9 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, paren
             tares.setdefault(key, it["tare"])
             tare = tares[key] or it["tare"]
             if it.get("gross") is not None and it["gross"] <= tare:
-                raise ValueError(f"{it['vendor']} {it['name']}: gross {it['gross']} g is not above the spool "
-                                 f"weight {tare} g used for this filament")
+                msg = (f"{it['vendor']} {it['name']}: gross {it['gross']} g is not above the spool "
+                       f"weight {tare} g used for this filament")
+                raise ItemsInvalid(msg, [{"item": it.get("_i"), "field": "gross", "message": msg}])
         try:
             _write_items(sm, placed, vendors, fils, result, dry)
         except (SpoolmanError, RuntimeError) as e:  # RuntimeError: a written spool did not read back

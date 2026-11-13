@@ -533,3 +533,41 @@ def test_searches_page_with_offset(sm):
     r = c.get("/api/filaments?offset=-1", headers=auth(tok))
     assert r.status_code == 400 and r.json()["field"] == "offset"
     assert c.get("/api/spools?limit=x", headers=auth(tok)).json()["field"] == "limit"
+
+
+def _refused(c, sm, items):
+    r = c.post("/api/intake/add", headers=auth(token()), json={"items": items, "dry_run": True})
+    assert r.status_code == 400, r.text
+    return r.json()
+
+
+def test_a_gross_below_the_spool_weight_names_its_item_and_field(sm):
+    sealed_spool(sm)                                    # SUNLU PETG Grey exists with a spool weight of 213 g
+    low = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 100, "density": 1.27,
+           "count": 1, "sealed": False, "gross": 150}
+    body = _refused(client(sm), sm, [low, {**low, "name": "PETG Blue", "gross": 500}])
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "gross")] and body["field"] == "items"
+    assert "not above the spool weight" in body["problems"][0]["message"] == body["message"]
+
+
+def test_an_unknown_bambu_parent_names_its_item_and_field(sm, monkeypatch):
+    monkeypatch.setattr(inventory.builds, "system_store", lambda: object())
+    monkeypatch.setattr(inventory.lines_mod, "usable", lambda store, name: False)
+    ok, new = _two_items(sm)
+    body = _refused(client(sm), sm, [ok, {**new, "bambu_parent": "Bambu Nothing"}])
+    assert body["error"] == "unknown_parent" and body["parent"] == "Bambu Nothing"      # today's fields stay
+    assert body["field"] == "items"
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(1, "bambu_parent")]
+
+
+def test_a_non_object_item_names_its_index(sm):
+    ok, _ = _two_items(sm)
+    body = _refused(client(sm), sm, [ok, 5])
+    assert body["field"] == "items" and body["message"] == "each item must be an object"
+    assert body["problems"] == [{"item": 1, "field": None, "message": "each item must be an object"}]
+
+
+def test_a_non_text_line_is_reported_once(sm):
+    ok, _ = _two_items(sm)
+    body = _refused(client(sm), sm, [{**ok, "line": 5}])
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "line")]

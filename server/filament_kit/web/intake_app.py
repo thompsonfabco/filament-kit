@@ -523,9 +523,11 @@ class IntakeApp:
     async def add(self, request: Request):
         body = await self._body(request)
         items = []
-        for raw in body.get("items") or []:
+        problems = []                                   # every refusal, with its item index and the item's own key
+        for i, raw in enumerate(body.get("items") or []):
             if not isinstance(raw, dict):
-                raise Problem("each item must be an object", "items")
+                problems.append({"item": i, "field": None, "message": "each item must be an object"})
+                continue
             it = {k: v for k, v in raw.items() if k in SpoolItem.model_fields and v not in ("", None)}
             if it.get("price_per_kg"):  # keep the read's order-based line unless the user changed the price
                 ppk = float(it["price_per_kg"])
@@ -536,9 +538,13 @@ class IntakeApp:
             try:
                 items.append(mcp_tools.item_dict(SpoolItem.model_validate(it)))
             except ValidationError as e:
-                err = e.errors()[0]
-                where = ".".join(str(x) for x in err.get("loc", ()))
-                raise Problem(f"{it.get('vendor')} {it.get('name')}: {where} {err.get('msg')}", "items") from None
+                for err in e.errors():
+                    loc = err.get("loc", ())
+                    where = ".".join(str(x) for x in loc)
+                    problems.append({"item": i, "field": str(loc[0]) if loc else None,
+                                     "message": f"{it.get('vendor')} {it.get('name')}: {where} {err.get('msg')}"})
+        if problems:
+            raise inventory.ItemsInvalid(problems[0]["message"], problems)
         if not items:
             raise Problem("no items", "items")
         dry = bool(body.get("dry_run", True))

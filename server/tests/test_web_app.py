@@ -809,3 +809,34 @@ def test_find_results_carry_the_filament_colour_and_page(app, sm):
         assert (fils["total"], fils["offset"], fils["has_more"]) == (3, 1, False)
         r = c.get("/intake/api/find", params={"offset": "x"})
         assert r.status_code == 400 and r.json()["field"] == "offset"
+
+
+def _web_refused(c, items):
+    r = c.post("/intake/api/add", json={"items": items, "dry_run": True}, headers={"Origin": ORIGIN})
+    assert r.status_code == 400, r.text
+    return r.json()
+
+
+def test_web_type_and_required_errors_name_their_item_and_field(app, sm):
+    ok, _ = _preview_items(sm)
+    with _client(app) as c:
+        # two items of the same filament, the second missing net
+        body = _web_refused(c, [ok, {k: v for k, v in ok.items() if k != "net"}])
+        assert body["field"] == "items" and [(p["item"], p["field"]) for p in body["problems"]] == [(1, "net")]
+        assert "SUNLU PETG Grey: net" in body["error"]
+        body = _web_refused(c, [ok, {**ok, "net": "abc"}])
+        assert [(p["item"], p["field"]) for p in body["problems"]] == [(1, "net")]
+        body = _web_refused(c, [{**ok, "count": 1.5}, ok])
+        assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "count")]
+        body = _web_refused(c, [{**ok, "net": "abc", "count": 1.5}])          # one entry per error
+        assert sorted(p["field"] for p in body["problems"]) == ["count", "net"]
+
+
+def test_web_gross_and_non_object_problems_name_their_item(app, sm):
+    ok, _ = _preview_items(sm)
+    with _client(app) as c:
+        low = {**ok, "tare": 100, "count": 1, "sealed": False, "gross": 150}
+        body = _web_refused(c, [low])
+        assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "gross")]
+        body = _web_refused(c, [ok, 5])
+        assert body["problems"] == [{"item": 1, "field": None, "message": "each item must be an object"}]
