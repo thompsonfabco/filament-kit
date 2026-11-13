@@ -58,7 +58,7 @@ const card = (title, ...kids) => h("section", { class: "card" }, h("h2", {}, tit
 let S = null;
 // result boxes outlive a re-render (every change reloads the state), so a token shown once or a QR code stays
 const boxes = {};
-const boxFor = (key) => boxes[key] || (boxes[key] = h("div"));
+const boxFor = (key) => boxes[key] || (boxes[key] = h("div", { role: "status" }));   // a live region: "Saving…" and the result are read out
 const sections = h("div");
 
 // ----- the tabs: the page's own anchors (/setup#printers) -----
