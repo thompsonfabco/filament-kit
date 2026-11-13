@@ -46,7 +46,7 @@ def test_token_needs_entropy_on_windows(tmp_path):
 def test_config_roundtrip(tmp_path):
     d = store.AppDirs(tmp_path / "fks")
     assert store.load_config(d) == {}
-    cfg = {"server": "filament.localdomain:8443", "variant": "BambuStudio", "user_id": "default"}
+    cfg = {"server": "kit.example.com:8443", "variant": "BambuStudio", "user_id": "default"}
     store.save_config(d, cfg)
     assert store.load_config(d) == cfg
     d.config.write_text("{broken", encoding="utf-8")

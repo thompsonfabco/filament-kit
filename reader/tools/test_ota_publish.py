@@ -104,10 +104,27 @@ def test_args_need_host_unless_dry_run_or_init():
     assert a.host == "srv" and a.remote_dir == op.DEFAULT_REMOTE_DIR
 
 
+# Owner-specific values are not in the repository: they live in the local, untracked ban file (the path in
+# $FK_OWNER_BANS, else <repo root>/.owner-bans.local; the "ota_plain" list). Without it this test skips, and with
+# FK_REQUIRE_OWNER_BANS=1 a missing file fails (the premerge check). The same loader is in server/tests/test_readme.py.
+def _ota_bans():
+    import json
+    import os
+    path = Path(os.environ.get("FK_OWNER_BANS") or Path(__file__).resolve().parents[2] / ".owner-bans.local")
+    if not path.is_file():
+        msg = "no local owner-ban file ($FK_OWNER_BANS or <repo root>/.owner-bans.local); the owner-specific check is not run"
+        if os.environ.get("FK_REQUIRE_OWNER_BANS") == "1":
+            pytest.fail(msg + " and FK_REQUIRE_OWNER_BANS=1 requires it")
+        pytest.skip(msg)
+    return json.loads(path.read_text(encoding="utf-8"))["ota_plain"]
+
+
 def test_no_owner_specific_defaults():
+    bans = _ota_bans()
+    assert bans, "the ban file lists no ota_plain entries"
     src = (Path(__file__).resolve().parent / "ota_publish.py").read_text(encoding="utf-8")
-    for owner_bit in ("thompsonfabco", "spoolman-vm", "h2d-fw", ".h2d-ota"):
-        assert owner_bit not in src
+    for i, owner_bit in enumerate(bans):
+        assert owner_bit not in src, f"ota_publish.py holds ota_plain ban {i}"
 
 
 def test_live_check_does_not_follow_redirects():

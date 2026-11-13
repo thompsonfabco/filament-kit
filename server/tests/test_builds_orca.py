@@ -83,7 +83,7 @@ import test_generate_orca as TGO
 from filament_kit import profiles
 
 SV08 = TGO.SV08
-OUSER = "f790a1c6-1"
+OUSER = "0badc0de-1"
 
 
 @pytest.fixture
@@ -473,7 +473,7 @@ def test_install_report_counts_orca_only_for_a_build_with_an_orca_tree(env):
 
 
 def test_new_sync_pc_keeps_migrated_orca_owner_edits_after_a_base_only_install(orca_cfg):
-    """B-I3: migrate-ops seeds owner-edits.json with the owner's Orca record; the first install goes in base/
+    """B-I3: a seeded owner-edits.json holds the owner's Orca record; the first install goes in base/
     only (record_installed keeps the Orca part); a new sync PC must not drop it."""
     TB.synced(orca_cfg)
     orca_synced()

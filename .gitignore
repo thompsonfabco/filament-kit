@@ -36,3 +36,6 @@ handoffs/
 android/**/.gradle/
 android/**/.idea/
 android/**/local.properties
+
+# the owner-ban file the leak-guard tests read (see server/tests/test_readme.py)
+.owner-bans.local

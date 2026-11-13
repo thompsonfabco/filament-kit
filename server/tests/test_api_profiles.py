@@ -447,14 +447,14 @@ from test_builds import orca_system_zip
 
 def test_orca_live_upload(c):
     tok = token()
-    r = put_zip(c, tok, "live", zip_of({"X @SV08 MAX 0.4.json": "{}"}), "?target=orca&user_id=f790a1c6-a")
+    r = put_zip(c, tok, "live", zip_of({"X @SV08 MAX 0.4.json": "{}"}), "?target=orca&user_id=0badc0de-a")
     assert r.status_code == 200, r.text
     h = r.json()["live_hash"]
     assert set(r.json()) == {"live_hash"}
     assert h == builds.tree_hash(config.paths().state / "profiles" / "live" / "orca" / "user")
     st = c.get("/api/sync/state", headers=auth(tok)).json()
     assert (st["orca_live_hash"], st["live_hash"], st["user_id"]) == (h, None, None)
-    assert builds.meta()["orca_user_id"] == "f790a1c6-a"
+    assert builds.meta()["orca_user_id"] == "0badc0de-a"
     assert not live_files().exists()
 
 
