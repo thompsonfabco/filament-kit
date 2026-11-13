@@ -309,8 +309,9 @@ more than one word for a meaning, the word belongs to a kind of thing:
 | Slot after mapping | confirmed · entered by hand · skipped |
 
 The code's own values map onto these words: status rows `ok` / `fail` / `info` / `detail` are OK / needs a look /
-note / detail; printer states `connected` / `offline` / `not_configured` / `wrong_code` / `cert_changed` are
-connected / offline / not set up / wrong Access Code / certificate changed.
+note / detail; printer states follow the printer states table of `02-components.md` 7.1: the badge word as the
+status word (`connected`, `offline`, `not configured`, `needs a look`; `connecting` as a progress line) and the
+table's sentence as the `Fix:` line.
 
 Recently added records carry a **kind of record**, not a health state: `as detected`, `revised by AI`,
 `edited by hand`. These are shown as words without a glyph; `revised by AI` is blue (`--info`) when colour is on.

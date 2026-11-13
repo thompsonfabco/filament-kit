@@ -1037,7 +1037,12 @@ sentence that always follows a "Needs a look".
 | `wrong_code` | triangle, `--warn` | Needs a look | "The printer did not accept the Access Code. Enter the Access Code again." |
 | `needs_developer_mode` | triangle, `--warn` | Needs a look | "The printer refuses remote control. Turn on LAN mode and Developer Mode on the printer." |
 | `cert_changed` | triangle, `--warn` | Needs a look | "The printer's certificate changed. Forget its old certificate in Printer settings." |
-| `not_configured` | hollow circle, `--muted` | Not configured | "Add it with its Access Code." |
+| `not_configured` | hollow circle, `--muted` | Not configured | Bambu Lab: "Add it with its Access Code." Klipper: "Use this printer to add it." |
+| `unknown_model` (Klipper) | filled circle, `--ok` | Connected | Note line (diamond, `--info`): "Model not known; slots are read as a generic Klipper printer." The job line and swatches are shown. |
+| `unauthorized` (Klipper) | triangle, `--warn` | Needs a look | "Moonraker refused the API key. Replace it in Printer settings." |
+| `klippy_not_ready` (Klipper) | triangle, `--warn` | Needs a look | "Klipper is not ready on the printer. Check it in Mainsail or Fluidd." |
+| `connecting` | inline spinner | "Connecting…" (not a badge) | none |
+| any other value | triangle, `--warn` | Needs a look | The Hub's word (underscores as spaces, sentence case) and its fix text when it sends one |
 
 While a job is known, the job state follows the badge as words (not a badge): "Printing", "Paused", "Preparing",
 "Slicing", "Finished", "Print failed", "Idle".
