@@ -1,0 +1,1318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Printers · Spoolwarden</title>
+<style>
+/* Layout concept: Workbench, a Material-style app shell: top app bar, labelled sidebar (desktop) / icon rail (tablet) / bottom bar + More sheet (phone), content in cards on a tinted ground. */
+:root{
+  color-scheme:light;
+  --bg:#F3F4FA;--surface:#FFFFFF;--surface-2:#ECEEF7;--surface-3:#E1E4F1;
+  --text:#1A1C25;--muted:#4B5064;--border:#D5D8E5;--outline:#737992;
+  --accent:#3949C0;--on-accent:#FFFFFF;--accent-soft:#E1E4FF;--on-accent-soft:#1D287A;
+  --ok:#1D6F3A;--ok-soft:#DCF2E2;--warn:#7E4E00;--warn-soft:#FCEBC8;--bad:#B0261E;--bad-soft:#FBE0DC;--on-bad:#FFFFFF;--info:#0A5C80;--info-soft:#D9EEF8;
+  --inv-bg:#2E3140;--inv-text:#F1F2F8;--focus:#3949C0;--hover:rgba(26,28,37,.06);--scrim:rgba(16,18,32,.45);
+  --sw-line:rgba(0,0,0,.2);--card-bd:transparent;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Ubuntu,sans-serif;--mono:ui-monospace,"Cascadia Mono",Consolas,"Liberation Mono",monospace;
+  --fs-xs:.75rem;--fs-sm:.8125rem;--fs-md:.9375rem;--fs-lg:1.0625rem;--fs-xl:1.375rem;--fs-2xl:1.75rem;--lh:1.5;--lh-tight:1.25;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;
+  --r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:28px;--r-full:999px;
+  --e1:0 1px 2px rgba(20,24,60,.08),0 1px 3px rgba(20,24,60,.06);
+  --e2:0 3px 8px rgba(20,24,60,.12),0 1px 3px rgba(20,24,60,.08);
+  --e3:0 12px 32px rgba(20,24,60,.2),0 2px 6px rgba(20,24,60,.1);
+  --t-fast:120ms;--t-med:200ms;--t-slow:320ms;--ease:cubic-bezier(.2,0,0,1);
+  --bar-h:64px;--nav-h:72px;--side-w:256px;--rail-w:88px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --bg:#12141B;--surface:#1B1E29;--surface-2:#232736;--surface-3:#2E3346;
+  --text:#E4E6F0;--muted:#A9AEC3;--border:#353A4D;--outline:#878DA6;
+  --accent:#AAB6FF;--on-accent:#10195A;--accent-soft:#2D3773;--on-accent-soft:#DEE2FF;
+  --ok:#7DD99A;--ok-soft:#173A24;--warn:#F2C06B;--warn-soft:#3B2D10;--bad:#FFB4AB;--bad-soft:#4A1C18;--on-bad:#5C0F0A;--info:#8CCFF0;--info-soft:#123848;
+  --inv-bg:#E4E6F0;--inv-text:#1A1C25;--focus:#AAB6FF;--hover:rgba(228,230,240,.08);--scrim:rgba(0,0,0,.62);
+  --sw-line:rgba(255,255,255,.28);--card-bd:rgba(255,255,255,.05);
+  --e1:0 1px 2px rgba(0,0,0,.4);--e2:0 3px 8px rgba(0,0,0,.45);--e3:0 12px 32px rgba(0,0,0,.6);
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#12141B;--surface:#1B1E29;--surface-2:#232736;--surface-3:#2E3346;
+  --text:#E4E6F0;--muted:#A9AEC3;--border:#353A4D;--outline:#878DA6;
+  --accent:#AAB6FF;--on-accent:#10195A;--accent-soft:#2D3773;--on-accent-soft:#DEE2FF;
+  --ok:#7DD99A;--ok-soft:#173A24;--warn:#F2C06B;--warn-soft:#3B2D10;--bad:#FFB4AB;--bad-soft:#4A1C18;--on-bad:#5C0F0A;--info:#8CCFF0;--info-soft:#123848;
+  --inv-bg:#E4E6F0;--inv-text:#1A1C25;--focus:#AAB6FF;--hover:rgba(228,230,240,.08);--scrim:rgba(0,0,0,.62);
+  --sw-line:rgba(255,255,255,.28);--card-bd:rgba(255,255,255,.05);
+  --e1:0 1px 2px rgba(0,0,0,.4);--e2:0 3px 8px rgba(0,0,0,.45);--e3:0 12px 32px rgba(0,0,0,.6);
+}
+@media (prefers-reduced-motion:reduce){:root{--t-fast:0ms;--t-med:0ms;--t-slow:0ms}}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:calc(var(--bar-h) + 72px)}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:var(--fs-md)/var(--lh) var(--font)}
+h1,h2,h3,p,ul,ol,dl,dd,figure{margin:0}
+ul,ol{padding:0;list-style:none}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+[hidden]{display:none!important}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+h1:focus,h1:focus-visible{outline:none}
+.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:-1px;padding:0;border:0}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.skip{position:fixed;left:var(--s3);top:var(--s3);z-index:60;transform:translateY(-200%)}
+.skip:focus{transform:none}
+
+/* top app bar */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:var(--s3);min-height:calc(var(--bar-h) + env(safe-area-inset-top));padding:env(safe-area-inset-top) max(var(--s4),env(safe-area-inset-right)) 0 max(var(--s4),env(safe-area-inset-left));background:var(--bg);border-bottom:1px solid transparent;transition:background-color var(--t-med),border-color var(--t-med)}
+.top.lift{background:var(--surface-2);border-color:var(--border)}
+.brand{display:flex;align-items:center;gap:var(--s3);flex:1;min-width:0}
+.logo{width:36px;height:36px;border-radius:var(--r-sm);background:var(--accent);color:var(--on-accent);display:grid;place-items:center;flex:none}
+.logo .ic{width:22px;height:22px}
+.brand-t{display:flex;flex-direction:column;min-width:0;line-height:var(--lh-tight)}
+.brand-t b{font-size:var(--fs-lg);font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.brand-t span{font-size:var(--fs-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lock{display:inline-flex;align-items:center;gap:var(--s2);min-height:44px;padding:0 var(--s4) 0 var(--s3);border-radius:var(--r-full);border:1px solid var(--outline);background:transparent;cursor:pointer;font-size:var(--fs-sm);font-weight:600;white-space:nowrap}
+.lock small{font-size:var(--fs-sm);font-weight:400;color:var(--muted)}
+.lock small::before{content:"· "}
+.lock:hover{background-image:linear-gradient(var(--hover),var(--hover))}
+.lock[data-s="unlocked"],.lock[data-s="trusted"]{background-color:var(--ok-soft);color:var(--ok);border-color:transparent}
+.lock[data-s="unlocked"] small,.lock[data-s="trusted"] small{color:var(--ok)}
+.lk-s{display:none}
+.seg{display:inline-flex;flex:none;border:1px solid var(--outline);border-radius:var(--r-full);overflow:hidden}
+.seg input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.seg label{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;min-width:44px;padding:0 var(--s3);cursor:pointer;font-size:var(--fs-sm);font-weight:600}
+.seg label+input+label{border-left:1px solid var(--outline)}
+.seg label:hover{background:var(--hover)}
+.seg input:checked+label{background:var(--accent-soft);color:var(--on-accent-soft)}
+.seg input:focus-visible+label{outline:3px solid var(--focus);outline-offset:-3px}
+
+/* shell + navigation */
+.shell{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);align-items:start}
+.side{position:sticky;top:calc(var(--bar-h) + env(safe-area-inset-top));max-height:calc(100vh - var(--bar-h) - env(safe-area-inset-top));overflow-y:auto;padding:var(--s2) var(--s3) var(--s5) max(var(--s3),env(safe-area-inset-left))}
+.nav-g{font-size:var(--fs-xs);font-weight:700;color:var(--muted);padding:var(--s4) var(--s4) var(--s2);letter-spacing:.02em}
+.nav-sep{display:none}
+.nav-i{display:flex;align-items:center;gap:var(--s3);min-height:48px;padding:0 var(--s4);border-radius:var(--r-full);color:var(--text);text-decoration:none;font-weight:500}
+.nav-i:hover{background:var(--hover)}
+.nav-i[aria-current="page"]{background:var(--accent-soft);color:var(--on-accent-soft);font-weight:700}
+.pill{display:inline-grid;place-items:center}
+main{min-width:0;padding:var(--s5) max(var(--s6),env(safe-area-inset-right)) var(--s7) var(--s6)}
+main:focus{outline:none}
+body:has(#job:not([hidden])) main{padding-bottom:calc(var(--s5) + 140px)}
+body:has(#jobLog:not([hidden])) main{padding-bottom:calc(var(--s5) + 320px)}
+.wrap{max-width:1120px;margin:0 auto}
+.bnav{display:none}
+
+/* page header */
+.ph{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--s3) var(--s5);margin-bottom:var(--s5)}
+.ph-t{flex:1 1 320px;min-width:0}
+.ph h1{font-size:var(--fs-2xl);line-height:var(--lh-tight);font-weight:700;letter-spacing:-.015em;overflow-wrap:anywhere}
+.ph-t>p{color:var(--muted);margin-top:var(--s1)}
+.ph-a{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2)}
+.back{margin:0 0 var(--s2) calc(-1 * var(--s3))}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:44px;padding:0 var(--s5);border-radius:var(--r-full);border:1px solid transparent;background:transparent;font-size:var(--fs-sm);font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap;transition:box-shadow var(--t-fast)}
+.btn:hover:not(:disabled){background-image:linear-gradient(var(--hover),var(--hover))}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.b-fill{background-color:var(--accent);color:var(--on-accent)}
+.b-fill:hover:not(:disabled){box-shadow:var(--e1)}
+.b-ton{background-color:var(--accent-soft);color:var(--on-accent-soft)}
+.b-out{border-color:var(--outline);color:var(--accent)}
+.b-txt{color:var(--accent);padding:0 var(--s3)}
+.b-bad{background-color:var(--bad);color:var(--on-bad)}
+.b-badt{color:var(--bad)}
+.ibtn{width:44px;height:44px;flex:none;display:inline-grid;place-items:center;border:0;border-radius:var(--r-full);background:transparent;color:var(--muted);cursor:pointer}
+.ibtn:hover{background:var(--hover);color:var(--text)}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2) var(--s3)}
+.grow{flex:1}
+
+/* cards, chips, messages */
+.card{background:var(--surface);border:1px solid var(--card-bd);border-radius:var(--r-md);box-shadow:var(--e1);padding:var(--s5)}
+.card h2{font-size:var(--fs-lg);font-weight:650;line-height:var(--lh-tight)}
+.card h3{font-size:var(--fs-lg);font-weight:650;line-height:var(--lh-tight);margin-bottom:var(--s2)}
+.sub{color:var(--muted);font-size:var(--fs-sm);margin-top:var(--s1)}
+.stack>*+*{margin-top:var(--s4)}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:2px 10px 2px 8px;border-radius:var(--r-sm);background:var(--surface-2);color:var(--text);font-size:var(--fs-xs);font-weight:600;line-height:1.2;white-space:nowrap}
+.chip .ic{width:16px;height:16px}
+.ok{--c:var(--ok);--cs:var(--ok-soft)}.warn{--c:var(--warn);--cs:var(--warn-soft)}.bad{--c:var(--bad);--cs:var(--bad-soft)}.info{--c:var(--info);--cs:var(--info-soft)}
+.chip.ok,.chip.warn,.chip.bad,.chip.info,.msg.ok,.msg.warn,.msg.bad,.msg.info{background:var(--cs);color:var(--c)}
+.chip.acc{background:var(--accent-soft);color:var(--on-accent-soft)}
+.msg{display:flex;align-items:flex-start;gap:var(--s2);padding:var(--s2) var(--s3);border-radius:var(--r-sm);background:var(--surface-2);font-size:var(--fs-sm);line-height:1.45}
+.msg>.ic{margin-top:1px}
+.msg>span{min-width:0;overflow-wrap:anywhere}
+.line{display:inline-flex;align-items:flex-start;gap:6px;font-size:var(--fs-sm);font-weight:600;color:var(--c,var(--muted))}
+.line .ic{width:18px;height:18px;margin-top:1px}
+.res:empty{display:none}
+.spin{width:18px;height:18px;flex:none;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:rot .8s linear infinite}
+@keyframes rot{to{transform:rotate(1turn)}}
+.bar{display:block;height:4px;border-radius:var(--r-full);background:var(--surface-3);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:inherit;transition:width var(--t-slow) var(--ease)}
+.msg .bar{background:var(--cs,var(--surface-3))}
+.prog{flex:1;min-width:0}
+.facts{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s5)}
+.facts dt{font-size:var(--fs-xs);color:var(--muted)}
+.facts dd{font:var(--fs-sm)/1.4 var(--mono);overflow-wrap:anywhere}
+
+/* forms */
+.fld{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fld>label,.lbl{font-size:var(--fs-sm);font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s1) var(--s2)}
+.in{width:100%;min-height:48px;padding:0 var(--s3);border:1px solid var(--outline);border-radius:var(--r-sm);background:var(--surface);color:var(--text);font-size:var(--fs-md)}
+textarea.in{min-height:96px;padding:var(--s3);line-height:var(--lh);resize:vertical}
+.in:focus{border-color:var(--accent)}
+.in::placeholder{color:var(--muted);opacity:1}
+.in:disabled{opacity:.6}
+.in[aria-invalid="true"]{border-color:var(--bad);border-width:2px}
+.help{font-size:var(--fs-xs);color:var(--muted)}
+.err{display:flex;align-items:flex-start;gap:6px;font-size:var(--fs-sm);font-weight:600;color:var(--bad)}
+.err .ic{width:18px;height:18px}
+.err:empty{display:none}
+.affix{position:relative}
+.affix .in{padding-right:72px}
+.affix .u{position:absolute;right:var(--s3);top:50%;transform:translateY(-50%);color:var(--muted);font-size:var(--fs-sm);pointer-events:none}
+.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s4)}
+.full{grid-column:1/-1}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend{padding:0}
+.legend{font-size:var(--fs-lg);font-weight:650;color:var(--accent);margin-bottom:var(--s3)}
+.chk,.sw-row{display:flex;align-items:center;gap:var(--s3);min-height:48px;cursor:pointer}
+.chk input{width:20px;height:20px;margin:0;flex:none;accent-color:var(--accent)}
+.sw-row{justify-content:space-between}
+.sw-row>span{display:flex;flex-direction:column;min-width:0}
+.tg{appearance:none;-webkit-appearance:none;position:relative;flex:none;width:52px;height:32px;margin:0;border-radius:var(--r-full);border:2px solid var(--outline);background:var(--surface-3);cursor:pointer;transition:background-color var(--t-fast)}
+.tg::after{content:"";position:absolute;top:50%;left:6px;width:16px;height:16px;border-radius:50%;background:var(--outline);transform:translateY(-50%);transition:left var(--t-fast),width var(--t-fast),height var(--t-fast)}
+.tg:checked{background:var(--accent);border-color:var(--accent)}
+.tg:checked::after{left:22px;width:24px;height:24px;background:var(--on-accent)}
+.rgrp{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:var(--s2)}
+.rc{display:flex;align-items:flex-start;gap:var(--s3);min-height:56px;padding:var(--s3) var(--s4);border:1px solid var(--outline);border-radius:var(--r-md);cursor:pointer}
+.rc input{width:20px;height:20px;margin:2px 0 0;flex:none;accent-color:var(--accent)}
+.rc span{display:flex;flex-direction:column;font-weight:600}
+.rc small{font-weight:400;color:var(--muted);font-size:var(--fs-sm)}
+.rc:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--on-accent-soft)}
+.rc:has(input:checked) small{color:var(--on-accent-soft)}
+.rc:has(input:focus-visible){outline:3px solid var(--focus);outline-offset:2px}
+.rc input:focus-visible{outline:none}
+#rsFile:focus-visible+label{outline:3px solid var(--focus);outline-offset:2px}
+.code{margin:0;padding:var(--s3) var(--s4);background:var(--surface-2);border-radius:var(--r-sm);font:var(--fs-sm)/1.7 var(--mono);white-space:pre;overflow-x:auto}
+
+/* printers */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:var(--s4);align-items:start}
+.pc{position:relative;display:flex;flex-direction:column;gap:var(--s4);padding:var(--s4) var(--s3) var(--s3) var(--s5)}
+.pc>*:not(.pc-h){margin-right:var(--s2)}
+.pc-h{display:flex;align-items:flex-start;gap:var(--s3)}
+.av{width:40px;height:40px;flex:none;border-radius:var(--r-full);display:grid;place-items:center;background:var(--accent-soft);color:var(--on-accent-soft)}
+.pc-t{flex:1;min-width:0;padding-top:1px}
+.pc-t h2{overflow-wrap:anywhere}
+.pc-t p{font-size:var(--fs-sm);color:var(--muted)}
+.pc .k{margin:-2px 0 0}
+.slots{display:grid;border-top:1px solid var(--border);padding-top:var(--s2)}
+.slots li{display:grid;grid-template-columns:28px 26px minmax(0,1fr) 48px;align-items:center;gap:var(--s3);min-height:48px}
+.sw{width:28px;height:28px;border-radius:var(--r-full);background:var(--sw);box-shadow:inset 0 0 0 1px var(--sw-line)}
+.slots .empty .sw{background:none;box-shadow:none;border:2px dashed var(--outline)}
+.sid{font:600 var(--fs-sm)/1 var(--mono);color:var(--muted)}
+.sn{display:flex;flex-direction:column;min-width:0;line-height:var(--lh-tight)}
+.sn b{font-size:var(--fs-sm);font-weight:600}
+.sn small{font-size:var(--fs-xs);color:var(--muted);margin-top:2px}
+.lv{font-size:var(--fs-sm);font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.lv .bar{margin-top:4px}
+.pc-f{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2);margin-top:auto}
+.pc.found{background:transparent;box-shadow:none;border:2px dashed var(--outline)}
+.over{display:flex;align-items:center;gap:var(--s2);font-size:var(--fs-xs);font-weight:700;color:var(--muted)}
+.over .ic{width:16px;height:16px}
+.menu{position:absolute;right:var(--s2);top:52px;z-index:15;min-width:236px;max-width:calc(100% - 16px);padding:var(--s2) 0;background:var(--surface-2);border-radius:var(--r-sm);box-shadow:var(--e2)}
+.mi{display:flex;align-items:center;gap:var(--s3);width:100%;min-height:44px;padding:0 var(--s4);border:0;background:none;text-align:left;font-size:var(--fs-md);cursor:pointer}
+.mi:hover,.mi:focus{background:var(--hover);outline:none}
+.mi:focus-visible{outline:3px solid var(--focus);outline-offset:-3px}
+.mi.bad{color:var(--bad)}
+.msep{height:1px;margin:var(--s2) 0;background:var(--border)}
+.tools{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:var(--s4);margin-top:var(--s6)}
+.sec-t{font-size:var(--fs-lg);font-weight:650;color:var(--muted);margin:var(--s6) 0 var(--s3)}
+.empty-st{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--s3);padding:var(--s7) var(--s5)}
+.art{width:88px;height:88px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--on-accent-soft);margin-bottom:var(--s2)}
+.art .ic{width:40px;height:40px;stroke-width:1.5}
+.empty-st h2{font-size:var(--fs-xl)}
+.empty-st p{color:var(--muted);max-width:44ch}
+.preview{margin-top:var(--s6);padding-top:var(--s3);border-top:1px dashed var(--border)}
+.preview .help{display:block}
+
+/* intake */
+.tcard{padding:0;overflow:hidden}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;font-size:var(--fs-xs);font-weight:700;color:var(--muted);padding:var(--s3) var(--s4);border-bottom:1px solid var(--border);background:var(--surface-2)}
+.tbl td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--border);vertical-align:middle;font-size:var(--fs-sm)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr{cursor:pointer}
+.tbl tbody tr:hover{background:var(--hover)}
+.tbl a{color:var(--text);font-weight:650;font-size:var(--fs-md);text-decoration:none}
+.tbl a:hover{text-decoration:underline}
+.tbl .chev{color:var(--muted);width:40px}
+.nw{white-space:nowrap}
+.cell{display:flex;flex-direction:column;gap:var(--s1);align-items:flex-start}
+.thumb{display:block;width:56px;height:56px;border-radius:var(--r-sm);overflow:hidden;flex:none}
+.thumb svg{display:block;width:100%;height:100%}
+.ph-bg{fill:var(--surface-3)}.ph-rim{fill:none;stroke:var(--outline);stroke-width:1.5}.ph-lab{fill:var(--surface)}.ph-ln{fill:var(--outline)}
+.nophoto{display:grid;place-items:center;background:var(--surface-2);color:var(--muted)}
+.conf{display:inline-flex;align-items:flex-start;gap:6px;font-size:var(--fs-xs);color:var(--muted)}
+.conf .ic{width:16px;height:16px}
+.conf.warn,.conf.bad{color:var(--c);font-weight:600}
+.ilist{display:none}
+.icard{display:grid;grid-template-columns:56px minmax(0,1fr) 24px;gap:var(--s3);align-items:start;padding:var(--s4);color:var(--text);text-decoration:none}
+.icard:hover{background-image:linear-gradient(var(--hover),var(--hover))}
+.icard b{font-size:var(--fs-md);font-weight:650;line-height:var(--lh-tight)}
+.icard .cell{gap:6px}
+.icard small{font-size:var(--fs-xs);color:var(--muted)}
+.icard>.ic{color:var(--muted);align-self:center}
+.dgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:var(--s4);align-items:start}
+.dgrid>div>*+*{margin-top:var(--s4)}
+.photos{display:flex;flex-wrap:wrap;gap:var(--s3);margin-top:var(--s3)}
+.pbtn{width:112px;height:112px;padding:0;border:0;border-radius:var(--r-md);overflow:hidden;cursor:zoom-in;background:none}
+.pbtn svg,.big svg{display:block;width:100%;height:100%}
+.big{width:min(100%,420px);aspect-ratio:1;margin:0 auto;border-radius:var(--r-md);overflow:hidden}
+.fform fieldset{padding:var(--s4) 0 var(--s5);border-top:1px solid var(--border)}
+.fform fieldset:first-of-type{border-top:0}
+.fform .legend{float:left;width:100%}
+.fform .legend+*{clear:both}
+.cfl{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-xs);font-weight:600;padding:1px 8px 1px 6px;border-radius:var(--r-sm);background:var(--cs,var(--surface-2));color:var(--c,var(--muted))}
+.cfl .ic{width:14px;height:14px}
+.colrow{display:flex;gap:var(--s2)}
+.colsw{width:48px;height:48px;flex:none;border-radius:var(--r-sm);background:var(--sw);box-shadow:inset 0 0 0 1px var(--sw-line)}
+.savebar,.cf{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--s2) var(--s3);padding-top:var(--s4);border-top:1px solid var(--border)}
+.cf{margin-top:var(--s5)}
+.savebar .res,.cf .res{margin-right:auto}
+.dirty{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-sm);color:var(--muted)}
+.dirty .ic{width:14px;height:14px;color:var(--warn)}
+.prop{border:1px solid var(--border);border-radius:var(--r-md);padding:var(--s4);background:var(--surface-2)}
+.chg{display:grid;gap:var(--s3);margin:var(--s3) 0 var(--s4)}
+.chg li{display:flex;flex-direction:column;font-size:var(--fs-sm)}
+.chg s{color:var(--muted)}
+.rev li{padding:var(--s3) 0;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:var(--s2);align-items:flex-start}
+.rev li:first-child{border-top:0;padding-top:var(--s2)}
+.rev .t{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2);align-items:center;font-size:var(--fs-sm)}
+.rev .undone>span:not(.t){text-decoration:line-through;color:var(--muted)}
+
+/* settings */
+.set{display:grid;grid-template-columns:208px minmax(0,1fr);gap:var(--s5);align-items:start}
+.snav{position:sticky;top:calc(var(--bar-h) + var(--s5));display:flex;flex-direction:column;gap:2px}
+.snav button{min-height:44px;padding:0 var(--s4);border:0;border-radius:var(--r-full);background:none;text-align:left;font-size:var(--fs-sm);font-weight:500;cursor:pointer}
+.snav button:hover{background:var(--hover)}
+.snav button[aria-current="true"]{background:var(--accent-soft);color:var(--on-accent-soft);font-weight:700}
+.scol>*+*{margin-top:var(--s4)}
+.scard>h2{margin-bottom:var(--s1)}
+.scard>.sub{margin:0 0 var(--s5)}
+.part{margin-top:var(--s5);padding-top:var(--s5);border-top:1px solid var(--border)}
+.blist li{display:flex;align-items:center;gap:var(--s3);min-height:60px;border-top:1px solid var(--border)}
+.blist li:first-child{border-top:0}
+.blist .ic.lead{color:var(--muted)}
+.blist .t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:var(--lh-tight)}
+.blist .t small{color:var(--muted);font-size:var(--fs-sm);margin-top:2px}
+.ph-rows li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--s1) var(--s4);padding:var(--s3) 0;border-top:1px solid var(--border)}
+.ph-rows li:first-child{border-top:0}
+/* theme picker */
+.tpk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s3);margin-top:var(--s3)}
+.tpk-t{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:2px;padding:var(--s3);border:1px solid var(--outline);border-radius:var(--r-md);background:var(--surface);color:var(--text);text-align:left;cursor:pointer}
+.tpk-t:hover{border-color:var(--text)}
+.tpk-t:active{background:var(--surface-2)}
+.tpk-t[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft);color:var(--on-accent-soft)}
+.tpk-p{display:block;aspect-ratio:4/3;margin-bottom:var(--s2);border-radius:var(--r-sm);overflow:hidden;outline:1px solid var(--border)}
+.tpk-p svg{display:block;width:100%;height:100%}
+.tpk-n{font-weight:650}
+.tpk-l{font-size:var(--fs-sm);color:var(--muted)}
+.tpk-t[aria-pressed="true"] .tpk-l{color:var(--on-accent-soft)}
+.tpk-ck{position:absolute;top:var(--s2);right:var(--s2);display:none;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--on-accent)}
+.tpk-ck .ic{width:16px;height:16px}
+.tpk-t[aria-pressed="true"] .tpk-ck{display:grid}
+.nav-i .ns{display:none}
+
+/* dock: toasts + job */
+.dock{position:fixed;z-index:30;right:max(var(--s5),env(safe-area-inset-right));bottom:max(var(--s5),env(safe-area-inset-bottom));width:min(392px,calc(100vw - 2 * var(--s4)));display:flex;flex-direction:column;gap:var(--s2);pointer-events:none}
+.dock>*{pointer-events:auto}
+.toasts{display:flex;flex-direction:column;gap:var(--s2)}
+.toasts:empty{display:none}
+.toast{display:flex;align-items:flex-start;gap:var(--s3);padding:var(--s3) var(--s2) var(--s3) var(--s4);border-radius:var(--r-sm);background:var(--inv-bg);color:var(--inv-text);box-shadow:var(--e3);font-size:var(--fs-sm);animation:rise var(--t-med) var(--ease)}
+.toast>span{flex:1;padding-top:2px}
+.toast .ibtn{width:44px;height:44px;margin:-12px 0;color:inherit}
+.job{background:var(--surface);border:1px solid var(--card-bd);border-radius:var(--r-md);box-shadow:var(--e3);padding:var(--s3) var(--s2) var(--s3) var(--s4)}
+.job-h{display:flex;align-items:center;gap:var(--s3)}
+.job-h>div{flex:1;min-width:0;display:flex;flex-direction:column;line-height:var(--lh-tight)}
+.job-h strong{font-size:var(--fs-sm)}
+.job-h span{font-size:var(--fs-sm);color:var(--muted)}
+#jobIc{display:grid;place-items:center;width:24px;color:var(--accent)}
+.job[data-s="ok"] #jobIc,.job[data-s="ok"] #jobS{color:var(--ok);font-weight:600}
+.job[data-s="bad"] #jobIc,.job[data-s="bad"] #jobS{color:var(--bad);font-weight:600}
+.job[data-s="ok"] .bar i{background:var(--ok)}.job[data-s="bad"] .bar i{background:var(--bad)}
+.job .bar{margin:var(--s2) var(--s2) 0 0}
+.job-log{margin:var(--s3) var(--s2) 0 0;padding:var(--s2) var(--s3);border-radius:var(--r-sm);background:var(--surface-2);font:var(--fs-xs)/1.7 var(--mono);max-height:160px;overflow:auto}
+#jobTg[aria-expanded="true"] .ic{transform:rotate(180deg)}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}}
+
+/* dialogs */
+.dlg{border:0;padding:0;width:min(520px,calc(100vw - 32px));max-width:none;max-height:calc(100vh - 48px);border-radius:var(--r-xl);background:var(--surface);color:var(--text);box-shadow:var(--e3)}
+.dlg[open]{animation:rise var(--t-med) var(--ease)}
+.dlg::backdrop{background:var(--scrim)}
+.dlg-in{display:flex;flex-direction:column;gap:var(--s4);padding:var(--s5)}
+.dlg h2{font-size:var(--fs-xl);font-weight:650;line-height:var(--lh-tight)}
+.dlg-ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--on-accent-soft)}
+.dlg-act{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--s2);margin-top:var(--s2)}
+.dlg .seg label{min-width:112px}
+.more-l a{display:flex;align-items:center;gap:var(--s4);min-height:56px;padding:0 var(--s4);border-radius:var(--r-full);color:var(--text);text-decoration:none;font-weight:500}
+.more-l a[aria-current="page"]{background:var(--accent-soft);color:var(--on-accent-soft);font-weight:700}
+.more-l a:hover{background:var(--hover)}
+
+@media (prefers-reduced-motion:reduce){.spin{animation:none}.dlg[open],.toast{animation:none}}
+
+/* tablet: icon rail */
+@media (max-width:1024px){
+  :root{--side-w:var(--rail-w)}
+  .side{padding:var(--s3) 0 var(--s5) env(safe-area-inset-left)}
+  .nav-g{display:none}
+  .nav-sep{display:block;margin:var(--s2) var(--s5);border:0;border-top:1px solid var(--border)}
+  .nav-i{flex-direction:column;justify-content:center;gap:4px;min-height:60px;padding:2px 0 6px;border-radius:0;font-size:var(--fs-xs);font-weight:600;text-align:center}
+  .nav-i:hover,.nav-i[aria-current="page"]{background:none;color:var(--text)}
+  .nav-i .pill{width:56px;height:32px;border-radius:var(--r-full)}
+  .nav-i .nl{display:none}.nav-i .ns{display:inline}
+  .tpk{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .nav-i:hover .pill{background:var(--hover)}
+  .nav-i[aria-current="page"] .pill{background:var(--accent-soft);color:var(--on-accent-soft)}
+  main{padding:var(--s5) max(var(--s5),env(safe-area-inset-right)) var(--s7) var(--s5)}
+  .tools,.dgrid{grid-template-columns:minmax(0,1fr)}
+  .set{grid-template-columns:minmax(0,1fr);gap:var(--s3)}
+  .snav{top:calc(var(--bar-h) + env(safe-area-inset-top));z-index:10;flex-direction:row;gap:var(--s2);overflow-x:auto;margin:calc(-1 * var(--s2)) calc(-1 * var(--s5)) 0;padding:var(--s2) var(--s5);background:var(--bg);scrollbar-width:none}
+  .snav button{flex:none;white-space:nowrap;border:1px solid var(--outline);border-radius:var(--r-sm)}
+  .snav button[aria-current="true"]{border-color:transparent}
+}
+/* phone: bottom bar */
+@media (max-width:600px){
+  :root{--bar-h:60px}
+  .top{gap:var(--s2);padding-left:max(var(--s3),env(safe-area-inset-left));padding-right:max(var(--s3),env(safe-area-inset-right))}
+  .logo{width:32px;height:32px}
+  .brand{gap:var(--s2)}
+  .brand-t b{font-size:var(--fs-md)}
+  .lock{flex-direction:column;gap:0;min-width:56px;padding:2px var(--s2);border:0;border-radius:var(--r-md);font-size:11px;line-height:1.2}
+  .lock small,.lk-l{display:none}
+  .lk-s{display:inline}
+  .top .seg label{padding:0}
+  .seg-l{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .shell{display:block}
+  .side{display:none}
+  main{padding:var(--s4) max(var(--s4),env(safe-area-inset-right)) calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--s7)) max(var(--s4),env(safe-area-inset-left))}
+  .ph{margin-bottom:var(--s4)}
+  .ph h1{font-size:var(--fs-xl)}
+  .ph-t{flex-basis:100%}
+  .ph-a{width:100%}
+  .ph-a .btn{flex:1 1 auto}
+  .ph-a .b-fill{order:-1}
+  .card{padding:var(--s4)}
+  .pc{padding:var(--s4) var(--s2) var(--s3) var(--s4)}
+  .fgrid{grid-template-columns:minmax(0,1fr)}
+  .tcard{display:none}
+  .ilist{display:grid;gap:var(--s3)}
+  .snav{margin:calc(-1 * var(--s2)) calc(-1 * var(--s4)) 0;padding:var(--s2) var(--s4)}
+  .bnav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding:var(--s1) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background:var(--surface-2);border-top:1px solid var(--border)}
+  .bn-i{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;padding:0;border:0;background:none;color:var(--muted);text-decoration:none;font-size:var(--fs-xs);font-weight:600;cursor:pointer}
+  .bn-i .pill{width:56px;height:32px;border-radius:var(--r-full)}
+  .bn-i:hover .pill{background:var(--hover)}
+  .bn-i[aria-current="page"],.bn-i.on{color:var(--text)}
+  .bn-i[aria-current="page"] .pill,.bn-i.on .pill{background:var(--accent-soft);color:var(--on-accent-soft)}
+  .dock{left:max(var(--s3),env(safe-area-inset-left));right:max(var(--s3),env(safe-area-inset-right));width:auto;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--s2))}
+  body:has(#job:not([hidden])) main{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--s2) + 140px)}
+  body:has(#jobLog:not([hidden])) main{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--s2) + 320px)}
+  .dlg{width:100%;margin:auto 0 0;max-height:92vh;border-radius:var(--r-xl) var(--r-xl) 0 0;padding-bottom:env(safe-area-inset-bottom)}
+  .dlg-in{padding:var(--s3) var(--s4) var(--s5)}
+  .dlg-in::before{content:"";align-self:center;width:32px;height:4px;border-radius:2px;background:var(--outline)}
+  .dlg-act .btn{flex:1}
+}
+@media (max-width:379px){.logo{display:none}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-spool" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3.5v6M12 14.5v6M3.5 12h6M14.5 12h6"/></symbol>
+<symbol id="i-overview" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="i-printer" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M4 8h16M10 8v3h4V8M12 11v2M8 17h8"/></symbol>
+<symbol id="i-intake" viewBox="0 0 24 24"><path d="M12 3.5v9m-3.5-3.5 3.5 3.5 3.5-3.5"/><path d="M3.5 14.5H8l1.5 2.5h5l1.5-2.5h4.5v5a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="i-devices" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="11" height="14" rx="1.5"/><rect x="16.5" y="9.5" width="4.5" height="10" rx="1"/><path d="M8 16.5h2"/></symbol>
+<symbol id="i-presets" viewBox="0 0 24 24"><path d="M4 6h9M18 6h2M4 12h3M12 12h8M4 18h11M20 18h0"/><circle cx="15.5" cy="6" r="2"/><circle cx="9.5" cy="12" r="2"/><circle cx="17.5" cy="18" r="2"/></symbol>
+<symbol id="i-modules" viewBox="0 0 24 24"><path d="M12 3.5 3.5 8 12 12.5 20.5 8z"/><path d="m3.5 12 8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.8 4.9 10.2 2.6h3.6l.4 2.3A7.4 7.4 0 0 1 15.5 5.5L17.4 4 20 6.6l-1.5 1.9a7.4 7.4 0 0 1 .6 1.3l2.3.4v3.6l-2.3.4a7.4 7.4 0 0 1-.6 1.3l1.5 1.9-2.6 2.6-1.9-1.5a7.4 7.4 0 0 1-1.3.6l-.4 2.3h-3.6l-.4-2.3a7.4 7.4 0 0 1-1.3-.6L6.6 20 4 17.4l1.5-1.9a7.4 7.4 0 0 1-.6-1.3l-2.3-.4v-3.6l2.3-.4a7.4 7.4 0 0 1 .6-1.3L4 6.6 6.6 4l1.9 1.5a7.4 7.4 0 0 1 1.3-.6z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-updates" viewBox="0 0 24 24"><path d="M19.5 10.5A7.7 7.7 0 0 0 5.6 7.6L4 9.5M4 4.5v5h5M4.5 13.5a7.7 7.7 0 0 0 13.9 2.9L20 14.5M20 19.5v-5h-5"/></symbol>
+<symbol id="i-logs" viewBox="0 0 24 24"><path d="M6 3.5h8.5l4 4v13H6z"/><path d="M14 3.5V8h4.5M9 12h6.5M9 15h6.5M9 18h4"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+<symbol id="i-kebab" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3M12 14.5v2"/></symbol>
+<symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5v-3a4 4 0 0 1 7.6-1.7M12 14.5v2"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.3 3 7.8 7 9.5 4-1.7 7-5.2 7-9.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 1 1 9.5 4.5a6.5 6.5 0 0 0 10 10z"/></symbol>
+<symbol id="i-system" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+<symbol id="i-okc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 10"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 4.5a2 2 0 0 1 3.4 0l7.4 13a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/><path d="M12 10v4M12 17.2v.1"/></symbol>
+<symbol id="i-bad" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.1"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5"/></symbol>
+<symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 3.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5zM18.5 15v5M16 17.5h5"/></symbol>
+<symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M4.5 19.5h15"/></symbol>
+<symbol id="i-offline" viewBox="0 0 24 24"><path d="M2.5 8.5a14 14 0 0 1 5-3M11 4.6a14 14 0 0 1 10.5 3.9M5.5 12a9.5 9.5 0 0 1 3.5-2M14 9.7a9.5 9.5 0 0 1 4.5 2.3M8.8 15.4a5 5 0 0 1 6.4 0M12 19.5v.1M3.5 3.5l17 17"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16.5 6.5 19 9M14 9l2 2"/></symbol>
+<symbol id="i-lanes" viewBox="0 0 24 24"><path d="M5 4v16M12 4v3M12 10.5v3M12 17v3M19 4v16"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 6.5h15M9.5 6.5V4h5v2.5M6.5 6.5l1 13.5h9l1-13.5"/></symbol>
+<symbol id="i-archive" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="4.5" rx="1"/><path d="M5 8.5V19a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8.5M10 12h4"/></symbol>
+<symbol id="i-photo" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/></symbol>
+<symbol id="i-nophoto" viewBox="0 0 24 24"><path d="M8 5h10.5a2 2 0 0 1 2 2v10M18 19H5.5a2 2 0 0 1-2-2V7M3 3l18 18"/></symbol>
+<symbol id="i-live" viewBox="0 0 24 24"><rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/></symbol>
+<symbol id="i-half" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></symbol>
+<symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="M12 20V9m-4.5 4.5L12 9l4.5 4.5M4.5 4.5h15"/></symbol>
+<symbol id="i-flash" viewBox="0 0 24 24"><path d="M13.5 3 5.5 13.5h6L10.5 21l8-10.5h-6z"/></symbol>
+<symbol id="i-s-filled" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor"/></symbol>
+<symbol id="i-s-hollow" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.5" fill="none" stroke-width="2.5"/></symbol>
+<symbol id="i-s-triangle" viewBox="0 0 24 24"><path d="M12 4.5 20.5 19h-17z" fill="currentColor"/></symbol>
+<symbol id="i-s-octagon" viewBox="0 0 24 24"><path d="M9.2 4.5h5.6l4.7 4.7v5.6l-4.7 4.7H9.2l-4.7-4.7V9.2z" fill="currentColor"/></symbol>
+<symbol id="i-s-half" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.5" fill="none" stroke-width="2.5"/><path d="M12 6.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-s-diamond" viewBox="0 0 24 24"><path d="M12 5l7 7-7 7-7-7z" fill="currentColor"/></symbol>
+</defs></svg>
+<button class="btn b-fill skip" id="skip" type="button">Skip to content</button>
+
+<header class="top" id="top">
+  <div class="brand"><span class="logo"><svg class="ic" aria-hidden="true"><use href="#i-spool"/></svg></span><span class="brand-t"><b>Spoolwarden</b><span><span id="dispName">Workshop kit</span> · 0.5.2</span></span></div>
+  <button class="lock" id="lockBtn" type="button" data-s="locked"></button>
+  <div class="seg" role="radiogroup" aria-label="Appearance">
+    <input type="radio" name="th" id="th-light" value="light" data-th><label for="th-light" title="Light"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg><span class="seg-l">Light</span></label>
+    <input type="radio" name="th" id="th-dark" value="dark" data-th><label for="th-dark" title="Dark"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg><span class="seg-l">Dark</span></label>
+    <input type="radio" name="th" id="th-system" value="system" data-th><label for="th-system" title="System"><svg class="ic" aria-hidden="true"><use href="#i-system"/></svg><span class="seg-l">System</span></label>
+  </div>
+</header>
+
+<div class="shell">
+<nav class="side" id="side" aria-label="Sections"></nav>
+<main id="main" tabindex="-1"><div class="wrap">
+
+<section class="view" id="v-printers" aria-labelledby="h-printers" hidden>
+  <div class="ph">
+    <div class="ph-t"><h1 id="h-printers" tabindex="-1">Printers</h1><p id="prSum"></p></div>
+    <div class="ph-a"><button class="btn b-out" type="button" data-do="find"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>Find Klipper printers</button><button class="btn b-fill" type="button" data-do="add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a printer</button></div>
+  </div>
+  <div class="grid" id="prGrid"></div>
+  <div class="card empty-st" id="prEmpty" hidden>
+    <span class="art"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg></span>
+    <h2>No printers yet</h2>
+    <p>Printers on the network appear here once they announce themselves.</p>
+    <button class="btn b-fill" type="button" data-do="add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add a printer</button>
+  </div>
+  <h2 class="sec-t">Printer tools</h2>
+  <div class="tools" style="margin-top:0">
+    <section class="card stack" aria-labelledby="h-pack">
+      <div><h2 id="h-pack">Klipper add-on</h2><p class="sub">Installs the spool macros and Spoolwarden's Moonraker settings on a Klipper printer. Run these two lines on the printer.</p></div>
+      <pre class="code" id="packCode">curl -fsSL https://kit.example/klipper-add-on/install.sh -o install.sh
+curl -fsSL https://kit.example/klipper-add-on/install.sh.sig -o install.sh.sig</pre>
+      <div class="row"><button class="btn b-ton" type="button" data-do="copy"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button><span class="res" id="copyRes" aria-live="polite"></span></div>
+    </section>
+    <section class="card stack" aria-labelledby="h-live">
+      <div><h2 id="h-live">Live printer view</h2><p class="sub">Camera, pause and resume. Opens the phone web app.</p></div>
+      <div><a class="btn b-out" href="#live-printer-view" data-np="The live printer view"><svg class="ic" aria-hidden="true"><use href="#i-live"/></svg>Open the live printer view<svg class="ic" aria-hidden="true"><use href="#i-ext"/></svg></a></div>
+    </section>
+  </div>
+  <div class="preview"><label class="sw-row" for="prEmptyT"><span><b>Preview empty state</b><span class="help">Mockup only: shows this view with no printers.</span></span><input type="checkbox" role="switch" class="tg" id="prEmptyT"></label></div>
+</section>
+
+<section class="view" id="v-recent" aria-labelledby="h-recent" hidden>
+  <div class="ph">
+    <div class="ph-t"><h1 id="h-recent" tabindex="-1">Recently added</h1><p>The newest 20 spool additions are kept with their photos (14.2 MB now).</p></div>
+    <div class="ph-a"><span class="chip ok"><svg class="ic" aria-hidden="true"><use href="#i-s-filled"/></svg>Label Reader is on</span></div>
+  </div>
+  <div id="inList"></div>
+  <div class="preview"><label class="sw-row" for="inEmptyT"><span><b>Preview empty state</b><span class="help">Mockup only: shows this view with no records.</span></span><input type="checkbox" role="switch" class="tg" id="inEmptyT"></label></div>
+</section>
+
+<section class="view" id="v-recent-detail" aria-labelledby="h-recent-detail" hidden><div id="det"></div></section>
+
+<section class="view" id="v-settings" aria-labelledby="h-settings" hidden>
+  <div class="ph"><div class="ph-t"><h1 id="h-settings" tabindex="-1">Settings</h1><p>Each group saves on its own. Switches and choices save as soon as you change them.</p></div></div>
+  <div class="set">
+    <nav class="snav" id="snav" aria-label="Settings groups"></nav>
+    <div class="scol">
+
+    <section class="card scard" id="s-app" aria-labelledby="t-app">
+      <h2 id="t-app">Appearance</h2><p class="sub">Light, Dark and the theme apply to this browser only and change at once.</p>
+      <fieldset class="rgrp"><legend class="sr">Appearance</legend>
+        <label class="rc" for="ts-light"><input type="radio" name="ts" id="ts-light" value="light" data-th><span>Light<small>Bright surfaces</small></span></label>
+        <label class="rc" for="ts-dark"><input type="radio" name="ts" id="ts-dark" value="dark" data-th><span>Dark<small>Dim surfaces</small></span></label>
+        <label class="rc" for="ts-system"><input type="radio" name="ts" id="ts-system" value="system" data-th><span>System<small>Follows this device</small></span></label>
+      </fieldset>
+      <div class="part" role="group" aria-labelledby="t-look">
+        <h3 id="t-look">Theme</h3><p class="sub" style="margin-top:0">The whole look of this page. The words and buttons stay the same.</p>
+        <div class="tpk">
+          <button class="tpk-t" type="button" data-look="console" aria-pressed="false" aria-describedby="lk-console"><span class="tpk-ck"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span class="tpk-p" aria-hidden="true"><svg viewBox="0 0 120 90"><rect width="120" height="90" fill="#0b0f12"/><rect width="120" height="11" fill="#fff" fill-opacity=".07"/><rect x="5" y="4" width="16" height="3.5" rx="1" fill="#3cccd8"/><rect y="11" width="16" height="79" fill="#fff" fill-opacity=".04"/><rect x="4" y="16" width="8" height="6" rx="1.5" fill="#3cccd8" fill-opacity=".35"/><rect x="5" y="27" width="6" height="5" rx="1" fill="#fff" fill-opacity=".3"/><rect x="5" y="37" width="6" height="5" rx="1" fill="#fff" fill-opacity=".3"/><rect x="5" y="47" width="6" height="5" rx="1" fill="#fff" fill-opacity=".3"/><rect x="21" y="16" width="94" height="6" fill="#fff" fill-opacity=".1"/><g fill="#fff" fill-opacity=".14"><rect x="21" y="32" width="94" height=".8"/><rect x="21" y="42" width="94" height=".8"/><rect x="21" y="52" width="94" height=".8"/><rect x="21" y="62" width="94" height=".8"/><rect x="21" y="72" width="94" height=".8"/></g><g fill="#fff" fill-opacity=".5"><rect x="24" y="26" width="26" height="2.5"/><rect x="24" y="36" width="22" height="2.5"/><rect x="24" y="46" width="28" height="2.5"/><rect x="24" y="56" width="20" height="2.5"/><rect x="24" y="66" width="24" height="2.5"/></g><g fill="#3cccd8"><rect x="80" y="26" width="14" height="2.5"/><rect x="80" y="36" width="10" height="2.5"/><rect x="80" y="46" width="16" height="2.5"/><rect x="80" y="56" width="12" height="2.5"/><rect x="80" y="66" width="8" height="2.5"/></g></svg></span><span class="tpk-n">Console</span><span class="tpk-l" id="lk-console">Dense and technical</span></button>
+          <button class="tpk-t" type="button" data-look="workbench" aria-pressed="true" aria-describedby="lk-workbench"><span class="tpk-ck"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span class="tpk-p" aria-hidden="true"><svg viewBox="0 0 120 90"><rect width="120" height="90" fill="#F3F4FA"/><rect x="5" y="5" width="9" height="7" rx="2" fill="#3949C0"/><rect x="17" y="7" width="22" height="3" rx="1.5" fill="#000" fill-opacity=".55"/><rect x="4" y="18" width="26" height="7" rx="3.5" fill="#3949C0" fill-opacity=".2"/><g fill="#000" fill-opacity=".25"><rect x="8" y="30" width="18" height="2.5" rx="1"/><rect x="8" y="38" width="16" height="2.5" rx="1"/><rect x="8" y="46" width="20" height="2.5" rx="1"/><rect x="8" y="54" width="14" height="2.5" rx="1"/></g><g fill="#fff"><rect x="35" y="18" width="38" height="31" rx="4"/><rect x="77" y="18" width="38" height="31" rx="4"/><rect x="35" y="53" width="38" height="31" rx="4"/><rect x="77" y="53" width="38" height="31" rx="4"/></g><g fill="#3949C0"><circle cx="43" cy="26" r="3.5"/><circle cx="85" cy="26" r="3.5"/><circle cx="43" cy="61" r="3.5"/><circle cx="85" cy="61" r="3.5"/></g><g fill="#000" fill-opacity=".2"><rect x="39" y="34" width="28" height="2.5" rx="1"/><rect x="81" y="34" width="24" height="2.5" rx="1"/><rect x="39" y="69" width="26" height="2.5" rx="1"/><rect x="81" y="69" width="28" height="2.5" rx="1"/></g></svg></span><span class="tpk-n">Workbench</span><span class="tpk-l" id="lk-workbench">Calm cards</span></button>
+          <button class="tpk-t" type="button" data-look="spool" aria-pressed="false" aria-describedby="lk-spool"><span class="tpk-ck"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span class="tpk-p" aria-hidden="true"><svg viewBox="0 0 120 90"><rect width="120" height="90" fill="#FAF6F1"/><rect x="6" y="6" width="24" height="9" rx="4.5" fill="#F59A2E"/><g fill="#000" fill-opacity=".1"><rect x="34" y="6" width="22" height="9" rx="4.5"/><rect x="60" y="6" width="22" height="9" rx="4.5"/></g><g fill="#fff"><rect x="6" y="22" width="52" height="62" rx="9"/><rect x="62" y="22" width="52" height="62" rx="9"/></g><circle cx="32" cy="45" r="13" fill="none" stroke="#F59A2E" stroke-width="6"/><circle cx="88" cy="45" r="13" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="6"/><g fill="#000" fill-opacity=".3"><rect x="16" y="66" width="32" height="3.5" rx="1.75"/><rect x="72" y="66" width="32" height="3.5" rx="1.75"/></g></svg></span><span class="tpk-n">Spool</span><span class="tpk-l" id="lk-spool">Colourful and roomy</span></button>
+          <button class="tpk-t" type="button" data-look="panes" aria-pressed="false" aria-describedby="lk-panes"><span class="tpk-ck"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span class="tpk-p" aria-hidden="true"><svg viewBox="0 0 120 90"><rect width="120" height="90" fill="#f2f2f5"/><rect x="5" y="6" width="38" height="78" rx="5" fill="#fff"/><rect x="5" y="6" width="38" height="11" rx="5" fill="#1b7a43" fill-opacity=".18"/><g fill="#000" fill-opacity=".14"><rect x="5" y="17" width="38" height=".8"/><rect x="5" y="28" width="38" height=".8"/><rect x="5" y="39" width="38" height=".8"/><rect x="5" y="50" width="38" height=".8"/></g><g fill="#000" fill-opacity=".3"><rect x="9" y="21" width="20" height="2.5" rx="1"/><rect x="9" y="32" width="16" height="2.5" rx="1"/><rect x="9" y="43" width="22" height="2.5" rx="1"/></g><rect x="9" y="10" width="18" height="2.5" rx="1" fill="#1b7a43"/><rect x="49" y="6" width="66" height="34" rx="5" fill="#fff"/><rect x="49" y="46" width="66" height="22" rx="5" fill="#fff"/><g fill="#000" fill-opacity=".14"><rect x="49" y="17" width="66" height=".8"/><rect x="49" y="28" width="66" height=".8"/><rect x="49" y="57" width="66" height=".8"/></g><g fill="#000" fill-opacity=".3"><rect x="53" y="10" width="30" height="2.5" rx="1"/><rect x="53" y="21" width="24" height="2.5" rx="1"/><rect x="53" y="32" width="28" height="2.5" rx="1"/><rect x="53" y="50" width="26" height="2.5" rx="1"/><rect x="53" y="61" width="20" height="2.5" rx="1"/></g><g fill="none" stroke="#1b7a43" stroke-width="1.5"><path d="m108 9.5 2 2-2 2M108 20.5l2 2-2 2M108 31.5l2 2-2 2M108 49.5l2 2-2 2M108 60.5l2 2-2 2"/></g></svg></span><span class="tpk-n">Panes</span><span class="tpk-l" id="lk-panes">Simple lists</span></button>
+        </div>
+        <p class="res" id="lookRes" aria-live="polite" style="margin-top:var(--s3)"></p>
+      </div>
+      <form class="part" data-group="Theme for new devices" novalidate>
+        <div class="fld" style="max-width:320px"><label for="aLook">Theme for new devices</label><select class="in" id="aLook" name="look" aria-describedby="aLookH"><option selected>Console</option><option>Workbench</option><option>Spool</option><option>Panes</option></select><p class="help" id="aLookH">Used by phones and computers that have not chosen a theme. Saved on the Hub.</p></div>
+        <div class="cf"><p class="res" aria-live="polite"></p><button class="btn b-txt" type="button" data-discard>Discard</button><button class="btn b-fill" type="submit">Save</button></div>
+      </form>
+    </section>
+
+    <form class="card scard" id="s-gen" aria-labelledby="t-gen" data-group="General" novalidate>
+      <h2 id="t-gen">General</h2><p class="sub">How the Hub names itself.</p>
+      <div class="fgrid">
+        <div class="fld"><label for="gName">Display name</label><input class="in" id="gName" name="name" value="Workshop kit" required></div>
+        <div class="fld"><label for="gHosts">Names for this page</label><input class="in" id="gHosts" name="hosts" value="kit.example.net" aria-describedby="gHostsH"><p class="help" id="gHostsH">Space separated.</p></div>
+      </div>
+      <div class="cf"><p class="res" aria-live="polite"></p><button class="btn b-txt" type="button" data-discard>Discard</button><button class="btn b-fill" type="submit">Save</button></div>
+    </form>
+
+    <form class="card scard" id="s-sto" aria-labelledby="t-sto" data-group="Storage locations" novalidate>
+      <h2 id="t-sto">Storage locations</h2><p class="sub">Where spools live, and where new ones go.</p>
+      <div class="fgrid">
+        <div class="fld full"><label for="sLoc">Locations</label><input class="in" id="sLoc" name="loc" value="Shelf A, Shelf B, Dry box 1, Dry box 2" aria-describedby="sLocH"><p class="help" id="sLocH">Comma separated.</p></div>
+        <div class="fld"><label for="sRack">PLA rack</label><select class="in" id="sRack" name="rack"><option selected>Shelf A</option><option>Shelf B</option><option>Dry box 1</option><option>Dry box 2</option></select></div>
+        <div class="fld"><label for="sOver">Overflow location</label><select class="in" id="sOver" name="over"><option>Shelf A</option><option selected>Shelf B</option><option>Dry box 1</option><option>Dry box 2</option></select></div>
+        <div class="fld"><label for="sPre">Box location prefix</label><input class="in" id="sPre" name="pre" value="Dry box"></div>
+        <div class="fld"><label for="sBox">Number of storage boxes</label><input class="in" id="sBox" name="box" type="number" min="0" value="2" inputmode="numeric"></div>
+      </div>
+      <div class="cf"><p class="res" aria-live="polite"></p><button class="btn b-txt" type="button" data-discard>Discard</button><button class="btn b-fill" type="submit">Save</button></div>
+    </form>
+
+    <form class="card scard" id="s-ai" aria-labelledby="t-ai" data-group="Label Reader" novalidate>
+      <h2 id="t-ai">Label Reader</h2><p class="sub">Reads spool labels from photos of new spools.</p>
+      <div class="row"><span class="lbl">Anthropic API key</span><span id="keyChip"></span><span class="grow"></span><span class="row" id="keyBtns"></span></div>
+      <p class="res" id="keyRes" aria-live="polite" style="margin-top:var(--s2)"></p>
+      <div class="fgrid part">
+        <div class="fld"><label for="aModel">Claude model</label><input class="in" id="aModel" name="model" placeholder="Model name"></div>
+        <div class="fld"><label for="aReads">Label reads per day</label><input class="in" id="aReads" name="reads" type="number" min="1" value="40" inputmode="numeric"></div>
+        <div class="fld"><label for="aKeep">Recently added records kept</label><input class="in" id="aKeep" name="keep" type="number" min="1" value="20" inputmode="numeric" aria-describedby="aKeepH"><p class="help" id="aKeepH">Now: 20 records, 14.2 MB of photos.</p></div>
+        <p class="msg info full"><svg class="ic" aria-hidden="true"><use href="#i-s-diamond"/></svg><span>Changing the model or the reads per day restarts the Hub.</span></p>
+      </div>
+      <div class="cf"><p class="res" aria-live="polite"></p><button class="btn b-txt" type="button" data-discard>Discard</button><button class="btn b-fill" type="submit">Save</button></div>
+    </form>
+
+    <section class="card scard" id="s-bak" aria-labelledby="t-bak">
+      <h2 id="t-bak">Backups</h2><p class="sub">Nightly at 03:00, and whenever you make one here.</p>
+      <p class="msg warn"><svg class="ic" aria-hidden="true"><use href="#i-s-triangle"/></svg><span>One zip with everything the Hub keeps. It is not encrypted and holds the setup secrets: store it somewhere safe.</span></p>
+      <div class="row" style="margin-top:var(--s4)"><button class="btn b-fill" type="button" id="bkNow"><svg class="ic" aria-hidden="true"><use href="#i-archive"/></svg>Back up now</button><span class="res" id="bkRes" aria-live="polite"></span></div>
+      <div class="part"><h3>Backups on the Hub</h3><ul class="blist" id="bkList"></ul></div>
+      <form class="part" data-group="Backup retention" novalidate>
+        <div class="fld" style="max-width:320px"><label for="bKeep">Keep nightly backups for</label><div class="affix"><input class="in" id="bKeep" name="days" type="number" min="1" value="14" inputmode="numeric"><span class="u">days</span></div></div>
+        <div class="cf"><p class="res" aria-live="polite"></p><button class="btn b-txt" type="button" data-discard>Discard</button><button class="btn b-fill" type="submit">Save</button></div>
+      </form>
+      <div class="part stack" id="rs">
+        <div><h3>Restore</h3><p class="sub" style="margin-top:0">Replaces everything the Hub keeps with the contents of a backup zip.</p></div>
+        <div class="row"><input type="file" id="rsFile" accept=".zip,application/zip" class="sr"><label for="rsFile" class="btn b-out"><svg class="ic" aria-hidden="true"><use href="#i-archive"/></svg>Choose a zip</label><span class="muted" id="rsName" style="font-size:var(--fs-sm)">No file chosen</span></div>
+        <div><button class="btn b-ton" type="button" id="rsCheck" disabled><svg class="ic" aria-hidden="true"><use href="#i-up"/></svg>Upload and check</button></div>
+        <div id="rsSum" aria-live="polite"><p class="help">After the check, a summary of the zip appears here.</p></div>
+        <div class="fld" style="max-width:320px"><label for="rsType">Type restore to go on</label><input class="in" id="rsType" autocomplete="off" disabled></div>
+        <div class="row"><button class="btn b-bad" type="button" id="rsGo" disabled>Restore</button><button class="btn b-txt" type="button" id="rsNo">Cancel</button></div>
+      </div>
+    </section>
+
+    <section class="card scard" id="s-net" aria-labelledby="t-net">
+      <h2 id="t-net">Network and addresses</h2><p class="sub">How phones, the Weigh Station and the outside reach the Hub.</p>
+      <form data-group="Addresses" novalidate>
+        <div class="fgrid">
+          <div class="fld"><label for="nPub">Web public address</label><input class="in" id="nPub" name="pub" placeholder="https://mcp.example.com/filament" inputmode="url"></div>
+          <div class="fld"><label for="nSta">Weigh Station address</label><input class="in" id="nSta" name="sta" placeholder="http://station.local:5003" inputmode="url"></div>
+        </div>
+        <div class="cf"><p class="res" aria-live="polite"></p><button class="btn b-txt" type="button" data-discard>Discard</button><button class="btn b-fill" type="submit">Save</button></div>
+      </form>
+      <div class="part">
+        <label class="sw-row" for="nAllow"><span><b>Allow printer changes from the public address</b><span class="help">Off: printers can be changed only from the home network.</span></span><input type="checkbox" role="switch" class="tg" id="nAllow"></label>
+        <p class="res" id="nAllowRes" aria-live="polite"></p>
+      </div>
+      <div class="part"><h3>Remote access</h3><div class="row"><button class="btn b-out" type="button" data-np="The firewall rules">Show the firewall rules</button><button class="btn b-out" type="button" data-np="The certificate download"><svg class="ic" aria-hidden="true"><use href="#i-dl"/></svg>Get the certificate</button></div></div>
+    </section>
+
+    <form class="card scard" id="s-pw" aria-labelledby="t-pw" novalidate>
+      <div class="row"><h2 id="t-pw">Web passphrase</h2><span id="pwChip" class="chip warn"><svg class="ic" aria-hidden="true"><use href="#i-s-hollow"/></svg>Not set</span></div>
+      <p class="sub">Asked before the web page opens from outside the home network.</p>
+      <div class="fgrid">
+        <div class="fld"><label for="pw1">New passphrase</label><input class="in" id="pw1" type="password" autocomplete="new-password" aria-describedby="pw1H"><p class="help" id="pw1H">At least 12 characters.</p></div>
+        <div class="fld"><label for="pw2">New passphrase again</label><input class="in" id="pw2" type="password" autocomplete="new-password"></div>
+      </div>
+      <div class="cf"><p class="res" aria-live="polite" id="pwRes"></p><button class="btn b-fill" type="submit">Set</button></div>
+    </form>
+
+    <section class="card scard" id="s-lib" aria-labelledby="t-lib">
+      <h2 id="t-lib">Filament Catalog</h2><p class="sub">The shared list of filaments Spoolwarden matches labels against.</p>
+      <p class="msg ok"><svg class="ic" aria-hidden="true"><use href="#i-s-filled"/></svg><span id="libSt">Catalog version 2026.11.2 (signed release), 3 local additions. Last check 2026-11-12 03:10: OK.</span></p>
+      <div class="row" style="margin-top:var(--s4)"><button class="btn b-ton" type="button" id="libUp"><svg class="ic" aria-hidden="true"><use href="#i-updates"/></svg>Update now</button><button class="btn b-txt" type="button" id="libBack"><svg class="ic" aria-hidden="true"><use href="#i-undo"/></svg>Go back to the version before</button><span class="res" id="libRes" aria-live="polite"></span></div>
+      <form class="part" data-group="Catalog token" novalidate>
+        <div class="row"><h3 style="margin:0">Catalog token <span class="muted" style="font-weight:400">(optional)</span></h3><span class="chip" id="tokChip"><svg class="ic" aria-hidden="true"><use href="#i-s-hollow"/></svg>Not set</span></div>
+        <div class="fld" style="margin-top:var(--s3)"><label for="lTok">New token</label><input class="in" id="lTok" name="tok" type="password" autocomplete="off"></div>
+        <div class="cf"><p class="res" aria-live="polite"></p><button class="btn b-fill" type="submit">Save</button></div>
+      </form>
+      <div class="part">
+        <div class="fld"><label for="lJson">Add your own entry</label><textarea class="in mono" id="lJson" rows="4" spellcheck="false" aria-describedby="lJsonH"></textarea><p class="help" id="lJsonH">One filament as JSON.</p></div>
+        <div class="cf"><p class="res" id="lJsonRes" aria-live="polite"></p><button class="btn b-fill" type="button" id="lAdd"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add entry</button></div>
+      </div>
+    </section>
+
+    <section class="card scard" id="s-voice" aria-labelledby="t-voice">
+      <div class="row"><h2 id="t-voice">Weigh Station voice</h2><span class="chip ok"><svg class="ic" aria-hidden="true"><use href="#i-s-filled"/></svg>Weigh Station feature on</span></div>
+      <p class="sub">How the Weigh Station speaks. Saves at once.</p>
+      <fieldset class="rgrp"><legend class="sr">Weigh Station voice</legend>
+        <label class="rc" for="vPiper"><input type="radio" name="voice" id="vPiper" value="Piper" checked><span>Piper<small>Natural; a 60-80 MB download</small></span></label>
+        <label class="rc" for="vEspeak"><input type="radio" name="voice" id="vEspeak" value="espeak-ng"><span>espeak-ng<small>Robotic; no download</small></span></label>
+      </fieldset>
+      <p class="res" id="vRes" aria-live="polite" style="margin-top:var(--s3)"></p>
+    </section>
+
+    <div class="preview"><div class="row"><span class="grow"><b>Preview a failed job</b><span class="help">Mockup only: runs a backup that ends with "failed".</span></span><button class="btn b-out" type="button" id="failJob">Run it</button></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="view" id="v-ph" hidden></section>
+</div></main>
+</div>
+
+<nav class="bnav" id="bnav" aria-label="Main sections"></nav>
+
+<div class="dock">
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+  <section class="job" id="job" aria-label="Background job" data-s="run" hidden>
+    <div class="job-h">
+      <span id="jobIc"></span>
+      <div><strong id="jobT">Backup</strong><span id="jobS" aria-live="polite"></span></div>
+      <button class="ibtn" type="button" id="jobTg" aria-expanded="false" aria-controls="jobLog" aria-label="Show the job log"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg></button>
+      <button class="ibtn" type="button" id="jobX" aria-label="Dismiss the job" hidden><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <span class="bar"><i id="jobBar"></i></span>
+    <ol class="job-log" id="jobLog" hidden></ol>
+  </section>
+</div>
+
+<dialog class="dlg" id="dlgCode" role="dialog" aria-modal="true" aria-labelledby="cdT" aria-describedby="cdWhy">
+  <form class="dlg-in" id="cdF" novalidate>
+    <span class="dlg-ic"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span>
+    <h2 id="cdT">Enter the setup code</h2>
+    <p class="muted" id="cdWhy"></p>
+    <div class="fld"><label for="cdIn">Setup code (8 digits)</label><input class="in mono" id="cdIn" inputmode="numeric" autocomplete="one-time-code" placeholder="1234-5678" maxlength="9"></div>
+    <label class="chk" for="cdTrust"><input type="checkbox" id="cdTrust"><span>Trust this computer (no code needed here for 90 days)</span></label>
+    <div class="dlg-act"><button class="btn b-txt" type="button" data-close>Cancel</button><button class="btn b-fill" type="submit">Unlock</button></div>
+  </form>
+</dialog>
+
+<dialog class="dlg" id="dlgForm" role="dialog" aria-modal="true" aria-labelledby="dfT">
+  <form class="dlg-in" id="dfF" novalidate>
+    <h2 id="dfT"></h2>
+    <p class="muted" id="dfX"></p>
+    <div class="stack" id="dfB"></div>
+    <div class="dlg-act"><button class="btn b-txt" type="button" data-close id="dfNo">Cancel</button><button class="btn b-fill" type="submit" id="dfOk">OK</button></div>
+  </form>
+</dialog>
+
+<dialog class="dlg" id="dlgPhoto" role="dialog" aria-modal="true" aria-labelledby="phT">
+  <div class="dlg-in">
+    <h2 id="phT">Photo</h2>
+    <div class="big" id="phBig"></div>
+    <p class="muted" id="phX">Placeholder: real label photos are not part of this mockup.</p>
+    <div class="dlg-act"><button class="btn b-fill" type="button" data-close>Close</button></div>
+  </div>
+</dialog>
+
+<dialog class="dlg" id="dlgMore" role="dialog" aria-modal="true" aria-labelledby="moT">
+  <div class="dlg-in">
+    <h2 id="moT">More sections</h2>
+    <nav aria-label="More sections"><ul class="more-l" id="moreL"></ul></nav>
+    <div class="dlg-act"><button class="btn b-txt" type="button" data-close>Close</button></div>
+  </div>
+</dialog>
+
+<script>
+(()=>{
+'use strict';
+const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+const ic=(n,c)=>`<svg class="ic${c?' '+c:''}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const ICK={ok:'s-filled',bad:'s-octagon',warn:'s-triangle',info:'s-diamond'};
+const spin='<span class="spin"></span>';
+const line=(k,t)=>`<span class="line ${k}">${k==='busy'?spin:ic(ICK[k])}<span>${t}</span></span>`;
+const msg=(k,t)=>`<p class="msg ${k==='busy'?'':k}">${k==='busy'?spin:ic(ICK[k])}<span>${t}</span></p>`;
+const chip=(k,i,t)=>`<span class="chip ${k}">${ic(i)}${t}</span>`;
+const root=document.documentElement;
+
+/* theme */
+const store=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
+const load=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+function setTheme(t,save){
+  t=t==='light'||t==='dark'?t:'system';
+  if(t==='system')root.removeAttribute('data-theme');else root.setAttribute('data-theme',t);
+  $$('input[data-th]').forEach(i=>i.checked=i.value===t);
+  if(save)store('spoolwarden.appearance',t==='system'?null:t);
+}
+$$('input[data-th]').forEach(i=>i.addEventListener('change',()=>{if(i.checked)setTheme(i.value,true)}));
+
+/* navigation */
+const NAV={overview:['Overview','overview'],printers:['Printers','printer'],recent:['Recently added','intake','Recent'],devices:['Devices','devices'],presets:['Slicer presets','presets','Presets'],features:['Features','modules'],settings:['Settings','settings'],flash:['Flash a device','flash','Flash'],updates:['Updates','updates'],logs:['Logs','logs']};
+const ALIAS={intake:'recent','intake-detail':'recent-detail',modules:'features'};
+const VIEWS=Object.keys(NAV),EVERY=['overview','printers','recent','devices','presets'],SYS=['features','settings','flash','updates','logs'],BOT=['overview','printers','recent','settings'],MORE=['devices','presets','features','flash','updates','logs'];
+const lnk=(k,c,m)=>`<a class="${c}" href="#${k}" data-nav="${k}"><span class="pill">${ic(NAV[k][1])}</span>${m==='both'?`<span class="nl">${NAV[k][0]}</span><span class="ns">${NAV[k][2]||NAV[k][0]}</span>`:`<span>${m==='short'?NAV[k][2]||NAV[k][0]:NAV[k][0]}</span>`}</a>`;
+const lst=(id,ks)=>`<ul aria-labelledby="${id}">${ks.map(k=>`<li>${lnk(k,'nav-i','both')}</li>`).join('')}</ul>`;
+$('#side').innerHTML=`<p class="nav-g" id="ng1">Everyday</p>${lst('ng1',EVERY)}<hr class="nav-sep"><p class="nav-g" id="ng2">System</p>${lst('ng2',SYS)}`;
+$('#bnav').innerHTML=BOT.map(k=>lnk(k,'bn-i','short')).join('')+`<button class="bn-i" type="button" id="moreBtn" aria-haspopup="dialog"><span class="pill">${ic('more')}</span><span>More</span><span class="sr" id="moreCur"></span></button>`;
+$('#moreL').innerHTML=MORE.map(k=>`<li>${lnk(k,'')}</li>`).join('');
+
+const PH={
+  overview:['What the Hub is doing right now.',[['Printers','3 added, 2 connected'],['Last backup','2026-11-12 03:00 · nightly'],['Filament Catalog','2026.11.2 · last check OK']]],
+  features:['Parts of Spoolwarden you can turn on or off.',[['Weigh Station','On'],['Label Reader','On']]],
+  devices:['Phones and Weigh Stations that use this Hub.',[['Weigh Station','Weigh Station feature on'],['Phone web app','Spool photos and the live printer view']]],
+  presets:['Slicer filament presets made from the spools in stock.',[['Orca Slicer','Filament presets'],['Bambu Studio','Filament presets']]],
+  flash:['Put Spoolwarden on a Tag Reader or a Weigh Station display, plugged into this computer or the Hub.',[['Tag Reader','Plug it in by USB'],['Weigh Station display','Plug it in by USB']]],
+  updates:['Versions of Spoolwarden and its Filament Catalog.',[['Spoolwarden','0.5.2'],['Filament Catalog','2026.11.2 (signed release)']]],
+  logs:['Recent events on the Hub.',[['2026-11-12 14:05','Recently added: spool 214 from a phone photo'],['2026-11-12 03:10','Filament Catalog check: OK'],['2026-11-12 03:00','Nightly backup: done']]]
+};
+const phView=v=>`<div class="ph"><div class="ph-t"><h1 id="h-${v}" tabindex="-1">${NAV[v][0]}</h1><p>${PH[v][0]}</p></div></div><section class="card stack" aria-label="${NAV[v][0]} preview"><span class="chip info">${ic('s-diamond')}Not part of this mockup</span><ul class="ph-rows">${PH[v][1].map(r=>`<li><span>${r[0]}</span><span class="muted">${r[1]}</span></li>`).join('')}</ul></section>`;
+
+let rec=0;
+function parse(){
+  let h=location.hash.slice(1),th=null;
+  try{h=decodeURIComponent(h)}catch(e){}
+  const m=h.match(/^(.*)-(light|dark)$/);if(m){h=m[1];th=m[2]}
+  h=ALIAS[h]||h;
+  if(!VIEWS.includes(h)&&h!=='recent-detail')h='printers';
+  return{v:h,th};
+}
+function route(first){
+  const{v,th}=parse();if(th)setTheme(th,false);
+  closeMenu();
+  const base=v==='recent-detail'?'recent':v,full=['printers','recent','recent-detail','settings'].includes(v);
+  $$('.view').forEach(s=>s.hidden=true);
+  let sec=$('#v-'+v);
+  if(!full){sec=$('#v-ph');sec.innerHTML=phView(v);sec.setAttribute('aria-labelledby','h-'+v)}
+  if(v==='recent')rec=0;
+  if(v==='recent-detail')renderDetail();
+  sec.hidden=false;
+  $$('[data-nav]').forEach(a=>a.dataset.nav===base?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
+  const inMore=MORE.includes(base);$('#moreBtn').classList.toggle('on',inMore);$('#moreCur').textContent=inMore?', current section: '+NAV[base][0]:'';
+  document.title=(v==='recent-detail'?'Recently added record':NAV[base][0])+' · Spoolwarden';
+  if(!first){scrollTo(0,0);const h=$('h1',sec);h&&h.focus({preventScroll:true})}
+  spy();
+}
+addEventListener('hashchange',()=>route(false));
+
+/* toasts, field errors */
+function toast(t,k){
+  const box=$('#toasts');box.innerHTML='';
+  const el=document.createElement('div');el.className='toast';
+  el.innerHTML=`${k?ic(ICK[k]):''}<span>${t}</span><button class="ibtn" type="button" aria-label="Dismiss message">${ic('close')}</button>`;
+  el.querySelector('button').onclick=()=>el.remove();
+  box.append(el);clearTimeout(toast.t);toast.t=setTimeout(()=>el.remove(),6000);
+}
+function fieldErr(i,t){
+  const f=i.closest('.fld');let e=f.querySelector('.err');
+  if(!e){e=document.createElement('p');e.className='err';e.id=i.id+'-e';f.append(e)}
+  e.innerHTML=ic('s-octagon')+'<span>'+t+'</span>';
+  i.setAttribute('aria-invalid','true');
+  const d=(i.getAttribute('aria-describedby')||'').split(' ').filter(Boolean);
+  if(!d.includes(e.id)){d.push(e.id);i.setAttribute('aria-describedby',d.join(' '))}
+  i.focus();return false;
+}
+function clearErr(i){const e=i.closest('.fld')?.querySelector('.err');if(e)e.innerHTML='';i.removeAttribute('aria-invalid')}
+document.addEventListener('input',e=>{if(e.target.getAttribute&&e.target.getAttribute('aria-invalid'))clearErr(e.target)});
+const fld=(id,l,o={})=>`<div class="fld"><label for="${id}">${l}</label><input class="in${o.mono?' mono':''}" id="${id}" type="${o.type||'text'}" value="${esc(o.value||'')}" placeholder="${esc(o.ph||'')}"${o.help?` aria-describedby="${id}-h"`:''} autocomplete="${o.type==='password'?'new-password':'off'}"${o.im?` inputmode="${o.im}"`:''}>${o.help?`<p class="help" id="${id}-h">${o.help}</p>`:''}</div>`;
+
+/* dialogs */
+function openDlg(d){
+  d._op=document.activeElement;d.showModal();
+  const f=d.dataset.danger?$('[data-close]',d):$('input:not(.sr):not([type=hidden]),textarea,select,a[href]',d)||$('.dlg-act .btn:last-child',d);
+  if(f){f.focus();if(f.type==='text'&&f.value)f.select()}
+}
+function closeDlg(d){if(d.open)d.close()}
+$$('dialog').forEach(d=>{
+  d.addEventListener('close',()=>{
+    if(d.id==='dlgCode')pend=null;
+    let o=d._op;if(o&&!o.isConnected&&o.id)o=document.getElementById(o.id);
+    if(o&&o.isConnected&&o.getClientRects().length&&!o.closest('dialog:not([open])'))o.focus();
+    else{const h=$('.view:not([hidden]) h1');h&&h.focus({preventScroll:true})}
+  });
+  d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-close]'))closeDlg(d)});
+});
+let dfGo=null;
+function formDlg(o){
+  const d=$('#dlgForm');$('#dfT').textContent=o.title;
+  const x=$('#dfX');x.textContent=o.text||'';x.hidden=!o.text;
+  const b=$('#dfB');b.innerHTML=o.body||'';b.hidden=!o.body;
+  const ok=$('#dfOk');ok.textContent=o.ok||'Save';ok.className='btn '+(o.danger?'b-bad':'b-fill');ok.disabled=false;
+  $('#dfNo').textContent=o.cancel||'Cancel';d.dataset.danger=o.danger?'1':'';
+  dfGo=o.submit;openDlg(d);o.init&&o.init(d);
+}
+$('#dfF').addEventListener('submit',e=>{
+  e.preventDefault();const r=dfGo?dfGo($('#dfF')):undefined;
+  if(r===false)return;closeDlg($('#dlgForm'));if(typeof r==='function')r();
+});
+const confirmDlg=(title,text,ok,what,fn)=>formDlg({title,text,ok,danger:1,submit:()=>()=>needCode(what,fn)});
+
+/* setup code / lock */
+let lock='locked',pend=null;
+const LK={locked:['lock','Locked','Enter setup code','Locked'],unlocked:['unlock','Unlocked','Lock again','Unlocked'],trusted:['shield','Trusted computer','Stop trusting','Trusted']};
+function renderLock(){
+  const b=$('#lockBtn'),m=LK[lock];b.dataset.s=lock;
+  b.innerHTML=`${ic(m[0])}<span class="lk-l">${m[1]}</span><span class="lk-s">${m[3]}</span><small>${m[2]}</small>`;
+  b.setAttribute('aria-label',`${m[1]}. ${m[2]}`);
+}
+function needCode(what,fn){
+  if(lock!=='locked'){fn&&fn();return}
+  pend=fn||null;
+  $('#cdWhy').textContent=what?`Enter the setup code to ${what}. Viewing needs no code.`:'Viewing needs nothing. Every change needs the 8-digit setup code, unless this is a trusted computer.';
+  const i=$('#cdIn');i.value='';clearErr(i);$('#cdTrust').checked=false;
+  openDlg($('#dlgCode'));
+}
+$('#lockBtn').onclick=()=>{
+  if(lock==='locked')return needCode(null,null);
+  const t=lock==='trusted';lock='locked';renderLock();
+  toast(t?'This computer is no longer trusted. Changes need the setup code again.':'Locked. Changes need the setup code again.');
+};
+$('#cdIn').addEventListener('input',e=>{const i=e.target,d=i.value.replace(/\D/g,'').slice(0,8);i.value=d.length>4?d.slice(0,4)+'-'+d.slice(4):d});
+$('#cdF').addEventListener('submit',e=>{
+  e.preventDefault();const i=$('#cdIn'),d=i.value.replace(/\D/g,'');
+  if(d.length!==8)return fieldErr(i,d.length?`That is ${d.length} digit${d.length>1?'s':''}; the setup code has 8.`:'Enter the 8-digit setup code.');
+  lock=$('#cdTrust').checked?'trusted':'unlocked';renderLock();
+  const f=pend;pend=null;closeDlg($('#dlgCode'));
+  toast(lock==='trusted'?'Unlocked. This computer is trusted for 90 days.':'Unlocked for this session.','ok');
+  f&&f();
+});
+
+/* menus */
+let openMenu=null;
+function toggleMenu(b){
+  const m=document.getElementById(b.getAttribute('aria-controls'));
+  if(openMenu===m)return closeMenu(true);
+  closeMenu();m.hidden=false;b.setAttribute('aria-expanded','true');openMenu=m;m._b=b;
+  $('[role=menuitem]',m).focus();
+}
+function closeMenu(focus){
+  if(!openMenu)return;const m=openMenu;openMenu=null;m.hidden=true;
+  if(m._b.isConnected){m._b.setAttribute('aria-expanded','false');if(focus)m._b.focus()}
+}
+
+/* printers */
+const P=[
+  {id:'x1',name:'Workshop X1',kind:'bambu',model:'Bambu Lab X1 Carbon',addr:'192.0.2.40',serial:'00M00A000000001',on:1,cert:1,mapped:1,acts:['map'],
+   slots:[['A1','Polymaker','PolyTerra PLA Charcoal Black','#2B2B2E',62],['A2','Bambu Lab','PETG HF Orange','#F2762E',88],['A3','eSUN','ABS+ White','#F4F4F2',35],['A4']]},
+  {id:'voron',name:'Garage Voron',kind:'klipper',model:'Klipper (Voron 2.4)',addr:'voron.example:7125',on:1,key:1,lane:'auto',acts:['test'],
+   slots:[['T0','Prusament','PLA Galaxy Silver','#8D9199',47],['T1','Overture','TPU Blue','#2E6FD9',71]]},
+  {id:'a1',name:'Study A1 mini',kind:'bambu',model:'Bambu Lab A1 mini',addr:'192.0.2.41',serial:'03000A000000002',on:0,cert:1,mapped:0,acts:['report'],
+   problem:'The last slot mapping stopped twice. A report would help.',slots:null}
+];
+let found=[{name:'mainsailos',addr:'192.0.2.57:7125'}];
+const AL={test:'Test connection',rename:'Rename',addr:'Change address',code:'Replace Access Code',map:'Map slots',load:'Map by loading filament',report:'Collect a report',reports:'Saved reports',cert:'Forget certificate',forget:'Forget printer',detect:'Detect model and slots',keyset:'Set Moonraker API key',keyrep:'Replace Moonraker API key',keyclr:'Clear Moonraker API key',lane:'Lane data (auto / on / off)'};
+const BUSY={test:'Testing…',map:'Mapping…',report:'Collecting…',detect:'Detecting…'};
+const menuKeys=p=>(p.kind==='bambu'?['test','map','load','report','reports','|','rename','addr','code','|','cert','forget']:['test','detect','load','|','rename','addr',...(p.key?['keyrep','keyclr']:['keyset']),'lane','|','forget'])
+  .filter(k=>!p.acts.includes(k)).filter((k,i,a)=>k!=='|'||(i>0&&a[i-1]!=='|'&&i<a.length-1));
+const menuHtml=p=>menuKeys(p).map(k=>k==='|'?'<div class="msep" role="separator"></div>':`<button class="mi${['forget','cert','keyclr'].includes(k)?' bad':''}" type="button" role="menuitem" tabindex="-1" data-a="${k}" data-p="${p.id}">${k==='forget'?ic('trash'):''}${AL[k]}</button>`).join('');
+const factsHtml=p=>`<div><dt>Address</dt><dd>${esc(p.addr)}</dd></div>${p.serial?`<div><dt>Serial</dt><dd>${p.serial}</dd></div>`:''}`;
+function chipsHtml(p){
+  const c=[p.on?chip('ok','s-filled','Connected'):chip('bad','s-hollow','Offline')];
+  if(p.kind==='bambu'){c.push(p.cert?chip('','s-filled','Certificate pinned'):chip('warn','s-triangle','No certificate pinned'));if(p.on)c.push(p.mapped?chip('','s-filled','Slots mapped'):chip('warn','s-triangle','Slots not mapped'))}
+  else{c.push(p.key?chip('','s-filled','API key set'):chip('warn','s-hollow','No API key'));c.push(chip('','lanes','Lane data: '+p.lane))}
+  return c.join('');
+}
+const slotsHtml=p=>p.slots?`<ul class="slots" aria-label="Slots">${p.slots.map(s=>s.length>1
+  ?`<li><span class="sw" style="--sw:${s[3]}"></span><span class="sid">${s[0]}</span><span class="sn"><b>${s[2]}</b><small>${s[1]}</small></span><span class="lv">${s[4]}%<span class="sr"> left</span><span class="bar" aria-hidden="true"><i style="width:${s[4]}%"></i></span></span></li>`
+  :`<li class="empty"><span class="sw"></span><span class="sid">${s[0]}</span><span class="sn"><b>Empty</b><small>No spool loaded</small></span><span class="lv muted">–</span></li>`).join('')}</ul>`
+  :msg('info',p.on?'No slot data yet. Detect the model and slots to read them.':'Slot data shows again when the printer is back online.');
+const btn=(p,k,c)=>`<button class="btn ${c}" type="button" data-a="${k}" data-p="${p.id}">${AL[k]}</button>`;
+const card=p=>`<article class="card pc" aria-labelledby="pn-${p.id}">
+<div class="pc-h"><span class="av">${ic('printer')}</span><div class="pc-t"><h2 id="pn-${p.id}">${esc(p.name)}</h2><p>${p.model}</p></div><button class="ibtn k" type="button" id="k-${p.id}" aria-haspopup="menu" aria-expanded="false" aria-controls="m-${p.id}" aria-label="More actions for ${esc(p.name)}">${ic('kebab')}</button><div class="menu" id="m-${p.id}" role="menu" aria-label="Actions" hidden>${menuHtml(p)}</div></div>
+<dl class="facts" id="fa-${p.id}">${factsHtml(p)}</dl>
+<div class="chips" id="ch-${p.id}">${chipsHtml(p)}</div>
+${p.problem?msg('warn',p.problem):''}
+<div id="sl-${p.id}">${slotsHtml(p)}</div>
+<div class="res" id="res-${p.id}" aria-live="polite">${p.res||''}</div>
+<div class="pc-f">${btn(p,p.acts[0],'b-ton')}</div></article>`;
+const fcard=f=>`<article class="card pc found" aria-labelledby="fn"><p class="over">${ic('search')}Found on the network, not added yet</p><div class="pc-h"><span class="av">${ic('printer')}</span><div class="pc-t"><h2 id="fn">${f.name}</h2><p>Klipper printer</p></div></div><dl class="facts"><div><dt>Address</dt><dd>${f.addr}</dd></div></dl><div class="pc-f"><button class="btn b-fill" type="button" data-f="use">Use this printer</button><button class="btn b-txt" type="button" data-f="dismiss">Dismiss</button></div></article>`;
+function renderPrinters(){
+  closeMenu();const em=$('#prEmptyT').checked||(!P.length&&!found.length);
+  $('#prGrid').hidden=em;$('#prEmpty').hidden=!em;
+  $('#prGrid').innerHTML=em?'':P.map(card).join('')+found.map(fcard).join('');
+  const c=P.filter(p=>p.on).length;
+  $('#prSum').textContent=em?'No printers yet.':`${P.length} printer${P.length===1?'':'s'}, ${c} connected${found.length?` · ${found.length} found on the network`:''}`;
+}
+function refresh(p){
+  if(!$('#pn-'+p.id))return;
+  $('#pn-'+p.id).textContent=p.name;$('#k-'+p.id).setAttribute('aria-label','More actions for '+p.name);
+  $('#m-'+p.id).innerHTML=menuHtml(p);$('#fa-'+p.id).innerHTML=factsHtml(p);$('#ch-'+p.id).innerHTML=chipsHtml(p);$('#sl-'+p.id).innerHTML=slotsHtml(p);
+}
+function setRes(p,k,t,pct){
+  p.res=k==='prog'?`<div class="msg info">${spin}<span class="prog">${t}<span class="bar"><i style="width:${pct}%"></i></span></span></div>`:msg(k,t);
+  const r=$('#res-'+p.id);if(r)r.innerHTML=p.res;
+}
+function busy(p,k,on){
+  p.busy=on;const b=$(`.pc-f [data-a="${k}"][data-p="${p.id}"]`);if(!b)return;
+  b.disabled=!!on;b.innerHTML=on?spin+BUSY[k]:AL[k];
+}
+async function doTest(p){
+  busy(p,'test',1);setRes(p,'busy','Testing the connection…');await wait(1400);busy(p,'test',0);
+  if(!p.on)return setRes(p,'bad',`No answer from ${p.addr}:8883: check that it is on.`);
+  if(p.kind==='klipper')return setRes(p,'ok',`${esc(p.addr)} answers${p.key?'; the Moonraker API key works.':'. No API key is set.'}`);
+  if(p.cert)return setRes(p,'ok',`${p.addr} answers; its certificate matches the pinned one.`);
+  p.cert=1;refresh(p);setRes(p,'ok',`${p.addr} answers. Its certificate is pinned now.`);
+}
+async function doMap(p){
+  busy(p,'map',1);
+  for(let s=1;s<=4;s++){setRes(p,'prog',`Mapping… step ${s} of 4`,s*25);await wait(750)}
+  busy(p,'map',0);p.mapped=1;refresh(p);setRes(p,'ok','Slots: '+p.slots.map(s=>s[0]).join(', '));
+}
+async function doReport(p){
+  busy(p,'report',1);setRes(p,'busy','Collecting a report…');await wait(1600);busy(p,'report',0);
+  setRes(p,'ok','Report saved. Open it from Saved reports in the menu.');
+}
+async function doDetect(p){
+  busy(p,'detect',1);setRes(p,'busy','Detecting the model and slots…');await wait(1500);busy(p,'detect',0);
+  setRes(p,p.slots?'ok':'info',p.slots?`Detected: Voron 2.4 with slots ${p.slots.map(s=>s[0]).join(', ')}.`:'Detected: Klipper. The printer reports no slots yet.');
+}
+function act(k,p){
+  if(p.busy&&BUSY[k])return toast(`Wait until ${esc(p.name)} finishes the current step.`);
+  const nm=p.name;
+  switch(k){
+  case 'test':return doTest(p);
+  case 'report':return doReport(p);
+  case 'map':return p.on?needCode('map the slots of '+nm,()=>doMap(p)):setRes(p,'bad',`${esc(nm)} does not answer, so its slots cannot be mapped now. Turn it on, then try again.`);
+  case 'detect':return needCode('detect the model and slots of '+nm,()=>doDetect(p));
+  case 'load':case 'reports':case 'addr':case 'cert':case 'keyset':case 'keyrep':case 'keyclr':return toast(`${AL[k]}: not part of this mockup.`,'info');
+  case 'rename':return formDlg({title:'Rename printer',body:fld('fName','Name',{value:nm}),ok:'Rename',submit:f=>{
+    const i=$('#fName',f),v=i.value.trim();if(!v)return fieldErr(i,'Enter a name.');if(v===nm)return;
+    return()=>needCode('rename '+nm,()=>{p.name=v;refresh(p);setRes(p,'ok',`Renamed from ${esc(nm)} to ${esc(v)}.`)})}});
+  case 'code':return formDlg({title:'Replace Access Code',text:`The LAN Access Code that ${nm} shows.`,body:fld('fCode','Access Code',{type:'password',mono:1,help:'On the printer: Settings > Network/LAN'}),ok:'Replace',submit:f=>{
+    const i=$('#fCode',f);if(!i.value.trim())return fieldErr(i,'Enter the Access Code. On the printer: Settings > Network/LAN.');
+    return()=>needCode('replace the Access Code of '+nm,()=>setRes(p,'ok','Access Code replaced. Test the connection to check it.'))}});
+  case 'forget':return confirmDlg(`Forget ${nm}?`,p.kind==='bambu'?'Its Access Code is deleted.':'Its Moonraker API key is deleted.','Forget','forget '+nm,()=>{P.splice(P.indexOf(p),1);renderPrinters();toast(`${esc(nm)} is forgotten.`,'ok');$('#h-printers').focus()});
+  case 'lane':return formDlg({title:'Lane data',text:'Whether Spoolwarden uses the lane data this printer reports (which spool sits in which lane).',ok:'Save',
+    body:`<fieldset class="rgrp"><legend class="sr">Lane data</legend>${[['auto','Auto','When the printer reports it'],['on','On','Always'],['off','Off','Never']].map(([v,l,s])=>`<label class="rc" for="ln-${v}"><input type="radio" name="lane" id="ln-${v}" value="${v}"${p.lane===v?' checked':''}><span>${l}<small>${s}</small></span></label>`).join('')}</fieldset>`,
+    init:d=>$('input[name=lane]:checked',d).focus(),
+    submit:f=>{const v=$('input[name=lane]:checked',f).value;if(v===p.lane)return;return()=>needCode('change the lane data setting of '+nm,()=>{p.lane=v;refresh(p);setRes(p,'ok','Lane data: '+v+'.')})}});
+  }
+}
+function useFound(){
+  if(P.some(p=>p.id==='mos'))return toast('mainsailos is already in the list.');
+  needCode('add mainsailos',()=>{
+    found=[];P.push({id:'mos',name:'mainsailos',kind:'klipper',model:'Klipper',addr:'192.0.2.57:7125',on:1,key:0,lane:'auto',acts:['detect'],slots:null});
+    renderPrinters();toast('mainsailos added. Detect its model and slots next.','ok');$('[data-a=detect][data-p=mos]').focus();
+  });
+}
+function dismissFound(){found=[];renderPrinters();toast('Dismissed. mainsailos shows again when it announces itself.');$('#h-printers').focus()}
+function addDlg(){
+  formDlg({title:'Add a printer',ok:'Add printer',
+    body:`<fieldset><legend class="lbl" style="margin-bottom:6px">Printer type</legend><div class="seg"><input type="radio" name="pt" id="pt-b" value="b" checked><label for="pt-b">Bambu</label><input type="radio" name="pt" id="pt-k" value="k"><label for="pt-k">Klipper</label></div></fieldset>
+<div class="stack" id="apB">${fld('aIp','IP address or name',{ph:'e.g. 192.0.2.40 or printer.local'})}${fld('aCode','Access Code',{type:'password',mono:1,help:'On the printer: Settings > Network/LAN'})}${fld('aName','Name (optional)')}${fld('aSer','Serial (optional)',{mono:1,help:'Left empty, it is read from the printer.'})}</div>
+<div class="stack" id="apK" hidden>${fld('kAddr','Address',{ph:'e.g. 192.0.2.57 or voron.example'})}${fld('kPort','Port',{value:'7125',im:'numeric'})}${fld('kName','Name (optional)')}${fld('kKey','Moonraker API key (optional)',{type:'password',mono:1})}</div>`,
+    init:d=>$$('input[name=pt]',d).forEach(r=>r.onchange=()=>{const k=$('#pt-k').checked;$('#apB').hidden=k;$('#apK').hidden=!k}),
+    submit:()=>{
+      const k=$('#pt-k').checked;
+      if(!k){if(!$('#aIp').value.trim())return fieldErr($('#aIp'),"Enter the printer's IP address or name.");if(!$('#aCode').value.trim())return fieldErr($('#aCode'),'Enter the Access Code. On the printer: Settings > Network/LAN.')}
+      else{if(!$('#kAddr').value.trim())return fieldErr($('#kAddr'),"Enter the printer's address.");if(!/^\d{1,5}$/.test($('#kPort').value.trim()))return fieldErr($('#kPort'),'Enter a port number, usually 7125.')}
+      const nm=(k?$('#kName'):$('#aName')).value.trim()||(k?$('#kAddr'):$('#aIp')).value.trim();
+      return()=>needCode('add a printer',()=>toast(`${esc(nm)} is being added. It shows in the list once it answers.`,'ok'));
+    }});
+}
+function findDlg(){
+  formDlg({title:'Find Klipper printers',text:'Looks for Klipper printers (Moonraker) on the network.',ok:'Scan',cancel:'Close',
+    body:fld('fNet','Subnet (optional)',{ph:'e.g. 192.0.2.0/24',mono:1,help:'Empty: the network the Hub is on.'})+'<div id="fOut" aria-live="polite"></div>',
+    submit:()=>{scan();return false}});
+}
+async function scan(){
+  const b=$('#dfOk'),i=$('#fNet'),net=i.value.trim()||'192.0.2.0/24';if(b.disabled)return;
+  if(!/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(net))return fieldErr(i,'Write the subnet like 192.0.2.0/24.');
+  b.disabled=true;$('#fOut').innerHTML=msg('busy',`Scanning ${esc(net)}…`);await wait(1500);b.disabled=false;
+  $('#fOut').innerHTML=net==='192.0.2.0/24'?msg('ok','Found on 192.0.2.0/24: 192.0.2.57:7125')+'<div class="row" style="margin-top:var(--s3)"><button class="btn b-ton" type="button" id="fUse">Use this printer</button></div>'
+    :msg('info',`Nothing found on ${esc(net)}. Check the subnet, or add the printer by its address.`);
+  const u=$('#fUse');if(u)u.onclick=()=>{closeDlg($('#dlgForm'));useFound()};
+}
+async function copyPack(){
+  const r=$('#copyRes');
+  try{await navigator.clipboard.writeText($('#packCode').textContent);r.innerHTML=line('ok','Copied.')}
+  catch(e){r.innerHTML=line('bad','Copy did not work here: select the lines and copy them by hand.')}
+}
+$('#prEmptyT').onchange=renderPrinters;
+
+/* intake */
+const R=[
+  {name:'Polymaker PolyTerra PLA Charcoal Black',hex:'#2B2B2E',when:'2026-11-12 14:05',src:'from phone photo',st:'det',spools:'Spool 214',photos:2,conf:['','High, except Colour (medium) and Price per kg (not on label)']},
+  {name:'Bambu Lab PETG HF Orange x2',hex:'#F2762E',when:'2026-11-12 09:41',src:'from phone photo',st:'ai',spools:'Spools 212 and 213',photos:1},
+  {name:'eSUN ABS+ White',hex:'#F4F4F2',when:'2026-11-11 19:22',src:'from the Weigh Station',st:'hand',spools:'Spool 211',photos:1},
+  {name:'Prusament PLA Galaxy Silver',hex:'#8D9199',when:'2026-11-10 08:15',src:'added by hand',st:'det',spools:'Spool 210',photos:0},
+  {name:'Overture TPU Blue',hex:'#2E6FD9',when:'2026-11-09 17:48',src:'from phone photo',st:'det',spools:'Spool 209',photos:3,conf:['warn','Low on Material and Net weight: check these']}
+];
+const ST={det:['As detected','s-hollow',''],ai:['Revised by AI','info','info'],hand:['Edited by hand','pencil','acc']};
+const stChip=s=>chip(ST[s][2],ST[s][1],ST[s][0]);
+const confHtml=r=>r.conf?`<span class="conf ${r.conf[0]}">${ic(r.conf[0]?'s-triangle':'s-diamond')}<span>Read confidence: ${r.conf[1]}</span></span>`:r.src==='added by hand'?'<span class="conf">Not read from a label</span>':'';
+const pc=n=>n?`${n} photo${n>1?'s':''}`:'no photo';
+const cap=s=>s[0].toUpperCase()+s.slice(1);
+const spoolSvg=h=>`<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="ph-bg" width="64" height="64"/><circle cx="32" cy="25" r="19" style="fill:${h}"/><circle class="ph-rim" cx="32" cy="25" r="19"/><circle class="ph-bg" cx="32" cy="25" r="6"/><rect class="ph-lab" x="11" y="39" width="42" height="17" rx="3"/><rect class="ph-ln" x="15" y="43.5" width="20" height="3" rx="1.5"/><rect class="ph-ln" x="15" y="49.5" width="26" height="2" rx="1"/><rect x="42" y="43" width="7" height="9" rx="1.5" style="fill:${h}"/></svg>`;
+const thumb=r=>r.photos?`<span class="thumb">${spoolSvg(r.hex)}</span>`:`<span class="thumb nophoto">${ic('nophoto')}<span class="sr">No photo</span></span>`;
+function renderIntake(){
+  const L=$('#inList');
+  if($('#inEmptyT').checked){L.innerHTML=`<div class="card empty-st"><span class="art">${ic('intake')}</span><h2>No spool additions yet</h2><p>No spool has been added since Recently added started keeping records.</p></div>`;return}
+  L.innerHTML=`<div class="card tcard"><table class="tbl"><caption class="sr">Spool additions, newest first</caption><thead><tr><th scope="col" style="width:88px"><span class="sr">Photo</span></th><th scope="col">Spool addition</th><th scope="col">Added</th><th scope="col">State</th><th scope="col"><span class="sr">Open</span></th></tr></thead><tbody>${R.map((r,i)=>`<tr data-row="${i}"><td>${thumb(r)}</td><td><div class="cell"><a href="#recent-detail" data-rec="${i}">${r.name}</a><span class="muted">${r.spools} · ${pc(r.photos)}</span></div></td><td><div class="cell"><span class="nw">${r.when}</span><span class="muted">${cap(r.src)}</span></div></td><td><div class="cell">${stChip(r.st)}${confHtml(r)}</div></td><td class="chev">${ic('chev')}</td></tr>`).join('')}</tbody></table></div>
+<ul class="ilist" aria-label="Spool additions, newest first">${R.map((r,i)=>`<li><a class="card icard" href="#recent-detail" data-rec="${i}">${thumb(r)}<span class="cell"><b>${r.name}</b><small>${r.when} · ${r.src}</small><span class="chips">${stChip(r.st)}</span>${confHtml(r)}<small>${r.spools} · ${pc(r.photos)}</small></span>${ic('chev')}</a></li>`).join('')}</ul>`;
+}
+$('#inEmptyT').onchange=renderIntake;
+
+/* intake record detail */
+const FG=[['Identity',[['brand','Brand'],['material','Material'],['name','Name','',0,1],['colour','Colour','','mid'],['line','Line']]],['Weights',[['net','Net weight','g'],['spool','Spool weight','g'],['density','Density','g/cm³']]],['Temperatures',[['nozzle','Nozzle','°C'],['bed','Bed','°C'],['nrange','Nozzle range','°C'],['brange','Bed range','°C']]],['Other',[['price','Price per kg','','none']]]];
+const LBL={};FG.forEach(g=>g[1].forEach(f=>LBL[f[0]]=[f[1],f[2]]));
+const unit=k=>LBL[k][1]?' '+LBL[k][1]:'';
+const D={v:{brand:'Polymaker',name:'PolyTerra PLA Charcoal Black',material:'PLA',colour:'#2B2B2E',line:'PolyTerra PLA',net:'1000',spool:'140',density:'1.31',nozzle:'210',bed:'55',nrange:'190-230',brange:'25-60',price:''},
+  revs:[{n:1,when:'2026-11-12 14:09',by:'by hand',ch:[['spool','150','140']]}],prop:null,out:''};
+function fd([k,l,u,c,w]){
+  const v=esc(D.v[k]),badge=c==='mid'?`<span class="cfl warn">${ic('s-triangle')}Medium confidence</span>`:c==='none'?`<span class="cfl">${ic('s-diamond')}Not on label</span>`:'';
+  const inp=`<input class="in" id="f-${k}" name="${k}" value="${v}" autocomplete="off"${k==='price'?' placeholder="Not on the label"':''}${u?' inputmode="decimal"':''}>`;
+  return `<div class="fld${w?' full':''}"><label for="f-${k}">${l}${badge}</label>${k==='colour'?`<div class="colrow"><span class="colsw" id="colsw" style="--sw:${v}"></span>${inp}</div>`:u?`<div class="affix">${inp}<span class="u">${u}</span></div>`:inp}</div>`;
+}
+function renderDetail(){
+  const r=R[rec]||R[0],i=R.indexOf(r);
+  let h=`<a class="btn b-txt back" href="#recent">${ic('back')}Recently added</a><div class="ph"><div class="ph-t"><h1 id="h-recent-detail" tabindex="-1">${r.name}</h1><p>${r.when} · ${r.src} · ${r.spools}</p></div><div class="ph-a">${stChip(r.st)}</div></div>`;
+  const ph=`<section class="card" aria-labelledby="h-ph"><h2 id="h-ph">Photos</h2><p class="sub">${r.photos?'Tap a photo to enlarge it.':'Added by hand, without a photo.'}</p>${r.photos?`<div class="photos">${Array.from({length:r.photos},(_,n)=>`<button class="pbtn" type="button" data-photo="${n}" aria-label="Enlarge photo ${n+1} of ${r.photos}">${spoolSvg(r.hex)}</button>`).join('')}</div>`:''}</section>`;
+  if(i){
+    $('#det').innerHTML=h+`<div class="dgrid"><div>${ph}<section class="card"><h2>Label fields</h2><p class="sub">This record's fields are not part of this mockup. The first record shows the full layout.</p><div class="row" style="margin-top:var(--s4)"><a class="btn b-ton" href="#recent-detail" data-rec="0">Open the first record</a></div></section></div></div>`;
+    return;
+  }
+  h+=`<div class="dgrid"><div>${ph}<form class="card fform" id="fForm" novalidate aria-labelledby="h-lf"><h2 id="h-lf">Label fields</h2><p class="sub">Read with high confidence unless marked. Edit what is wrong, then save.</p>${FG.map(([g,fl])=>`<fieldset><legend class="legend">${g}</legend><div class="fgrid">${fl.map(fd).join('')}</div></fieldset>`).join('')}<div class="savebar"><p class="res" id="fRes" aria-live="polite"></p><button class="btn b-txt" type="button" data-do="fundo">Discard edits</button><button class="btn b-fill" type="submit">Save changes</button></div></form></div>
+<div><section class="card stack" aria-labelledby="h-ai"><div><h2 id="h-ai">Ask the AI to correct it</h2><p class="sub">Say what is wrong. The AI proposes changes; nothing changes until you accept.</p></div><div class="fld"><label for="aiTx">What should change?</label><textarea class="in" id="aiTx" rows="3" placeholder="e.g. brand is Polymaker"></textarea></div><div><button class="btn b-ton" type="button" data-do="ai">${ic('spark')}Ask the AI</button></div><div id="aiOut" aria-live="polite">${D.out}</div></section>
+<section class="card" aria-labelledby="h-rv"><h2 id="h-rv" tabindex="-1">Revisions</h2><ol class="rev" id="revs"></ol></section></div></div>`;
+  $('#det').innerHTML=h;renderRevs();
+  const f=$('#fForm');
+  f.addEventListener('submit',e=>{e.preventDefault();saveFields()});
+  f.addEventListener('input',e=>{
+    if(e.target.id==='f-colour'&&/^#[0-9a-f]{6}$/i.test(e.target.value.trim()))$('#colsw').style.setProperty('--sw',e.target.value.trim());
+    $('#fRes').innerHTML=changes().length?`<span class="dirty">${ic('s-diamond')}Unsaved changes</span>`:'';
+  });
+}
+const changes=()=>Object.keys(D.v).map(k=>[k,D.v[k],$('#f-'+k).value.trim()]).filter(c=>c[1]!==c[2]);
+function syncFields(){for(const k in D.v){const i=$('#f-'+k);if(i)i.value=D.v[k]}const s=$('#colsw');if(s)s.style.setProperty('--sw',D.v.colour)}
+function saveFields(){
+  const ch=changes(),r=$('#fRes');
+  if(!ch.length){r.innerHTML=line('info','Nothing changed.');return}
+  needCode('save the changes to this record',()=>{
+    ch.forEach(([k,,n])=>D.v[k]=n);D.revs.unshift({n:D.revs.length+1,when:'just now',by:'by hand',ch});renderRevs();
+    r.innerHTML=line('ok',`Saved. Sent only the changed field${ch.length>1?'s':''}: ${ch.map(c=>LBL[c[0]][0]).join(', ')}.`);
+  });
+}
+function renderRevs(){
+  $('#revs').innerHTML=D.revs.map(v=>`<li class="${v.undone?'undone':''}"><span class="t"><b>Revision ${v.n}</b><span class="muted">${v.when} · ${v.by}</span>${v.undone?chip('','undo','Undone'):''}</span>${v.ch.map(([k,a,b])=>`<span>${LBL[k][0]} ${esc(a||'(empty)')} → ${esc(b||'(empty)')}${unit(k)}</span>`).join('')}${v.undone?'':`<button class="btn b-out" type="button" data-undo="${v.n}">${ic('undo')}Undo revision ${v.n}</button>`}</li>`).join('');
+}
+function undoRev(n){
+  const v=D.revs.find(x=>x.n===n);if(!v||v.undone)return;
+  needCode('undo revision '+n,()=>{
+    v.ch.forEach(([k,a])=>D.v[k]=a);v.undone=1;syncFields();renderRevs();$('#fRes').innerHTML='';$('#h-rv').focus();
+    toast(`Revision ${n} undone: ${v.ch.map(([k,a])=>`${LBL[k][0]} is ${a?a+unit(k):'empty'} again`).join('; ')}.`,'ok');
+  });
+}
+async function askAI(){
+  const tx=$('#aiTx'),b=$('[data-do=ai]');
+  if(!tx.value.trim())return fieldErr(tx,'Say what the AI should correct, e.g. brand is Polymaker.');
+  b.disabled=true;$('#aiOut').innerHTML=D.out=msg('busy','Asking the AI… (up to a minute)');await wait(2000);
+  if(!$('#aiOut')){D.out='';return}b.disabled=false;
+  const p=[['name','PolyTerra PLA Charcoal Black (Matte)'],['nrange','190-220']].map(([k,n])=>[k,D.v[k],n]).filter(c=>c[1]!==c[2]);
+  D.prop=p.length?p:null;
+  D.out=p.length?`<div class="prop"><h3>Proposed changes</h3><ul class="chg">${p.map(([k,a,n])=>`<li><span class="lbl">${LBL[k][0]}</span><span><s>${esc(a)}${unit(k)}</s> <span aria-hidden="true">→</span><span class="sr">becomes</span> <b>${esc(n)}${unit(k)}</b></span></li>`).join('')}</ul><div class="row"><button class="btn b-fill" type="button" data-do="aiyes">Accept</button><button class="btn b-txt" type="button" data-do="aino">Discard</button></div></div>`
+    :msg('info','The AI found nothing to change.');
+  $('#aiOut').innerHTML=D.out;const y=$('[data-do=aiyes]');y&&y.focus();
+}
+function aiAccept(){
+  if(!D.prop)return;
+  needCode('accept the AI proposal',()=>{
+    const ch=D.prop;ch.forEach(([k,,n])=>D.v[k]=n);D.revs.unshift({n:D.revs.length+1,when:'just now',by:'by the AI',ch});D.prop=null;
+    syncFields();renderRevs();$('#aiTx').value='';
+    $('#aiOut').innerHTML=D.out=msg('ok',`Accepted. ${ch.length} field${ch.length>1?'s':''} changed; see Revisions.`);$('#aiTx').focus();
+  });
+}
+function showPhoto(n){
+  const r=R[rec]||R[0];$('#phT').textContent=`Photo ${n+1} of ${r.photos}`;$('#phBig').innerHTML=spoolSvg(r.hex);openDlg($('#dlgPhoto'));
+}
+
+/* settings */
+const SG=[['s-app','Appearance'],['s-gen','General'],['s-sto','Storage locations'],['s-ai','Label Reader'],['s-bak','Backups'],['s-net','Network and addresses'],['s-pw','Web passphrase'],['s-lib','Filament Catalog'],['s-voice','Weigh Station voice']];
+$('#snav').innerHTML=SG.map(([id,t],i)=>`<button type="button" data-jump="${id}"${i?'':' aria-current="true"'}>${t}</button>`).join('');
+function markNav(id){
+  const n=$('#snav');
+  $$('button',n).forEach(b=>{if(b.dataset.jump!==id)return b.removeAttribute('aria-current');b.setAttribute('aria-current','true');if(n.scrollWidth>n.clientWidth)n.scrollLeft=b.offsetLeft-16});
+}
+function spy(){
+  if($('#v-settings').hidden)return;let cur=SG[0][0];
+  for(const[id]of SG){if($('#'+id).getBoundingClientRect().top<170)cur=id}
+  if(innerHeight+scrollY>=document.body.scrollHeight-4)cur=SG[SG.length-1][0];
+  markNav(cur);
+}
+function jump(id){
+  const c=$('#'+id);c.scrollIntoView({behavior:RM.matches?'auto':'smooth',block:'start'});
+  const h=$('h2',c);h.tabIndex=-1;h.focus({preventScroll:true});
+  setTimeout(()=>markNav(id),RM.matches?0:450);
+}
+const fv=f=>JSON.stringify($$('[name]',f).map(i=>i.value));
+$$('form[data-group]').forEach(f=>{
+  f._i=fv(f);f._v=$$('[name]',f).map(i=>i.value);const r=$('.cf .res',f);
+  f.addEventListener('input',()=>{r.innerHTML=fv(f)!==f._i?`<span class="dirty">${ic('s-diamond')}Unsaved changes</span>`:''});
+  const d=$('[data-discard]',f);
+  if(d)d.onclick=()=>{$$('[name]',f).forEach((i,n)=>{i.value=f._v[n];clearErr(i)});r.innerHTML=line('info','Changes discarded.')};
+  f.addEventListener('submit',e=>{
+    e.preventDefault();
+    if(fv(f)===f._i){r.innerHTML=line('info','Nothing changed.');return}
+    for(const i of $$('input[type=number]',f)){const n=Number(i.value),m=+(i.min||0);if(i.value===''||!Number.isInteger(n)||n<m)return fieldErr(i,`Enter a whole number, ${m} or more.`)}
+    for(const i of $$('[required]',f))if(!i.value.trim())return fieldErr(i,'This cannot be empty.');
+    needCode('save these settings',()=>{const b=JSON.parse(f._i);f._i=fv(f);f._v=$$('[name]',f).map(i=>i.value);r.innerHTML=line('ok',saved(f,b))});
+  });
+});
+function saved(f,b){
+  const g=f.dataset.group,n=JSON.parse(f._i);
+  if(g==='General')$('#dispName').textContent=$('#gName').value.trim();
+  if(g==='Label Reader'&&(n[0]!==b[0]||n[1]!==b[1]))return 'Saved. The Hub restarts to use it; this takes a few seconds.';
+  if(g==='Catalog token'){const t=$('#lTok'),set=!!t.value.trim();t.value='';f._i=fv(f);f._v=[''];if(set){$('#tokChip').className='chip ok';$('#tokChip').innerHTML=ic('s-filled')+'Set'}return 'Saved. The token is set.'}
+  if(g==='Theme for new devices')return `Saved. Devices that have not chosen a theme use ${esc($('#aLook').value)}.`;
+  return 'Saved.';
+}
+let keySet=1;
+function renderKey(){
+  $('#keyChip').innerHTML=keySet?chip('ok','s-filled','Set'):chip('warn','s-hollow','Not set');
+  $('#keyBtns').innerHTML=keySet?'<button class="btn b-txt" type="button" data-key="check">Check</button><button class="btn b-out" type="button" data-key="rep">Replace</button><button class="btn b-txt b-badt" type="button" data-key="rm">Remove</button>':'<button class="btn b-out" type="button" data-key="rep">Add a key</button>';
+}
+async function keyAct(k){
+  const r=$('#keyRes');
+  if(k==='check'){r.innerHTML=line('busy','Checking the key…');await wait(1200);r.innerHTML=line('ok','The key works.');return}
+  if(k==='rm')return confirmDlg('Remove the Anthropic API key?','The Label Reader stops until you add a key again.','Remove key','remove the API key',()=>{keySet=0;renderKey();r.innerHTML=line('warn','Key removed. The Label Reader is off until you add a key.');$('[data-key=rep]').focus()});
+  formDlg({title:keySet?'Replace the API key':'Add an API key',body:fld('fAk','Anthropic API key',{type:'password',ph:'sk-ant-…',mono:1}),ok:keySet?'Replace key':'Add key',submit:f=>{
+    const i=$('#fAk',f),v=i.value.trim();
+    if(!v)return fieldErr(i,'Paste the key. It starts with sk-ant-.');
+    if(!v.startsWith('sk-ant-'))return fieldErr(i,'This does not look like an Anthropic key: those start with sk-ant-.');
+    return()=>needCode('change the API key',()=>{keySet=1;renderKey();r.innerHTML=line('ok','Key saved. Check it to be sure it works.')});
+  }});
+}
+const BK=[['2026-11-12 03:00','nightly','4,812 KiB'],['2026-11-11 03:00','nightly','4,790 KiB'],['2026-11-10 16:32','made here','4,771 KiB']];
+const renderBk=()=>$('#bkList').innerHTML=BK.map(b=>`<li>${ic('archive','lead')}<span class="t"><b>${b[0]}</b><small>${b[1]} · ${b[2]}</small></span><button class="btn b-txt" type="button" data-np="Downloading a backup">${ic('dl')}Download<span class="sr"> the backup from ${b[0]}</span></button></li>`).join('');
+
+/* background job */
+let jobOn=false;
+async function runJob(o){
+  if(jobOn){toast('Another job is still running. Try again when it ends.','warn');return null}
+  jobOn=true;o.start&&o.start();
+  const J=$('#job'),S=$('#jobS'),L=$('#jobLog'),B=$('#jobBar'),n=o.steps.length;
+  J.dataset.s='run';J.hidden=false;$('#jobT').textContent=o.title;$('#jobIc').innerHTML=spin;$('#jobX').hidden=true;L.innerHTML='';B.style.width='4%';
+  const add=t=>{const li=document.createElement('li');li.textContent=t;L.append(li);L.scrollTop=L.scrollHeight};
+  for(let i=0;i<n;i++){S.textContent=`Running · step ${i+1} of ${n}`;add(o.steps[i]);B.style.width=Math.round((i+1)/(n+1)*100)+'%';await wait(o.ms||1000)}
+  const ok=!o.fail;J.dataset.s=ok?'ok':'bad';S.textContent=ok?o.done:o.fail;add(S.textContent);B.style.width='100%';
+  $('#jobIc').innerHTML=ic(ok?'s-filled':'s-octagon');$('#jobX').hidden=false;jobOn=false;return ok;
+}
+$('#jobTg').onclick=()=>{const t=$('#jobTg'),x=t.getAttribute('aria-expanded')!=='true';t.setAttribute('aria-expanded',x);t.setAttribute('aria-label',x?'Hide the job log':'Show the job log');$('#jobLog').hidden=!x};
+$('#jobX').onclick=()=>{$('#job').hidden=true;const h=$('.view:not([hidden]) h1');h&&h.focus({preventScroll:true})};
+$('#bkNow').onclick=()=>needCode('make a backup',async()=>{
+  const r=$('#bkRes');
+  const ok=await runJob({title:'Backup',steps:['Backup started.','Copying the database and settings…','Adding 20 Recently added records with photos (14.2 MB)…','Writing the zip…'],done:'Backup: done.',start:()=>r.innerHTML=line('busy','Running in the background. Follow it in the job panel.')});
+  if(ok){BK.unshift(['Just now','made here','4,815 KiB']);renderBk();r.innerHTML=line('ok','Backup: done. It is first in the list below.')}
+});
+$('#failJob').onclick=()=>runJob({title:'Backup',steps:['Backup started.','Copying the database and settings…'],fail:'Backup: failed. The disk is full: delete old backups or free some space, then try again.'});
+function resetRs(all){
+  $('#rsSum').innerHTML='<p class="help">After the check, a summary of the zip appears here.</p>';
+  const t=$('#rsType');t.value='';t.disabled=true;$('#rsGo').disabled=true;
+  if(all){$('#rsFile').value='';$('#rsName').textContent='No file chosen';$('#rsCheck').disabled=true}
+}
+$('#rsFile').onchange=e=>{const f=e.target.files[0];$('#rsName').textContent=f?f.name:'No file chosen';$('#rsCheck').disabled=!f;resetRs(false)};
+$('#rsCheck').onclick=async()=>{
+  const b=$('#rsCheck'),n=esc($('#rsName').textContent);b.disabled=true;
+  $('#rsSum').innerHTML=msg('busy',`Uploading and checking ${n}…`);await wait(1400);b.disabled=false;
+  if(!/\.zip$/i.test(n)){$('#rsSum').innerHTML=msg('bad',`${n} is not a zip. Choose a backup zip made by Spoolwarden.`);return}
+  $('#rsSum').innerHTML=msg('ok',`<b>${n}</b> is a complete Spoolwarden backup: spools, printers, settings, Recently added records with photos, and the setup secrets.`)+'<div style="height:var(--s2)"></div>'+msg('warn','Restoring replaces everything the Hub keeps now. Back up first if you may want today\'s state back.');
+  const t=$('#rsType');t.disabled=false;t.focus();
+};
+$('#rsType').oninput=e=>{$('#rsGo').disabled=e.target.value.trim().toLowerCase()!=='restore'};
+$('#rsGo').onclick=()=>needCode('restore a backup',async()=>{if(await runJob({title:'Restore',steps:['Restore started.','Checking the zip again…','Replacing the data…','Restarting the Hub…'],done:'Restore: done.',ms:900}))resetRs(true)});
+$('#rsNo').onclick=()=>{resetRs(true);toast('Restore cancelled. Nothing changed.')};
+$('#nAllow').onchange=e=>{
+  const t=e.target,v=t.checked;t.checked=!v;
+  needCode('change where printers can be changed from',()=>{t.checked=v;$('#nAllowRes').innerHTML=line(v?'warn':'ok',v?'Saved. Printers can now be changed from the public address.':'Saved. Printers can be changed only from the home network.')});
+};
+$('#s-pw').addEventListener('submit',e=>{
+  e.preventDefault();const a=$('#pw1'),b=$('#pw2'),r=$('#pwRes');r.innerHTML='';
+  if(a.value.length<12)return fieldErr(a,a.value?`That is ${a.value.length} characters. Use at least 12.`:'Enter a passphrase of at least 12 characters.');
+  if(a.value!==b.value)return fieldErr(b,'The two passphrases do not match.');
+  needCode('set the web passphrase',()=>{a.value=b.value='';const c=$('#pwChip');c.className='chip ok';c.innerHTML=ic('s-filled')+'Set';r.innerHTML=line('ok','Passphrase set.')});
+});
+let voice='Piper';
+$$('input[name=voice]').forEach(i=>i.onchange=()=>{
+  const v=i.value;$(`input[name=voice][value="${voice}"]`).checked=true;
+  needCode('change the Weigh Station voice',()=>{voice=v;$(`input[name=voice][value="${v}"]`).checked=true;$('#vRes').innerHTML=line('ok',v==='Piper'?'Saved. The Weigh Station speaks with Piper once the voice has downloaded.':'Saved. The Weigh Station speaks with espeak-ng.')});
+});
+let loc=3;
+const libLine=()=>`Catalog version 2026.11.2 (signed release), ${loc} local additions. Last check 2026-11-12 03:10: OK.`;
+$('#libUp').onclick=()=>needCode('update the Filament Catalog',async()=>{
+  const r=$('#libRes');
+  if(await runJob({title:'Filament Catalog update',steps:['Looking for a new signed release…','Checking the signature…'],done:'Filament Catalog: up to date (2026.11.2).',start:()=>r.innerHTML=line('busy','Running in the background.')}))r.innerHTML=line('ok','Up to date: 2026.11.2.');
+});
+$('#libBack').onclick=()=>confirmDlg('Go back to the Catalog version before?',`Spoolwarden uses the release before 2026.11.2 until the next update. Your ${loc} local additions stay.`,'Go back','go back to the Catalog version before',()=>{$('#libRes').innerHTML=line('ok','Back on the version before. Update now returns to the newest.')});
+$('#lAdd').onclick=()=>{
+  const t=$('#lJson'),r=$('#lJsonRes'),v=t.value.trim();r.innerHTML='';let o;
+  if(!v)return fieldErr(t,'Paste one filament entry as JSON.');
+  try{o=JSON.parse(v)}catch(e){return fieldErr(t,'This is not valid JSON. Check the brackets, commas and quotes.')}
+  if(!o||typeof o!=='object'||Array.isArray(o))return fieldErr(t,'Add one entry: a JSON object in { }.');
+  needCode('add a Catalog entry',()=>{loc++;t.value='';$('#libSt').textContent=libLine();r.innerHTML=line('ok',`Entry added. ${loc} local additions now.`)});
+};
+
+/* theme picker: each theme is its own mockup file; carry the current view over */
+const LOOKS={console:['Console','c-console.html'],workbench:['Workbench','a-workbench.html'],spool:['Spool','b-spool.html'],panes:['Panes','d-panes.html']};
+function pickLook(t){
+  const k=t.dataset.look;if(!LOOKS[k])return;
+  if(t.getAttribute('aria-pressed')==='true'){$('#lookRes').innerHTML=line('ok',`Theme: ${LOOKS[k][0]}. This is the theme you are looking at.`);return}
+  location.href=LOOKS[k][1]+location.hash;
+}
+
+/* global events */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button,a');
+  if(openMenu&&!(t&&(openMenu.contains(t)||t===openMenu._b)))closeMenu();
+  const tr=e.target.closest('tr[data-row]');
+  if(tr&&!t){rec=+tr.dataset.row;location.hash='recent-detail';return}
+  if(!t)return;const d=t.dataset;
+  if(t.getAttribute('aria-haspopup')==='menu')return toggleMenu(t);
+  if(d.a){const p=P.find(x=>x.id===d.p);if(t.classList.contains('mi'))closeMenu(true);return p&&act(d.a,p)}
+  if(d.f)return d.f==='use'?useFound():dismissFound();
+  if(d.do)return({add:addDlg,find:findDlg,copy:copyPack,ai:askAI,aiyes:aiAccept,aino:()=>{D.prop=null;$('#aiOut').innerHTML=D.out=msg('info','Discarded. Nothing changed.');$('#aiTx').focus()},fundo:()=>{syncFields();$('#fRes').innerHTML=line('info','Edits discarded.')}})[d.do]();
+  if(d.np){e.preventDefault();return toast(`${d.np}: not part of this mockup.`,'info')}  if(d.key)return keyAct(d.key);
+  if(d.undo)return undoRev(+d.undo);
+  if(d.photo)return showPhoto(+d.photo);
+  if(d.jump)return jump(d.jump);
+  if(d.look)return pickLook(t);
+  if(d.rec!=null){rec=+d.rec;if(parse().v==='recent-detail'){e.preventDefault();route(false)}}
+  if(d.nav&&t.closest('#dlgMore'))closeDlg($('#dlgMore'));
+});
+document.addEventListener('keydown',e=>{
+  if(openMenu&&openMenu.contains(e.target)){
+    const it=$$('[role=menuitem]',openMenu),i=it.indexOf(e.target),k=e.key;
+    if(k==='ArrowDown'||k==='ArrowUp'){e.preventDefault();it[(i+(k==='ArrowDown'?1:-1)+it.length)%it.length].focus()}
+    else if(k==='Home'||k==='End'){e.preventDefault();it[k==='Home'?0:it.length-1].focus()}
+    else if(k==='Escape'){e.preventDefault();closeMenu(true)}
+    else if(k==='Tab')closeMenu();
+    return;
+  }
+  if(e.key==='Escape'&&openMenu){closeMenu(true);return}
+  if(e.key!=='Tab')return;
+  const dl=$$('dialog[open]').pop();if(!dl)return;
+  const f=$$('button,input,textarea,select,a[href]',dl).filter(x=>!x.disabled&&x.getClientRects().length&&!(x.type==='radio'&&!x.checked));
+  if(!f.length)return;const a=f[0],z=f[f.length-1];
+  if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}
+  else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}
+});
+$('#moreBtn').onclick=()=>openDlg($('#dlgMore'));
+$('#skip').onclick=()=>{const h=$('.view:not([hidden]) h1');(h||$('#main')).focus()};
+addEventListener('scroll',()=>{$('#top').classList.toggle('lift',scrollY>4);spy()},{passive:true});
+
+setTheme(load('spoolwarden.appearance'),false);
+renderLock();renderPrinters();renderIntake();renderKey();renderBk();
+route(true);
+})();
+</script>
+</body>
+</html>

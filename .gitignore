@@ -8,7 +8,6 @@ android/local.properties
 *.apk
 dist/
 .superpowers/
-docs/design/
 .venv/
 __pycache__/
 *.egg-info/
@@ -25,7 +24,6 @@ pc-sync/.venv/
 
 # Claude / agent working files never belong in the repo (plans, specs, ledgers, notes, handoffs)
 docs/superpowers/
-docs/design/
 .claude/
 CLAUDE.md
 CLAUDE.local.md
