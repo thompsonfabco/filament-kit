@@ -305,7 +305,7 @@ def test_a_failure_halfway_puts_everything_back(kit, monkeypatch, capsys, error)
 
     def extract(zf, items, target, folder=None):
         if items and items[0].root == "var/lib/filament-kit-web":
-            raise OSError(28, "No space left on device")
+            raise error
         return real(zf, items, target, folder)
     monkeypatch.setattr(backup, "_extract", extract)
     assert backup.restore(z, yes=True, run=Runner()) == 1
