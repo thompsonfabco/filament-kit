@@ -41,9 +41,18 @@ def js_texts(text):
 
 
 def _unescape(text, order):
-    """Android text back to catalogue form: %n$s / %n$d to {name}, %% to %, backslash escapes undone."""
+    """Android text back to catalogue form, by Android's own rules: an unquoted text is trimmed and its whitespace runs
+    collapsed, a text in double quotes keeps them; %n$s / %n$d become {name}; %% becomes % only in a string with
+    placeholders (Android only undoes it when it formats); backslash escapes are undone."""
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"' and text[-2] != "\\":
+        text = text[1:-1]
+    else:
+        text = re.sub(r"[ \t\n]+", " ", text).strip()
+
     def printf(m):
-        return "%" if m.group(0) == "%%" else "{" + order[int(m.group(1)) - 1] + "}"
+        if m.group(0) == "%%":
+            return "%" if order else "%%"
+        return "{" + order[int(m.group(1)) - 1] + "}"
     text = PRINTF.sub(printf, text)
     return re.sub(r"\\(.)", lambda m: "\n" if m.group(1) == "n" else m.group(1), text)
 
@@ -230,6 +239,19 @@ def test_plants_are_found():
     assert catalogue_problems(raw, js, xml.replace("1=hub", "1=box", 1))
     # the apostrophe escape and the number format are read back
     assert xml_texts("<resources><!-- 1=count --><string name=\"a\">It\\'s %1$d%%</string></resources>") == {"a": "It's {count}%"}
+    # Android's whitespace and percent rules: an unquoted trailing space or double space is lost, a lone %% stays %%
+    assert xml_texts('<resources><string name="a">State: </string><string name="b">s  q</string></resources>') == \
+        {"a": "State:", "b": "s q"}
+    assert xml_texts('<resources><string name="a">"State: "</string><string name="b">"s  q"</string></resources>') == \
+        {"a": "State: ", "b": "s  q"}
+    assert xml_texts('<resources><string name="a">%%</string><string name="b" formatted="false">%</string></resources>') \
+        == {"a": "%%", "b": "%"}
+    # so a generator that left them unquoted, or wrote a lone % as %%, fails the comparison
+    planted = {"zz_trailing": "State: ", "zz_double": "s  save", "zz_percent": "%"}
+    for k, v in planted.items():
+        bad = xml.replace("</resources>", f'<string name="{k}">{v.replace("%", "%%")}</string></resources>')
+        head, _, tail = js.rpartition("});")
+        assert catalogue_problems({**raw, k: v}, head + f"  {json.dumps(k)}: {json.dumps(v)},\n}});" + tail, bad), k
     # a theme name that differs, a theme name that is missing
     tokens = json.loads(json.dumps(TOKENS))
     assert theme_name_problems(tokens, raw) == []
