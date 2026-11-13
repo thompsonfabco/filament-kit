@@ -582,6 +582,63 @@ def test_update_deadline(served, monkeypatch):
     _assert_kept(_bundled_version())
 
 
+def test_update_deadline_holds_while_a_server_trickles(monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(library, "_clock", lambda: now[0])
+
+    class Trickle:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n):
+            now[0] += 100       # every receive takes 100 s; the bytes never stop
+            return b"x"
+
+    fetch = library._Fetcher(lambda req, timeout=None: Trickle(), 0)
+    with pytest.raises(library._Abort, match="longer than"):
+        fetch.get("https://example.invalid/index.json", "index.json", 1024)
+    assert now[0] <= library.DEADLINE + 100
+
+
+def test_update_deadline_holds_against_a_real_trickling_socket(monkeypatch):
+    import socket
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    stop = threading.Event()
+
+    def serve():
+        conn, _ = srv.accept()
+        with conn:
+            conn.recv(4096)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n")
+            while not stop.is_set():
+                try:
+                    conn.sendall(b"x")
+                except OSError:
+                    return
+                time.sleep(0.2)
+
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    monkeypatch.setattr(library, "DEADLINE", 1.0)
+    fetch = library._Fetcher(urllib.request.build_opener().open, 0)
+    t0 = time.monotonic()
+    try:
+        with pytest.raises(library._Abort, match="longer than"):
+            fetch.get(f"http://127.0.0.1:{srv.getsockname()[1]}/index.json", "index.json", 40)
+        assert time.monotonic() - t0 < 4       # the base held this read for ~8 s (41 bytes at 0.2 s)
+    finally:
+        stop.set()
+        srv.close()
+        t.join(2)
+
+
 def test_update_total_bytes_cap(served, monkeypatch):
     for rel in ("library/sunlu/pla-plus-2-0.json", "library/elegoo/petg-cf.json"):
         edit(served.root, rel, lambda e: e["published_ranges"].update({"_t": "a"}))

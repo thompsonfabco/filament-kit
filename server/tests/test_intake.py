@@ -520,6 +520,14 @@ def test_filter_orders_multi_pattern():
     assert kept == [None, "A1", "A3", "A4"]
 
 
+def test_filter_orders_single_spool_weights_are_not_bundles():
+    titles = ("PLA 1.5kg", "PLA 1,5 kg", "PLA 0.5kg", "PLA 1.75 kg", "PLA 1kg")
+    fils = [{"comment": " ".join(f"ASIN B{i}" for i in range(len(titles)))}]
+    rows = [{"date": "1", "order": "o", "asin": f"B{i}", "title": t} for i, t in enumerate(titles)]
+    assert intake_mod.filter_orders(rows, fils) == []
+    assert intake_mod.MULTI.search("PLA 10kg") and intake_mod.MULTI.search("PLA 2.5 kg")
+
+
 def test_tare_hints_from_config_reach_the_prompt(sm, tmp_path):
     (tmp_path / "etc" / "config.json").write_text(json.dumps({"intake": {"tare_hints": {"Acme": 177,
                                                                                          "SUNLU": 213}}}))

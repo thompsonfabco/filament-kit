@@ -727,7 +727,17 @@ class _Fetcher:
                 status = getattr(r, "status", 200)
                 if status != 200:
                     raise _Abort(f"{name}: HTTP {status}", status)
-                data = r.read(min(limit, budget) + 1)
+                want = min(limit, budget) + 1
+                chunks = []
+                read = getattr(r, "read1", r.read)      # read1 returns what has arrived; read(n) waits for all n bytes
+                while want > 0:         # the deadline holds during the read too: a trickling server can't stall the lock
+                    chunk = read(min(want, 65536))
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    want -= len(chunk)
+                    self.remaining()
+                data = b"".join(chunks)
         except urllib.error.HTTPError as e:
             if e.code == 404 and name in self.missing_ok:
                 return None
