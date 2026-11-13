@@ -217,6 +217,18 @@ def test_fingerprint_option_and_off_switch(cap, tmp_path, capsys):
     assert rc == 0 and c.password == CODE
 
 
+def test_fingerprint_with_no_pin_is_an_error_and_the_mode_is_printed(cap, tmp_path, capsys):
+    rc, out, made = run(cap, tmp_path, "--fingerprint", "00" * 32, "--no-pin")
+    err = capsys.readouterr().err
+    assert rc == 2 and not made and not out.exists() and "--fingerprint" in err and "--no-pin" in err
+    rc, _, _ = run(cap, tmp_path)
+    assert rc == 0 and "trust on first use" in capsys.readouterr().out
+    rc, _, _ = run(cap, tmp_path, "--fingerprint", hashlib.sha256(LEAF).hexdigest())
+    assert rc == 0 and "the --fingerprint given" in capsys.readouterr().out
+    rc, _, _ = run(cap, tmp_path, "--no-pin")
+    assert rc == 0 and "pin: OFF" in capsys.readouterr().out
+
+
 def test_read_env_format(cap, tmp_path):
     env = cap.read_env(env_file(tmp_path))
     assert env == {"PRINTER_IP": IP, "PRINTER_SERIAL": SERIAL, "PRINTER_CODE": CODE}   # nothing else kept
