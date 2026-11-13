@@ -595,14 +595,14 @@ def _web_state(ex: _Exec) -> None:
     web_access.grant(web.pw_uid, kit.st_uid)
 
 
-def _put_back(path: Path, old: bytes | None) -> None:
+def _put_back(path: Path, old: bytes | None, mode: int = 0o600) -> None:
     """Restore a file's old bytes with one atomic replace (or remove it when it did not exist)."""
     if old is None:
         path.unlink(missing_ok=True)
         return
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(old)
-    os.chmod(tmp, 0o600)
+    os.chmod(tmp, mode)
     os.replace(tmp, path)
 
 
@@ -626,6 +626,8 @@ def _remote_install(ex: _Exec, host: str) -> None:
     # this renewal-hooks/deploy file. A later `certbot --expand` rewrites the renewal conf and drops its hook
     # (known from the ops install); this file keeps the cert reaching nginx. The hook acts only on our lineage.
     ex.write(remote.DEPLOY_HOOK_FILE, f"#!/bin/sh\nexec {remote.HOOK} deploy\n".encode("utf-8"), 0o755)
+    # nginx loads the certificate and key at start: this drop-in has the hook check they match first (it never blocks)
+    ex.write(remote.NGINX_DROPIN, remote.NGINX_DROPIN_TEXT.encode("utf-8"), 0o644)
     for d, mode in ((remote.ROUTE_DIR, 0o755), (remote.TLS_DIR, 0o750)):
         _under(ex.root, d).mkdir(parents=True, exist_ok=True)
         os.chmod(_under(ex.root, d), mode)
@@ -645,6 +647,11 @@ def _remote_install(ex: _Exec, host: str) -> None:
         both = [new] + ([hashlib.sha256(old_cert).hexdigest()] if old_cert is not None else [])
         ex.write(remote.PLACEHOLDER_MARK, ("\n".join(both) + "\n").encode("ascii"), 0o644)
         old_key = key.read_bytes() if key.exists() else None
+        if old_cert is not None and old_key is not None:    # the check at nginx start falls back to this pair
+            prev = key.parent / "previous"
+            prev.mkdir(mode=0o700, exist_ok=True)
+            _put_back(prev / "fullchain.pem", old_cert, 0o644)
+            _put_back(prev / "privkey.pem", old_key, 0o600)
         ex.write(f"{remote.TLS_DIR}/privkey.pem", key_pem, 0o600)
         try:
             ex.write(f"{remote.TLS_DIR}/fullchain.pem", cert_pem, 0o644)
@@ -711,7 +718,8 @@ def _remote_off(ex: _Exec, name: str) -> None:
         # the kit no longer has this route: a stale entry would make a route put back later (the ops one) the kit's
         book.write_text("".join(f"{n}\n" for n in listed if n != name), encoding="utf-8")
     others = _other_routes(ex, name)
-    files = [(remote.DEPLOY_HOOK_FILE, "the kit's certbot deploy hook")]
+    files = [(remote.DEPLOY_HOOK_FILE, "the kit's certbot deploy hook"),
+             (remote.NGINX_DROPIN, "the kit's nginx start check")]
     if not others:
         files.insert(0, (remote.ROUTER_CONF, "the kit's router conf"))
     elif _under(ex.root, remote.ROUTER_CONF).exists():

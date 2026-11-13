@@ -33,6 +33,9 @@ RENEW_DAYS = 30         # at an apply, a placeholder this close to its end is ma
 WARN_REAL_DAYS = 14     # certbot renews at about 30 days: a real certificate is only news well after that
 LEGACY_DAYS = 31        # up to 0.4.x the placeholder lasted 30 days and had no mark
 TIMER_DROPIN = "/etc/systemd/system/certbot.timer.d/acme-window.conf"
+NGINX_DROPIN = "/etc/systemd/system/nginx.service.d/filament-kit-pair.conf"  # checks the certificate and key at start
+NGINX_DROPIN_TEXT = ("# Before every nginx start, make sure the certificate and key match (filament-kit)\n"
+                     f"[Service]\nExecStartPre=-{HOOK} check\n")
 DEPLOY_HOOK_FILE = "/etc/letsencrypt/renewal-hooks/deploy/filament-kit"
 KIT_ROUTES = ROUTER_DIR + "/kit-routes"  # names of the routes this kit added, one per line
 # In the first line of every route the kit's mcp-route writes. The filament-ops router's mcp-route writes
