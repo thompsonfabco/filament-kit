@@ -89,7 +89,7 @@ def test_there_is_no_channel_option_job_or_switch():
         cli.main(["update", "--channel", "nightly"])
     assert not any("channel" in j for j in setup_helper.JOBS)
     js = "".join((ROOT / f"server/filament_kit/setup_static/{n}").read_text(encoding="utf-8") for n in ("setup_tabs.js", "setup_overview.js", "setup_features.js", "setup_updates.js", "setup_settings.js", "setup_devices.js"))
-    assert "nightly" not in js.lower()
+    assert "nightly" not in js.lower().replace("updates_dialog_update_from_nightly", "")      # the catalogue key of 03 12's dialog sentence
     assert not (ROOT / ".github/workflows/nightly.yml").exists()
     assert not (ROOT / "server/filament_kit/nightly.py").exists()
     rel = (ROOT / "tools/make_release.sh").read_text(encoding="utf-8")

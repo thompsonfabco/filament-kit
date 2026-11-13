@@ -303,3 +303,72 @@ def test_the_allow_list_names_a_later_step_and_a_count_on_every_line():
             view, check, where, count, reason = (x.strip() for x in line.split("|"))
             assert view in ["#" + s for s in SECTIONS] and check and where, line
             assert count.isdigit() and int(count) > 0 and "removed by S2." in reason, line
+
+
+UPDATES = {"installed": "0.5.2", "installed_text": "0.5.2", "latest": "0.5.3", "newer": True, "checked_at": 1794700800,
+           "half_install": None, "notes": "Fixes the label reader.\nThe web app keeps its draft when the Hub restarts.",
+           "going_back": "Goes back to the signed release 0.5.1 and restarts the Hub.", "held": None, "failed": None,
+           "previous": "0.5.1", "module_on": True, "schedule": "daily", "update_refused": None, "rollback_refused": None}
+UPDATES_STATES = {
+    "available": {},
+    "held back": {"held": "0.5.3", "rollback_refused": "a printer is printing; wait until it has finished"},
+    "failed": {"failed": "0.5.3", "update_refused": "a printer is printing; wait until it has finished", "module_on": False},
+    "nightly": {"installed_text": "0.5.2-nightly.20260101", "notes": ""},
+}
+# what the Version list holds in each state, and whether Update is refused
+UPDATES_ROWS = {
+    "available": (["Installed", "Latest release", "0.5.3 is available.", "Last checked", "Checked by itself daily (Automatic updates)."], False),
+    "held back": (["Held back", "0.5.3 was rolled back. Automatic updates skip it; Update here installs it."], False),
+    "failed": (["Failed before", "Installing 0.5.3 failed before.", "Not checked by itself: Automatic updates are switched off."], True),
+    "nightly": (["0.5.2-nightly.20260101"], False),
+}
+
+UPDATES_READY = """(async () => {
+  const state = %s, [rows, refused] = %s, nightly = %s;
+  const until = async (what, f) => {
+    for (let i = 0; i < 80 && !f(); i++) await new Promise((r) => setTimeout(r, 100));
+    if (!f()) throw new Error("Updates (" + state + "): " + what);
+  };
+  await until("no Version list", () => document.querySelector(".updates__cards .kv"));
+  const text = document.querySelector(".updates__cards .kv").textContent;
+  for (const r of rows) if (!text.includes(r)) throw new Error("Updates (" + state + "): the Version list lacks " + r + " :: " + text);
+  const label = (b) => [...b.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("");      // not the tooltip of a refused one
+  const head = [...document.querySelectorAll(".updates__actions .btn")];
+  if (label(head[0]) !== "Check now" || head[0].classList.contains("btn--primary")) throw new Error("Updates (" + state + "): Check now");
+  const update = head.find((b) => b.classList.contains("btn--primary"));
+  if (!update || label(update) !== "Update to 0.5.3") throw new Error("Updates (" + state + "): no primary Update to 0.5.3");
+  if (!!update.getAttribute("aria-disabled") !== refused) throw new Error("Updates (" + state + "): Update disabled is not " + refused);
+  if (refused && !document.querySelector(".updates__actions + .banner--bad")) throw new Error("Updates (" + state + "): no refusal line");
+  if (!document.querySelector(".updates__cards .btn--danger") || label(document.querySelector(".updates__cards .btn--danger")) !== "Roll back to 0.5.1") throw new Error("Updates (" + state + "): no Roll back to 0.5.1");
+  if (!document.querySelector(".updates__cards .banner--info .updates__going")) throw new Error("Updates (" + state + "): no going-back note");
+  const foot = document.querySelector(".updates__foot .code");
+  if (!foot || !foot.textContent.includes("sudo filament-kit uninstall") || !foot.querySelector('[data-action="copy"]')) throw new Error("Updates (" + state + "): no uninstall code block with Copy");
+  const notes = document.querySelector(".updates__notes");
+  if (!!notes === (state === "nightly")) throw new Error("Updates (" + state + "): release notes");
+  if (notes && (!notes.querySelector("h2").textContent.startsWith("What 0.5.3 brings") || !notes.querySelector(".code__text").textContent.includes("\\n"))) throw new Error("Updates (" + state + "): notes box");
+  if (nightly) {
+    if (refused) return;
+    update.click();
+    await until("no Update dialog", () => document.querySelector("dialog[open] .dialog__text"));
+    const dlg = document.querySelector("dialog[open]");
+    if (!dlg.textContent.includes("Update to 0.5.3?") || !dlg.textContent.includes("This replaces the nightly build with the signed release 0.5.3.")) throw new Error("Updates (nightly): dialog " + dlg.textContent);
+    dlg.querySelector('[data-action="cancel"]').click();
+    await until("dialog still open", () => !document.querySelector("dialog[open]"));
+  }
+})()"""
+
+
+@pytest.mark.parametrize("state", list(UPDATES_STATES))
+def test_the_updates_section_passes_the_audit_with_an_update_available_held_back_failed_and_on_a_nightly(hub, monkeypatch, state):
+    """AUT-5 on Updates in its states (no allow-list: nothing of Updates is allowed any more), with what each shows: the
+    Version list, Check now and the primary Update to <version> in the header, the refusal, release notes, Roll back with
+    its note, the uninstall command in a code block with Copy, and the nightly sentence in the Update dialog."""
+    from filament_kit import updates
+    data = {**UPDATES, **UPDATES_STATES[state]}
+    monkeypatch.setattr(updates, "view", lambda cfg: data)
+    rows, refused = UPDATES_ROWS[state]
+    ready = UPDATES_READY % (json.dumps(state), json.dumps([rows, refused]), json.dumps(state == "nightly"))
+    fonts = ["--font-dir", os.environ["AUT5_FONT_DIR"]] if os.environ.get("AUT5_FONT_DIR") else ["--wide-font"]      # as a Linux runner draws it
+    run = _run("--url", hub, "--views", "#updates", "--ready", ready, *fonts)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert json.loads(run.stdout)["views"] == 4
