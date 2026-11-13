@@ -15,8 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.thompsonfabco.filamentkit.ui.pair.Mismatch
-import com.thompsonfabco.filamentkit.ui.pair.PairTexts
+import com.thompsonfabco.filamentkit.ui.pair.MismatchSource
+import com.thompsonfabco.filamentkit.ui.pair.mismatchText
 import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
