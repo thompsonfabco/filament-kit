@@ -94,9 +94,19 @@ def test_the_live_store_is_preferred_over_the_previous_pair(tmp_path):
     assert "fresh copy" in out and (tls / "privkey.pem").read_bytes() == live and _matches(tls)
 
 
-def test_an_expired_previous_pair_is_not_put_back(tmp_path):
+def test_an_expired_previous_pair_is_served_with_a_plain_warning_when_it_is_all_there_is(tmp_path):
     tls = _setup(tmp_path)
     _pair(tls / "previous", "old.example.org", LONG_AGO)
+    out = _check(tmp_path)
+    assert "served anyway" in out and "sudo certbot renew" in out
+    assert _matches(tls)                                  # still one pair, never a mismatched one
+    assert (tls / "privkey.pem").read_bytes() == (tls / "previous/privkey.pem").read_bytes()
+
+
+def test_a_mismatched_previous_pair_is_never_served_even_when_expired(tmp_path):
+    tls = _setup(tmp_path)
+    _pair(tls / "previous", "old.example.org", LONG_AGO)
+    shutil.copy(tmp_path / "other/privkey.pem", tls / "previous/privkey.pem")
     assert "filament-kit apply" in _check(tmp_path)
     assert not _matches(tls)
 
