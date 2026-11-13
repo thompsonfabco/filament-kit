@@ -257,6 +257,7 @@
     <string name="common_automatic">Automatic: %1$s</string>
     <string name="common_banner_unreachable">Cannot reach the Hub. Check that it is on; this page tries again every 10 s.</string>
     <string name="common_breadcrumb">Breadcrumb</string>
+    <string name="common_busy_wait">Still working. Wait for it to finish.</string>
     <string name="common_change">Change</string>
     <string name="common_check">Check</string>
     <string name="common_clear_selection">Clear selection</string>
@@ -306,6 +307,7 @@
     <!-- 1=group -->
     <string name="common_save_group">Save %1$s</string>
     <string name="common_save_key">Save key</string>
+    <string name="common_saved">Saved.</string>
     <string name="common_saved_hidden">Saved (hidden)</string>
     <string name="common_saving">Saving…</string>
     <!-- 1=name -->
