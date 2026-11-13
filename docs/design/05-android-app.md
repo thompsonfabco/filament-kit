@@ -1460,7 +1460,7 @@ An `info` line: "Presets are built on the Hub and installed on your PC by Slicer
 closed." A panel "Missing a product line?" with the text "If a filament's line is not in the Filament Catalog, add
 it so presets can be built for it." and the outlined button "Add a line to the Filament Catalog" (opens 8).
 
-A panel "Product lines" lists the lines the Hub knows, as on the Hub page and in the web app (request: the
+A panel "Product lines" lists the lines the Hub knows, as on the Hub page and in the web app (the
 app's existing product-lines route). One row per line: headline "<brand> <product line>", supporting
 "<material> · <n> presets", and a second supporting line "Bambu Studio parent: <name>" or "Bambu Studio parent:
 none" with the triangle (a line without a parent builds no presets). The row's action is the text button "Change
@@ -1553,7 +1553,7 @@ The update panel appears on 12.4, and as a one-line notice on Home (5) that link
 | Installing | "Tap Install in the window Android shows." | none |
 | Waiting for the install to be confirmed (Android's install window was closed or went to the background without an answer) | `info` "The update is downloaded. Tap to install to open Android's install window again." On Home the notice reads "Update downloaded: tap to install." | "Tap to install" (main; opens Android's install window again without downloading) |
 | Installed | The app restarts on the new version; snackbar "Updated to 0.5.3." | none |
-| Signature refused | `bad` "Android refused this update: it is signed by a different key than the installed app." and the text button "What this means", which opens a dialog: "The app on your Hub was built by someone else than the app on this phone. To switch, uninstall this app and install the one from the Hub. Drafts on this phone are lost." | "Try again" (outlined) |
+| Signature refused | `bad` "Android refused this update because it is not signed like the app on this phone. Do not install it; check where the app on your Hub came from." and the text button "What this means", which opens a dialog: title "An update signed with a different key", text "An update signed with a different key is what a forged app looks like, so Android refuses it and the app on this phone stays as it is. If you built or replaced the app on your Hub yourself, that is the reason. If you did not, do not install it: check where the app on your Hub came from.", button "Close". The app never tells the person to uninstall in this case, here or anywhere else: uninstalling is the one step that would get a forged app past this protection. | "Try again" (outlined; it picks up a corrected copy on the Hub) |
 | Failures | `bad` with one of: "Could not reach the Hub. Check that you are on the same network.", "The Hub has no app update to download.", "The Hub's certificate changed.", "A newer version is already installed.", "The download was damaged. Try again.", "Not enough storage on this phone.", "The install was blocked on this phone.", "This update does not work on this Android version.", "The download timed out. Try again.", "The update could not be installed." | "Try again" (main) |
 
 ---
