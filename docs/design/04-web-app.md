@@ -480,6 +480,11 @@ two lines at most). Right: one filled button. The status text is the button's re
 | Something was edited after the preview | "You changed spool 2. Preview again." | "Preview" |
 | Adding | "Adding to Spoolman…" | "Adding…" (working shape) |
 
+A preview is all or nothing. When any spool has a problem the Hub answers with the list of problems only (which
+spool, which field, the Hub's sentence) and no results: the page shows each sentence at its field, opens the first
+spool that has one and moves focus to that field. Results are shown only when every spool is good, so results
+and problems never appear side by side.
+
 Any edit to any card, adding or removing a card, or a new read makes the preview out of date. "Medium" and "Low"
 marks do not block the preview; they are counted in the status text ("3 fields to check · Preview ready: 2
 spools.").
@@ -591,7 +596,7 @@ the page is hidden or left.
 |---|---|
 | Loading (first request) | skeleton line and "Checking for the last tag…" |
 | No tag | hollow circle "No tag read yet: tap one on a reader." |
-| A tag | tag icon, the tag id (`--mono`), the age ("12 s ago", "3 min ago", "2 h ago"; exact time on long-press), the reader ("Tag Reader" or "Weigh Station", F2), and "scale <g> g" when the Weigh Station scale sent a reading; below, the Hub's text for the tag (`text`) |
+| A tag | tag icon, the tag id (`--mono`), the age ("12 s ago", "3 min ago", "2 h ago"; the exact time is in the tag's detail), the reader ("Tag Reader" or "Weigh Station", F2), and "scale <g> g" when the Weigh Station scale sent a reading; below, the Hub's text for the tag (`text`) |
 | The tag belongs to a spool | (Printers Feature on, from GET `printers/tagged`) "Linked to spool 214, Polymaker PolyTerra PLA Charcoal Black" and the button "Show spool 214" |
 | The poll failed | the last tag stays; a triangle line "Last update 40 s ago: the Hub did not answer." |
 
@@ -989,8 +994,8 @@ While the Hub connects: "Connecting to the printer…". On success the sheet clo
 
 ### 6.10 Printers switched off
 
-When the Printers Feature is off, the destination is dimmed and the page shows: printer icon, "Printers is switched
-off" and "Switch it on in Features on the Hub page." with "Open the Hub page" (home address only).
+When the Printers Feature is off, the destination is dimmed and the page shows: printer icon, "Printers are switched
+off" and "Switch them on in Features on the Hub page." with "Open the Hub page" (home address only).
 
 ---
 
@@ -1032,8 +1037,8 @@ undo a correction. Served on the home address only (7.4). Code today: `historyTa
   <n>".
 - Card (the whole card opens `#recent/<id>`): first photo 48 px (`--s7`) with the photo count chip, or a dashed box
   with "No photo"; names "<Brand> <Name>" and "x<n>" for several spools; source in words ("From a phone photo", "From
-  the Weigh Station", "Added by hand"; another value: the Hub's word) and the relative time (exact time on
-  long-press); state: the badge "As detected", "Revised by AI" or "Edited by hand" (3.3); "Spool 214" or "Spools
+  the Weigh Station", "Added by hand"; another value: the Hub's word) and the relative time (the exact time is in
+  the record); state: the badge "As detected", "Revised by AI" or "Edited by hand" (3.3); "Spool 214" or "Spools
   212, 213" in `--mono`; when confidence is known, a last line with the record summary of 02-components 7.2, e.g.
   "Medium: Colour · Not on the label: Price per kg" (triangle) or "Low: check Material, Net weight" (octagon).
 - Empty: "Nothing added yet" with the text "No spool has been added since the history started. Spools added from the web app, the app or the Weigh Station appear here."
@@ -1121,7 +1126,7 @@ When the Label Reader is off (`ai` false in the list, or 409 `ai_off`) the group
 "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page."
 
 **Revisions.** One row per revision, oldest first: "Revision <n>, <time>, by hand|by AI: <field old → new; …>" with
-the note when there is one. Undone revisions are struck through with "(undone)" (02-components 7.10). The newest revision that is
+the note when there is one. Undone revisions are struck through with "(undone)" (02-components 7.10). The record also shows the read facts of 02-components 7.2 (when read, read again, weighed and tag read, a revision's device, the filament lines), with the same texts and field errors. The newest revision that is
 not undone carries "Undo revision <n>" (undo icon): POST `history/<id>/undo` `{revision}`; result "Revision 1 undone.
 <Field> is <value> again." (e.g. "Empty spool weight is 150 g again."; with several fields, one sentence each) plus
 the filament lines above. Empty: "No revisions. Corrections by hand or by the Label Reader appear here."
@@ -1182,9 +1187,24 @@ More (and from the Add result). Code today: `presetsTab` in `app.js`.
 
 Empty: filled circle "Every filament has a preset line." Errors per card in a line under its buttons.
 
-When the Slicer presets Feature is off, the More row and the page are dimmed and the page shows "Slicer presets is
-switched off" and "Switch it on in Features on the Hub page." with "Open the Hub page" (home address
+When the Slicer presets Feature is off, the More row and the page are dimmed and the page shows "Slicer presets are
+switched off" and "Switch them on in Features on the Hub page." with "Open the Hub page" (home address
 only).
+
+**Updates** (a group under the list of lines; the same actions and texts as the Hub page, `03-hub-page.md` 8.2):
+
+- Summary line: "<n> updates are waiting<, <a> accepted: Slicer Sync writes them next>. Lines with updates: <m>.
+  Presets already in your slicers are never replaced unless you accept here." or "No updates. Presets already in
+  your slicers are never replaced on their own."
+- "Show what would change" (default button): lists each change ("<Orca Slicer / Bambu Studio>: <name>: <what
+  changes>"); under a shown list, "Accept these" (the group's one filled button); result "<n> updates accepted.
+  Slicer Sync writes them at its next run, after its backup." If the updates changed since the list was shown, the
+  Hub's refusal is shown and the list is asked for again.
+- "Bring back deleted presets" (ghost button): result "The next build brings back the presets deleted in Bambu
+  Studio. A build was asked for."
+- Each button asks the Hub through the web app's own routes for these actions, as today; a refusal is shown as the
+  Hub words it.
+
 
 ---
 

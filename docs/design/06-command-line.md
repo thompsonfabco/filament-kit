@@ -1692,7 +1692,7 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
    Appearance, and delivered to the Hub page, the web app and the app so a device that has not chosen opens in
    it. No such setting exists today.
 2. **Grouped status rows.** Each status row (`status.Row`) carries a `group` (Hub, Spoolman, Label Reader, Weigh
-   Station, Devices, Printers, Slicer presets, Filament Catalog), and the Printers group has one row per printer
+   Station, Devices, Printers, Slicer presets, Filament Catalog, Web access; a group is shown only when it has rows), and the Printers group has one row per printer
    with its state and one row per printer problem. `GET /setup/api/overview` returns the same rows, so the
    Overview and `status` show the same groups in the same order.
 3. **Hub messages in the new words.** Error texts in Hub replies and Fix texts in status rows are printed as they

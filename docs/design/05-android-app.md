@@ -144,7 +144,7 @@ that destination, pops back to its root. Every destination root is one tap away 
 
 A Feature switched off on the Hub never removes a destination (F8): the destination stays in the bar or rail,
 dimmed (icon and label drawn like a disabled control, but still selectable; content description "Printers, switched
-off"). Printers with the printers Feature off opens a page that says "Printers is switched
+off"). Printers with the printers Feature off opens a page that says "Printers are switched
 off. Switch it on in Features on the Hub page." with the
 button "Open the Hub page" (opens the Hub page in the browser, as 12.3).
 
@@ -361,7 +361,7 @@ Hub and network failures use these texts everywhere (`strings.xml`, one key each
 | No route to the Hub, timeout | "Cannot reach the Hub. Check that this phone is on the home network." |
 | Unexpected answer | "The Hub sent an answer this app does not understand. Update the app or the Hub, then try again." |
 | A refusal with the Hub's own message | the Hub's message, as given |
-| Feature off | Title "<Feature name> is switched off", text "Switch it on in Features on the Hub page." |
+| Feature off | Title "<Section> are switched off" or "<Section> is switched off", as the name reads ("Printers are switched off", "Slicer presets are switched off"); text "Switch them on in Features on the Hub page." (or "Switch it on …"). Each section has its own title text, written out in full; there is no one sentence with the name filled in. |
 | Spoolman unreachable | "The Hub can't reach Spoolman right now. Try again in a minute." |
 
 Ellipses are always the single character "…".
@@ -1396,9 +1396,10 @@ Station", records without photos "Added by hand"; any other value is shown as th
 | Top bar | Title: the filament name; back arrow; overflow "Open spool 214" (opens `spools/214` in the Spools destination; one item per spool). | `TopAppBar` |
 | Header | Meta row: "2026-11-12 14:05 · From a phone photo", the state, "Spool 214" (`--mono`). Two icon buttons "Newer record" and "Older record" (disabled at the ends) step through the list without going back. | `Row`, `IconButton` |
 | Photos panel | Title "Photos (2)", the count in brackets. Thumbnails `thumb` square in a `LazyRow`; each has the content description "Label photo 1 of 2, opens it large". Tapping opens 10.5. No photo: "No photo: this spool was added by hand." | Panel, `LazyRow` |
-| Fields panel | Title "Fields", the tag "Read confidence is high unless marked" (only with confidence data), header action "Edit by hand" (pencil icon; opens 10.3 for this item). Field rows in four groups: **Identity** Brand, Name, Material, Colour (swatch + hex); **Weights** Net weight, Empty spool weight, Density; **Temperatures** Nozzle, Bed, Nozzle range, Bed range; **Other** Price per kg, Line. Empty values read "(empty)" in `--muted`. Confidence marks as in 6.3 next to the value. When one record saved several items, there is one Fields panel per item, titled "Spools 212, 213" with the line "A change applies to both." | Panel, field rows |
+| Fields panel | Title "Fields", the tag "Read confidence is high unless marked" when the reader rates its fields, or "This reader does not say how sure it is. Check the values against the label." when it does not (02 7.2); no tag for a record typed by hand, header action "Edit by hand" (pencil icon; opens 10.3 for this item). Field rows in four groups: **Identity** Brand, Name, Material, Colour (swatch + hex); **Weights** Net weight, Empty spool weight, Density; **Temperatures** Nozzle, Bed, Nozzle range, Bed range; **Other** Price per kg, Line. Empty values read "(empty)" in `--muted`. Confidence marks as in 6.3 next to the value. When one record saved several items, there is one Fields panel per item, titled "Spools 212, 213" with the line "A change applies to both." | Panel, field rows |
 | Ask the Label Reader panel | 10.4. | Panel |
 | Revisions panel | Title "Revisions (2)", the count in brackets. One entry per revision: "Revision 1, 2026-11-12 14:09, by hand: Empty spool weight 150 → 140 g" (`--mono` for the change); undone ones are struck through and followed by "(undone)" (02 7.10; text, not a badge). The newest live revision has the button "Undo revision 1" (outlined, undo icon). None: "No revisions. Corrections by hand or by the Label Reader appear here." | Panel |
+| Read facts | Under the fields, in `--fs-s` `--muted`: the lines of `02-components.md` 7.2 ("Read facts"): "When read: …", "Read again by the Label Reader (…)", "Weighed <n> g · Tag read"; in a revision: "Note: …" and "From <device>"; after a correction or an undo: the filament lines; when Records kept is 0 the screen shows only "The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page." Field errors as given there. | `Text` |
 
 Undo asks: dialog "Undo revision 1?", body "Empty spool weight goes back to 150 g.", buttons "Cancel" and "Undo" (main).
 Result: notice line in the Revisions panel "Revision 1 undone. Empty spool weight is 150 g again." plus, when the Hub
@@ -1734,6 +1735,7 @@ Every route, screen, dialog and flow of today's app (`filament-kit` Android app)
 | "Add spool" | Home "Add by hand" 5 |
 | "Add from label photos" | Home "Add from label photos" 5 |
 | "Add profile" | Slicer presets screen 11.2 and spool panel overflow 6.3, opening `catalog/new` 8 |
+| History record: "When read" line, "Read again by …", "Weighed … · Tag read", a revision's note and device, re-link lines, the text when nothing is kept | Read facts of Recently added 10.2 (texts in `02-components.md` 7.2) |
 | "Existing lines" list on the Add profile screen, with "Change parent" on each line | Product lines panel of the Slicer presets screen 11.2 ("Change parent" opens a sheet) |
 | "Search" | Bottom bar "Spools" 2.3 |
 | "Printers" | Bottom bar "Printers" 2.3; Home Printers panel 5 |

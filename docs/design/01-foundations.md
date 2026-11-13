@@ -65,7 +65,10 @@ message, help text and document. The middle column is what the code and older do
 
 Rules for wording: sentence case everywhere ("Add a printer"); no internal words (module, unit, endpoint, job id);
 numbers with units and a space ("210 °C", "1000 g", "4,812 KiB"); dates as `2026-11-12 14:05` in tables and logs and
-as relative words in summaries ("3 minutes ago") with the exact time on hover or long-press.
+as relative words in summaries, with the exact time in the date's tooltip (hover or keyboard focus) and wherever
+the thing is shown in detail. Relative words are: "just now" (under a minute), "1 minute ago" / "<n> minutes ago"
+(under an hour), "1 hour ago" / "<n> hours ago" (under a day), "1 day ago" / "<n> days ago" (under seven days), and
+from seven days on the date itself (`2026-11-12`).
 
 ## 3. The four interfaces
 
