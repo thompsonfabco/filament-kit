@@ -189,6 +189,23 @@ def test_changing_the_address_keeps_the_pin(both, manager):
     assert registry.load()[SERIAL].ip == "h2d.local"
 
 
+def test_a_new_address_with_the_access_code_saves_both_like_the_api(both, manager, kl):
+    """03 15: the page's Change address dialog sends the Access Code for a Bambu Lab printer; the Hub saves it with the
+    address and drops the old pin, as PATCH /api/printers does. A Klipper printer has no Access Code."""
+    _bambu()
+    registry.pin(SERIAL, "ab" * 32)
+    c = client(both)
+    r = post(c, f"printers/{SERIAL}/address", {"address": "h2d.local", "access_code": "87654321"})
+    assert r.status_code == 200
+    p = registry.load()[SERIAL]
+    assert p.ip == "h2d.local" and p.access_code == "87654321" and not p.cert_fp
+    r = post(c, f"printers/{SERIAL}/address", {"address": "192.0.2.40", "access_code": "not a code!"})
+    assert r.status_code == 400 and r.json()["field"] == "access_code"
+    assert registry.load()[SERIAL].ip == "h2d.local"                    # nothing written on a bad code
+    r = post(c, f"printers/{kl.serial}/address", {"address": NAME, "access_code": "87654321"})
+    assert r.status_code == 400 and r.json()["field"] == "access_code"
+
+
 def test_the_terminal_menu_takes_a_name_too(env, names, monkeypatch, capsys):
     answers = iter(["H2D", "h2d.local", SERIAL, "H2D"])
     monkeypatch.setattr(cli, "_ask", lambda q: next(answers))

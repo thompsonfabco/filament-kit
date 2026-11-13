@@ -34,8 +34,12 @@ function addressButton(p, box, now) {
   return h("button", { class: "secondary", textContent: "Change address", on: { click: () => asking(box, printerPath(p, "address"), {
     kind: "entry", title: SW.t("printers_change_address_title", { name: p.name }), confirm: SW.t("printers_change_address"),
     fields: [entryField({ label: SW.t(bambu ? "printers_field_address" : "common_address"), name: "address", value: now, mono: true,
-      hint: bambu ? SW.t("printers_change_address_hint_bambu") : SW.t("printers_change_address_hint_klipper", { port: p.port }) }, "common_error_address")],
-  }, ([address]) => ({ address: address.trim() }), (r) => say(box, r.note ? `Saved. ${r.note}.` : "Saved.", true)) } });
+      hint: bambu ? SW.t("printers_change_address_hint_bambu") : SW.t("printers_change_address_hint_klipper", { port: p.port }) }, "common_error_address"),
+    // 03 15: a Bambu Lab printer's new address takes its Access Code too, as in the web app and the app
+    ...(bambu ? [entryField({ type: "secret", label: SW.t("common_field_access_code"), name: "access_code", mono: true },
+      "common_error_access_code")] : [])],
+  }, ([address, access]) => ({ address: address.trim(), ...(bambu ? { access_code: access } : {}) }),
+  (r) => say(box, r.note ? `Saved. ${r.note}.` : "Saved.", true)) } });
 }
 
 function bambuRow(p) {
