@@ -536,6 +536,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             presetsNoteIsError = presetsNoteIsError,
                             presetUpdates = presetUpdates,
                             onPresetsChanged = { presetsReload++ },
+                            onAddCatalogLine = { nav.navigate(AddProfileRoute) },
                             localNetworkPanel = { LocalNetworkNotice(localNetwork) },
                             extra = { if (BuildConfig.DEBUG) SimulateTag() },
                         )

@@ -115,6 +115,8 @@ internal fun HomeScreen(
     /** The panel's Updates dialog; null: not offered (no server). [onPresetsChanged]: reload the panel. */
     presetUpdates: PresetUpdatesViewModel? = null,
     onPresetsChanged: () -> Unit = {},
+    /** Opens the Filament Catalog's new-line form from the presets panel (until S4.14 moves it). */
+    onAddCatalogLine: () -> Unit = {},
     /** Offer the label-photo add flow ([showLabelPhotos]); off, "Add by hand" is the main button. */
     labelPhotos: Boolean = false,
     /** Shown while [connection] is [Connection.NeedsLocalNetwork] (explanation, Allow, Open app settings). */
@@ -143,7 +145,7 @@ internal fun HomeScreen(
             var updatesOpen by remember { mutableStateOf(false) }
             PresetsCard(
                 presets, onBuild = onBuildPresets, building = buildingPresets, buildNote = presetsNote,
-                buildFailed = presetsNoteIsError,
+                buildFailed = presetsNoteIsError, onAddLine = onAddCatalogLine,
                 onUpdates = presetUpdates?.takeIf { presets != null }?.let { vm -> { vm.load(); updatesOpen = true } },
             )
             if (updatesOpen && presetUpdates != null) {
@@ -230,7 +232,10 @@ private fun AddSpoolsPanel(labelPhotos: Boolean, onAddSpools: () -> Unit, onAddB
     HomePanel(stringResource(R.string.home_add_title)) {
         Text(stringResource(R.string.home_add_text), style = MaterialTheme.typography.bodyMedium)
         if (labelPhotos) {
-            SwButton(stringResource(R.string.home_add_from_photos), onAddSpools, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
+            SwButton(
+                stringResource(R.string.home_add_from_photos), onAddSpools, Modifier.fillMaxWidth(), kind = SwButtonKind.Main,
+                icon = R.drawable.sw_ic_camera,
+            )
             SwButton(stringResource(R.string.home_add_by_hand), onAddByHand, Modifier.fillMaxWidth())
         } else {
             Text(

@@ -74,6 +74,7 @@ class HomeScreenTest {
                     onPairAgain = { calls += "pair" }, onInstallUpdate = { calls += "install" },
                     onConfirmInstall = { calls += "confirm" },
                     showPrinters = showPrinters, labelPhotos = labelPhotos,
+                    onAddCatalogLine = { calls += "catalog" },
                 )
             }
         }
@@ -253,6 +254,12 @@ class HomeScreenTest {
         text("The Hub's certificate has changed. This phone stopped talking to it to stay safe.").assertExists()
         text("Review the certificate").performClick()
         assertEquals(listOf("review"), calls)
+    }
+
+    @Test fun thePresetsPanelKeepsAWayIntoTheFilamentCatalog() {
+        show()
+        text("Add a line to the Filament Catalog").performClick()
+        assertEquals(listOf("catalog"), calls)
     }
 
     @Test fun aPhoneThatIsNoLongerPairedOffersToPairAgain() {

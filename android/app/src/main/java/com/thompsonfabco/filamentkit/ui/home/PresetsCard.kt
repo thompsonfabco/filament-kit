@@ -4,15 +4,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ProfileStatus
+import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import java.text.DateFormat
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
@@ -106,6 +109,8 @@ fun PresetsCard(
     buildFailed: Boolean = false,
     /** Opens the Updates dialog (accept updates, restore deleted presets); null: not offered. */
     onUpdates: (() -> Unit)? = null,
+    /** Opens the Filament Catalog's new-line form; null: not offered. Moves to the Slicer presets screen in S4.14. */
+    onAddLine: (() -> Unit)? = null,
 ) {
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -123,7 +128,7 @@ fun PresetsCard(
                 val actions = presetActions(status)
                 actions.hints.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (actions.canBuild) {
-                    Button(onClick = onBuild, enabled = !building) { Text(if (building) "Asking…" else "Build now") }
+                    SwButton(if (building) "Asking…" else "Build now", onBuild, enabled = !building)
                 }
                 onUpdates?.let { OutlinedButton(onClick = it) { Text(updatesButton(actions)) } }
                 buildNote?.let {
@@ -134,6 +139,7 @@ fun PresetsCard(
                     )
                 }
             }
+            onAddLine?.let { SwButton(stringResource(R.string.catalog_add_line), it, kind = SwButtonKind.Quiet) }
         }
     }
 }
