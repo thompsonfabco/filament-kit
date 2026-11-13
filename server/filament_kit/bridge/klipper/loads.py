@@ -321,14 +321,22 @@ class LoadsMixin:
             return
         _model, _system, adapter = self.model(pid)
         if not lanes.should_publish(p, adapter):
-            if adapter.name not in lanes.NEVER and getattr(p, "lane_data", "auto") == "off":
+            if adapter.name not in lanes.NEVER:      # `off`, or `auto` that resolves to off: no kit lane stays behind
                 self._retract_lanes(pid, c)
             return
         try:
             units = self.slots(pid)
             ids = {s.spool_id for u in units for s in u.slots if s.spool_id is not None}
-            by_id = {i: self.sm.get(f"spool/{i}") for i in sorted(ids)}      # these spools only, not the whole inventory
-            by_id = {i: sp for i, sp in by_id.items() if sp}
+            by_id = {}
+            for i in sorted(ids):               # these spools only, not the whole inventory
+                try:
+                    sp = self.sm.get(f"spool/{i}")
+                except SpoolmanError as e:
+                    if e.status != 404:
+                        raise
+                    continue                    # deleted in Spoolman while a slot still shows it: that slot is empty
+                if sp:
+                    by_id[i] = sp
             presets = {}
             for u in units:
                 for s in u.slots:
@@ -340,7 +348,7 @@ class LoadsMixin:
             wrote = lanes.publish(c.client, pl, c.lane_last)
             if wrote:
                 log.info("klipper %s: lane_data %s updated", pid, ", ".join(wrote))
-            gone = lanes.retract(c.client, pl, c.lane_last)
+            gone = lanes.retract(c.client, pl, c.lane_last, c.client.db_get(lanes.NAMESPACE))
             if gone:
                 log.info("klipper %s: lane_data %s removed", pid, ", ".join(gone))
         except Exception as e:  # noqa: BLE001 - publishing is a convenience: never fail a load over it

@@ -222,3 +222,41 @@ def test_publishing_reads_only_the_printers_spools(env, moonraker, sm, monkeypat
         assert "spool" not in asked and f"spool/{s['id']}" in asked
     finally:
         fam.stop()
+
+
+def test_a_deleted_spool_does_not_stop_the_other_lanes(env, moonraker, sm, spoolman_fake_store):
+    moonraker.objects = ["print_stats", "toolhead", "extruder", "extruder1", "heater_bed", "virtual_sdcard",
+                         "gcode_macro FK_UNVERIFIED_M1D", "gcode_macro _FK_TOOL_SPOOLS"]
+    moonraker.status["gcode_macro _FK_TOOL_SPOOLS"] = {f"t{i}": 0 for i in range(7)}
+    pid = registry.add_klipper("M1D", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        assert fam.wait_settled(pid, 8) == "connected"
+        a, b = _spool(sm), _spool(sm)
+        assert fam.load(sm, pid, "C1", a["id"], False, sealed_location="Sealed stock")["confirmed"] is True
+        assert wait_for(lambda: (moonraker.db.get("lane_data") or {}).get("lane1", {}).get("spool_id") == a["id"])
+        del spoolman_fake_store["spools"][a["id"]]        # Spoolman then answers 404 for it
+        assert fam.load(sm, pid, "C2", b["id"], False, sealed_location="Sealed stock")["confirmed"] is True
+        assert wait_for(lambda: (moonraker.db.get("lane_data") or {}).get("lane2", {}).get("spool_id") == b["id"])
+        assert moonraker.db["lane_data"]["lane1"]["spool_id"] is None      # the deleted spool's slot reads empty
+    finally:
+        fam.stop()
+
+
+def test_auto_that_resolves_to_off_removes_the_kits_lanes(env, moonraker, sm):
+    moonraker.objects = json.loads((DATA / "SV08-MAX" / "objects.json").read_text())["objects"]
+    moonraker.status = json.loads((DATA / "SV08-MAX" / "status.json").read_text())
+    moonraker.hostname = "SV08MAX"
+    pid = registry.add_klipper("SV08 MAX", moonraker.host, moonraker.port).serial
+    moonraker.db["lane_data"] = {"lane0": {"lane": "0", "source": "filament-kit"},
+                                 "lane7": {"lane": "7", "source": "other"}}
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        assert fam.wait_settled(pid, 8) == "connected"
+        s = _spool(sm)
+        assert fam.load(sm, pid, "T0", s["id"], False, sealed_location="Sealed stock")["confirmed"] is True
+        assert moonraker.db["lane_data"] == {"lane7": {"lane": "7", "source": "other"}}
+    finally:
+        fam.stop()

@@ -40,7 +40,8 @@ COMMON = ("print_stats", "toolhead", "virtual_sdcard", "heater_bed", "webhooks",
 GCODE_STATE = {"printing": "RUNNING", "paused": "PAUSE", "complete": "FINISH", "cancelled": "FAILED",
                "error": "FAILED", "standby": "IDLE"}
 SPOOL_CACHE = 30.0
-NOT_MJPEG = ("webrtc", "hls", "iframe")      # Moonraker webcam `service` values whose stream_url is not an MJPEG stream
+MJPEG = ("mjpegstreamer", "uv4l-mjpeg")     # Moonraker webcam `service` values whose stream_url is an MJPEG stream
+STATUS_TEXT = 200       # longest status text taken from the far side
 SPOOL_RETRY = 5.0           # after a failed read, Spoolman is not asked again for this long (its timeout is 15 s)
 OFFLINE_AFTER = 10.0    # seconds a websocket may be down before the printer reads as offline
 SYNC_EVERY = 15.0       # seconds between registry re-reads (the CLI edits it in another process)
@@ -49,6 +50,12 @@ SCAN_GAP = 30.0         # seconds from the end of one scan to the start of the n
 ONLINE = ("connected", "unknown_model")
 SYSTEM_WORDS = {"single": "a single-extruder printer", "tool-macros": "a toolchanger", "afc": "an AFC printer",
                 "happy-hare": "a Happy Hare printer", "lane-data": "a printer with lane_data"}
+
+
+def clean_text(text: str) -> str:
+    """The far side's text as shown in the printer's state: one line, no markup or control characters, bounded."""
+    t = " ".join("".join(" " if ch in "<>" or not ch.isprintable() else ch for ch in str(text)).split())
+    return t if len(t) <= STATUS_TEXT else t[:STATUS_TEXT - 1] + "…"
 
 
 def generic_note(system_key: str) -> str:
@@ -101,6 +108,7 @@ class _Conn:
         self.thread.join(5)
 
     def _set(self, state: str, message: str = "") -> None:
+        message = clean_text(message)
         with self.lock:
             changed = (state, message) != (self.state, self.message)
             self.state, self.message = state, message
@@ -587,8 +595,9 @@ class KlipperFamily(LoadsMixin):
             return None
         for cam in c.webcams:
             url = cam.get("stream_url") if cam.get("enabled", True) else None
-            if str(cam.get("service") or "").lower().startswith(NOT_MJPEG):
-                continue            # the camera hub reads MJPEG only; a WebRTC or HLS page would show nothing
+            service = str(cam.get("service") or "").lower()
+            if service and not service.startswith(MJPEG):
+                continue            # the camera hub reads MJPEG only; WebRTC, HLS, jmuxer or an iframe show nothing
             if isinstance(url, str) and url:
                 full = urllib.parse.urljoin(f"http://{hostaddr.url_host(c.p.host)}/", url)     # an IPv6 host in brackets
                 u = urllib.parse.urlsplit(full)
