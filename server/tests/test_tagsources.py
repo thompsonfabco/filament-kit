@@ -159,6 +159,77 @@ def test_fresh_unknown_tag(monkeypatch):
     assert tagsources.fresh_unknown_tag({}, _SM([])) is None
 
 
+class _Redirector:
+    """A server answering every GET with a 302 to `location`."""
+
+    def __init__(self, location):
+        outer = self
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header("Location", outer.location)
+                self.end_headers()
+
+            def log_message(self, *a):
+                pass
+
+        self.location = location
+        self.srv = HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.srv.server_port}"
+
+    def close(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+
+
+def test_redirect_to_ftp_is_refused_and_never_connected():
+    """FB-078: a 30x to ftp: is not followed (a listener on the ftp target sees no connection)."""
+    import socket
+    lis = socket.socket()
+    lis.bind(("127.0.0.1", 0))
+    lis.listen(1)
+    lis.settimeout(1.0)
+    red = _Redirector(f"ftp://127.0.0.1:{lis.getsockname()[1]}/x")
+    try:
+        assert tagsources.latest({"tag_sources": [{"name": "r", "url": red.url}]}) is None
+        with pytest.raises(socket.timeout):
+            lis.accept()
+    finally:
+        red.close()
+        lis.close()
+
+
+def test_redirect_to_file_is_refused():
+    red = _Redirector("file:///etc/passwd")
+    try:
+        assert tagsources._fetch(red.url) is None
+        assert red.url in tagsources._failed
+    finally:
+        red.close()
+
+
+def test_redirect_to_http_is_followed(fakes):
+    good = fakes(tag("GGG", 3))
+    red = _Redirector(good.url + "/last-tag")
+    try:
+        assert tagsources.latest({"tag_sources": [{"name": "r", "url": red.url}]})["nfc_id"] == "GGG"
+    finally:
+        red.close()
+
+
+def test_oversized_response_is_refused(fakes):
+    big = fakes({"status": "ok", "pad": "x" * tagsources.MAX_BYTES})
+    assert tagsources._fetch(big.url) is None
+    assert big.url in tagsources._failed
+
+
+def test_normal_body_still_works(fakes):
+    ok = fakes(tag("OOO", 2))
+    assert tagsources._fetch(ok.url)["nfc_id"] == "OOO"
+
+
 def test_only_http_and_https_sources_are_read(monkeypatch):
     """A-M2: a tag source is fetched only over http(s) (urllib would also open file: and ftp: URLs)."""
     seen = []
