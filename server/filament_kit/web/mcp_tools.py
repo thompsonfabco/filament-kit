@@ -273,45 +273,20 @@ class Tools:
 
     # ---------- printer slots ----------
 
-    def _slot_backend(self):
-        cfg = self.cfg()
-        svc = cfg.get("slot_service")
-        if svc is not None:
-            if isinstance(svc, dict) and svc.get("state_url") and svc.get("set_url"):
-                return "service", svc
-            log.error("config slot_service is set but lacks state_url or set_url; the printer slot tools are off")
-            raise Problem("config slot_service is incomplete: it needs state_url and set_url (and token_file); "
-                          "fix config.json, or remove slot_service to use the printers module")
-        if "printers" in modules.enabled(cfg):
-            if self._kit is None:
-                self._kit = slots.KitApi()
-            return "bridge", self._kit
-        raise Problem("no printer slots on this server: neither slot_service is configured nor the printers "
-                      "module on")
-
     def kit_bridge(self):
-        """The kit server's API (slots.KitApi) for the reader API; refuses when slot_service is the backend."""
-        kind, b = self._slot_backend()
-        if kind != "bridge":
-            raise Problem("the reader needs the printers module: slot_service is configured (the owner's own slot "
-                          "services); remove it from config.json once the printers module has the printers")
-        return b
+        """The kit server's API (slots.KitApi): the printer slot tools and the reader API, with the printers module
+        on. (A `slot_service` left in config.json from the old standalone scanner is ignored.)"""
+        if "printers" not in modules.enabled(self.cfg()):
+            raise Problem("no printer slots on this server: the printers module is off")
+        if self._kit is None:
+            self._kit = slots.KitApi()
+        return self._kit
 
     def printer_slots(self, printer: str | None = None) -> dict:
-        kind, b = self._slot_backend()
-        if kind == "service":
-            out = slots.service_slots(b, self.sm)
-            if printer is not None:
-                out["printer_note"] = (f"printer {printer!r} ignored: the slot service (config slot_service) "
-                                       "serves one printer")
-            return out
-        return slots.bridge_slots(b, printer)
+        return slots.bridge_slots(self.kit_bridge(), printer)
 
     def printer_set_slot(self, spool: int, slot: str, dry_run: bool = True, printer: str | None = None) -> dict:
-        kind, b = self._slot_backend()
-        if kind == "service":
-            return slots.service_set_slot(b, spool, slot, dry_run)
-        return slots.bridge_set_slot(b, spool, slot, dry_run, printer)
+        return slots.bridge_set_slot(self.kit_bridge(), spool, slot, dry_run, printer)
 
 
 def _uid(v) -> str | None:
@@ -507,13 +482,5 @@ def register(mcp, tools: Tools) -> None:
                    ) -> str:
         return await call(tools.printer_set_slot, spool, slot, dry_run, printer)
 
-    async def _h2d_set(spool: Annotated[int, Field(description="Spoolman spool id (find_spools)")],
-                       slot: Annotated[str, Field(description=SLOT_ARG)], dry_run: bool = True) -> str:
-        return await call(tools.printer_set_slot, spool, slot, dry_run)
-
     mcp.tool(name="printer_slots", description=slots_doc, annotations=read)(_slots)
     mcp.tool(name="printer_set_slot", description=set_doc, annotations=write)(_set)
-    # ops names, kept so a connector that learned them keeps working
-    mcp.tool(name="h2d_slots", description=slots_doc + " (Same as printer_slots.)", annotations=read)(_slots)
-    mcp.tool(name="h2d_set_slot", annotations=write,
-             description=set_doc + " (Same as printer_set_slot, for the only printer.)")(_h2d_set)

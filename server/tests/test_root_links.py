@@ -147,7 +147,7 @@ def test_grants_never_go_through_a_link_in_a_tree_or_a_lock_folder(kit):
     os.rename(st / "profiles", st / "profiles.real")
     os.symlink(kit / "victim", st / "profiles")                    # lines.lock etc. now lead into the victim
     (kit / "victim" / "lines.lock").write_text("", encoding="utf-8")
-    web_access.grant(54321, os.getuid(), {})
+    web_access.grant(54321, os.getuid())
     assert 54321 not in acl.users_of(kit / "victim")
     assert 54321 not in acl.users_of(kit / "victim" / "a")
     assert 54321 not in acl.users_of(kit / "victim" / "lines.lock")

@@ -121,6 +121,31 @@ def grant_at(dir_fd: int, name: str, users: dict[int, int], default: dict[int, i
     return True
 
 
+def revoke(path, uids) -> bool:
+    """Take the named-user entries of `uids` off `path`'s access ACL (the mask recomputed, as setfacl -x does). Never
+    follows a link (the file is opened as `grant` opens it). False when there was nothing to take or no file."""
+    path = Path(path)
+    try:
+        dfd = nofollow.open_dir(path.parent)
+    except (FileNotFoundError, nofollow.LinkRefused):
+        return False
+    try:
+        fd = nofollow.open_node(path.name, dfd, path)
+        if fd is None:
+            return False
+        try:
+            acc = _read(fd, ACCESS)
+            if not acc or not any(t == USER and e in uids for t, _p, e in acc):
+                return False
+            kept = [x for x in acc if not (x[0] == USER and x[2] in uids)]
+            os.setxattr(fd, ACCESS, encode(_with_users(kept, {})))
+            return True
+        finally:
+            os.close(fd)
+    finally:
+        os.close(dfd)
+
+
 def grant_tree(path, users: dict[int, int], default: dict[int, int] | None = None) -> None:
     """`grant` on `path` and everything below it (grant_at with tree)."""
     path = Path(path)

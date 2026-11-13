@@ -9,8 +9,8 @@ its reach. It gets exactly what it uses, as POSIX ACLs (acl.py) on named files a
                   (kit_token), the Web Push keys and subscriptions, its failed label reads kept for retry
                   (failed/, FK_FAILED_DIR in its unit); copied here once from /var/lib/filament-kit/web/
                   (migrate; the originals stay there, as they were, for `update --rollback` to 0.3.0)
-  settings        /etc/filament-kit: pass (x); config.json, web_passphrase, anthropic_key and the owner's H2D slot
-                  token (slot_service.token_file): read (r); every root writer of these keeps the grant
+  settings        /etc/filament-kit: pass (x); config.json, web_passphrase and anthropic_key: read (r); every
+                  root writer of these keeps the grant
                   (config.save, cli.write_passphrase, cli.write_key)
   kit state       /var/lib/filament-kit: pass (x); web/ (reader_tokens, 644): read; profiles/, library/,
                   library-local/, reader-fw/: read, also what is made there later (default ACLs);
@@ -28,6 +28,7 @@ state folder (printers.xml and printers.json with Access Codes, devices.json, pe
 nothing in /etc beyond the files above."""
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import stat
@@ -35,6 +36,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import acl, config, nofollow, pairing
+
+log = logging.getLogger(__name__)
 
 KEEP_IN_STATE = ("reader_tokens",)          # stays in state/web/: the CLI and the setup page write it
 MARKER = ".migrated"                       # in the web folder: the one-time copy from state/web/ is done
@@ -289,7 +292,7 @@ def mark_web_device() -> int:
     return pairing.set_role_by_name(slots.DEVICE_NAME, WEB_ROLE)
 
 
-def grant(web_uid: int, kit_uid: int, cfg: dict | None = None) -> list[str]:
+def grant(web_uid: int, kit_uid: int) -> list[str]:
     """The web user's ACLs (module docstring). Returns the paths granted. Never through a link: each file is
     opened without following one, below a folder opened the same way (acl.grant_at)."""
     if not acl.supported():
@@ -323,10 +326,23 @@ def grant(web_uid: int, kit_uid: int, cfg: dict | None = None) -> list[str]:
         one(p.state, name, R | W | X, {web_uid: R | W | X, kit_uid: R | W | X}, tree=True)
     for name in RO_TREES:
         one(p.state, name, R | X, {web_uid: R | X}, tree=True)
-    cfg = cfg if cfg is not None else config.load()
-    svc = cfg.get("slot_service")
-    token = svc.get("token_file") if isinstance(svc, dict) else None
-    if token:                                  # the owner's H2D slot token (printer_set_slot), re-granted on save
-        t = Path(token)
-        one(t.parent, t.name, R)
+    _revoke_old_slot_token(web_uid)
     return done
+
+
+def _revoke_old_slot_token(web_uid: int) -> None:
+    """The old standalone scanner's slot token (`slot_service.token_file`, still named in config.json on an install
+    that used it): the web unit was granted read on it and no longer reads it, so the grant is taken back (review
+    R181 note 2). The file itself, the owner's, is left alone."""
+    try:
+        svc = config.load().get("slot_service")
+    except (OSError, ValueError):
+        return
+    token = svc.get("token_file") if isinstance(svc, dict) else None
+    if not isinstance(token, str) or not token.strip():
+        return
+    try:
+        if acl.revoke(Path(token), {web_uid}):
+            log.info("took the web unit's read off the old slot service token %s", token)
+    except OSError as e:
+        log.warning("cannot take the web unit's read off %s: %s", token, e)

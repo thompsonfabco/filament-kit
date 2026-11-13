@@ -1,10 +1,6 @@
-"""Printer AMS slots for the MCP tools `printer_slots` / `printer_set_slot` (ops `h2d_slots` / `h2d_set_slot`).
+"""Printer AMS slots for the MCP tools `printer_slots` / `printer_set_slot`.
 
-Two backends, picked by config:
-- `slot_service` `{state_url, set_url, token_file}`: the owner's own slot services (ops h2d_tools.py: the
-  h2d-remote state and the scanner orchestrator's `/set-slot`). The web process never talks to the printer;
-  the orchestrator picks the user's exact preset, sets Spoolman and releases the slot's previous spool.
-- else, with the `printers` module on: the kit's bridge, through the kit server's own API on 127.0.0.1 (the server
+With the `printers` module on: the kit's bridge, through the kit server's own API on 127.0.0.1 (the server
   process owns the printer connections; a second MQTT session from this process would compete with it). The web
   process pairs itself once like a phone, in-process (device 'web (MCP)'), at start, and keeps that token in
   `<web state>/kit_token` (0600; on an install the web unit runs as its own user, which may not write the kit's
@@ -25,12 +21,10 @@ import urllib.request
 from pathlib import Path
 
 from .. import config, pairing
-from ..profiles import builds
 from .errors import Problem
 
 log = logging.getLogger(__name__)
 
-TIMEOUT_STATE, TIMEOUT_SET = 10, 20
 DEVICE_NAME = "web (MCP)"
 INTAKE_DEVICE = "phone web app (this server)"     # the kit server's own /intake page (api._intake_web_app)
 CLI_DEVICE = "command line (this server)"         # `filament-kit printer map|report` asking the running server
@@ -48,7 +42,6 @@ def pair_token(f: Path, role: str | None = None, name: str = DEVICE_NAME) -> str
     f.parent.mkdir(parents=True, exist_ok=True)
     pairing._write_atomic(f, (tok + "\n").encode("utf-8"), 0o600)
     return tok
-OPS_NOTE = "spool = the Spoolman spool assigned by an NFC tap or printer_set_slot (null: never assigned)"
 
 
 class SlotError(Problem):
@@ -92,87 +85,6 @@ def parse_slot(slot) -> tuple[int, int]:
 def _http_json(req: urllib.request.Request | str, timeout: float, context: ssl.SSLContext | None = None):
     with urllib.request.urlopen(req, timeout=timeout, context=context) as r:
         return json.loads(r.read())
-
-
-# ---------- the owner's slot service ----------
-
-def _preset_names() -> dict[str, str]:
-    """filament_id -> '<vendor> <product>' from the current build's lines (ops read the generated H2D files)."""
-    cur = builds.current()
-    m = builds.manifest(cur["stamp"]) if cur else None
-    out = {}
-    for row in ((m or {}).get("lines") or {}).values():
-        if isinstance(row, dict) and isinstance(row.get("filament_id"), str):
-            out[row["filament_id"]] = f"{row.get('vendor', '')} {row.get('product', '')}".strip()
-    return out
-
-
-def _assigned(sm) -> dict[str, dict]:
-    """'H2D:ams<id>:tray<id>' -> the spool whose `extra.active_tray` says it sits there (set by the orchestrator)."""
-    out = {}
-    for s in sm.get("spool"):
-        at = (s.get("extra") or {}).get("active_tray") or ""
-        try:
-            at = json.loads(at)
-        except ValueError:
-            pass
-        if isinstance(at, str) and at.startswith("H2D:"):
-            f = s.get("filament") or {}
-            out[at] = {"spool_id": s["id"], "filament_id": f.get("id"),
-                       "name": f"{(f.get('vendor') or {}).get('name', '')} {f.get('name', '')}".strip(),
-                       "remaining_g": round(s.get("remaining_weight") or 0), "location": s.get("location")}
-    return out
-
-
-def service_slots(svc: dict, sm) -> dict:
-    try:
-        state = _http_json(str(svc["state_url"]), TIMEOUT_STATE)
-    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
-        raise SlotError(f"the slot service at {svc['state_url']} is not reachable ({e})") from None
-    assigned, names, out = _assigned(sm), _preset_names(), []
-    for u in state.get("ams") or []:
-        for t in u.get("trays") or []:
-            pid = t.get("preset_id") or ""
-            out.append({
-                "slot": slot_label(u["id"], t["id"]),
-                "loaded": not t.get("empty"),
-                "printer_type": t.get("type"), "printer_color": t.get("color"),
-                "preset": names.get(pid) or ("Generic " + (t.get("type") or "") if pid.startswith("GF") else
-                                             f"not a current preset ({pid}): re-set this slot" if pid else ""),
-                "preset_id": pid,
-                "feeding_now": bool(t.get("active")),
-                "spool": assigned.get(f"H2D:ams{u['id']}:tray{t['id']}"),
-                "humidity_pct": u.get("humidity"),
-            })
-    return {"printer_online": state.get("online"), "printer_state": state.get("state"), "job": state.get("name"),
-            "slots": out, "note": OPS_NOTE}
-
-
-def service_set_slot(svc: dict, spool_id: int, slot: str, dry_run: bool) -> dict:
-    ams_id, tray_id = parse_slot(slot)
-    try:
-        token = Path(svc["token_file"]).read_text(encoding="utf-8").strip()
-    except (OSError, KeyError, TypeError):
-        raise SlotError("the slot service token file (slot_service.token_file) cannot be read; if it is there, let "
-                        "the web unit read it: sudo filament-kit modules apply") from None
-    body = json.dumps({"spool_id": int(spool_id), "ams_id": ams_id, "tray_id": tray_id,
-                       "dry_run": bool(dry_run)}).encode()
-    req = urllib.request.Request(str(svc["set_url"]), data=body, method="POST",
-                                 headers={"Content-Type": "application/json", "X-Auth-Token": token})
-    try:
-        res = _http_json(req, TIMEOUT_SET)
-    except urllib.error.HTTPError as e:      # orchestrator errors carry a JSON body
-        try:
-            res = json.loads(e.read() or b"{}") or {}
-        except ValueError:
-            res = {}
-        res = res if isinstance(res, dict) and res else {"ok": False, "status": f"http {e.code}"}
-    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
-        raise SlotError(f"the slot service at {svc['set_url']} is not reachable ({e})") from None
-    res["slot"] = slot_label(ams_id, tray_id)
-    if dry_run and res.get("ok"):
-        res["note"] = "dry run: nothing sent. Show the user, then call again with dry_run=false."
-    return res
 
 
 # ---------- the kit's own bridge (through the kit server's API) ----------
@@ -419,4 +331,4 @@ def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str |
 
 
 __all__ = ["KitApi", "SlotError", "bridge_set_slot", "bridge_slots", "kit_label", "kit_printers", "parse_slot",
-           "pick_printer", "printer_path", "service_set_slot", "service_slots", "slot_label", "status_slots"]
+           "pick_printer", "printer_path", "slot_label", "status_slots"]
