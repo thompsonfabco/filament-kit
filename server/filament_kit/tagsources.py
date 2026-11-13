@@ -25,8 +25,22 @@ TIMEOUT = 4
 BACKOFF = 60
 TAG_FRESH = 300  # a tap or a weight this recent (seconds) belongs to the spool in the photos
 
+MAX_BYTES = 64 * 1024  # a lasttag reply is a few hundred bytes; refuse anything past this
+
 _failed: dict[str, float] = {}  # url -> monotonic time of its last failure
 _lock = threading.Lock()
+
+
+class _WebRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow redirects only to http(s): urllib would also follow a 30x to ftp: (FB-078)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlsplit(newurl).scheme.lower() not in ("http", "https"):
+            raise urllib.error.HTTPError(req.full_url, code, "redirect to a non-http(s) URL refused", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_opener = urllib.request.build_opener(_WebRedirects)
 
 
 def _fetch(url: str) -> dict | None:
@@ -36,10 +50,13 @@ def _fetch(url: str) -> dict | None:
     if failed is not None and time.monotonic() - failed < BACKOFF:
         return None
     try:
-        with urllib.request.urlopen(url, timeout=TIMEOUT) as resp:
+        with _opener.open(url, timeout=TIMEOUT) as resp:
             if resp.status != 200:
                 raise ValueError(f"status {resp.status}")
-            data = json.loads(resp.read())
+            raw = resp.read(MAX_BYTES + 1)
+            if len(raw) > MAX_BYTES:
+                raise ValueError("response too large")
+            data = json.loads(raw)
         if not isinstance(data, dict):
             raise ValueError("not an object")
     except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError):
