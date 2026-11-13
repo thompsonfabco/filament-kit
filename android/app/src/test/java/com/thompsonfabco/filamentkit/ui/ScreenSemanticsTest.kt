@@ -53,8 +53,6 @@ import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.performClick
 
 import androidx.compose.ui.test.onNodeWithContentDescription
 
@@ -876,8 +874,6 @@ class ScreenSemanticsTest {
         assertTrue(audit().any { "own click" in it })
     }
 
-    private class FakePrinters(private val list: List<Printer>? = null) : PrinterBackend {
-
     private class FakeHistory(
         val records: List<HistorySummary> = listOf(
             HistorySummary(
@@ -930,7 +926,7 @@ class ScreenSemanticsTest {
         override suspend fun undo(id: String, revision: Int) = record
     }
 
-    private class FakePrinters : PrinterBackend {
+    private class FakePrinters(private val list: List<Printer>? = null) : PrinterBackend {
         private val online = Printer(
             id = "ABC123", name = "Workshop X1", model = "X1C", serial = "ABC123", ip = "192.0.2.40", configured = true,
             state = "connected", summary = PrinterSummary("RUNNING", 42, 31, "Benchy"),
