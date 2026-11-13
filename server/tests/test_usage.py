@@ -409,6 +409,37 @@ def _undoable(rig, sd, sm):
     return next(e for e in usage.entries(SERIAL, 7) if e["slot"] == "A2")
 
 
+def test_undo_that_cannot_write_its_line_credits_nothing(rig, sd, spoolman_fake_store, sm, monkeypatch):
+    e = _undoable(rig, sd, sm)
+    before = list(spoolman_fake_store["uses"])
+    real = usage._write_line
+
+    def broken(serial, rec):
+        if "undo" in rec:
+            raise OSError("disk full")
+        real(serial, rec)
+    monkeypatch.setattr(usage, "_write_line", broken)
+    for _ in range(2):
+        with pytest.raises(OSError):
+            usage.undo(e["id"], sm)
+    assert spoolman_fake_store["uses"] == before
+    monkeypatch.setattr(usage, "_write_line", real)
+    assert usage.undo(e["id"], sm)["undone"] is True
+    assert spoolman_fake_store["uses"][len(before):] == [(A2, -21.92)]
+
+
+def test_undo_that_spoolman_refuses_leaves_the_entry_undoable(rig, sd, spoolman_fake_store, sm, monkeypatch):
+    e = _undoable(rig, sd, sm)
+    real = sm.use
+    monkeypatch.setattr(sm, "use", lambda *a: (_ for _ in ()).throw(usage.SpoolmanError("down", status=None)))
+    with pytest.raises(usage.SpoolmanError):
+        usage.undo(e["id"], sm)
+    assert next(x for x in usage.entries(SERIAL, 7) if x["id"] == e["id"])["undone"] is False
+    monkeypatch.setattr(sm, "use", real)
+    assert usage.undo(e["id"], sm)["undone"] is True
+    assert spoolman_fake_store["uses"][-1] == (A2, -21.92)
+
+
 class _Reused:
     """Spoolman with one spool's answer changed."""
 
@@ -513,6 +544,35 @@ def test_parse_slice_info_plates():
     assert plates == {"1": [{"id": 1, "used_g": 1.5, "type": "PLA", "color": "#FFF", "idx": "a"}],
                       "2": [{"id": 4, "used_g": 2.0, "type": "PETG", "color": "#000", "idx": "b"}]}
     assert usage.parse_filaments(b"not a zip") == {}
+
+
+def _3mf_with(slice_info_text: str) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("Metadata/slice_info.config", slice_info_text)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("grams", ["nan", "inf", "-inf", "1e30", "5000.5"])
+def test_parse_slice_info_drops_nonfinite_or_absurd_grams(grams):
+    plates = usage.parse_filaments(_3mf_with(
+        f'<config><plate><metadata key="index" value="1"/><filament id="1" used_g="{grams}"/></plate></config>'))
+    assert plates["1"][0]["used_g"] == 0.0
+
+
+def test_parse_slice_info_of_a_damaged_zip_is_empty():
+    data = bytearray(build_3mf(TWO_COLOUR))
+    # corrupt the deflate stream of the slice_info member: zlib.error, not BadZipFile
+    name = b"Metadata/slice_info.config"
+    j = data.find(name) + len(name)
+    data[j:j + 8] = bytes([255]) * 8
+    assert usage.parse_filaments(bytes(data)) == {}
+
+
+def test_parse_slice_info_refuses_entities():
+    bomb = ('<?xml version="1.0"?><!DOCTYPE c [<!ENTITY a "x">]><config><plate>'
+            '<filament id="1" used_g="2"/></plate></config>')
+    assert usage.parse_filaments(_3mf_with(bomb)) == {}
 
 
 # ---------------------------------------------------------------- state ownership (root-run CLI first)
