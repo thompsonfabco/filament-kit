@@ -74,7 +74,7 @@ internal fun PairAddressScreen(
         )
         Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
             SwButton(
-                stringResource(if (ui.busy) R.string.common_connecting else R.string.pair_address_connect),
+                stringResource(if (ui.busy) R.string.common_connecting else R.string.common_connect),
                 { onSubmit(host, port) }, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = ui.busy,
             )
             if (ui.errorField == null) ui.error?.let { PairErrorLine(it, access) }
