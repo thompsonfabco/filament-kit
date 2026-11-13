@@ -85,9 +85,6 @@ class Model:
     orca: tuple = ()
     light_on: str | None = None
     light_off: str | None = None
-    scan_ok: str | None = None
-    scan_unknown: str | None = None
-    tag_source: str | None = None
 
 
 GENERIC = Model("generic", "Klipper printer", "printer", "auto", True)
@@ -159,7 +156,7 @@ _SCHEMA = xmlfile.E(
         "models": xmlfile.E(children={"model": xmlfile.E(
             attrs={"key": xmlfile.text, "name": xmlfile.text, "say": xmlfile.text, "system": xmlfile.text,
                    "verified": xmlfile.boolean},
-            required=("key", "name"), once=("detect", "light", "scan-feedback", "tag-source"),
+            required=("key", "name"), once=("detect", "light"),
             children={
                 "detect": xmlfile.E(children={"object": _DETECT_TEXT, "namespace": _DETECT_TEXT,
                                               "hostname": _DETECT_TEXT}),
@@ -169,8 +166,6 @@ _SCHEMA = xmlfile.E(
                 "orca": xmlfile.E(attrs={"nozzle": xmlfile.text, "printer": xmlfile.text},
                                   required=("nozzle", "printer")),
                 "light": xmlfile.E(attrs={"on": _plain, "off": _plain}, required=("on", "off")),
-                "scan-feedback": xmlfile.E(attrs={"ok": _template, "unknown": _template}),
-                "tag-source": xmlfile.E(attrs={"url": xmlfile.text}, required=("url",)),
             })}),
         "speech": xmlfile.E(children={"word": xmlfile.E(attrs={"text": xmlfile.text, "say": xmlfile.text},
                                                         required=("text", "say"))}),
@@ -230,14 +225,11 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
         if len(set(labels)) != len(labels) or len({s.n for s in slots}) != len(slots):
             errors.append(f"model {key!r}: a slot label or tool number is given twice")
         light = el.find("light")
-        scan = el.find("scan-feedback")
         models[key] = Model(
             key, el.get("name").strip(), el.get("say"), system, el.get("verified", "true") == "true",
             objs, nss, hosts, tuple(sorted(slots, key=lambda s: s.n)),
             tuple(Orca(o.get("nozzle").strip(), o.get("printer").strip()) for o in el.findall("orca")),
-            light.get("on") if light is not None else None, light.get("off") if light is not None else None,
-            scan.get("ok") if scan is not None else None, scan.get("unknown") if scan is not None else None,
-            _opt(el, "tag-source", "url"))
+            light.get("on") if light is not None else None, light.get("off") if light is not None else None)
     if "generic" not in models:
         models["generic"] = GENERIC
     words = {k: el.get("say") for k, el in sections["speech"].items()}
