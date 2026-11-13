@@ -4,21 +4,35 @@ import android.content.pm.PackageInstaller
 import androidx.annotation.StringRes
 import com.thompsonfabco.filamentkit.R
 
-/** Why an update did not go through: one line each in 05-android-app 13, worded in the string catalogue. */
-enum class UpdateFailure(@StringRes val text: Int) {
-    HubUnreachable(R.string.app_update_fail_hub),
-    NoUpdate(R.string.app_update_fail_none),
-    CertificateChanged(R.string.app_update_fail_cert),
-    NewerInstalled(R.string.app_update_fail_newer),
-    Damaged(R.string.app_update_fail_damaged),
-    Storage(R.string.app_update_fail_storage),
-    Blocked(R.string.app_update_fail_blocked),
-    AndroidVersion(R.string.app_update_fail_android),
-    TimedOut(R.string.app_update_fail_timeout),
-    Generic(R.string.app_update_fail_install),
+/**
+ * Why an update did not go through: one line each in 05-android-app 13, worded in the string catalogue ([text]).
+ * [english] is the same line for code that has no resources; a test keeps the two equal.
+ */
+enum class UpdateFailure(@StringRes val text: Int, val english: String) {
+    HubUnreachable(R.string.app_update_fail_hub,
+        "Could not reach the Hub. Check that you are on the same network."),
+    NoUpdate(R.string.app_update_fail_none,
+        "The Hub has no app update to download."),
+    CertificateChanged(R.string.app_update_fail_cert,
+        "The Hub's certificate changed."),
+    NewerInstalled(R.string.app_update_fail_newer,
+        "A newer version is already installed."),
+    Damaged(R.string.app_update_fail_damaged,
+        "The download was damaged. Try again."),
+    Storage(R.string.app_update_fail_storage,
+        "Not enough storage on this phone."),
+    Blocked(R.string.app_update_fail_blocked,
+        "The install was blocked on this phone."),
+    AndroidVersion(R.string.app_update_fail_android,
+        "This update does not work on this Android version."),
+    TimedOut(R.string.app_update_fail_timeout,
+        "The download timed out. Try again."),
+    Generic(R.string.app_update_fail_install,
+        "The update could not be installed."),
 
     /** Signed by another key than the installed app: its own panel (with "What this means"). */
-    Signature(R.string.app_update_signature),
+    Signature(R.string.app_update_signature,
+        "Android refused this update because it is not signed like the app on this phone. Do not install it; check where the app on your Hub came from."),
 }
 
 /** Texts of the Home update banner (until its screen step) and of a failed install. */
@@ -46,7 +60,10 @@ object UpdateTexts {
      * [status] alone is not specific enough: Android folds several causes into one status. It is never told to
      * uninstall: a different key inside the in-app updater is the one sign of a forged APK.
      */
-    fun installFailure(status: Int, message: String?): UpdateFailure? {
+    fun installFailure(status: Int, message: String?): String? = failureOf(status, message)?.english
+
+    /** The same decision as [installFailure], as the value the update panel maps to the catalogue's words. */
+    fun failureOf(status: Int, message: String?): UpdateFailure? {
         val m = message.orEmpty()
         return when {
             status == PackageInstaller.STATUS_SUCCESS || status == PackageInstaller.STATUS_PENDING_USER_ACTION ||

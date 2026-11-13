@@ -120,7 +120,7 @@ internal fun UpdatePanel(update: UpdateUi, appVersion: String, actions: UpdateAc
     }
     if (explain) {
         SwDialog(
-            title = stringResource(R.string.app_update_signature_more),
+            title = stringResource(R.string.app_update_signature_title),
             onClose = { explain = false },
             confirm = SwDialogButton(stringResource(R.string.common_close), { explain = false }),
         ) { Text(stringResource(R.string.app_update_signature_body), style = MaterialTheme.typography.bodyMedium) }

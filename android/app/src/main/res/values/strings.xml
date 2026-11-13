@@ -2694,8 +2694,9 @@
     <!-- 1=version 2=app_version -->
     <string name="app_update_offered">filament-kit %1$s is on your Hub. This app is %2$s.</string>
     <string name="app_update_permission">Allow filament-kit to install apps, then tap Install update again.</string>
-    <string name="app_update_signature">Android refused this update: it is signed by a different key than the installed app.</string>
-    <string name="app_update_signature_body">The app on your Hub was built by someone else than the app on this phone. To switch, uninstall this app and install the one from the Hub. Drafts on this phone are lost.</string>
+    <string name="app_update_signature">Android refused this update because it is not signed like the app on this phone. Do not install it; check where the app on your Hub came from.</string>
+    <string name="app_update_signature_body">An update signed with a different key is what a forged app looks like, so Android refuses it and the app on this phone stays as it is. If you built or replaced the app on your Hub yourself, that is the reason. If you did not, do not install it: check where the app on your Hub came from.</string>
+    <string name="app_update_signature_title">An update signed with a different key</string>
     <string name="app_update_signature_more">What this means</string>
     <string name="app_update_tap_install">Tap to install</string>
     <string name="catalog_add_line">Add a line to the Filament Catalog</string>

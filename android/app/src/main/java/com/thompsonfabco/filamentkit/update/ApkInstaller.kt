@@ -94,7 +94,7 @@ class InstallResultReceiver : BroadcastReceiver() {
             else -> {
                 PendingConfirm.intent.value = null
                 PendingConfirm.failure.value =
-                    UpdateTexts.installFailure(status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
+                    UpdateTexts.failureOf(status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
             }
         }
     }
