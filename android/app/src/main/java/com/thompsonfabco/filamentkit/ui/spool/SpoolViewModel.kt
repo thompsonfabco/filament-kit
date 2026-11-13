@@ -83,6 +83,7 @@ sealed interface SpoolUiState {
         val confirmEmpty: Boolean = false,
         val locations: List<String>? = null,
         val message: String? = null,
+        val messageIsError: Boolean = false,
         val rev: Int = 0,
     ) : SpoolUiState
 
@@ -150,7 +151,7 @@ class SpoolViewModel(private val backend: SpoolBackend) : ViewModel() {
     fun previewWeight(gross: Double) {
         if (!isValidWeight(gross)) return
         val c = _state.value as? SpoolUiState.Card ?: return
-        op(onError = { c.copy(message = it) }) {
+        op(onError = { c.copy(message = it, messageIsError = true) }) {
             val preview = backend.update(c.spool.id, gross, null, empty = false, dryRun = true).toSpoolSummary()
             _state.value = c.copy(weightPreview = preview, pendingGross = gross, message = null)
         }
@@ -163,7 +164,7 @@ class SpoolViewModel(private val backend: SpoolBackend) : ViewModel() {
     fun confirmWeight() {
         val c = _state.value as? SpoolUiState.Card ?: return
         val gross = c.pendingGross ?: return
-        op(onError = { c.copy(message = it) }) {
+        op(onError = { c.copy(message = it, messageIsError = true) }) {
             val updated = backend.update(c.spool.id, gross, null, empty = false, dryRun = false).toSpoolSummary()
             _state.value = card(updated, "Weight updated")
         }
@@ -171,7 +172,7 @@ class SpoolViewModel(private val backend: SpoolBackend) : ViewModel() {
 
     fun openMove() {
         val c = _state.value as? SpoolUiState.Card ?: return
-        op(onError = { c.copy(message = it) }) {
+        op(onError = { c.copy(message = it, messageIsError = true) }) {
             _state.value = c.copy(locations = backend.locations(), message = null)
         }
     }
@@ -182,7 +183,7 @@ class SpoolViewModel(private val backend: SpoolBackend) : ViewModel() {
 
     fun move(location: String) {
         val c = _state.value as? SpoolUiState.Card ?: return
-        op(onError = { c.copy(message = it) }) {
+        op(onError = { c.copy(message = it, messageIsError = true) }) {
             val updated = backend.update(c.spool.id, null, location, empty = false, dryRun = false).toSpoolSummary()
             _state.value = card(updated, "Moved to $location")
         }
@@ -198,7 +199,7 @@ class SpoolViewModel(private val backend: SpoolBackend) : ViewModel() {
 
     fun confirmEmpty() {
         val c = _state.value as? SpoolUiState.Card ?: return
-        op(onError = { c.copy(confirmEmpty = false, message = it) }) {
+        op(onError = { c.copy(confirmEmpty = false, message = it, messageIsError = true) }) {
             val updated = backend.update(c.spool.id, null, null, empty = true, dryRun = false).toSpoolSummary()
             _state.value = card(updated, "Marked empty")
         }

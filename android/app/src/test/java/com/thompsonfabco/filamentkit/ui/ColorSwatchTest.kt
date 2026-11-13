@@ -58,11 +58,6 @@ class ColorSwatchTest {
         assertEquals("A1 · PLA", LoadHelp.slotLine(slot(type = "PLA", hex = "FFFFFF")))
     }
 
-    @Test fun darkThemesGetAHaloSoTheBlackRingShows() {
-        assertTrue(swatchNeedsHalo(Color(0xFF141218)))
-        assertFalse(swatchNeedsHalo(Color(0xFFFEF7FF)))
-    }
-
     private fun slot(type: String, hex: String, present: Boolean? = null, spool: SlotSpool? = null) =
         AmsSlot(slot = 0, label = "A1", type = type, colorHex = hex, present = present, spool = spool)
 }

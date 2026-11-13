@@ -115,8 +115,9 @@ class MainActivity : ComponentActivity() {
             // Nothing is drawn (the window background shows) until the stored appearance has been read.
             stored?.let { appearance ->
                 val dark = resolveDark(appearance, isSystemInDarkTheme())
-                // The bars follow the resolved appearance, also after the phone flips while System is chosen.
-                LaunchedEffect(dark) { appEdgeToEdge(if (dark) Appearance.Dark else Appearance.Light) }
+                // The bars follow the resolved appearance; the phone's own flip is keyed too (API 29/30 handle uiMode).
+                val systemDark = isSystemInDarkTheme()
+                LaunchedEffect(appearance, systemDark) { appEdgeToEdge(if (dark) Appearance.Dark else Appearance.Light) }
                 // The next launch follows the choice.
                 LaunchedEffect(appearance) { applyNightMode(appearance) }
                 AppFrame(appearance) { FilamentKitApp(app) }

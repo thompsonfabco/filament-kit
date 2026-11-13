@@ -106,7 +106,7 @@ fun SpoolSummaryRow(spool: SpoolSummary) {
 private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -> Unit, onLoad: (() -> Unit)?) {
     var gross by remember(card.rev) { mutableStateOf("") }
     SpoolSummaryRow(card.spool)
-    card.message?.let { Text(it, color = SpoolwardenTheme.colors.ok) }
+    card.message?.let { Text(it, color = if (card.messageIsError) SpoolwardenTheme.colors.bad else SpoolwardenTheme.colors.ok) }
 
     OutlinedTextField(
         value = gross,

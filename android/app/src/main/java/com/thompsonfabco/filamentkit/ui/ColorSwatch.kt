@@ -8,7 +8,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
@@ -22,10 +21,10 @@ internal fun swatchColor(hex: String?): Color? =
     hex?.trim()?.removePrefix("#")?.takeIf { HEX.matches(it) }?.let { Color(0xFF000000 or it.take(6).toLong(16)) }
 
 internal sealed interface SwatchLook {
-    /** Filament of this colour: a black ring around the fill. */
+    /** Filament of this colour: a 1 dp outline around the fill. */
     data class Filled(val color: Color) : SwatchLook
 
-    /** Filament whose colour is not known: the black ring around nothing. */
+    /** Filament whose colour is not known: the outline around nothing. */
     data object NoColour : SwatchLook
 
     /** Nothing there: a dashed ring around nothing. */
@@ -35,18 +34,14 @@ internal sealed interface SwatchLook {
 internal fun swatchLook(hex: String?, empty: Boolean = false): SwatchLook =
     if (empty) SwatchLook.Empty else swatchColor(hex)?.let { SwatchLook.Filled(it) } ?: SwatchLook.NoColour
 
-/** A black ring vanishes on a dark surface, so there it gets a lighter one around it. */
-internal fun swatchNeedsHalo(surface: Color): Boolean = surface.luminance() < 0.5f
-
 /**
- * Every filament colour in the app. The ring keeps white and light filament from looking like an empty slot; [empty]
- * draws a dashed ring instead, so that the ring does not make an empty slot look loaded.
+ * Every filament colour in the app. The one 1 dp border-strong outline keeps white and light filament from looking like an empty slot; [empty]
+ * draws a dashed ring instead, so that the outline does not make an empty slot look loaded.
  */
 @Composable
 internal fun ColorSwatch(hex: String?, size: Dp, modifier: Modifier = Modifier, empty: Boolean = false) {
     val look = swatchLook(hex, empty)
     val outline = MaterialTheme.colorScheme.outline
-    val halo = swatchNeedsHalo(MaterialTheme.colorScheme.surface)
     Canvas(modifier.size(size)) {
         val ring = RING.toPx()
         val outer = this.size.minDimension / 2
@@ -56,9 +51,8 @@ internal fun ColorSwatch(hex: String?, size: Dp, modifier: Modifier = Modifier, 
             drawCircle(outline, radius, style = Stroke(ring, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash))))
             return@Canvas
         }
-        val blackRadius = (if (halo) outer - ring else outer) - ring / 2
-        if (look is SwatchLook.Filled) drawCircle(look.color, blackRadius)
-        if (halo) drawCircle(outline, outer - ring / 2, style = Stroke(ring))
-        drawCircle(outline, blackRadius, style = Stroke(ring))
+        val edge = outer - ring / 2
+        if (look is SwatchLook.Filled) drawCircle(look.color, edge)
+        drawCircle(outline, edge, style = Stroke(ring))
     }
 }
