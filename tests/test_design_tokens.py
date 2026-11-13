@@ -185,3 +185,64 @@ def test_colour_conversion_per_form():
     assert bt.kt_color("rgba(16,18,32,.45)") == "Color(0x73101220)"  # 114.75 -> 115
     assert bt.kt_color("rgba(0,0,0,.62)") == "Color(0x9E000000)"  # 158.1 -> 158
     assert bt.kt_sp("0.6875rem") == "11.sp" and bt.kt_dp("4px") == "4.dp"
+
+
+def _contrast(*args):
+    return subprocess.run([sys.executable, str(TOKENS / "check_contrast.py"), *map(str, args)], capture_output=True, text=True,
+                          cwd=TOKENS, timeout=120)
+
+
+def test_contrast_counts_the_old_pairs_and_the_new_ones():
+    r = _contrast()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "required pairs checked: 424 (of which 248 are the first version's); failed: 0" in r.stdout
+    assert "advisory" not in r.stdout  # accent-text on accent-soft and text on surface-3 are required now
+    rows = [line.split() for line in r.stdout.splitlines()]
+    assert ["spool", "dark", "focus", "surface-2", "3.0"] == next(x for x in rows if x[:4] == ["spool", "dark", "focus", "surface-2"])[:5]
+    assert any(x[:4] == ["panes", "light", "accent-text", "accent-soft"] for x in rows)
+
+
+def test_lowered_token_value_fails_in_the_message_form_of_aut_1(tmp_path):
+    data = json.loads((TOKENS / "tokens.json").read_text(encoding="utf-8"))
+    data["themes"]["spool"]["dark"]["muted"] = "#6B5E52"
+    bad = tmp_path / "tokens.json"
+    bad.write_text(json.dumps(data), encoding="utf-8")
+    r = _contrast(bad)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert re.search(r"spool dark: --muted on --surface-2 is \d\.\d\d:1, needs 4\.5:1 \(CON-1\)", r.stderr), r.stderr
+    assert r.stdout.rstrip().endswith("RESULT: FAIL")
+
+
+def test_lowered_added_pair_value_fails(tmp_path):
+    # a 07 3.2 pair that the first version did not check: the focus ring on a log block
+    data = json.loads((TOKENS / "tokens.json").read_text(encoding="utf-8"))
+    data["themes"]["console"]["light"]["focus"] = data["themes"]["console"]["light"]["code"]
+    bad = tmp_path / "tokens.json"
+    bad.write_text(json.dumps(data), encoding="utf-8")
+    r = _contrast(bad)
+    assert r.returncode == 1
+    assert "console light: --focus on --code is 1.00:1, needs 3:1 (CON-1)" in r.stderr
+
+
+def test_missing_token_fails(tmp_path):
+    data = json.loads((TOKENS / "tokens.json").read_text(encoding="utf-8"))
+    del data["themes"]["panes"]["dark"]["surface-3"]
+    bad = tmp_path / "tokens.json"
+    bad.write_text(json.dumps(data), encoding="utf-8")
+    r = _contrast(bad)
+    assert r.returncode == 1
+    assert "panes dark: --surface-3 is missing" in r.stderr
+
+
+def test_material_pairs_are_read_from_the_kotlin_values(tmp_path):
+    # tokens.json stays as it is; one Kotlin colour is lowered, so only the CON-8 rows can catch it
+    kt = (ROOT / KT).read_text(encoding="utf-8")
+    old = "onBad = Color(0xFF2A0B07)"  # spool dark
+    assert old in kt
+    low = tmp_path / "SpoolwardenTokens.kt"
+    low.write_text(kt.replace(old, "onBad = Color(0xFF8F5A55)", 1), encoding="utf-8", newline="\n")
+    r = _contrast(TOKENS / "tokens.json", low)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert re.search(r"spool dark: onError on error is \d\.\d\d:1, needs 4\.5:1 \(CON-8\)", r.stderr), r.stderr
+    assert r.stderr.count("\n") == 1  # the web pairs are untouched
+    assert _contrast(TOKENS / "tokens.json", tmp_path / "missing.kt").returncode == 1  # no Kotlin file, no Material values
