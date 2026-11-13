@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 import anyio
 import pytest
@@ -271,7 +273,82 @@ def test_page_needs_no_sign_in_and_has_csp(app):
         assert "set-cookie" not in r.headers
         assert c.get("/intake/app.js").text.startswith("// Spool intake")
         assert c.get("/intake/icon.png").content[:4] == bytes([0x89]) + b"PNG"
-        assert c.get("/intake/manifest.webmanifest").json()["start_url"] == BASE
+        assert c.get("/intake/manifest-light.webmanifest").json()["start_url"] == BASE
+
+
+def _tokens(look="console"):
+    data = json.loads((Path(__file__).resolve().parents[2] / "tokens" / "tokens.json").read_text(encoding="utf-8"))
+    return data["themes"][look]
+
+
+def _metas(text, name):
+    return re.findall(rf"<meta name={name} content='([^']*)'(?: media='([^']*)')?>", text)
+
+
+def _body_attrs(text):
+    return dict(re.findall(r"data-([a-z-]+)='([^']*)'", re.search(r"<body ([^>]*)>", text).group(1)))
+
+
+def _home_client(sm, host="hub.local:8710", ok=True):
+    from starlette.applications import Starlette
+    from filament_kit.web import mcp_tools
+    from filament_kit.web.intake_app import IntakeApp
+    tools = mcp_tools.Tools(sm, kit_api=CapKit(), kit_writes=True)
+    routes = IntakeApp(tools, public_url=None, lan_cidrs=["192.168.1.0/24"], push=False, host_ok=lambda r: ok).routes()
+    return TestClient(Starlette(routes=routes), base_url=f"https://{host}", client=HOME)
+
+
+def test_page_head_has_two_theme_colours_and_the_catalogue_name(app):
+    names = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    light, dark = _tokens()["light"], _tokens()["dark"]
+    with _client(app) as c:
+        text = c.get("/intake").text
+        assert _metas(text, "theme-color") == [(light["surface"], "(prefers-color-scheme: light)"),
+                                              (dark["surface"], "(prefers-color-scheme: dark)")]
+        assert _metas(text, "apple-mobile-web-app-title") == [(names["app_name"], "")]
+        assert "<meta name=apple-mobile-web-app-status-bar-style content=default>" in text
+        assert f"<link rel=manifest href='{BASE}/manifest-light.webmanifest'>" in text
+        for appearance, colours in (("light", light), ("dark", dark)):
+            m = c.get(f"/intake/manifest-{appearance}.webmanifest")
+            j = m.json()
+            assert m.headers["content-type"].startswith("application/manifest+json")
+            assert j["name"] == j["short_name"] == names["app_name"] and j["display"] == "standalone"
+            assert j["theme_color"] == colours["surface"] and j["background_color"] == colours["bg"]
+            assert j["start_url"] == j["scope"] == BASE
+            assert [(i["sizes"], i["src"]) for i in j["icons"]] == [("180x180", f"{BASE}/icon.png"),
+                                                                    ("512x512", f"{BASE}/icon-512.png")]
+        assert c.get("/intake/icon-512.png").content[:4] == bytes([0x89]) + b"PNG"
+        old = c.get("/intake/manifest.webmanifest")          # home-screen apps added before keep their manifest
+        assert old.status_code == 200 and old.json() == c.get("/intake/manifest-light.webmanifest").json()
+
+
+def test_public_page_has_hub_name_presets_and_no_hub_page_address(app, env):
+    with _client(app) as c:
+        r = c.get("/intake")
+        a = _body_attrs(r.text)
+        assert a["hub"] == config.load()["server_name"] and "hub-page" not in a
+        assert a["presets"] == "1" and a["spool-edit"] == "0"
+        assert a["base"] == BASE and a["history"] == "0" and a["ai"] == "1"      # today's attributes stay
+        assert r.headers["content-security-policy"] in (INTAKE_CSP, INTAKE_CSP_PRINTERS)
+
+
+def test_presets_attribute_follows_the_module(app, env):
+    cfg = config.load()
+    cfg["modules"]["presets"] = False
+    config.save(cfg)
+    with _client(app) as c:
+        assert _body_attrs(c.get("/intake").text)["presets"] == "0"
+
+
+def test_home_page_names_the_hub_page_by_the_address_it_was_opened_at(sm):
+    with _home_client(sm) as c:
+        r = c.get("/intake")
+        a = _body_attrs(r.text)
+        assert a["hub-page"] == "https://hub.local:8710/setup" and a["history"] == "1" and a["base"] == "/intake"
+        assert r.headers["content-security-policy"] in (INTAKE_CSP, INTAKE_CSP_PRINTERS)
+        assert c.get("/intake/manifest-dark.webmanifest").json()["start_url"] == "/intake"
+    with _home_client(sm, ok=False) as c:       # a name the Hub refuses gets no page, so no address
+        assert c.get("/intake").status_code == 403
 
 
 def test_no_sign_in_routes(app):
