@@ -115,14 +115,26 @@ def _publish_step() -> str:
     return text[text.index("uses: softprops/action-gh-release@"):]
 
 
-def test_release_prerelease_marker_step_tests_the_notes_marker_file():
+def _marker_step() -> str:
+    """The whole 'Pre-release marker' step: from its name line up to the next step."""
     text = _read(".github/workflows/release.yml")
-    step = text[text.index("id: pre"):text.index("uses: softprops/action-gh-release@")]
+    start = text.index("- name: Pre-release marker")
+    rest = text[start + 1:]
+    nxt = re.search(r"^\s+- (name|uses):", rest, re.M)
+    assert nxt, "no step after the marker step"
+    return text[start:start + 1 + nxt.start()]
+
+
+def test_release_prerelease_marker_step_tests_the_notes_marker_file():
+    step = _marker_step()
+    assert re.search(r"^\s+id: pre$", step, re.M)  # the publish step reads steps.pre.outputs
+    assert not re.search(r"^\s+(- )?if:", step, re.M)  # it must run on every release
     assert 'test -f "release-notes/v${VERSION}.prerelease"' in step
     assert "VERSION: ${{ needs.version.outputs.version }}" in step
-    assert re.search(r"then\s+echo prerelease=true >> .*\s+echo make_latest=false >> ", step)
+    out = r'>> "\$GITHUB_OUTPUT"\s*$'
+    assert re.search(r"then\s+echo prerelease=true " + out + r"\s+echo make_latest=false " + out, step, re.M)
     # without the marker both outputs are empty, so the action sends what it sent before the marker existed
-    assert re.search(r"else\s+(#.*\s+)?echo prerelease= >> .*\s+echo make_latest= >> ", step)
+    assert re.search(r"else\s+(#.*\s+)?echo prerelease= " + out + r"\s+echo make_latest= " + out, step, re.M)
 
 
 def test_release_publish_is_driven_by_the_marker_for_both_inputs():
