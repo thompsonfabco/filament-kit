@@ -864,7 +864,8 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         def build() -> list[dict]:
             known(serial)
             kf = klipper_of(serial)
-            return kf.usage(serial, days) if kf is not None else usage.entries(serial, days)
+            got = kf.usage(serial, days) if kf is not None else usage.entries(serial, days)
+            return inventory.with_spools(got, sm)
         return JSONResponse({"entries": await run_in_threadpool(build)})
 
     @_authed
@@ -1199,11 +1200,16 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     @_authed
     async def spool_update(request: Request):
         body = await _json(request)
-        spool = await run_in_threadpool(functools.partial(
-            inventory.update_spool, sm, request.path_params["id"], gross=_opt(body, "gross", float),
+        out = await run_in_threadpool(functools.partial(
+            inventory.edit_spool, sm, request.path_params["id"], gross=_opt(body, "gross", float),
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
             empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True)))
-        return JSONResponse({"spool": spool})
+        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9)
+
+    @_authed
+    async def spool_get(request: Request):
+        spool = await run_in_threadpool(sm.get, f"spool/{request.path_params['id']}")
+        return JSONResponse({"spool": spool, "view": inventory.spool_view(spool)})   # raw and phone shape, as PATCH gives
 
     @_authed
     async def spool_search(request: Request):
@@ -1281,6 +1287,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/filaments", filament_list),
             Route("/api/vendors", vendor_list),
             Route("/api/spools/{id:int}/link", spool_link, methods=["POST"]),
+            Route("/api/spools/{id:int}", spool_get),
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
             Route("/app.apk", apk),

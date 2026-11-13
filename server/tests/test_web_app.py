@@ -340,7 +340,7 @@ def test_public_page_has_hub_name_presets_and_no_hub_page_address(app, env):
         r = c.get("/intake")
         a = _body_attrs(r.text)
         assert a["hub"] == config.load()["server_name"] and "hub-page" not in a
-        assert a["presets"] == "1" and a["spool-edit"] == "0"
+        assert a["presets"] == "1" and a["spool-edit"] == "1"
         assert a["base"] == BASE and a["history"] == "0" and a["ai"] == "1"      # today's attributes stay
         assert r.headers["content-security-policy"] in (INTAKE_CSP, INTAKE_CSP_PRINTERS)
 
@@ -840,3 +840,66 @@ def test_web_gross_and_non_object_problems_name_their_item(app, sm):
         assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "gross")]
         body = _web_refused(c, [ok, 5])
         assert body["problems"] == [{"item": 1, "field": None, "message": "each item must be an object"}]
+
+
+def _web_spool(sm, **kw) -> int:
+    it = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
+          "count": 1, **kw}
+    return inventory.add_spools(sm, [it], RULES, dry=False).spool_ids[0]
+
+
+def test_web_spool_read(app, sm, spoolman_fake_store):
+    sid = _web_spool(sm)
+    spoolman_fake_store["spools"][sid]["lot_nr"] = "L-42"       # the fake does not keep a lot from an add
+    with _client(app) as c:
+        r = c.get(f"/intake/api/spools/{sid}")
+        assert r.status_code == 200 and r.json()["spool"]["id"] == sid
+        v = r.json()["view"]
+        assert (v["location"], v["remaining_g"], v["net_g"], v["tare_g"], v["tag"], v["state"], v["lot"]) == (
+            "Sealed stock", 1000, 1000, 213, None, "sealed", "L-42")
+        assert (v["vendor"], v["name"], v["material"], v["filament_id"] is not None) == ("SUNLU", "PETG Grey", "PETG", True)
+        r = c.get("/intake/api/spools/99999")
+        assert r.status_code == 404 and "99999" in r.json()["error"]
+    away = _client(app, AWAY)                                   # no lifespan: the app ran once above
+    assert away.get(f"/intake/api/spools/{sid}").status_code == 403
+
+
+def test_web_spool_edit_previews_then_saves_moves_and_marks_empty(app, sm):
+    sid = _web_spool(sm)
+    post = {"headers": {"Origin": ORIGIN}}
+    with _client(app) as c:
+        r = c.post(f"/intake/api/spools/{sid}", json={"gross": 713}, **post)                  # no dry_run: a preview
+        assert r.status_code == 200 and r.json()["dry"] is True
+        assert (r.json()["before"]["remaining_g"], r.json()["view"]["remaining_g"]) == (1000, 500)
+        r = c.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": True}, **post)
+        assert sm.get(f"spool/{sid}")["remaining_weight"] == 1000
+        r = c.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False}, **post)
+        assert r.status_code == 200 and r.json()["dry"] is False and r.json()["view"]["remaining_g"] == 500
+        assert sm.get(f"spool/{sid}")["remaining_weight"] == 500
+        r = c.post(f"/intake/api/spools/{sid}", json={"location": "Rack 1", "dry_run": False}, **post)
+        assert r.status_code == 200 and sm.get(f"spool/{sid}")["location"] == "Rack 1"
+        r = c.post(f"/intake/api/spools/{sid}", json={"empty": True, "dry_run": False}, **post)
+        assert r.status_code == 200 and r.json()["view"]["state"] == "empty"
+        stored = sm.get(f"spool/{sid}")
+        assert stored["remaining_weight"] == 0 and stored["archived"] is True
+
+
+def test_web_spool_edit_refusals_name_their_field_and_write_nothing(app, sm):
+    sid = _web_spool(sm)
+    before = sm.get(f"spool/{sid}")
+    post = {"headers": {"Origin": ORIGIN}}
+    with _client(app) as c:
+        for sent, field in (({"gross": 10}, "gross"), ({"gross": "heavy"}, "gross"), ({"remaining": -5}, "remaining"),
+                            ({"location": "Nowhere Shelf"}, "location"), ({"location": 7}, "location"),
+                            ({"gross": 800, "remaining": 5}, "remaining"), ({"empty": "yes"}, "empty"),
+                            ({"dry_run": "no"}, "dry_run")):
+            r = c.post(f"/intake/api/spools/{sid}", json={"dry_run": False, **sent}, **post)
+            assert r.status_code == 400 and r.json()["field"] == field, (sent, r.text)
+        assert sm.get(f"spool/{sid}") == before
+        assert c.post("/intake/api/spools/99999", json={"gross": 700, "dry_run": False}, **post).status_code == 404
+        assert c.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False}).status_code == 403   # no Origin
+        assert c.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False},
+                      headers={"Origin": "https://evil.example"}).status_code == 403
+    away = _client(app, AWAY)
+    assert away.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False}, **post).status_code == 403
+    assert sm.get(f"spool/{sid}") == before
