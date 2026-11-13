@@ -157,6 +157,7 @@ _SCHEMA = xmlfile.E(
             attrs={"key": xmlfile.text, "name": xmlfile.text, "say": xmlfile.text, "system": xmlfile.text,
                    "verified": xmlfile.boolean},
             required=("key", "name"), once=("detect", "light"),
+            ignored=("scan-feedback", "tag-source"),     # dropped fields (FA-071): an old file still loads cleanly
             children={
                 "detect": xmlfile.E(children={"object": _DETECT_TEXT, "namespace": _DETECT_TEXT,
                                               "hostname": _DETECT_TEXT}),

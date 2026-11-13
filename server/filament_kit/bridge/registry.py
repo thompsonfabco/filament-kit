@@ -411,8 +411,9 @@ def set_code(serial: str, code: str, name: str | None = None, replace: bool = Fa
         p.configured = True
         p.cert_fp = ""          # adding the printer again with its code = trust the leaf it presents next
         given = (name or "").strip()
+        same = bool(given) and not first and given == p.name     # the stored name given again is a kept name
         p.name = given or p.name or serial
-        if given or first or p.name == serial:   # a kept name is left alone, even if an older entry shares it
+        if (given and not same) or first or p.name == serial:   # a kept name is left alone, even if an older entry shares it
             p.name = _free_name(p.name, printers, serial)
         printers[serial] = p
         _write(printers)
