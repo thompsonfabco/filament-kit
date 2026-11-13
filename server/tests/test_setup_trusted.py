@@ -328,4 +328,5 @@ def test_the_script_is_served_and_the_second_question_stays(app):
     assert "/setup/setup_trust.js" in c.get("/setup").text
     assert c.get("/setup/setup_trust.js").status_code == 200
     tabs = (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
-    assert "window.confirm(question)" in tabs   # update and rollback ask, trusted or not
+    # update and rollback ask in their dialogs (S1.6), trusted or not
+    assert "if (question) asking(" in tabs and 'startJob(box, "update", {' in tabs and 'startJob(box, "rollback",\n' in tabs

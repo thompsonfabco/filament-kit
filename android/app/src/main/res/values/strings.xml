@@ -686,6 +686,7 @@
     <string name="devices_revoke_all_body">Each one, this one included, needs the setup code again.</string>
     <string name="devices_revoke_all_title">Revoke every trusted computer?</string>
     <string name="devices_revoke_one_body">That browser needs the setup code again for every change.</string>
+    <string name="devices_revoke_one_confirm">Revoke</string>
     <!-- 1=name -->
     <string name="devices_revoke_one_title">Revoke %1$s?</string>
     <string name="devices_revoke_token_body">A Tag Reader using it is refused from now on. Set it up again in Flash a device to give it a new token.</string>
@@ -1095,6 +1096,7 @@
     <string name="printers_fact_certificate">Certificate</string>
     <string name="printers_fact_lane_data">Lane data</string>
     <string name="printers_fact_serial">Serial</string>
+    <string name="printers_field_address">IP address or name</string>
     <string name="printers_find">Find Klipper printers</string>
     <string name="printers_find_text">Bambu Lab printers announce themselves; Klipper printers are found by a scan.</string>
     <string name="printers_forget">Forget printer</string>
@@ -1409,6 +1411,10 @@
     <string name="settings_key_remove_body">Label Reader: Cloud (Claude) stops reading labels until a new key is set.</string>
     <string name="settings_key_remove_confirm">Remove key</string>
     <string name="settings_key_remove_title">Remove the Anthropic API key?</string>
+    <!-- 1=version -->
+    <string name="settings_local_install_title">Install the local label reader %1$s?</string>
+    <string name="settings_local_remove_body">It leaves this machine, and Label Reader: On this Hub is switched off. Its settings are kept.</string>
+    <string name="settings_local_remove_title">Remove the local label reader?</string>
     <string name="settings_network_certificate">Get the certificate</string>
     <string name="settings_network_changes">Allow printer changes from the public address</string>
     <string name="settings_network_changes_hint">Off: the web app at the public address shows printers but cannot add, change or forget them. At home it always can.</string>

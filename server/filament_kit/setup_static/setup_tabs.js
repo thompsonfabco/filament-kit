@@ -145,9 +145,10 @@ function modesCard() {
 }
 
 // ----- Updates -----
+// `question`: the ask options of its dialog (10.11, 12.3); the job starts once it is confirmed
 function startJob(box, name, question) {
-  if (question && !window.confirm(question)) return;
-  change(box, "job", { name }, () => { box.replaceChildren(); followApply(true); });
+  const started = () => { box.replaceChildren(); followApply(true); };
+  if (question) asking(box, "job", question, () => ({ name }), started); else change(box, "job", { name }, started);
 }
 
 // ----- the filament library (Settings) -----
@@ -157,7 +158,8 @@ function libraryCard() {
   const el = card("Filament library", body,
     h("div", { class: "row" },
       h("button", { textContent: "Update now", on: { click: () => startJob(box, "library_update") } }),
-      h("button", { class: "secondary", textContent: "Go back to the version before", on: { click: () => startJob(box, "library_rollback", "Go back to the library version before the last update?") } })),
+      h("button", { class: "secondary", textContent: "Go back to the version before", on: { click: () => startJob(box, "library_rollback",
+        destroy("settings_catalog_back_title", "settings_catalog_back_body", "settings_catalog_back_confirm")) } })),
     h("p", { class: "muted", textContent: "Add your own entry. It is checked as `filament-kit library add` checks it, and a preset build follows." }),
     entry,
     h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Add entry", on: { click: () => change(box, "library/add", { entry: entry.value }, (r) => { say(box, `Added ${r.vendor} ${r.product}.`, true); entry.value = ""; }) } })),
@@ -273,7 +275,8 @@ function readerCard() {
       const label = p.upgrade ? "Upgrade" : p.same ? "Reinstall" : "Install";
       fill(out, h("p", { class: "muted", textContent: `Checked ${when}:` }), ...s.text.map((line) => h("p", { textContent: line })),
         t && s.fresh && !p.downgrade ? h("button", { textContent: `${label} ${p.version} (${p.tier} tier)`, on: { click: () => startJob(box, "local_intake_install",
-          `${s.text.filter((l) => !l.startsWith("Installed") && !l.startsWith("Other")).join(" ")} Go ahead?`) } }) : null,
+          { title: SW.t("settings_local_install_title", { version: p.version }), text: s.text.filter((l) => !l.startsWith("Installed") && !l.startsWith("Other")).join(" "),
+            confirm: `${label} ${p.version} (${p.tier} tier)` }) } }) : null,
         !s.fresh ? h("p", { class: "muted", textContent: "That check is over an hour old: check again to install." }) : null,
         h("p", { class: "muted", textContent: "The tier is the one under General (Local reader tier); change it there, then check again." }));
     }).catch((e) => say(out, e.message, false));
@@ -291,7 +294,7 @@ function readerCard() {
       h("div", { class: "row" },
         h("button", { class: "secondary", textContent: have ? "Check for an upgrade" : "Check what an install needs", on: { click: check } }),
         have ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => startJob(box, "local_intake_remove",
-          "Remove the local label reader from this machine and switch local_intake off? Its settings are kept.") } }) : null),
+          destroy("settings_local_remove_title", "settings_local_remove_body", "common_remove")) } }) : null),
       out, tokenRow);
   }).catch((e) => say(body, e.message, false));
   return el;
@@ -307,7 +310,8 @@ function remoteCard() {
       h("p", { class: "muted", textContent: "The kit never changes your firewall or router. Getting the certificate needs port 80 to reach this computer while certbot runs." }),
       h("div", { class: "row" },
         h("button", { class: "secondary", textContent: "Show the firewall rules", on: { click: () => change(box, "remote/firewall", {}, (r) => say(box, r.text, true)) } }),
-        h("button", { textContent: "Get the certificate", on: { click: () => startJob(box, "remote_issue", "Get the certificate now? Port 80 must reach this computer.") } })));
+        h("button", { textContent: "Get the certificate", on: { click: () => startJob(box, "remote_issue",
+          { title: SW.t("settings_certificate_title"), text: SW.t("settings_certificate_body"), confirm: SW.t("settings_network_certificate") }) } })));
   }).catch((e) => say(body, e.message, false));
   return el;
 }
@@ -326,14 +330,16 @@ function updatesTab() {
         h("p", { class: "muted" }, u.module_on ? `Checked by itself ${u.schedule || ""} (the updates module).` : "Not checked by itself: the updates module is off. ", u.module_on ? null : link("features", "Modules")),
         h("div", { class: "row" },
           h("button", { class: "secondary", textContent: "Check now", on: { click: () => startJob(box, "check") } }),
-          u.newer ? h("button", { textContent: `Update to ${u.latest}`, disabled: !!u.update_refused, on: { click: () => startJob(box, "update", `Update to ${u.latest}? The kit stops while it installs and starts again by itself.`) } }) : null),
+          u.newer ? h("button", { textContent: `Update to ${u.latest}`, disabled: !!u.update_refused, on: { click: () => startJob(box, "update", { title: SW.t("updates_dialog_update_title", { version: u.latest }),
+            text: SW.t("updates_dialog_update_body"), confirm: SW.t("updates_update", { version: u.latest }) }) } }) : null),
         u.newer && u.update_refused ? h("p", { class: "err", textContent: u.update_refused }) : null,
         box),
       u.notes ? card(u.newer ? `What ${u.latest} brings` : `Release notes of ${u.latest}`, h("pre", { textContent: u.notes })) : null,
       card("Roll back",
         u.previous ? h("p", {}, `Goes back to ${u.previous}, the version this one replaced. Settings and data stay.`) : h("p", { class: "muted", textContent: "No earlier version is kept, so there is nothing to roll back to." }),
         u.previous && u.going_back ? h("pre", { textContent: u.going_back }) : null,
-        u.previous ? h("div", { class: "row" }, h("button", { class: "danger", textContent: `Roll back to ${u.previous}`, disabled: !!u.rollback_refused, on: { click: () => startJob(box, "rollback", `Roll back to ${u.previous}? The kit stops while it installs and starts again by itself.`) } })) : null,
+        u.previous ? h("div", { class: "row" }, h("button", { class: "danger", textContent: `Roll back to ${u.previous}`, disabled: !!u.rollback_refused, on: { click: () => startJob(box, "rollback",
+          destroy("updates_dialog_rollback_title", "updates_dialog_rollback_body", "updates_roll_back", { version: u.previous })) } })) : null,
         u.previous && u.rollback_refused ? h("p", { class: "err", textContent: u.rollback_refused }) : null),
       h("p", { class: "muted", textContent: "To remove the kit: at the server, sudo filament-kit uninstall." }));
   }).catch((e) => say(out, e.message, false));

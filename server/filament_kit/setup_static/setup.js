@@ -42,7 +42,7 @@ function hubError(status, data) {
 const theCode = () => SW.lock.code || "";
 // the unlock dialog names the change in the words of the control that asked ("To revoke, enter …")
 function asked() {
-  const b = document.activeElement, w = b && b.matches("main button") ? b.textContent.trim() : "";
+  const b = document.activeElement, w = b && b.matches("main button, .dialog__foot button") ? b.textContent.trim() : "";
   return w ? w[0].toLowerCase() + w.slice(1) : null;
 }
 // a change or a read that needs the code: while Locked the unlock dialog opens in place first, and a refusal for the code
@@ -102,6 +102,30 @@ async function change(box, path, body, done, clear) {
   });
   return out;
 }
+// A change behind a dialog (02 9.1): `o` is SW.ask's (kind, title, text, fields, confirm), `body(values)` the request.
+// Confirming passes the lock (the unlock dialog opens on top and returns); a refusal stays in the dialog with what was
+// typed, at the field it names; a success closes it and says the result in `box` as change() does. Resolves with the
+// reply, or null when cancelled.
+function asking(box, path, o, body = () => ({}), done) {
+  return SW.ask({ ...o, run: async (values, { result }) => {
+    let out = null;
+    await needCode(async () => {
+      try { out = await api(path, { ...body(values), code: theCode() }); } catch (e) {
+        if (e.locked) throw e;
+        const at = (o.fields || []).find((f) => e.data && e.data.field && f._control.name === e.data.field);
+        if (at) { SW.fieldError(at, e.message); at._control.focus(); } else SW.result(result, "bad", e.message);
+      }
+    });
+    if (!out) return false;
+    if (done) done(out); else say(box, "Saved.", true);
+    refresh();
+    return out;
+  } });
+}
+// the ask options of a destructive dialog, from its catalogue keys
+const destroy = (title, text, confirm, vars) => ({ kind: "destructive", title: SW.t(title, vars), text: SW.t(text, vars), confirm: SW.t(confirm) });
+// a field of an entry dialog, refused while empty with the catalogue's `error`
+const entryField = (o, error) => SW.field({ ...o, check: (v) => (v.trim() ? null : SW.t(error)) });
 // replaceChildren would print a null as the word "null" (h() skips it, this one does not)
 const fill = (el, ...kids) => el.replaceChildren(...kids.filter(Boolean));
 const pill = (on, yes, no) => h("span", { class: "pill " + (on ? "ok" : "no"), textContent: on ? yes : no });
@@ -213,7 +237,7 @@ function keyCard() {
     h("p", { class: "muted", textContent: a.ai_intake ? "Used for AI label reading (ai_intake)." : "Only for AI label reading: the ai_intake module is off (see Modules)." }),
     h("div", { class: "row" }, inp,
       h("button", { textContent: a.set ? "Replace" : "Set", on: { click: () => change(box, "key", { key: inp.value }, null, [inp]) } }),
-      a.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => { if (window.confirm("Remove the Anthropic key?")) change(box, "key/remove", {}); } } }) : null,
+      a.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => asking(box, "key/remove", destroy("settings_key_remove_title", "settings_key_remove_body", "settings_key_remove_confirm")) } }) : null,
       h("button", { class: "secondary", textContent: "Check", on: { click: async () => {
         box.replaceChildren(h("p", { class: "muted", textContent: "Checking…" }));
         try { const r = await api("key/check", {}); say(box, r.text, r.ok); } catch (e) { say(box, e.message, false); }
@@ -238,7 +262,8 @@ function tokenCard() {
     h("p", { class: "muted", textContent: "Optional: lets the filament library download from a private repository." }),
     h("div", { class: "row" }, inp,
       h("button", { textContent: S.library_token.set ? "Replace" : "Set", on: { click: () => change(box, "library_token", { token: inp.value }, null, [inp]) } }),
-      S.library_token.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => change(box, "library_token/remove", {}) } }) : null),
+      S.library_token.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => asking(box, "library_token/remove",
+        destroy("settings_token_remove_title", "settings_token_remove_body", "settings_catalog_token_remove")) } }) : null),
     box);
 }
 
@@ -248,7 +273,8 @@ function readersCard() {
   return card("NFC readers",
     R.error ? h("p", { class: "err", textContent: R.error }) : null,
     ...R.list.map((t) => h("div", { class: "row item" }, h("span", { textContent: `${t.id} · ${t.name} · made ${t.created}` }),
-      h("button", { class: "secondary", textContent: "Revoke", on: { click: () => { if (window.confirm(`Revoke ${t.id}? A reader using it is refused from now on.`)) change(box, `readers/${encodeURIComponent(t.id)}/revoke`, {}); } } }))),
+      h("button", { class: "secondary", textContent: "Revoke", on: { click: () => asking(box, `readers/${encodeURIComponent(t.id)}/revoke`,
+        destroy("devices_revoke_token_title", "devices_revoke_token_body", "devices_revoke_token_confirm", { id: t.id })) } }))),
     R.list.length ? null : h("p", { class: "muted", textContent: "No reader tokens." }),
     h("div", { class: "row" }, name, h("button", { textContent: "Make a token", on: { click: () => change(box, "readers", { name: name.value },
       (r) => box.replaceChildren(h("p", { textContent: `New reader token ${r.id} (${r.name}):` }), h("pre", { class: "ok", textContent: r.token }), h("p", { class: "muted", textContent: r.note }))) } })),
@@ -294,7 +320,8 @@ function pairCard() {
   return card("Phones, PC and station",
     ...S.devices.map((d) => h("div", { class: "row item" }, h("span", { textContent: `${d.name} · paired ${d.paired || "?"} · last seen ${d.last_seen || "never"}` }),
       d.built_in ? h("span", { class: "muted", textContent: "built in: this server's own pairing" })
-        : h("button", { class: "secondary", textContent: "Revoke", on: { click: () => { if (window.confirm(`Unpair ${d.name}?`)) change(box, `devices/${encodeURIComponent(d.id)}/revoke`, {}); } } }))),
+        : h("button", { class: "secondary", textContent: "Revoke", on: { click: () => asking(box, `devices/${encodeURIComponent(d.id)}/revoke`,
+          destroy("devices_unpair_title", "devices_unpair_body", "devices_unpair", { name: d.name })) } }))),
     S.devices.length ? null : h("p", { class: "muted", textContent: "Nothing paired yet." }),
     h("div", { class: "row" },
       h("button", { textContent: "Pair a phone", on: { click: () => start("phone") } }),
