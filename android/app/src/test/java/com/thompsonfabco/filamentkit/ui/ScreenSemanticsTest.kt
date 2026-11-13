@@ -165,6 +165,7 @@ import kotlinx.serialization.json.put
 import java.io.File
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -511,6 +512,25 @@ class ScreenSemanticsTest {
     @Test fun aRefusedAccessCodeOpensSettingsWithReplaceAccessCodeAlreadyOpen() {
         showSettings(openAccessCode = true)
         auditWindowsAllFour("Replace Access Code: Workshop X1")
+    }
+
+    @Test fun replaceAccessCodeOpensOnceAndNotAgainAfterItIsClosed() {
+        var ask by mutableStateOf(true)
+        val edit = PrinterEditViewModel(FakeEdit(), "ABC123", "bambu")
+        val vm = PrinterViewModel(FakePrinters(), "ABC123", pollMs = 600_000)
+        host("Printer settings") {
+            PrinterSettingsScreen(vm, edit, onPairAgain = {}, onForgotten = {}, openAccessCode = ask)
+        }
+        rule.waitForIdle()
+        assertNotNull("opened on arrival", edit.state.value.dialog)
+        edit.close()
+        rule.waitForIdle()
+        // the screen is asked again (the route's argument changes and returns): the dialog stays closed
+        rule.runOnUiThread { ask = false }
+        rule.waitForIdle()
+        rule.runOnUiThread { ask = true }
+        rule.waitForIdle()
+        assertNull("not opened a second time", edit.state.value.dialog)
     }
 
     @Test fun aWrongCodeRowOpensItsPrinterToReplaceTheCode() {

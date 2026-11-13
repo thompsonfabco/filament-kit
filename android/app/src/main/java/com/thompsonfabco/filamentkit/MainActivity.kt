@@ -65,6 +65,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.createSavedStateHandle
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
@@ -366,11 +367,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     // screens ask for the client at each call, so a trusted certificate or a re-pair reaches them with their state intact
     fun currentApi(): Api = app.session.api.value ?: throw ApiError(0, "offline", "No Hub is paired.")
     fun pushPairing() {
-        // Settings opened from pairing: the pairing graph is already below it, so go back to it (no second one)
-        if (!nav.currentDestination.inPairing() && runCatching { nav.getBackStackEntry<PairGraph>() }.isSuccess) {
-            nav.popBackStack<PairGraph>(inclusive = false)
-            return
-        }
+        if (nav.leaveSettingsForPairing()) return
         hubBefore = hubIdentity(config)
         nav.navigate(PairGraph) { launchSingleTop = true }
     }
@@ -1242,6 +1239,16 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             onDismiss = { sheetOpen = false },
         )
     }
+}
+
+/**
+ * "Pair" or "Pair again" from Settings that was opened over a pairing step: that step is still below it, so only the
+ * Settings entries go (no second pairing graph, and not the pairing steps). False when no pairing is below.
+ */
+internal fun NavController.leaveSettingsForPairing(): Boolean {
+    if (currentDestination.inPairing() || runCatching { getBackStackEntry<PairGraph>() }.isFailure) return false
+    popBackStack<SettingsGraph>(inclusive = true)
+    return true
 }
 
 /** The place the top bar names (05-android-app 2.2): the screen, not the product. */

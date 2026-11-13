@@ -75,11 +75,16 @@ class PickSpoolViewModelTest {
         val dryGates = mutableMapOf<Int, CompletableDeferred<Unit>>()
         var writeGate: CompletableDeferred<Unit>? = null
         var writeError: Exception? = null
+        /** A dry run for these spools fails with this once its gate opens. */
+        val dryErrors = mutableMapOf<Int, Exception>()
         val loads = mutableListOf<Pair<Int, Boolean>>()
         override suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject> = emptyList()
         override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
             loads += spoolId to dryRun
-            if (dryRun) dryGates[spoolId]?.let { withContext(NonCancellable) { it.await() } }
+            if (dryRun) {
+                dryGates[spoolId]?.let { withContext(NonCancellable) { it.await() } }
+                dryErrors[spoolId]?.let { throw it }
+            }
             else {
                 writeGate?.await()
                 writeError?.let { throw it }
@@ -138,13 +143,18 @@ class PickSpoolViewModelTest {
     }
 
     @Test fun aLateErrorOfAnEarlierPickIsIgnoredToo() = runTest(dispatcher) {
+        val late = CompletableDeferred<Unit>()
+        fake.dryGates[1] = late
+        fake.dryErrors[1] = ApiError(0, "offline", "x")
         val v = vm()
         v.pick(spool(1)); runCurrent()
-        // the second pick is for another spool whose dry run is still out when the first one's reply arrives
+        // the second pick is for another spool whose dry run is still out when the first one's error arrives
         fake.dryGates[2] = CompletableDeferred()
         v.pick(spool(2)); runCurrent()
+        late.complete(Unit); runCurrent()
+        assertEquals(2, v.state.value.preview!!.spool.id)
         assertNull(v.state.value.preview!!.result)
-        assertNull(v.state.value.preview!!.problem)
+        assertNull("the earlier pick's error is not shown for this spool", v.state.value.preview!!.problem)
     }
 
     @Test fun aRefusedLoadStaysAndNamesTheCause() = runTest(dispatcher) {
