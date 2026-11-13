@@ -472,3 +472,47 @@ def test_no_two_hub_page_scripts_declare_the_same_top_level_name():
         for name in re.findall(r"^(?:const|let|var|function|async function|class)\s+([A-Za-z_$][\w$]*)", path.read_text(encoding="utf-8"), re.M):
             assert name not in seen, f"{name} is declared in {seen[name]} and in {path.name}"
             seen[name] = path.name
+
+
+OVERVIEW_PRELUDE = """
+  const until = async (what, f, ms = 15000) => {
+    for (let t = 0; t < ms && !f(); t += 100) await new Promise((r) => setTimeout(r, 100));
+    if (!f()) throw new Error("Overview: " + what + " :: " + document.querySelector("main").innerText.slice(0, 300));
+  };
+  await until("the checks did not load", () => document.querySelector(".overview__checks .coll--checks")
+    && !document.querySelector('[aria-busy="true"]:not(button)'));
+  const text = document.querySelector("main").innerText;
+  if (/\bnull\b|undefined/.test(text)) throw new Error("Overview: a stray null or undefined: " + text.slice(0, 300));
+  if (!document.querySelector(".overview__meta").textContent.includes("Setup:")) throw new Error("Overview: no setup in the meta line");
+  if (document.querySelectorAll(".tiles .tile").length !== 4) throw new Error("Overview: not four tiles");
+  if (!document.querySelector(".overview__head .btn--ghost")) throw new Error("Overview: no Run the checks again");
+  if (!document.querySelector(".coll--checks .coll__group")) throw new Error("Overview: the checks are not in groups");
+"""
+
+OVERVIEW_UNLOCKED = "(async () => {" + OVERVIEW_PRELUDE + """
+  SW.setLock("unlocked", { code: %r });
+  await until("the hidden-values line stayed", () => !document.querySelector("main .banner--info"));
+})()""" % CODE
+
+# a failing check: the row that needs a look comes first, with Make the fields as the one primary button
+OVERVIEW_FAILING = "(async () => {" + OVERVIEW_PRELUDE + """
+  const first = document.querySelector(".coll--checks .coll__item:not(.coll__group)");
+  if (!first.textContent.includes("Needs a look")) throw new Error("Overview: the problem is not first: " + first.textContent);
+  if (!document.querySelector(".overview__head .status--warn")) throw new Error("Overview: no needs-a-look badge");
+  const primary = [...document.querySelectorAll("main .btn--primary")];
+  if (primary.length !== 1 || primary[0].textContent !== "Make the fields") throw new Error("Overview: the one primary button is not Make the fields");
+  if (document.querySelector(".overview__ok").open) throw new Error("Overview: the OK checks are open while a check needs a look");
+  if (!document.querySelector(".banner .actions .btn")) throw new Error("Overview: no Unlock to show while Locked");
+})()"""
+
+
+def test_overview_passes_the_audit_unlocked(hub_change):
+    run = _run("--url", hub_change, "--views", "#overview", "--ready", OVERVIEW_UNLOCKED)
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_overview_passes_the_audit_locked_with_a_failing_check(hub, monkeypatch):
+    """Locked (the all-sections test above also runs it, with no Overview line in the allow-list), with a check that needs a look."""
+    monkeypatch.setattr(cli.Spoolman, "missing_fields", lambda self: ["spoolwarden_example"])
+    run = _run("--url", hub, "--views", "#overview", "--ready", OVERVIEW_FAILING)
+    assert run.returncode == 0, run.stdout + run.stderr

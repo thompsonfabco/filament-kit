@@ -7,7 +7,6 @@
 # selector appears under several sections. The audit also reads the fields of hidden regions. S1.11 changes no shipped
 # file; the Hub page steps S2.x rebuild each section on the shared components (labelled fields, 44 px controls) and
 # delete their lines.
-#overview | sideways scroll | page | 2 | Overview at 320 px: the certificate fingerprint (64 characters, no break) is wider than the page (today's markup); removed by S2.2
 #printers | field without a label | div > section.card > div.row > input | 4 | Printers (today's markup); removed by S2.4 and S2.5
 #printers | field without a label | section.card > div > div.row > input | 16 | Printers (today's markup); removed by S2.4 and S2.5
 #printers | field without a label | section.card > div.item > div.row > input | 8 | Printers (today's markup); removed by S2.4 and S2.5

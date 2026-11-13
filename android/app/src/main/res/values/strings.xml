@@ -933,8 +933,15 @@
     <string name="overview_all_ok">Everything checked out.</string>
     <!-- 1=count -->
     <string name="overview_badge_ok">%1$d OK</string>
+    <!-- 1=count -->
+    <plurals name="overview_badge_look">
+        <item quantity="one">%1$d needs a look</item>
+        <item quantity="other">%1$d need a look</item>
+    </plurals>
     <string name="overview_checks_title">Checks</string>
     <string name="overview_col_check">Check</string>
+    <string name="overview_command">Command</string>
+    <string name="overview_command_name">command</string>
     <string name="common_fix">Fix</string>
     <string name="common_field_status">Status</string>
     <!-- 1=reason -->
@@ -953,6 +960,7 @@
     <!-- 1=version -->
     <string name="overview_meta_version">filament-kit %1$s</string>
     <string name="overview_run_checks">Run the checks again</string>
+    <string name="overview_setup_hub">Hub</string>
     <!-- 1=count -->
     <plurals name="overview_show_ok">
         <item quantity="one">Show %1$d check that is OK</item>
@@ -961,12 +969,24 @@
     <!-- 1=count -->
     <string name="overview_tile_devices_paired">%1$d paired</string>
     <!-- 1=count -->
+    <plurals name="overview_tile_devices_readers">
+        <item quantity="one">%1$d Tag Reader</item>
+        <item quantity="other">%1$d Tag Readers</item>
+    </plurals>
+    <!-- 1=count -->
+    <string name="overview_tile_printers_connected">%1$d connected</string>
+    <!-- 1=count -->
     <string name="overview_tile_printers_not_configured">%1$d not configured</string>
+    <string name="overview_tile_printers_none">No printers yet</string>
+    <!-- 1=count -->
+    <string name="overview_tile_printers_offline">%1$d offline</string>
     <!-- 1=limit -->
     <string name="overview_tile_reader_limit">Reads per day: %1$s</string>
     <string name="overview_tile_reader_line">Cloud reads used today</string>
     <!-- 1=used 2=limit -->
     <string name="overview_tile_reader_value">%1$s of %2$s</string>
+    <string name="overview_tile_recent_error">Could not read</string>
+    <string name="overview_tiles_label">Summary</string>
     <!-- 1=id -->
     <string name="spool_title">Spool %1$s</string>
     <string name="overview_todo_key">Set the Anthropic API key, so the Label Reader can use Cloud.</string>
