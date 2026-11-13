@@ -80,9 +80,10 @@ and `build_tokens.py` is run afterwards (section 3.1).
   (`"4px"`), which become `dp` on Android. Durations are strings in `ms` (`"120ms"`). The easing is a
   `cubic-bezier(a, b, c, d)` string. Line heights and weights are strings holding a plain number (`"1.45"`,
   `"650"`); the CSS carries them unquoted.
-- A key of `size` (or of `extra.size`) that ends in `-phone` is the value at 600 px and below of the key without
-  the suffix: `ctl-phone` is `--ctl` on phones, Workbench's `extra.size.top-phone` is its `--top` on phones. It is
-  emitted only where it differs from the base value (section 3.2).
+- A key of `size` (or of `extra.size`) that ends in `-phone` is the value on small or touch screens of the key
+  without the suffix. `ctl-phone` is `--ctl` at 1024 px and below and wherever the main pointer is coarse
+  (foundations 4.3); every other `-phone` key (Workbench's `extra.size.top-phone` is its `--top`) applies at 600 px
+  and below. It is emitted only where it differs from the base value (section 3.2).
 - Elevation levels are CSS `box-shadow` values. A 1 px ring drawn with the shadow is written as the last part,
   `0 0 0 1px var(--<colour token>)`; the Kotlin output (section 3.4) reads the ring's colour token from it.
 - Layout profile values must be one of the choices in foundations section 6.1.
@@ -234,9 +235,10 @@ same change. The person installing Spoolwarden never runs it: the Hub serves the
      `<light selector>[data-theme="dark"] { … }`. A dark block holds only what changes with the appearance:
      `color-scheme: dark`, the dark colours and `extra.colour.dark`, and the dark elevation and
      `extra.elevation.dark`.
-3. Phone: for each theme that has a `-phone` key whose value differs from its base, an
-   `@media (max-width: 600px) { <light selector> { --<base>: <value>; } }` block. Today these are Console's
-   `--ctl: 44px` and Workbench's `--top: 60px`.
+3. Phone: for each theme that has a `-phone` key whose value differs from its base, a media block
+   `{ <light selector> { --<base>: <value>; } }`: under `@media (max-width: 1024px), (pointer: coarse)` for
+   `ctl-phone`, under `@media (max-width: 600px)` for every other key. Today these are Console's `--ctl: 44px`
+   and Workbench's `--top: 60px`.
 4. Last: `@media (prefers-reduced-motion: reduce)` setting `--t-fast`, `--t` and `--t-slow` to `0ms` on `:root` and
    on each `:root[data-look="<key>"]`.
 
@@ -291,10 +293,11 @@ Console, as written (several declarations per line here, dark repeated blocks sh
 :root[data-theme="dark"] { /* the same declarations as the block above */ }
 /* … Workbench, Palette, Panes … */
 
-/* Phone: control height and chrome sizes at 600 px and below */
-@media (max-width: 600px) {
+/* Control height wherever a finger is the pointer, or the screen is a tablet or phone */
+@media (max-width: 1024px), (pointer: coarse) {
   :root { --ctl: 44px; }
 }
+/* Chrome sizes at 600 px and below */
 @media (max-width: 600px) {
   :root[data-look="workbench"] { --top: 60px; }
 }
