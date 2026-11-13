@@ -1219,15 +1219,14 @@ applies when its value changes (with the lock and a result, like a toggle).
 
 ### 5.6 Toggle (switch)
 
-**Purpose.** Switch something on or off **at once**, with no Save: "Follow nightly builds", "Trusted computers",
+**Purpose.** Switch something on or off **at once**, with no Save: "Allow printer changes from the public address", "Trusted computers",
 "Notify this phone" (in the web app's group "Print alerts on this phone").
 
 **Anatomy.** A switch (track and thumb), its label, and the state word "On" or "Off" after it. A hint and a result
 area below.
 
 **Rule.** A toggle applies the moment it changes. It is never placed inside a form group that has a Save button;
-there the same choice is a checkbox (5.8). When switching has a consequence worth reading first (nightly builds are
-untested), the change opens a confirm dialog (9.1) before anything is sent.
+there the same choice is a checkbox (5.8). When switching has a consequence worth reading first (turning Trusted computers off), the change opens a confirm dialog (9.1) before anything is sent.
 
 **Toggles that guard security** (the Android app's "Check the fingerprint when pairing by address", on by default)
 are never placed among routine options or at the bottom of a task screen. They sit last in their screen or group,
@@ -1255,7 +1254,7 @@ badge (7.1) beside the state word. Turning it back on asks nothing.
   not answer. Try again."). Cancelling the unlock dialog or the confirm dialog also returns it.
 
 **Behaviour and keyboard.** Space toggles (Enter too). The change passes the lock (1.4). Success writes a result
-naming the consequence ("On: each new nightly build is installed after the current one.").
+naming the consequence ("On: this browser needs no setup code for 90 days after its last use.").
 
 **Accessibility.** `input type="checkbox" role="switch"` with its `label`; the state word is `aria-hidden` (the
 switch's checked state is read); the result area is `role="status"`.
@@ -1268,11 +1267,11 @@ switch's checked state is read); the result area is `role="status"`.
 ```html
 <div class="toggle">
   <label class="toggle__row">
-    <input class="toggle__input" type="checkbox" role="switch" aria-describedby="nightly-hint">
-    <span class="toggle__label">Follow nightly builds</span>
+    <input class="toggle__input" type="checkbox" role="switch" aria-describedby="public-changes-hint">
+    <span class="toggle__label">Allow printer changes from the public address</span>
     <span class="toggle__word" aria-hidden="true"></span>
   </label>
-  <p class="toggle__hint" id="nightly-hint">Nightly builds are untested and unsigned.</p>
+  <p class="toggle__hint" id="public-changes-hint">Printers can then be renamed, re-addressed and removed from the public address too.</p>
   <p class="result" role="status"></p>
 </div>
 ```
@@ -2649,7 +2648,6 @@ Job titles by the Hub's job `name`:
 | `rollback` | Rolling back | `check` | Checking for updates |
 | `library_update` | Updating the Filament Catalog | `library_rollback` | Going back to the previous Filament Catalog |
 | `remote_issue` | Getting the certificate | `station_pair` | Pairing the Weigh Station |
-| `channel_nightly` | Switching to nightly builds | `channel_stable` | Switching to signed releases |
 | `reader_setup` | Setting up a Tag Reader | any other name | Working |
 
 End lines: "<Title>: done." · "<Title>: failed. See the log." · a job that stopped without finishing: "<Title>:
@@ -2704,7 +2702,7 @@ left and right `--s2`, bottom above the bottom bar (`calc(var(--tab) + env(safe-
 - Pressed: buttons as 4.1.
 - Disabled: Show the whole log is disabled until the job has ended (reason "Available when the job has ended.").
 - Loading: on page load, before `GET job` answers, nothing is shown.
-- Error: polling fails during a job that restarts the Hub (`apply`, `update`, `rollback`, `restore`, `channel_*`):
+- Error: polling fails during a job that restarts the Hub (`apply`, `update`, `rollback`, `restore`):
   the Hub restarting state (8.5). Polling fails otherwise: a `--warn` line "Lost touch with the Hub; still trying…"
   under the head, polling continues.
 - Done / Failed: badge and end line; bar full (`--bad` when failed); Close shown.

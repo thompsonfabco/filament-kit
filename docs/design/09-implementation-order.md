@@ -483,7 +483,7 @@ Hub page · M · Depends on: S1.11, S2.2 (same file), S2.11 · Beside: S2.4, S2.
 Hub page · M · Depends on: S2.12 (same file) · Beside: S2.4, S2.5, S2.7, S2.9, S2.10
 - **Files today:** `setup_static/setup_tabs.js` (Updates, lines 240-286); `setup_console/updates_tab.py`.
 - **Change:** 03 12: version key-value list, **Check now**, **Update to <version>** with its dialog, release notes,
-  Nightly builds toggle with its dialogs, Roll back, the uninstall line as a code block.
+  Roll back, the uninstall line as a code block.
 - **Keep:** the signed-release checks and the meaning of the refusal texts.
 - **Other interfaces:** command line S5.8 (`update`, `uninstall`). The app has its own App updates (S4.15); Hub
   updates install on the Hub and start from the Hub page or the command line (06 12).
@@ -744,7 +744,7 @@ app · M · Depends on: S0.4, S0.9 · Beside: Stage 3 steps
   never recreates the activity or drops what is being typed. Status colours come from the tokens; the window
   background from `sw_window.xml`; dynamic colour stays off. The whole app changes look at once.
   The launcher icon of 05 1 and 08 11 comes with this step: the adaptive icon (foreground mark, `sw_launcher_bg`
-  background, monochrome layer) and the pre-release variant on `sw_launcher_bg_nightly`.
+  background, monochrome layer).
 - **Keep:** screens, texts, navigation.
 - **Check:** 08 test 5 Kotlin part, with the app's entries removed from `tests/literal_allowlist.txt` in this step
   (the camera's black ground and the swatch fill stay listed with their reasons); AUT-1 Material roles; the app's
@@ -1111,8 +1111,8 @@ all four · S · Depends on: S7.1 and every interface step of Stages 1 to 5 · B
 - **Files today:** the allow-list of AUT-7 (S0.7); `tests/strings_allowlist.txt` (S0.8);
   `android/app/build.gradle.kts` and the manifest (app label "filament-kit").
 - **Change:** AUT-7 with no allow-list entry for an old name; any old name left on a screen replaced; any text left
-  in the Hub page or web app scripts moved into the catalogue; the app label "Spoolwarden" ("Spoolwarden Nightly"
-  for nightly builds) (05 1; open point 12).
+  in the Hub page or web app scripts moved into the catalogue; the app label "Spoolwarden"
+  (05 1; open point 12).
 - **Keep:** the app's package and id (the rename's part).
 - **Check:** AUT-7 and AUT-9 pass; 08 test 7 with no entry left in `tests/strings_allowlist.txt` for
   `setup_static/` or `web/static/`.

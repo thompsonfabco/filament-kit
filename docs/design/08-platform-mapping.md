@@ -436,8 +436,8 @@ The enums are `Look`, `Appearance`, `NavStyle` (`Rail`, `Sidebar`, `Pills`, `Lis
 
 **`sw_window.xml`.** One colour, `sw_window_bg`, set to Console's `bg` (light in `values/`, dark in
 `values-night/`). `res/values/themes.xml` uses it as `android:windowBackground` so the frame shown before Compose
-draws matches the page ground. It also holds the launcher icon's two backgrounds, `sw_launcher_bg` (Console's light
-`accent`) and `sw_launcher_bg_nightly` (Console's light `warn`), equal in both folders (section 11).
+draws matches the page ground. It also holds the launcher icon's background, `sw_launcher_bg` (Console's light
+`accent`), equal in both folders (section 11).
 
 **Proposed tests.** `tests/test_design_sources.py` runs with the project's normal Python test command. Each check
 below is one test function, so a failure names what is wrong. Checks 1 and 3 extend the two existing checks of 3.3
@@ -1026,10 +1026,7 @@ The app's destinations use `overview` (Home), `spool` (Spools), `printer`, `cloc
   `ic_launcher_round.xml` with three layers: `foreground` a 108 dp vector drawable of the product mark (a spool seen
   from the side inside a ring, in the stroke style of foundations section 10, scaled into the central 66 dp safe
   zone) in Console's light `on-accent`; `background` the colour `sw_launcher_bg`, Console's light `accent`;
-  `monochrome` the same mark as a single-colour drawable, so Android 13 and newer can tint it for themed icons. The
-  nightly flavour (and any other pre-release flavour) has its own `ic_launcher.xml` and `ic_launcher_round.xml` in
-  its source set whose background is `sw_launcher_bg_nightly`, Console's light `warn`, so a pre-release app never
-  looks like the stable one in the launcher. The generator writes both colours into `sw_window.xml` (the same values
+  `monochrome` the same mark as a single-colour drawable, so Android 13 and newer can tint it for themed icons. The generator writes the colour into `sw_window.xml` (the same values
   in `values/` and `values-night/`); the manifest sets `android:icon` and `android:roundIcon`. The web app's home-screen icons (section 13) show the same
   mark on the same ground.
 - Status shapes are in the sprite (`s-<shape>`) and in the drawables (`sw_st_<shape>`), drawn by `status__shape` on
