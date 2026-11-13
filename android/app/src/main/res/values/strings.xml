@@ -1613,6 +1613,7 @@
     <string name="settings_voice_saved_espeak">Saved: espeak-ng.</string>
     <string name="settings_voice_saved_piper">Saved: Piper. The Weigh Station downloads it next time it is idle.</string>
     <string name="updates_check">Check now</string>
+    <string name="updates_code_caption">shell · run on the Hub</string>
     <string name="updates_dialog_rollback_body">filament-kit stops while it installs and starts again by itself. Settings and data stay.</string>
     <string name="updates_roll_back">Roll back</string>
     <!-- 1=version -->
@@ -1626,8 +1627,10 @@
     <string name="updates_error">Could not read the update state. %1$s</string>
     <!-- 1=version -->
     <string name="updates_failed">Installing %1$s failed before. Automatic updates wait for a newer release; Update here tries it again.</string>
+    <string name="updates_failed_label">Failed before</string>
     <!-- 1=version -->
     <string name="updates_held">%1$s was rolled back. Automatic updates skip it; Update here installs it.</string>
+    <string name="updates_held_label">Held back</string>
     <string name="updates_installed">Installed</string>
     <string name="updates_last_checked">Last checked</string>
     <string name="updates_latest">Latest release</string>
@@ -1647,6 +1650,7 @@
     <string name="updates_rollback_text">Goes back to %1$s, the version this one replaced. Settings and data stay.</string>
     <!-- 1=schedule -->
     <string name="updates_schedule">Checked by itself %1$s (Automatic updates).</string>
+    <string name="updates_schedule_label">Checking</string>
     <string name="updates_schedule_off">Not checked by itself: Automatic updates are switched off.</string>
     <!-- 1=version -->
     <string name="updates_update">Update to %1$s</string>

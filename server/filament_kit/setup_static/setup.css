@@ -93,3 +93,15 @@ img.qr { display: block; width: var(--qr); height: var(--qr); max-width: 100%; p
 
 /* the icon sprite is inline at the top of <body> (S0.10); taken out of the flow here too, in case components.css loads late */
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* Updates (S2.13) */
+.updates__actions { margin: 0 0 var(--s3); }
+.updates__cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--s4); align-items: start; }
+.updates__cards > .card { margin: var(--s3) 0 0; }
+.updates__notes .code__text { max-height: calc(var(--s7) * 8); max-width: var(--column-max); }   /* about 72 characters of --mono */
+.updates__half { display: grid; gap: var(--s2); margin-bottom: var(--s3); }
+.updates__going { white-space: pre-line; }
+.updates__foot { display: grid; gap: var(--s2); margin-top: var(--s4); }
+.updates__foot > p { margin: 0; }
+@media (max-width: 1024px) { .updates__cards { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) { .updates__actions > .btn--primary { order: -1; } .updates__actions > .btn { flex: 1 1 100%; } }

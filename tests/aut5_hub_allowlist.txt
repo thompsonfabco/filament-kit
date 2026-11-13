@@ -44,4 +44,3 @@
 #flash | hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 4 | Flash a device (today's markup); removed by S2.16
 #flash | hit area under 44 x 44 | section.card > div > div.row > button.secondary | 4 | Flash a device (today's markup); removed by S2.16
 #flash | hit area under 44 x 44 | section.card > div > div.row > input | 8 | Flash a device (today's markup); removed by S2.16
-#updates | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 2 | Updates (today's markup); removed by S2.13

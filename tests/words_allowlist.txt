@@ -89,10 +89,6 @@ server/filament_kit/setup_static/setup_settings.js | the kit | 2 | today's strin
 server/filament_kit/setup_static/setup_settings.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_trust.js | filament-kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_trust.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_updates.js | filament-kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_updates.js | module | 3 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_updates.js | the kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_updates.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | "station" | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | blank = | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | color | 5 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
