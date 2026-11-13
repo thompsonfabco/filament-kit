@@ -353,15 +353,12 @@ def test_the_retry_gives_an_opened_spool_its_first_used(sm, monkeypatch):
 
 # ---------- refusals and fall-throughs ----------
 
-def test_a_local_recognizer_that_raises_falls_through_to_claude(sm, monkeypatch):
-    local = types.ModuleType(station_flow.LOCAL_MODULE)
-
-    def boom(sm, images, cfg):
-        raise RuntimeError("model file missing")
-    local.recognize = boom
-    monkeypatch.setitem(sys.modules, station_flow.LOCAL_MODULE, local)
+def test_a_local_reader_that_errors_falls_through_to_claude(sm, fake_reader):
+    url, data = fake_reader
+    data["errors"] = [(500, "model_error", None)]             # the local reader answers with an error
     cfg = config.load()
-    cfg["modules"] = {"spoolman": True, "server": True, "ai_intake": True, "local_ai": True}
+    cfg["modules"] = {"spoolman": True, "server": True, "ai_intake": True, "local_intake": True}
+    cfg["local_intake"] = {"url": url}
     config.save(cfg)
     fake = FakeClaude(read_reply(vendor="SUNLU"))
     r = recognize(client(sm, fake), auth())
