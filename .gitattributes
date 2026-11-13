@@ -37,3 +37,7 @@ android/app/src/main/res/drawable/sw_*.xml text eol=lf
 
 # esptool-js, vendored as published (THIRD-PARTY.md has its SHA-256): byte for byte.
 server/filament_kit/setup_static/esptool.bundle.js -text
+
+# segno, vendored as published (server/filament_kit/_vendor/VENDORED.txt has the hashes): byte for byte.
+server/filament_kit/_vendor/segno/** -text
+server/filament_kit/_vendor/segno-LICENSE -text

@@ -1,0 +1,18 @@
+segno 1.6.6, vendored unchanged (QR codes drawn by the Hub, design step S2.8).
+Source: https://pypi.org/project/segno/1.6.6/  (segno-1.6.6-py3-none-any.whl)
+Wheel sha256: 28c7d081ed0cf935e0411293a465efd4d500704072cdb039778a2ab8736190c7
+Licence: BSD-3-Clause (segno-LICENSE, the wheel's licenses/LICENSE)
+Vendored: 2026-11-13
+Files are byte for byte the wheel's; tests/test_vendored_segno.py checks each against its sha256 below.
+Format: sha256  path (segno-LICENSE is the wheel's LICENSE).
+e436a1f5aa93f7ac7fa3be1f0ea98e04a792d218dfec385f595adb88dc43d2e6  segno/__init__.py
+4e46cd1fa0fa72a10b53a8f3f8a743a8e9e640a448fde0236aade255ab086dbc  segno/__init__.pyi
+570ecdeac4134039a9d32ce9ac9da5968c4ca49882dda71bdc41b9e5b0fd15a1  segno/cli.py
+561440243f8e44634edf3b443ad468783d2de733cb15a1b7ec34d8d5a310a738  segno/consts.py
+d764280726708dbf894865e6b63f4404732fcf0037528bbdae054b6a38f97af8  segno/encoder.py
+1023b33c60f1104eb74ae25ca75aebd1f17f9b99fab3cbf9de51afc5d9575dd4  segno/helpers.py
+d7ca550f6a8fb676a14a28c873b57ff0d96bc90fa37200a5b6c7dac522844980  segno/helpers.pyi
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  segno/py.typed
+18964640fb64a5962f74afd1b87ae3460e268680997018df485817925c1cfe5d  segno/utils.py
+67e7c07a2da8aabe435587782d393a093a430e6e073d4698f74b321babbdeec4  segno/writers.py
+de6c85fccf5d52902aa13dfe2dc6d2a2a106fc3419ed438f3460f0d4b76a6935  segno-LICENSE

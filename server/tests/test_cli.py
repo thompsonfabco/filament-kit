@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -480,20 +481,12 @@ def test_pair_pc_prints_link_not_qr(capsys, monkeypatch):
 
 def test_pair_qr_has_four_module_quiet_zone(capsys, monkeypatch):
     _cert()
-    seen = {}
-
-    def fake_run(args, **kw):
-        seen["args"] = args
-        return cli.subprocess.CompletedProcess(args, 0, stdout="QR\n", stderr="")
-
-    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/qrencode")
-    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    monkeypatch.setenv("PATH", "")      # no qrencode: the Hub draws the code itself
     assert cli.main(["pair"]) == 0
-    args = seen["args"]
-    assert args[:3] == ["qrencode", "-t", "ansiutf8"]
-    assert args[args.index("-m") + 1] == "4"
-    assert args[-1].startswith("fkit://pair?")
-    assert "QR" in capsys.readouterr().out
+    rows = [re.sub(r"\x1b\[[0-9;]*m", "", ln) for ln in capsys.readouterr().out.splitlines()
+            if ln.startswith("\x1b[30;47m")]
+    assert rows and rows[0].strip() == "" and rows[1].strip() == ""     # 4 blank module rows = 2 character rows
+    assert all(r[:4].strip() == "" and r[-4:].strip() == "" for r in rows)
 
 
 def _ok_client(key):
