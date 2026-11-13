@@ -53,8 +53,8 @@
     <string name="theme_console_line">Dense and technical</string>
     <string name="theme_workbench_name">Workbench</string>
     <string name="theme_workbench_line">Calm cards</string>
-    <string name="theme_spool_name">Spool</string>
-    <string name="theme_spool_line">Colourful and roomy</string>
+    <string name="theme_palette_name">Palette</string>
+    <string name="theme_palette_line">Colourful and roomy</string>
     <string name="theme_panes_name">Panes</string>
     <string name="theme_panes_line">Simple lists</string>
     <string name="theme_unavailable_line">Not available yet</string>
@@ -3964,7 +3964,7 @@
     <!-- 1=theme 2=line -->
     <string name="cli_theme_line_set">Theme for new devices: %1$s (%2$s).</string>
     <string name="cli_theme_panes_line">simple lists</string>
-    <string name="cli_theme_spool_line">colourful and roomy</string>
+    <string name="cli_theme_palette_line">colourful and roomy</string>
     <string name="cli_theme_workbench_line">calm cards</string>
     <string name="cli_typing_not_shown">(typing is not shown)</string>
     <string name="cli_unchanged">Unchanged.</string>

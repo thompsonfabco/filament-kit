@@ -3,5 +3,5 @@
   var a = null, l = null;
   try { a = localStorage.getItem("spoolwarden.appearance"); l = localStorage.getItem("spoolwarden.look"); } catch (e) {}
   if (a === "light" || a === "dark") r.setAttribute("data-theme", a);
-  if (["console", "workbench", "spool", "panes"].indexOf(l) >= 0) r.setAttribute("data-look", l);
+  if (["console", "workbench", "palette", "panes"].indexOf(l) >= 0) r.setAttribute("data-look", l);
 })(document.documentElement);

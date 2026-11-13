@@ -15,7 +15,7 @@ Every pair below is required, for every theme in light and dark (eight token set
 Translucent colours (scrim) are skipped. A missing token is a failure.
 
 Prints a table; exits 1 when any pair fails, naming it as
-"spool dark: --muted on --surface-2 is 4.31:1, needs 4.5:1 (CON-1)".
+"palette dark: --muted on --surface-2 is 4.31:1, needs 4.5:1 (CON-1)".
 Usage: python check_contrast.py [path/to/tokens.json [path/to/SpoolwardenTokens.kt]]
 """
 import json

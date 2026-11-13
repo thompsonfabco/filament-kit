@@ -3,7 +3,7 @@
 This folder is the only place the token files exist. The design documents in `docs/design/` describe them; the
 pages and the app are generated from them.
 
-- `tokens.json` is the source: four themes (console, workbench, spool, panes), each with light and dark values, type, space, radius, size, elevation and motion.
+- `tokens.json` is the source: four themes (console, workbench, palette, panes), each with light and dark values, type, space, radius, size, elevation and motion.
 - `tokens.css` is generated from `tokens.json`; do not edit it by hand.
 - `build_tokens.py` writes `tokens.css`; with `--check` it exits 1 when `tokens.css` is out of date.
 - `check_contrast.py` checks the required contrast pairs of every theme and exits 1 on a failure.

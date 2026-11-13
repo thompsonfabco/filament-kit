@@ -235,8 +235,8 @@ def test_plants_are_found():
     assert theme_name_problems(tokens, raw) == []
     tokens["themes"]["panes"]["label"] = "Lists"
     assert len(theme_name_problems(tokens, raw)) == 1
-    assert theme_name_problems(TOKENS, {k: v for k, v in raw.items() if k != "theme_spool_name"}) == \
-        ["theme_spool_name is missing"]
+    assert theme_name_problems(TOKENS, {k: v for k, v in raw.items() if k != "theme_palette_name"}) == \
+        ["theme_palette_name is missing"]
     # the product's name written inside another entry, the command's name too
     assert name_problems(raw) == []
     planted = dict(raw, home_title="Home of filament-kit")

@@ -96,7 +96,7 @@ internal object SpoolwardenTokens {
         motion = SwMotion(fast = 120, base = 200, slow = 320, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
         profile = LayoutProfile(NavStyle.Sidebar, CollectionStyle.Cards, DetailStyle.Card),
     )
-    val spool = ThemeTokens(
+    val palette = ThemeTokens(
         light = SpoolwardenColors(
             bg = Color(0xFFFAF6F1), surface = Color(0xFFFFFFFF), surface2 = Color(0xFFF3ECE3),
             surface3 = Color(0xFFE9E0D4), text = Color(0xFF2A2420), muted = Color(0xFF665A50),
@@ -186,6 +186,6 @@ internal object SpoolwardenTokens {
     )
 
     fun of(look: Look): ThemeTokens = when (look) {
-        Look.Console -> console; Look.Workbench -> workbench; Look.Spool -> spool; Look.Panes -> panes
+        Look.Console -> console; Look.Workbench -> workbench; Look.Palette -> palette; Look.Panes -> panes
     }
 }
