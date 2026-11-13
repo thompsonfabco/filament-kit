@@ -202,6 +202,93 @@ def test_tap_follow_mode(printer, sm, fil):
     assert wait_for(lambda: loc_of(sm, s["id"]) == "Shelf 3")
 
 
+def _spoolman_fails_once(fam, monkeypatch):
+    real, calls = fam._move, []
+
+    def flaky(*a, **kw):
+        calls.append(a)
+        if len(calls) == 1:
+            raise OSError("Spoolman unreachable")
+        return real(*a, **kw)
+    monkeypatch.setattr(fam, "_move", flaky)
+    return calls
+
+
+def test_follow_retries_a_tap_when_spoolman_was_down(printer, sm, fil, monkeypatch):
+    """FA-066: a spool change made while Spoolman fails is applied on the next update, not lost."""
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 3")
+    calls = _spoolman_fails_once(fam, monkeypatch)
+    fake.set_spool(s["id"])
+    assert wait_for(lambda: len(calls) == 1)
+    time.sleep(0.2)
+    assert loc_of(sm, s["id"]) == "Shelf 3"
+    fam._follow_q.put(pid)                   # the next update
+    assert wait_for(lambda: loc_of(sm, s["id"]) == LOC)
+
+
+def test_follow_retries_an_unload_when_spoolman_was_down(printer, sm, fil, monkeypatch):
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 3")
+    fake.set_spool(s["id"])
+    assert wait_for(lambda: loc_of(sm, s["id"]) == LOC)
+    calls = _spoolman_fails_once(fam, monkeypatch)
+    fake.set_spool(None)
+    assert wait_for(lambda: len(calls) == 1)
+    time.sleep(0.2)
+    assert loc_of(sm, s["id"]) == LOC
+    fam._follow_q.put(pid)
+    assert wait_for(lambda: loc_of(sm, s["id"]) == "Shelf 3")
+
+
+def test_connect_reconcile_is_retried_when_spoolman_was_down(moonraker, sm, fil, monkeypatch):
+    s = spool(sm, fil, "Shelf 1")
+    moonraker.set_spool(s["id"])
+    pid = registry.add_klipper("Voron", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    calls = _spoolman_fails_once(fam, monkeypatch)
+    fam.start()
+    try:
+        assert fam.wait_settled(pid, 8) == "unknown_model"
+        assert wait_for(lambda: len(calls) == 1)
+        fam._follow_q.put(pid)               # the next update (the connect's own follow-up may already have done it)
+        assert wait_for(lambda: loc_of(sm, s["id"]) == "Voron – T0")
+    finally:
+        fam.stop()
+
+
+def test_reconnect_during_a_follow_move_keeps_the_rebaseline(printer, sm, fil, monkeypatch):
+    """A disconnect that pops the seen map while a move is in flight: the move's late write must not recreate it, or
+    the next status skips the connect baseline and unloads what Moonraker forgot."""
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 3")
+    fam._seen[pid] = {"T0": None}
+    real = fam._move
+
+    def move_then_disconnect(*a, **kw):
+        r = real(*a, **kw)
+        fam._on_change(pid, "klippy", {"state": "disconnected"})
+        return r
+    monkeypatch.setattr(fam, "_move", move_then_disconnect)
+    fam._follow_move(pid, "T0", s["id"])
+    assert pid not in fam._seen
+
+
+def test_one_failing_slot_does_not_block_the_next(printer, monkeypatch):
+    fam, pid, fake = printer
+    fam._seen[pid] = {"T0": None, "T1": None}
+    monkeypatch.setattr(fam, "_current", lambda p: {"T0": 11, "T1": 12})
+    done = []
+
+    def move(p, label, sid):
+        if label == "T0":
+            raise OSError("bad patch")
+        done.append(label)
+    monkeypatch.setattr(fam, "_follow_move", move)
+    fam._follow_check(pid)
+    assert done == ["T1"]
+
+
 def test_tap_during_kit_load(printer, sm, fil):
     """Review Focus 2: a kit load of spool A is in flight and a tap sets spool B → one spool ends in the slot,
     the one the printer shows."""

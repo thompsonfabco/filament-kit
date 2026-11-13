@@ -125,14 +125,18 @@ class LoadsMixin:
             # first status after connecting: reconcile what changed while the kit was not watching (a tap during a
             # kit restart). Only a spool the printer shows counts: Moonraker forgets its active spool on a restart,
             # and that is no reason to unload Spoolman.
-            self._seen[pid] = dict(cur)
+            # A slot left out of the baseline stays unseen until its move succeeds, so a failure is retried.
+            todo = []
             for label, sid in cur.items():
                 if sid is None:
                     continue
                 here = [s.get("id") for s in loading.occupants(self.sm, self._location(pid, label))]
                 if here != [sid]:
-                    with self._slot_lock(pid, label):
-                        self._follow_move(pid, label, sid)
+                    todo.append((label, sid))
+            self._seen[pid] = {l: s for l, s in cur.items() if (l, s) not in todo}
+            for label, sid in todo:
+                with self._slot_lock(pid, label):
+                    self._follow_slot(pid, label, sid)
             return
         for label, sid in cur.items():
             if seen.get(label, "unset") == sid:
@@ -141,12 +145,25 @@ class LoadsMixin:
                 now = self._current(pid).get(label)
                 if self._seen.get(pid, {}).get(label, "unset") == now:
                     continue
-                self._follow_move(pid, label, now)
+                self._follow_slot(pid, label, now)
+
+    def _follow_slot(self, pid: str, label: str, spool_id) -> None:
+        """One slot's move; a failure (Spoolman down, a 4xx) is logged and leaves the slot unseen for the next update,
+        and never holds back the printer's other slots. One line per failure, not a traceback, as every update retries."""
+        try:
+            self._follow_move(pid, label, spool_id)
+        except PrinterOffline:
+            raise
+        except Exception as e:  # noqa: BLE001
+            log.warning("klipper %s %s: Spoolman could not follow (%s); the next update tries again", pid, label, e)
+            log.debug("klipper %s %s: follow failure detail", pid, label, exc_info=True)
 
     def _follow_move(self, pid: str, label: str, spool_id) -> None:
         """Spoolman follows the printer for one slot. A spool id this Spoolman does not have (Moonraker reports to
-        another one, or the spool was deleted) moves nothing and is logged once; it still counts as seen."""
-        self._seen.setdefault(pid, {})[label] = spool_id
+        another one, or the spool was deleted) moves nothing and is logged once; it still counts as seen. Any other
+        failure leaves the slot unseen, so the next update tries again. The seen map is the one in place when the move
+        began: a reconnect that re-baselined meanwhile must not get this late write."""
+        seen = self._seen.get(pid)
         if spool_id is not None:
             try:
                 self.sm.get(f"spool/{spool_id}")
@@ -154,9 +171,13 @@ class LoadsMixin:
                 if e.status == 404:
                     log.warning("klipper %s %s: the printer shows spool %s, which this Spoolman does not have; "
                                 "Spoolman left unchanged", pid, label, spool_id)
+                    if seen is not None:
+                        seen[label] = spool_id
                     return
                 raise
         self._move(pid, label, spool_id, dry=False)
+        if seen is not None:
+            seen[label] = spool_id
         self._publish(pid)
         log.info("klipper %s %s: printer shows spool %s; Spoolman follows", pid, label, spool_id)
 
