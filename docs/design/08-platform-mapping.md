@@ -1100,8 +1100,8 @@ same are merged (the status words are the `status_…` keys, used by every badge
 "Weight with spool"); the unit is shown inside the field (`02-components.md` section 5.4; the `suffix` of the text
 field on Android) and comes from its own key (`unit_g`, `unit_c`, `unit_g_cm3`, `unit_mm3_s`, `unit_days`). In a
 key-value list the unit follows the value ("1000 g", "210 °C"). "(optional)" stays in the label, alone in its
-brackets. A format a person must type goes in the placeholder or the hint ("e.g. 190-220", "A hex colour, like
-#2B2B2E"), not in the label.
+brackets. A format a person must type goes in the placeholder or the hint ("e.g. 190-220"; for a colour the hint key
+`common_field_colour_hint`, "A hex colour, like #2B2B2E"), not in the label.
 
 **Shared wording.** One term per thing, in every interface (Hub page, web app, app and the `spoolwarden` command)
 and in the user documents. Each term is one catalogue key (`common_…` where several screens use it), so the interfaces

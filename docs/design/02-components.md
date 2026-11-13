@@ -2660,14 +2660,14 @@ shows an indeterminate bar. Which is which is fixed here, so every interface sho
 
 | Job (`name`) | Steps | The step sentences, in order |
 |---|---|---|
-| `backup` | Counted | Collecting the settings and pairings · Copying the Spoolman database · Writing the zip · Checking the zip |
-| `restore` | Counted | Checking the backup · Keeping what is here now as a backup · Stopping the services · Putting the backup in place · Starting the services · Checking that everything answers |
-| `update` | Counted | Downloading <version> · Checking its signature · Installing · Restarting the Hub · Checking that it answers |
-| `rollback` | Counted | Finding the kept version · Installing <version> · Restarting the Hub · Checking that it answers |
-| `apply` | Counted | One step per feature or service that changes ("Switching on Klipper printers", "Restarting the Hub service"), then "Checking that everything answers"; the count is known once the plan is made, before the first step |
+| `backup` | Counted | Copying the Spoolman database · Collecting the settings and pairings · Writing the zip |
+| `restore` | Counted | Checking the backup · Keeping what is here now as a backup (left out, and the count one lower, on a machine with nothing to keep) · Stopping the services · Putting the backup in place · Starting the services · Checking that everything answers |
+| `update` | Counted | Downloading <version> · Checking its signature · Installing <version> (the restart and the check that the Hub answers are part of this step; the strip shows the Hub restarting state, 8.5, while they run) |
+| `rollback` | Counted | Finding the kept version · Installing <version> (with the restart and the check, as for `update`) |
+| `apply` | Counted | One step per phase of the plan (installing what is needed, writing the settings, switching services on or off, restarting), then "Checking that everything answers"; the count is known once the plan is made, before the first step |
 | `library_update` | Counted | Downloading the Filament Catalog · Checking its signature · Putting it in place · Asking for a preset build |
 | `library_rollback` | Counted | Putting the previous Filament Catalog back · Asking for a preset build |
-| `reader_setup` (flashing on the Hub) | Counted | Finding the board · Writing the program · Checking what was written · Joining the Wi-Fi · Reaching the Hub |
+| `reader_setup` (flashing on the Hub) | Counted | Finding the board · Writing the program · Checking what was written · Joining the Wi-Fi · Reaching the Hub. When the board already runs the current program, steps two and three read "Keeping the program that is on the board" and "Writing the settings" |
 | `station_pair` | Counted | Asking the Hub · Saving the pairing · Restarting the Weigh Station service |
 | `check` | Not counted | One short request |
 | `remote_issue` | Not counted | The certificate tool runs for an unknown time and reports no steps |
