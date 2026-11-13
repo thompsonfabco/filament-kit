@@ -34,7 +34,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
-import com.thompsonfabco.filamentkit.ui.components.SwProgress
+import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
@@ -67,28 +67,33 @@ fun TagScreen(
     onAddNew: () -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    online: Boolean = true,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val linked by rememberUpdatedState(onLinked)
     (ui as? TagUi.Linked)?.let { l -> LaunchedEffect(l) { linked(l.spool) } }
     TagPage(modifier) {
-        when (val s = ui) {
-            TagUi.Looking, is TagUi.Linked -> {
-                PageHeader(stringResource(R.string.common_tag, uid))
-                SwProgress(null)
-                Text(stringResource(R.string.tag_looking), style = MaterialTheme.typography.bodyMedium)
-            }
-            TagUi.NotLinked -> SwEmptyState(
+        if (ui !is TagUi.NotLinked) PageHeader(stringResource(R.string.common_tag, uid))
+        if (ui is TagUi.Looking || ui is TagUi.Linked) {
+            Text(stringResource(R.string.tag_looking), style = MaterialTheme.typography.bodyMedium)
+        }
+        val failure = (ui as? TagUi.Failed)?.failure
+        HubNoticeOf(failure, onPairAgain)
+        // the states every Hub screen has (05 3.2)
+        ScreenState(
+            loaded = ui is TagUi.NotLinked,
+            loading = ui is TagUi.Looking || ui is TagUi.Linked,
+            error = failure?.let { hubFailureText(it) },
+            onTryAgain = vm::lookUp,
+            offline = !online,
+        ) {
+            SwEmptyState(
                 icon = R.drawable.sw_ic_tag,
                 title = stringResource(R.string.tag_unlinked_title),
                 text = stringResource(R.string.tag_unlinked_text),
                 primary = SwAction(stringResource(R.string.tag_link_sealed), onLink),
                 secondary = SwAction(stringResource(R.string.tag_add_new), onAddNew),
             )
-            is TagUi.Failed -> {
-                PageHeader(stringResource(R.string.common_tag, uid))
-                HubFailureNotice(s.failure, onPairAgain, onTryAgain = vm::lookUp)
-            }
         }
     }
 }
@@ -104,6 +109,7 @@ fun LinkFindScreen(
     onPick: (SpoolSummary, String?) -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    online: Boolean = true,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val colors = SpoolwardenTheme.colors
@@ -133,19 +139,22 @@ fun LinkFindScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
         )
-        if (ui.busy) SwProgress(null)
-        ui.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = if (ui.query.isNotBlank()) vm::search else null) }
-        when {
-            ui.searched && ui.results.isEmpty() && !ui.busy && ui.failure == null ->
-                Text(stringResource(R.string.tag_find_none), style = MaterialTheme.typography.bodyLarge)
-            ui.results.isNotEmpty() -> {
-                // the rows are off while the weight is wrong; the reason is above them
-                if (ui.weightInvalid) Text(stringResource(R.string.tag_find_weight_error), style = MaterialTheme.typography.bodySmall, color = colors.muted)
-                SpoolPanel {
-                    ui.results.forEachIndexed { i, spool ->
-                        if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                        SpoolRow(spool, enabled = !ui.weightInvalid, onClick = { onPick(spool, ui.weight.trim().ifEmpty { null }) })
-                    }
+        HubNoticeOf(ui.failure, onPairAgain)
+        ScreenState(
+            loaded = ui.searched,
+            loading = ui.busy,
+            isEmpty = ui.searched && ui.results.isEmpty(),
+            empty = { Text(stringResource(R.string.tag_find_none), style = MaterialTheme.typography.bodyLarge) },
+            error = ui.failure?.let { hubFailureText(it) },
+            onTryAgain = { if (ui.query.isNotBlank()) vm.search() },
+            offline = !online,
+        ) {
+            // the rows are off while the weight is wrong; the reason is above them
+            if (ui.weightInvalid) Text(stringResource(R.string.tag_find_weight_error), style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            SpoolPanel {
+                ui.results.forEachIndexed { i, spool ->
+                    if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+                    SpoolRow(spool, enabled = !ui.weightInvalid, onClick = { onPick(spool, ui.weight.trim().ifEmpty { null }) })
                 }
             }
         }
@@ -164,6 +173,7 @@ fun LinkPreviewScreen(
     onDone: (SpoolResult) -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    online: Boolean = true,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val done by rememberUpdatedState(onDone)
@@ -172,16 +182,20 @@ fun LinkPreviewScreen(
     BackHandler(enabled = ui.linking) {}
     val space = SpoolwardenTheme.space
     TagPage(modifier) {
-        if (ui.checking) SwProgress(null)
         val conflict = ui.conflict
         if (conflict != null) {
-            NoticeCard(NoticeKind.Warn, stringResource(R.string.tag_in_use))
-            ui.other?.let { SpoolRow(it) }
+            // 05 7.8 "Tag already in use": the spool that has the tag, then the button that moves it
+            if (ui.other != null) {
+                NoticeCard(NoticeKind.Warn, stringResource(R.string.tag_in_use))
+                SpoolRow(ui.other!!)
+            }
+            // the chosen spool has a tag of its own: moving the tag here replaces it
+            val replaces = conflict == ConflictReason.SpoolHasOtherTag || ui.spool?.tag != null
             Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
                 SwButton(
-                    stringResource(if (ui.linking) R.string.tag_link_linking else {
-                        if (conflict == ConflictReason.SpoolHasOtherTag) R.string.tag_move_replace else R.string.tag_move_here
-                    }),
+                    stringResource(
+                        if (ui.linking) R.string.tag_link_linking else if (replaces) R.string.tag_move_replace else R.string.tag_move_here,
+                    ),
                     vm::moveHere, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = ui.linking,
                 )
                 SwButton(stringResource(R.string.common_cancel), onBack, Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = !ui.linking)
@@ -189,21 +203,29 @@ fun LinkPreviewScreen(
             return@TagPage
         }
         PageHeader(stringResource(R.string.tag_link_title))
-        ui.spool?.let { SpoolRow(it) }
-        if (ui.checking) Text(stringResource(R.string.common_checking), style = MaterialTheme.typography.bodyMedium)
-        if (!ui.checking && ui.failure == null) {
+        HubNoticeOf(ui.failure, onPairAgain)
+        // the states every Hub screen has (05 3.2)
+        ScreenState(
+            loaded = !ui.checking,
+            loading = ui.checking,
+            error = ui.failure?.let { hubFailureText(it) },
+            onTryAgain = vm::retry,
+            offline = !online,
+        ) {
+            ui.spool?.let { SpoolRow(it) }
             Text(stringResource(R.string.tag_link_line, uid), style = MaterialTheme.typography.bodyMedium)
-            vm.gross?.takeIf { parseWeight(it.toString()) != null }?.let {
+            vm.gross?.let {
                 Text(monoNumbers(stringResource(R.string.tag_link_weight, formatGrams(it))), style = MaterialTheme.typography.bodyMedium)
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                SwButton(stringResource(R.string.common_back), onBack, enabled = !ui.linking)
+                SwButton(
+                    stringResource(if (ui.linking) R.string.tag_link_linking else R.string.tag_link_button), vm::link,
+                    kind = SwButtonKind.Main, enabled = !ui.checking && ui.failure == null, busy = ui.linking,
+                )
+            }
         }
-        ui.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::check) }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
-            SwButton(stringResource(R.string.common_back), onBack, enabled = !ui.linking)
-            SwButton(
-                stringResource(if (ui.linking) R.string.tag_link_linking else R.string.tag_link_button), vm::link,
-                kind = SwButtonKind.Main, enabled = !ui.checking && ui.failure == null, busy = ui.linking,
-            )
-        }
+        // Back stays available while an error card is up
+        if (ui.checking.not() && ui.failure != null) SwButton(stringResource(R.string.common_back), onBack)
     }
 }

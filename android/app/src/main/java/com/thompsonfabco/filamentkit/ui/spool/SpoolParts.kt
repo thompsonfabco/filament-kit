@@ -131,6 +131,30 @@ internal fun HubFailureNotice(
     }
 }
 
+/**
+ * A failure as the words of 05 3.5, for the shared error card of 3.2 (with its Try again); null for the two Hub notices,
+ * which have their own card ([HubFailureNotice]).
+ */
+@Composable
+internal fun hubFailureText(failure: HubFailure): String? = when (failure) {
+    HubFailure.CertificateChanged, HubFailure.NotPaired -> null
+    HubFailure.Unreachable -> stringResource(R.string.common_hub_unreachable)
+    HubFailure.Unexpected -> stringResource(R.string.common_hub_answer_unknown)
+    HubFailure.SpoolmanDown -> stringResource(R.string.common_spoolman_unreachable)
+    is HubFailure.Message -> failure.text
+}
+
+/** The Hub notice of a failure that is one (05 3.4); nothing for the other failures. */
+@Composable
+internal fun HubNoticeOf(failure: HubFailure?, onPairAgain: () -> Unit) {
+    if (failure != null && failure.isNotice) HubFailureNotice(failure, onPairAgain)
+}
+
+/** Seconds since [loadedAt] (epoch millis), for the offline notice's age; 0 when nothing was loaded. */
+internal fun secondsSince(loadedAt: Long?): Long = loadedAt?.let { ((System.currentTimeMillis() - it) / MILLIS).coerceAtLeast(0) } ?: 0
+
+private const val MILLIS = 1000L
+
 /** The last change, as the notice line of 7.2: announced politely when it appears. */
 @Composable
 internal fun ResultLine(result: SpoolResult, modifier: Modifier = Modifier) {

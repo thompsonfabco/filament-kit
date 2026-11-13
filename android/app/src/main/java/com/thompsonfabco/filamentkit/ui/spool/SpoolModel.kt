@@ -18,6 +18,7 @@ import kotlin.math.roundToInt
 /** The server calls the spool screens need; [of] adapts the real [Api] at each call, tests pass a fake. */
 interface SpoolBackend {
     suspend fun search(q: String, sealedOnly: Boolean): List<JsonObject>
+    suspend fun spool(id: Int): JsonObject
     suspend fun tag(uid: String): JsonObject?
     suspend fun link(spoolId: Int, tag: String, force: Boolean, dryRun: Boolean, gross: Double?): JsonObject
     suspend fun update(spoolId: Int, gross: Double?, location: String?, empty: Boolean, dryRun: Boolean): JsonObject
@@ -27,6 +28,7 @@ interface SpoolBackend {
         /** Calls go to whatever [current] returns at that moment, so a re-pair or a trusted certificate reaches the screen. */
         fun of(current: () -> Api): SpoolBackend = object : SpoolBackend {
             override suspend fun search(q: String, sealedOnly: Boolean) = current().search(q, sealedOnly)
+            override suspend fun spool(id: Int) = current().spoolById(id)
             override suspend fun tag(uid: String) = current().tag(uid)
             override suspend fun link(spoolId: Int, tag: String, force: Boolean, dryRun: Boolean, gross: Double?) =
                 current().link(spoolId, tag, force, dryRun, gross, null)
@@ -215,7 +217,7 @@ object SpoolCache {
     fun get(id: Int): SpoolSummary? = seen[id]
 
     /** The top bar's title for spool [id]: its brand and name once seen. */
-    fun title(id: Int): String? = seen[id]?.title?.ifBlank { null }
+    fun title(id: Int): String? = seen[id]?.let { it.name.ifBlank { it.title } }?.ifBlank { null }
 
     fun clear() {
         seen.clear()

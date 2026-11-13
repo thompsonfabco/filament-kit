@@ -44,9 +44,11 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
-import com.thompsonfabco.filamentkit.ui.components.SwProgress
+import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
-import com.thompsonfabco.filamentkit.ui.spool.HubFailureNotice
+import com.thompsonfabco.filamentkit.ui.spool.HubNoticeOf
+import com.thompsonfabco.filamentkit.ui.spool.hubFailureText
+import com.thompsonfabco.filamentkit.ui.spool.secondsSince
 import com.thompsonfabco.filamentkit.ui.spool.SpoolPanel
 import com.thompsonfabco.filamentkit.ui.spool.SpoolRow
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
@@ -74,6 +76,8 @@ data class SearchUi(
     val searched: String? = null,
     val results: List<SpoolSummary> = emptyList(),
     val failure: HubFailure? = null,
+    /** When the results were read (epoch millis), for the offline notice. */
+    val loadedAt: Long? = null,
 )
 
 /** Spool search; [search] is `api.search(q, sealedOnly)`, asked of the session's current client at each call. */
@@ -117,7 +121,7 @@ class SearchViewModel(
         job = viewModelScope.launch {
             try {
                 val found = search(q, s.sealedOnly).map { it.toSpoolSummary() }
-                _state.update { it.copy(busy = false, searched = q, results = found, failure = null) }
+                _state.update { it.copy(busy = false, searched = q, results = found, failure = null, loadedAt = System.currentTimeMillis()) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -174,6 +178,7 @@ fun SearchScreen(
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
     nfc: NfcState = rememberNfcState(),
+    online: Boolean = true,
     onNfcSettings: (() -> Unit)? = null,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
@@ -206,42 +211,45 @@ fun SearchScreen(
                         keyboardActions = KeyboardActions(onSearch = { vm.search() }),
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (ui.busy) SwProgress(null, Modifier.padding(top = space.s1))
                 }
-                // the whole chip toggles
+                // the whole chip toggles: no check icon (08 10.3)
                 FilterChip(
                     selected = ui.sealedOnly,
                     onClick = { vm.setSealedOnly(!ui.sealedOnly) },
                     label = { Text(stringResource(R.string.spools_sealed_only), style = MaterialTheme.typography.labelLarge) },
                     modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row),
-                    shape = SpoolwardenTheme.shapes.r,
-                    leadingIcon = if (ui.sealedOnly) {
-                        { SwIcon(R.drawable.sw_ic_check, null) }
-                    } else {
-                        null
-                    },
+                    shape = SpoolwardenTheme.shapes.rS,
                     colors = FilterChipDefaults.filterChipColors(
                         containerColor = colors.surface, labelColor = colors.text,
                         selectedContainerColor = colors.accentSoft, selectedLabelColor = colors.accentText,
-                        selectedLeadingIconColor = colors.accentText,
                     ),
                     border = FilterChipDefaults.filterChipBorder(
-                        enabled = true, selected = ui.sealedOnly, borderColor = colors.borderStrong,
-                        selectedBorderColor = colors.accentText, borderWidth = SpoolwardenTheme.sizes.hairline,
-                        selectedBorderWidth = SpoolwardenTheme.sizes.hairline,
+                        enabled = true, selected = ui.sealedOnly, borderColor = colors.border, selectedBorderColor = colors.border,
+                        borderWidth = SpoolwardenTheme.sizes.hairline, selectedBorderWidth = SpoolwardenTheme.sizes.hairline,
                     ),
                 )
                 if (ui.query.isBlank()) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
-                ui.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = if (ui.query.isNotBlank()) vm::search else null) }
+                HubNoticeOf(ui.failure, onPairAgain)
                 val searched = ui.searched
-                when {
-                    searched != null && ui.results.isEmpty() && !ui.busy -> Column {
-                        Text(stringResource(R.string.spools_empty, searched), style = MaterialTheme.typography.bodyLarge)
-                        if (ui.sealedOnly) {
-                            SwButton(stringResource(R.string.spools_clear_sealed), { vm.setSealedOnly(false) }, kind = SwButtonKind.Quiet)
+                // the states every Hub screen has (05 3.2): the progress line, the error card, offline
+                ScreenState(
+                    loaded = searched != null,
+                    loading = ui.busy,
+                    isEmpty = searched != null && ui.results.isEmpty(),
+                    empty = {
+                        Column {
+                            Text(stringResource(R.string.spools_empty, searched.orEmpty()), style = MaterialTheme.typography.bodyLarge)
+                            if (ui.sealedOnly) {
+                                SwButton(stringResource(R.string.spools_clear_sealed), { vm.setSealedOnly(false) }, kind = SwButtonKind.Quiet)
+                            }
                         }
-                    }
-                    ui.results.isNotEmpty() -> SpoolPanel {
+                    },
+                    error = ui.failure?.let { hubFailureText(it) },
+                    onTryAgain = { if (ui.query.isNotBlank()) vm.search() },
+                    offline = !online,
+                    loadedSecondsAgo = secondsSince(ui.loadedAt),
+                ) {
+                    SpoolPanel {
                         ui.results.forEachIndexed { i, spool ->
                             if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
                             SpoolRow(spool, onClick = { onOpenSpool(spool) })

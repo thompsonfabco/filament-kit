@@ -130,6 +130,7 @@ import com.thompsonfabco.filamentkit.nav.selectTab
 import com.thompsonfabco.filamentkit.nav.showsBackArrow
 import com.thompsonfabco.filamentkit.nav.tab
 import com.thompsonfabco.filamentkit.nav.tabTap
+import com.thompsonfabco.filamentkit.nav.tapIsForTheOpenTag
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.ProfileStatus
@@ -399,16 +400,29 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     val adding = destination?.hasRoute(AddRoute::class) == true
     val tapsOn = destination != null && !inPairing && !adding
     val loadWriting by app.loadGate.writing.collectAsStateWithLifecycle()
-    var queuedTag by remember { mutableStateOf<String?>(null) }
+    var queuedTag by rememberSaveable { mutableStateOf<String?>(null) }
     val tagWaits = stringResource(R.string.tag_read_wait)
     fun openTag(uid: String) {
         val here = nav.currentBackStackEntry
-        val tagHere = here?.let(::tagUidOf)
-        if (tagHere == uid) return
+        val tagScreen = here?.let(::tagUidOf)
+        // the tag whose spool screen is open: a tap of it does nothing (05 2.6)
+        val spoolsTag = here?.takeIf { it.destination.hasRoute(SpoolRoute::class) }?.let {
+            val route = it.toRoute<SpoolRoute>()
+            route.tag ?: SpoolCache.get(route.id)?.tag
+        }
+        if (tapIsForTheOpenTag(uid, tagScreen, spoolsTag)) return
         // a different tag replaces the tag screen (and the link steps on it)
-        if (tagHere != null) nav.popBackStack<TagRoute>(inclusive = true)
+        if (tagScreen != null) nav.popBackStack<TagRoute>(inclusive = true)
         nav.navigate(TagRoute(uid))
     }
+    // the tag that waited for a write to end opens now; once
+    fun openQueued() {
+        val uid = queuedTag ?: return
+        queuedTag = null
+        openTag(uid)
+    }
+    // a load or a link is being written, or its screen is still showing its answer
+    val onWriteStep = destination?.hasRoute(SpoolLoadPreviewRoute::class) == true || destination?.hasRoute(TagLinkPreviewRoute::class) == true
     LaunchedEffect(tapsOn, lifecycle) {
         if (!tapsOn) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -422,12 +436,9 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             }
         }
     }
-    LaunchedEffect(loadWriting, tapsOn) {
-        val uid = queuedTag
-        if (!loadWriting && uid != null && tapsOn) {
-            queuedTag = null
-            openTag(uid)
-        }
+    // off the write's screen (its own result handling goes first), the waiting tag opens
+    LaunchedEffect(loadWriting, tapsOn, onWriteStep) {
+        if (!loadWriting && tapsOn && !onWriteStep) openQueued()
     }
 
     // The Hub connection chip and its sheet.
@@ -505,6 +516,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 },
                 onOpenPrinters = { tabTapped(Tab.Printers) },
                 onPairAgain = app.router::pairAgain,
+                online = online,
             )
         }
 
@@ -523,6 +535,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 skipped = route.skipped,
                 onPick = { label -> nav.navigate(SpoolLoadPreviewRoute(route.id, route.printerId, label)) },
                 onPairAgain = app.router::pairAgain,
+                online = online,
             )
         }
 
@@ -550,6 +563,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     runCatching { nav.getBackStackEntry<SpoolRoute>() }.getOrNull()?.savedStateHandle
                         ?.set(SpoolViewModel.RESULT_KEY, result.encode())
                     nav.popBackStack<SpoolRoute>(inclusive = false)
+                    // a tag that waited for the load opens on top of the spool screen, after the steps have gone
+                    openQueued()
                 },
                 onDone = { nav.popBackStack<SpoolRoute>(inclusive = false) },
                 onOpenPrinter = {
@@ -559,6 +574,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     nav.navigate(PrinterRoute(route.printerId))
                 },
                 onPairAgain = app.router::pairAgain,
+                online = online,
             )
         }
 
@@ -587,6 +603,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     if (nav.openAdd(request, ::addReplaceOf) == AddOpened.NeedsLeave) leaveAddFor = request
                 },
                 onPairAgain = app.router::pairAgain,
+                online = online,
             )
         }
 
@@ -607,6 +624,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     nav.navigate(TagLinkPreviewRoute(uid, spool.id, gross))
                 },
                 onPairAgain = app.router::pairAgain,
+                online = online,
             )
         }
 
@@ -618,7 +636,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             val route = e.toRoute<TagLinkPreviewRoute>()
             val vm: LinkPreviewViewModel = viewModel(factory = viewModelFactory {
                 initializer {
-                    LinkPreviewViewModel(route.uid, route.spoolId, route.gross?.let(::parseWeight), SpoolBackend.of(::currentApi))
+                    LinkPreviewViewModel(route.uid, route.spoolId, route.gross?.let(::parseWeight), SpoolBackend.of(::currentApi), app.loadGate)
                 }
             })
             LinkPreviewScreen(
@@ -630,8 +648,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     nav.navigate(SpoolRoute(route.spoolId, tag = route.uid, result = result.encode())) {
                         popUpTo<TagRoute> { inclusive = true }
                     }
+                    openQueued()
                 },
                 onPairAgain = app.router::pairAgain,
+                online = online,
             )
         }
     }
@@ -893,6 +913,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                                 nav.navigate(SpoolRoute(spool.id))
                             },
                             onPairAgain = app.router::pairAgain,
+                            online = online,
                         )
                     }
                     sharedRoutes()

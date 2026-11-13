@@ -47,6 +47,7 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
+import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
@@ -94,7 +95,6 @@ fun SpoolScreen(
     }
 
     Column(modifier.fillMaxSize()) {
-        if (ui.loading) SwProgress(null)
         Column(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space.s4),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -103,16 +103,24 @@ fun SpoolScreen(
                 Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(space.s4),
             ) {
-                ui.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::refresh) }
+                HubNoticeOf(ui.failure, onPairAgain)
                 val spool = ui.spool
-                if (spool == null) {
-                    if (ui.loading) SwSkeletonRows(SKELETON_ROWS)
-                } else {
-                    Header(spool, ui.openedByTag)
-                    Remaining(spool)
-                    ui.result?.let { ResultLine(it) }
-                    Actions(vm, ui, online, printersOn, onLoad)
-                    Details(spool)
+                // the states every Hub screen has (05 3.2): the progress line, the error card with Try again, offline
+                ScreenState(
+                    loaded = spool != null,
+                    loading = ui.loading,
+                    error = ui.failure?.let { hubFailureText(it) },
+                    onTryAgain = vm::retry,
+                    offline = !online,
+                    loadedSecondsAgo = secondsSince(ui.loadedAt),
+                ) {
+                    if (spool != null) {
+                        Header(spool, ui.openedByTag)
+                        Remaining(spool)
+                        ui.result?.let { ResultLine(it) }
+                        Actions(vm, ui, online, printersOn, onLoad)
+                        Details(spool)
+                    }
                 }
             }
         }
@@ -293,12 +301,12 @@ private fun Details(spool: SpoolSummary) {
 private fun WeightSheet(vm: SpoolViewModel, w: WeightUi, now: Double?, onPairAgain: () -> Unit) {
     val space = SpoolwardenTheme.space
     val focus = remember { FocusRequester() }
-    var leaving by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     SwSheet(
         onDismiss = vm::closeWeight,
-        // typed weight: Back, the scrim and a swipe ask first (2.5 rule 1); a save in flight is waited for
-        onBlockedDismiss = if (w.dirty || w.saving) ({ if (!w.saving) leaving = true }) else null,
+        // a save in flight is waited for; typed weight: Back, the scrim and a swipe ask first (2.5 rule 1)
+        gesturesEnabled = !w.saving,
+        onBlockedDismiss = if (w.dirty) vm::askLeaveWeight else null,
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
             Text(stringResource(R.string.spool_update_weight), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
@@ -328,13 +336,13 @@ private fun WeightSheet(vm: SpoolViewModel, w: WeightUi, now: Double?, onPairAga
                     Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            w.failure?.let { HubFailureNotice(it, onPairAgain) }
+            w.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::retryWeight) }
             if (!w.canSave && !w.saving && !w.invalid && w.failure == null) {
                 Text(stringResource(R.string.spool_weight_need_preview), style = MaterialTheme.typography.bodySmall, color = SpoolwardenTheme.colors.muted)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2, Alignment.End)) {
                 SwButton(
-                    stringResource(R.string.common_cancel), { if (w.dirty) leaving = true else vm.closeWeight() },
+                    stringResource(R.string.common_cancel), vm::askLeaveWeight,
                     kind = SwButtonKind.Quiet, enabled = !w.saving,
                 )
                 SwButton(
@@ -344,20 +352,17 @@ private fun WeightSheet(vm: SpoolViewModel, w: WeightUi, now: Double?, onPairAga
             }
         }
     }
-    if (leaving) {
+    if (w.leaving) {
         SwDialog(
             title = stringResource(R.string.common_leave_title),
-            onClose = { leaving = false },
+            onClose = vm::stayWeight,
             confirm = SwDialogButton(
                 stringResource(R.string.common_leave_without_saving),
-                onClick = {
-                    leaving = false
-                    vm.closeWeight()
-                },
+                onClick = vm::closeWeight,
                 kind = SwButtonKind.DestructiveFilled,
                 enabled = !w.saving,
             ),
-            cancel = SwAction(stringResource(R.string.common_stay)) { leaving = false },
+            cancel = SwAction(stringResource(R.string.common_stay), vm::stayWeight),
         ) {
             Text(stringResource(R.string.common_leave_body, stringResource(R.string.spool_weight_thing)))
         }
@@ -369,10 +374,10 @@ private fun WeightSheet(vm: SpoolViewModel, w: WeightUi, now: Double?, onPairAga
 private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAgain: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
-    SwSheet(onDismiss = vm::closeMove, onBlockedDismiss = if (m.movingTo != null) ({}) else null) {
+    SwSheet(onDismiss = vm::closeMove, gesturesEnabled = m.movingTo == null) {
         Column(Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4), verticalArrangement = Arrangement.spacedBy(space.s2)) {
             Text(stringResource(R.string.spool_move_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
-            m.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = null) }
+            m.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::retryMove) }
             val locations = m.locations
             when {
                 locations == null -> if (m.failure == null) SwSkeletonRows(SKELETON_ROWS)

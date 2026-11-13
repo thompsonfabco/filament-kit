@@ -42,7 +42,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
-import com.thompsonfabco.filamentkit.ui.components.SwProgress
+import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -102,6 +102,7 @@ fun LoadPrintersScreen(
     onOpenPrinters: () -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    online: Boolean = true,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val colors = SpoolwardenTheme.colors
@@ -111,20 +112,28 @@ fun LoadPrintersScreen(
     LaunchedEffect(only?.id) { only?.let { pick(it, true) } }
     LoadPage(spool, modifier) {
         Header(stringResource(R.string.spool_load_which_printer))
-        if (ui.loading) SwProgress(null)
-        ui.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::load) }
+        HubNoticeOf(ui.failure, onPairAgain)
         val printers = ui.printers
-        when {
-            printers == null -> if (ui.loading) {
-                Text(stringResource(R.string.spool_load_loading_printers), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
-                SwSkeletonRows(SKELETON_ROWS)
-            }
-            printers.isEmpty() -> {
+        // the states every Hub screen has (05 3.2); the skeleton rows are the loading state of this list
+        ScreenState(
+            loaded = printers != null,
+            loading = ui.loading,
+            isEmpty = printers?.isEmpty() == true,
+            empty = {
                 Text(stringResource(R.string.spool_load_no_printers), style = MaterialTheme.typography.bodyLarge)
                 SwButton(stringResource(R.string.spool_load_open_printers), onOpenPrinters, kind = SwButtonKind.Quiet)
-            }
-            else -> SpoolPanel {
-                printers.forEachIndexed { i, p ->
+            },
+            error = ui.failure?.let { hubFailureText(it) },
+            onTryAgain = vm::load,
+            offline = !online,
+            loadedSecondsAgo = secondsSince(ui.loadedAt),
+            skeleton = {
+                Text(stringResource(R.string.spool_load_loading_printers), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+                SwSkeletonRows(SKELETON_ROWS)
+            },
+        ) {
+            SpoolPanel {
+                printers.orEmpty().forEachIndexed { i, p ->
                     if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
                     val can = canTakeLoad(p)
                     Row(
@@ -135,7 +144,7 @@ fun LoadPrintersScreen(
                             Text(p.name, style = MaterialTheme.typography.bodyLarge, color = if (can) colors.text else colors.muted)
                             StatusLabel(statusOf(p), small = true)
                             p.shownModel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.muted) }
-                            // the reason it is off; "Offline" is said by its label
+                            // the reason it is off; Offline is said by its label
                             if (!can && p.state != Printer.STATE_OFFLINE) {
                                 fixText(p.state)?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = colors.muted) }
                             }
@@ -170,6 +179,7 @@ fun LoadSlotsScreen(
     onPick: (String) -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    online: Boolean = true,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val colors = SpoolwardenTheme.colors
@@ -181,28 +191,32 @@ fun LoadSlotsScreen(
             if (skipped) Text(stringResource(R.string.spool_load_printer, printer.name), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             fixText(printer.state)?.let { NoticeCard(NoticeKind.Warn, stringResource(it)) }
         }
-        if (ui.loading) {
-            SwProgress(null)
-            Text(stringResource(R.string.spool_load_loading_slots), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
-            SwSkeletonRows(SKELETON_ROWS)
-        }
-        ui.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::load) }
+        HubNoticeOf(ui.failure, onPairAgain)
         val slots = ui.slots
-        if (slots != null) {
-            if (slots.isEmpty()) {
-                Text(stringResource(R.string.spool_load_no_slots), style = MaterialTheme.typography.bodyLarge)
-            } else {
-                val can = printer?.let(::canTakeLoad) == true
-                ui.units.filter { u -> u.slots.any { it.label.isNotBlank() } }.forEach { unit ->
-                    Text(
-                        PrinterHelp.unitTitle(unit), Modifier.semantics { heading() },
-                        style = MaterialTheme.typography.titleSmall, color = colors.muted,
-                    )
-                    SpoolPanel {
-                        unit.slots.filter { it.label.isNotBlank() }.forEachIndexed { i, slot ->
-                            if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                            SlotRow(slot, ui.units, can) { onPick(slot.label) }
-                        }
+        ScreenState(
+            loaded = slots != null,
+            loading = ui.loading,
+            isEmpty = slots?.isEmpty() == true,
+            empty = { Text(stringResource(R.string.spool_load_no_slots), style = MaterialTheme.typography.bodyLarge) },
+            error = ui.failure?.let { hubFailureText(it) },
+            onTryAgain = vm::load,
+            offline = !online,
+            loadedSecondsAgo = secondsSince(ui.loadedAt),
+            skeleton = {
+                Text(stringResource(R.string.spool_load_loading_slots), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+                SwSkeletonRows(SKELETON_ROWS)
+            },
+        ) {
+            val can = printer?.let(::canTakeLoad) == true
+            ui.units.filter { u -> u.slots.any { it.label.isNotBlank() } }.forEach { unit ->
+                Text(
+                    PrinterHelp.unitTitle(unit), Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleSmall, color = colors.muted,
+                )
+                SpoolPanel {
+                    unit.slots.filter { it.label.isNotBlank() }.forEachIndexed { i, slot ->
+                        if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+                        SlotRow(slot, ui.units, can) { onPick(slot.label) }
                     }
                 }
             }
@@ -276,6 +290,7 @@ fun LoadPreviewScreen(
     onOpenPrinter: () -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    online: Boolean = true,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val colors = SpoolwardenTheme.colors
@@ -289,15 +304,21 @@ fun LoadPreviewScreen(
     LoadPage(spool, modifier) {
         val printer = ui.printer
         if (printer != null) Header(stringResource(R.string.spool_load_confirm_title, printer.name, slot))
-        if (ui.checking) {
-            SwProgress(null)
-            Text(stringResource(R.string.common_checking), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+        if (ui.checking) Text(stringResource(R.string.common_checking), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+        HubNoticeOf(ui.failure, onPairAgain)
+        // the states every Hub screen has (05 3.2); Try again asks the preview again, or sends the load again
+        ScreenState(
+            loaded = ui.plan != null,
+            loading = ui.checking,
+            error = ui.failure?.let { hubFailureText(it) },
+            onTryAgain = if (ui.plan == null) vm::check else vm::load,
+            offline = !online,
+        ) {
+            ui.plan?.let { plan ->
+                PlanRows(plan)
+                Text(stringResource(R.string.spool_load_confirm_text), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            }
         }
-        ui.plan?.let { plan ->
-            PlanRows(plan)
-            Text(stringResource(R.string.spool_load_confirm_text), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
-        }
-        ui.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = if (ui.plan == null) vm::check else null) }
         if (ui.pairingRefused) NoticeCard(NoticeKind.Bad, stringResource(R.string.spool_load_pairing_refused))
         if (ui.dropped) {
             NoticeCard(

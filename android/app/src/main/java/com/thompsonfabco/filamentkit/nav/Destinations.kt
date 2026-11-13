@@ -161,6 +161,13 @@ fun NavController.replaceAdd(route: AddRoute) {
     navigate(route)
 }
 
+/**
+ * A tag tap that does nothing (05 2.6): the tag of the tag screen that is open ([tagScreen]) or of the spool screen that is
+ * open ([spoolsTag]) is tapped again.
+ */
+fun tapIsForTheOpenTag(uid: String, tagScreen: String?, spoolsTag: String?): Boolean =
+    uid == tagScreen || uid.equals(spoolsTag, ignoreCase = true)
+
 private const val MAX_STACK_DEPTH = 32
 
 /**

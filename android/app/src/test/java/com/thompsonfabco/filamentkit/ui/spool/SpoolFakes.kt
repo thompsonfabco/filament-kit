@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import com.thompsonfabco.filamentkit.net.ApiError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -64,6 +65,13 @@ internal class FakeSpoolBackend : SpoolBackend {
         calls += "search:$q:$sealedOnly"
         check("search")
         return spools
+    }
+
+    override suspend fun spool(id: Int): JsonObject {
+        calls += "spool:$id"
+        check("spool")
+        return spools.firstOrNull { (it["id"] as? JsonPrimitive)?.content == id.toString() }
+            ?: throw ApiError(404, "not_found", "spool $id was not found")
     }
 
     override suspend fun tag(uid: String): JsonObject? {

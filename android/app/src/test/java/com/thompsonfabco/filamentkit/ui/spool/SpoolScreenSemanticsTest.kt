@@ -267,14 +267,14 @@ class SpoolScreenSemanticsTest {
     }
 
     @Test fun spoolRestoredWithoutASummaryShowsTheFailureAndKeepsItsControlsOut() {
-        backend.failure = "search" to ApiError(0, "offline", "gone")
+        backend.failure = "spool" to ApiError(0, "offline", "gone")
         spoolScreen(spool = null)
         auditAllFour(listOf("Cannot reach the Hub. Check that this phone is on the home network.", "Try again"))
     }
 
     @Test fun spoolHubNotices() {
         val vm = spoolScreen()
-        backend.failure = "tag" to ApiError(401, "unauthorized", "no")
+        backend.failure = "spool" to ApiError(401, "unauthorized", "no")
         vm.refresh()
         rule.waitForIdle()
         auditAllFour(listOf("This phone is no longer paired with the Hub.", "Pair again", "Update weight"), listOf("Details"))
@@ -592,5 +592,143 @@ class SpoolScreenSemanticsTest {
         hold.complete(Unit)
         rule.waitUntil { vm.state.value.finished != null }
         assertEquals(SpoolResult.LoadedUnconfirmed("Workshop X1", "A2"), vm.state.value.finished)
+    }
+
+    // ---- 05 3.2 states on the S4.8 screens ----
+
+    @Test fun spoolsOfflineKeepsTheResultsUnderTheOfflineNotice() {
+        val vm = SearchViewModel { _, _ -> results }
+        var online by mutableStateOf(true)
+        host("Spools") { SearchScreen(vm, onOpenSpool = {}, onPairAgain = {}, nfc = NfcState.Ready, online = online) }
+        vm.setQuery("poly")
+        vm.search()
+        rule.waitForIdle()
+        online = false
+        auditAllFour(listOf("Offline. Showing what was loaded", "Polymaker PolyTerra PLA Charcoal Black"))
+    }
+
+    @Test fun spoolsOfflineWithNothingLoadedIsTheCannotReachTheHubState() {
+        val vm = SearchViewModel { _, _ -> results }
+        host("Spools") { SearchScreen(vm, onOpenSpool = {}, onPairAgain = {}, nfc = NfcState.Ready, online = false) }
+        auditAllFour(listOf("Cannot reach the Hub", "Check that this phone is on the home network.", "Try again"))
+    }
+
+    @Test fun spoolOfflineShowsWhatWasLoadedAndItsAge() {
+        spoolScreen(online = false)
+        auditAllFour(listOf("Offline. Showing what was loaded", "Needs the Hub. Reconnecting…", "Polymaker"), listOf("Details"))
+    }
+
+    @Test fun tagOfflineWhileLookingUp() {
+        SpoolCache.clear()
+        backend.tagGate = CompletableDeferred()
+        val vm = TagViewModel("04A1B2", backend)
+        host("Tag 04A1B2") { TagScreen(vm, "04A1B2", onLinked = {}, onLink = {}, onAddNew = {}, onPairAgain = {}, online = false) }
+        auditAllFour(listOf("Cannot reach the Hub", "Try again"))
+    }
+
+    @Test fun aSlowFirstLoadSaysItIsStillWaitingAfterTenSeconds() {
+        SpoolCache.clear()
+        backend.tagGate = CompletableDeferred()
+        val vm = TagViewModel("04A1B2", backend)
+        host("Tag 04A1B2") { TagScreen(vm, "04A1B2", onLinked = {}, onLink = {}, onAddNew = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Still waiting for the Hub…").assertDoesNotExist()
+        rule.mainClock.advanceTimeBy(10_500)
+        rule.waitForIdle()
+        rule.onNodeWithText("Still waiting for the Hub…").assertExists()
+    }
+
+    @Test fun loadPrintersOfflineAfterTheyWereRead() {
+        SpoolCache.clear()
+        val vm = LoadPrintersViewModel(FakeLoad(listOf(x1, voron, locked), PrinterDetail(x1, status), plan))
+        var online by mutableStateOf(true)
+        host("Load into a printer") {
+            LoadPrintersScreen(vm, polymaker.toSpoolSummary(), onPick = { _, _ -> }, onOpenPrinters = {}, onPairAgain = {}, online = online)
+        }
+        rule.waitForIdle()
+        online = false
+        auditAllFour(listOf("Offline. Showing what was loaded", "Workshop X1"))
+    }
+
+    @Test fun linkPreviewOffline() {
+        SpoolCache.clear()
+        SpoolCache.put(spoolJson(212, sealed = true).toSpoolSummary())
+        val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
+        var online by mutableStateOf(true)
+        host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}, online = online) }
+        rule.waitForIdle()
+        online = false
+        auditAllFour(listOf("Offline. Showing what was loaded"))
+    }
+
+    // ---- 05 7.8 tag already in use ----
+
+    @Test fun aSpoolWithATagOfItsOwnOffersTheReplaceButton() {
+        SpoolCache.clear()
+        SpoolCache.put(spoolJson(212, sealed = true, tag = "04FFFF").toSpoolSummary())
+        backend.failure = "link" to ApiError(
+            409, "tag_conflict", "in use",
+            kotlinx.serialization.json.buildJsonObject {
+                put("reason", kotlinx.serialization.json.JsonPrimitive("tag_on_other_spool"))
+                put("other_spool", spoolJson(90, tag = "04A1B2"))
+            },
+        )
+        val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
+        host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}) }
+        auditAllFour(listOf("This tag is already linked to another spool:", "Spool 90", "Move the tag here and replace this spool's tag", "Cancel"))
+        rule.onNodeWithText("Move the tag to this spool").assertDoesNotExist()
+    }
+
+    @Test fun aSpoolThatHasAnotherTagIsNotToldTheTagIsLinkedElsewhere() {
+        SpoolCache.clear()
+        SpoolCache.put(spoolJson(212, sealed = true).toSpoolSummary())
+        backend.failure = "link" to ApiError(
+            409, "tag_conflict", "has a tag",
+            kotlinx.serialization.json.buildJsonObject { put("reason", kotlinx.serialization.json.JsonPrimitive("spool_has_other_tag")) },
+        )
+        val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
+        host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}) }
+        auditAllFour(listOf("Move the tag here and replace this spool's tag", "Cancel"))
+        rule.onNodeWithText("This tag is already linked to another spool:").assertDoesNotExist()
+    }
+
+    // ---- the sheet's own window ----
+
+    private fun sheetBack() {
+        rule.runOnUiThread {
+            (org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.activity.ComponentDialog).onBackPressedDispatcher.onBackPressed()
+        }
+        rule.waitForIdle()
+    }
+
+    @Test fun systemBackOnTheWeightSheetClosesAnEmptyOneAndAsksWhenTyped() {
+        backend.updateAnswer = { _, _, _, _ -> spoolJson(214, remaining = 482.0) }
+        val vm = spoolScreen()
+        rule.waitForIdle()
+        rule.onNodeWithText("Update weight").performClick()
+        rule.waitForIdle()
+        // nothing typed: Back closes the sheet
+        sheetBack()
+        assertEquals(null, vm.state.value.weight)
+        rule.onNodeWithText("Update weight").performClick()
+        rule.waitForIdle()
+        vm.setWeight("622")
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+        rule.waitForIdle()
+        assertTrue(vm.state.value.weight!!.canSave)
+        // typed: Back asks, Stay keeps it
+        sheetBack()
+        rule.onNodeWithText("Leave without saving?").assertExists()
+        rule.onNodeWithText("Stay").performClick()
+        rule.waitForIdle()
+        assertEquals("622", vm.state.value.weight?.text)
+    }
+
+    @Test fun systemBackOnTheMoveSheetClosesIt() {
+        val vm = spoolScreen()
+        vm.openMove()
+        rule.waitForIdle()
+        sheetBack()
+        assertEquals(null, vm.state.value.move)
     }
 }

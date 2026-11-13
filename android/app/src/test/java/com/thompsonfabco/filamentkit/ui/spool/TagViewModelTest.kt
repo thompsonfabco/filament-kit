@@ -192,4 +192,30 @@ class TagViewModelTest {
         assertEquals(SpoolResult.TagLinked, vm.state.value.finished)
         assertNull(vm.state.value.failure)
     }
+
+    @Test fun theGateIsHeldWhileTheLinkIsWrittenSoATagTappedMeanwhileWaits() = runTest(dispatcher) {
+        val gate = LoadGate()
+        val vm = LinkPreviewViewModel("04A1B2", 212, null, backend, gate)
+        advanceUntilIdle()
+        vm.link()
+        assertTrue(gate.writing.value)
+        advanceUntilIdle()
+        assertFalse(gate.writing.value)
+    }
+
+    @Test fun tryAgainSendsTheFailedLinkAgainWithItsForceFlag() = runTest(dispatcher) {
+        backend.failure = "link" to ApiError(
+            409, "tag_conflict", "in use", buildJsonObject { put("reason", JsonPrimitive("tag_on_other_spool")) },
+        )
+        val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
+        advanceUntilIdle()
+        backend.failure = "link" to ApiError(0, "offline", "gone")
+        vm.moveHere()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.failedWrite)
+        vm.retry()
+        advanceUntilIdle()
+        assertEquals(SpoolResult.TagMoved, vm.state.value.finished)
+        assertTrue(backend.calls.last().contains("force=true:dry=false"))
+    }
 }

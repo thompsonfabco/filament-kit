@@ -54,6 +54,7 @@ data class LoadPrintersUi(
     val printers: List<Printer>? = null,
     val loading: Boolean = true,
     val failure: HubFailure? = null,
+    val loadedAt: Long? = null,
 ) {
     /** The only printer that can take the load, when there is exactly one: the step is skipped. */
     val only: Printer? get() = printers?.filter(::canTakeLoad)?.singleOrNull()
@@ -72,7 +73,7 @@ class LoadPrintersViewModel(private val backend: LoadBackend) : ViewModel() {
         viewModelScope.launch {
             try {
                 val list = backend.printers().filter { it.configured }
-                _state.update { LoadPrintersUi(list, loading = false) }
+                _state.update { LoadPrintersUi(list, loading = false, loadedAt = System.currentTimeMillis()) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -89,6 +90,7 @@ data class LoadSlotsUi(
     val slots: List<AmsSlot>? = null,
     val loading: Boolean = true,
     val failure: HubFailure? = null,
+    val loadedAt: Long? = null,
 )
 
 class LoadSlotsViewModel(private val printerId: String, private val backend: LoadBackend) : ViewModel() {
@@ -106,7 +108,7 @@ class LoadSlotsViewModel(private val printerId: String, private val backend: Loa
                 val d = backend.printer(printerId)
                 val units = d.status?.ams.orEmpty()
                 val slots = units.flatMap { it.slots }.filter { it.label.isNotBlank() }
-                _state.update { LoadSlotsUi(d.printer, units, slots, loading = false) }
+                _state.update { LoadSlotsUi(d.printer, units, slots, loading = false, loadedAt = System.currentTimeMillis()) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

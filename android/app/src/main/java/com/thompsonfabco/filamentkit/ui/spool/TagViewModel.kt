@@ -126,6 +126,9 @@ data class LinkPreviewUi(
     val other: SpoolSummary? = null,
     val linking: Boolean = false,
     val failure: HubFailure? = null,
+    /** [failure] came from the write, not the dry run: Try again sends it again ([lastForce] as it was). */
+    val failedWrite: Boolean = false,
+    val lastForce: Boolean = false,
     /** The link was written; the screen goes to the spool screen, which shows this as its result line. */
     val finished: SpoolResult? = null,
 )
@@ -139,6 +142,7 @@ class LinkPreviewViewModel(
     private val spoolId: Int,
     val gross: Double?,
     private val backend: SpoolBackend,
+    private val gate: LoadGate = LoadGate(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(LinkPreviewUi(spool = SpoolCache.get(spoolId)))
     val state: StateFlow<LinkPreviewUi> = _state.asStateFlow()
@@ -147,8 +151,14 @@ class LinkPreviewViewModel(
         check()
     }
 
+    /** Try again: the write that failed, else the dry run. */
+    fun retry() {
+        val s = _state.value
+        if (s.failedWrite) write(s.lastForce) else check()
+    }
+
     fun check() {
-        _state.update { it.copy(checking = true, failure = null, conflict = null, other = null) }
+        _state.update { it.copy(checking = true, failure = null, failedWrite = false, conflict = null, other = null) }
         viewModelScope.launch {
             try {
                 val spool = backend.link(spoolId, uid, force = false, dryRun = true, gross = gross).toSpoolSummary()
@@ -168,7 +178,9 @@ class LinkPreviewViewModel(
     private fun write(force: Boolean) {
         val s = _state.value
         if (s.linking || s.finished != null) return
-        _state.update { it.copy(linking = true, failure = null) }
+        _state.update { it.copy(linking = true, failure = null, failedWrite = false, lastForce = force) }
+        // a tag tapped meanwhile waits: the write is not cut short by another screen
+        gate.set(true)
         viewModelScope.launch {
             try {
                 val spool = backend.link(spoolId, uid, force = force, dryRun = false, gross = gross).toSpoolSummary().copy(id = spoolId)
@@ -177,9 +189,15 @@ class LinkPreviewViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { failed(it.copy(linking = false), e) }
+                _state.update { failed(it.copy(linking = false), e).let { f -> if (f.failure != null) f.copy(failedWrite = true) else f } }
+            } finally {
+                gate.set(false)
             }
         }
+    }
+
+    override fun onCleared() {
+        gate.set(false)
     }
 
     private fun failed(s: LinkPreviewUi, e: Exception): LinkPreviewUi {

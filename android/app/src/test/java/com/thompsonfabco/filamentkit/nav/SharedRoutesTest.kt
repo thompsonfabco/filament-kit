@@ -110,3 +110,12 @@ class SharedRoutesTest {
         assertTrue("one Back returns to the screen that was open", nav.currentDestination?.hasRoute(PrintersRoute::class) == true)
     }
 }
+
+class TagTapTest {
+    @org.junit.Test fun aRepeatedTapOfTheOpenTagDoesNothingButAnotherTagDoes() {
+        org.junit.Assert.assertTrue(tapIsForTheOpenTag("4:a1:b2:c3", "4:a1:b2:c3", null))
+        org.junit.Assert.assertTrue("the spool screen of that tag", tapIsForTheOpenTag("4:a1:b2:c3", null, "4:A1:B2:C3"))
+        org.junit.Assert.assertFalse(tapIsForTheOpenTag("4:a1:b2:c3", "4:ff:ee:dd", "4:11:22:33"))
+        org.junit.Assert.assertFalse(tapIsForTheOpenTag("4:a1:b2:c3", null, null))
+    }
+}

@@ -110,7 +110,7 @@ class SearchViewModelTest {
         error = IllegalStateException("boom")
         vm.search()
         assertEquals(HubFailure.Unexpected, vm.state.value.failure)
-        error = ApiError(502, "http", "The server returned an error (502)")
+        error = ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
         vm.search()
         assertEquals(HubFailure.Unexpected, vm.state.value.failure)
         error = ApiError(503, "spoolman_unreachable", "Spoolman is not reachable")
