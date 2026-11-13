@@ -449,7 +449,7 @@ class CappedString : public Stream {
 };
 static const int HTTP_TOO_BIG = -100;   // our code: reply refused for size
 
-// quick: one short attempt (background retries and taps), see LIST_QUICK_TIMEOUT_MS.
+// quick: one short attempt (background refreshes and taps), see LIST_QUICK_TIMEOUT_MS.
 int apiRequest(const String& url, const char* body, String& resp, bool quick = false) {
   int code = -1;
   for (int attempt = 0; attempt < (quick ? 1 : 2); attempt++) {
@@ -1047,7 +1047,7 @@ void loop() {
   // background refreshes (skipped while a result or the printer list is showing)
   if (!resultUntil && menu.mode == MODE_SLOTS && !settleAt) {
     if (listsDue(millis(), listsAt, serverOk, scr != SCR_OFF, LIST_REFRESH_MS, listRetryMs(listFails))) {
-      refreshLists(listFails > 0); if (scr != SCR_OFF) redraw();
+      refreshLists(true); if (scr != SCR_OFF) redraw();   // always one short attempt: even the first failure of an outage
     }
     if (millis() - updCheckAt > UPD_CHECK_MS) { checkForUpdate(); if (scr != SCR_OFF) redraw(); }
   }
