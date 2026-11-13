@@ -742,7 +742,7 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 
 | Group | Item | Key | Kind of answer |
 |---|---|---|---|
-| Appearance | Theme for new devices | `appearance.theme` (section 13) | choice: Console (dense and technical) · Workbench (calm cards) · Spool (colourful and roomy) · Panes (simple lists) |
+| Appearance | Theme for new devices | `appearance.theme` (section 13) | choice: Console (dense and technical) · Workbench (calm cards) · Palette (colourful and roomy) · Panes (simple lists) |
 | General | Display name | `server_name` | text |
 | General | Spoolman address | (none: `spoolman address`, 9.12) | text, an http address; only when Spoolman runs on another machine. On Save the Hub first checks that Spoolman answers there, as `spoolman address` does, and saves it after the other changes |
 | Storage locations | Locations | `locations` | text, separated by commas |
@@ -1427,7 +1427,7 @@ this way (`Error: the Anthropic API key is a secret. Fix: sudo spoolwarden confi
 key stops with exit code 2 and lists the keys.
 
 **`config theme [<theme>]`** shows or sets the Hub's theme for new devices: devices that have not chosen a theme
-open in it; devices that chose keep theirs (foundations section 6.2). Names: `console`, `workbench`, `spool`,
+open in it; devices that chose keep theirs (foundations section 6.2). Names: `console`, `workbench`, `palette`,
 `panes`, any case.
 
 ```
@@ -1690,7 +1690,7 @@ Gaps marked "remains" outside the command-line column are specified in the docum
 The command line calls the same code as the Hub page's routes (`/setup/api/...`) or the Hub's own API
 (`/api/info`, `/api/printers/<serial>/...`). The design above needs these from the Hub:
 
-1. **Theme for new devices.** A stored Hub setting (`appearance.theme`, values `console`, `workbench`, `spool`,
+1. **Theme for new devices.** A stored Hub setting (`appearance.theme`, values `console`, `workbench`, `palette`,
    `panes`; default `console`), written by `config theme` / `config set` and by the Hub page's Settings >
    Appearance, and delivered to the Hub page, the web app and the app so a device that has not chosen opens in
    it. No such setting exists today.

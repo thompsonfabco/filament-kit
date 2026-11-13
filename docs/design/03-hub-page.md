@@ -263,7 +263,7 @@ two groups separated by a hairline.
 
 - **Desktop and tablet:** the navigation rail, `--rail` wide, icon above a `--fs-xs` label; labels that do not fit
   in two lines ("Recently added", "Slicer presets", "Flash a device") break into two lines, never truncate. The
-  active entry has `--accent-soft` ground, weight 600 label, the 3 px `--accent` mark at the rail's inner edge and
+  active entry has `--accent-soft` ground, weight 600 label, the 3 px `--accent-text` mark at the rail's inner edge and
   `aria-current="page"`. Hover shows the live summary as a tooltip.
 - **Phone:** the bottom bar with Overview, Printers, Recent, Settings, More. More opens the More sheet: the six
   other sections, each a row with icon, name, live summary and chevron; the active one has `aria-current="page"`.
@@ -1242,7 +1242,7 @@ Description: "How this page looks on this device." Per device; needs no setup co
 | Field | Type | Does | Stored / endpoint |
 |---|---|---|---|
 | Light, dark or system | Appearance control (segmented choice with icons), hint "System follows this device's light or dark setting." | Applies at once | `localStorage` `spoolwarden.appearance` (foundations section 5) |
-| Theme | Theme picker: four preview tiles Console "Dense and technical", Workbench "Calm cards", Spool "Colourful and roomy", Panes "Simple lists"; the current one checked | Applies at once, no reload | `localStorage` `spoolwarden.look` (foundations section 6.2) |
+| Theme | Theme picker: four preview tiles Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists"; the current one checked | Applies at once, no reload | `localStorage` `spoolwarden.look` (foundations section 6.2) |
 | Theme for new devices | Select of the four themes, hint "Used by browsers and phones that have not chosen a theme." | Saved with the group's Save | Section 15 (no endpoint yet) |
 
 Save: **Save theme for new devices** (only this field needs it; the button is enabled only while it changed).

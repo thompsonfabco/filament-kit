@@ -39,12 +39,12 @@ Fixed dimensions that are not steps of the space scale are entries of the `size`
 them through `SpoolwardenTheme.sizes` (`08-platform-mapping.md`); no component writes them inline. "Existing" entries
 are in `tokens.json` today; "new" entries are `size` entries this app needs, added to every theme with the values
 given here (the web reads the same entries where it draws the same part). The other themes scale with their type
-and density: Workbench and Panes one step roomier than Console where a size holds text, Spool larger again, and
+and density: Workbench and Panes one step roomier than Console where a size holds text, Palette larger again, and
 its swatches larger still because the spool colour is that theme's main mark. Collection, settings and slot rows use `ListItem`'s own minimum height (56 dp), the
 accepted difference of `08-platform-mapping.md` for rows; it is not a size entry. Selection outlines (2 dp) are border
 widths, not sizes.
 
-| `size` entry | Console | Workbench | Spool | Panes | Status | Used for |
+| `size` entry | Console | Workbench | Palette | Panes | Status | Used for |
 |---|---|---|---|---|---|---|
 | `hairline` | 1 dp | 1 dp | 1 dp | 1 dp | existing | Hairlines between rows and around panels |
 | `thumb` | 96 dp | 96 dp | 96 dp | 96 dp | existing | Photo thumbnails in strips (6.2, 10.2) |
@@ -63,7 +63,7 @@ widths, not sizes.
 | `list-pane` | 360 dp | 360 dp | 400 dp | 360 dp | new | Minimum width of the list pane of `ListDetailPaneScaffold` (2.1) |
 
 In `tokens.json` the values are written in px (`"label-col": "118px"`); 1 px in the file is 1 dp in the app. In
-Spool the row swatch is drawn as a ring (the spool seen from the side); in the other themes it is a rounded
+Palette the row swatch is drawn as a ring (the spool seen from the side); in the other themes it is a rounded
 rectangle with `--r-s` corners.
 
 ---
@@ -309,7 +309,7 @@ the Console theme.
 | Dialog | Medium width and up: `AlertDialog` (`BasicAlertDialog` when it holds a form), `--r-l`, `--e2`, scrim `--scrim`. Compact width: the same content in a `ModalBottomSheet` (F7: dialogs become bottom sheets on phones). | Title `--fs-l` `--fw-title`; body `--fs-b`; buttons at the bottom right (in a sheet: full width, stacked, confirming button on top); confirming button last in reading order on wide screens. Every "dialog" in this document follows this rule. |
 | Sheet | `ModalBottomSheet`, `--r-l` top corners, drag handle | Used for short tasks on one thing (update weight, move, slot actions) |
 | Toast | `Snackbar` in the `Scaffold`'s `SnackbarHost`, `--surface` ground, `--border-strong` outline, `--e2` | One line, optional one action ("Undo"); held 5 s, 10 s when it has an action, by the host's own timer |
-| Determinate bar (02 8.3; "progress line" in this document) | `LinearProgressIndicator`, 4 dp, track `--surface-3`, indicator `--accent` | Determinate when the Hub gives a number; indeterminate while it does not |
+| Determinate bar (02 8.3; "progress line" in this document) | `LinearProgressIndicator`, 4 dp, track `--surface-3`, indicator `--accent-text` | Determinate when the Hub gives a number; indeterminate while it does not |
 | Spinner | `CircularProgressIndicator`, 16 dp, inside the button that started the work | Replaced by the word "Working…" when animations are off |
 | Skeleton | `Box` blocks in `--surface-2` with `--r-s` corners | Same height as the rows they stand for; no shimmer |
 | Empty state | `Column` centred in a panel with a dashed `--border` | `empty-mark` circle in `--accent-soft` with the section icon, title `--fs-l` `--fw-title`, one sentence `--muted`, at most two buttons |
@@ -1420,7 +1420,7 @@ A panel on 10.2, titled "Ask the Label Reader to correct it".
 |---|---|
 | Ready | Field "What is wrong?" (placeholder "e.g. brand is Polymaker", up to 3 lines); hint "The Label Reader reads the photos again with your note and proposes changes. Nothing changes until you accept."; button "Ask the Label Reader" (outlined). Empty note: error "Say what is wrong first, e.g. brand is Polymaker." |
 | Waiting | Progress line and "Asking the Label Reader… (up to a minute)". |
-| Proposal | Before-and-after change list (02 7.9) with `--accent-soft` ground and a 1 dp `--accent` outline: heading "Proposal: 2 changes", one row per change: field name, old value struck through in `--muted`, arrow, new value at `--fw-label` ("Name: PolyTerra PLA Charcoal Black → PolyTerra PLA Charcoal Black (Matte)"); TalkBack reads "Name, PolyTerra PLA Charcoal Black, becomes PolyTerra PLA Charcoal Black (Matte)". With no photo kept: "No photo was kept: it worked from the saved values and your note." Buttons "Accept" (main) and "Discard" (outlined). |
+| Proposal | Before-and-after change list (02 7.9) with `--accent-soft` ground and a 1 dp `--accent-text` outline: heading "Proposal: 2 changes", one row per change: field name, old value struck through in `--muted`, arrow, new value at `--fw-label` ("Name: PolyTerra PLA Charcoal Black → PolyTerra PLA Charcoal Black (Matte)"); TalkBack reads "Name, PolyTerra PLA Charcoal Black, becomes PolyTerra PLA Charcoal Black (Matte)". With no photo kept: "No photo was kept: it worked from the saved values and your note." Buttons "Accept" (main) and "Discard" (outlined). |
 | No change | "The Label Reader changed nothing." |
 | Accepted | `ok` line "Accepted. 2 fields changed; revision 2 keeps the old values." |
 | Discarded | Hollow-circle line "Proposal discarded. Nothing changed." |
@@ -1486,7 +1486,7 @@ On expanded width the list is the left pane and the chosen group the right pane 
 | Element | Text / behaviour |
 |---|---|
 | Appearance | Group title "Appearance". Segmented control with icons and words: "Light", "Dark", "System". Applies at once. |
-| Theme | Group title "Theme". Four preview tiles in a 2 × 2 grid on compact and medium width, one row of four on expanded width: each tile a small drawing of the theme in its own colours, the name and one line: "Console" "Dense and technical"; "Workbench" "Calm cards"; "Spool" "Colourful and roomy"; "Panes" "Simple lists". The tiles are a radio group; the chosen one has a 2 dp `--accent` outline and a check mark. Choosing applies at once, with no save button. |
+| Theme | Group title "Theme". Four preview tiles in a 2 × 2 grid on compact and medium width, one row of four on expanded width: each tile a small drawing of the theme in its own colours, the name and one line: "Console" "Dense and technical"; "Workbench" "Calm cards"; "Palette" "Colourful and roomy"; "Panes" "Simple lists". The tiles are a radio group; the chosen one has a 2 dp `--accent-text` outline and a check mark. Choosing applies at once, with no save button. |
 | Note | "These choices are kept on this phone only." |
 
 Stored in the app's settings store (DataStore) beside each other. When nothing is chosen yet the app uses System and
