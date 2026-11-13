@@ -479,7 +479,7 @@ private fun FindResults(results: List<KlipperFound>, network: String, viewModel:
     val space = SpoolwardenTheme.space
     if (results.isEmpty()) {
         Text(
-            stringResource(R.string.printer_find_none, network.ifEmpty { stringResource(R.string.printer_find_placeholder).substringAfter(' ') }),
+            if (network.isEmpty()) stringResource(R.string.printer_find_none_own) else stringResource(R.string.printer_find_none, network),
             style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted,
         )
         return

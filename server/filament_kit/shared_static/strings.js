@@ -2180,6 +2180,7 @@ window.SW_TEXT = Object.freeze({
   "printer_find_hint": "Leave empty to search the Hub's own network.",
   "printer_find_network": "Network to search (optional)",
   "printer_find_none": "No Klipper printers answered on {network}.",
+  "printer_find_none_own": "No Klipper printers answered on the Hub's own network.",
   "printer_find_placeholder": "e.g. 192.0.2.0/24",
   "printer_find_search": "Search",
   "printer_find_searching": "Searching…",
