@@ -140,11 +140,12 @@ Tooling · S · Depends on: S0.2 · Beside: S0.3, S0.4, S0.5
 ### S0.7 Lint checks
 Hub page, web app, app · S · Depends on: S0.6 · Beside: S0.4, S0.5
 - **Files today:** none (the checks are new); they read `setup_static/*`, `web/static/*` and `<app>/**/*.kt`.
-- **Change:** literal colours and values (AUT-2; 08 test 5), native dialogs (AUT-3), fields outside the field
+- **Change:** literal colours and values, and `var(--accent)` outside the listed labelled fills (AUT-2 with CON-9; 08 test 5), native dialogs (AUT-3), fields outside the field
   component (AUT-4), press-down handlers (AUT-6), and the words lint with its word list (AUT-7: internal words, the
   old names of the "Was" column of F2, "color", "OK" and "here" as whole button or link texts). Today's findings go
-  into `tests/literal_allowlist.txt` and the allow-lists of AUT-3, AUT-4, AUT-6 and AUT-7, each with file and
-  reason, so the build stays green; every later step that rewrites a file removes that file's entries (open
+  into `tests/literal_allowlist.txt` and the allow-lists of AUT-3, AUT-4, AUT-6 and AUT-7, each with file,
+  reason and the number of findings of that kind in that file, so the build stays green and a new finding in a
+  listed file still fails (the count may only go down); every later step that rewrites a file removes that file's entries (open
   point 4), and S7.2 removes the last AUT-7 entries.
 - **Keep:** every shipped file.
 - **Check:** each lint fails on a planted `confirm(`, `#fff`, bare `<input>` and a button text "Modules" in a
@@ -482,7 +483,7 @@ Hub page · M · Depends on: S1.11, S2.2 (same file), S2.11 · Beside: S2.4, S2.
 Hub page · M · Depends on: S2.12 (same file) · Beside: S2.4, S2.5, S2.7, S2.9, S2.10
 - **Files today:** `setup_static/setup_tabs.js` (Updates, lines 240-286); `setup_console/updates_tab.py`.
 - **Change:** 03 12: version key-value list, **Check now**, **Update to <version>** with its dialog, release notes,
-  Nightly builds toggle with its dialogs, Roll back, the uninstall line as a code block.
+  Roll back, the uninstall line as a code block.
 - **Keep:** the signed-release checks and the meaning of the refusal texts.
 - **Other interfaces:** command line S5.8 (`update`, `uninstall`). The app has its own App updates (S4.15); Hub
   updates install on the Hub and start from the Hub page or the command line (06 12).
@@ -742,6 +743,8 @@ app · M · Depends on: S0.4, S0.9 · Beside: Stage 3 steps
   `android:configChanges="uiMode"` on `MainActivity` and `setApplicationNightMode`, so a change of light or dark
   never recreates the activity or drops what is being typed. Status colours come from the tokens; the window
   background from `sw_window.xml`; dynamic colour stays off. The whole app changes look at once.
+  The launcher icon of 05 1 and 08 11 comes with this step: the adaptive icon (foreground mark, `sw_launcher_bg`
+  background, monochrome layer).
 - **Keep:** screens, texts, navigation.
 - **Check:** 08 test 5 Kotlin part, with the app's entries removed from `tests/literal_allowlist.txt` in this step
   (the camera's black ground and the swatch fill stay listed with their reasons); AUT-1 Material roles; the app's
@@ -1108,8 +1111,8 @@ all four · S · Depends on: S7.1 and every interface step of Stages 1 to 5 · B
 - **Files today:** the allow-list of AUT-7 (S0.7); `tests/strings_allowlist.txt` (S0.8);
   `android/app/build.gradle.kts` and the manifest (app label "filament-kit").
 - **Change:** AUT-7 with no allow-list entry for an old name; any old name left on a screen replaced; any text left
-  in the Hub page or web app scripts moved into the catalogue; the app label "Spoolwarden" ("Spoolwarden Nightly"
-  for nightly builds) (05 1; open point 12).
+  in the Hub page or web app scripts moved into the catalogue; the app label "Spoolwarden"
+  (05 1; open point 12).
 - **Keep:** the app's package and id (the rename's part).
 - **Check:** AUT-7 and AUT-9 pass; 08 test 7 with no entry left in `tests/strings_allowlist.txt` for
   `setup_static/` or `web/static/`.
@@ -1261,9 +1264,9 @@ Things the design parts leave open. Each needs a decision before the step named;
 2. **Settled: `size.side-w` and `size.list-w`.** They are in `tokens.json` in every theme (256px and 360px); nothing is left to set.
 3. **Settled: the `size` entries of 05 1 in every theme.** 05 1 gives the value of each entry for Console,
    Workbench, Palette and Panes; `swatch-row` is two entries, `swatch-row-w` and `swatch-row-h`. S0.2 adds them.
-4. **How the checks start on today's code.** S0.6 and S0.7 list today's findings in the allow-lists so the build stays
-   green, and each step removes its files' entries. 08 describes the allow-lists only as reviewed exceptions; whether
-   they may carry today's findings for a time, or the checks start in a report-only mode, is open.
+4. **Settled: how the checks start on today's code.** The allow-lists carry today's findings, each with file, reason
+   and count; a count may only go down; each step removes the entries of the files it rebuilds; the lists are empty
+   of today's findings when stage 2 ends.
 5. **Where the shared files are served, and the component script's name.** N29 asks for one place for both pages but
    names no path; 08 13 names `components.css` but not the shared component script. Needed by S0.10 and S0.11.
 6. **Settled: the fake data for the tests.** `mockups/CONTENT-SPEC.md` is one example Hub, "Workshop hub", with

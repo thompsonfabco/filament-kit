@@ -814,7 +814,7 @@ when the page is left or hidden. Until the first message arrives, the status and
 While a command is sent its button shows the working shape. The inline result sits under the row: the words above,
 or, when the printer refuses, the sentence in the reply's `message` as sent (until the Hub sends one: "The printer
 said no: <the reply's `error` text>"; 02-components 8.6 and 12; never the raw reply, never JSON), or the Hub's text (its refusals: printer offline, no reply, busy, slot in use,
-certificate changed, needs developer mode, no preset, write refused, already running). A refusal that points at
+certificate changed, needs Developer Mode, no preset, write refused, already running). A refusal that points at
 Slicer presets carries the button "Open Slicer presets".
 
 **Camera.** A box with a 16:9 ratio, radius `--r`, ground `--surface-3`, under the controls. MJPEG printers:
@@ -825,7 +825,7 @@ muted playsinline>` from GET `printers/<id>/camera/<name>`. The picture is never
 |---|---|
 | Starting | skeleton and "Starting the camera…" |
 | Browser cannot play HLS | "This browser cannot play this printer's camera. Use Safari on iPhone or Mac." |
-| Did not start | "The camera did not start. Check that the printer is on, LAN mode live view is on, and not too many views are open." · "Try again" |
+| Did not start | "The camera did not start. Check that the printer is on, LAN Mode Liveview is on, and not too many views are open." · "Try again" |
 | Too many views (429) | "Too many camera views are open (4 at most). Close one on another phone or tab." · "Try again" |
 
 ### 6.5 Slots, load and unload

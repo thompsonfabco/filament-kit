@@ -321,7 +321,7 @@ Where each job is started:
 | `name` | Started from |
 |---|---|
 | `apply` | Features; Settings > General (Spoolman address), Network and addresses, Weigh Station voice |
-| `update`, `rollback`, `check`, `channel_nightly`, `channel_stable` | Updates |
+| `update`, `rollback`, `check` | Updates |
 | `backup`, `restore` | Settings > Backups and restore |
 | `library_update`, `library_rollback` | Settings > Filament Catalog |
 | `remote_issue` | Settings > Network and addresses |
@@ -1514,9 +1514,9 @@ half.
 
 ## 12. Updates
 
-**Purpose.** See the installed version, update, follow nightly builds, roll back. Address `#updates`.
+**Purpose.** See the installed version, update, roll back. Address `#updates`.
 
-**Data.** `G updates` (view) → `{installed, latest, newer, checked_at, half_install, installed_text, channel, notes,
+**Data.** `G updates` (view) → `{installed, latest, newer, checked_at, half_install, installed_text, notes,
 going_back, held, failed, previous, module_on, schedule, update_refused, rollback_refused}`.
 
 ### 12.1 Layout
@@ -1531,14 +1531,14 @@ Desktop
 | | Last checked    2026-11-12 03:00              | |                                              | |
 | | Checked by itself daily (Automatic updates).  | |                                              | |
 | +-----------------------------------------------+ +----------------------------------------------+ |
-| +-- Roll back ----------------------------------+ +-- Nightly builds ----------------------------+ |
-| | Goes back to 0.5.1, the version this one      | | [ ] Follow nightly builds                     | |
-| | replaced. Settings and data stay.             | | Off: only signed releases are installed.      | |
-| | [Roll back to 0.5.1]                          | | Nightly builds are untested and unsigned.     | |
-| +-----------------------------------------------+ +----------------------------------------------+ |
+| +-- Roll back ----------------------------------+                                                |
+| | Goes back to 0.5.1, the version this one      |                                                |
+| | replaced. Settings and data stay.             |                                                |
+| | [Roll back to 0.5.1]                          |                                                |
+| +-----------------------------------------------+                                                |
 |  To remove Spoolwarden: on the Hub, run sudo spoolwarden uninstall.                               |
 +--------------------------------------------------------------------------------------------------+
-Tablet: two columns become one; Version, release notes, Roll back, Nightly builds.
+Tablet: two columns become one; Version, release notes, Roll back.
 Phone:  one column; the header buttons go full width, Update first.
 ```
 
@@ -1556,6 +1556,8 @@ Phone:  one column; the header buttons go full width, Update first.
 | Checking | "Checked by itself <schedule> (Automatic updates)." or "Not checked by itself: Automatic updates are switched off." with link **Features** |
 | Refused | `update_refused` as an error line under the buttons |
 
+A Hub that still runs a nightly build shows its version as "<version>-nightly.<date>"; Update then installs the latest signed release over it, even when that release has a lower number, and the confirm dialog says so: "This replaces the nightly build with the signed release <latest>."
+
 | Control | Type | Does | Endpoint |
 |---|---|---|---|
 | **Check now** | Default (header) | Job | job `check` (code) |
@@ -1563,12 +1565,6 @@ Phone:  one column; the header buttons go full width, Update first.
 
 **What <latest> brings** (when `newer` and `notes`) or **Release notes of <latest>** (when not newer and `notes`):
 the notes as text with line breaks kept, at most 72 characters a line, in a box that scrolls inside past 24rem.
-
-**Nightly builds.** Toggle "Follow nightly builds" showing what the Hub does now (`channel`). Changing it never
-flips by itself: it opens the confirm, and the job changes the channel; the toggle follows the Hub afterwards. Text
-under it: "On: <installed> is installed, and each new nightly build after it. Nightly builds are untested and
-unsigned." or "Off: only signed releases are installed. Nightly builds are untested and unsigned." Shown only when
-`G updates` reports a `channel`.
 
 **Roll back.** "Goes back to <previous>, the version this one replaced. Settings and data stay." or "No earlier
 version is kept, so there is nothing to roll back to." `going_back` as a Note block. Danger **Roll back to
@@ -1583,8 +1579,6 @@ version is kept, so there is nothing to roll back to." `going_back` as a Note bl
 |---|---|---|---|
 | Update | "Update to <v>?" | "Spoolwarden stops while it installs and starts again by itself. Settings and data stay. The version before is kept, so you can roll back." | Cancel · **Update to <v>** (primary) |
 | Roll back | "Roll back to <v>?" | "Spoolwarden stops while it installs and starts again by itself. Settings and data stay." | Cancel · **Roll back** (danger) |
-| Follow nightly builds | "Follow nightly builds?" | "Nightly builds are untested and unsigned: Spoolwarden checks a download only against the nightly's own checksum list, which proves nothing about who built it. The newest nightly build is installed now, and each new one after it. Turn this off to go back to signed releases." | Cancel · **Follow nightly builds** (danger) |
-| Stop following | "Go back to signed releases?" | "The latest signed release replaces the nightly build now." | Cancel · **Use signed releases** (primary) |
 
 ### 12.4 States
 
@@ -1887,7 +1881,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | **Update to <latest>** + confirm | Kept | Header primary with dialog (12.2, 12.3) |
 | `update_refused` text | Kept | Error line and tooltip (12.2) |
 | Card "What <v> brings" / "Release notes of <v>" | Kept | (12.2) |
-| Card "Nightly builds": checkbox, two confirms, state texts | Kept | Toggle with dialogs (12.2, 12.3) |
+| Card "Nightly builds": checkbox, two confirms, state texts | Not part of the design | The product has no nightly builds |
 | Card "Roll back": texts, `going_back`, **Roll back to <v>** + confirm, `rollback_refused` | Kept | (12.2, 12.3) |
 | Footer "To remove the kit: at the server, sudo filament-kit uninstall." | Kept | Foot with code block (12.2) |
 | "Reading…", red error | Renamed | Skeleton, error state (12.4) |

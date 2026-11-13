@@ -25,8 +25,8 @@ Contents: 1 Baseline · 2 App shell · 3 Shared parts and states · 4 Pairing ·
 | Icons | Spoolwarden's own vector drawables (F10). No Material icon library. |
 | Strings | Every user-visible text is in `res/values/strings.xml` (section 15). |
 | Units on screen | dp for layout; `sp` derived from the type tokens so the phone's font size setting scales all text. |
-| App label | "Spoolwarden" (nightly builds: "Spoolwarden Nightly"). |
-| Launcher icon | An adaptive icon (`android:icon` and `android:roundIcon`): foreground the Spoolwarden mark (a spool seen from the side inside a ring) drawn in the icon style of F10 in `--on-accent`, inside the adaptive icon's safe zone; background Console's light `--accent`; a monochrome layer of the same mark for themed icons. Nightly builds (and any other pre-release flavour) use Console's light `--warn` as the background, so the two apps tell apart in the launcher. Files and colours: `08-platform-mapping.md` section 11. |
+| App label | "Spoolwarden". |
+| Launcher icon | An adaptive icon (`android:icon` and `android:roundIcon`): foreground the Spoolwarden mark (a spool seen from the side inside a ring) drawn in the icon style of F10 in `--on-accent`, inside the adaptive icon's safe zone; background Console's light `--accent`; a monochrome layer of the same mark for themed icons. Files and colours: `08-platform-mapping.md` section 11. |
 | Threads | No file, database or network read on the main thread: assets (the Licences texts of 12.5 included), DataStore and every Hub request are read in a coroutine on `Dispatchers.IO` (`produceState`, or the screen's view model) and the screen shows a skeleton until they arrive. |
 
 Spacing, size and radius values in this document are the tokens of F4.3 read as dp: `--s1` 4 dp, `--s2` 8 dp,

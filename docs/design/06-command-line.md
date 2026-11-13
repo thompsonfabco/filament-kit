@@ -138,7 +138,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `klipper add-on` | Prints the commands that install the Klipper add-on | Klipper add-on |
 | `recent` (same as `recent history`) | Recently added records (9.3) | Recently added |
 | `recent show <record> [--photos]` | One record: fields, confidence, revisions | Record detail |
-| `recent revise <record> --note TEXT [--item N]` | Ask the AI to correct it | Ask the AI to correct it |
+| `recent revise <record> --note TEXT [--item N]` | Ask the Label Reader to correct it | Ask the Label Reader to correct it |
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
 | `devices` (same as `devices list`) | Paired devices (9.4) | Devices |
@@ -188,7 +188,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `certificate` | Make the Hub's certificate if missing; print its fingerprint | (none) |
 | `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |
 | `spoolman address [<url>]` | Show or change the Spoolman in use (checked before saving) | Settings > General, Spoolman address |
-| `update [--check \| --rollback \| --channel stable\|nightly] [--scheduled]` | Updates | Updates |
+| `update [--check \| --rollback] [--scheduled]` | Updates | Updates |
 | `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
 | `migrate-ops [--apply]` | Move a filament-ops bundle in (a dry run without `--apply`) | (none) |
@@ -463,7 +463,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | Map slots | `◐ Mapping the slots of Workshop X1… step 2 of 4` |
 | Collect a report | `◐ Collecting a report from Workshop X1…` |
 | Check the Anthropic API key | `◐ Checking the API key…` |
-| Ask the AI to correct a record | `◐ Asking the AI… (up to a minute)` |
+| Ask the Label Reader to correct a record | `◐ Asking the Label Reader… (up to a minute)` |
 | Label Reader test | `◐ Reading 2 photos with On this Hub…` |
 | Apply features | `◐ Applying the changes…` |
 | Update, roll back, check | `◐ Updating to 0.5.3…`, `◐ Rolling back to 0.5.1…`, `◐ Checking for updates…` |
@@ -594,8 +594,6 @@ Every question, word for word (names are examples):
 | `presets accept-updates` | the list (9.5), then `Accept these 3 updates? The Slicer Sync writes them at its next run, after its backup.` | `3 updates accepted; the Slicer Sync writes them at its next run, after its backup.` |
 | `update` | `Update to 0.5.3? Spoolwarden stops while it installs and starts again by itself. Settings and data stay. The version before is kept, so you can roll back.` | the update runs |
 | `update --rollback` | `Roll back to 0.5.1? Spoolwarden stops while it installs and starts again by itself. Settings and data stay.` | the roll back runs |
-| `update --channel nightly` | `Follow nightly builds? Nightly builds are untested and unsigned: Spoolwarden checks a download only against the nightly's own checksum list, which proves nothing about who built it. The newest nightly build is installed now, and each new one after it. To go back to signed releases, run sudo spoolwarden update --channel stable.` | `Following nightly builds.` |
-| `update --channel stable` | `Go back to signed releases? The latest signed release replaces the nightly build now.` | `Back on signed releases.` |
 | `remote get-certificate` | `Get the certificate now? Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router.` | the job runs (9.12) |
 | `setup-code --new` | `Make a new setup code? The old one stops working.` | the new code, then `The old setup code no longer works.` |
 | `setup-code --revoke-trusted` | `Revoke every trusted computer? Each one needs the setup code again.` | `2 trusted computers revoked.` |
@@ -1220,7 +1218,7 @@ Photos open on the Hub page: https://192.0.2.10:8710/setup#recent/35
 
 ```
 $ sudo spoolwarden recent revise 35 --note "it is the matte one"
-◐ Asking the AI… (up to a minute) 6 s
+◐ Asking the Label Reader… (up to a minute) 6 s
 The Label Reader suggests:
   Name: PolyTerra PLA Charcoal Black
      → PolyTerra PLA Charcoal Black (Matte)
@@ -1556,9 +1554,8 @@ line):
 | Command | Output |
 |---|---|
 | `update --check` | `◐ Checking for updates…`, then `Installed: 0.5.2.` and `Latest release: 0.5.3.` or `Latest release: 0.5.2 (up to date).`; the Hub page's held and failed lines when they apply; `Checked by itself <schedule> (the Automatic updates feature).` or `Not checked by itself: the Automatic updates feature is off.` |
-| `update` | section 7, `◐ Updating to 0.5.3…` with the installer's lines dim below it, then `● done  Installed 0.5.3. The Hub is back.` or `× failed  Updating to 0.5.3 failed.` with the log's last lines and `Fix: see the whole log: sudo spoolwarden logs`. Nothing newer: `No updates available: 0.5.2 is the latest.` |
+| `update` | section 7, `◐ Updating to 0.5.3…` with the installer's lines dim below it, then `● done  Installed 0.5.3. The Hub is back.` or `× failed  Updating to 0.5.3 failed.` with the log's last lines and `Fix: see the whole log: sudo spoolwarden logs`. Nothing newer: `No updates available: 0.5.2 is the latest.` On a Hub that still runs a nightly build, update installs the latest signed release over it and prints: going back to the signed release <latest>. |
 | `update --rollback` | section 7, `◐ Rolling back to 0.5.1…` with the installer's lines dim below it, then `● done  Rolled back to 0.5.1. The Hub is back.` or `× failed  Rolling back to 0.5.1 failed.` with the log's last lines and `Fix: see the whole log: sudo spoolwarden logs` (exit 1). Nothing kept: `Error: no earlier version is kept, so there is nothing to roll back to.` |
-| `update --channel nightly\|stable` | section 7, then the Hub page's state sentence (`On: …` / `Off: only signed releases are installed.`) |
 | `uninstall [--purge]` | section 7, then `◐ Removing Spoolwarden…` with the removal script's own lines dim and indented below it as they arrive (section 6.6), then `Spoolwarden is removed from this machine.` (exit 0) or `× failed  The removal stopped: <the script's last line>.` (exit 1). The removal script is the one kept with the installed release; when only an older release is kept: `Note: using the removal script of 0.5.1, the newest kept release; no copy of 0.5.2 is kept.` When none is kept: `Error: no copy of a release is kept, so there is no removal script to run.` with `Fix: download spoolwarden-0.5.2.tar.gz from the releases page, unpack it, then in its folder run:` and `sudo ./uninstall.sh` on its own line (with ` --purge` when given) |
 
 A stopped half-install is shown by `status` and `update --check`: `▲ needs a look  The last install or update
@@ -1660,8 +1657,7 @@ this design.
 | Backups: make, list, download | N | Y | N | Y | Y | none for the command line |
 | Keep nightly backups for N days | N | Y | N | N | Y (`backup keep`, `config`) | **closed** |
 | Restore from a backup | N | Y | N | Y | Y | none for the command line |
-| Updates: check, install, roll back, channel | P | Y | N | Y | Y | web app: remains |
-| Nightly builds | N | Y | N | Y | Y (asks) | none for the command line |
+| Updates: check, install, roll back | P | Y | N | Y | Y | web app: remains |
 | Anthropic API key: set, check, remove | N | Y | N | Y | Y (`config`, Label Reader) | none for the command line |
 | Web passphrase | N | Y | N | Y | Y | none for the command line |
 | Catalog token | N | Y | N | N | Y (`catalog token`, `config`) | **closed** |
