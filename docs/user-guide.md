@@ -747,6 +747,51 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   server's address changes, run `sudo filament-kit modules apply` on the station computer so it answers the new
   one.
 
+## Intake history
+
+Every time you save a spool at intake, the server keeps a record of it: the photos of the label (when the save came
+from a label read), the values you saved, the weight and the tag. From the record you can correct a wrong read
+afterwards without scanning the spool again, and undo the correction.
+
+A record is made when a save succeeds, from any place you save from: the Android app, the phone web app, the intake
+station's buttons or the command line. A save you typed by hand makes a record without a photo. The records live on the
+server, are part of its backups, and a photo goes nowhere except to the AI you set up, and only when you ask for a
+revision.
+
+**Where to find it.** On the setup page, the **Intake** tab, and in the phone web app that the kit server itself
+serves, the **History** tab. Records are listed newest first, each with its first photo (tap to enlarge), the spools'
+names, the time and a mark for its state: **as detected**, **revised by AI** or **edited by hand**. **Open** shows the
+rest of the photos and the saved values of each spool.
+
+**Correct a record by hand.** Change any of the values and press **Save changes**. No AI is needed.
+
+**Correct a record with a note.** Type what is wrong in the note box, for example "brand is Polymaker", and press
+**Ask the AI to correct it**. The server asks the AI again with the photos, the first result and your note, and shows
+the values before and after. Nothing is written until you press **Accept**. If you saved several spools from one
+intake, accepting applies to all of them. A revision counts as one label read toward the daily limit. With label
+reading off on this server, the note box is greyed.
+
+**What a correction does to Spoolman.** A filament that other spools also use is never edited: the spools are moved to
+a filament with the new values, found if one exists and created if not. A filament only this record's spools use is
+edited in place. A filament left with no spools is reported, not deleted. Each spool keeps its NFC tag, its opened
+state, its location and its used weight.
+
+**Undo.** **Undo revision** takes back the newest correction that is not undone yet, one step at a time.
+
+**How many records are kept.** The newest 20 by default. Change the number under **Settings**, **General**, **Intake
+records kept** on the setup page, or in `sudo filament-kit config`. 0 keeps none, and the highest is 500. The oldest
+records and their photos go first. The Intake tab shows how much disk the photos use.
+
+**On the command line.**
+
+| Command | What it does |
+|---|---|
+| `filament-kit intake history` | Lists the records, newest first, with their photo files on the server. |
+| `filament-kit intake show <id>` | One record with its corrections. |
+| `filament-kit intake revise <id> --note "brand is X" [--item N]` | Shows the values before and after, then asks before applying (`--yes` applies without asking). |
+| `filament-kit intake edit <id> [--item N] field=value ...` | Edits by hand. |
+| `filament-kit intake undo <id>` | Undoes the newest correction. |
+
 ## Tag readers and printer slots
 
 ### More tag readers
