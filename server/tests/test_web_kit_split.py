@@ -234,15 +234,38 @@ def test_no_kit_folder_is_writable_by_the_web_user(kit, tmp_path):
     st = kit / "state"
     for d in ("profiles", "failed", "library", "web"):
         (st / d).mkdir()
-    cfg = config.load()
     web_access.shared_files(os.getuid(), os.getgid(), chown=lambda *a: None)
-    web_access.grant(54321, os.getuid(), cfg)
+    web_access.grant(54321, os.getuid())
     for d in ("profiles", "library", "web"):
         assert acl.users_of(st / d)[54321] & acl.W == 0, d
     assert 54321 not in acl.users_of(st / "failed")
     assert acl.users_of(st / "profiles", acl.DEFAULT)[54321] & acl.W == 0
     assert not (st / "reads.json").exists() or 54321 not in acl.users_of(st / "reads.json")
     assert acl.users_of(st / "inventory.lock") == {54321: acl.R}       # a lock is taken on a read-only fd
+
+
+@LINUX
+def test_the_apply_takes_back_the_web_users_read_on_the_old_slot_token(kit, tmp_path):
+    """Review R181 note 2: an install that used the old scanner's slot service granted the web unit read on its token
+    file; with slot_service gone, the next `modules apply` (web_access.grant) takes that grant back."""
+    from filament_kit import acl
+    if not acl.supported():
+        pytest.skip("no xattrs")
+    token = kit / "etc" / "h2d_token"
+    token.write_text("t" + chr(10), encoding="utf-8")
+    try:
+        acl.grant(token, {54321: acl.R, 54322: acl.R})
+    except OSError:
+        pytest.skip("no ACLs on this file system")
+    cfg = config.load()
+    cfg["slot_service"] = {"state_url": "x", "set_url": "y", "token_file": str(token)}
+    config.save(cfg)
+    for d in ("profiles", "failed", "library", "web"):
+        (kit / "state" / d).mkdir(exist_ok=True)
+    web_access.grant(54321, os.getuid())
+    assert acl.users_of(token) == {54322: acl.R}                      # only the web user's grant is taken
+    assert token.read_text() == "t" + chr(10)
+    assert acl.revoke(token, {54321}) is False                         # nothing left to take
 
 
 def test_the_web_writes_only_its_own_folder():

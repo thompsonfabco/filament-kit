@@ -1036,7 +1036,7 @@ def test_r2b_grants_give_the_web_user_exactly_its_paths(env, tmp_path):
     (etc / "key.pem").write_text("k", encoding="utf-8")
     web_access.shared_files(os.getuid(), os.getgid(), chown=lambda *a: None)
     WEB, KIT = 54321, os.getuid()
-    web_access.grant(WEB, KIT, {"orders": {"file": None}})
+    web_access.grant(WEB, KIT)
     R, W, X = acl.R, acl.W, acl.X
     assert acl.users_of(etc) == {WEB: X} and acl.users_of(st) == {WEB: X}
     assert acl.users_of(etc / "config.json") == {WEB: R} and acl.users_of(etc / "anthropic_key") == {WEB: R}
