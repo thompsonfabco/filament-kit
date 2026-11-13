@@ -37,6 +37,7 @@
 #include "reader_api.h"
 #include "menu.h"
 #include "settings.h"
+#include "ota_digest.h"
 
 using namespace reader;
 
@@ -695,16 +696,12 @@ bool httpsGet(HTTPClient& http, WiFiClientSecure& tls, const String& url) {
 }
 
 // sig2 signs SHA-256("fk-reader-ota\x01" || image SHA-256 || build, 8 bytes big-endian);
-// tools/ota_publish.py build_digest() makes the same bytes.
+// tools/ota_publish.py build_digest() makes the same bytes (otaSigPreimage, pinned by a test on both sides).
 bool verifySig(const uint8_t imgHash[32], long build, const char* sigB64) {
-  static const char PREFIX[] = "fk-reader-ota\x01";
-  uint8_t be[8];
-  for (int i = 0; i < 8; i++) be[i] = (uint8_t)((uint64_t)build >> (56 - 8 * i));
+  std::string pre = otaSigPreimage(imgHash, build);
   uint8_t hash[32];
   mbedtls_sha256_context c; mbedtls_sha256_init(&c); mbedtls_sha256_starts(&c, 0);
-  mbedtls_sha256_update(&c, (const uint8_t*)PREFIX, sizeof(PREFIX) - 1);
-  mbedtls_sha256_update(&c, imgHash, 32);
-  mbedtls_sha256_update(&c, be, 8);
+  mbedtls_sha256_update(&c, (const uint8_t*)pre.data(), pre.size());
   mbedtls_sha256_finish(&c, hash); mbedtls_sha256_free(&c);
   uint8_t sig[80]; size_t sigLen = 0;
   if (mbedtls_base64_decode(sig, sizeof(sig), &sigLen, (const uint8_t*)sigB64, strlen(sigB64)) != 0)

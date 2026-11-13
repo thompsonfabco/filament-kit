@@ -9,6 +9,7 @@
 #include "reader_api.h"
 #include "menu.h"
 #include "settings.h"
+#include "ota_digest.h"
 
 using namespace reader;
 
@@ -609,6 +610,23 @@ void test_tag_gate_missed_polls_do_not_count_as_lift() {
   TEST_ASSERT_TRUE(g.accept("a", 9000, 2500));
 }
 
+// ---- OTA signature digest (ota_digest.h) -------------------------------------------
+
+// The same vector and expected hex as test_sig2_preimage_matches_the_firmware in
+// tools/test_ota_publish.py: image hash 00 01 .. 1f, build 1793600000.
+static const char* OTA_PREIMAGE_HEX =
+    "666b2d7265616465722d6f746101000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f000000006ae82a00";
+
+void test_ota_sig_preimage_matches_publisher() {
+  uint8_t hash[32];
+  for (int i = 0; i < 32; i++) hash[i] = (uint8_t)i;
+  std::string pre = otaSigPreimage(hash, 1793600000L);
+  static const char* HEX = "0123456789abcdef";
+  std::string hex;
+  for (unsigned char c : pre) { hex.push_back(HEX[c >> 4]); hex.push_back(HEX[c & 15]); }
+  TEST_ASSERT_EQUAL_STRING(OTA_PREIMAGE_HEX, hex.c_str());
+}
+
 // ---- settings over USB (settings.h) -----------------------------------------------
 
 static const char* GOOD = R"({"ssid":"Home","pass":"pw","base":"https://kit.example.net/filament/reader/","token":"abcdefghijklmnop_-12"})";
@@ -748,6 +766,7 @@ int main(int, char**) {
   RUN_TEST(test_tag_gate_cooldown_for_same_tag);
   RUN_TEST(test_tag_gate_held_tag_does_not_post_after_refused_tap);
   RUN_TEST(test_tag_gate_missed_polls_do_not_count_as_lift);
+  RUN_TEST(test_ota_sig_preimage_matches_publisher);
   RUN_TEST(test_wanted_label_prefers_saved);
   RUN_TEST(test_unit_dropping_out_briefly_keeps_selection);
   RUN_TEST(test_settings_parse_the_required_ones);
