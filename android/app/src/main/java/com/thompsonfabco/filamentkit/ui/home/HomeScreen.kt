@@ -147,7 +147,7 @@ internal fun HomeScreen(
     }
     val right: @Composable ColumnScope.() -> Unit = {
         if (showPrinters) {
-            PrintersPanel(printers, connection, onOpenPrinter, onOpenPrinters, onRefreshPrinters)
+            PrintersPanel(printers, connection, onOpenPrinter, onOpenPrinters, onRefreshPrinters, onReviewCertificate, onPairAgain)
         }
         if (showPresets) {
             var updatesOpen by remember { mutableStateOf(false) }
@@ -406,31 +406,36 @@ private fun PrintersPanel(
     onOpenPrinter: (String) -> Unit,
     onOpenAll: () -> Unit,
     onRefresh: () -> Unit,
+    onReviewCertificate: () -> Unit,
+    onPairAgain: () -> Unit,
 ) {
     // the Hub lists the printers it has found too; the panel shows the configured ones
     val list = state.printers?.filter { it.configured }
     val offline = connection == Connection.Offline
-    val waiting = (connection is Connection.Online || connection == Connection.Checking) && !state.failed
     HomePanel(
         stringResource(R.string.home_printers_title),
         count = list?.size,
         action = { SwButton(stringResource(R.string.home_printers_all), onOpenAll, kind = SwButtonKind.Quiet) },
     ) {
         when {
-            list == null && state.failed && state.message != null -> NoticeCard(
-                NoticeKind.Bad, state.message,
-                actions = listOf(SwAction(stringResource(R.string.common_try_again), onRefresh)),
-            )
-            // nothing loaded and the Hub cannot be reached: 05 3.2 "Offline", never an endless skeleton
-            list == null && !waiting -> SwEmptyState(
+            // nothing loaded: say why by state (05 3.3, 3.4, 3.2)
+            list == null && connection is Connection.CertChanged -> HubNotice(HubNoticeKind.CertificateChanged, onReviewCertificate)
+            list == null && connection == Connection.Unpaired -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+            // the local network notice already stands in for the content
+            list == null && connection == Connection.NeedsLocalNetwork -> Unit
+            list == null && offline -> SwEmptyState(
                 icon = R.drawable.sw_st_hollow, title = stringResource(R.string.common_offline_title),
                 text = stringResource(R.string.common_offline_text), dashed = false,
                 secondary = SwAction(stringResource(R.string.common_try_again), onRefresh),
             )
+            list == null && state.failed -> NoticeCard(
+                NoticeKind.Bad, state.message ?: stringResource(R.string.common_hub_no_answer),
+                actions = listOf(SwAction(stringResource(R.string.common_try_again), onRefresh)),
+            )
             list == null -> SwSkeletonRows(PRINTER_SKELETON_ROWS)
             else -> {
                 // the data stays when a read fails; while the Hub is simply offline the top notice says so
-                if (state.failed && !offline) {
+                if (state.failed && !offline && connection !is Connection.CertChanged && connection != Connection.Unpaired) {
                     NoticeCard(
                         NoticeKind.Bad, state.message ?: stringResource(R.string.common_hub_unreachable),
                         actions = listOf(SwAction(stringResource(R.string.common_try_again), onRefresh)),

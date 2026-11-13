@@ -202,10 +202,9 @@ class HomeScreenTest {
         rule.onAllNodesWithText("No printers yet.").assertCountEquals(0)
     }
 
-    @Test fun aFailedFirstReadSaysSoWithTryAgain() {
+    @Test fun aFailedFirstReadWhileOnlineSaysSoWithTryAgain() {
         show(printers = HomePrintersState(failed = true))
-        text("Cannot reach the Hub").assertExists()
-        text("Check that this phone is on the home network.").assertExists()
+        text("The Hub did not answer. Check that it is on, then try again.").assertExists()
         text("Try again").performClick()
         assertEquals(listOf("refresh"), calls)
     }
@@ -295,6 +294,37 @@ class HomeScreenTest {
         assertEquals(1, filledButtons())
         val filled = rule.onAllNodes(hasTestTag(MAIN_BUTTON_TAG)).fetchSemanticsNodes()
         assertEquals("Add by hand", filled.single().config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text })
+    }
+
+    @Test fun withNothingLoadedACertificateChangeShowsTheHubNoticeInThePanel() {
+        show(connection = Connection.CertChanged("AA", "BB"), printers = HomePrintersState(failed = true))
+        // once at the top of Home and once where the printers would be
+        rule.onAllNodesWithText("Review the certificate").assertCountEquals(2)
+        rule.onAllNodesWithText("Review the certificate")[1].performClick()
+        assertEquals(listOf("review"), calls)
+        rule.onAllNodesWithText("Cannot reach the Hub").assertCountEquals(0)
+        rule.onAllNodesWithText("Try again").assertCountEquals(0)
+    }
+
+    @Test fun withNothingLoadedAnUnpairedPhoneShowsTheHubNoticeInThePanel() {
+        show(connection = Connection.Unpaired, printers = HomePrintersState(failed = true))
+        rule.onAllNodesWithText("Pair again").assertCountEquals(2)
+        rule.onAllNodesWithText("Pair again")[1].performClick()
+        assertEquals(listOf("pair"), calls)
+        rule.onAllNodesWithText("Try again").assertCountEquals(0)
+    }
+
+    @Test fun withNothingLoadedAndNoLocalNetworkAccessThePanelAddsNothing() {
+        show(connection = Connection.NeedsLocalNetwork, printers = HomePrintersState(failed = true))
+        rule.onAllNodesWithText("Try again").assertCountEquals(0)
+        rule.onAllNodesWithText("Cannot reach the Hub").assertCountEquals(0)
+        rule.onAllNodesWithText("No printers yet.").assertCountEquals(0)
+    }
+
+    @Test fun onlyOfflineSaysCannotReachTheHubWithTryAgain() {
+        show(connection = Connection.Offline, printers = HomePrintersState(failed = true))
+        text("Cannot reach the Hub").assertExists()
+        text("Try again").assertExists()
     }
 
     @Test fun theHubsOwnRefusalIsShownAsGiven() {
