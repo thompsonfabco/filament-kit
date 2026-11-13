@@ -3,7 +3,7 @@
 // tests/page_audit.js in it and prints the findings as JSON. Test-only: never shipped, never run on a Hub.
 //
 //   node tests/aut5_run.mjs --url http://127.0.0.1:8799/intake --views "#add,#spools" [--widths 1280,320]
-//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/aut5_allowlist.txt]
+//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/aut5_allowlist.txt] [--wide-font]
 //
 // Besides the audit's own checks, each pass fails on: sideways scroll (content wider than the layout viewport), a view
 // that did not open (the address or title is not the one asked for), and an uncaught error in the page.
@@ -16,7 +16,10 @@
 // After a view is opened the runner waits --settle ms (a floor), then until no region is aria-busy (at most 10 s; a
 // region still busy after that is a finding of the audit). At 600 px or narrower the page is a touch device (mobile
 // metrics and touch emulation, so (pointer: coarse) is true); "passes" in the output gives innerWidth, dark and coarse
-// of every pass.
+// of every pass. --wide-font swaps the page's two font tokens (--sans, --mono) for wide faces (Verdana and Lucida
+// Console, or DejaVu Sans and Sans Mono where those are installed): a Linux runner falls back to DejaVu, which is wider
+// than the fonts a Windows or Mac machine has, so this shows there what a layout does when the text is wider. A
+// "sideways scroll" finding names the widest element that reaches past the viewport.
 // Exit 0: no findings; 1: findings, or allow-list counts that do not match (printed); 2: the run itself failed (no
 // browser found, the browser closed, a call timed out); 3: a browser was found but could not start headless here
 // (its last error lines are printed). The browser is driven over the DevTools protocol with Node's own
@@ -37,6 +40,31 @@ const VIEWS = (args.views || "").split(",").map((v) => v.trim()).filter(Boolean)
 const WIDTHS = (args.widths || "1280,320").split(",").map(Number);
 const SCHEMES = (args.schemes || "light,dark").split(",");
 const SETTLE = Number(args.settle || 100);
+// a constructed style sheet, not a <style> element: the page's content security policy refuses inline styles
+const WIDE_FONT = "document.addEventListener('DOMContentLoaded', () => { const s = new CSSStyleSheet(); " +
+  "s.replaceSync(':root{--sans:Verdana,\"DejaVu Sans\",sans-serif !important;" +
+  "--mono:\"Lucida Console\",\"DejaVu Sans Mono\",\"Courier New\",monospace !important}'); " +
+  "document.adoptedStyleSheets = [...document.adoptedStyleSheets, s]; });";
+// the element that makes the page wider than the viewport: the one whose right edge goes furthest past it (selector
+// path, how far, its text); elements inside a box that scrolls or clips on its own do not count
+const WIDEST = `(() => {
+  const vw = document.documentElement.clientWidth, name = (e) => e.tagName.toLowerCase() + (e.id ? "#" + e.id : "") +
+    [...e.classList].slice(0, 2).map((c) => "." + c).join("");
+  let best = null;
+  for (const e of document.body.querySelectorAll("*")) {
+    const r = e.getBoundingClientRect();
+    if (!r.width || r.right <= vw + 0.5 || getComputedStyle(e).visibility === "hidden") continue;
+    let clipped = false;
+    for (let p = e.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+      if (/auto|scroll|hidden|clip/.test(getComputedStyle(p).overflowX) && p.getBoundingClientRect().right <= vw + 0.5) { clipped = true; break; }
+    }
+    if (clipped) continue;
+    if (!best || r.right > best.right) best = { e, right: r.right };
+  }
+  if (!best) return "";
+  const path = []; for (let e = best.e; e && e !== document.body && path.length < 4; e = e.parentElement) path.unshift(name(e));
+  return path.join(" > ") + " reaches " + Math.round(best.right) + " px: " + (best.e.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
+})()`;
 const BUSY_LIMIT = 10000;
 const CALL_TIMEOUT = 30000;
 const PROFILE_PREFIX = "aut5-";
@@ -162,6 +190,7 @@ async function main() {
     };
     await send("Page.enable");
     await send("Runtime.enable");
+    if (args["wide-font"]) await send("Page.addScriptToEvaluateOnNewDocument", { source: WIDE_FONT });
     const report = [], passes = [];
     let pass = 0;
     for (const scheme of SCHEMES) {
@@ -189,7 +218,10 @@ async function main() {
             dark: matchMedia("(prefers-color-scheme: dark)").matches, coarse: matchMedia("(pointer: coarse)").matches })`);
           const extra = [];
           if (page.hash !== view) extra.push({ check: "view did not open", where: "page", detail: `asked ${view}, shows ${page.hash}` });
-          if (page.sideways) extra.push({ check: "sideways scroll", where: "page", detail: `${page.width} px` });
+          if (page.sideways) {
+            const widest = await evaluate(WIDEST);
+            extra.push({ check: "sideways scroll", where: "page", detail: `${page.width} px${widest ? "; " + widest : ""}` });
+          }
           for (const e of errors.splice(0)) extra.push({ check: "page error", where: "page", detail: String(e).split("\n")[0] });
           const findings = [...found, ...extra].filter((f) => {
             const a = ALLOW.get(`${view} | ${f.check} | ${f.where}`) || ALLOW.get(` | ${f.check} | ${f.where}`);

@@ -167,6 +167,16 @@ def test_the_page_audit_passes_on_every_section(hub):
     assert out["views"] == len(SECTIONS) * 2 * 2 and out["failing"] == 0      # ten sections, two widths, light and dark
 
 
+def test_devices_and_flash_do_not_scroll_sideways_at_320_px_in_a_wide_font(hub):
+    """A Linux runner has no Segoe UI or Consolas and falls back to DejaVu, which is wider: the layout must hold there
+    too, so these two sections (the ones a Linux CI run found wider than 320 px) run with the page's font tokens swapped for wide faces (the runner's --wide-font)."""
+    run = _run("--url", hub, "--views", "#devices,#flash", "--widths", "320", "--wide-font")      # no allow-list: only the scroll is asked about
+    assert run.returncode in (0, 1), run.stdout + run.stderr
+    found = [(r["view"], r["scheme"], f["detail"]) for r in json.loads(run.stdout).get("report", [])
+             for f in r["findings"] if f["check"] == "sideways scroll"]
+    assert not found, found
+
+
 def test_an_unlabelled_button_added_to_the_served_page_fails_the_audit(planted):
     run = _run("--url", planted, "--views", VIEWS, "--allow", str(ALLOW))      # with the whole allow-list on
     assert run.returncode == 1, run.stdout + run.stderr
