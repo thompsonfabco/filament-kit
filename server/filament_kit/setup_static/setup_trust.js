@@ -35,21 +35,21 @@ function trustGone() {
 function trustCard() {
   const box = boxFor("trust"), list = boxFor("trust-list");
   async function show() {
-    list.replaceChildren(h("p", { class: "muted", textContent: "Reading…" }));
+    working(list, SW.t("common_reading"));
     let r;
     try { r = await api("trust/list", { code: theCode() }); } catch (e) { if (e.locked) throw e; say(list, e.message, false); return; }
     fill(list,
-      ...r.devices.map((d) => h("div", { class: "row item" },
+      ...r.devices.map((d) => h("div", { class: "row item", "data-key": d.id },
         h("span", { textContent: `${d.name}${d.id === r.this ? " (this computer)" : ""} · made ${fmtDate(d.created)} · last seen ${fmtDate(d.last_seen)} at ${d.last_address === "loopback" ? "the server itself" : d.last_address} · runs out ${fmtDate(d.expires)}` }),
         h("button", { class: "secondary", textContent: "Rename", on: { click: async () => {
-          if (await asking(box, `trust/${d.id}/rename`, { kind: "entry", title: SW.t("devices_rename_title", { name: d.name }), confirm: SW.t("common_rename"),
-            fields: [entryField({ label: SW.t("common_field_name"), name: "name", value: d.name }, "common_error_name")] }, ([name]) => ({ name: name.trim() }))) show();
+          await asking(box, `trust/${d.id}/rename`, { kind: "entry", title: SW.t("devices_rename_title", { name: d.name }), confirm: SW.t("common_rename"),
+            fields: [entryField({ label: SW.t("common_field_name"), name: "name", value: d.name }, "common_error_name")] }, ([name]) => ({ name: name.trim() }));
         } } }),
         h("button", { class: "secondary", textContent: "Revoke", on: { click: async () => {
-          if (await asking(box, `trust/${d.id}/revoke`, destroy("devices_revoke_one_title", "devices_revoke_one_body", "devices_revoke_one_confirm", { name: d.name }))) { loadTrust(); show(); }
+          if (await asking(box, `trust/${d.id}/revoke`, destroy("devices_revoke_one_title", "devices_revoke_one_body", "devices_revoke_one_confirm", { name: d.name }))) loadTrust();
         } } }))),
       r.devices.length ? h("div", { class: "row" }, h("button", { class: "danger", textContent: "Revoke all", on: { click: async () => {
-        if (await asking(box, "trust/revoke_all", destroy("devices_revoke_all_title", "devices_revoke_all_body", "devices_trusted_revoke_all"))) { loadTrust(); show(); }
+        if (await asking(box, "trust/revoke_all", destroy("devices_revoke_all_title", "devices_revoke_all_body", "devices_trusted_revoke_all"))) loadTrust();
       } } })) : h("p", { class: "muted", textContent: "No computer is trusted." }));
   }
   const pills = pill(T.enabled, "on", "off");

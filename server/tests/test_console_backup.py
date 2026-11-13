@@ -166,7 +166,7 @@ def test_keep_days_goes_through_the_helper(app):
 
 
 def test_the_settings_tab_has_the_card_and_the_page_its_script(app):
-    assert "backupCard()" in (STATIC / "setup.js").read_text(encoding="utf-8")
+    assert " backupCard, " in (STATIC / "setup.js").read_text(encoding="utf-8")
     src = (STATIC / "setup_backup.js").read_text(encoding="utf-8")
     assert "innerHTML" not in src and 'confirm: word.value.trim()' in src
     assert "The zip is not encrypted and holds the setup secrets" in src

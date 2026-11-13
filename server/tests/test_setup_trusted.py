@@ -316,7 +316,7 @@ def test_the_page_offers_it_in_the_unlock_dialog_and_keeps_the_rules():
     # S1.5: no offer after an unrelated change; the unlock dialog's checkbox, there while the feature is on
     assert "offerTrust" not in trust and "SW.lock.trustOffered = !!T.enabled" in trust
     setup = (STATIC / "setup.js").read_text(encoding="utf-8")
-    assert "offerTrust" not in setup and "codeIn" not in setup and "trustCard()" in setup
+    assert "offerTrust" not in setup and "codeIn" not in setup and "readersCard, trustCard]" in setup
     # the code is held in memory by the shared script and sent in the body, never stored by the page
     assert "const theCode = () => SW.lock.code" in setup and "code: theCode()" in setup
     every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("setup*.js"))

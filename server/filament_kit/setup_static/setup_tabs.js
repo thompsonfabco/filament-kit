@@ -57,7 +57,7 @@ async function jobTick() {
 
 // read only when pressed, it can be long (03 2.1); while Locked it asks for the code in place
 function showWholeLog() {
-  const box = h("div");
+  const box = slot();
   return coded(box, async () => {
     jobNote.replaceChildren(box);
     let at = 0, text = "";
@@ -76,7 +76,7 @@ const ROW_MARK = { ok: ["ok", "OK"], fail: ["bad", "needs a look"], info: ["", "
 function rowEl(r) {
   if (r.state === "detail") return h("p", { class: "muted indent", textContent: r.text });
   const [cls, word] = ROW_MARK[r.state] || ROW_MARK.info;
-  const box = h("div");
+  const box = slot();
   return h("div", { class: "item" },
     h("p", {}, h("span", { class: "pill " + cls, textContent: word }), " ", r.text),
     r.state === "fail" && r.fix ? h("p", { class: "muted indent", textContent: `Fix: ${r.fix}` }) : null,
@@ -117,12 +117,12 @@ function overviewTab() {
 function modesCard() {
   const box = boxFor("modes");
   async function ask(m) {
-    box.replaceChildren(h("p", { class: "muted", textContent: "…" }));
+    working(box, "…");
     let p;
     try { p = await api(`modules/preview?mode=${encodeURIComponent(m.name)}`); } catch (e) { say(box, e.message, false); return; }
     if (p.refused) { say(box, p.refused, false); return; }
     const inputs = p.needs.map((n) => ({ key: n.key, el: h("input", { placeholder: n.prompt }) }));
-    box.replaceChildren(
+    fill(box,
       h("p", { textContent: `Set the mode to ${m.name}.` }),
       ...p.notes.map((n) => h("p", { class: "muted", textContent: n })),
       h("p", { class: "muted", textContent: "On afterwards: " + (p.after.join(", ") || "nothing") }),
@@ -133,7 +133,7 @@ function modesCard() {
           const r = await change(box, "modules/mode", { mode: m.name, settings }, (x) => say(box, x.changed ? "Saved; applying…" : "Unchanged.", true));
           if (r && r.changed) followApply(true);
         } } }),
-        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => box.replaceChildren() } })));
+        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => fill(box) } })));
   }
   return card(`Mode: ${S.mode}`,
     h("div", { class: "row" }, ...S.modes.map((m) => h("button", {
@@ -147,7 +147,7 @@ function modesCard() {
 // ----- Updates -----
 // `question`: the ask options of its dialog (10.11, 12.3); the job starts once it is confirmed
 function startJob(box, name, question) {
-  const started = () => { box.replaceChildren(); followApply(true); };
+  const started = () => { fill(box); followApply(true); };
   if (question) asking(box, "job", question, () => ({ name }), started); else change(box, "job", { name }, started);
 }
 
@@ -178,7 +178,7 @@ function libraryCard() {
 function generalCard() {
   const body = h("div"), box = boxFor("general");
   const save = (key, value) => change(box, "settings/general", { key, value }, (r) => {
-    if (r.applies) { box.replaceChildren(); followApply(true); return; }
+    if (r.applies) { fill(box); followApply(true); return; }
     say(box, r.restarts ? "Saved. The server restarts now; this page comes back by itself." : "Saved.", true);
   });
   const text = (label, key, v) => {
@@ -224,7 +224,7 @@ function generalCard() {
         h("button", { class: "secondary", textContent: "espeak-ng (robotic; no download)", on: { click: () => save("station.tts", "espeak") } })) : null,
       g.spoolman_external ? h("div", {},
         h("p", { class: "muted", textContent: `Spoolman in use: ${g.spoolman_url}. A new address must answer as Spoolman before it is saved, and the kit then uses that database for everything.` }),
-        h("div", { class: "row" }, url, h("button", { class: "secondary", textContent: "Change", on: { click: () => change(box, "settings/spoolman", { url: url.value }, () => { box.replaceChildren(); followApply(true); }) } }))) : null);
+        h("div", { class: "row" }, url, h("button", { class: "secondary", textContent: "Change", on: { click: () => change(box, "settings/spoolman", { url: url.value }, () => { fill(box); followApply(true); }) } }))) : null);
   }).catch((e) => say(body, e.message, false));
   return el;
 }
@@ -232,9 +232,9 @@ function generalCard() {
 // the local label reader (local_intake): its address, its tier, and a test of /v1/health
 function localReaderRows(v, save) {
   const url = h("input", { value: v["local_intake.url"] || "", placeholder: "http://127.0.0.1:7915", ariaLabel: "Local reader address" });
-  const out = h("div");
+  const out = slot();
   const test = () => {
-    out.replaceChildren(h("p", { class: "muted", textContent: "Asking the local reader…" }));
+    working(out, "Asking the local reader…");
     api("settings/local-intake").then((r) => {
       const tiers = Object.entries(r.tiers || {}).map(([k, t]) => `${k} ${t.usable ? "usable" : "not usable" + (t.reason ? " (" + t.reason + ")" : "")}`).join(", ");
       say(out, r.ok
@@ -280,13 +280,12 @@ function readerCard() {
         !s.fresh ? h("p", { class: "muted", textContent: "That check is over an hour old: check again to install." }) : null,
         h("p", { class: "muted", textContent: "The tier is the one under General (Local reader tier); change it there, then check again." }));
     }).catch((e) => say(out, e.message, false));
-    const tok = secret("Local reader token"), tokBox = h("div");
+    const tok = secret("Local reader token");
     const tokenRow = h("div", {},
       h("p", { class: "muted", textContent: `Reader token: ${S.local_intake_token && S.local_intake_token.set ? "set" : "not set"}. Only for a reader installed with a token (one on another machine, usually); it is sent with each read, never shown again.` }),
       h("div", { class: "row" }, tok,
-        h("button", { class: "secondary", textContent: S.local_intake_token && S.local_intake_token.set ? "Replace" : "Set", on: { click: () => change(tokBox, "local_intake_token", { token: tok.value }, null, [tok]) } }),
-        S.local_intake_token && S.local_intake_token.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => change(tokBox, "local_intake_token/remove", {}) } }) : null),
-      tokBox);
+        h("button", { class: "secondary", textContent: S.local_intake_token && S.local_intake_token.set ? "Replace" : "Set", on: { click: () => change(box, "local_intake_token", { token: tok.value }, null, [tok]) } }),
+        S.local_intake_token && S.local_intake_token.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => change(box, "local_intake_token/remove", {}) } }) : null));
     fill(body,
       h("p", { class: "muted", textContent: have
         ? `Installed on this machine: version ${have.version}, ${have.tier} tier.`

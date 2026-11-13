@@ -39,9 +39,9 @@ function backupCard() {
         ...r.backups.map((b) => h("div", { class: "row item" },
           h("span", { textContent: `${b.at} · ${b.kind === "daily" ? "nightly" : b.kind === "pre-restore" ? "before a restore" : "made here"} · ${Math.max(1, Math.round(b.size / 1024))} KiB` }),
           h("button", { class: "secondary", textContent: "Download", on: { click: () => coded(box, async () => {
-            say(box, "Preparing the zip…", true);
+            working(box, "Preparing the zip…");
             await download("backups/download", { name: b.name, code: theCode() }, b.download);
-            box.replaceChildren();
+            fill(box);
           }) } }))),
         h("div", { class: "row" }, h("label", {}, "Keep nightly backups for ", days, " days"),
           h("button", { class: "secondary", textContent: "Save", on: { click: () => change(box, "backups/keep", { days: Number(days.value) }, (x) => say(box, `Backups are kept for ${x.days} days.`, true)) } })));
@@ -51,7 +51,7 @@ function backupCard() {
   const restore = () => {
     if (!file.files.length) { say(rbox, "Choose the backup zip first.", false); return; }
     coded(rbox, async () => {
-      say(rbox, "Uploading and checking…", true);
+      working(rbox, "Uploading and checking…");
       checked(await upload("restore/upload", file.files[0], theCode()));
     });
   };
@@ -64,8 +64,8 @@ function backupCard() {
       h("p", { class: "muted", textContent: "Afterwards the setup code is the one from the backup." }),
       h("p", { class: "muted", textContent: `Checked copy: SHA-256 ${s.sha256}. Only this copy is restored.` }),
       h("div", { class: "row" }, h("label", {}, "Type restore to go on: ", word),
-        h("button", { textContent: "Restore", on: { click: () => change(rbox, "job", { name: "restore", confirm: word.value.trim(), sha256: s.sha256 }, () => { rbox.replaceChildren(); followApply(true); }) } }),
-        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => change(rbox, "restore/forget", {}, () => rbox.replaceChildren()) } })));
+        h("button", { textContent: "Restore", on: { click: () => change(rbox, "job", { name: "restore", confirm: word.value.trim(), sha256: s.sha256 }, () => { fill(rbox); followApply(true); }) } }),
+        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => change(rbox, "restore/forget", {}, () => fill(rbox)) } })));
   };
   fill(body,
     h("p", { class: "muted", textContent: "One zip with everything the kit keeps: spools, settings, printers, pairings and the certificate. The zip is not encrypted and holds the setup secrets (the keys, Access Codes and certificate): store it somewhere safe." }),

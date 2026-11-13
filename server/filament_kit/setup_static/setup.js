@@ -82,98 +82,218 @@ function codeRead(key, body, load) {
   });
   return h("div", {}, note, body);
 }
-const say = (box, text, ok) => box.replaceChildren(h("pre", { class: ok ? "ok" : "err", textContent: text }));
+// A result (02 8.6): written into the control's own status region (boxFor), with its shape and the time it was written,
+// so it is read out where it was asked. `ok`: true, false or a kind (run, warn, info, neutral); `text`: a sentence (a
+// Hub text as sent) or the parts of a longer answer.
+function say(box, text, ok) {
+  const kind = ok === true ? "ok" : ok === false ? "bad" : ok;
+  box._said = kind === "run" ? null : [kind, text];
+  return SW.result(box, kind, text);
+}
+const working = (box, text) => say(box, text, "run");
+// after a change: when its control left with its row (a forgotten printer, a revoked token), the result is a toast
+// (02 8.7), and focus, lost with the row, goes to the page title
+function gone(box) {
+  if (box.isConnected || !box._said) return;
+  SW.toast(box._said[1], box._said[0]);
+  const a = document.activeElement;
+  if (!a || a === document.body) pageTitle.focus({ preventScroll: true });
+}
 function secret(placeholder) {
   return h("input", { type: "password", autocomplete: "new-password", placeholder });
 }
-// A change: sends the code (and `body`), says the result in `box`, clears the secret inputs, reloads the page's state.
-// Resolves with the reply, or null when it failed or the unlock dialog was cancelled.
+// the fields a change sends: the row (or the [data-group] form) of the control that started it. Its region's redraw
+// shows them from the new state; what is typed anywhere else stays (capture).
+const sentWith = (ctl) => (ctl && ctl.closest ? ctl.closest("[data-group], .row") : null);
+// A change: sends the code (and `body`), clears the secret inputs, reads the state again and draws only the region of
+// `box` (refresh), then says the result there: done(reply), or "Saved.". Resolves with the reply, or null when it
+// failed or the unlock dialog was cancelled.
 async function change(box, path, body, done, clear) {
   let out = null;
+  const sent = sentWith(document.activeElement);
   await needCode(async () => {
-    box.replaceChildren(h("p", { class: "muted", textContent: "Saving…" }));
-    try {
-      const r = await api(path, { ...body, code: theCode() });
-      for (const inp of clear || []) inp.value = "";
-      if (done) done(r); else say(box, "Saved.", true);
-      refresh();
-      out = r;
-    } catch (e) { if (e.locked) { box.replaceChildren(); throw e; } say(box, e.message, false); }
+    working(box, SW.t("common_saving"));
+    let r;
+    try { r = await api(path, { ...body, code: theCode() }); } catch (e) {
+      if (e.locked) { SW.result(box, null); throw e; }
+      say(box, e.message, false);
+      return;
+    }
+    for (const inp of clear || []) inp.value = "";
+    await refresh(box, sent);
+    box._said = null;
+    if (done) done(r); else say(box, "Saved.", true);
+    gone(box);
+    out = r;
   });
   return out;
 }
 // A change behind a dialog (02 9.1): `o` is SW.ask's (kind, title, text, fields, confirm), `body(values)` the request.
 // Confirming passes the lock (the unlock dialog opens on top and returns); a refusal stays in the dialog with what was
-// typed, at the field it names; a success closes it and says the result in `box` as change() does. Resolves with the
-// reply, or null when cancelled.
-function asking(box, path, o, body = () => ({}), done) {
-  return SW.ask({ ...o, run: async (values, { result }) => {
-    let out = null;
+// typed, at the field it names; a success closes it (focus back on its button), then draws the region again and says
+// the result in `box` as change() does. Resolves with the reply, or null when cancelled.
+async function asking(box, path, o, body = () => ({}), done) {
+  const out = await SW.ask({ ...o, run: async (values, { result }) => {
+    let r = null;
     await needCode(async () => {
-      try { out = await api(path, { ...body(values), code: theCode() }); } catch (e) {
+      try { r = await api(path, { ...body(values), code: theCode() }); } catch (e) {
         if (e.locked) throw e;
         const at = (o.fields || []).find((f) => e.data && e.data.field && f._control.name === e.data.field);
         if (at) { SW.fieldError(at, e.message); at._control.focus(); } else SW.result(result, "bad", e.message);
       }
     });
-    if (!out) return false;
-    if (done) done(out); else say(box, "Saved.", true);
-    refresh();
-    return out;
+    return r || false;
   } });
+  if (!out) return null;
+  await refresh(box);
+  box._said = null;
+  if (done) done(out); else say(box, "Saved.", true);
+  gone(box);
+  return out;
 }
 // the ask options of a destructive dialog, from its catalogue keys
 const destroy = (title, text, confirm, vars) => ({ kind: "destructive", title: SW.t(title, vars), text: SW.t(text, vars), confirm: SW.t(confirm) });
 // a field of an entry dialog, refused while empty with the catalogue's `error`
 const entryField = (o, error) => SW.field({ ...o, check: (v) => (v.trim() ? null : SW.t(error)) });
-// replaceChildren would print a null as the word "null" (h() skips it, this one does not)
-const fill = (el, ...kids) => el.replaceChildren(...kids.filter(Boolean));
+// replaceChildren would print a null as the word "null" (h() skips it, this one does not). A result slot loses its
+// result; a part of a region that is read later gets what was being typed in it (carry).
+function fill(el, ...kids) {
+  el._said = null;
+  SW.result(el, null).replaceChildren(...kids.filter(Boolean));
+  const r = regionOf(el);
+  if (r) carry(r);
+  return el;
+}
 const pill = (on, yes, no) => h("span", { class: "pill " + (on ? "ok" : "no"), textContent: on ? yes : no });
 const card = (title, ...kids) => h("section", { class: "card" }, h("h2", {}, title), ...kids);
 
 let S = null;
-// result boxes outlive a re-render (every change reloads the state), so a token shown once or a QR code stays
+// result slots (02 8.6; 07 SR-12): a status region in the page before a result is written into it. Kept by key while
+// the section is open, so the redraw of a region after its change keeps the slot and the result is said where it was
+// asked; leaving the section clears their results (render).
+const slot = () => h("div", { class: "result result--block", role: "status" });
 const boxes = {};
-const boxFor = (key) => boxes[key] || (boxes[key] = h("div", { role: "status" }));   // a live region: "Saving…" and the result are read out
+const boxFor = (key) => boxes[key] || (boxes[key] = slot());
 const sections = h("div");
 
+// ----- regions (02 1.4 "Redraw only what changed"; 03 2.2, 2.7): each card of a section is drawn by its own builder.
+// A change reads the state again and draws only its own region (and the one its builder names in `also`). What is
+// typed there and not sent, and the focus, go to the new drawing by each control's place: its row (data-key), its kind
+// and words, and how many like it come before. A part a region reads later gets them when it is filled.
+const CONTROLS = "button, a[href], input, select, textarea";
+const TYPED = "input:not([type=checkbox], [type=radio], [type=file]), select, textarea";
+function spots(root) {
+  const n = {}, out = new Map();
+  for (const el of root.querySelectorAll(CONTROLS)) {
+    const row = el.closest("[data-key]");
+    const k = [row && root.contains(row) ? row.dataset.key : "", el.tagName, el.type, el.getAttribute("aria-label"), el.placeholder,
+      el.matches("button, a") ? el.textContent : ""].join("|");
+    n[k] = (n[k] || 0) + 1;
+    out.set(k + "|" + n[k], el);
+  }
+  return out;
+}
+// what is typed and not sent (`sent`: see sentWith) and the focused control, by place
+function capture(root, sent) {
+  const keep = new Map(), now = document.activeElement;
+  for (const [k, el] of spots(root)) {
+    const typed = el.matches(TYPED) && el._was !== undefined && el.value !== el._was && !(sent && sent.contains(el));
+    if (typed || el === now) keep.set(k, { value: typed ? el.value : null, focus: el === now, sel: el === now && el.matches(TYPED) ? [el.selectionStart, el.selectionEnd] : null });
+  }
+  return keep;
+}
+// the value each field was drawn with, to tell a typed one
+const stamp = (root) => { for (const f of root.querySelectorAll(TYPED)) if (f._was === undefined) f._was = f.value; };
+// puts back what capture() kept into a region now in the page; the focus only when it was lost with the old drawing
+function carry(root) {
+  stamp(root);
+  const keep = root._keep, a = document.activeElement;
+  if (!keep || !keep.size) return;
+  const lost = !a || a === document.body || a === pageTitle;
+  for (const [k, el] of spots(root)) {
+    const v = keep.get(k);
+    if (!v) continue;
+    keep.delete(k);
+    if (v.value != null && (el.tagName !== "SELECT" || [...el.options].some((o) => o.value === v.value))) el.value = v.value;
+    if (v.focus && lost) {
+      el.focus({ preventScroll: true });
+      try { if (v.sel && v.sel[0] != null) el.setSelectionRange(...v.sel); } catch { /* a field without a text selection */ }
+    }
+  }
+}
+function draw(make, key) {
+  let el = make();
+  if (Array.isArray(el)) el = h("div", {}, el);
+  if (!el) return null;
+  Object.assign(el, { _make: make, _key: key });
+  stamp(el);
+  return el;
+}
+const regionOf = (el) => { while (el && !el._make) el = el.parentElement; return el; };
+// draws one region again from the new state, in its place; `sent`: see sentWith
+function redraw(r, sent) {
+  const keep = capture(r, sent), fresh = draw(r._make, r._key);
+  if (!fresh) { r.remove(); return; }
+  r.replaceWith(fresh);
+  fresh._keep = keep;
+  carry(fresh);
+}
+
 // ----- the sections (F8), at the page's own addresses (03 1.2): #<section>[/<place>]; Back and Forward move between them -----
-// [catalogue key of the name, icon, the view]; the first five are the Everyday group, the rest the System group
+// [catalogue key of the name, icon, the builders of its regions]; the first five are the Everyday group, the rest the
+// System group
 const TABS = {
-  overview: ["nav_overview", "overview", () => overviewTab()],
+  overview: ["nav_overview", "overview", () => [overviewTab]],
   printers: ["nav_printers", "printer", () => printersTab()],
-  recent: ["nav_recently_added", "recent", () => intakeTab()],
-  devices: ["nav_devices", "devices", () => [pairCard(), stationAsksCard(), webAppCard(), readersCard(), trustCard()]],
-  presets: ["nav_slicer_presets", "presets", () => presetsTab()],
-  features: ["nav_features", "features", () => [modesCard(), modulesCard(), applyCard()]],
-  settings: ["nav_settings", "settings", () => [generalCard(), readerCard(), backupCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
-  flash: ["nav_flash_device", "flash", () => flashTab()],
-  updates: ["nav_updates", "updates", () => updatesTab()],
-  logs: ["nav_logs", "logs", () => logsTab()],
+  recent: ["nav_recently_added", "recent", () => [intakeTab]],
+  devices: ["nav_devices", "devices", () => [pairCard, stationAsksCard, webAppCard, readersCard, trustCard]],
+  presets: ["nav_slicer_presets", "presets", () => [presetsTab]],
+  features: ["nav_features", "features", () => [modesCard, modulesCard, applyCard]],
+  settings: ["nav_settings", "settings", () => [generalCard, readerCard, backupCard, keyCard, passphraseCard, tokenCard, libraryCard, addressCard, remoteCard]],
+  flash: ["nav_flash_device", "flash", () => [flashTab]],
+  updates: ["nav_updates", "updates", () => [updatesTab]],
+  logs: ["nav_logs", "logs", () => [logsTab]],
 };
 const GROUPS = [["everyday", "nav_everyday", 0, 5], ["system", "nav_system", 5, 10]];
 const BAR = new Set(["overview", "printers", "recent", "settings"]);   // the phone bottom bar (02 2.4); the rest are in More
 const MOVED = { modules: "features", intake: "recent" };              // the tabs' old addresses
 const tabNow = () => { const t = location.hash.slice(1).split(/[/?]/)[0]; return Object.hasOwn(TABS, t) ? t : "overview"; };
 
+// draws every region of the section; drawn again in the same section (a job ended, the lock changed), what is typed
+// and the focus stay; on entering a section, the results left in its slots are cleared (02 8.6)
+let shown = null;
 function render() {
-  const now = tabNow();
+  const now = tabNow(), keep = new Map();
+  if (now === shown) { for (const r of sections.children) if (r._key) keep.set(r._key, capture(r)); }
+  else for (const b of Object.values(boxes)) if (b.dataset.state) SW.result(b, null);
+  shown = now;
   page.dataset.section = now;
   pageTitle.textContent = SW.t(TABS[now][0]);
-  sections.replaceChildren(...TABS[now][2]().filter(Boolean));
+  const regions = TABS[now][2]().filter(Boolean).map((m, i) => draw(m, m.name || "#" + i)).filter(Boolean);
+  sections.replaceChildren(...regions);
+  for (const r of regions) { r._keep = keep.get(r._key); carry(r); }
   summaries();
 }
 
-async function refresh() {
+// Reads the state again. After a change (`at`: an element of its region; `sent`: see sentWith) only that region is
+// drawn again, and the one its builder names in `also`; without `at` (the page opens, a job ends) the whole section is.
+async function refresh(at, sent) {
+  const r = at && regionOf(at);
   try { S = await api("state"); } catch (e) {
     if (!S) { hubName.parentElement.dataset.state = "error"; hubName.replaceChildren(SW.shape("s-octagon"), SW.t("topbar_hub_unreachable")); }
-    sections.replaceChildren(h("p", { class: "err", textContent: e.message }));
+    if (!at) { sections.replaceChildren(h("p", { class: "err", textContent: e.message })); shown = null; }
     return;
   }
   hubName.replaceChildren(S.server_name);
   hubVersion.replaceChildren(SW.h("span", { class: "sr", text: SW.t("topbar_version_prefix") }), S.version);
   SW.configure({ hub: S.server_name, noCode: !S.code_set });
-  render();
+  if (!at) render();
+  else if (r && r.isConnected) {
+    const also = r._make.also && [...sections.children].find((x) => x._make === r._make.also);
+    redraw(r, sent);
+    if (also) redraw(also);
+    summaries();
+  }
   if (shellView) shellView.paint(false);
   if (S.apply.running) followApply();
 }
@@ -239,7 +359,7 @@ function keyCard() {
       h("button", { textContent: a.set ? "Replace" : "Set", on: { click: () => change(box, "key", { key: inp.value }, null, [inp]) } }),
       a.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => asking(box, "key/remove", destroy("settings_key_remove_title", "settings_key_remove_body", "settings_key_remove_confirm")) } }) : null,
       h("button", { class: "secondary", textContent: "Check", on: { click: async () => {
-        box.replaceChildren(h("p", { class: "muted", textContent: "Checking…" }));
+        working(box, SW.t("common_checking"));
         try { const r = await api("key/check", {}); say(box, r.text, r.ok); } catch (e) { say(box, e.message, false); }
       } } })),
     box);
@@ -272,12 +392,13 @@ function readersCard() {
   const R = S.readers, box = boxFor("readers"), name = h("input", { placeholder: "reader name, e.g. printer-station" });
   return card("NFC readers",
     R.error ? h("p", { class: "err", textContent: R.error }) : null,
-    ...R.list.map((t) => h("div", { class: "row item" }, h("span", { textContent: `${t.id} · ${t.name} · made ${t.created}` }),
-      h("button", { class: "secondary", textContent: "Revoke", on: { click: () => asking(box, `readers/${encodeURIComponent(t.id)}/revoke`,
-        destroy("devices_revoke_token_title", "devices_revoke_token_body", "devices_revoke_token_confirm", { id: t.id })) } }))),
+    ...R.list.map((t) => { const at = boxFor("reader:" + t.id); return h("div", { class: "row item", "data-key": t.id }, h("span", { textContent: `${t.id} · ${t.name} · made ${t.created}` }),
+      h("button", { class: "secondary", textContent: "Revoke", on: { click: () => asking(at, `readers/${encodeURIComponent(t.id)}/revoke`,
+        destroy("devices_revoke_token_title", "devices_revoke_token_body", "devices_revoke_token_confirm", { id: t.id }), undefined,
+        () => say(at, SW.t("devices_token_revoked", { id: t.id }), true)) } }), at); }),
     R.list.length ? null : h("p", { class: "muted", textContent: "No reader tokens." }),
     h("div", { class: "row" }, name, h("button", { textContent: "Make a token", on: { click: () => change(box, "readers", { name: name.value },
-      (r) => box.replaceChildren(h("p", { textContent: `New reader token ${r.id} (${r.name}):` }), h("pre", { class: "ok", textContent: r.token }), h("p", { class: "muted", textContent: r.note }))) } })),
+      (r) => say(box, [h("p", { textContent: `New reader token ${r.id} (${r.name}):` }), h("pre", { class: "ok", textContent: r.token }), h("p", { class: "muted", textContent: r.note })], true)) } })),
     box);
 }
 
@@ -294,7 +415,7 @@ function watchPaired(box, known, seconds) {
     try { s = await api("state"); } catch { /* the server may be restarting: the next try tells */ }
     if (me !== pairWatch) return;
     const fresh = s && s.devices.find((d) => !known.has(d.id));
-    if (fresh) { say(box, `Paired: ${fresh.name}.`, true); refresh(); return; }
+    if (fresh) { await refresh(box); say(box, `Paired: ${fresh.name}.`, true); return; }
     setTimeout(tick, 3000);
   };
   setTimeout(tick, 3000);
@@ -308,20 +429,21 @@ function pairCard() {
     watchPaired(box, known, r.expires_in);
     if (qrUrl) URL.revokeObjectURL(qrUrl);
     qrUrl = r.qr_svg ? URL.createObjectURL(new Blob([r.qr_svg], { type: "image/svg+xml" })) : null;
-    fill(box,
+    say(box, [
       kind === "phone" ? h("p", { textContent: "Open the filament-kit app and scan this code, or type the pairing code." }) :
         h("p", { textContent: kind === "pc" ? "Paste this link into filament-kit-sync when it asks:" : "On the station PC run: sudo filament-kit station pair, then paste this link:" }),
       qrUrl ? h("img", { class: "qr", alt: "Pairing QR code", src: qrUrl }) : null,
       kind === "phone" ? null : h("pre", { class: "ok", textContent: r.link }),
       h("p", {}, "Pairing code: ", h("b", { textContent: r.code })),
       h("p", { class: "muted", textContent: `Certificate fingerprint (${kind === "phone" ? "the phone asks for two groups of it" : "check it matches"}): ${r.fingerprint}` }),
-      h("p", { class: "muted", textContent: `Expires in ${Math.round(r.expires_in / 60)} min.` }));
+      h("p", { class: "muted", textContent: `Expires in ${Math.round(r.expires_in / 60)} min.` })], "info");
   }
   return card("Phones, PC and station",
-    ...S.devices.map((d) => h("div", { class: "row item" }, h("span", { textContent: `${d.name} · paired ${d.paired || "?"} · last seen ${d.last_seen || "never"}` }),
+    ...S.devices.map((d) => { const at = boxFor("device:" + d.id); return h("div", { class: "row item", "data-key": d.id }, h("span", { textContent: `${d.name} · paired ${d.paired || "?"} · last seen ${d.last_seen || "never"}` }),
       d.built_in ? h("span", { class: "muted", textContent: "built in: this server's own pairing" })
-        : h("button", { class: "secondary", textContent: "Revoke", on: { click: () => asking(box, `devices/${encodeURIComponent(d.id)}/revoke`,
-          destroy("devices_unpair_title", "devices_unpair_body", "devices_unpair", { name: d.name })) } }))),
+        : h("button", { class: "secondary", textContent: "Revoke", on: { click: () => asking(at, `devices/${encodeURIComponent(d.id)}/revoke`,
+          destroy("devices_unpair_title", "devices_unpair_body", "devices_unpair", { name: d.name }), undefined,
+          () => say(at, SW.t("devices_unpaired", { name: d.name }), true)) } }), at); }),
     S.devices.length ? null : h("p", { class: "muted", textContent: "Nothing paired yet." }),
     h("div", { class: "row" },
       h("button", { textContent: "Pair a phone", on: { click: () => start("phone") } }),
@@ -343,8 +465,8 @@ function stationAsksCard() {
           h("p", {}, `${q.name} at ${q.address} asks to pair. Its screen shows `, h("b", { textContent: `${q.code.slice(0, 3)} ${q.code.slice(3)}` }), "."),
           h("p", { class: "muted", textContent: "Pair only if the station shows the same six digits. If not, refuse: someone else asked." }),
           h("div", { class: "row" },
-            h("button", { textContent: "Pair", on: { click: () => change(box, `stations/requests/${q.id}/pair`, {}, () => { say(box, `Paired ${q.name}. It picks up its pairing within a few seconds.`, true); show(); }) } }),
-            h("button", { class: "secondary", textContent: "Refuse", on: { click: () => change(box, `stations/requests/${q.id}/refuse`, {}, () => { box.replaceChildren(); show(); }) } })))));
+            h("button", { textContent: "Pair", on: { click: () => change(box, `stations/requests/${q.id}/pair`, {}, () => say(box, `Paired ${q.name}. It picks up its pairing within a few seconds.`, true)) } }),
+            h("button", { class: "secondary", textContent: "Refuse", on: { click: () => change(box, `stations/requests/${q.id}/refuse`, {}, () => fill(box)) } })))));
     } catch (e) { if (e.locked) throw e; say(body, e.message, false); }
   };
   return card("Stations asking to pair", h("p", { class: "muted", textContent: "An intake station on another computer asks from its own screen." }),
@@ -384,12 +506,12 @@ function webAppCard() {
 function modulesCard() {
   const box = boxFor("modules");
   async function ask(m) {
-    box.replaceChildren(h("p", { class: "muted", textContent: "…" }));
+    working(box, "…");
     let p;
     try { p = await api(`modules/preview?name=${encodeURIComponent(m.name)}`); } catch (e) { say(box, e.message, false); return; }
     if (p.refused) { say(box, p.refused, false); return; }
     const inputs = p.needs.map((n) => ({ key: n.key, el: h("input", { placeholder: n.prompt }) }));
-    box.replaceChildren(
+    fill(box,
       h("p", { textContent: `${p.on ? "Turn on" : "Turn off"} ${m.name}.` }),
       ...p.notes.map((n) => h("p", { class: "muted", textContent: n })),
       h("p", { class: "muted", textContent: "On afterwards: " + (p.after.join(", ") || "nothing") }),
@@ -400,10 +522,10 @@ function modulesCard() {
           const r = await change(box, "modules", { name: m.name, on: p.on, settings }, (x) => say(box, x.changed ? "Saved; applying…" : "Unchanged.", true));
           if (r && r.changed) followApply();
         } } }),
-        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => box.replaceChildren() } })));
+        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => fill(box) } })));
   }
   return card(`Modules (mode: ${S.mode})`,
-    ...S.modules.map((m) => h("div", { class: "row item" },
+    ...S.modules.map((m) => h("div", { class: "row item", "data-key": m.name },
       h("span", {}, pill(m.on, "on", "off"), ` ${m.name}: ${m.description}`, m.needs.length ? h("span", { class: "muted", textContent: ` · needs: ${m.needs.join(", ")}` }) : null,
         m.optional_ai ? h("span", { class: "muted", textContent: " · OPTIONAL AI" }) : null),
       h("button", { class: "secondary", textContent: m.on ? "Turn off" : "Turn on", on: { click: () => ask(m) } }))),
@@ -451,7 +573,7 @@ function applyCard() {
   const box = boxFor("apply");
   return card("Apply", h("p", { class: "muted", textContent: "Module and address changes are applied in the background (sudo filament-kit modules apply)." }),
     h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Apply again", on: { click: async () => {
-      const r = await change(box, "apply", {}, () => say(box, "Applying…", true));
+      const r = await change(box, "apply", {}, () => say(box, "Applying…", "info"));
       if (r) followApply(true);
     } } })), box);
 }

@@ -14,8 +14,8 @@ const histPath = (id, what) => `intake/history/${encodeURIComponent(id)}${what ?
 // close the record being edited); the record redraws itself from the answer.
 function intakePost(box, path, body, done) {
   return coded(box, async () => {
-    box.replaceChildren(h("p", { class: "muted", textContent: path.endsWith("/revise") ? "Asking the AI… (up to a minute)" : "Saving…" }));
-    try { done(await api(path, { ...body, code: theCode() })); } catch (e) { if (e.locked) box.replaceChildren(); throw e; }
+    working(box, path.endsWith("/revise") ? "Asking the AI… (up to a minute)" : SW.t("common_saving"));
+    try { done(await api(path, { ...body, code: theCode() })); } catch (e) { if (e.locked) fill(box); throw e; }
   });
 }
 
@@ -58,7 +58,7 @@ function intakeRow(r, ai) {
 async function intakeDetail(id, ai, detail) {
   let rec;
   try { rec = await api(histPath(id)); } catch (e) { say(detail, e.message, false); return; }
-  const note = h("div");
+  const note = boxFor("intake:" + id);     // the record's result slot: kept when the record is drawn again
   const photos = Array.from({ length: rec.photos }, (_, i) => intakePhoto(id, i + 1));
   const items = rec.saved.map((s) => {
     const inputs = {};
@@ -73,7 +73,7 @@ async function intakeDetail(id, ai, detail) {
         const was = s.values[k] == null ? "" : String(s.values[k]), now = inputs[k].value.trim();
         if (now !== was) values[k] = now === "" ? null : (INTAKE_NUM.has(k) ? Number(now) : now);
       }
-      if (!Object.keys(values).length) { say(note, "Nothing changed.", false); return; }
+      if (!Object.keys(values).length) { say(note, "Nothing changed.", "neutral"); return; }
       intakePost(note, histPath(id, "apply"), { item: s.item, values }, (r) => intakeDone(r, id, ai, detail));
     } } });
     const ask = h("textarea", { rows: 2, placeholder: "e.g. brand is Polymaker", ariaLabel: "What is wrong", disabled: !ai });
@@ -108,14 +108,14 @@ function intakeProposal(p, id, ai, detail, note) {
     ...rows,
     p.changes.length ? h("div", { class: "row" },
       h("button", { textContent: "Accept", on: { click: () => intakePost(note, histPath(id, "apply"), { proposal: p.proposal }, (r) => intakeDone(r, id, ai, detail)) } }),
-      h("button", { class: "secondary", textContent: "Discard", on: { click: () => note.replaceChildren() } })) : null);
+      h("button", { class: "secondary", textContent: "Discard", on: { click: () => fill(note) } })) : null);
 }
 
 function intakeDone(r, id, ai, detail, text) {
   if (detail.mark) detail.mark.textContent = INTAKE_STATE[r.state] || r.state;
   const v = r.revisions[r.revisions.length - 1] || {};
   const fl = v.filaments || {};
-  intakeDetail(id, ai, detail).then(() => detail.append(h("pre", { class: "ok", textContent: text || (
+  intakeDetail(id, ai, detail).then(() => say(boxFor("intake:" + id), text || (
     "Saved." + (fl.to !== fl.from ? ` The spools now use filament ${fl.to}${fl.created ? " (new)" : ""}.` : "")
-    + (fl.orphaned && fl.orphaned.length ? ` Filament ${fl.orphaned.join(", ")} has no spools left; it was not deleted.` : "")) })));
+    + (fl.orphaned && fl.orphaned.length ? ` Filament ${fl.orphaned.join(", ")} has no spools left; it was not deleted.` : "")), true));
 }

@@ -693,6 +693,8 @@
     <string name="devices_revoke_token_confirm">Revoke token</string>
     <!-- 1=id -->
     <string name="devices_revoke_token_title">Revoke the token %1$s?</string>
+    <!-- 1=id -->
+    <string name="devices_token_revoked">Reader token %1$s revoked.</string>
     <string name="devices_stop_trusting_body">This browser then needs the setup code for every change.</string>
     <string name="devices_stop_trusting_confirm">Stop trusting</string>
     <string name="devices_stop_trusting_title">Stop trusting this computer?</string>
@@ -708,6 +710,8 @@
     <string name="devices_trusted_this_tag">(this computer)</string>
     <string name="devices_unpair">Unpair</string>
     <string name="devices_unpair_body">It can no longer reach the Hub until it is paired again.</string>
+    <!-- 1=name -->
+    <string name="devices_unpaired">%1$s unpaired.</string>
     <!-- 1=name -->
     <string name="devices_unpair_title">Unpair %1$s?</string>
     <string name="devices_webapp_away">Away from home too:</string>
@@ -1112,6 +1116,8 @@
     <string name="printers_forget_title">Forget %1$s?</string>
     <!-- 1=name -->
     <string name="printers_forgotten">%1$s forgotten.</string>
+    <!-- 1=name -->
+    <string name="printers_dismissed">%1$s dismissed.</string>
     <string name="printers_found_group">Found on the network, not added yet</string>
     <string name="printers_group_actions">Actions</string>
     <string name="printers_group_change">Change</string>
