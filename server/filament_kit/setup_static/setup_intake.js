@@ -58,7 +58,7 @@ function intakeRow(r, ai) {
 async function intakeDetail(id, ai, detail) {
   let rec;
   try { rec = await api(histPath(id)); } catch (e) { say(detail, e.message, false); return; }
-  const note = boxFor("intake:" + id);     // the record's result slot: kept when the record is drawn again
+  const note = boxFor("record:" + id);     // the record's result slot: kept when the record is drawn again
   const photos = Array.from({ length: rec.photos }, (_, i) => intakePhoto(id, i + 1));
   const items = rec.saved.map((s) => {
     const inputs = {};
@@ -115,7 +115,7 @@ function intakeDone(r, id, ai, detail, text) {
   if (detail.mark) detail.mark.textContent = INTAKE_STATE[r.state] || r.state;
   const v = r.revisions[r.revisions.length - 1] || {};
   const fl = v.filaments || {};
-  intakeDetail(id, ai, detail).then(() => say(boxFor("intake:" + id), text || (
+  intakeDetail(id, ai, detail).then(() => say(boxFor("record:" + id), text || (
     "Saved." + (fl.to !== fl.from ? ` The spools now use filament ${fl.to}${fl.created ? " (new)" : ""}.` : "")
     + (fl.orphaned && fl.orphaned.length ? ` Filament ${fl.orphaned.join(", ")} has no spools left; it was not deleted.` : "")), true));
 }
