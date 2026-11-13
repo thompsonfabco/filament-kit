@@ -97,16 +97,32 @@ def public_pem(key):
                                          serialization.PublicFormat.SubjectPublicKeyInfo).decode()
 
 
+SIG2_PREFIX = b"fk-reader-ota\x01"
+
+
+def build_digest(image_sha256, build):
+    """What `sig2` signs: SHA-256(SIG2_PREFIX || image SHA-256 || build as 8 bytes big-endian).
+    The reader builds the same bytes, so a signed image cannot be passed off as a newer build."""
+    return hashlib.sha256(SIG2_PREFIX + image_sha256 + int(build).to_bytes(8, "big")).digest()
+
+
 def sign_image(image, key, build):
-    """Manifest for `image`: build, size, sha256 hex, base64 DER ECDSA signature over the SHA-256."""
+    """Manifest for `image`: build, size, sha256 hex, base64 DER ECDSA signatures. `sig` signs the
+    SHA-256 alone (the only check a reader flashed before FA-027 makes, so those still install
+    this image); `sig2` signs the SHA-256 together with the build number (readers from FA-027 on
+    require it, so a server cannot serve an older signed image under a higher build)."""
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.asymmetric import ec, utils
 
+    pre = ec.ECDSA(utils.Prehashed(hashes.SHA256()))
     digest = hashlib.sha256(image).digest()
-    sig = key.sign(digest, ec.ECDSA(utils.Prehashed(hashes.SHA256())))
-    key.public_key().verify(sig, digest, ec.ECDSA(utils.Prehashed(hashes.SHA256())))
+    sig = key.sign(digest, pre)
+    key.public_key().verify(sig, digest, pre)
+    d2 = build_digest(digest, build)
+    sig2 = key.sign(d2, pre)
+    key.public_key().verify(sig2, d2, pre)
     return {"build": build, "size": len(image), "sha256": digest.hex(),
-            "sig": base64.b64encode(sig).decode()}
+            "sig": base64.b64encode(sig).decode(), "sig2": base64.b64encode(sig2).decode()}
 
 
 def make_stage(host):

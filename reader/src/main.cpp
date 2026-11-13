@@ -533,10 +533,12 @@ void IRAM_ATTR encISR() {
 bool swPressed() { return digitalRead(PIN_ENC_SW) == (ENC_SW_TO_VCC ? HIGH : LOW); }
 
 // ---- OTA --------------------------------------------------------------------
-// Manifest {"build": <unix time>, "size": N, "sha256": "<hex>", "sig": "<base64 DER>"}.
-// The image is streamed into the inactive OTA slot while hashing; it's only
-// committed if size, SHA-256 and the ECDSA signature (over the SHA-256) all
-// check out. The new image boots "pending verify" and marks itself valid once
+// Manifest {"build": <unix time>, "size": N, "sha256": "<hex>", "sig": "<base64 DER>",
+// "sig2": "<base64 DER>"}. The image is streamed into the inactive OTA slot while
+// hashing; it's only committed if size, SHA-256 and the ECDSA signature sig2 (over
+// the SHA-256 together with the build number, so an older signed image can't be
+// served as a newer build) all check out. "sig" (hash only) is for readers flashed
+// before sig2 and is ignored here. The new image boots "pending verify" and marks itself valid once
 // Wi-Fi is up and <READER_BASE>/healthz answers 200 (see confirmOtaImage);
 // otherwise the bootloader rolls back to the previous image on the next reset.
 // core: don't auto-mark the app valid. extern "C": the core's weak default is C.
@@ -564,7 +566,18 @@ bool httpsGet(HTTPClient& http, WiFiClientSecure& tls, const String& url) {
   return http.GET() == 200;
 }
 
-bool verifySig(const uint8_t hash[32], const char* sigB64) {
+// sig2 signs SHA-256("fk-reader-ota\x01" || image SHA-256 || build, 8 bytes big-endian);
+// tools/ota_publish.py build_digest() makes the same bytes.
+bool verifySig(const uint8_t imgHash[32], long build, const char* sigB64) {
+  static const char PREFIX[] = "fk-reader-ota\x01";
+  uint8_t be[8];
+  for (int i = 0; i < 8; i++) be[i] = (uint8_t)((uint64_t)build >> (56 - 8 * i));
+  uint8_t hash[32];
+  mbedtls_sha256_context c; mbedtls_sha256_init(&c); mbedtls_sha256_starts(&c, 0);
+  mbedtls_sha256_update(&c, (const uint8_t*)PREFIX, sizeof(PREFIX) - 1);
+  mbedtls_sha256_update(&c, imgHash, 32);
+  mbedtls_sha256_update(&c, be, 8);
+  mbedtls_sha256_finish(&c, hash); mbedtls_sha256_free(&c);
   uint8_t sig[80]; size_t sigLen = 0;
   if (mbedtls_base64_decode(sig, sizeof(sig), &sigLen, (const uint8_t*)sigB64, strlen(sigB64)) != 0)
     return false;
@@ -581,14 +594,14 @@ void otaFail(const char* why) {
   buzzError();
 }
 
-struct Manifest { long build = 0; size_t size = 0; String sha, sig; };
+struct Manifest { long build = 0; size_t size = 0; String sha, sig; };   // sig = the manifest's sig2
 bool fetchManifest(Manifest& m) {
   String resp;
   if (apiRequest(urlManifest, nullptr, resp) != 200) return false;
   JsonDocument j;
   if (deserializeJson(j, resp)) return false;
   m.build = j["build"] | 0L; m.size = j["size"] | 0;
-  m.sha = (const char*)(j["sha256"] | ""); m.sig = (const char*)(j["sig"] | "");
+  m.sha = (const char*)(j["sha256"] | ""); m.sig = (const char*)(j["sig2"] | "");
   return true;
 }
 
@@ -658,7 +671,7 @@ void otaCheck() {
   char hex[65];
   for (int i = 0; i < 32; i++) sprintf(hex + 2 * i, "%02x", hash[i]);
   if (!shaHex.equalsIgnoreCase(hex)) { Update.abort(); otaFail("hash mismatch"); return; }
-  if (!verifySig(hash, sigB64.c_str())) { Update.abort(); otaFail("bad signature"); return; }
+  if (!verifySig(hash, build, sigB64.c_str())) { Update.abort(); otaFail("bad signature"); return; }
   if (!Update.end(true)) { otaFail(Update.errorString()); return; }
 
   showProgress("Firmware update", "installed\nrestarting...", 100);
