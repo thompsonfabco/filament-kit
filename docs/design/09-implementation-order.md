@@ -844,7 +844,7 @@ app · S · Depends on: S4.4 · Beside: S4.5 to S4.8
 ### S4.10 Printers list, add, find Klipper printers
 app · M · Depends on: S4.4 · Beside: S4.5, S4.9, S4.15
 - **Files today:** `<app>/ui/printers/PrintersScreen.kt`; `<app>/net/Api.kt`.
-- **Change:** 05 9.1 to 9.3: the list with status shape and word; Add a Bambu printer; Add a Klipper printer and Find
+- **Change:** 05 9.1 to 9.3: the list with status shape and word; Add a Bambu Lab printer; Add a Klipper printer and Find
   Klipper printers (new in the app; the Hub routes exist).
 - **Keep:** printer data and routes.
 - **Other interfaces:** Hub page S2.4, S2.5; web app S3.11; command line S5.5.

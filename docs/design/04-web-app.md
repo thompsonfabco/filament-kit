@@ -487,7 +487,7 @@ spools.").
 Endpoints: POST `add` with `{items, dry_run: true}` for Preview; POST `add` with `{items, dry_run: false, link_tag,
 read_id}` for Add (as today).
 
-**Preview result** (a group after the last card, scrolled into view): title "Preview (nothing saved yet)", the
+**Preview result** (a group after the last card, scrolled into view): title "Preview" with the line "Nothing is saved yet.", the
 summary line of 3.2 and the Hub's text in a code block. Problems the Hub names for a field are also shown under that
 field when the Hub returns them per item (section 14); until then they are only in the code block.
 
@@ -695,13 +695,13 @@ printer's settings. Code today: `printersTab` in `printers.js`. Shown when the P
 | | (*) Printing: Benchy . 42 % . 1 h 12  ||
 | |     min left                          ||
 | | [=========-------------]              ||
-| | [#][#][#][ ]  3 of 4 slots loaded   > ||
+| | [#][#][#][ ]  3 of 4 loaded         > ||
 | +---------------------------------------+|
 | +---------------------------------------+|
 | | Garage Voron             (o) Connected||
 | | Klipper (Voron 2.4)                   ||
 | | ( ) Idle                              ||
-| | [#][#]  2 of 2 slots loaded         > ||
+| | [#][#]  2 of 2 loaded               > ||
 | +---------------------------------------+|
 | +---------------------------------------+|
 | | Study A1 mini             ( ) Offline ||
@@ -723,17 +723,16 @@ printer's settings. Code today: `printersTab` in `printers.js`. Shown when the P
   (Connected, Offline, Not configured or Needs a look, 3.3); model (`--muted`); while connected, the print state
   sentence (3.3, 6.3: "Printing: Benchy", "Idle"), and while printing also percent, time left and a 4 px progress
   bar; slot swatches (the level swatch of 02-components 7.3, filled from the bottom by the remaining percentage,
-  dashed when empty) with "<n> of <m> slots loaded"; any problem or alert as a triangle or octagon line. The
+  dashed when empty) with "<n> of <m> loaded"; any problem or alert as a triangle or octagon line. The
   swatches are `aria-hidden`; each slot's colour is in the card's `sr` text, one sentence per slot ("A1 Polymaker
   PolyTerra PLA Charcoal Black #2B2B2E, 62 % left"; "A4 empty"), so every swatch has its colour's name or hex
   (F4.1).
 - Header line: "<n> printers · Connected <n> · Offline <n>" (badges with counts, 02-components 7.1).
 - "Add" (plus icon) at the top right opens the add choice (6.9). The default button "Add a Klipper printer" at the
   end of the page opens the sheet "Add a Klipper printer" (12.2).
-- Found on the network: one row per Bambu printer the Hub has seen but not added: model, address (`--mono`) and
+- Found on the network: one row per Bambu Lab printer the Hub has seen but not added: model, address (`--mono`) and
   "Add". Shown only when there is one.
-- Empty: "No printers yet." · "A Bambu printer on the network shows up here by itself; add it with its Access Code.
-  A Klipper printer is added by its address." · "Add a Klipper printer".
+- Empty: "No printers yet." · "The Hub finds Bambu Lab printers on its network by itself: turn the printer on, then add it here with its Access Code. A Klipper printer is added by its address." · "Add a Klipper printer".
 - Errors: as 3.6; the cards keep their last data.
 
 Tablet: the list keeps the full content width; opening a printer expands its page (6.2 to 6.8) in place under its
@@ -983,7 +982,7 @@ of 6.1 are hidden and the same line appears there.
 
 ### 6.9 Adding a printer
 
-"Add" on the list opens a menu: "Bambu printer found on the network" (one item per found printer) and "Klipper
+"Add" on the list opens a menu: "Bambu Lab printer found on the network" (one item per found printer) and "Klipper
 printer by address". The sheets are in section 12 ("Add <model>", "Add a Klipper printer"). POST `printers/add`.
 While the Hub connects: "Connecting to the printer…". On success the sheet closes, the new printer opens
 (`#printers/<id>`) and its status line says "Added. The Hub is connecting to it."
@@ -1114,7 +1113,7 @@ weight."; "Nothing changed." when no field differs; then, from the Hub, "The spo
 | Field | label "What is wrong?", placeholder "e.g. brand is Polymaker", helper "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept." | |
 | "Ask the Label Reader" | default button; aria-disabled with "Say what is wrong first." while the field is empty | POST `history/<id>/revise` `{item, note}` |
 | Waiting | working shape and "Asking the Label Reader… (up to a minute)" | |
-| Proposal | the before-and-after change list (02-components 7.9) on `--accent-soft` with an `--accent-text` outline: "Proposal: <n> changes" then one row per change: field name, old value struck through, arrow (read as "becomes"), new value (600); or "The Label Reader changed nothing." When the record has no photo: `--muted` "No photo was kept: it worked from the saved values and your note." | |
+| Proposal | the before-and-after change list (02-components 7.9) on `--accent-soft` with an `--accent-text` outline: "Proposal: <n> changes" then one row per change: field name, old value struck through, arrow (read as "becomes"), new value (600); or "The Label Reader changed nothing." When the record has no photo: `--muted` "No photo was kept for this record: the Label Reader worked from the saved values and your note." | |
 | "Accept" | filled | POST `history/<id>/apply` `{proposal}`; result "Accepted. 2 fields changed; revision 2 keeps the old values." State becomes "Revised by AI". |
 | "Discard" | default | nothing is sent; line "Proposal discarded. Nothing changed." |
 
@@ -1222,7 +1221,7 @@ A sheet on phones with the address `#settings` (2.4), opened over the last place
 |------------------------------------------|
 | Appearance                               |
 | [ Light    | Dark     | System    ]      |   sun, moon, half-circle icons
-| Saved on this phone.                     |
+| Saved on this device: Dark.              |
 |------------------------------------------|
 | Theme                                    |
 | +-----------------+ +-----------------+  |
@@ -1254,8 +1253,8 @@ The segmented control takes the full content width; each theme tile is a radio t
 
 | Group | Content |
 |---|---|
-| Appearance | The wide segmented control "Light / Dark / System" with sun, moon and half-circle icons (F5). Applies at once; line "Saved on this phone." |
-| Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this phone." Helper: "New phones start with the Hub's theme for new devices." |
+| Appearance | The wide segmented control "Light / Dark / System" with sun, moon and half-circle icons (F5). Applies at once; line "Saved on this device: <choice>." |
+| Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this device: <choice>." Helper: "New phones start with the Hub's theme for new devices." |
 | Print alerts on this phone (only when print alerts are offered, `data-push`) | Status: "Off" (hollow circle), "On: this phone gets print alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive print alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). |
 | This Hub | Hub name; the address this page is using (`--mono`); on the home address "Open the Hub page". |
 

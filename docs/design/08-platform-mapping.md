@@ -1044,7 +1044,7 @@ One string catalogue serves the web pages and the app, so the same thing is call
 (section 3.4).
 
 **Source: `strings/en.json`.** A flat object, keys in lower snake case, grouped by a prefix for the place
-(`printers_title`, `printer_forget`, `appearance_system`, `theme_console_line`). A value is a text, or for a
+(`nav_printers`, `printers_forget`, `appearance_system`, `theme_console_line`). A value is a text, or for a
 text that depends on a count an object `{ "one": "…", "other": "…" }`. Placeholders are written `{name}` in lower
 snake case; `{count}` is the number a plural depends on.
 
@@ -1105,6 +1105,10 @@ field on Android) and comes from its own key (`unit_g`, `unit_c`, `unit_g_cm3`, 
 key-value list the unit follows the value ("1000 g", "210 °C"). "(optional)" stays in the label, alone in its
 brackets. A format a person must type goes in the placeholder or the hint ("e.g. 190-220"; for a colour the hint key
 `common_field_colour_hint`, "A hex colour, like #2B2B2E"), not in the label.
+
+**Counts.** A text with one number that changes its words is a plural entry. A text with two numbers is written so
+that at most one of them changes a word: the other is given as a labelled number ("Lines with updates: 2",
+"Problems: 1"), never as "2 lines" beside "3 updates".
 
 **Shared wording.** One term per thing, in every interface (Hub page, web app, app and the `spoolwarden` command)
 and in the user documents. Each term is one catalogue key (`common_…` where several screens use it), so the interfaces

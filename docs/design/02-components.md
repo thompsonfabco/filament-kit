@@ -2437,7 +2437,7 @@ old, arrow, new follow on the next.
   accepting: "Accepting…" on Accept.
 - Error: the Label Reader could not answer: an inline result (failed) with the Hub's reason and **Try again**. No
   changes: "The Label Reader changed nothing." (neutral, no actions). No photo kept: a note "No photo was kept for
-  this record: it worked from the saved values and your note."
+  this record: the Label Reader worked from the saved values and your note."
 
 **Behaviour and keyboard.** Accept passes the lock, applies the proposal (`POST intake/history/<id>/apply` with the
 proposal), updates the fields in place, adds a revision (7.10), and replaces the container with the result

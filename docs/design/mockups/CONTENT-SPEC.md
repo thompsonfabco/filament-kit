@@ -162,10 +162,10 @@ Pairing a phone shows a drawn placeholder QR code, "Pairing code: 4821 9370", th
 
 ## 7. Slicer presets
 
-- Build: "Last build 2026-11-12 14:06: 58 presets, 46 for Orca Slicer, 1 problem." Problem: "Overture TPU has no
+- Build: "Last build 2026-11-12 14:06. Presets: 58 (46 for Orca Slicer). Problems: 1." Problem: "Overture TPU has no
   Bambu Studio parent." Slicer Sync: "Slicer Sync reported in 2026-11-12 13:50 (Desk PC)."
-- Updates: "3 updates available on 2 lines. Presets already in your slicers are never replaced unless you accept
-  here." Showing them lists: "Bambu Studio: Polymaker PolyTerra PLA @Workshop X1: nozzle temperature, fan speed",
+- Updates: "3 updates are waiting. Lines with updates: 2. Presets already in your slicers are never replaced unless
+  you accept here." Showing them lists: "Bambu Studio: Polymaker PolyTerra PLA @Workshop X1: nozzle temperature, fan speed",
   "Orca Slicer: Polymaker PolyTerra PLA @Workshop X1: nozzle temperature", "Bambu Studio: eSUN ABS+ @Workshop X1:
   bed temperature".
 
