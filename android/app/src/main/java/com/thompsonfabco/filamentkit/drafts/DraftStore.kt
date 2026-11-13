@@ -23,7 +23,12 @@ data class Draft(
     /** Set after a real add that may have written spools (partial Spoolman failure, or the reply was lost): the ids
      * already created (possibly none known). The next real add needs an explicit "I checked". */
     val addedBefore: List<Long>? = null,
-)
+    /** An add by hand: no photos, the typed spools are the content. */
+    val manual: Boolean = false,
+) {
+    /** Something worth keeping: photos, or a hand add with spools typed in (Home lists these; start-up keeps them). */
+    val hasContent: Boolean get() = photos.isNotEmpty() || (manual && editedItems?.isNotEmpty() == true)
+}
 
 @Serializable
 private data class DraftJson(
@@ -35,6 +40,7 @@ private data class DraftJson(
     val editedItems: JsonArray? = null,
     val created: Long = 0,
     val addedBefore: List<Long>? = null,
+    val manual: Boolean = false,
 )
 
 /**
@@ -44,9 +50,9 @@ private data class DraftJson(
 class DraftStore(private val dir: File) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun create(): Draft {
+    fun create(manual: Boolean = false): Draft {
         val id = UUID.randomUUID().toString()
-        val draft = Draft(id, emptyList(), "", null, null, false, null, null, System.currentTimeMillis())
+        val draft = Draft(id, emptyList(), "", null, null, true, null, null, System.currentTimeMillis(), manual = manual) // "Still sealed" starts on
         folder(id).mkdirs()
         write(draft)
         return draft
@@ -80,7 +86,7 @@ class DraftStore(private val dir: File) {
         if (!file.isFile) return null
         return try {
             val d = json.decodeFromString<DraftJson>(file.readText())
-            Draft(id, photoFiles(folder), d.hint, d.tag, d.weightGrams, d.sealed, d.readResult, d.editedItems, d.created, d.addedBefore)
+            Draft(id, photoFiles(folder), d.hint, d.tag, d.weightGrams, d.sealed, d.readResult, d.editedItems, d.created, d.addedBefore, d.manual)
         } catch (e: Exception) {
             null
         }
@@ -91,14 +97,16 @@ class DraftStore(private val dir: File) {
      * older than [maxAgeMs] and drafts with no photos (Home hides those, so nobody could discard them). A draft that
      * holds [Draft.addedBefore] is kept: it carries the "may already be added" warning. Returns how many were deleted.
      */
-    fun purge(maxAgeMs: Long, now: Long = System.currentTimeMillis()): Int {
+    fun purge(maxAgeMs: Long, now: Long = System.currentTimeMillis(), open: Set<String> = emptySet()): Int {
         var n = 0
         for (folder in dir.listFiles { f -> f.isDirectory }.orEmpty()) {
             val d = get(folder.name)
             val drop = when {
                 d == null -> true
+                folder.name in open -> false // an add that is open right now is never taken from under its screen
                 d.addedBefore != null -> false
-                else -> d.photos.isEmpty() || now - d.created > maxAgeMs
+                // a draft with nothing in it goes after a day; one just created or restored is never touched
+                else -> now - d.created > maxAgeMs || (!d.hasContent && now - d.created > EMPTY_GRACE_MS)
             }
             if (drop && folder.deleteRecursively()) n++
         }
@@ -120,7 +128,7 @@ class DraftStore(private val dir: File) {
             // JSON has no NaN/Infinity: such a weight would make every later write of this draft fail.
             DraftJson(
                 draft.hint, draft.tag, draft.weightGrams?.takeIf { it.isFinite() }, draft.sealed, draft.readResult,
-                draft.editedItems, draft.created, draft.addedBefore,
+                draft.editedItems, draft.created, draft.addedBefore, draft.manual,
             ),
         )
         val tmp = File(folder, "$DRAFT_FILE.tmp")
@@ -140,6 +148,9 @@ class DraftStore(private val dir: File) {
     companion object {
         /** Drafts older than this are deleted at start ([purge]). */
         const val MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
+
+        /** A draft with nothing in it is deleted at start only when it is older than this. */
+        const val EMPTY_GRACE_MS = 24L * 60 * 60 * 1000
         private const val DRAFT_FILE = "draft.json"
         private val PHOTO = Regex("""photo(\d+)\.jpg""")
     }

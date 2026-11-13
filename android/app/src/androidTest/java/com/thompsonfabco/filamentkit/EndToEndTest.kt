@@ -100,19 +100,21 @@ class EndToEndTest {
 
         // Add spools: photo (injected), tag, weight → Read.
         click("Add from label photos") // shown while the server has ai_intake on
-        waitFor("Photos: 0 of 8")
+        waitFor("Take at least one photo first.")
         DebugPhotos.emit(photo)
-        waitFor("Photos: 1 of 8", timeoutMs = 30_000)
+        waitFor("Read labels (1 photo)", timeoutMs = 30_000)
         emitUntil(uid) { exists("Tag $uid") }
-        field("Weight on the scale, with spool (g)").performScrollTo().performTextInput("812.5")
+        // "Still sealed" is on by default; one opened spool has its weight with the spool
+        click("Still sealed (in its bag or box)")
+        field("Weight with spool (optional)").performScrollTo().performTextInput("812.5")
         if (arg("fkStopBeforeRead") == "1") return // rehearsal: everything up to the paid Read step
-        click("Read labels")
+        click("Read labels (1 photo)")
         compose.waitUntil(180_000) { exists("Check the spools") || exists("Your photos and edits are kept.") }
         assertTrue("Read failed: ${allText()}", exists("Check the spools"))
         Log.i(TAG, "read: ${allText()}")
 
         // One opened spool, so the tag is linked and the weight becomes its gross.
-        val sealed = compose.onNode(hasContentDescription("Still sealed"))
+        val sealed = compose.onNode(hasText("Still sealed (in its bag or box)"))
         if (sealed.fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState) == ToggleableState.On) {
             sealed.performScrollTo().performClick()
         }
@@ -125,8 +127,8 @@ class EndToEndTest {
         click("Preview")
         waitFor("would link tag $uid", timeoutMs = 60_000)
         click("Add 1 spool")
-        compose.waitUntil(60_000) { exists("New spool: #", substring = true) || exists("Your photos and edits are kept.") }
-        val done = allText().firstNotNullOfOrNull { Regex("New spool: #(\\d+)").find(it) }
+        compose.waitUntil(60_000) { exists("New spools: spool ", substring = true) || exists("Your photos and edits are kept.") }
+        val done = allText().firstNotNullOfOrNull { Regex("New spools: spool (\\d+)").find(it) }
         assertTrue("Add failed: ${allText()}", done != null)
         val spoolId = done!!.groupValues[1].toInt()
         assertTrue(exists("linked tag $uid to spool $spoolId"))

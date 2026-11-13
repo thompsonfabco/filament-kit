@@ -104,7 +104,12 @@ data class AddResult(
     val lines: List<String> = emptyList(),
     val dry: Boolean = true,
     @SerialName("history_id") val historyId: String? = null,
+    /** What the add does per item (index, new or existing filament, where the spools go, problems); older Hubs send none. */
+    val items: JsonArray = JsonArray(emptyList()),
 )
+
+/** One page of `GET /api/filaments`: the rows and how many filaments match in all. */
+data class FilamentPage(val filaments: List<FilamentChoice>, val total: Int)
 
 // ---- intake history (2026-11-12-1031 handoff, API v1) ----------------------------------------------------
 

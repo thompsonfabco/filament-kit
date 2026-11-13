@@ -2,6 +2,10 @@ package com.thompsonfabco.filamentkit.ui.add
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.imaging.prepareJpeg
@@ -9,6 +13,7 @@ import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FilamentChoice
+import com.thompsonfabco.filamentkit.net.FilamentPage
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.ParentList
@@ -22,6 +27,8 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,6 +74,9 @@ interface IntakeApi {
 
     suspend fun vendors(): List<VendorChoice> = emptyList()
 
+    /** The picker's page: [limit] rows and the total (the default asks for them all, older fakes keep compiling). */
+    suspend fun filamentPage(q: String, limit: Int): FilamentPage = filaments(q).let { FilamentPage(it, it.size) }
+
     companion object {
         /** Calls go to whatever [current] returns at that moment, so a new client (trusted certificate, re-pair) is used at once. */
         fun of(current: () -> Api): IntakeApi = object : IntakeApi {
@@ -80,6 +90,7 @@ interface IntakeApi {
             override suspend fun parents(material: String) = api().parents(material)
             override suspend fun filaments(q: String) = api().filaments(q)
             override suspend fun vendors() = api().vendors()
+            override suspend fun filamentPage(q: String, limit: Int) = api().filamentPage(q, limit)
         }
 
         fun of(api: Api): IntakeApi = object : IntakeApi {
@@ -92,43 +103,48 @@ interface IntakeApi {
             override suspend fun parents(material: String) = api.parents(material)
             override suspend fun filaments(q: String) = api.filaments(q)
             override suspend fun vendors() = api.vendors()
+            override suspend fun filamentPage(q: String, limit: Int) = api.filamentPage(q, limit)
         }
     }
 }
 
 /**
- * Capture → (Reading) → Review → (Previewing) → Preview → (Adding) → Done. Adding by hand ([AddUiState.manual])
- * starts at Review with no items: the user picks filaments or types new ones in.
+ * Photos (Capture, Reading) → Check the spools (Review) → Preview (Previewing, Preview, Adding) → Spools added (Done).
+ * Adding by hand ([AddUiState.manual]) starts at Review with no items: the person picks filaments or types new ones in.
  */
 enum class Stage { Capture, Reading, Review, Previewing, Preview, Adding, Done }
 
 /**
- * A problem shown to the user. [canRetry] offers Retry (repeats the failed step; a failed read is retried from the
- * photos the server kept). [canDropTag] offers adding without the tag. [pairAgain] sends the user to pairing; with
- * [expectedFingerprint]/[actualFingerprint] it is a changed server certificate.
+ * A problem shown to the person (05-android-app 6.2, 3.5). [canRetry] offers "Try again" (repeats the failed step; a
+ * failed read is retried from the photos the Hub kept). [canDropTag] offers adding without the tag; [canAddByHand]
+ * offers adding by hand instead; [pairAgain] sends the person to pairing, and with [expectedFingerprint] and
+ * [actualFingerprint] it is a changed Hub certificate. [detail] is what the Hub said, shown as given.
  */
 data class AddError(
-    val message: String,
+    val message: AddText,
     val detail: String? = null,
     val canRetry: Boolean = false,
     val canDropTag: Boolean = false,
+    val canAddByHand: Boolean = false,
     val pairAgain: Boolean = false,
     val expectedFingerprint: String? = null,
     val actualFingerprint: String? = null,
 )
 
 /**
- * A real add failed after it may have written to Spoolman: [spoolIds] are the spools the server reported as created
- * (a partial `spoolman_error`); empty when the reply was lost and nothing is known.
+ * A real add failed after it may have written to Spoolman: [spoolIds] are the spools the Hub reported as created (a
+ * partial `spoolman_error`, with its [hubMessage]); empty when the reply was lost and nothing is known.
  */
-data class AddedBefore(val spoolIds: List<Long>) {
-    val note: String
-        get() = if (spoolIds.isEmpty()) {
-            "The last add may have gone through: the connection was lost before the server answered."
-        } else {
-            "Spools already added: ${spoolIds.joinToString { "#$it" }}"
-        }
+data class AddedBefore(val spoolIds: List<Long>, val hubMessage: String? = null)
+
+/** Something that happened to the draft that the screen answers with a snackbar (and an "Undo"). */
+sealed interface AddEvent {
+    data object PhotoRemoved : AddEvent
+    data object SpoolRemoved : AddEvent
 }
+
+/** One thing the Hub's check refused: [text] as the Hub gave it; [index] and [key] name the field when it does. */
+data class PreviewProblem(val text: String, val index: Int? = null, val key: String? = null)
 
 data class AddUiState(
     val stage: Stage = Stage.Capture,
@@ -137,14 +153,31 @@ data class AddUiState(
     val hint: String = "",
     val tag: String? = null,
     val weight: Double? = null,
-    val sealed: Boolean = false,
+    val sealed: Boolean = true,
     val questions: List<String> = emptyList(),
     /** Which reader answered the read and how sure it was (null: no read, or a manual add). */
     val readInfo: ReaderTexts.Info? = null,
     /** The read's items as the server sent them, plus the user's edits; sent back to `add` as-is. */
     val items: List<JsonObject> = emptyList(),
-    val notices: List<String> = emptyList(),
+    /** Notices of the read (the Hub's own words) and the app's note on a weight it could not use. */
+    val notices: List<AddText> = emptyList(),
     val previewLines: List<String> = emptyList(),
+    /** What the Hub says each item does (its dry run, per item); empty from an older Hub: the rows use the app's own items. */
+    val previewItems: List<JsonObject> = emptyList(),
+    /** The spool panels that are open on the Check step (null: not touched yet, the first one is open); kept across the Preview step. */
+    val openPanels: Set<Int>? = null,
+    /** The Hub's check came back with problems or failed: the preview is not usable and Add stays off. */
+    val previewFailed: Boolean = false,
+    /** What the Hub refused, one entry each (the Hub's words); each has a "Fix" back to the field. */
+    val problems: List<PreviewProblem> = emptyList(),
+    /** The Hub's record of the add (`history_id`), for "Open in Recently added". */
+    val historyId: String? = null,
+    /** The tag that was sent with the add that finished (the Done step says it is linked). */
+    val doneTag: String? = null,
+    /** The field a "Fix" or "Show" asks the Check step to open and focus (item index, item key); cleared once done. */
+    val focus: Pair<Int, String>? = null,
+    /** A spool just added or put back: the Check step opens its panel (item index); cleared once done. */
+    val reveal: Int? = null,
     val spoolIds: List<Int> = emptyList(),
     val resultLines: List<String> = emptyList(),
     val locations: List<String> = emptyList(),
@@ -153,7 +186,7 @@ data class AddUiState(
     val generation: Int = 0,
     /** A real add may already have written spools; the next real add needs [AddViewModel.addAgain]. */
     val addedBefore: AddedBefore? = null,
-    /** The "I checked — add again" warning is open (Add was tapped while [addedBefore] is set). */
+    /** The "Add these spools again?" dialog is open (Add was tapped while [addedBefore] is set). */
     val askAddAgain: Boolean = false,
     /** Bambu Studio parents per material (for the parent dropdown); a material missing here is not loaded yet. */
     val parents: Map<String, ParentList> = emptyMap(),
@@ -165,19 +198,21 @@ data class AddUiState(
     val filamentQuery: String = "",
     val filaments: List<FilamentChoice> = emptyList(),
     val filamentsLoading: Boolean = false,
-    val filamentsError: String? = null,
+    /** How many filaments match in all (the Hub pages the picker); more than listed means "N more: type more". */
+    val filamentsTotal: Int = 0,
+    val filamentsError: AddText? = null,
     /** Vendor suggestions for a new filament (manual add). */
     val vendors: List<VendorChoice> = emptyList(),
     /** The server's complaint about one field (item index → item key → text), shown at that field until an edit. */
     val fieldErrors: Map<Int, Map<String, String>> = emptyMap(),
 ) {
-    /** Manual add: what each item still needs before Preview (item keys); empty lists when complete. */
+    /** What each item still needs before Preview (item keys); empty lists when complete. */
     val missing: List<List<String>>
-        get() = items.map(::missingFields)
+        get() = items.map { missingFields(it, needDensity = manual) }
 
-    /** A manual add's items are complete; the label-photo flow leaves this to the server, as before. */
+    /** Every item has what the Hub needs (a read's density is the Hub's to ask for, so the photo path leaves it out). */
     val complete: Boolean
-        get() = !manual || missing.all { it.isEmpty() }
+        get() = missing.all { it.isEmpty() }
 
     /** Every item has a whole spool count of at least 1 (Preview is blocked otherwise). */
     val countsValid: Boolean
@@ -208,7 +243,11 @@ class AddViewModel(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Add by hand (no photos, no draft): starts at Review with the filament picker. */
     private val manual: Boolean = false,
+    /** Where the flow's work runs; the app's [AddFlows] pass theirs, so a read or an add outlives the screen. */
+    private val ownScope: CoroutineScope? = null,
 ) : ViewModel() {
+    private val scope: CoroutineScope get() = ownScope ?: viewModelScope
+
     private val _state = MutableStateFlow(
         if (manual) AddUiState(stage = Stage.Review, tag = initialTag, manual = true, filamentsLoading = true)
         else AddUiState(tag = initialTag),
@@ -234,9 +273,25 @@ class AddViewModel(
     private val typingParent = mutableSetOf<Int>()
     /** The running (or debounced) filament search of the manual add's picker. */
     private var filamentJob: Job? = null
+    private var readJob: Job? = null
+    private var addJob: Job? = null
+    private val _events = Channel<AddEvent>(Channel.BUFFERED)
+
+    /** What the screen answers with a snackbar: a removed photo or spool, each with its "Undo". */
+    val events: Flow<AddEvent> = _events.receiveAsFlow()
+    private val _readDone = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+
+    /** A read ended with items: the shell says so (with "Check") when the person is not on the Photos step. */
+    val readDone: SharedFlow<Unit> = _readDone
+    private val _finished = MutableSharedFlow<Boolean>(extraBufferCapacity = 4)
+
+    /** A real add ended: true when the spools were added, false when it failed. */
+    val finished: SharedFlow<Boolean> = _finished
+    private var removedPhoto: ByteArray? = null
+    private var removedItem: Pair<Int, JsonObject>? = null
 
     init {
-        viewModelScope.launch(io) {
+        scope.launch(io) {
             saves.filterNotNull().collect { d ->
                 try {
                     store.update(d)
@@ -244,30 +299,32 @@ class AddViewModel(
                 }
             }
         }
-        viewModelScope.launch { taps.collect { setTag(it) } }
-        viewModelScope.launch {
+        scope.launch { taps.collect { setTag(it) } }
+        scope.launch {
             try {
                 val names = api.locations()
                 _state.update { it.copy(locations = names) }
+                hubOk()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) { // suggestions only; the location field still takes free text
             }
         }
-        if (manual) {
-            viewModelScope.launch {
-                try {
-                    val list = api.vendors()
-                    _state.update { it.copy(vendors = list) }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) { // suggestions only; the vendor field still takes free text
-                }
+        scope.launch {
+            try {
+                val list = api.vendors()
+                _state.update { it.copy(vendors = list) }
+                hubOk()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) { // suggestions only; the brand field still takes free text
             }
-            findFilaments("")
-        } else if (draftId != null) {
-            viewModelScope.launch { restore(draftId) }
         }
+        if (draftId != null) {
+            store.get(draftId)?.let(::applyDraft)
+            if (initialTag != null) save() // a tapped tag is part of the draft from the start
+        }
+        if (manual) findFilaments("")
     }
 
     // ---------- manual add: filament picker ----------
@@ -281,12 +338,13 @@ class AddViewModel(
 
     private fun findFilaments(q: String, wait: Long = 0) {
         filamentJob?.cancel()
-        filamentJob = viewModelScope.launch {
+        filamentJob = scope.launch {
             if (wait > 0) delay(wait)
             _state.update { it.copy(filamentsLoading = true, filamentsError = null) }
             try {
-                val list = api.filaments(q)
-                _state.update { it.copy(filaments = list, filamentsLoading = false) }
+                val page = api.filamentPage(q, FILAMENTS_SHOWN)
+                _state.update { it.copy(filaments = page.filaments, filamentsTotal = page.total, filamentsLoading = false) }
+                hubOk()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -329,7 +387,7 @@ class AddViewModel(
 
     private fun addItem(item: JsonObject) {
         _state.update { s ->
-            s.copy(items = s.items + item, generation = s.generation + 1).invalidated()
+            s.copy(items = s.items + item, generation = s.generation + 1, reveal = s.items.size).invalidated()
         }
         retryAction = null
         save()
@@ -342,18 +400,18 @@ class AddViewModel(
         var next = item + ("vendor" to JsonPrimitive(v.name))
         val tare = v.tare?.takeIf(::isValidWeight)
         if (tare != null && item.num("tare") == null) next = next + ("tare" to number(tare))
-        editItem(index) { JsonObject(next) }
-        _state.update { it.copy(generation = it.generation + 1) } // the card shows the new vendor and tare
+        editItem(index, "vendor") { JsonObject(next) }
+        _state.update { it.copy(generation = it.generation + 1) } // the panel shows the new vendor and tare
         scheduleProposal(index)
     }
 
     // ---------- capture ----------
 
     fun addPhoto(raw: ByteArray) {
-        viewModelScope.launch {
+        scope.launch {
             photoLock.withLock {
                 if (_state.value.photos.size >= MAX_PHOTOS) {
-                    showError(AddError("$MAX_PHOTOS photos at most. Remove one to add another."))
+                    showError(AddError(AddText.plural(R.plurals.field_file_error_photo_limit, MAX_PHOTOS, MAX_PHOTOS)))
                     return@withLock
                 }
                 try {
@@ -371,23 +429,49 @@ class AddViewModel(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    showError(AddError("That photo could not be used. Take it again.", detail = e.message))
+                    showError(AddError(AddText.of(R.string.add_photos_photo_failed), detail = e.message))
                 }
             }
         }
     }
 
+    /** Removes a photo; [AddEvent.PhotoRemoved] offers "Undo" ([undoPhoto]) for the latest one. */
     fun removePhoto(index: Int) {
         val file = _state.value.photos.getOrNull(index) ?: return
-        viewModelScope.launch {
+        scope.launch {
             val photos = photoLock.withLock {
                 withContext(io) {
+                    removedPhoto = runCatching { file.readBytes() }.getOrNull()
                     file.delete()
                     draft?.let { store.get(it.id)?.photos }.orEmpty()
                 }
             }
             forgetFailedRead()
             _state.update { it.copy(photos = photos) }
+            if (removedPhoto != null) _events.trySend(AddEvent.PhotoRemoved)
+        }
+    }
+
+    /** Puts the photo removed last back (at the end of the strip). */
+    fun undoPhoto() {
+        val bytes = removedPhoto ?: return
+        removedPhoto = null
+        scope.launch {
+            photoLock.withLock {
+                val d = draft ?: return@withLock
+                try {
+                    val photos = withContext(io) {
+                        store.addPhoto(d.id, bytes)
+                        store.get(d.id)?.photos.orEmpty()
+                    }
+                    forgetFailedRead()
+                    _state.update { it.copy(photos = photos) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    showError(AddError(AddText.of(R.string.add_photos_photo_failed), detail = e.message))
+                }
+            }
         }
     }
 
@@ -439,10 +523,11 @@ class AddViewModel(
 
     private fun runRead(call: suspend () -> ReadResult) {
         _state.update { it.copy(stage = Stage.Reading, error = null) }
-        viewModelScope.launch {
+        readJob = scope.launch {
             try {
                 val res = call()
                 failedReadId = null
+                hubOk()
                 onRead(res)
             } catch (e: CancellationException) {
                 throw e
@@ -454,14 +539,25 @@ class AddViewModel(
                     val id = failedReadId
                     if (id != null) runRead { api.retry(id) } else read()
                 }
-                showError(describe(e))
+                val err = describe(e)
+                // a read needs the Hub: the photos stay, and the words say so (05 6.2)
+                showError(if ((e as? ApiError)?.code == "offline") err.copy(message = AddText.of(R.string.add_read_offline)) else err)
             }
         }
     }
 
+    /** "Cancel reading": the draft and its photos stay; the answer, if it still comes, is not used. */
+    fun cancelRead() {
+        if (_state.value.stage != Stage.Reading) return
+        readJob?.cancel()
+        readJob = null
+        _state.update { it.copy(stage = Stage.Capture) }
+    }
+
     private fun onRead(res: ReadResult) {
         val s = _state.value
-        val (items, notices) = applyCaptureChoices(res.items.mapNotNull { it as? JsonObject }, s.weight, s.sealed)
+        val (items, ours) = applyCaptureChoices(res.items.mapNotNull { it as? JsonObject }, s.weight, s.sealed)
+        val notices = listOfNotNull(res.note?.takeIf { it.isNotBlank() }?.let(AddText::hub)) + ours
         readResult = json.encodeToJsonElement(res) as JsonObject
         _state.update {
             it.copy(
@@ -472,6 +568,7 @@ class AddViewModel(
         }
         save()
         loadParentsForItems()
+        _readDone.tryEmit(Unit)
     }
 
     /** Not in a manual add (it has no photos; the screen offers Cancel instead). */
@@ -488,7 +585,7 @@ class AddViewModel(
     fun setText(index: Int, key: String, value: String) {
         val v = if (key == "color_hex") value.trim().removePrefix("#").uppercase() else value
         val el: JsonElement = if (v.isBlank() && key !in REQUIRED_TEXT) JsonNull else JsonPrimitive(v)
-        editItem(index) { JsonObject(it + (key to el)) }
+        editItem(index, key) { JsonObject(it + (key to el)) }
         if (key in LINE_KEYS) scheduleProposal(index)
     }
 
@@ -501,20 +598,20 @@ class AddViewModel(
     fun setParent(index: Int, value: String) {
         typingParent.remove(index)
         if (value.isBlank()) {
-            editItem(index) { JsonObject(it - PICKED + ("bambu_parent" to JsonNull)) }
+            editItem(index, "bambu_parent") { JsonObject(it - PICKED + ("bambu_parent" to JsonNull)) }
             scheduleProposal(index)
             return
         }
         val listed = syncedParents(index)
         if (listed != null && value !in listed) return
-        editItem(index) { JsonObject(it + ("bambu_parent" to JsonPrimitive(value)) + (PICKED to JsonPrimitive(true))) }
+        editItem(index, "bambu_parent") { JsonObject(it + ("bambu_parent" to JsonPrimitive(value)) + (PICKED to JsonPrimitive(true))) }
     }
 
     /** Free-text typing of the parent (only while not synced). Not a pick until [commitParent] (blur, Done, Preview). */
     fun typeParent(index: Int, value: String) {
         if (syncedParents(index) != null) return
         typingParent += index
-        editItem(index) { JsonObject(it + ("bambu_parent" to (if (value.isEmpty()) JsonNull else JsonPrimitive(value)))) }
+        editItem(index, "bambu_parent") { JsonObject(it + ("bambu_parent" to (if (value.isEmpty()) JsonNull else JsonPrimitive(value)))) }
     }
 
     /** Ends typing: non-blank text becomes a pick; blank lets the server propose again. */
@@ -542,7 +639,7 @@ class AddViewModel(
      */
     private fun scheduleProposal(index: Int) {
         proposalJobs.remove(index)?.cancel()
-        proposalJobs[index] = viewModelScope.launch {
+        proposalJobs[index] = scope.launch {
             delay(PROPOSE_DEBOUNCE_MS)
             val asked = _state.value.items.getOrNull(index) ?: return@launch
             val material = asked.text("material")
@@ -570,7 +667,7 @@ class AddViewModel(
 
     private fun loadParentsForItems() {
         _state.value.items.mapNotNull { it.text("material")?.takeIf(String::isNotBlank) }.distinct().forEach { m ->
-            viewModelScope.launch { loadParents(m) }
+            scope.launch { loadParents(m) }
         }
     }
 
@@ -603,39 +700,59 @@ class AddViewModel(
     /** Weights (`net`, `tare`, `gross`); a value that is not finite and above 0 is ignored. */
     fun setNumber(index: Int, key: String, value: Double?) {
         if (value != null && !isValidWeight(value)) return
-        editItem(index) { JsonObject(it + (key to (value?.let(::number) ?: JsonNull))) }
+        editItem(index, key) { JsonObject(it + (key to (value?.let(::number) ?: JsonNull))) }
     }
 
     /** `gross` only applies to a single spool, so any other count drops it. */
-    fun setCount(index: Int, count: Int?) = editItem(index) {
+    fun setCount(index: Int, count: Int?) = editItem(index, "count") {
         val o = it + ("count" to (count?.let { c -> JsonPrimitive(c) } ?: JsonNull))
         JsonObject(if (count != 1) o - "gross" else o)
     }
 
     /** Blank leaves the location to the server's placement rules. */
-    fun setLocation(index: Int, location: String) = editItem(index) {
+    fun setLocation(index: Int, location: String) = editItem(index, "location") {
         if (location.isBlank()) JsonObject(it - "location") else JsonObject(it + ("location" to JsonPrimitive(location.trim())))
     }
 
     /** A sealed spool has no gross weight. */
-    fun setItemSealed(index: Int, sealed: Boolean) = editItem(index) {
+    fun setItemSealed(index: Int, sealed: Boolean) = editItem(index, "gross") {
         val o = it + ("sealed" to JsonPrimitive(sealed))
         JsonObject(if (sealed) o - "gross" else o)
     }
 
+    /** Removes a spool; [AddEvent.SpoolRemoved] offers "Undo" ([undoRemoveItem]) for the latest one. */
     fun removeItem(index: Int) {
-        if (index !in _state.value.items.indices || _state.value.stage in BUSY) return
+        val gone = _state.value.items.getOrNull(index) ?: return
+        if (_state.value.stage in BUSY) return
         cancelProposals() // indices shift
+        removedItem = index to gone
         _state.update { s ->
             s.copy(items = s.items.filterIndexed { i, _ -> i != index }, generation = s.generation + 1).invalidated()
         }
         retryAction = null
         save()
+        _events.trySend(AddEvent.SpoolRemoved)
     }
 
-    private fun editItem(index: Int, change: (JsonObject) -> JsonObject) {
+    /** Puts the spool removed last back where it was. */
+    fun undoRemoveItem() {
+        val (index, item) = removedItem ?: return
+        removedItem = null
+        if (_state.value.stage in BUSY) return
+        cancelProposals()
+        _state.update { s ->
+            val at = index.coerceIn(0, s.items.size)
+            s.copy(items = s.items.take(at) + item + s.items.drop(at), generation = s.generation + 1, reveal = at).invalidated()
+        }
+        retryAction = null
+        save()
+    }
+
+    private fun editItem(index: Int, touch: String? = null, change: (JsonObject) -> JsonObject) {
         if (index !in _state.value.items.indices || _state.value.stage in BUSY) return
-        _state.update { s -> s.copy(items = s.items.mapIndexed { i, o -> if (i == index) change(o) else o }).invalidated() }
+        _state.update { s ->
+            s.copy(items = s.items.mapIndexed { i, o -> if (i == index) change(o).touched(touch) else o }).invalidated()
+        }
         retryAction = null
         save()
     }
@@ -645,19 +762,47 @@ class AddViewModel(
      * error is cleared (callers also drop [retryAction]).
      */
     private fun AddUiState.invalidated() =
-        (if (stage == Stage.Preview) copy(stage = Stage.Review, previewLines = emptyList()) else this)
-            .copy(error = null, parentError = null, fieldErrors = emptyMap())
+        (if (stage == Stage.Preview) copy(stage = Stage.Review, previewLines = emptyList(), previewItems = emptyList()) else this)
+            .copy(error = null, parentError = null, fieldErrors = emptyMap(), previewFailed = false, problems = emptyList())
 
+    /** "Preview": the Hub's check (`dry_run`) runs on entry to the Preview step. */
     fun preview() {
         val s = _state.value
-        if (s.items.isEmpty() || !s.countsValid || !s.taresValid || s.stage != Stage.Review) return
+        val again = s.stage == Stage.Preview && s.previewFailed
+        if (s.items.isEmpty() || !s.countsValid || !s.taresValid || (s.stage != Stage.Review && !again)) return
         typingParent.toList().forEach(::commitParent) // parent text still being typed counts as entered
         fillDensities()
         if (!_state.value.complete) return
         runAdd(dryRun = true)
     }
 
-    /** A missing density becomes the usual one for its material (PLA 1.24, PETG 1.27, ...), shown in the card. */
+    /** "Back to the check": from the Preview step to Check the spools. Not while the Hub is writing. */
+    fun backToCheck() {
+        if (_state.value.stage !in setOf(Stage.Preview, Stage.Previewing)) return
+        addJob?.cancel()
+        retryAction = null
+        _state.update {
+            it.copy(
+                stage = Stage.Review, previewLines = emptyList(), previewItems = emptyList(), previewFailed = false,
+                problems = emptyList(), error = null,
+            )
+        }
+    }
+
+    /** "Fix" and "Show": the Check step opens the spool and focuses the field ([AddUiState.focus]). */
+    fun fixField(index: Int, key: String) {
+        backToCheck()
+        if (_state.value.stage == Stage.Review) _state.update { it.copy(focus = index to key) }
+    }
+
+    /** Which spool panels are open (the screen's choice; kept while the person is on the Preview step). */
+    fun setOpenPanels(open: Set<Int>) = _state.update { it.copy(openPanels = open) }
+
+    fun focusDone() = _state.update { it.copy(focus = null) }
+
+    fun revealDone() = _state.update { it.copy(reveal = null) }
+
+    /** A missing density becomes the usual one for its material (PLA 1.24, PETG 1.27, ...), shown in the panel. */
     private fun fillDensities() {
         val s = _state.value
         val filled = s.items.map { item ->
@@ -673,7 +818,7 @@ class AddViewModel(
     /** The real add. After an add that may already have written spools, this only opens the "add again?" warning. */
     fun confirm() {
         val s = _state.value
-        if (s.stage != Stage.Preview) return
+        if (s.stage != Stage.Preview || s.previewFailed) return
         if (s.addedBefore != null) {
             _state.update { it.copy(askAddAgain = true) }
             return
@@ -681,7 +826,7 @@ class AddViewModel(
         runAdd(dryRun = false)
     }
 
-    /** "I checked — add again" in the warning: the real add, once. */
+    /** "Add again" in the warning: the real add, once. */
     fun addAgain() {
         val s = _state.value
         if (!s.askAddAgain) return
@@ -693,53 +838,77 @@ class AddViewModel(
 
     private fun runAdd(dryRun: Boolean) {
         val s = _state.value
-        val back = if (dryRun) Stage.Review else Stage.Preview
-        _state.update { it.copy(stage = if (dryRun) Stage.Previewing else Stage.Adding, error = null) }
-        viewModelScope.launch {
+        _state.update {
+            it.copy(
+                stage = if (dryRun) Stage.Previewing else Stage.Adding, error = null,
+                previewFailed = false, problems = emptyList(),
+            )
+        }
+        addJob = scope.launch {
             try {
                 val readId = if (s.manual) null else (readResult?.get("read_id") as? JsonPrimitive)?.contentOrNull
                 val res = api.add(JsonArray(s.items.map(::forAdd)), dryRun, s.tag, readId)
+                hubOk()
                 if (dryRun) {
-                    _state.update { it.copy(stage = Stage.Preview, previewLines = res.lines) }
+                    _state.update {
+                        it.copy(stage = Stage.Preview, previewLines = res.lines, previewItems = res.items.mapNotNull { x -> x as? JsonObject })
+                    }
                 } else {
                     val id = draft?.id
                     draft = null
                     if (id != null) withContext(io) { store.delete(id) }
                     _state.update {
-                        it.copy(stage = Stage.Done, spoolIds = res.spoolIds, resultLines = res.lines, draftId = null)
+                        it.copy(
+                            stage = Stage.Done, spoolIds = res.spoolIds, resultLines = res.lines, draftId = null,
+                            historyId = res.historyId, doneTag = it.tag, addedBefore = null,
+                        )
                     }
+                    _finished.tryEmit(true)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val code = (e as? ApiError)?.code
+                val failure = e as? ApiError
+                val code = failure?.code
                 var err = describe(e)
                 // A real add that may have written something (Spoolman failed part-way, or the reply was lost) needs a
                 // fresh preview before another real add; its retry is that preview, never a blind second write.
                 val mayHaveWritten = !dryRun && (code == "spoolman_error" || code == "offline")
-                if (!dryRun && code == "offline") err = err.copy(message = ADD_REPLY_LOST)
-                val badParent = code == "unknown_parent" // fixed in Review, at the parent fields
-                val stage = if (mayHaveWritten || badParent) Stage.Review else back
+                if (!dryRun && code == "offline") err = err.copy(message = AddText.of(R.string.add_preview_reply_lost))
+                val badParent = code == "unknown_parent" // fixed in Check, at the parent field
+                // a failed check stays on the Preview step, with its problems and "Fix"
+                val stage = if (mayHaveWritten || badParent) Stage.Review else Stage.Preview
                 // Spools may exist now: a partial Spoolman failure (ids known) or a lost reply (unknown).
-                val created = (e as? ApiError)?.let(::partialIds).orEmpty()
+                val created = failure?.let(::partialIds).orEmpty()
                 val warn = !dryRun && (code == "offline" || (code == "spoolman_error" && created.isNotEmpty()))
                 val field = if (code == "bad_request") fieldError(e.message.orEmpty(), s.items) else null
-                if (field != null) err = err.copy(message = FIELD_PROBLEM)
+                // the Hub's complaint about a field: a line of the preview with "Fix", and under the field itself
+                val problem = if (dryRun && code == "bad_request") {
+                    listOf(PreviewProblem(e.message.orEmpty(), field?.index, field?.key))
+                } else emptyList()
                 _state.update {
                     it.copy(
                         stage = stage,
                         previewLines = if (stage == Stage.Review) emptyList() else it.previewLines,
-                        parentError = if (badParent) UNKNOWN_PARENT else null,
+                        previewFailed = dryRun && stage == Stage.Preview,
+                        problems = problem,
+                        parentError = if (badParent) e.message else null,
                         fieldErrors = field?.let { f -> mapOf(f.index to mapOf(f.key to f.text)) }.orEmpty(),
                         addedBefore = if (warn) {
-                            AddedBefore((it.addedBefore?.spoolIds.orEmpty() + created).distinct())
+                            AddedBefore(
+                                (it.addedBefore?.spoolIds.orEmpty() + created).distinct(),
+                                hubMessage = failure?.message?.takeIf { created.isNotEmpty() },
+                            )
                         } else it.addedBefore,
                     )
                 }
                 if (warn) save()
                 // Retries go through the stage guards of preview()/confirm(), so a later edit blocks a stale write.
                 retryAction = if (dryRun || mayHaveWritten) ::preview else ::confirm
-                showError(err)
+                // A refusal that names a field is shown at the field and as a line of the preview, a wrong parent at its
+                // field and a partial write by the "may have been added" notice: none of them needs a second line.
+                if (problem.isEmpty() && !badParent && !(warn && created.isNotEmpty())) showError(err)
+                if (!dryRun) _finished.tryEmit(false)
             }
         }
     }
@@ -754,19 +923,22 @@ class AddViewModel(
         action()
     }
 
-    /** After a tag conflict: forget the tag and preview again without it (a tag change always needs a new preview). */
+    /** After a tag conflict: forget the tag and try again without it (a tag change always needs a new preview). */
     fun dropTagAndRetry() {
         if (_state.value.error?.canDropTag != true) return
         retryAction = null
         _state.update { it.copy(tag = null).invalidated() }
         save()
-        preview()
+        if (_state.value.items.isNotEmpty()) preview() else read()
     }
 
     fun dismissError() {
         retryAction = null
         _state.update { it.copy(error = null) }
     }
+
+    /** A call was answered: a "no longer paired" or "certificate changed" notice from before is no longer true. */
+    private fun hubOk() = _state.update { if (it.error?.pairAgain == true) it.copy(error = null) else it }
 
     /** After Done: start a fresh flow (no draft until the next photo). */
     fun startOver() {
@@ -808,8 +980,8 @@ class AddViewModel(
         saves.value = next
     }
 
-    private suspend fun restore(id: String) {
-        val d = withContext(io) { store.get(id) } ?: return
+    /** The saved draft: its photos, choices, read result and edited items come back as they were. */
+    private fun applyDraft(d: Draft) {
         draft = d
         readResult = d.readResult
         val res = d.readResult?.let {
@@ -822,11 +994,11 @@ class AddViewModel(
         val items = (d.editedItems ?: res?.items)?.mapNotNull { it as? JsonObject }
         _state.update {
             it.copy(
-                stage = if (items != null) Stage.Review else Stage.Capture,
+                stage = if (manual || items != null) Stage.Review else Stage.Capture,
                 draftId = d.id, photos = d.photos, hint = d.hint, tag = d.tag ?: it.tag, weight = d.weightGrams,
                 sealed = d.sealed, questions = res?.questions.orEmpty(), items = items.orEmpty(),
                 readInfo = res?.let(ReaderTexts::info),
-                addedBefore = d.addedBefore?.let(::AddedBefore),
+                addedBefore = d.addedBefore?.let { ids -> AddedBefore(ids) },
                 generation = it.generation + 1,
             )
         }
@@ -835,6 +1007,9 @@ class AddViewModel(
 
     companion object {
         const val MAX_PHOTOS = 8
+
+        /** The most filaments the picker lists (05-android-app 6.4). */
+        const val FILAMENTS_SHOWN = 20
         internal const val PROPOSE_DEBOUNCE_MS = 500L
         internal const val PARENTS_MAX_AGE_MS = 5 * 60_000L
         /** App-only item key (kept in the draft, never sent): the user picked this item's Bambu parent. */
@@ -846,8 +1021,8 @@ class AddViewModel(
         private val LINE_KEYS = listOf("vendor", "line", "material")
         private val REQUIRED_TEXT = setOf("vendor", "name", "material")
         private val BUSY = setOf(Stage.Reading, Stage.Previewing, Stage.Adding)
-        internal const val ADD_REPLY_LOST = "The connection to the server was lost while adding, so the spools may " +
-            "have been added. Check Spoolman before trying again; Retry first runs a new preview."
+        /** App-only item key (never sent): the fields the person has edited (their confidence mark is gone). */
+        internal const val TOUCHED = "app_touched"
     }
 }
 
@@ -859,7 +1034,7 @@ internal fun applyCaptureChoices(
     items: List<JsonObject>,
     weight: Double?,
     sealed: Boolean,
-): Pair<List<JsonObject>, List<String>> {
+): Pair<List<JsonObject>, List<AddText>> {
     if (sealed) return items.map { JsonObject(it + ("sealed" to JsonPrimitive(true)) - "gross") } to emptyList()
     if (weight == null) return items to emptyList()
     val one = items.singleOrNull()
@@ -868,7 +1043,7 @@ internal fun applyCaptureChoices(
     return if (opened) {
         listOf(JsonObject(one + ("gross" to number(weight)))) to emptyList()
     } else {
-        items to listOf("The weight (${grams(weight)} g) was not filled in: it is only used for one opened spool.")
+        items to listOf(AddText.of(R.string.add_review_weight_unused, grams(weight)))
     }
 }
 
@@ -895,10 +1070,10 @@ private val DENSITIES = mapOf("PLA" to 1.24, "PETG" to 1.27, "ABS" to 1.04, "ASA
  * What a manual add item still needs (item keys): vendor, name, material, net, tare and density (unless the
  * material has a usual one), and a spool count. Empty when complete.
  */
-internal fun missingFields(item: JsonObject): List<String> = buildList {
+internal fun missingFields(item: JsonObject, needDensity: Boolean = true): List<String> = buildList {
     for (k in listOf("vendor", "name", "material")) if (item.text(k).isNullOrBlank()) add(k)
     for (k in listOf("net", "tare")) if (item.num(k)?.let(::isValidWeight) != true) add(k)
-    if (item.num("density")?.let(::isValidWeight) != true && defaultDensity(item.text("material")) == null) add("density")
+    if (needDensity && item.num("density")?.let(::isValidWeight) != true && defaultDensity(item.text("material")) == null) add("density")
     if (((item["count"] as? JsonPrimitive)?.intOrNull ?: 0) < 1) add("count")
 }
 
@@ -927,24 +1102,38 @@ private val FIELD_KEYS = setOf(
     "bambu_parent", "nozzle", "bed", "lot", "note",
 )
 
-internal const val FIELD_PROBLEM = "The server could not use one of the values. Check the marked field."
-
-/** The server's rule for intake `line` and `bambu_parent` text (at most 100 characters, no `@`); null when fine. */
-fun intakeTextProblem(value: String): String? = when {
-    value.length > 100 -> "At most 100 characters"
-    '@' in value -> "No @ (leave out the printer part)"
-    else -> null
+/** The Hub's rule for intake `line` and `bambu_parent` text (at most 100 characters, no `@`). */
+sealed interface TextProblem {
+    data object TooLong : TextProblem
+    data object HasAt : TextProblem
 }
 
-internal const val UNKNOWN_PARENT = "Bambu Studio has no preset with that parent name. Pick one from the list, or " +
-    "choose Automatic."
+fun intakeTextProblem(value: String): TextProblem? = when {
+    value.length > 100 -> TextProblem.TooLong
+    '@' in value -> TextProblem.HasAt
+    else -> null
+}
 
 /** A text value of an item (null when missing, JSON null or not a string). */
 private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
-/** A number value of an item (null when missing, JSON null or text). */
-private fun JsonObject.num(key: String): Double? =
-    (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.contentOrNull?.toDoubleOrNull()
+/**
+ * [key] was edited by the person: its confidence mark is gone (it leaves the read's `estimates` and joins the
+ * app-only [AddViewModel.TOUCHED] list, which is never sent).
+ */
+private fun JsonObject.touched(key: String?): JsonObject {
+    if (key == null) return this
+    val keys = (this[AddViewModel.TOUCHED] as? JsonArray).orEmpty()
+    val estimates = this["estimates"] as? JsonArray
+    var o = this
+    if (keys.none { (it as? JsonPrimitive)?.contentOrNull == key }) {
+        o = JsonObject(o + (AddViewModel.TOUCHED to JsonArray(keys + JsonPrimitive(key))))
+    }
+    if (estimates != null && estimates.any { (it as? JsonPrimitive)?.contentOrNull == key }) {
+        o = JsonObject(o + ("estimates" to JsonArray(estimates.filterNot { (it as? JsonPrimitive)?.contentOrNull == key })))
+    }
+    return o
+}
 
 /** Whole numbers stay integers in the JSON (and on screen). */
 internal fun number(v: Double): JsonPrimitive =
@@ -956,61 +1145,39 @@ internal fun grams(v: Double): String = number(v).content
 internal fun partialIds(e: ApiError): List<Long> = (e.extra["partial_spool_ids"] as? JsonArray).orEmpty()
     .mapNotNull { (it as? JsonPrimitive)?.longOrNull }
 
-/** Maps a failure to a plain-English [AddError]. */
+/** The words for a failure (05-android-app 3.5, 6.2): from the real [ApiError] shapes and the Hub's own message. */
 internal fun describe(e: Exception): AddError = when (e) {
     is FingerprintMismatch -> AddError(
-        "The server's certificate has changed. This can mean the server was reinstalled, or that another device " +
-            "is pretending to be it. Pair again only if you reinstalled the server.",
+        AddText.of(R.string.common_cert_changed_notice),
         pairAgain = true, expectedFingerprint = e.expected, actualFingerprint = e.actual,
     )
     is ApiError -> describeApi(e)
-    else -> AddError("Unexpected response from the server")
+    else -> AddError(AddText.of(R.string.common_hub_answer_unknown))
 }
 
 private fun describeApi(e: ApiError): AddError {
-    val claude = { text: String -> AddError(text, detail = e.message, canRetry = true) }
-    ReaderTexts.localError(e.code)?.let { return claude(it) }
-    return when (e.code) {
-        "offline" -> AddError(
-            "Can't reach the server. Check that this phone is on the same network as the server, then try again.",
-            canRetry = true,
-        )
-        "local_network" -> AddError(LOCAL_NETWORK_MESSAGE, canRetry = true)
-        "unauthorized" -> AddError("This phone is no longer paired with the server. Pair it again.", pairAgain = true)
-        "daily_cap" -> AddError("Today's limit of label reads on the server is used up. Try again tomorrow.")
-        "bad_key" -> claude("The server's Anthropic API key was rejected. Fix the key on the server, then retry.")
-        "rate_limited" -> claude("Claude is busy right now (rate limit). Wait a minute, then retry.")
-        "unreachable" -> claude("The server can't reach Claude. Check the server's internet connection, then retry.")
-        "refused" -> claude("Claude declined to read these photos. Retry, or take different photos.")
-        "truncated" -> claude("Claude's answer was cut off. Retry, or read fewer photos at once.")
-        "api_error" -> claude("Claude could not read the labels this time. Retry in a moment.")
-        "not_found" -> AddError(
-            "The server no longer has those photos. Read them again.", canRetry = true,
-        )
-        "spoolman_unreachable" -> AddError(
-            "The server can't reach Spoolman. Check that Spoolman is running, then try again.", canRetry = true,
-        )
-        "spoolman_error" -> {
-            val ids = partialIds(e)
-            if (ids.isEmpty()) {
-                AddError("Spoolman reported an error; nothing was added. Check the values and try again.", detail = e.message)
-            } else {
-                AddError(
-                    "Spoolman failed part-way. These spools were already created: ${ids.joinToString { "#$it" }}. " +
-                        "Check them in Spoolman before adding again.",
-                    detail = e.message,
-                )
-            }
-        }
-        "tag_conflict" -> AddError(
-            "This tag is already linked to another spool. Add without the tag, or use a different tag.",
-            detail = e.message, canDropTag = true,
-        )
-        "bad_photo" -> AddError("The server could not use a photo. Remove it and take it again.", detail = e.message)
-        "bad_request" -> AddError("The server could not use these values.", detail = e.message)
-        "module_off" -> AddError("Label reading is turned off on this server. Add the spool by hand instead.")
-        "unknown_parent" -> AddError(UNKNOWN_PARENT, detail = e.message)
-        "bad_response" -> AddError("Unexpected response from the server")
-        else -> AddError("The server hit an error. Try again later.", detail = e.message, canRetry = true)
+    val again = { text: AddText, byHand: Boolean -> AddError(text, canRetry = true, canAddByHand = byHand) }
+    val unreadable = AddText.of(R.string.add_read_unreadable)
+    // the local reader's own failures: busy is busy; every other kind is "could not read" to the person
+    if (e.code == "local_busy") return again(AddText.of(R.string.add_read_busy), false)
+    if (e.code.startsWith("local_")) return again(unreadable, true)
+    return when {
+        e.code == "offline" && e.status == 0 -> again(AddText.of(R.string.common_hub_unreachable), false)
+        e.code == "local_network" -> AddError(AddText.hub(LOCAL_NETWORK_MESSAGE), canRetry = true)
+        e.code == "unauthorized" -> AddError(AddText.of(R.string.common_not_paired_notice), pairAgain = true)
+        // an error page of some other service (a bare 404) is not the Hub speaking: no code of the Hub's applies to it
+        e.code == ApiError.BAD_RESPONSE || e.notFromHub -> AddError(AddText.of(R.string.common_hub_answer_unknown), canRetry = true)
+        e.code == "daily_cap" -> AddError(AddText.of(R.string.add_read_limit), canAddByHand = true)
+        e.code == "bad_key" -> again(AddText.of(R.string.add_read_key_refused), false)
+        e.code == "rate_limited" -> again(AddText.of(R.string.add_read_busy), false)
+        e.code == "unreachable" -> again(AddText.of(R.string.add_read_cloud), false)
+        e.code == "refused" || e.code == "truncated" || e.code == "api_error" -> again(unreadable, true)
+        e.code == "not_found" -> again(AddText.of(R.string.add_read_photos_gone), false)
+        e.code == "spoolman_unreachable" -> again(AddText.of(R.string.common_spoolman_unreachable), false)
+        e.code == "bad_photo" -> AddError(AddText.of(R.string.add_read_photo_unusable))
+        e.code == "tag_conflict" -> AddError(AddText.of(R.string.add_read_tag_linked), canDropTag = true)
+        e.code == "module_off" -> AddError(AddText.of(R.string.home_label_reader_off), canAddByHand = true)
+        // the Hub's own message goes through as given
+        else -> AddError(AddText.hub(e.message), canRetry = e.code != "bad_request" && e.code != "unknown_parent")
     }
 }

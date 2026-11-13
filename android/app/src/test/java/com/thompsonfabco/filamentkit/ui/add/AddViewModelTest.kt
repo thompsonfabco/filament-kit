@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.add
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.ApiError
@@ -264,7 +265,7 @@ class AddViewModelTest {
 
         val s = vm.state.value
         // the reply may have been lost after a write: warn, and retry with a fresh preview, never a blind write
-        assertEquals(AddViewModel.ADD_REPLY_LOST, s.error!!.message)
+        assertEquals(R.string.add_preview_reply_lost, s.error!!.message.res)
         assertTrue(s.error.canRetry)
         assertEquals(Stage.Review, s.stage)
         val draft = store.get(s.draftId!!)!!
@@ -298,8 +299,7 @@ class AddViewModelTest {
             buildJsonObject { put("partial_spool_ids", JsonArray(listOf(Json.parseToJsonElement("12"), Json.parseToJsonElement("13")))) })
         vm.confirm()
         advanceUntilIdle()
-        assertEquals(AddedBefore(listOf(12L, 13L)), vm.state.value.addedBefore)
-        assertEquals("Spools already added: #12, #13", vm.state.value.addedBefore!!.note)
+        assertEquals(AddedBefore(listOf(12L, 13L), "spoolman failed part-way"), vm.state.value.addedBefore)
 
         vm.preview()
         advanceUntilIdle()
@@ -521,7 +521,7 @@ class AddViewModelTest {
         vm.preview()
         advanceUntilIdle()
         assertFalse("gross" in sentItem())
-        assertTrue(vm.state.value.notices.any { "only used for one opened spool" in it })
+        assertTrue(vm.state.value.notices.any { it.res == R.string.add_review_weight_unused })
     }
 
     @Test fun sealedToggleMarksEveryItemSealed() = runTest(dispatcher) {
@@ -543,7 +543,7 @@ class AddViewModelTest {
         advanceUntilIdle()
         val s = vm.state.value
         assertEquals(Stage.Capture, s.stage)
-        assertEquals("Today's limit of label reads on the server is used up. Try again tomorrow.", s.error!!.message)
+        assertEquals(R.string.add_read_limit, s.error!!.message.res)
         assertFalse(s.error.canRetry)
         assertNotNull(store.get(s.draftId!!))
     }
@@ -572,7 +572,7 @@ class AddViewModelTest {
         advanceUntilIdle()
         vm.read()
         advanceUntilIdle()
-        assertTrue(vm.state.value.error!!.message.startsWith("The server can't reach its local label reader"))
+        assertEquals(R.string.add_read_unreadable, vm.state.value.error!!.message.res)
         assertTrue(vm.state.value.error!!.canRetry)
     }
 
@@ -584,7 +584,7 @@ class AddViewModelTest {
         advanceUntilIdle()
         vm.read()
         advanceUntilIdle()
-        assertEquals("Claude is busy right now (rate limit). Wait a minute, then retry.", vm.state.value.error!!.message)
+        assertEquals(R.string.add_read_busy, vm.state.value.error!!.message.res)
         assertTrue(vm.state.value.error!!.canRetry)
 
         api.readResults += result(item())
@@ -632,8 +632,9 @@ class AddViewModelTest {
         vm.confirm()
         advanceUntilIdle()
         val s = vm.state.value
-        assertTrue(s.error!!.message, "#12, #13" in s.error.message)
-        assertFalse(s.error.canRetry)
+        // the partial write is the "may have been added" notice, not a second error line
+        assertNull(s.error)
+        assertEquals(listOf(12L, 13L), s.addedBefore!!.spoolIds)
         assertNotNull(store.get(s.draftId!!))
     }
 
@@ -643,8 +644,7 @@ class AddViewModelTest {
         api.addFailures += ApiError(503, "spoolman_unreachable", "can't reach Spoolman")
         vm.preview()
         advanceUntilIdle()
-        assertEquals("The server can't reach Spoolman. Check that Spoolman is running, then try again.",
-            vm.state.value.error!!.message)
+        assertEquals(R.string.common_spoolman_unreachable, vm.state.value.error!!.message.res)
         assertTrue(vm.state.value.error!!.canRetry)
     }
 
@@ -682,8 +682,10 @@ class AddViewModelTest {
         api.addFailures += IllegalStateException("boom")
         vm.preview()
         advanceUntilIdle()
-        assertEquals("Unexpected response from the server", vm.state.value.error!!.message)
-        assertEquals(Stage.Review, vm.state.value.stage)
+        assertEquals(R.string.common_hub_answer_unknown, vm.state.value.error!!.message.res)
+        // a check that failed stays on the Preview step, with Add off
+        assertEquals(Stage.Preview, vm.state.value.stage)
+        assertTrue(vm.state.value.previewFailed)
     }
 
     @Test fun reopeningADraftRestoresTheReview() = runTest(dispatcher) {
@@ -904,9 +906,9 @@ class AddViewModelTest {
         advanceUntilIdle()
         val s = vm.state.value
         assertEquals(Stage.Review, s.stage)
-        assertEquals(UNKNOWN_PARENT, s.parentError)
-        assertEquals(UNKNOWN_PARENT, s.error!!.message)
-        assertEquals("Bambu Studio has no preset named Foo PLA", s.error?.detail)
+        // the Hub's own words, at the parent field
+        assertEquals("Bambu Studio has no preset named Foo PLA", s.parentError)
+        assertNull(s.error)
         vm.setParent(0, "Generic PLA")
         assertNull("an edit clears it", vm.state.value.parentError)
     }
@@ -915,8 +917,8 @@ class AddViewModelTest {
         assertNull(intakeTextProblem("SUNLU PLA+"))
         assertNull(intakeTextProblem(""))
         assertNull(intakeTextProblem("a".repeat(100)))
-        assertEquals("At most 100 characters", intakeTextProblem("a".repeat(101)))
-        assertEquals("No @ (leave out the printer part)", intakeTextProblem("Generic PLA @BBL H2D"))
+        assertEquals(TextProblem.TooLong, intakeTextProblem("a".repeat(101)))
+        assertEquals(TextProblem.HasAt, intakeTextProblem("Generic PLA @BBL H2D"))
     }
 
     @Test fun parentListsAreReloadedAfterStartOver() = runTest(dispatcher) {
@@ -1010,4 +1012,12 @@ internal class FakeIntakeApi : IntakeApi {
     }
 
     override suspend fun vendors(): List<VendorChoice> = vendorList
+
+    /** The total the Hub reports for the picker (null: as many as the list holds). */
+    var filamentTotal: Int? = null
+
+    override suspend fun filamentPage(q: String, limit: Int): com.thompsonfabco.filamentkit.net.FilamentPage {
+        val rows = filaments(q)
+        return com.thompsonfabco.filamentkit.net.FilamentPage(rows.take(limit), filamentTotal ?: rows.size)
+    }
 }

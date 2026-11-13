@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.add
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.ApiError
@@ -92,7 +93,7 @@ class ManualAddTest {
         api.filamentFailure = ApiError(503, "spoolman_unreachable", "down")
         val vm = vm()
         advanceUntilIdle()
-        assertTrue(vm.state.value.filamentsError!!.contains("Spoolman"))
+        assertEquals(R.string.common_spoolman_unreachable, vm.state.value.filamentsError!!.res)
         assertTrue(vm.state.value.filaments.isEmpty())
     }
 
@@ -192,10 +193,12 @@ class ManualAddTest {
         vm.preview()
         advanceUntilIdle()
         val s = vm.state.value
-        assertEquals(Stage.Review, s.stage)
+        // the Hub's check stays on the Preview step: a line with "Fix" and the complaint at the field
+        assertEquals(Stage.Preview, s.stage)
+        assertTrue(s.previewFailed)
         assertEquals(mapOf(0 to mapOf("tare" to "Tare must be a positive number")), s.fieldErrors)
-        assertEquals(FIELD_PROBLEM, s.error!!.message)
-        assertEquals("SUNLU PETG Grey: tare must be a positive number", s.error!!.detail)
+        assertEquals(listOf(PreviewProblem("SUNLU PETG Grey: tare must be a positive number", 0, "tare")), s.problems)
+        assertNull(s.error)
         vm.setNumber(0, "tare", 213.0)
         assertTrue(vm.state.value.fieldErrors.isEmpty())
         assertNull(vm.state.value.error)
@@ -249,6 +252,7 @@ class ManualAddTest {
 
     @Test fun aReadWithTheModuleOffSaysToAddByHand() {
         val e = describe(ApiError(409, "module_off", "the ai_intake module is turned off on this server"))
-        assertTrue(e.message.contains("by hand"))
+        assertEquals(R.string.home_label_reader_off, e.message.res)
+        assertTrue(e.canAddByHand)
     }
 }

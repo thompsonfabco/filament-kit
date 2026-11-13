@@ -19,17 +19,11 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/pairing/PairingPayload.k
 android/app/src/main/java/com/thompsonfabco/filamentkit/session/AppViewModel.kt | filament-kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/session/PairRouter.kt | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/Weights.kt | weight on the scale | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | color | 3 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | module | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | retry | 7 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | the server | 17 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | weight on the scale | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReaderTexts.kt | color | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReaderTexts.kt | retry | 8 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReaderTexts.kt | setup page | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReaderTexts.kt | the server | 3 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | blank = | 3 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | color | 6 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | "station" | 1 | the Hub's source value station, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color | 5 | the Hub's field name color_hex, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | module | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
@@ -48,8 +42,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | the server | 6 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | module | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/SlotMapHelp.kt | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/ParentField.kt | blank = | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/ParentField.kt | presets | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/update/ApkInstaller.kt | filament-kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/update/UpdateTexts.kt | filament-kit | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup.js | "station" | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
@@ -110,3 +102,6 @@ server/filament_kit/web/static/printers.js | setup page | 1 | today's string, ro
 server/filament_kit/web/static/printers.js | the kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolModel.kt | color | 1 | wire identifier (a JSON key of the Hub's answer), never shown; the screen's texts are in the catalogue (S4.8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | color | 3 | wire identifier (the item key `color_hex`), never shown (S4.7)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | color | 1 | wire identifier (the item key `color_hex`), never shown (S4.7)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/SpoolPanel.kt | color | 6 | wire identifier (the item key `color_hex`), never shown (S4.7)

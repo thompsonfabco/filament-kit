@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -196,6 +197,17 @@ class Api(
     suspend fun filaments(q: String): List<FilamentChoice> {
         val req = request("api", "filaments") { if (q.isNotBlank()) addQueryParameter("q", q.trim()) }
         return call(req.get()).jsonObject["filaments"]?.jsonArray.orEmpty().map { decode(it) }
+    }
+
+    /** The first [limit] filaments for [q] and the number that match in all (the picker says how many more there are). */
+    suspend fun filamentPage(q: String, limit: Int): FilamentPage {
+        val req = request("api", "filaments") {
+            if (q.isNotBlank()) addQueryParameter("q", q.trim())
+            addQueryParameter("limit", limit.toString())
+        }
+        val body = call(req.get()).jsonObject
+        val rows = body["filaments"]?.jsonArray.orEmpty().map { decode<FilamentChoice>(it) }
+        return FilamentPage(rows, body["total"]?.jsonPrimitive?.intOrNull ?: rows.size)
     }
 
     suspend fun vendors(): List<VendorChoice> =

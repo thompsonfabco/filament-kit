@@ -77,8 +77,18 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.thompsonfabco.filamentkit.nav.AddProfileRoute
 import com.thompsonfabco.filamentkit.nav.AddProfileTitle
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.SnackbarResult
+import com.thompsonfabco.filamentkit.nav.AddDoneRoute
 import com.thompsonfabco.filamentkit.nav.AddOpened
-import com.thompsonfabco.filamentkit.nav.AddRoute
+import com.thompsonfabco.filamentkit.nav.AddPhotosRoute
+import com.thompsonfabco.filamentkit.nav.AddPreviewRoute
+import com.thompsonfabco.filamentkit.nav.AddReviewRoute
+import com.thompsonfabco.filamentkit.nav.addDraftId
+import com.thompsonfabco.filamentkit.nav.addRoute
+import com.thompsonfabco.filamentkit.nav.closeAdd
+import com.thompsonfabco.filamentkit.nav.inAdd
+import com.thompsonfabco.filamentkit.nav.takesTagTaps
 import com.thompsonfabco.filamentkit.nav.HomeGraph
 import com.thompsonfabco.filamentkit.nav.HomeRoute
 import com.thompsonfabco.filamentkit.nav.LicencesRoute
@@ -124,7 +134,6 @@ import com.thompsonfabco.filamentkit.nav.inPairing
 import com.thompsonfabco.filamentkit.nav.isTabRoot
 import com.thompsonfabco.filamentkit.nav.keepLastKnown
 import com.thompsonfabco.filamentkit.nav.openAdd
-import com.thompsonfabco.filamentkit.nav.replaceAdd
 import com.thompsonfabco.filamentkit.nav.popToRootThrough
 import com.thompsonfabco.filamentkit.nav.selectTab
 import com.thompsonfabco.filamentkit.nav.showsBackArrow
@@ -145,9 +154,9 @@ import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.tags.disableTagReader
 import com.thompsonfabco.filamentkit.tags.enableTagReader
 import com.thompsonfabco.filamentkit.ui.rememberLocalNetworkAccess
-import com.thompsonfabco.filamentkit.ui.add.AddSpoolsScreen
-import com.thompsonfabco.filamentkit.ui.add.AddViewModel
-import com.thompsonfabco.filamentkit.ui.add.addReplaceOf
+import com.thompsonfabco.filamentkit.ui.add.AddStep
+import com.thompsonfabco.filamentkit.ui.add.AddStepRoute
+import com.thompsonfabco.filamentkit.ui.add.text
 import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
 import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.ui.add.TagTaps
@@ -198,6 +207,7 @@ import com.thompsonfabco.filamentkit.ui.printers.TrustAction
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
 import com.thompsonfabco.filamentkit.ui.settings.HubPage
@@ -396,10 +406,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         )
     }
 
-    // A tag tap opens tag/{uid} on the stack of the selected tab (05 2.6), anywhere except pairing and the add flow (which
-    // takes taps itself). While a load is being written it waits: the toast says so and the tag opens when the write ends.
-    val adding = destination?.hasRoute(AddRoute::class) == true
-    val tapsOn = destination != null && !inPairing && !adding
+    // A tag tap opens tag/{uid} on the stack of the selected tab (05 2.6), anywhere except pairing and the add steps that
+    // take taps themselves (photos, check). While a load is being written it waits: the toast says so and the tag opens
+    // when the write ends.
+    val tapsOn = destination != null && !inPairing && !destination.takesTagTaps()
     val loadWriting by app.loadGate.writing.collectAsStateWithLifecycle()
     var queuedTag by rememberSaveable { mutableStateOf<String?>(null) }
     val tagWaits = stringResource(R.string.tag_read_wait)
@@ -448,7 +458,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     var shown by remember(config?.name, config?.token, config?.fingerprint) { mutableStateOf(live) }
     LaunchedEffect(live) { shown = keepLastKnown(shown, live) }
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
-    var leaveAddFor by remember { mutableStateOf<AddRoute?>(null) }
 
     val phone = SpoolwardenTheme.window == WindowClass.Phone
     val imeVisible = WindowInsets.isImeVisible
@@ -600,9 +609,19 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 onAddNew = {
                     nav.popBackStack<TagRoute>(inclusive = true)
                     // without label reading on the Hub the new spool is added by hand
-                    val request = AddRoute(tag = uid, manual = !labelPhotos)
                     // an add already open follows the Back rules before a new one replaces it
-                    if (nav.openAdd(request, ::addReplaceOf) == AddOpened.NeedsLeave) leaveAddFor = request
+                    val opened = nav.openAdd(
+                        first = {
+                            val id = app.addFlows.start(manual = !labelPhotos, tag = uid)
+                            if (labelPhotos) AddPhotosRoute(id) else AddReviewRoute(id)
+                        },
+                        decide = app.addFlows::replaceRule,
+                    )
+                    // an add that is writing stays, and the person is told why nothing new opened
+                    if (opened == AddOpened.KeptWriting) {
+                        val reason = nav.currentBackStackEntry?.addDraftId()?.let(app.addFlows::writingReason)
+                        if (reason != null) pairScope.launch { toast.show(context.getString(reason)) }
+                    }
                 },
                 onPairAgain = app.router::pairAgain,
                 online = online,
@@ -664,6 +683,58 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         onSelect = tabTapped,
         settingsUpdate = update.available != null,
     ) {
+        val addStep: @Composable (String, AddStep) -> Unit = { id, step ->
+            AddStepRoute(
+                app.addFlows, nav, id, step,
+                onPairAgain = app.router::pairAgain,
+                // the Filament Catalog form opens filled from the panel; Back returns here with the draft
+                onAddCatalogLine = { brand, line, material ->
+                    nav.currentBackStackEntry?.savedStateHandle?.set(CATALOG_PREFILL, arrayListOf(brand, line, material))
+                    nav.navigate(AddProfileRoute)
+                },
+                onOpenRecord = { hid ->
+                    nav.closeAdd()
+                    nav.selectTab(Tab.Recent)
+                    nav.navigate(RecordRoute(hid))
+                },
+            )
+        }
+        // a read or an add that ends while the person is elsewhere is answered with a snackbar (05 6.2, 6.5)
+        val readDoneText = stringResource(R.string.add_photos_read_done)
+        val readDoneAction = stringResource(R.string.common_check)
+        val addedText = stringResource(R.string.add_done_title)
+        LaunchedEffect(app) {
+            launch {
+                app.addFlows.readFinished.collect { id ->
+                    if (nav.currentBackStackEntry?.addDraftId() == id) return@collect
+                    launch {
+                        val result = toast.show(readDoneText, readDoneAction)
+                        if (result == SnackbarResult.ActionPerformed) nav.openAdd(first = { addRoute(AddStep.Check, id) })
+                    }
+                }
+            }
+            launch {
+                app.addFlows.addFinished.collect { (id, ok) ->
+                    if (nav.currentBackStackEntry?.addDraftId() == id) return@collect
+                    launch {
+                        if (ok) {
+                            toast.show(addedText)
+                            app.addFlows.release(id)
+                        } else {
+                            val flow = app.addFlows.get(id)
+                            // whatever did not end cleanly says so: the error, spools that may exist, or the Hub's refusal
+                            val st = flow.state.value
+                            val why = st.error?.message?.resolve(context) ?: st.addedBefore?.text(context) ?: st.parentError
+                                ?: context.getString(R.string.common_hub_answer_unknown)
+                            val result = toast.show(why, readDoneAction)
+                            if (result == SnackbarResult.ActionPerformed) {
+                                nav.openAdd(first = { addRoute(AddStep.Preview, id) })
+                            }
+                        }
+                    }
+                }
+            }
+        }
         Scaffold(
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
             topBar = {
@@ -796,10 +867,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             update = update,
                             printers = homePrinters,
                             showPrinters = showPrinters,
-                            onAddSpools = { nav.navigate(AddRoute()) },
-                            onAddByHand = { nav.navigate(AddRoute(manual = true)) },
+                            onAddSpools = { nav.navigate(AddPhotosRoute(app.addFlows.start(manual = false))) },
+                            onAddByHand = { nav.navigate(AddReviewRoute(app.addFlows.start(manual = true))) },
                             labelReaderOff = labelReaderOff(info),
-                            onResumeDraft = { id -> nav.navigate(AddRoute(draft = id)) },
+                            onResumeDraft = { id -> nav.navigate(addRoute(app.addFlows.stepOf(id), id)) },
                             onDiscardDraft = app::discardDraft,
                             onOpenPrinter = { id ->
                                 // the Printers stack goes back to its root first, so Back from the printer lands on the list
@@ -848,34 +919,21 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         )
                     }
 
-                    composable<AddRoute> { e ->
-                        val a = api
-                        if (a == null) {
-                            HubNoticePage(::pushPairing)
-                            return@composable
-                        }
-                        val route = e.toRoute<AddRoute>()
-                        val addVm: AddViewModel = viewModel(factory = viewModelFactory {
-                            initializer {
-                                AddViewModel(
-                                    IntakeApi.of(::currentApi), app.drafts, taps = emptyFlow(),
-                                    draftId = route.draft, initialTag = route.tag, manual = route.manual,
-                                )
-                            }
-                        })
-                        TagTaps(addVm::onTag)
-                        if (BuildConfig.DEBUG && !route.manual) LaunchedEffect(addVm) { DebugPhotos.photos.collect(addVm::addPhoto) }
-                        AddSpoolsScreen(
-                            vm = addVm,
-                            onClose = { nav.popBackStack() },
-                            onDone = { nav.popBackStack<HomeRoute>(inclusive = false) },
-                            onPairAgain = app.router::pairAgain,
-                        )
-                    }
+                    composable<AddPhotosRoute> { e -> addStep(e.toRoute<AddPhotosRoute>().draftId, AddStep.Photos) }
+                    composable<AddReviewRoute> { e -> addStep(e.toRoute<AddReviewRoute>().draftId, AddStep.Check) }
+                    composable<AddPreviewRoute> { e -> addStep(e.toRoute<AddPreviewRoute>().draftId, AddStep.Preview) }
+                    composable<AddDoneRoute> { e -> addStep(e.toRoute<AddDoneRoute>().draftId, AddStep.Done) }
 
                     composable<AddProfileRoute> {
                         val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
-                            initializer { AddProfileViewModel(ProfileApi.of(::currentApi)) }
+                            initializer {
+                                // opened from a panel of Add spools: brand, line and material come with it
+                                val prefill = nav.previousBackStackEntry?.savedStateHandle?.remove<ArrayList<String>>(CATALOG_PREFILL)
+                                val initial = prefill?.takeIf { it.size == 3 }?.let {
+                                    mapOf(ProfileField.Vendor to it[0], ProfileField.Line to it[1], ProfileField.Material to it[2])
+                                }.orEmpty()
+                                AddProfileViewModel(ProfileApi.of(::currentApi), initial)
+                            }
                         })
                         val savedText = stringResource(R.string.catalog_saved)
                         AddProfileScreen(
@@ -1119,24 +1177,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             onDismiss = { sheetOpen = false },
         )
     }
-
-    leaveAddFor?.let { request ->
-        SwDialog(
-            title = stringResource(R.string.common_leave_title),
-            onClose = { leaveAddFor = null },
-            confirm = SwDialogButton(
-                stringResource(R.string.common_leave_without_saving),
-                onClick = {
-                    leaveAddFor = null
-                    nav.replaceAdd(request)
-                },
-                kind = SwButtonKind.DestructiveFilled,
-            ),
-            cancel = SwAction(stringResource(R.string.common_stay)) { leaveAddFor = null },
-        ) {
-            Text(stringResource(R.string.common_leave_body, stringResource(R.string.add_card_new_spool)))
-        }
-    }
 }
 
 /** The place the top bar names (05-android-app 2.2): the screen, not the product. */
@@ -1157,7 +1197,7 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
         destination == null -> R.string.nav_home
         storedCertificate -> R.string.pair_cert_top_title
         destination.inPairing() -> R.string.pair_title
-        destination.hasRoute(AddRoute::class) -> R.string.home_add_title
+        destination.inAdd() -> R.string.home_add_title
         destination.hasRoute(AddProfileRoute::class) -> AddProfileTitle
         destination.hasRoute(LicencesRoute::class) -> R.string.settings_licences_title
         destination.hasRoute(SettingsAppearanceRoute::class) -> R.string.appearance_title
@@ -1247,3 +1287,6 @@ private fun SimulateTag() {
         Button(onClick = { TagEvents.emit(uid.trim()) }) { Text("Simulate tag") }
     }
 }
+
+/** The saved-state key under which an add's panel hands brand, line and material to the Filament Catalog form. */
+private const val CATALOG_PREFILL = "catalog_prefill"

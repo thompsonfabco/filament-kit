@@ -92,6 +92,8 @@ data class AddProfileUiState(
     /** [lineFailure] came from loading the list (it offers Try again), not from a parent call. */
     val linesLoadFailed: Boolean = false,
     val lineMessage: String? = null,
+    /** What the form was opened with (from a panel of Add spools): typing something else is what asks before leaving. */
+    val opened: Map<ProfileField, String> = emptyMap(),
 ) {
     /** The required fields are filled. */
     val filled: Boolean
@@ -101,20 +103,27 @@ data class AddProfileUiState(
     val canSave: Boolean get() = !saving && !saved && filled
 
     /** Something was typed: leaving asks first (05 2.5 rule 1). */
-    val dirty: Boolean get() = !saved && values.values.any { it.isNotBlank() }
+    val dirty: Boolean get() = !saved && values.filterValues { it.isNotBlank() } != opened
 }
 
 /** The parent choice open for [lineId]: the Bambu Studio parents for its material (null while loading). */
 data class LineParentEdit(val lineId: String, val parents: ParentList? = null)
 
 /** The catalog line form: the owner's own library entry for a product line, posted to `/api/library/local`. */
-class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
-    private val _state = MutableStateFlow(AddProfileUiState())
+class AddProfileViewModel(
+    private val api: ProfileApi,
+    /** Fields the form opens with (Add spools' "Add this line to the Filament Catalog" fills brand, line and material). */
+    initial: Map<ProfileField, String> = emptyMap(),
+) : ViewModel() {
+    private val _state = MutableStateFlow(
+        initial.filterValues { it.isNotBlank() }.let { AddProfileUiState(values = it, opened = it) },
+    )
     val state: StateFlow<AddProfileUiState> = _state.asStateFlow()
     private var parentsJob: Job? = null
 
     init {
         loadLines()
+        _state.value.values[ProfileField.Material]?.let { loadParents(it.trim()) }
     }
 
     /** The product lines already on the Hub. A failure leaves the list empty with its notice (the form still works). */

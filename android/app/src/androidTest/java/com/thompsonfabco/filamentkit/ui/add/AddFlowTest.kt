@@ -1,6 +1,9 @@
 package com.thompsonfabco.filamentkit.ui.add
 
 import android.Manifest
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -61,26 +64,35 @@ class AddFlowTest {
         val store = DraftStore(dir)
         val vm = AddViewModel(api, store, taps = taps, prepare = { it })
         var done = false
-        compose.setContent { AddSpoolsScreen(vm, onClose = {}, onDone = { done = true }, onPairAgain = {}) }
+        compose.setContent {
+            // the destination follows the draft, as the app's stack does
+            var step by mutableStateOf(AddStep.Photos)
+            AddSpoolsScreen(
+                vm, step, onStep = { step = it }, onPop = { }, onClose = {}, onDone = { done = true }, onAddMore = {},
+                onPairAgain = {}, onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {},
+            )
+        }
 
         compose.runOnIdle { vm.addPhoto(byteArrayOf(1, 2, 3)) }
-        waitForText("Photos: 1 of 8")
+        waitForText("Read labels (1 photo)")
         taps.tryEmit("4:77:90:e")
         waitForText("Tag 4:77:90:e")
-        field("Weight on the scale, with spool (g)").performScrollTo().performTextInput("812.5")
-        compose.onNodeWithText("Read labels").performScrollTo().performClick()
+        // "Still sealed" is on by default; one opened spool has its weight with the spool
+        compose.onNodeWithText("Still sealed (in its bag or box)").performScrollTo().performClick()
+        field("Weight with spool (optional)").performScrollTo().performTextInput("812.5")
+        compose.onNodeWithText("Read labels (1 photo)").performScrollTo().performClick()
 
-        waitForText("Claude asks")
+        waitForText("The Label Reader asks:")
         compose.onNodeWithText("• Is the colour grey or silver?").assertExists()
         compose.onNodeWithText("SUNLU PLA+ Grey").assertExists()
-        field("Empty spool (g) (estimated)").assertExists()
+        field("Empty spool weight").assertExists()
         field("Name").performScrollTo().performTextClearance()
         field("Name").performTextInput("PLA+ Silver")
         compose.onNodeWithText("Preview").performScrollTo().performClick()
 
         waitForText("would link tag 4:77:90:e")
         compose.onNodeWithText("Add 1 spool").performScrollTo().performClick()
-        waitForText("New spool: #41")
+        waitForText("New spools: spool 41")
 
         assertEquals(listOf(true, false), api.adds.map { it.second })
         val sent = api.adds.last().first[0].jsonObject

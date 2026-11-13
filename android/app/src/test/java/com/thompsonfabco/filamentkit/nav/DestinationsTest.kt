@@ -10,6 +10,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.createGraph
 import androidx.navigation.toRoute
 import com.thompsonfabco.filamentkit.ui.add.AddReplace
+import com.thompsonfabco.filamentkit.ui.add.AddStep
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -60,7 +61,10 @@ class DestinationsTest {
             navigation<PairGraph>(startDestination = PairRoute) { composable<PairRoute> { Text("") } }
             navigation<HomeGraph>(startDestination = HomeRoute) {
                 composable<HomeRoute> { Text("") }
-                composable<AddRoute> { Text("") }
+                composable<AddPhotosRoute> { Text("") }
+                composable<AddReviewRoute> { Text("") }
+                composable<AddPreviewRoute> { Text("") }
+                composable<AddDoneRoute> { Text("") }
             }
             navigation<PrintersGraph>(startDestination = PrintersRoute) {
                 composable<PrintersRoute> { Text("") }
@@ -82,7 +86,7 @@ class DestinationsTest {
         assertTrue(nav.currentDestination.isTabRoot())
         assertFalse(nav.currentDestination.inPairing())
 
-        nav.navigate(AddRoute(manual = true))
+        nav.navigate(AddReviewRoute("d"))
         assertEquals("Add belongs to Home", Tab.Home, nav.currentDestination.tab())
         assertFalse(nav.currentDestination.isTabRoot())
 
@@ -116,9 +120,9 @@ class DestinationsTest {
         val nav = controller()
         nav.selectTab(Tab.Printers)
         nav.navigate(PrinterRoute("p1"))
-        nav.openAdd(AddRoute(tag = "04:aa", manual = true))
+        nav.openAdd(first = { AddReviewRoute("new") })
         assertEquals(Tab.Home, nav.currentDestination.tab())
-        assertTrue(nav.currentDestination?.hasRoute(AddRoute::class) == true)
+        assertTrue(nav.currentDestination.inAdd())
         val graphs = nav.currentBackStack.value.count { it.destination.hasRoute(HomeGraph::class) }
         assertEquals("one Home graph on the stack, not two", 1, graphs)
 
@@ -131,7 +135,7 @@ class DestinationsTest {
         nav.selectTab(Tab.Printers)
         nav.navigate(PrinterRoute("old-hub-printer"))
         nav.selectTab(Tab.Home)
-        nav.navigate(AddRoute(draft = "old-draft"))
+        nav.navigate(AddPhotosRoute("old-draft"))
         nav.selectTab(Tab.Recent)
         nav.clearSavedStacks()
         nav.selectTab(Tab.Printers)
@@ -150,7 +154,7 @@ class DestinationsTest {
         assertFalse(nav.currentDestination.isTabRoot())
 
         nav.selectTab(Tab.Home)
-        nav.navigate(AddRoute(draft = "old-draft"))
+        nav.navigate(AddPhotosRoute("old-draft"))
         nav.selectTab(Tab.Recent)
         nav.selectTab(Tab.Home)
         assertFalse("Home's saved stack comes back too", nav.currentDestination.isTabRoot())
@@ -172,34 +176,103 @@ class DestinationsTest {
 
     @Test fun anAddFromTheSpoolCardAlwaysStartsANewOneInPlaceOfTheOpenOne() {
         val nav = controller()
-        nav.openAdd(AddRoute(draft = "d1"))
+        nav.navigate(AddPhotosRoute("d1"))
+        nav.navigate(AddReviewRoute("d1"))
         nav.selectTab(Tab.Printers)
-        assertEquals(AddOpened.Opened, nav.openAdd(AddRoute(tag = "04:aa")))
+        assertEquals(AddOpened.Opened, nav.openAdd(first = { AddPhotosRoute("d2") }))
         assertEquals(Tab.Home, nav.currentDestination.tab())
-        assertEquals("one add, not two", 1, nav.currentBackStack.value.count { it.destination.hasRoute(AddRoute::class) })
-        val top = nav.currentBackStackEntry!!.toRoute<AddRoute>()
-        assertEquals("04:aa", top.tag)
-        assertNull("the older draft is not reused", top.draft)
+        assertEquals("one add, not two", 1, nav.currentBackStack.value.count { it.destination.inAdd() })
+        assertEquals("the older draft is not reused", "d2", nav.currentBackStackEntry!!.addDraftId())
     }
 
     @Test fun anAddThatIsWritingStaysAndTheRequestIsDropped() {
         val nav = controller()
-        nav.openAdd(AddRoute(draft = "d1"))
+        nav.navigate(AddPreviewRoute("d1"))
         nav.selectTab(Tab.Printers)
-        assertEquals(AddOpened.KeptWriting, nav.openAdd(AddRoute(tag = "04:aa")) { AddReplace.KeepWriting })
+        var made = 0
+        val rule = { id: String -> if (id == "d1") AddReplace.KeepWriting else AddReplace.Replace }
+        assertEquals(AddOpened.KeptWriting, nav.openAdd(first = { made++; AddPhotosRoute("d2") }, decide = rule))
+        assertEquals("no draft is made for a request that is dropped", 0, made)
         assertEquals("the Home tab shows the add that was open", Tab.Home, nav.currentDestination.tab())
-        assertEquals("d1", nav.currentBackStackEntry!!.toRoute<AddRoute>().draft)
+        assertEquals("d1", nav.currentBackStackEntry!!.addDraftId())
     }
 
-    @Test fun anAddWithTypedFieldsAsksAndIsReplacedOnlyOnLeave() {
+    @Test fun theStackFollowsTheDraftForwardAndBack() {
         val nav = controller()
-        nav.openAdd(AddRoute(manual = true))
-        nav.selectTab(Tab.Printers)
-        assertEquals(AddOpened.NeedsLeave, nav.openAdd(AddRoute(tag = "04:aa")) { AddReplace.AskLeave })
-        assertTrue("stay: the open add is showing", nav.currentBackStackEntry!!.toRoute<AddRoute>().manual)
+        nav.navigate(AddPhotosRoute("d1"))
+        nav.followStep("d1", AddStep.Photos, AddStep.Check)
+        assertTrue(nav.currentDestination?.hasRoute(AddReviewRoute::class) == true)
+        nav.followStep("d1", AddStep.Check, AddStep.Preview)
+        assertTrue(nav.currentDestination?.hasRoute(AddPreviewRoute::class) == true)
+        nav.followStep("d1", AddStep.Preview, AddStep.Check)
+        assertTrue("back pops to the step below", nav.currentDestination?.hasRoute(AddReviewRoute::class) == true)
+        nav.followStep("d1", AddStep.Check, AddStep.Photos)
+        assertTrue(nav.currentDestination?.hasRoute(AddPhotosRoute::class) == true)
+        assertEquals("one step each, none left over", 1, nav.currentBackStack.value.count { it.destination.inAdd() })
+    }
 
-        nav.replaceAdd(AddRoute(tag = "04:aa"))
-        assertEquals("04:aa", nav.currentBackStackEntry!!.toRoute<AddRoute>().tag)
-        assertEquals(1, nav.currentBackStack.value.count { it.destination.hasRoute(AddRoute::class) })
+    @Test fun aStackThatCameBackAheadOfItsDraftIsReplacedNotPopped() {
+        val nav = controller()
+        // the app was stopped: the stack still says Preview, the draft was restored at the check
+        nav.navigate(AddPreviewRoute("d1"))
+        nav.followStep("d1", AddStep.Preview, AddStep.Check)
+        assertTrue(nav.currentDestination?.hasRoute(AddReviewRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
+    }
+
+    @Test fun closingTheAddTakesEveryStepOffTheStack() {
+        val nav = controller()
+        nav.navigate(AddPhotosRoute("d1"))
+        nav.navigate(AddReviewRoute("d1"))
+        nav.navigate(AddPreviewRoute("d1"))
+        nav.closeAdd()
+        assertTrue(nav.currentDestination.isTabRoot())
+    }
+
+    @Test fun aTagTapIsTheDraftsTagOnPhotosAndCheckOnly() {
+        val nav = controller()
+        nav.navigate(AddPhotosRoute("d1"))
+        assertTrue(nav.currentDestination.takesTagTaps())
+        nav.navigate(AddReviewRoute("d1"))
+        assertTrue(nav.currentDestination.takesTagTaps())
+        nav.navigate(AddPreviewRoute("d1"))
+        assertFalse("on Preview the tap opens the tag (05 2.6)", nav.currentDestination.takesTagTaps())
+        nav.navigate(AddDoneRoute("d1"))
+        assertFalse(nav.currentDestination.takesTagTaps())
+    }
+
+    @Test fun aStepThatWasAlreadyPoppedDoesNotMoveTheStackAgain() {
+        val nav = controller()
+        nav.navigate(AddPhotosRoute("d1"))
+        nav.navigate(AddReviewRoute("d1"))
+        nav.popBackStack() // system Back from Check
+        nav.followStep("d1", AddStep.Check, AddStep.Photos) // the popped screen's late effect
+        assertTrue(nav.currentDestination?.hasRoute(AddPhotosRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
+    }
+
+    @Test fun backFromCheckOrPreviewOpenedOnTopOfHomeGoesToTheStepTheTableNames() {
+        // a resumed draft, the "Check" snackbar and the failed-add snackbar open a step straight on Home
+        val nav = controller()
+        nav.navigate(AddReviewRoute("d1"))
+        nav.followStep("d1", AddStep.Check, AddStep.Photos)
+        assertTrue("Check goes to Photos on the photo path", nav.currentDestination?.hasRoute(AddPhotosRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
+        nav.closeAdd()
+        assertTrue("and Back from Photos is Home", nav.currentDestination.isTabRoot())
+
+        nav.navigate(AddPreviewRoute("d1"))
+        nav.followStep("d1", AddStep.Preview, AddStep.Check)
+        assertTrue("Preview goes to Check", nav.currentDestination?.hasRoute(AddReviewRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
+    }
+
+    @Test fun backFromAFullStackStillPopsToTheStepBelow() {
+        val nav = controller()
+        nav.navigate(AddPhotosRoute("d1"))
+        nav.navigate(AddReviewRoute("d1"))
+        nav.followStep("d1", AddStep.Check, AddStep.Photos)
+        assertTrue(nav.currentDestination?.hasRoute(AddPhotosRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
     }
 }

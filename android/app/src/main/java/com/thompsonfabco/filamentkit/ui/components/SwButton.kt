@@ -63,6 +63,8 @@ internal fun SwButton(
     busy: Boolean = false,
     /** A drawing before the words (decoration: the words name the button). */
     @DrawableRes icon: Int? = null,
+    /** Words at the right end of the button, in `mono` (the count in "Take photo  2 of 8"); the button is then full width. */
+    trailing: String? = null,
 ) {
     val colors = SpoolwardenTheme.colors
     val shape = SpoolwardenTheme.shapes.r
@@ -70,7 +72,7 @@ internal fun SwButton(
     val sized = modifier.heightIn(min = SpoolwardenTheme.density.control)
     val padding = PaddingValues(horizontal = SpoolwardenTheme.space.s3)
     val line = SpoolwardenTheme.sizes.hairline
-    val content: @Composable RowScope.() -> Unit = { ButtonLabel(text, busy, icon) }
+    val content: @Composable RowScope.() -> Unit = { ButtonLabel(text, busy, icon, trailing) }
     when (kind) {
         SwButtonKind.Main -> {
             val interaction = remember { MutableInteractionSource() }
@@ -118,7 +120,7 @@ internal fun SwButton(
 private fun flat() = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
 
 @Composable
-private fun RowScope.ButtonLabel(text: String, busy: Boolean, icon: Int?) {
+private fun RowScope.ButtonLabel(text: String, busy: Boolean, icon: Int?, trailing: String?) {
     if (busy && reducedMotion) {
         Text(stringResource(R.string.common_working), style = MaterialTheme.typography.labelLarge)
         return
@@ -132,4 +134,8 @@ private fun RowScope.ButtonLabel(text: String, busy: Boolean, icon: Int?) {
         Spacer(Modifier.width(SpoolwardenTheme.space.s2))
     }
     Text(text, style = MaterialTheme.typography.labelLarge)
+    if (trailing != null) {
+        Spacer(Modifier.weight(1f).width(SpoolwardenTheme.space.s3))
+        Text(trailing, style = SpoolwardenTheme.type.data)
+    }
 }
