@@ -26,15 +26,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,6 +45,7 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwAction
@@ -56,12 +59,14 @@ import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import kotlinx.coroutines.launch
 
 /**
  * "Add a line to the Filament Catalog" (05-android-app 8): the owner's own spec values for a product line, saved on
  * the Hub as a local library entry from which the slicer presets are rebuilt. Brand, line and material are needed.
  * [onBack] leaves without saving; [onSaved] leaves after a save (the shell shows the snackbar). Leaving with typing
- * asks first (2.5 rule 1).
+ * asks first (2.5 rule 1); while a save runs Back does nothing but say why (rule 2). Without a pairing the form stays
+ * and the Hub notice sits where the save's result would ([paired] false, 2.7).
  */
 @Composable
 fun AddProfileScreen(
@@ -70,49 +75,52 @@ fun AddProfileScreen(
     onSaved: () -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    paired: Boolean = true,
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
     val space = SpoolwardenTheme.space
     var leaving by remember { mutableStateOf(false) }
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val wait = stringResource(R.string.catalog_saving_wait)
     BackHandler(enabled = s.dirty) { leaving = true }
+    // registered last, so it wins while a save runs
+    BackHandler(enabled = s.saving) { scope.launch { toast?.show(wait) } }
     val savedNow by rememberUpdatedState(onSaved)
     LaunchedEffect(s.saved) { if (s.saved) savedNow() }
 
-    Column(modifier.fillMaxSize()) {
+    Column(
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space.s4),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(space.s3),
         ) {
-            Column(
-                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(space.s3),
-            ) {
-                Text(stringResource(R.string.catalog_intro), style = MaterialTheme.typography.bodyMedium)
-                Text(stringResource(R.string.catalog_required_note), style = MaterialTheme.typography.bodySmall)
-                Group(R.string.catalog_group_line, s, vm, ProfileField.Vendor, ProfileField.Line, ProfileField.Material)
-                Group(R.string.common_group_temperatures, s, vm, ProfileField.Nozzle, ProfileField.Bed)
-                Group(R.string.catalog_group_material, s, vm, ProfileField.Density, ProfileField.MaxVolumetric)
-                Group(R.string.catalog_group_slicer, s, vm, ProfileField.Parent)
-                Group(R.string.catalog_group_notes, s, vm, ProfileField.Notes)
-                ExistingLines(s, vm, onPairAgain)
-                if (s.problems.isNotEmpty()) {
-                    NoticeCard(
-                        NoticeKind.Bad, s.problems.joinToString(System.lineSeparator()) { BULLET + it },
-                        title = stringResource(R.string.catalog_refused),
-                    )
-                }
-                FailureNotice(s.failure, s.message, onPairAgain)
+            Text(stringResource(R.string.catalog_intro), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.catalog_required_note), style = MaterialTheme.typography.bodySmall)
+            Group(R.string.catalog_group_line, s, vm, ProfileField.Vendor, ProfileField.Line, ProfileField.Material)
+            Group(R.string.common_group_temperatures, s, vm, ProfileField.Nozzle, ProfileField.Bed)
+            Group(R.string.catalog_group_material, s, vm, ProfileField.Density, ProfileField.MaxVolumetric)
+            Group(R.string.catalog_group_slicer, s, vm, ProfileField.Parent)
+            Group(R.string.catalog_group_notes, s, vm, ProfileField.Notes)
+            // the action bar, and under it whatever the save answered
+            Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
+                if (!s.filled) Text(stringResource(R.string.catalog_fill), style = MaterialTheme.typography.bodySmall)
+                SwButton(
+                    stringResource(if (s.saving) R.string.common_saving else R.string.catalog_save), vm::save,
+                    Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = s.canSave && paired, busy = s.saving,
+                )
             }
-        }
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = space.s4, vertical = space.s3),
-            verticalArrangement = Arrangement.spacedBy(space.s2),
-        ) {
-            if (!s.filled) Text(stringResource(R.string.catalog_fill), style = MaterialTheme.typography.bodySmall)
-            SwButton(
-                stringResource(if (s.saving) R.string.common_saving else R.string.catalog_save), vm::save,
-                Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = s.canSave, busy = s.saving,
-            )
+            if (!paired) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+            if (s.problems.isNotEmpty()) {
+                NoticeCard(
+                    NoticeKind.Bad, s.problems.joinToString(System.lineSeparator()) { BULLET + it },
+                    title = stringResource(R.string.catalog_refused),
+                )
+            }
+            FailureNotice(s.failure, s.message, onPairAgain)
+            ExistingLines(s, vm, paired, onPairAgain)
         }
     }
 
@@ -128,6 +136,7 @@ fun AddProfileScreen(
                     onBack()
                 },
                 kind = SwButtonKind.DestructiveFilled,
+                enabled = !s.saving,
             ),
             cancel = SwAction(stringResource(R.string.common_stay), stay),
         ) {
@@ -136,23 +145,27 @@ fun AddProfileScreen(
     }
 }
 
+/** A failed Hub call as a notice; [onTryAgain] adds the button to the ones that are about reaching the Hub. */
 @Composable
-private fun FailureNotice(failure: SaveFailure?, message: String?, onPairAgain: () -> Unit) {
+private fun FailureNotice(failure: SaveFailure?, message: String?, onPairAgain: () -> Unit, onTryAgain: (() -> Unit)? = null) {
+    val again = onTryAgain?.let { listOf(SwAction(stringResource(R.string.common_try_again), it)) }.orEmpty()
     when (failure) {
         null -> Unit
         SaveFailure.CertificateChanged -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
         SaveFailure.NotPaired -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-        SaveFailure.Unreachable -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_unreachable))
-        SaveFailure.Unknown -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_answer_unknown))
-        SaveFailure.Message -> NoticeCard(NoticeKind.Bad, message.orEmpty())
+        SaveFailure.Unreachable -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_unreachable), actions = again)
+        SaveFailure.Unknown -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_answer_unknown), actions = again)
+        SaveFailure.Message -> NoticeCard(NoticeKind.Bad, message.orEmpty(), actions = again)
     }
 }
 
 /** The lines the Hub already has, each with "Change parent" (moves to the Slicer presets screen in S4.14). */
 @Composable
-private fun ExistingLines(s: AddProfileUiState, vm: AddProfileViewModel, onPairAgain: () -> Unit) {
+private fun ExistingLines(s: AddProfileUiState, vm: AddProfileViewModel, paired: Boolean, onPairAgain: () -> Unit) {
     val lines = s.lines
-    if (lines != null && lines.isEmpty()) return
+    // not paired: the notice above already says why there is no list
+    if (!paired && s.linesLoadFailed) return
+    if (lines != null && lines.isEmpty() && !s.linesLoadFailed) return
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
@@ -164,7 +177,7 @@ private fun ExistingLines(s: AddProfileUiState, vm: AddProfileViewModel, onPairA
             SwSkeletonRows(3)
             return@Column
         }
-        FailureNotice(s.lineFailure, s.lineMessage, onPairAgain)
+        FailureNotice(s.lineFailure, s.lineMessage, onPairAgain, vm::retryLines.takeIf { s.linesLoadFailed })
         lines.forEach { line ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -189,7 +202,11 @@ private fun ExistingLines(s: AddProfileUiState, vm: AddProfileViewModel, onPairA
                         )
                     }
                     if (s.parentSavedFor == line.lineId) {
-                        Text(stringResource(R.string.catalog_parent_saved), style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            stringResource(R.string.catalog_parent_saved),
+                            Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
                 Box {
@@ -198,8 +215,10 @@ private fun ExistingLines(s: AddProfileUiState, vm: AddProfileViewModel, onPairA
                     SwMenu(expanded = edit != null, onDismiss = vm::cancelEditParent) {
                         val parents = edit?.parents
                         when {
-                            parents == null -> SwMenuItem(stringResource(R.string.catalog_parent_loading), {}, modifier = Modifier.alpha(0.6f))
-                            !parents.synced -> SwMenuItem(stringResource(R.string.catalog_parent_unsynced), vm::cancelEditParent)
+                            parents == null ->
+                                SwMenuItem(stringResource(R.string.catalog_parent_loading), {}, enabled = false)
+                            !parents.synced ->
+                                SwMenuItem(stringResource(R.string.catalog_parent_unsynced), {}, enabled = false)
                             else -> parents.parents.forEach { p ->
                                 SwMenuItem(p, { vm.setLineParent(p) }, checked = p == line.bambuParent)
                             }
@@ -221,10 +240,7 @@ private fun Group(@StringRes title: Int, s: AddProfileUiState, vm: AddProfileVie
         fields.forEach { f ->
             val error = if (f in s.badRange) stringResource(R.string.catalog_error_range) else s.fieldProblems[f]
             if (f == ProfileField.Parent) {
-                ParentField(
-                    s.values[f].orEmpty(), s.parents, !s.saving, onPick = { vm.set(f, it) }, error = error,
-                    appliesNote = true,
-                )
+                CatalogParentField(s.values[f].orEmpty(), s.parents, !s.saving, onPick = { vm.set(f, it) }, error = error)
             } else {
                 OutlinedTextField(
                     value = s.values[f].orEmpty(),
@@ -257,40 +273,36 @@ private fun placeholderOf(f: ProfileField): Int? = when (f) {
 }
 
 /**
- * The Bambu Studio parent (05-android-app 6.3): a drop-down with "Automatic" first once the Hub has the presets
- * ([ParentList.synced]); before that a plain text field, [onType] per keystroke and [onCommit] when it loses focus
- * or Done is pressed. [error] is shown under the field; [appliesNote] adds "Applies to every colour of this line."
+ * The catalog screen's Bambu Studio parent (05-android-app 6.3): a drop-down with "Automatic" first once the Hub has
+ * the presets ([ParentList.synced]); before that a plain text field. [error] is shown under the field, and "Applies
+ * to every colour of this line." stays under it either way.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ParentField(
+private fun CatalogParentField(
     value: String,
     parents: ParentList?,
     enabled: Boolean,
     onPick: (String) -> Unit,
-    onType: (String) -> Unit = onPick,
-    onCommit: () -> Unit = {},
     error: String? = null,
-    appliesNote: Boolean = false,
 ) {
     val synced = parents?.synced == true
     val unsynced = stringResource(R.string.common_bambu_parent_unsynced)
     val leaveEmpty = stringResource(R.string.common_hint_leave_empty_auto)
     val applies = stringResource(R.string.common_bambu_parent_applies)
-    val note = error ?: listOfNotNull(
-        unsynced.takeIf { parents != null && !synced },
-        leaveEmpty.takeIf { !synced },
-        applies.takeIf { appliesNote },
-    ).joinToString(" ").ifEmpty { null }
+    val note = listOfNotNull(
+        error,
+        unsynced.takeIf { error == null && parents != null && !synced },
+        leaveEmpty.takeIf { error == null && !synced },
+        applies,
+    ).joinToString(" ")
     val label: @Composable () -> Unit = { Text(stringResource(R.string.common_field_bambu_parent)) }
-    val supporting: (@Composable () -> Unit)? = note?.let { { Text(it) } }
+    val supporting: @Composable () -> Unit = { Text(note) }
     if (!synced) {
         OutlinedTextField(
-            value = value, onValueChange = onType, enabled = enabled, singleLine = true,
+            value = value, onValueChange = onPick, enabled = enabled, singleLine = true,
             isError = error != null, label = label, supportingText = supporting,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onCommit() }),
-            modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) onCommit() },
+            modifier = Modifier.fillMaxWidth(),
         )
         return
     }
@@ -308,7 +320,7 @@ internal fun ParentField(
             containerColor = SpoolwardenTheme.colors.surface, shape = SpoolwardenTheme.shapes.r,
         ) {
             SwMenuItem(automatic, { onPick(""); open = false }, checked = value.isEmpty())
-            parents.parents.forEach { p -> SwMenuItem(p, { onPick(p); open = false }, checked = p == value) }
+            parents?.parents.orEmpty().forEach { p -> SwMenuItem(p, { onPick(p); open = false }, checked = p == value) }
         }
     }
 }

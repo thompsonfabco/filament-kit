@@ -89,6 +89,8 @@ data class AddProfileUiState(
     /** The line whose parent was just saved (its row says so), or the failure of a parent call. */
     val parentSavedFor: String? = null,
     val lineFailure: SaveFailure? = null,
+    /** [lineFailure] came from loading the list (it offers Try again), not from a parent call. */
+    val linesLoadFailed: Boolean = false,
     val lineMessage: String? = null,
 ) {
     /** The required fields are filled. */
@@ -115,7 +117,7 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
         loadLines()
     }
 
-    /** The product lines already on the Hub. A failure just leaves the list empty (the form still works). */
+    /** The product lines already on the Hub. A failure leaves the list empty with its notice (the form still works). */
     private fun loadLines() {
         viewModelScope.launch {
             try {
@@ -123,10 +125,16 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
                 _state.update { it.copy(lines = lines) }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
-                _state.update { it.copy(lines = emptyList()) }
+            } catch (e: Exception) {
+                _state.update { lineFailed(it.copy(lines = emptyList(), linesLoadFailed = true), e) }
             }
         }
+    }
+
+    /** Try again after the list did not load. */
+    fun retryLines() {
+        _state.update { it.copy(lines = null, lineFailure = null, lineMessage = null, linesLoadFailed = false) }
+        loadLines()
     }
 
     /** Opens the parent choice for [line], with the parents for its material. */

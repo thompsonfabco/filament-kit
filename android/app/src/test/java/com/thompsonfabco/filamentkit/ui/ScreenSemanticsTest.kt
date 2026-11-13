@@ -1,5 +1,8 @@
 package com.thompsonfabco.filamentkit.ui
 
+import androidx.compose.ui.test.onAllNodesWithText
+import com.thompsonfabco.filamentkit.nav.AddProfileTitle
+import org.robolectric.RuntimeEnvironment
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -136,7 +139,7 @@ class ScreenSemanticsTest {
     }
 
     /** Light and dark, font scale 1 and 2, on the screen already shown. */
-    private fun auditAllFour(shows: String) {
+    private fun auditAllFour(shows: String, sectionTitles: List<String> = emptyList()) {
         rule.waitForIdle()
         rule.onNodeWithText(shows).assertExists()
         assertTrue("the screen has controls to audit", SemanticsAudit.clickableCount(rule.onRoot().fetchSemanticsNode()) >= 1)
@@ -144,7 +147,7 @@ class ScreenSemanticsTest {
             for (scale in listOf(1f, 2f)) {
                 dark = isDark
                 fontScale = scale
-                assertEquals("dark=$isDark fontScale=$scale", emptyList<String>(), audit())
+                assertEquals("dark=$isDark fontScale=$scale", emptyList<String>(), audit(sectionTitles))
             }
         }
     }
@@ -219,18 +222,21 @@ class ScreenSemanticsTest {
     private fun group(title: String, group: SettingsGroup, facts: SettingsFacts = facts()) =
         host(title) { SettingsGroupPage(group, facts, actions()) }
 
+    /** The title the app's top bar shows on the catalog route: the shell reads the same resource. */
+    private fun catalogTitle() = RuntimeEnvironment.getApplication().getString(AddProfileTitle)
+
     @Test fun catalogLine() {
         val vm = AddProfileViewModel(FakeCatalog(refuse = false))
-        host("New catalog line") { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
         rule.waitForIdle()
         rule.onNodeWithText("Existing lines").assertExists()
         rule.onNodeWithText("Bambu Studio parent: none").assertExists()
-        auditAllFour("Save to the catalog")
+        auditAllFour("Save to the catalog", CATALOG_SECTIONS)
     }
 
     @Test fun catalogLineRefused() {
         val vm = AddProfileViewModel(FakeCatalog(refuse = true))
-        host("New catalog line") { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
         vm.set(ProfileField.Vendor, "Example Filaments")
         vm.set(ProfileField.Line, "PolyTerra")
         vm.set(ProfileField.Material, "PLA")
@@ -238,7 +244,9 @@ class ScreenSemanticsTest {
         vm.save()
         rule.waitForIdle()
         rule.onNodeWithText("The Hub could not use these values:").assertExists()
-        auditAllFour("Save to the catalog")
+        // the notice lists the problem and the Density field carries it again under itself
+        assertEquals(2, rule.onAllNodesWithText(DENSITY_PROBLEM, substring = true).fetchSemanticsNodes().size)
+        auditAllFour("Save to the catalog", CATALOG_SECTIONS)
     }
 
     @Test fun settings() {
@@ -473,7 +481,7 @@ class ScreenSemanticsTest {
             if (refuse) {
                 throw ApiError(
                     400, "invalid_entry", "not valid",
-                    JsonObject(mapOf("problems" to JsonArray(listOf(JsonPrimitive("fields.filament_density '9' is outside 0.5-3.0 g/cm3"))))),
+                    JsonObject(mapOf("problems" to JsonArray(listOf(JsonPrimitive(DENSITY_PROBLEM))))),
                 )
             }
             return LocalEntryResult(entry, "example--polyterra")
@@ -486,5 +494,10 @@ class ScreenSemanticsTest {
         override suspend fun report(id: String): PrinterReport = error("not used")
         override suspend fun usage(id: String, days: Int): List<UsageEntry> = emptyList()
         override suspend fun undoUsage(entryId: String): UsageEntry = error("not used")
+    }
+
+    private companion object {
+        const val DENSITY_PROBLEM = "fields.filament_density '9' is outside 0.5-3.0 g/cm3"
+        val CATALOG_SECTIONS = listOf("Line", "Temperatures", "Material", "Slicer", "Notes", "Existing lines")
     }
 }

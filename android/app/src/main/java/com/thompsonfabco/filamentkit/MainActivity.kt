@@ -73,6 +73,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.thompsonfabco.filamentkit.nav.AddProfileRoute
+import com.thompsonfabco.filamentkit.nav.AddProfileTitle
 import com.thompsonfabco.filamentkit.nav.AddOpened
 import com.thompsonfabco.filamentkit.nav.AddRoute
 import com.thompsonfabco.filamentkit.nav.HomeGraph
@@ -550,11 +551,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     }
 
                     composable<AddProfileRoute> {
-                        val a = api
-                        if (a == null) {
-                            HubNoticePage(::pushPairing)
-                            return@composable
-                        }
                         val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
                             initializer { AddProfileViewModel(ProfileApi.of(::currentApi)) }
                         })
@@ -568,6 +564,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                                 pairScope.launch { toast.show(savedText) }
                             },
                             onPairAgain = app.router::pairAgain,
+                            // no pairing: the form and its typing stay, the Hub notice sits inline (05 2.7)
+                            paired = api != null,
                         )
                     }
                 }
@@ -809,7 +807,7 @@ private fun placeTitle(destination: NavDestination?): String = stringResource(
         destination == null -> R.string.nav_home
         destination.hasRoute(PairRoute::class) -> R.string.pair_title
         destination.hasRoute(AddRoute::class) -> R.string.home_add_title
-        destination.hasRoute(AddProfileRoute::class) -> R.string.catalog_add_line
+        destination.hasRoute(AddProfileRoute::class) -> AddProfileTitle
         destination.hasRoute(LicencesRoute::class) -> R.string.settings_licences_title
         destination.hasRoute(SettingsAppearanceRoute::class) -> R.string.appearance_title
         destination.hasRoute(SettingsHubRoute::class) -> R.string.settings_hub_title

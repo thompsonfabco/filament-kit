@@ -41,11 +41,13 @@ internal fun SwMenuItem(
     modifier: Modifier = Modifier,
     @DrawableRes icon: Int? = null,
     checked: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val colors = SpoolwardenTheme.colors
     DropdownMenuItem(
         text = { Text(text, style = MaterialTheme.typography.bodyMedium) },
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.semantics { selected = checked },
         leadingIcon = icon?.let { { SwIcon(it, null) } },
         trailingIcon = if (checked) {
@@ -54,7 +56,7 @@ internal fun SwMenuItem(
             null
         },
         colors = MenuDefaults.itemColors(
-            textColor = colors.text, leadingIconColor = colors.muted, trailingIconColor = colors.accentText,
+            textColor = colors.text, disabledTextColor = colors.muted, leadingIconColor = colors.muted, trailingIconColor = colors.accentText,
         ),
     )
 }

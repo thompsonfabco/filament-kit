@@ -296,6 +296,16 @@ class AddProfileViewModelTest {
         val vm = AddProfileViewModel(api)
         advanceUntilIdle()
         assertEquals(emptyList<ProfileLine>(), vm.state.value.lines)
+        assertEquals(SaveFailure.Unreachable, vm.state.value.lineFailure)
+        assertTrue(vm.state.value.linesLoadFailed)
+
+        api.linesFailure = null
+        vm.retryLines()
+        assertNull("loading again", vm.state.value.lines)
+        advanceUntilIdle()
+        assertEquals(listOf("example--pla"), vm.state.value.lines?.map { it.lineId })
+        assertNull(vm.state.value.lineFailure)
+        assertFalse(vm.state.value.linesLoadFailed)
     }
 
     @Test fun parentsAreLoadedForTheMaterialAfterAPause() = runTest(dispatcher) {
