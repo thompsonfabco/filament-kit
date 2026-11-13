@@ -433,22 +433,30 @@ def generate_strings_js(strings):
 
 
 def xml_text(text, order):
-    """Android resource text: placeholders numbered by first appearance ({count} -> %n$d, others %n$s), then escaped."""
+    """Android resource text: placeholders numbered by first appearance ({count} -> %n$d, others %n$s), then escaped.
+
+    A literal % is %% only in a string with placeholders (Android turns %% back into % only when it formats the string
+    with arguments). A text with leading or trailing whitespace or a run of spaces is written in double quotes, because
+    Android trims and collapses whitespace in an unquoted string."""
+    fmt = bool(order)
     parts = []
     pos = 0
     for m in PLACEHOLDER.finditer(text):
-        parts.append(xml_escape(text[pos:m.start()]))
+        parts.append(xml_escape(text[pos:m.start()], fmt))
         i = order.index(m.group(1)) + 1
         parts.append(f"%{i}${'d' if m.group(1) == 'count' else 's'}")
         pos = m.end()
-    parts.append(xml_escape(text[pos:]))
-    return "".join(parts)
+    parts.append(xml_escape(text[pos:], fmt))
+    out = xml_lead("".join(parts))
+    if text != text.strip() or "  " in text:
+        out = f'"{out}"'
+    return out
 
 
-def xml_escape(text):
-    for old, rep in (("\\", "\\\\"), ("'", "\\'"), ('"', '\\"'), ("&", "&amp;"), ("<", "&lt;"), ("%", "%%"), ("\n", "\\n")):
+def xml_escape(text, fmt=True):
+    for old, rep in (("\\", "\\\\"), ("'", "\\'"), ('"', '\\"'), ("&", "&amp;"), ("<", "&lt;"), ("\n", "\\n")):
         text = text.replace(old, rep)
-    return text
+    return text.replace("%", "%%") if fmt else text
 
 
 def xml_lead(text):
@@ -465,10 +473,11 @@ def generate_strings_xml(strings):
         if isinstance(value, dict):
             lines.append(f'    <plurals name="{key}">')
             for q in ("one", "other"):
-                lines.append(f'        <item quantity="{q}">{xml_lead(xml_text(value[q], order))}</item>')
+                lines.append(f'        <item quantity="{q}">{xml_text(value[q], order)}</item>')
             lines.append("    </plurals>")
         else:
-            lines.append(f'    <string name="{key}">{xml_lead(xml_text(value, order))}</string>')
+            attr = ' formatted="false"' if not order and "%" in value else ""
+            lines.append(f'    <string name="{key}"{attr}>{xml_text(value, order)}</string>')
     lines.append("</resources>")
     return "\n".join(lines) + "\n"
 

@@ -219,7 +219,7 @@
         <item quantity="other">Accepted. %1$d fields changed; revision %2$s keeps the old values.</item>
     </plurals>
     <string name="changes_asking">Asking the Label Reader… (up to a minute)</string>
-    <string name="changes_becomes">becomes </string>
+    <string name="changes_becomes">"becomes "</string>
     <string name="changes_discarded">Proposal discarded. Nothing changed.</string>
     <string name="changes_no_photo">No photo was kept for this record: it worked from the saved values and your note.</string>
     <string name="changes_none">The Label Reader changed nothing.</string>
@@ -229,7 +229,7 @@
         <item quantity="one">Proposal: %1$d change</item>
         <item quantity="other">Proposal: %1$d changes</item>
     </plurals>
-    <string name="changes_was">was </string>
+    <string name="changes_was">"was "</string>
     <string name="code_checking_release">Checking the signed release…</string>
     <string name="code_nothing">Nothing to copy yet.</string>
     <string name="coll_pages_label">Pages</string>
@@ -491,7 +491,7 @@
     <string name="progress_uploading_failed">Upload failed at %1$s %%.</string>
     <string name="qr_alt_pair">QR code for pairing a phone</string>
     <string name="qr_check_groups">Check that the phone shows the same groups.</string>
-    <string name="qr_code_prefix">Pairing code </string>
+    <string name="qr_code_prefix">"Pairing code "</string>
     <string name="qr_expired">The pairing code expired. Make a new one.</string>
     <!-- 1=minutes -->
     <string name="qr_expires">Expires in %1$s min</string>
@@ -555,7 +555,7 @@
     <string name="status_offline">Offline</string>
     <string name="status_ok">OK</string>
     <string name="status_on">On</string>
-    <string name="status_prefix">State: </string>
+    <string name="status_prefix">"State: "</string>
     <string name="status_revised_ai">Revised by AI</string>
     <string name="status_running">Running</string>
     <string name="status_set">Set</string>
@@ -569,7 +569,7 @@
     <string name="topbar_hub_unreachable">Hub not reachable</string>
     <!-- 1=title 2=state -->
     <string name="topbar_job_name">Background job: %1$s, %2$s. Show the job panel.</string>
-    <string name="topbar_version_prefix">version </string>
+    <string name="topbar_version_prefix">"version "</string>
     <string name="unlock_button">Unlock</string>
     <string name="unlock_continue">Unlock and continue</string>
     <string name="unlock_error_empty">Enter the 8-digit setup code.</string>
@@ -1810,7 +1810,7 @@
     <string name="common_unit_celsius">°C</string>
     <string name="common_unit_density">g/cm³</string>
     <string name="common_unit_grams">g</string>
-    <string name="common_unit_percent">%%</string>
+    <string name="common_unit_percent" formatted="false">%</string>
     <string name="common_weight_with_spool">Weight with spool</string>
     <string name="common_weight_with_spool_optional">Weight with spool (optional)</string>
     <string name="nav_add">Add</string>
@@ -3174,9 +3174,9 @@
     <!-- 1=name 2=id 3=address -->
     <string name="cli_added_klipper">Added %1$s as %2$s (%3$s).</string>
     <!-- 1=model -->
-    <string name="cli_added_model">  Model: %1$s</string>
+    <string name="cli_added_model">"  Model: %1$s"</string>
     <!-- 1=slots -->
-    <string name="cli_added_slots">  Slots: %1$s</string>
+    <string name="cli_added_slots">"  Slots: %1$s"</string>
     <!-- 1=name 2=address -->
     <string name="cli_address_saved">Saved. %1$s is at %2$s.</string>
     <!-- 1=name -->
@@ -3396,12 +3396,12 @@
     <string name="cli_fix_update_log">see the whole log: sudo filament-kit logs</string>
     <!-- 1=folder -->
     <string name="cli_folder">Folder: %1$s</string>
-    <string name="cli_footer_checklist">Space on/off  s apply  q leave  ? help</string>
-    <string name="cli_footer_menu_main">s save   q leave   ? help</string>
-    <string name="cli_footer_menu_sub">s save   q back   ? help</string>
-    <string name="cli_footer_open">Enter open  s save  q leave  ? help</string>
-    <string name="cli_footer_printer">q back   ? help</string>
-    <string name="cli_footer_printers">a add a printer   l look again   q back   ? help</string>
+    <string name="cli_footer_checklist">"Space on/off  s apply  q leave  ? help"</string>
+    <string name="cli_footer_menu_main">"s save   q leave   ? help"</string>
+    <string name="cli_footer_menu_sub">"s save   q back   ? help"</string>
+    <string name="cli_footer_open">"Enter open  s save  q leave  ? help"</string>
+    <string name="cli_footer_printer">"q back   ? help"</string>
+    <string name="cli_footer_printers">"a add a printer   l look again   q back   ? help"</string>
     <string name="cli_group_action_backup">Back up now: sudo filament-kit backup create</string>
     <string name="cli_group_action_catalog">Update now: sudo filament-kit catalog update</string>
     <string name="cli_group_action_firewall">Firewall rules: filament-kit remote firewall</string>
@@ -3420,7 +3420,7 @@
     <string name="cli_help_certificate">The Hub\'s certificate and its fingerprint</string>
     <string name="cli_help_config">Settings menu; also config show, set and theme</string>
     <string name="cli_help_devices">Paired phones, PCs and Weigh Stations</string>
-    <string name="cli_help_every_command">Every command: -h  --json  -q/--quiet  -y/--yes  --color auto|always|never\n               --plain  --no-progress</string>
+    <string name="cli_help_every_command">"Every command: -h  --json  -q/--quiet  -y/--yes  --color auto|always|never\n               --plain  --no-progress"</string>
     <string name="cli_help_features">Switch features on and off; choose the setup</string>
     <string name="cli_help_group_everyday">Everyday</string>
     <string name="cli_help_group_moving_in">Moving in</string>
@@ -3443,7 +3443,7 @@
     <string name="cli_help_tag_reader">Tag Readers: tokens, flash one over USB</string>
     <string name="cli_help_uninstall">Remove filament-kit from this machine</string>
     <string name="cli_help_update">Check, install or roll back filament-kit</string>
-    <string name="cli_help_usage">Usage: filament-kit &lt;command> [options]    More: filament-kit &lt;command> -h</string>
+    <string name="cli_help_usage">"Usage: filament-kit &lt;command> [options]    More: filament-kit &lt;command> -h"</string>
     <string name="cli_help_web">Access from outside the home, and Claude\'s connector</string>
     <string name="cli_help_weigh_station">Weigh Station: pair it, flash its display</string>
     <string name="cli_hint_leave_empty_auto">Leave empty to choose automatically.</string>
@@ -3490,7 +3490,7 @@
     <!-- 1=example 2=slot -->
     <string name="cli_mapload_answers">y yes · a slot (e.g. %1$s) I loaded that one · s skip %2$s · q stop</string>
     <!-- 1=slot 2=nozzle -->
-    <string name="cli_mapload_confirmed">confirmed  %1$s (%2$s)</string>
+    <string name="cli_mapload_confirmed">"confirmed  %1$s (%2$s)"</string>
     <!-- 1=confirmed 2=skipped -->
     <string name="cli_mapload_done">Done: %1$s confirmed, %2$s skipped.</string>
     <!-- 1=name -->
@@ -3571,7 +3571,7 @@
     <!-- 1=time -->
     <string name="cli_presets_sync_reported">Slicer Sync: last reported %1$s.</string>
     <!-- 1=line 2=preset 3=file 4=keys -->
-    <string name="cli_presets_update_line">%1$s  Bambu Studio: %2$s (in your file %3$s): %4$s</string>
+    <string name="cli_presets_update_line">"%1$s  Bambu Studio: %2$s (in your file %3$s): %4$s"</string>
     <!-- 1=count 2=lines -->
     <string name="cli_presets_updates">Updates: %1$d on %2$s lines. Presets already in your slicers are never replaced unless you accept them.</string>
     <!-- 1=count -->
@@ -3644,40 +3644,40 @@
     <string name="cli_progress_waiting_phone">Waiting for the phone… (the code works until %1$s)</string>
     <!-- 1=name -->
     <string name="cli_progress_waiting_report">Waiting for %1$s to report…</string>
-    <string name="cli_prompt_access_code">Access Code (on the printer: Settings > Network/LAN): </string>
+    <string name="cli_prompt_access_code">"Access Code (on the printer: Settings > Network/LAN): "</string>
     <!-- 1=name -->
-    <string name="cli_prompt_access_code_new">New Access Code for %1$s (on the printer: Settings > Network/LAN): </string>
+    <string name="cli_prompt_access_code_new">"New Access Code for %1$s (on the printer: Settings > Network/LAN): "</string>
     <!-- 1=name -->
-    <string name="cli_prompt_access_code_of">Access Code of %1$s (on the printer: Settings > Network/LAN): </string>
-    <string name="cli_prompt_address">Address: </string>
+    <string name="cli_prompt_access_code_of">"Access Code of %1$s (on the printer: Settings > Network/LAN): "</string>
+    <string name="cli_prompt_address">"Address: "</string>
     <string name="cli_prompt_answer">Answer:</string>
     <!-- 1=name -->
-    <string name="cli_prompt_api_key">Moonraker API key for %1$s: </string>
-    <string name="cli_prompt_api_key_optional">Moonraker API key (optional): </string>
+    <string name="cli_prompt_api_key">"Moonraker API key for %1$s: "</string>
+    <string name="cli_prompt_api_key_optional">"Moonraker API key (optional): "</string>
     <!-- 1=example -->
-    <string name="cli_prompt_bambu_address">IP address or name (e.g. %1$s): </string>
-    <string name="cli_prompt_buzzer">Buzzer: h for high, l for low [h]: </string>
-    <string name="cli_prompt_catalog_token">Catalog token (GitHub token): </string>
+    <string name="cli_prompt_bambu_address">"IP address or name (e.g. %1$s): "</string>
+    <string name="cli_prompt_buzzer">"Buzzer: h for high, l for low [h]: "</string>
+    <string name="cli_prompt_catalog_token">"Catalog token (GitHub token): "</string>
     <string name="cli_prompt_fingerprint_match">Does it match the fingerprint the Hub shows?</string>
-    <string name="cli_prompt_name_optional">Name (optional): </string>
+    <string name="cli_prompt_name_optional">"Name (optional): "</string>
     <string name="cli_prompt_number">Number:</string>
     <string name="cli_prompt_number_enter_keeps">Number (Enter keeps it):</string>
     <string name="cli_prompt_number_or_letter">Number or letter:</string>
-    <string name="cli_prompt_passphrase_again">New passphrase again: </string>
-    <string name="cli_prompt_passphrase_new">New passphrase, at least 12 characters: </string>
-    <string name="cli_prompt_paste_link">Paste the link from the Hub (sudo filament-kit pair --weigh-station): </string>
+    <string name="cli_prompt_passphrase_again">"New passphrase again: "</string>
+    <string name="cli_prompt_passphrase_new">"New passphrase, at least 12 characters: "</string>
+    <string name="cli_prompt_paste_link">"Paste the link from the Hub (sudo filament-kit pair --weigh-station): "</string>
     <!-- 1=default -->
-    <string name="cli_prompt_port">Port [%1$s]: </string>
+    <string name="cli_prompt_port">"Port [%1$s]: "</string>
     <!-- 1=label -->
-    <string name="cli_prompt_secret_enter_keeps">%1$s (Enter keeps it): </string>
-    <string name="cli_prompt_serial_optional">Serial (optional: read from the printer): </string>
+    <string name="cli_prompt_secret_enter_keeps">"%1$s (Enter keeps it): "</string>
+    <string name="cli_prompt_serial_optional">"Serial (optional: read from the printer): "</string>
     <!-- 1=word -->
-    <string name="cli_prompt_type_word">Type %1$s to go on: </string>
+    <string name="cli_prompt_type_word">"Type %1$s to go on: "</string>
     <!-- 1=label 2=value -->
-    <string name="cli_prompt_value">%1$s [%2$s]: </string>
-    <string name="cli_prompt_wifi_network">Wi-Fi network the Tag Reader joins: </string>
-    <string name="cli_prompt_wifi_password">Its Wi-Fi password: </string>
-    <string name="cli_prompt_wifi_password_again">The password again: </string>
+    <string name="cli_prompt_value">"%1$s [%2$s]: "</string>
+    <string name="cli_prompt_wifi_network">"Wi-Fi network the Tag Reader joins: "</string>
+    <string name="cli_prompt_wifi_password">"Its Wi-Fi password: "</string>
+    <string name="cli_prompt_wifi_password_again">"The password again: "</string>
     <string name="cli_q_catalog_rollback">Go back to the previous Filament Catalog? The version before the last update comes back. Your own entries are kept.</string>
     <string name="cli_q_catalog_token_remove">Remove the Catalog token? The Filament Catalog can then download only from public sources.</string>
     <string name="cli_q_config_remove_api_key">Remove the Anthropic API key? Label Reader: Cloud (Claude) stops reading labels until a new key is set.</string>
@@ -3834,23 +3834,23 @@
     <string name="cli_scan_none">No Moonraker found on %1$s.</string>
     <string name="cli_setting_orders_error">give the path of the order history file.</string>
     <string name="cli_setting_orders_line">Order history needs its file.</string>
-    <string name="cli_setting_orders_prompt">Path of the order history file: </string>
+    <string name="cli_setting_orders_prompt">"Path of the order history file: "</string>
     <!-- 1=example -->
     <string name="cli_setting_spoolman_error">give the address of a Spoolman on another machine, e.g. %1$s.</string>
     <string name="cli_setting_spoolman_line">The Hub service needs a Spoolman: none runs on this machine.</string>
     <!-- 1=example -->
-    <string name="cli_setting_spoolman_prompt">Address of your Spoolman (e.g. %1$s): </string>
+    <string name="cli_setting_spoolman_prompt">"Address of your Spoolman (e.g. %1$s): "</string>
     <string name="cli_setting_station_error">enter one address or name, not a range or wildcard.</string>
     <string name="cli_setting_station_error_self">give the address of the machine the Hub runs on.</string>
     <string name="cli_setting_station_line">Weigh Station only needs the Hub\'s address.</string>
-    <string name="cli_setting_station_prompt">The Hub\'s address (IP address or name): </string>
+    <string name="cli_setting_station_prompt">"The Hub\'s address (IP address or name): "</string>
     <!-- 1=example -->
     <string name="cli_setting_web_error">give the https address people use, e.g. %1$s.</string>
     <string name="cli_setting_web_line">Web access needs the address people use.</string>
     <!-- 1=example -->
-    <string name="cli_setting_web_prompt">Public https address of the web app (e.g. %1$s): </string>
+    <string name="cli_setting_web_prompt">"Public https address of the web app (e.g. %1$s): "</string>
     <!-- 1=url 2=code -->
-    <string name="cli_setup_code_line">Open %1$s  (setup code: %2$s)</string>
+    <string name="cli_setup_code_line">"Open %1$s  (setup code: %2$s)"</string>
     <string name="cli_setup_custom">custom</string>
     <!-- 1=address -->
     <string name="cli_setup_hub_address">Weigh Station answers at: %1$s</string>
