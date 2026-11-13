@@ -2127,6 +2127,36 @@
     <string name="presets_parent">Find a parent</string>
     <string name="presets_waiting">Waiting for Slicer Sync on the PC</string>
     <string name="presets_without_line">Filaments without a preset line</string>
+    <!-- 1=material 2=id -->
+    <string name="presets_card_sub">%1$s · F%2$s</string>
+    <!-- 1=id -->
+    <string name="presets_card_sub_no_material">F%1$s</string>
+    <!-- 1=brand 2=name -->
+    <string name="presets_filament_name">%1$s %2$s</string>
+    <string name="presets_lines_label">Lines</string>
+    <string name="presets_line_name_needed">Type a line name first.</string>
+    <string name="presets_parent_help">A material or a name, e.g. PETG-CF. Changing it searches again.</string>
+    <string name="web_presets_restore">Restore presets deleted in Bambu Studio</string>
+    <string name="web_presets_restore_done">The next build brings them back; Slicer Sync installs it the next time the slicers are closed.</string>
+    <!-- 1=count -->
+    <plurals name="web_presets_updates_accept">
+        <item quantity="one">Accept %1$d update</item>
+        <item quantity="other">Accept %1$d updates</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="web_presets_updates_accepted">
+        <item quantity="one">%1$d update accepted: Slicer Sync writes it over the preset at its next run.</item>
+        <item quantity="other">%1$d updates accepted: Slicer Sync writes them over the presets at its next run.</item>
+    </plurals>
+    <string name="web_presets_updates_intro">A newer build would change these presets already in your slicers. Nothing is written over until you accept.</string>
+    <string name="web_presets_updates_none">No preset in your slicers needs an update.</string>
+    <!-- 1=count -->
+    <string name="web_presets_updates_none_accepted">Nothing waiting; %1$d accepted, written at the next Slicer Sync run.</string>
+    <!-- 1=name 2=target 3=keys -->
+    <string name="web_presets_updates_row">%1$s (%2$s): %3$s</string>
+    <string name="web_presets_updates_title">Updates</string>
+    <!-- 1=names -->
+    <string name="web_presets_updates_yours">Never written over (your own preset of that name): %1$s</string>
     <string name="add_preview_title_unsaved">Preview (nothing saved yet)</string>
     <string name="printer_camera_hide">Hide camera</string>
     <string name="printer_camera_show">Show camera</string>

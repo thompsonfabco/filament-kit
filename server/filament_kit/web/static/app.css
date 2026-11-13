@@ -155,3 +155,11 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .standalone > p:last-child { margin-top: var(--s5); }
 .standalone__form { display: grid; gap: var(--s4); margin-top: var(--s5); }
 .standalone__wide { width: 100%; }
+
+/* Slicer presets (04 8): groups, filament cards and the new-line disclosure */
+.group__title, .group__desc { margin: 0; }
+.cards { display: grid; gap: var(--s4); }
+.cards > .group { margin-top: 0; }
+.disclosure > summary { display: flex; align-items: center; min-height: calc(var(--s7) - var(--s1)); font-size: var(--fs-m);
+                        font-weight: var(--fw-label); cursor: pointer; }
+.disclosure__body { display: grid; gap: var(--s3); padding-top: var(--s3); }
