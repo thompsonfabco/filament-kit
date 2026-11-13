@@ -160,6 +160,9 @@ class Updater(
             } catch (e: Exception) {
                 onProblem(e)
                 _state.update { it.copy(busy = false, progress = null, error = messageFor(e)) }
+            } finally {
+                // the session holds its own copy once committed; a partial or failed download is no use either
+                apkFile.delete()
             }
         }
     }

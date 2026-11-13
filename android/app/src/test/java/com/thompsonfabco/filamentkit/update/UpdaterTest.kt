@@ -45,6 +45,16 @@ class UpdaterTest {
         scheduler.runCurrent()
     }
 
+    @Test fun theDownloadedApkIsDeletedOnceHandedToTheInstaller() {
+        val installer = FakeInstaller(allowed = true)
+        val u = updater(FakeSource("7"), installer)
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        assertEquals(1, installer.installed.size)
+        assertFalse(installer.installed.single().exists())
+    }
+
     @Test fun theOfferedReleaseComesFromTheServer() {
         val u = updater(FakeSource("7"), FakeInstaller(allowed = true))
         scheduler.runCurrent()

@@ -82,9 +82,8 @@ fun HomeScreen(
     localNetworkPanel: @Composable () -> Unit = {},
     extra: @Composable () -> Unit = {},
 ) {
-    Column(modifier.fillMaxSize()) {
     Column(
-        Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column {
@@ -111,7 +110,6 @@ fun HomeScreen(
             drafts.forEach { d -> DraftRow(d, onClick = { onResumeDraft(d.id) }, onDiscard = { onDiscardDraft(d.id) }) }
         }
         extra()
-    }
     }
 }
 

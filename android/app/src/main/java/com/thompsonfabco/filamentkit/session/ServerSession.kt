@@ -14,10 +14,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 
 /** How often [ServerSession.recheck] runs while the app is on screen. */
 const val CONNECTION_POLL_MS = 20_000L
+
+/** How long [ServerSession.trustCertificate] waits for the stored config to show the new pin. */
+const val TRUST_WAIT_MS = 5_000L
 
 /** How the app currently reaches the paired server (the Home screen's connection dot). */
 sealed interface Connection {
@@ -47,6 +51,7 @@ class ServerSession(
     private val clientFor: (fingerprint: String) -> OkHttpClient = { pinnedClient(it) },
     /** API 37 `ACCESS_LOCAL_NETWORK`; while false the server is not resolved ([Connection.NeedsLocalNetwork]). */
     private val localNetworkGranted: () -> Boolean = { true },
+    private val trustWaitMs: Long = TRUST_WAIT_MS,
 ) {
     private val _config = MutableStateFlow<ServerConfig?>(null)
     val config: StateFlow<ServerConfig?> = _config.asStateFlow()
@@ -138,15 +143,17 @@ class ServerSession(
 
     /**
      * The user trusts the certificate they were shown: pin exactly [actual] in place of [expected] and keep the token
-     * and addresses. False (nothing saved) when [expected] is no longer what this pairing pins. If the server no longer
-     * knows the token, its next 401 goes to Pair as usual. Returns once the new pin is in use.
+     * and addresses. False (nothing saved) when [expected] is no longer what this pairing pins, or when the stored
+     * config does not show the new pin within [trustWaitMs]. If the server no longer knows the token, its next 401
+     * goes to Pair as usual. Returns once the new pin is in use.
      */
     suspend fun trustCertificate(expected: String, actual: String): Boolean {
         val cfg = _config.value
         if (cfg == null || !cfg.canTrust(expected) || cfg.token == revokedToken) return false
         save(cfg.copy(fingerprint = actual))
-        _config.first { !it?.fingerprint.equals(expected, ignoreCase = true) }
-        return true
+        return withTimeoutOrNull(trustWaitMs) {
+            _config.first { !it?.fingerprint.equals(expected, ignoreCase = true) }
+        } != null
     }
 
     private fun apply(cfg: ServerConfig?) {

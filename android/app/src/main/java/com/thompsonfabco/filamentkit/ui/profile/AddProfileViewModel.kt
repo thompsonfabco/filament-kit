@@ -62,8 +62,12 @@ data class AddProfileUiState(
     val error: String? = null,
     val pairAgain: Boolean = false,
 ) {
-    val canSave: Boolean
-        get() = !saving && ProfileField.entries.filter { it.required }.all { !values[it].isNullOrBlank() }
+    /** The required fields are filled. */
+    val filled: Boolean
+        get() = ProfileField.entries.filter { it.required }.all { !values[it].isNullOrBlank() }
+
+    /** Not again right after a save (a second tap would post the same entry); any edit clears [saved]. */
+    val canSave: Boolean get() = !saving && saved == null && filled
 }
 
 /** "Add profile": the owner's own library entry for a product line, posted to `/api/library/local`. */

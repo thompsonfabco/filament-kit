@@ -173,6 +173,8 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
             val list = backend.printers().filter { it.configured }
             printers = list
             _state.value = LoadUiState.PickPrinter(spool, list)
+            // the only printer: nothing to choose, go to its slots (the next op cancels this one, which has finished)
+            list.singleOrNull()?.let(::pickPrinter)
         }
     }
 
@@ -232,13 +234,15 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
         }
     }
 
-    /** One step back: preview → slots → printers. */
+    /** One step back: preview → slots → printers (a one-printer list is skipped, so slots → closed). */
     fun back() {
         if (writing) return
         job?.cancel()
         when (val s = _state.value) {
             is LoadUiState.Preview -> _state.value = LoadUiState.PickSlot(s.spool, s.printer, slots ?: emptyList(), units = units)
-            is LoadUiState.PickSlot -> _state.value = LoadUiState.PickPrinter(s.spool, printers ?: emptyList())
+            is LoadUiState.PickSlot ->
+                if (printers?.size == 1) close() // the printer step was skipped, so there is no list to go back to
+                else _state.value = LoadUiState.PickPrinter(s.spool, printers ?: emptyList())
             else -> close()
         }
     }

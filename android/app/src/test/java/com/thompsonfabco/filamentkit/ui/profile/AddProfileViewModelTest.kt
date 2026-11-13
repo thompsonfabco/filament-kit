@@ -120,6 +120,19 @@ class AddProfileViewModelTest {
         assertFalse(s.saving)
     }
 
+    @Test fun saveIsOffAfterASuccessUntilTheFormIsEdited() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        filled(vm)
+        vm.save()
+        advanceUntilIdle()
+        assertFalse(vm.state.value.canSave)
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(1, api.posted.size)
+        vm.set(Density, "1.2")
+        assertTrue(vm.state.value.canSave)
+    }
+
     @Test fun invalidEntryProblemsBecomeTheFieldErrorsList() = runTest(dispatcher) {
         val problems = listOf("fields.filament_density '9' is outside 0.5-3.0 g/cm3", "nozzle range low 240 is above high 230")
         api.failure = ApiError(

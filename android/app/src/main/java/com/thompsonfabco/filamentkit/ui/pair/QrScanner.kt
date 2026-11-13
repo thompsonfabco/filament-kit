@@ -34,6 +34,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.thompsonfabco.filamentkit.ui.openAppSettings
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -60,6 +63,12 @@ fun QrScanner(
         denied = !it
     }
     LaunchedEffect(Unit) { if (!granted) launcher.launch(Manifest.permission.CAMERA) }
+    // back from the app's settings page with the camera allowed
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            granted = true
+        }
+    }
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -85,6 +94,7 @@ fun QrScanner(
             ) {
                 Text("The camera is needed to scan the pairing code. You can allow it in the phone's app settings, or enter the address by hand instead.")
                 Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) { Text("Try again") }
+                OutlinedButton(onClick = context::openAppSettings) { Text("Open app settings") }
                 OutlinedButton(onClick = onEnterAddress) { Text("Enter address instead") }
             }
         }

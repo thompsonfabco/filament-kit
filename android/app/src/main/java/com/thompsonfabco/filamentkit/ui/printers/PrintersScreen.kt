@@ -32,11 +32,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import com.thompsonfabco.filamentkit.net.Printer
+import com.thompsonfabco.filamentkit.ui.pair.Mismatch
+import com.thompsonfabco.filamentkit.ui.pair.PairTexts
+import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
 
 /** The printers the server knows; tapping a set-up printer opens it, an unset one asks for its Access Code. */
 @Composable
@@ -176,11 +180,15 @@ private fun AddKlipperDialog(d: KlipperDialog, viewModel: PrintersViewModel) {
 
 @Composable
 internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () -> Unit) {
+    // the Pair screen's words and grouped fingerprint, for a saved pairing whose certificate changed
+    val text = PairTexts.mismatch(Mismatch(expected, actual), host = "")
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("The server's certificate changed.", style = MaterialTheme.typography.titleMedium)
-        Text("Expected: $expected")
-        Text("Got: $actual")
-        Button(onClick = onPairAgain) { Text("Pair again") }
+        Text(text.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+        Text(text.body)
+        Text(text.actualLabel)
+        Text(groupFingerprint(actual), fontFamily = FontFamily.Monospace)
+        text.whereToCheck?.let { Text(it) }
+        Button(onClick = onPairAgain) { Text(text.button) }
     }
 }
 

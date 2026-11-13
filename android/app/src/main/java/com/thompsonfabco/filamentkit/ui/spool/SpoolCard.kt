@@ -27,6 +27,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.parseWeight
+import com.thompsonfabco.filamentkit.ui.printers.MismatchNotice
+import com.thompsonfabco.filamentkit.ui.printers.UnpairedNotice
 import com.thompsonfabco.filamentkit.ui.weightHint
 
 /**
@@ -75,16 +77,8 @@ fun SpoolHost(
                     OutlinedButton(onClick = onClose) { Text("Close") }
                 }
             }
-            SpoolUiState.Unauthorized -> {
-                Text("This phone is no longer paired with the server.", color = MaterialTheme.colorScheme.error)
-                Button(onClick = onPairAgain) { Text("Pair again") }
-            }
-            is SpoolUiState.Mismatch -> {
-                Text("The server's certificate changed.", style = MaterialTheme.typography.titleMedium)
-                Text("Expected: ${s.expected}")
-                Text("Got: ${s.actual}")
-                Button(onClick = onPairAgain) { Text("Pair again") }
-            }
+            SpoolUiState.Unauthorized -> UnpairedNotice(onPairAgain)
+            is SpoolUiState.Mismatch -> MismatchNotice(s.expected, s.actual, onPairAgain)
         }
     }
 }

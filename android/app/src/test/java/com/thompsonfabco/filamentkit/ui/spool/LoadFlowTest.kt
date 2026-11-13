@@ -75,7 +75,8 @@ class LoadFlowTest {
         var loadError: Exception? = null
         /** When set, a real load waits for it (the write is in flight). */
         var gate: CompletableDeferred<Unit>? = null
-        var printers = listOf(detail.printer, Printer(id = "X", name = "X", serial = "X", configured = false))
+        var printers = listOf(detail.printer, Printer(id = "X", name = "X", serial = "X", configured = false),
+            Printer(id = "Y", name = "Other", serial = "Y", configured = true))
         override suspend fun printers() = printers
         override suspend fun printer(id: String) = detail
         override suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
@@ -104,11 +105,23 @@ class LoadFlowTest {
         vm.start(spool)
         runCurrent()
         val pick = vm.state.value as LoadUiState.PickPrinter
-        assertEquals(listOf("0948AB"), pick.printers!!.map { it.id })
+        assertEquals(listOf("0948AB", "Y"), pick.printers!!.map { it.id })
         vm.pickPrinter(printer)
         runCurrent()
         val slots = vm.state.value as LoadUiState.PickSlot
         assertEquals(listOf("A1", "A2", "HT-A", "Ext"), slots.slots!!.map { it.label })
+    }
+
+    @Test fun theOnlyConfiguredPrinterSkipsTheListAndBackClosesTheFlow() = runTest(dispatcher) {
+        load.printers = listOf(printer, Printer(id = "X", name = "X", serial = "X", configured = false))
+        val vm = loadVm()
+        vm.start(spool)
+        runCurrent()
+        val slots = vm.state.value as LoadUiState.PickSlot
+        assertEquals("0948AB", slots.printer.id)
+        assertEquals(listOf("A1", "A2", "HT-A", "Ext"), slots.slots!!.map { it.label })
+        vm.back()
+        assertEquals(LoadUiState.Closed, vm.state.value)
     }
 
     @Test fun theExternalHolderCanBePickedLikeASlot() = runTest(dispatcher) {

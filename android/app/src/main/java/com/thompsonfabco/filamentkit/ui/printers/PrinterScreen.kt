@@ -26,6 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,12 +45,16 @@ import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.Temp
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
+import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlin.math.roundToInt
+
+/** How long the answer to a command stays under the controls. */
+private const val COMMAND_MESSAGE_MS = 6_000L
 
 /** Where the camera streams come from: the app's pinned client, the stream URLs and the Bearer header. */
 class CameraSource(
@@ -87,12 +94,28 @@ fun PrinterScreen(
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val visible = lifecycle.isAtLeast(Lifecycle.State.STARTED)
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // a print that ends while the screen is open: the "Filament used" list (fetched once) picks up its entry
+    var wasPrinting by remember { mutableStateOf(false) }
+    LaunchedEffect(state.printing) {
+        if (wasPrinting && !state.printing) tools.refreshUsage()
+        wasPrinting = state.printing
+    }
+    // the answer to a command (Pause, Stop ...) would otherwise stay until the next one
+    LaunchedEffect(state.commandMessage) {
+        if (state.commandMessage != null) {
+            delay(COMMAND_MESSAGE_MS)
+            viewModel.dismissCommandMessage()
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // outside the scrolled column, so Back stays reachable on this long screen
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("Back") }
             Text(state.printer?.name ?: "Printer", style = MaterialTheme.typography.headlineSmall)
         }
+    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
         (state.mismatch ?: toolsState.mismatch ?: editState?.mismatch)?.let { (expected, actual) ->
             MismatchNotice(expected, actual, onPairAgain)
             return@Column
@@ -132,6 +155,7 @@ fun PrinterScreen(
         }
         FilamentUsed(toolsState, tools)
         edit?.let { PrinterEditSection(printer, it, onRemoved) }
+    }
     }
 
     if (toolsState.confirmMap) {
