@@ -315,7 +315,8 @@ const coll = h("div", { class: "coll coll--printers", role: "table", "aria-label
   item({ id: "p4", name: "mainsailos", kind: "Found on the network, not added", address: "192.0.2.57:7125", status: "not_configured", connection: "", state: "off",
     actions: [SW.btn(t("printers_use"), { cls: "btn--primary", name: "Use this printer: mainsailos" }), SW.btn(t("common_dismiss"), { name: "Dismiss mainsailos" })] }));
 const collResult = resultSlot();
-SW.collection(coll, { name: "sample-printers", result: collResult });
+// page 2 of the pager below: 214 printers in all, 50 before this page (aria-rowcount, aria-rowindex)
+SW.collection(coll, { name: "sample-printers", result: collResult, total: 214, first: 50 });
 const addRegion = h("section", { class: "detail", id: "add-printer", "aria-labelledby": "add-printer-title", hidden: true },
   h("header", { class: "detail__head" }, h("h2", { class: "detail__title", id: "add-printer-title", tabindex: "-1", text: t("printers_add") }),
     SW.iconBtn("close", t("detail_close", { name: t("printers_add") }), { cls: "detail__close" })),
@@ -386,7 +387,7 @@ section("7 Showing data and status",
     state("Log output", code("2026-11-12 14:05 backup started\n2026-11-12 14:05 copying the Spoolman database\n2026-11-12 14:06 backup written: 14.2 MB", null, "log", true)),
     state("Copy disabled until there is text; loading", h("figure", { class: "code" }, h("p", { class: "result code__wait", role: "status" }, SW.spinner(), t("code_checking_release")),
       E("figcaption", "code__bar", h("span", { class: "code__caption mono", text: "token" }), h("span", { class: "result", role: "status" }), emptyCopy)))),
-  grid(state("QR block", E("div", "qr", SW.qrImage(svgQr, t("qr_alt_pair")), E("div", "qr__text", E("p", null, t("qr_scan_or_type")),
+  grid(state("QR block", E("div", "qr", SW_MEDIA.qrImage(svgQr, t("qr_alt_pair")), E("div", "qr__text", E("p", null, t("qr_scan_or_type")),
     E("p", "qr__code mono", E("span", "sr", t("qr_code_prefix")), "123 456"), E("p", "qr__fingerprint mono", "1111 2222 3333 4444 5555 6666 7777 8888"),
     E("p", null, t("qr_check_groups")), E("p", "qr__expiry", t("qr_expires", { minutes: 9 }))))),
     state("QR block: the Hub draws no QR", E("div", "qr", E("div", "qr__text", E("p", "qr__none", t("qr_unavailable")), E("p", "qr__code mono", "123 456")))),

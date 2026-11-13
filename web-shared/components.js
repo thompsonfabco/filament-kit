@@ -35,6 +35,7 @@ function h(tag, props, ...kids) {
 const E = (tag, cls, ...kids) => h(tag, { class: cls }, ...kids);
 const $ = (s, r = doc) => r.querySelector(s), $$ = (s, r = doc) => [...r.querySelectorAll(s)];
 const on = (el, ev, fn, o) => el.addEventListener(ev, fn, o);
+const up = (e, s) => e.target.closest && e.target.closest(s);   // the event target's nearest s
 const attr = (el, k, v) => (v == null ? el.removeAttribute(k) : el.setAttribute(k, v));
 let seq = 0;
 const uid = (p) => `sw-${p}-${++seq}`;
@@ -153,10 +154,10 @@ function disable(b, reason) {
   r.textContent = reason;
   attr(b, "aria-disabled", "true"); attr(b, "aria-describedby", ids.concat(r.id).join(" "));
 }
-// a press on an aria-disabled control does nothing
+// a press on an aria-disabled control does nothing but call its _refused()
 on(doc, "click", (e) => {
-  const b = e.target.closest && e.target.closest('[aria-disabled="true"]');
-  if (b && b.matches("button, a, [role^=menuitem]")) { e.preventDefault(); e.stopImmediatePropagation(); }
+  const b = up(e, '[aria-disabled="true"]');
+  if (b && b.matches("button, a, [role^=menuitem]")) { e.preventDefault(); e.stopImmediatePropagation(); if (b._refused) b._refused(); }
 }, true);
 
 // ----- the Hub request helper: api(path, {method, body, form, code, signal}) -----
@@ -193,7 +194,7 @@ function result(el, kind, content, o = {}) {
   clearTimeout(pending.get(el));
   el.replaceChildren();
   const row = el.closest(".coll__row--result");
-  if (row) row.hidden = !kind;
+  if (row) renumber(row, !kind);
   if (!kind) { attr(el, "data-state", null); return el; }
   el.dataset.state = kind;
   const d = new Date(), kids = [kind === "run" ? spinner() : shape(KIND_SHAPE[kind] || "s-hollow"), E("span", "result__text", content)];
@@ -257,7 +258,8 @@ function ask(o) {
   return new Promise((resolve) => {
     const id = uid("dlg"), danger = o.kind === "destructive" || o.kind === "typed", fields = (o.fields || []).slice();
     let word = null, answer = null;
-    if (o.kind === "typed") fields.push(word = field({ label: t("common_type_word", { word: o.word }), attrs: { autocapitalize: "off", spellcheck: "false" } }));
+    const typed = t("common_type_word", { word: o.word });
+    if (o.kind === "typed") fields.push(word = field({ label: typed, attrs: { autocapitalize: "off", spellcheck: "false" } }));
     const text = o.text != null ? h("p", { class: "dialog__text", id: id + "-text" }, o.text) : null;
     const res = h("p", { class: "result result--block dialog__result", role: "status" });
     const close = () => dlg.close();
@@ -271,7 +273,9 @@ function ask(o) {
     const dlg = h("dialog", { class: "dialog" + (o.wide ? " dialog--wide" : ""), role: danger ? "alertdialog" : null,
       "aria-labelledby": id + "-title", "aria-describedby": text ? id + "-text" : null }, form);
     const values = () => fields.map((f) => f._control.value), first = values().join("\n");
-    if (word) { const sync = () => { go.disabled = word._control.value.trim() !== o.word; }; on(word._control, "input", sync); sync(); }
+    // a wrong typed word: the button stays focusable, aria-disabled with its reason (07 SR-22)
+    const wrong = () => word && word._control.value.trim() !== o.word, sync = () => disable(go, wrong() ? typed : null);
+    if (word) { go._refused = () => word._control.focus(); on(word._control, "input", sync); sync(); }
     const ro = (on) => { for (const f of fields) f._control.readOnly = on; };
     on(dlg, "cancel", (e) => {
       if (dlg._busy) return e.preventDefault();
@@ -280,10 +284,10 @@ function ask(o) {
         leaveAsk(o.title).then((leave) => { if (leave) close(); });
       }
     });
-    for (const b of [cancel, x]) if (b) on(b, "click", (e) => { if (dlg._busy) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
     on(form, "submit", (e) => {
       e.preventDefault();
-      if (dlg._busy || go.disabled) return;
+      if (dlg._busy) return;
+      if (wrong()) return go._refused();
       const bad = fields.filter((f) => { const err = f._check && f._check(); fieldError(f, err || null); return !!err; });
       if (bad.length) return bad[0]._control.focus();
       if (!o.run) { answer = o.kind === "entry" ? values() : true; return close(); }
@@ -412,7 +416,7 @@ function setAppearance(v) {
 }
 const setLook = (look) => { attr(root, "data-look", look); return store.set("spoolwarden.look", look); };
 on(doc, "change", (e) => {
-  const i = e.target, fs = i.closest && i.closest(".appearance, .theme-picker");
+  const i = e.target, fs = up(e, ".appearance, .theme-picker");
   if (!fs) return;
   const look = fs.classList.contains("theme-picker"), kept = look ? setLook(i.value) : setAppearance(i.value);
   const res = fs.parentElement.querySelector(":scope > .result");
@@ -496,7 +500,8 @@ function field(o) {
     : kind === "textarea" ? h("textarea", { rows: 3 }) : h("input", { type: kind === "secret" ? "password" : kind === "number" ? "text" : kind });
   Object.assign(control, { className: "field__control" + (o.mono ? " mono" : ""), id });
   if (o.name) control.name = o.name;
-  const a = Object.assign(kind === "select" || kind === "file" ? {} : { autocomplete: "off" },
+  // a field that is not optional is aria-required (07 FRM-3)
+  const a = Object.assign(kind === "select" || kind === "file" ? {} : { autocomplete: "off" }, o.optional || o.disabled || kind === "search" ? {} : { "aria-required": "true" },
     kind === "number" ? { inputmode: o.decimal ? "decimal" : "numeric" } : kind === "search" ? { inputmode: "search", enterkeyhint: "search" } : {}, o.attrs);
   for (const [k, v] of Object.entries(a)) control.setAttribute(k, v);
   if (o.accept) control.accept = o.accept;
@@ -533,7 +538,9 @@ function field(o) {
   else if (kind !== "search") box = control;
   wrap.append(...[label, box, hint, error].filter(Boolean));
   Object.assign(wrap, { _control: control, _error: error, _hint: hint, _check: o.check ? () => o.check(control.value) : null });
-  on(control, "input", () => { if (wrap.dataset.state === "error" && wrap._check) fieldError(wrap, wrap._check() || null); });
+  // checked on a change (focus leaves) and, while it shows an error, as it is typed in (5.1)
+  const recheck = (e) => { if (wrap._check && (e.type === "change" || wrap.dataset.state === "error")) fieldError(wrap, wrap._check() || null); };
+  on(control, "input", recheck); on(control, "change", recheck);
   if (kind === "search" && o.onSearch) {
     let timer = 0;
     const go = () => { clearTimeout(timer); o.onSearch(control.value.trim()); };
@@ -726,15 +733,15 @@ function formGroup(form, o = {}) {
 const dirtyGroups = () => [...groups].filter((g) => g.form.isConnected && g.dirty());
 const leaveText = (list = dirtyGroups()) => list.map((g, i) => t(i ? "form_leave_next" : "form_leave_first",
   { count: g.changed().length, group: $(".group__title", g.form).textContent })).join(", ");
-// unsaved-changes guard (5.11 behaviour 4): a link to another section, wherever it is, and Back or Forward
+// unsaved-changes guard (5.11 behaviour 4): a link to another section, wherever it is
 const leave = (to) => leaveAsk(leaveText()).then((ok) => { if (ok) { for (const g of dirtyGroups()) g.reset(); location.hash = to; } });
 on(doc, "click", (e) => {
-  const a = e.target.closest && e.target.closest('a[href^="#"]');
+  const a = up(e, 'a[href^="#"]');
   if (!a || !a.hash || a.closest(".subnav, .group__summary") || sec(a.href) === sec(location.href) || !dirtyGroups().length) return;
   e.preventDefault();
   leave(a.hash);
 }, true);
-// Back or Forward: the address has already changed, so it is put back first (capture runs before the pages' listeners)
+// Back or Forward: the address already changed, so it is put back (capture: before the pages' listeners)
 on(window, "hashchange", (e) => {
   if (sec(e.oldURL) === sec(e.newURL) || !dirtyGroups().length) return;
   e.stopImmediatePropagation();
@@ -744,8 +751,18 @@ on(window, "hashchange", (e) => {
 on(window, "beforeunload", (e) => { if (dirtyGroups().length) { e.preventDefault(); e.returnValue = ""; } });
 
 // ----- collection (6.1): sort, expand, live patch; markup as 02 6.1 -----
+// renumber(row, hide): shows or hides a result or detail row
+function renumber(row, hide) { row.hidden = hide; const c = row.closest(".coll"); if (c && c._number) c._number(); }
+// collection(el, {name, sort, result, total, first}): paged when total (all pages' items) is given, first = items
+// before this page; then aria-rowcount, and aria-rowindex on every shown row
 function collection(el, o = {}) {
   const items = () => $$(":scope > .coll__item", el);
+  const number = el._number = () => {
+    if (o.total == null) return;
+    const shown = $$(".coll__row", el).filter((r) => !r.hidden && !r.parentElement.hidden);
+    shown.forEach((r, i) => attr(r, "aria-rowindex", i ? i + 1 + (o.first || 0) : 1));
+    attr(el, "aria-rowcount", o.total + 1 + shown.filter((r) => /--/.test(r.className)).length);
+  };
   const sortBy = (col, dir, quiet) => {
     const head = $(`.coll__head [data-col="${CSS.escape(col)}"]`, el);
     if (!head) return;
@@ -753,6 +770,7 @@ function collection(el, o = {}) {
     const key = (it) => { const c = $(`.coll__row [data-col="${CSS.escape(col)}"]`, it); return c ? (c.dataset.sort || c.textContent).trim() : ""; };
     for (const it of items().sort((a, b) => key(a).localeCompare(key(b), "en", { numeric: true }) * (dir === "ascending" ? 1 : -1))) el.append(it);
     store.set("spoolwarden.sort." + o.name, col + ":" + dir);
+    number();
     if (quiet) return;
     const text = t(dir === "ascending" ? "coll_sorted_ascending" : "coll_sorted_descending", { column: $(".coll__sort", head).firstChild.textContent.trim() });
     if (o.result) result(o.result, "info", text); else announce(text);
@@ -760,7 +778,7 @@ function collection(el, o = {}) {
   const expand = (x, open) => {
     attr(x, "aria-expanded", String(open));
     const region = doc.getElementById(x.getAttribute("aria-controls"));
-    if (region) region.hidden = region.closest(".coll__row--detail").hidden = !open;
+    if (region) renumber(region.closest(".coll__row--detail"), region.hidden = !open);
   };
   on(el, "click", (e) => {
     const s = e.target.closest(".coll__sort"), x = e.target.closest(".coll__expand");
@@ -773,9 +791,9 @@ function collection(el, o = {}) {
     }
   });
   const kept = (store.get("spoolwarden.sort." + o.name) || o.sort || "").split(":");
-  if (kept[0]) sortBy(kept[0], kept[1] || "ascending", true);
+  if (kept[0]) sortBy(kept[0], kept[1] || "ascending", true); else number();
   return {
-    sortBy,
+    sortBy, number,
     patch(id, col, content) {
       const it = $(`.coll__item[data-id="${CSS.escape(id)}"]`, el), cell = it && $(`.coll__row [data-col="${col}"]`, it);
       if (!cell || cell.contains(doc.activeElement)) return false;
@@ -806,7 +824,7 @@ function openDetail(region, o = {}) {
   const p = profile().detail, row = region.closest(".coll__row--detail");
   const hostId = p === "sheet" ? "detail-host" : row || p === "pane" ? null : p === "card" ? "form-host" : "drawer-host";
   if (!hostId) {
-    if (row) { row.hidden = false; const x = $(`[aria-controls="${region.id}"]`); if (x) attr(x, "aria-expanded", "true"); }
+    if (row) { renumber(row, false); const x = $(`[aria-controls="${region.id}"]`); if (x) attr(x, "aria-expanded", "true"); }
     region.hidden = false;
   } else {
     const dlg = host(hostId), home = [region.parentNode, region.nextSibling];
@@ -825,7 +843,7 @@ async function closeDetail(region) {
   const dlg = region.closest("dialog"), row = region.closest(".coll__row--detail"), x = $(`[aria-controls="${region.id}"]`);
   if (dlg) { dlg.close(); return true; }
   region.hidden = true;
-  if (row) row.hidden = true;
+  if (row) renumber(row, true);
   if (x) { attr(x, "aria-expanded", "false"); x.focus(); }
   return true;
 }
@@ -842,8 +860,7 @@ async function copy(text, res, source) {
   }
 }
 on(doc, "click", (e) => {
-  const b = e.target.closest && e.target.closest('[data-action="copy"]');
-  const d = e.target.closest && e.target.closest(".detail__close, .detail__back");
+  const b = up(e, '[data-action="copy"]'), d = up(e, ".detail__close, .detail__back");
   if (d) closeDetail(d.closest(".detail"));
   if (!b) return;
   const code = b.closest(".code"), src = code ? $(".code__text", code) : b.closest(".kv__value");
@@ -866,10 +883,6 @@ function swatch(hex, o = {}) {
   else if (!paint(el, hex, o.level)) el.classList.add("swatch--none");
   return el;
 }
-// ----- QR block (7.8): the Hub's SVG through a Blob URL -----
-const qrImage = (svgText, alt) => h("img", { class: "qr__image", alt, width: 224, height: 224,
-  src: URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" })) });
-
 // ----- determinate bar (8.3) -----
 // progress({label, value, valuetext, name, indeterminate, decorative, failed})
 function progress(o = {}) {
@@ -980,6 +993,6 @@ window.SW = Object.freeze({
   t, h, icon, shape, uid, profile, announce, configure, api, HubError, errText, guard, lock, setLock, lockChip, unlock,
   status, spinner, tooltip, btn, iconBtn, busy, idle, disable, result, toast, ask, sheet, openModal, modal,
   leaveAsk, setAppearance, setLook, appearanceMenu, menu, field, fieldError, check, toggle, segmented, formGroup,
-  collection, pager, openDetail, closeDetail, copy, swatch, paint, qrImage, progress, setProgress, banner, empty, errorState, loading, shell, phone,
+  collection, pager, openDetail, closeDetail, copy, swatch, paint, progress, setProgress, banner, empty, errorState, loading, shell, phone,
 });
 })();
