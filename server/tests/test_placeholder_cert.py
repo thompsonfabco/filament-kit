@@ -304,6 +304,7 @@ def test_the_hint_never_holds_the_clients_address():
 def test_only_a_refused_ipv6_client_sees_it():
     pytest.importorskip("mcp")
     from filament_kit.web import auth
-    assert lan.IPV6_HINT in auth._home_only("2001:db8::5")
-    assert lan.IPV6_HINT not in auth._home_only("203.0.113.9") and "home network" in auth._home_only("203.0.113.9")
+    assert lan.IPV6_HINT in auth._home_only("2001:db8::5")        # the refusal paragraphs (S3.16: a list)
+    away = " ".join(auth._home_only("203.0.113.9"))
+    assert lan.IPV6_HINT not in away and "home network" in away
 

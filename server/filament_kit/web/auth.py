@@ -61,6 +61,11 @@ def _origin(public_url: str) -> str:
 # ---------- LAN (lan.py: the kit server's /setup page uses the same checks) ----------
 
 from ..lan import IPV6_HINT, Networks, is_lan, over_ipv6, parse_lan  # noqa: E402,F401  (re-exported)
+from .. import shared_files  # noqa: E402
+from . import pages  # noqa: E402
+
+# the web app's refusal page (04 11.1): its own files only, no form
+REFUSAL_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 
 # ---------- store ----------
@@ -288,25 +293,65 @@ class Lockout:
 
 # ---------- sign-in page (LAN only) ----------
 
-# no scripts, no framing, nothing cached; the form may only post here and then go on to Claude's callback
+# the web app's own files only (stylesheet, appearance script, the Show button's script), no framing, nothing cached;
+# the form may only post here and then go on to Claude's callback
 PAGE_HEADERS = {
-    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; "
-                               "form-action 'self' " + " ".join(sorted(CALLBACKS)),
+    "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; "
+                               "base-uri 'none'; form-action 'self' " + " ".join(sorted(CALLBACKS)),
     "X-Frame-Options": "DENY", "Referrer-Policy": "same-origin", "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff"}
-HOME_ONLY = "<p>Sign-in is only available from the home network.</p>"
 
 
-def _home_only(client: str) -> str:
-    return HOME_ONLY + (f"<p>{IPV6_HINT}</p>" if over_ipv6(client) else "")
+def _prefix(path: str) -> str:
+    """The web app's address relative to the page at `path` (behind the proxy the browser's path has a prefix)."""
+    return "../" * max(path.count("/") - 1, 0) + "intake"
 
 
-def _page(body: str, status: int = 200) -> HTMLResponse:
+def _home_only(client: str) -> list[str]:
+    return [_say("signin_outside")] + ([IPV6_HINT] if over_ipv6(client) else [])
+
+
+def _say(key: str, **values: str) -> str:
+    return pages.text(pages.catalogue(_shared()), key, **values)
+
+
+_SHARED: dict = {}
+
+
+def _shared() -> dict:
+    if not _SHARED:
+        _SHARED.update(shared_files.load())
+    return _SHARED
+
+
+def _page(paras: list[str] | str, status: int = 200, *, path: str = "/login", heading: str | None = None,
+          form: str = "") -> HTMLResponse:
+    """The sign-in page (04 11.2) on the web app's stylesheet: the mark, an optional heading, plain-text paragraphs
+    and the form's markup. Text is escaped here; `form` is markup built by login()."""
+    files = _shared()
+    cat = pages.catalogue(files)
+    paras = [paras] if isinstance(paras, str) else paras
+    body = (f"<h1>{html.escape(heading)}</h1>" if heading else "") + "".join(f"<p>{html.escape(t)}</p>" for t in paras)
     return HTMLResponse(
-        "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>Filament MCP sign-in</title>"
-        "<style>body{font:16px system-ui;max-width:28rem;margin:3rem auto;padding:0 1rem}input,button{font:inherit;"
-        "padding:.6rem;width:100%;box-sizing:border-box;margin:.4rem 0}</style>" + body, status_code=status,
-        headers=PAGE_HEADERS)
+        pages.head(_prefix(path), pages.text(cat, "signin_title")) + "<body><main class=standalone>"
+        + pages.brand(files, cat) + body + form + "</main>"
+        + (f"<script src='{_prefix(path)}/signin.js'></script>" if form else "") + "</body></html>",
+        status_code=status, headers=PAGE_HEADERS)
+
+
+def _form(rid: str, error: str | None = None) -> str:
+    """The passphrase form (04 11.2): the field with its Show button (signin.js wires it) and the Allow button."""
+    label, e = _say("signin_passphrase"), html.escape
+    err = f"<p class=field__error id=pass-error>{e(error)}</p>" if error else ""
+    return (f"<form method=post class=standalone__form><input type=hidden name=req value='{e(rid)}'>"
+            f"<div class='field field--secret'><label class=field__label for=pass>{e(label)}</label>"
+            "<div class=field__box><input class=field__control id=pass type=password name=passphrase required autofocus "
+            f"autocomplete=current-password autocapitalize=off spellcheck=false{' aria-describedby=pass-error aria-invalid=true' if error else ''}>"
+            "<button class='btn btn--ghost field__action' type=button aria-controls=pass aria-pressed=false hidden "
+            f"data-show='{e(_say('common_show'))}' data-hide='{e(_say('common_hide'))}' "
+            f"data-show-name='{e(_say('signin_show'))}' data-hide-name='{e(_say('signin_hide'))}'>"
+            f"{e(_say('common_show'))}</button></div>{err}</div>"
+            f"<button class='btn btn--primary standalone__wide' type=submit>{e(_say('common_allow'))}</button></form>")
 
 
 def _lan_path(path: str) -> bool:
@@ -321,10 +366,17 @@ def lan_only(app: Any, lan_cidrs: Iterable[str]) -> Any:
     (MAX_PENDING) or starting one to lure the owner into approving."""
     nets = parse_lan(lan_cidrs)
 
+    public = {f"/intake/shared/{n}" for n in pages.PUBLIC_SHARED} | {f"/intake/{n}" for n in pages.PUBLIC_OWN}
+
     async def wrapped(scope, receive, send):
-        if scope["type"] == "http" and _lan_path(scope.get("path", "")) \
-                and not is_lan((scope.get("client") or ("",))[0], nets):
-            await _page(_home_only((scope.get("client") or ("",))[0]), 403)(scope, receive, send)
+        path, client = scope.get("path", ""), (scope.get("client") or ("",))[0]
+        if scope["type"] == "http" and _lan_path(path) and path not in public and not is_lan(client, nets):
+            if path.rstrip("/") == "/intake" and scope.get("method") == "GET":     # the web app: its refusal page
+                page = HTMLResponse(pages.refusal(_shared(), _prefix(path), client), 403,
+                                    headers={**PAGE_HEADERS, "Content-Security-Policy": REFUSAL_CSP})
+            else:
+                page = _page(_home_only(client), 403, path=path)
+            await page(scope, receive, send)
             return
         await app(scope, receive, send)
 
@@ -341,27 +393,24 @@ def login_routes(store: Store, public_url: str, passphrase_file: Path | str, *, 
         if not is_lan(request.client.host if request.client else "", nets):
             return _page(_home_only(request.client.host if request.client else ""), 403)
         if request.method == "POST" and request.headers.get("origin") != origin:  # another site posting via a browser
-            return _page("<p>This form only works from its own page. Start again from Claude.</p>", 403)
+            return _page(_say("signin_elsewhere"), 403)
         form = await request.form() if request.method == "POST" else {}
         rid = str(form.get("req") or request.query_params.get("req", ""))
         pend = store.pending.get(rid)
         if not pend or pend["t"] < time.time() - PENDING_TTL:
-            return _page("<p>This sign-in request expired. Start again from Claude.</p>", 400)
-        who = html.escape(pend["client_name"])
+            return _page(_say("signin_expired"), 400)
+        ask = {"heading": _say("signin_heading", name=pend["client_name"])}
         if request.method == "GET":
-            return _page(f"<h2>Allow {who}?</h2><p>It will be able to read and change your Spoolman inventory and "
-                         f"slicer presets.</p><form method=post><input type=hidden name=req value='{html.escape(rid)}'>"
-                         "<input type=password name=passphrase placeholder=Passphrase autofocus>"
-                         "<button>Allow</button></form>")
+            return _page(_say("signin_text"), **ask, form=_form(rid))
         attempt = lockout.attempt()             # counted before the check (A-M1)
         if attempt is None:
-            return _page("<p>Too many wrong passphrases. Wait 10 minutes.</p>", 429)
+            return _page(_say("signin_too_many"), 429)
         ok = await anyio.to_thread.run_sync(check_passphrase, str(form.get("passphrase", "")), passphrase_file)
         if ok is None:
             lockout.release(attempt)
-            return _page("<p>No passphrase is set on the server yet (run: filament-kit web passphrase).</p>", 503)
+            return _page(_say("signin_not_set"), 503)
         if not ok:
-            return _page("<p>Wrong passphrase.</p><p><a href='login?req=" + html.escape(rid) + "'>Try again</a></p>", 401)
+            return _page(_say("signin_text"), 401, **ask, form=_form(rid, _say("signin_wrong")))
         lockout.release(attempt)
         store.pending.pop(rid, None)
         p, now = pend["params"], time.time()

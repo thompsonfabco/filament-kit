@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -30,6 +31,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.net.DiscoveredServer
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
 
@@ -120,7 +122,8 @@ fun PairScreen(
 internal fun SkipCheckSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
-            Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+            Modifier.fillMaxWidth().defaultMinSize(minHeight = SpoolwardenTheme.sizes.row)
+                .toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(PairTexts.SKIP_CHECK_LABEL, Modifier.weight(1f).padding(end = 12.dp))

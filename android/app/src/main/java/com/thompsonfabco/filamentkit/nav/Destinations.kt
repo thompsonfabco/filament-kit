@@ -22,6 +22,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class AddRoute(val tag: String? = null, val draft: String? = null, val manual: Boolean = false)
 @Serializable data object AddProfileRoute
 
+/** The top bar's title on [AddProfileRoute] (05-android-app 8); the shell and the AUT-8 test both read it. */
+@get:StringRes
+internal val AddProfileTitle: Int get() = R.string.catalog_title
+
 @Serializable data object SpoolsGraph
 @Serializable data object SpoolsRoute
 
@@ -37,6 +41,10 @@ import kotlinx.serialization.Serializable
 @Serializable data object SettingsGraph
 @Serializable data object SettingsRoute
 @Serializable data object LicencesRoute
+@Serializable data object SettingsAppearanceRoute
+@Serializable data object SettingsHubRoute
+@Serializable data object SettingsUpdatesRoute
+@Serializable data object SettingsDeveloperRoute
 
 /** The five destinations of the bottom bar and the rail, in their order (05-android-app 2.3). */
 enum class Tab(

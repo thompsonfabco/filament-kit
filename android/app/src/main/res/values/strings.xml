@@ -25,7 +25,7 @@
     <string name="common_hub_unreachable">Cannot reach the Hub. Check that this phone is on the home network.</string>
     <string name="common_hub_answer_unknown">The Hub sent an answer this app does not understand. Update the app or the Hub, then try again.</string>
     <!-- 1=feature -->
-    <string name="common_feature_off">%1$s is switched off on this Hub. Switch it on on the Hub page under Features.</string>
+    <string name="common_feature_off">%1$s is switched off on this Hub. Switch it on in Features on the Hub page.</string>
     <string name="common_spoolman_unreachable">The Hub can\'t reach Spoolman right now. Try again in a minute.</string>
     <string name="common_still_waiting">Still waiting for the Hub…</string>
     <!-- 1=time -->
@@ -143,7 +143,7 @@
     <string name="home_add_text">Photograph each label, check what was read, then add. Nothing is saved until you add.</string>
     <string name="home_add_from_photos">Add from label photos</string>
     <string name="home_add_by_hand">Add by hand</string>
-    <string name="home_label_reader_off">The Label Reader is switched off on this Hub. Add the spool by hand, or switch it on on the Hub page under Features.</string>
+    <string name="home_label_reader_off">The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page.</string>
     <string name="home_drafts_title">Drafts</string>
     <!-- 1=count -->
     <plurals name="home_draft_photos">
@@ -157,10 +157,17 @@
     <string name="home_draft_discard_title">Discard this add?</string>
     <string name="home_draft_discard_body">Its photos and edits are removed from this phone.</string>
     <string name="home_draft_discarded">Add discarded.</string>
+    <string name="home_draft_yesterday">Yesterday</string>
     <string name="home_printers_all">All printers</string>
     <!-- 1=count -->
     <string name="home_printers_more">and %1$d more</string>
     <string name="home_printers_empty">No printers yet.</string>
+    <!-- 1=state 2=percent -->
+    <string name="home_printer_job">%1$s · %2$s %%</string>
+    <!-- 1=hours 2=minutes -->
+    <string name="home_printer_left_hours">%1$s h %2$s min</string>
+    <!-- 1=minutes -->
+    <string name="home_printer_left_minutes">%1$s min</string>
     <string name="printers_add">Add a printer</string>
     <string name="settings_updates_title">App updates</string>
     <string name="settings_licences_title">Licences</string>
@@ -183,6 +190,8 @@
     <string name="settings_hub_security_title">Security</string>
     <string name="settings_hub_check_title">Check the fingerprint when pairing by address</string>
     <string name="settings_hub_check_help">When this is off, the app trusts the certificate a Hub presents when you pair by typing its address. A scanned QR code is always checked.</string>
+    <string name="settings_hub_check_off">Off</string>
+    <string name="settings_hub_check_on">On</string>
     <string name="settings_hub_skip_title">Skip the fingerprint check?</string>
     <string name="settings_hub_skip_body">Only do this on a network you trust.</string>
     <string name="settings_hub_skip_confirm">Skip the check</string>
@@ -194,12 +203,16 @@
     <string name="settings_updates_on_hub">On the Hub</string>
     <string name="settings_updates_check">Check for updates</string>
     <string name="settings_updates_up_to_date">This app is up to date.</string>
+    <string name="settings_updates_check_unpaired">Pair with a Hub first: updates come from the Hub.</string>
+    <!-- 1=app_version -->
+    <string name="settings_updates_unchecked">App %1$s</string>
     <string name="settings_licences_line">filament-kit is free software under GPL-3.0-or-later. It comes with no warranty.</string>
     <string name="settings_licences_show">Show the GPL-3.0 text</string>
     <string name="settings_licences_hide">Hide the GPL-3.0 text</string>
     <!-- 1=name -->
     <string name="settings_licences_missing">%1$s is missing from this build.</string>
     <string name="settings_developer_tag_id">Tag ID</string>
+    <string name="settings_developer_tag_example">4:77:90:e</string>
     <string name="settings_developer_simulate">Simulate a tag tap</string>
     <!-- 1=choice -->
     <string name="appearance_name">Appearance: %1$s</string>
@@ -289,6 +302,7 @@
     <string name="common_restore_them">Restore them</string>
     <!-- 1=name 2=action -->
     <string name="common_result_refused">%1$s did not accept %2$s. Try again.</string>
+    <string name="common_result_hub_text">The Hub\'s answer</string>
     <!-- 1=group -->
     <string name="common_save_group">Save %1$s</string>
     <string name="common_save_key">Save key</string>
@@ -1601,7 +1615,7 @@
     <string name="common_error_access_code">Enter the Access Code shown on the printer.</string>
     <string name="common_error_address">Enter the printer\'s address.</string>
     <string name="common_error_port">Enter a port from 1 to 65535.</string>
-    <string name="common_feature_off_hint">Switch it on on the Hub page under Features.</string>
+    <string name="common_feature_off_hint">Switch it on in Features on the Hub page.</string>
     <string name="common_field_bed">Bed</string>
     <string name="common_field_bed_range">Bed range</string>
     <string name="common_field_brand">Brand</string>
@@ -1706,8 +1720,10 @@
         <item quantity="other">Added %1$d spools.</item>
     </plurals>
     <string name="printer_address_bambu_help">e.g. 192.0.2.40 or printer.local</string>
+    <string name="printer_address_bambu_label">IP address or name</string>
     <string name="printer_address_code_help">The Hub needs it again when the address changes. On the printer: Settings > Network/LAN > Access Code.</string>
     <string name="printer_address_klipper_help">e.g. voron.example or 192.0.2.57</string>
+    <string name="printer_address_key_help">Sent only to the new address. Leave it empty for none: a saved key is cleared.</string>
     <string name="shell_banner_back_online">Connected to the Hub again.</string>
     <string name="shell_banner_no_network">This phone has no network. Your draft is kept on this phone.</string>
     <string name="shell_banner_offline">Cannot reach the Hub.</string>
@@ -1872,13 +1888,14 @@
     <string name="nav_more_home_screen_summary">Open filament-kit like an app</string>
     <string name="nav_more_hub_page_summary">Features, settings, backups</string>
     <string name="nav_more_install">Install app</string>
-    <string name="nav_more_presets_summary">Appearance, theme, print alerts</string>
+    <string name="nav_more_settings_summary">Appearance, theme, print alerts</string>
     <!-- 1=count -->
     <plurals name="nav_add_waiting">
         <item quantity="one">Add, %1$d spool waiting</item>
         <item quantity="other">Add, %1$d spools waiting</item>
     </plurals>
     <string name="nav_printers_look">Printers, needs a look</string>
+    <string name="nav_recent_public">Recent, on the home address only</string>
     <string name="shell_needs_hub">Needs the Hub.</string>
     <string name="presets_add_button">Add to line</string>
     <string name="presets_add_select">Add to the line</string>
@@ -1944,6 +1961,8 @@
         <item quantity="other">%1$s of %2$d slots loaded</item>
     </plurals>
     <string name="add_reason_photo_first">Add a photo first.</string>
+    <string name="add_reason_check_first">Check the spools first: any edit needs a new check.</string>
+    <string name="add_reason_check_first_link">Check first: any change needs a new check.</string>
     <string name="recent_all_apply">A change applies to all of them.</string>
     <string name="recent_ask_reason">Say what is wrong first.</string>
     <!-- 1=count 2=size -->
@@ -1990,6 +2009,10 @@
     <string name="settings_saved_on_phone">Saved on this phone.</string>
     <string name="settings_theme_help">New phones start with the Hub\'s theme for new devices.</string>
     <string name="settings_this_hub">This Hub</string>
+    <!-- 1=appearance 2=theme -->
+    <string name="settings_summary_appearance">%1$s · %2$s</string>
+    <!-- 1=hub 2=state -->
+    <string name="settings_summary_hub">%1$s · %2$s</string>
     <!-- 1=name -->
     <string name="spool_sheet_empty_body">%1$s will be marked as used up.</string>
     <string name="spool_sheet_humidity_error">Enter a percentage from 0 to 100.</string>
@@ -2277,6 +2300,8 @@
     <string name="app_update_fail_none">The Hub has no app update to download.</string>
     <string name="app_update_fail_storage">Not enough storage on this phone.</string>
     <string name="app_update_fail_timeout">The download timed out. Try again.</string>
+    <string name="app_update_fail_check">Could not check for updates. Try again.</string>
+    <string name="app_update_fail_network">Android needs your permission before the app can reach the Hub on your network.</string>
     <string name="app_update_hub_newer">Update the app: the Hub is newer than this app, so some things may not work.</string>
     <string name="app_update_install">Install update</string>
     <!-- 1=version -->
@@ -2285,16 +2310,21 @@
     <!-- 1=version 2=app_version -->
     <string name="app_update_offered">filament-kit %1$s is on your Hub. This app is %2$s.</string>
     <string name="app_update_permission">Allow filament-kit to install apps, then tap Install update again.</string>
-    <string name="app_update_signature">Android refused this update: it is signed by a different key than the installed app.</string>
-    <string name="app_update_signature_body">The app on your Hub was built by someone else than the app on this phone. To switch, uninstall this app and install the one from the Hub. Drafts on this phone are lost.</string>
+    <string name="app_update_signature">Android refused this update because it is not signed like the app on this phone. Do not install it; check where the app on your Hub came from.</string>
+    <string name="app_update_signature_body">An update signed with a different key is what a forged app looks like, so Android refuses it and the app on this phone stays as it is. If you built or replaced the app on your Hub yourself, that is the reason. If you did not, do not install it: check where the app on your Hub came from.</string>
     <string name="app_update_signature_more">What this means</string>
+    <string name="app_update_signature_title">An update signed with a different key</string>
     <string name="app_update_tap_install">Tap to install</string>
+    <string name="app_update_cancel_writing">Handing the update to Android. This can\'t be cancelled.</string>
     <string name="catalog_add_line">Add a line to the Filament Catalog</string>
     <string name="catalog_bed_placeholder">e.g. 55-65</string>
     <string name="catalog_field_brand">Brand *</string>
     <string name="catalog_field_line">Line *</string>
     <string name="catalog_field_material">Material *</string>
     <string name="catalog_field_max_speed">Max volumetric speed</string>
+    <string name="catalog_field_bed_range">Bed range (°C)</string>
+    <string name="catalog_field_density">Density (g/cm³)</string>
+    <string name="catalog_field_nozzle_range">Nozzle range (°C)</string>
     <string name="catalog_fill">Fill in Brand, Line and Material.</string>
     <string name="catalog_group_line">Line</string>
     <string name="catalog_group_material">Material</string>
@@ -2307,6 +2337,21 @@
     <string name="catalog_save">Save to the catalog</string>
     <string name="catalog_saved">Saved to the Filament Catalog. Slicer presets are rebuilt in a minute.</string>
     <string name="catalog_title">New catalog line</string>
+    <string name="catalog_change_parent">Change parent</string>
+    <string name="catalog_error_range">Enter a range like 190-230.</string>
+    <string name="catalog_leave_thing">the new catalog line</string>
+    <!-- 1=material 2=presets -->
+    <string name="catalog_line_material">%1$s · %2$s</string>
+    <!-- 1=brand 2=line -->
+    <string name="catalog_line_name">%1$s %2$s</string>
+    <!-- 1=name -->
+    <string name="catalog_line_parent">Bambu Studio parent: %1$s</string>
+    <string name="catalog_line_parent_none">Bambu Studio parent: none</string>
+    <string name="catalog_lines_title">Existing lines</string>
+    <string name="catalog_parent_loading">Loading…</string>
+    <string name="catalog_parent_saved">Saved. A preset build was asked for.</string>
+    <string name="catalog_parent_unsynced">Slicer Sync has not reported any parents yet. It reports them when it runs.</string>
+    <string name="catalog_saving_wait">Saving to the catalog… wait for the Hub\'s answer.</string>
     <string name="common_add">Add</string>
     <string name="common_bambu_parent_applies">Applies to every colour of this line.</string>
     <string name="common_bambu_parent_unsynced">Bambu Studio\'s presets are not synced to the Hub yet; type the name.</string>
@@ -2357,6 +2402,7 @@
     <string name="presets_not_installed">Not installed on your PC yet</string>
     <string name="presets_status_unavailable">Slicer preset status is not available right now.</string>
     <string name="presets_sync_not_set_up">Slicer Sync is not set up</string>
+    <string name="presets_result_build_requested">Build requested. The Hub builds the presets within a minute or two.</string>
     <string name="printer_add_connecting">Connecting to the printer…</string>
     <!-- 1=model 2=serial -->
     <string name="printer_add_facts">%1$s · serial %2$s</string>
@@ -2469,6 +2515,8 @@
     <!-- 1=job 2=printer -->
     <string name="printer_stop_dialog_body">Stop %1$s on %2$s? It cannot be resumed.</string>
     <string name="printer_stop_dialog_title">Stop the print?</string>
+    <!-- 1=printer -->
+    <string name="printer_stop_dialog_body_nojob">Stop the print on %1$s? It cannot be resumed.</string>
     <string name="printer_stop_keep">Keep printing</string>
     <!-- 1=now 2=target -->
     <string name="printer_temp_bed">Bed %1$s → %2$s °C</string>
@@ -2583,6 +2631,7 @@
     <string name="spool_load_which_printer">Which printer?</string>
     <!-- 1=printer -->
     <string name="spool_load_which_slot">Which slot on %1$s?</string>
+    <string name="spool_load_previous_place">its previous place</string>
     <string name="spool_mark_empty">Mark empty</string>
     <string name="spool_move">Move</string>
     <string name="spool_move_here">Now here</string>

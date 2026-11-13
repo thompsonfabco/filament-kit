@@ -57,6 +57,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             currentVersion = BuildConfig.VERSION_CODE,
             apkFile = File(app.cacheDir, "updates/filament-kit.apk"),
             onProblem = router::report,
+            words = { app.getString(it.text) },
         )
     }
 
@@ -77,7 +78,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             // a server is stored with a usable token: start on Home; none, or a revoked token: start on Pair
-            _startup.value = Startup(settings.appearance.first(), settings.server.first().isPaired())
+            _startup.value = Startup(settings.appearance.first(), settings.serverOrNull().isPaired())
         }
     }
 

@@ -318,6 +318,10 @@ computers, with Rename, Revoke and Revoke all, and a switch that turns the featu
 setup code keeps trusted computers trusted; `sudo filament-kit setup-code --revoke-trusted` forgets them, alone or
 with `--new`.
 
+**Light, dark or system.** The page header has a switch with three choices: Light, Dark and System (the default, which follows your device). The choice is kept in that browser only.
+
+**Moving around.** The sections are a list down the side on a wide screen. On a phone the page has a bar at the bottom with Overview, Printers, Recent and Settings, and a **More** button that opens the other sections.
+
 ## Everyday commands
 
 Run these in a Terminal on the Ubuntu computer.

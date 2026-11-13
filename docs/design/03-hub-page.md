@@ -548,8 +548,8 @@ Klipper printers a scan found that are not configured (`configured: false`).
 | Expand | Icon button with chevron, "Details for <name>", `aria-expanded`, `aria-controls` | P1 (on phone a ghost button "Details" at the card's foot) |
 | Printer (sortable) | Name in weight 600; under it the model in `--muted`. When both families are on, a tag "Bambu Lab" or "Klipper" after the name. | P1 |
 | Address (sortable) | `ip` (Bambu Lab) or `host:port` (Klipper) in `--mono`, or "No address yet" in `--muted`; under it "SN <serial>" (Bambu Lab) or "Moonraker" (Klipper). Hidden values read "Hidden while locked". | P3 |
-| State (sortable) | Status badge from `state`: `connected` → "Connected"; `offline` → "Offline"; `not_configured` → "Not configured"; any other value → "Needs a look" (triangle) followed by the state's sentence (the value with underscores as spaces) | P1 |
-| Slots | Slot strip of filament swatches with fill level and "<loaded>/<total> loaded"; or "No slot data while offline"; or "No slots read yet" | P1 |
+| State (sortable) | Status badge and sentence from `state`, as the printer states table of `02-components.md` 7.1 gives them (the Klipper states `unknown_model`, `unauthorized`, `klippy_not_ready` and `connecting` included) | P1 |
+| Slots | Slot strip of filament swatches with fill level and "<loaded> of <total> loaded"; or "No slot data while offline"; or "No slots read yet" | P1 |
 | Connection | Bambu Lab: "Certificate pinned" or "Certificate not pinned yet"; "Slots mapped" when mapped. Klipper: "Moonraker API key" with status badge "Set" (OK) or "Not set" (Note); "Lane data: <auto, on or off>" | P3 |
 | Actions | Default button **Test connection** ("Test" on tablet) and icon button "More actions for <name>" (overflow menu) | P1 |
 
@@ -647,7 +647,7 @@ Cancel (default) closes; with typed values it asks "Leave without saving?" (sect
 
 | Result | What shows |
 |---|---|
-| Success | The drawer closes; toast "Added <name>."; the new row is expanded with the message "Added. Test the connection next." and its Test connection button focused. A `note` from the Hub joins the message. |
+| Success | The drawer closes; toast "Added <name>."; the new row is expanded with the message "Added. The Hub is connecting to it." and its Test connection button focused. A `note` from the Hub joins the message. |
 | "names itself <A>, not <B>" | At the address field: "The printer at <ip> calls itself <A>, not <B>. Check the address." |
 | Serial cannot be read | At the serial field: "Spoolwarden could not read the serial. Type it in: on the printer, Settings > Device." |
 | Bad address | At the address field: the Hub's text, which ends "On the printer: Settings > Network." |
@@ -816,7 +816,7 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 | Fields | Key-value list in four groups. Identity: Brand, Name, Material, Colour (filament swatch and hex). Weights: Net weight, Empty spool weight, Density. Temperatures: Nozzle, Bed, Nozzle range, Bed range. Other: Price per kg, Line. Empty values read "(empty)" in `--muted`. Per-field confidence display next to the value when it is not high. Card action: default **Edit by hand**. |
 | Fields, editing | The values become fields (text; numbers with unit). Foot: inline result, default **Cancel**, primary **Save changes**. Only changed fields are sent: `P intake/history/<id>/apply` (code) `{item, values}`. |
 | Ask the Label Reader to correct it | Text area "What is wrong?", placeholder "e.g. brand is Polymaker", hint "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept." Default button **Ask the Label Reader** → `P intake/history/<id>/revise` (code) `{item, note}` |
-| Suggestion | Change list (before → after per field), title "The Label Reader (<engine>) suggests <n> changes" or "The Label Reader changed nothing."; when no photo was kept: "No photo was kept for this record: it worked from the saved values and your note." Primary **Accept** → `P intake/history/<id>/apply` (code) `{proposal}`; default **Discard** (nothing is sent) |
+| Suggestion | Change list (before → after per field), title "The Label Reader (<engine>) suggests <n> changes" or "The Label Reader changed nothing."; when no photo was kept: "No photo was kept for this record: the Label Reader worked from the saved values and your note." Primary **Accept** → `P intake/history/<id>/apply` (code) `{proposal}`; default **Discard** (nothing is sent) |
 | Revisions | Revision list, newest first: "Revision <n>, <time>, by hand / by the Label Reader: <field old → new; …>", the note when there was one, "Filament <ids> has no spools left (not deleted)" when it applies; an undone revision is struck through and ends with "(undone)" (no badge). The newest live revision has default **Undo revision <n>** → `P intake/history/<id>/undo` (code) `{revision}`. Empty: "No revisions. Corrections by hand or by the Label Reader appear here." |
 | Record | Key-value list: Added, Source, State, Spool(s), Photos |
 
@@ -1013,11 +1013,11 @@ to build filament presets for Bambu Studio and Orca Slicer."
 Desktop
 +--------------------------------------------------------------------------------------------------+
 | Slicer presets                                                                     [Build now]   |
-| Last build 2026-11-12 03:12 · 46 presets, 12 for Orca Slicer · (*) Slicer Sync reported in        |
+| Last build 2026-11-12 03:12 · Presets: 46 (12 for Orca Slicer) · (*) Slicer Sync reported in      |
 | +-- Build ---------------------------------------------+ +-- Updates -------------------------+  |
-| | Last build 2026-11-12 03:12: 46 presets, 12 for Orca  | | 3 updates on 2 lines.               |  |
-| | Slicer, 0 problems.                                   | | Presets already in your slicers are |  |
-| | (*) Slicer Sync has reported in.                      | | never replaced unless you accept.   |  |
+| | Last build 2026-11-12 03:12. Presets: 46 (12 for Orca | | 3 updates are waiting. Lines with   |  |
+| | Slicer). Problems: 0.                                 | | updates: 2. Presets already in your |  |
+| | (*) Slicer Sync has reported in.                      | | slicers are never replaced unless   |  |
 | | Delete by hand in Bambu Studio: Generic PLA (old)     | | [Show what would change]            |  |
 | | [Bring back deleted presets]                          | |                                     |  |
 | +-------------------------------------------------------+ +-------------------------------------+  |
@@ -1036,7 +1036,7 @@ Phone:  one column; product lines become cards.
 
 | Part | Content |
 |---|---|
-| Summary | "Last build <stamp>: <n> presets, <m> for Orca Slicer, <k> problems." or "No build yet." |
+| Summary | "Last build <stamp>. Presets: <n> (<m> for Orca Slicer). Problems: <k>." or "No build yet." |
 | Last attempt failed | Error line: "The last preset build failed: <error>" |
 | Waiting | Note line with `waiting_text` |
 | Slicer Sync | Status badge "OK" with "Slicer Sync has reported in.", or "Not configured" (Note) with "Slicer Sync is not set up. Link it in Devices." (link to `#devices`) |
@@ -1049,7 +1049,7 @@ Phone:  one column; product lines become cards.
 
 | Part | Content |
 |---|---|
-| Summary | "<n> updates on <m> lines<, <a> accepted: Slicer Sync writes them next>. Presets already in your slicers are never replaced unless you accept here." or "No updates. Presets already in your slicers are never replaced on their own." |
+| Summary | "<n> updates are waiting<, <a> accepted: Slicer Sync writes them next>. Lines with updates: <m>. Presets already in your slicers are never replaced unless you accept here." ("1 update is waiting") or "No updates. Presets already in your slicers are never replaced on their own." |
 | Your own presets | When `updates.yours`: "<n> generated presets have the same name as one of your own in Bambu Studio. Yours stay: rename or delete yours to get the generated one." |
 | **Show what would change** | Default → `P presets/updates` (code) `{all: true, dry_run: true}`; shows a change list: "<Orca Slicer / Bambu Studio>: <name> (in your file <file>): <up to 6 keys>, …"; inline result "<n> updates would be accepted; nothing was changed yet." or "No updates to accept." |
 | **Accept these** | Primary, only under a shown list → `P presets/updates` (code) `{all, dry_run: false, stamp, names}`; result "<n> updates accepted. Slicer Sync writes them at its next run, after its backup." |

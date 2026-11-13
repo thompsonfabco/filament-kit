@@ -748,8 +748,11 @@ app · M · Depends on: S0.4, S0.9 · Beside: Stage 3 steps
   The launcher icon of 05 1 and 08 11 comes with this step: the adaptive icon (foreground mark, `sw_launcher_bg`
   background, monochrome layer).
 - **Keep:** screens, texts, navigation.
-- **Check:** 08 test 5 Kotlin part, with the app's entries removed from `tests/literal_allowlist.txt` in this step
-  (the camera's black ground and the swatch fill stay listed with their reasons); AUT-1 Material roles; the app's
+- **Check:** 08 test 5 Kotlin part. The app's colour entries leave `tests/literal_allowlist.txt` in this step except
+  two reviewed exceptions that stay, each with its reason: the camera view's black ground and the white text drawn
+  over the camera picture (07 CON-6); the swatch's fallback colour literal leaves with the step that rebuilds the
+  swatch (S4.4), after which the swatch holds no colour literal. Size literals (dp) leave with the step that
+  rebuilds their screen; AUT-1 Material roles; the app's
   own `ColorSchemeTest` (08 9), added in this step; manual: release checklist step 7 (Home with TalkBack) in light
   and dark, and a switch of the phone between light and dark while a field holds typed text (the text stays).
 
@@ -836,7 +839,8 @@ app · L · Depends on: S4.4, S3.9 · Beside: S4.9, S4.15 (not S4.5: both edit `
 app · S · Depends on: S4.4 · Beside: S4.5 to S4.8
 - **Files today:** `<app>/ui/profile/AddProfileScreen.kt`, `AddProfileViewModel.kt`.
 - **Change:** 05 8 (was Add profile).
-- **Keep:** what is saved.
+- **Keep:** what is saved; the list of existing lines with "Change parent" stays on this screen, in the new look,
+  until S4.14 moves it to the Slicer presets screen (no working control goes away between two steps).
 - **Other interfaces:** Hub page Settings > Filament Catalog, Add entry (S2.19); command line `catalog add` (S5.8).
   The web app has none yet (feature idea B8).
 - **Check:** AUT-8 on the screen.
@@ -844,7 +848,7 @@ app · S · Depends on: S4.4 · Beside: S4.5 to S4.8
 ### S4.10 Printers list, add, find Klipper printers
 app · M · Depends on: S4.4 · Beside: S4.5, S4.9, S4.15
 - **Files today:** `<app>/ui/printers/PrintersScreen.kt`; `<app>/net/Api.kt`.
-- **Change:** 05 9.1 to 9.3: the list with status shape and word; Add a Bambu printer; Add a Klipper printer and Find
+- **Change:** 05 9.1 to 9.3: the list with status shape and word; Add a Bambu Lab printer; Add a Klipper printer and Find
   Klipper printers (new in the app; the Hub routes exist).
 - **Keep:** printer data and routes.
 - **Other interfaces:** Hub page S2.4, S2.5; web app S3.11; command line S5.5.
@@ -881,7 +885,8 @@ Hub · M · Depends on: S1.4 · Beside: any step that does not edit `api.py`
 ### S4.14 Slicer presets
 app · M · Depends on: S4.6, S4.13 · Beside: S4.5, S4.9
 - **Files today:** the presets panel in `<app>/ui/home/HomeScreen.kt`.
-- **Change:** 05 11: the Home panel and the Slicer presets screen.
+- **Change:** 05 11: the Home panel and the Slicer presets screen, with the Product lines panel and its "Change
+  parent" sheet (11.2); the list of existing lines leaves the catalog screen (S4.9) in this step.
 - **Keep:** the other panels of Home.
 - **Other interfaces:** Hub page S2.10; web app S3.13; command line S5.7.
 - **Check:** AUT-8 on the screen.

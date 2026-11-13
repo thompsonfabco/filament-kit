@@ -254,11 +254,24 @@ def _client(app, who=HOME):
 def test_shared_files_are_served_and_the_sprite_comes_first(app):
     with _client(app) as c:
         r = c.get("/intake")
-        check_sprite_first(r.text)
+        check_sprite_first(r.text, "<div id=app>")                              # S3.3: the shell replaces it
         assert r.headers["content-security-policy"] in (INTAKE_CSP, INTAKE_CSP_PRINTERS)
         check_files(c.get, "/intake")
-        assert "/intake/shared/" not in r.text                                  # not linked yet
-    assert _client(app, AWAY).get("/intake/shared/tokens.css").status_code == 403   # no lifespan: the app ran once above
+        head = r.text.split("<body")[0]                                         # S3.2: theme first, then tokens, components, own
+        links = ["/intake/manifest-light.webmanifest", "/intake/shared/theme-init.js", "/intake/shared/tokens.css",
+                 "/intake/shared/components.css", "/intake/app.css"]
+        assert [head.index(x) for x in links] == sorted(head.index(x) for x in links)
+        # S3.3: the catalogue and the shared script load after the stylesheets and before the page's own scripts
+        order = ["/intake/shared/components.css", "/intake/app.css", "/intake/shared/strings.js",
+                 "/intake/shared/components.js", "/intake/app.js"]
+        assert [r.text.index(x) for x in order] == sorted(r.text.index(x) for x in order)
+        assert r.text.index("/intake/shared/strings.js") < r.text.index("/intake/shared/components.js")
+        assert re.search(r"<title>[^<]+</title>", head) and "Spool intake" not in r.text   # the shell adds the page and the Hub
+        for name in ("theme-init.js", "tokens.css", "components.css"):
+            assert c.get(f"/intake/shared/{name}").status_code == 200
+    away = _client(app, AWAY)                                   # no lifespan: the app ran once above
+    assert away.get("/intake/shared/tokens.css").status_code == 200   # the refusal page's files (S3.16)
+    assert away.get("/intake/shared/strings.js").status_code == 403
 
 
 def test_page_needs_no_sign_in_and_has_csp(app):
@@ -680,8 +693,48 @@ def test_slash_redirects_stay_within_the_public_prefix(app, path, target):
     assert r.headers["location"] in (target, ORIGIN + target), r.headers["location"]
 
 
-def test_a_link_can_open_a_tab_by_its_hash():
-    """The setup page's "Open the live printer view" links /intake#printers; only a tab the page has is taken."""
+def _app_js():
     from pathlib import Path
-    src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
-    assert "if (Object.hasOwn(tabs, location.hash.slice(1))) first = location.hash.slice(1);" in src
+    return (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+
+
+def test_a_link_can_open_a_place_by_its_hash():
+    """The setup page's "Open the live printer view" links /intake#printers; today's addresses keep working (04 2.4)."""
+    src = _app_js()
+    assert 'const PLACES = ["add", "spools", "printers", "recent", "presets"];' in src
+    assert 'const ALIAS = { open: "spools", history: "recent" };' in src          # #open and #history redirect
+    assert "if (PLACES.includes(name)) return show(name);" in src
+    assert 'const PLACE_KEY = "spoolwarden.place";' in src and 'localStorage.getItem("tab")' in src
+
+
+def test_the_shell_is_built_from_the_catalogue_and_the_page_attributes():
+    src = _app_js()
+    assert "SW.shell(" in src and "SW.segmented(" in src and "SW.sheet(" in src
+    for key in ("app_name", "nav_label", "nav_more", "nav_add", "nav_spools", "nav_printers", "nav_recent", "nav_recently_added",
+                "nav_slicer_presets", "nav_settings", "common_skip_to_content", "home_add_title", "nav_printers_off", "nav_recent_public",
+                "recent_public_title", "presets_off_title", "nav_more_home_screen", "common_open_hub_page",
+                "settings_this_hub", "settings_saved_on_phone", "appearance_theme_title"):
+        assert f'"{key}"' in src, key
+    for attr in ("hubPage", "hub", "presets", "push", "printers", "history"):
+        assert f"document.body.dataset.{attr}" in src, attr
+    code = " ".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("//"))
+    assert 'SW.t("app_name")' in src and "Spoolwarden" not in code and "filament-kit" not in code   # the name flips at the rename
+
+
+def test_settings_is_never_the_stored_place_and_sheets_push_an_entry():
+    src = _app_js()
+    assert 'if (key !== "settings") { try { localStorage.setItem(PLACE_KEY, key); } catch {} }' in src
+    assert 'history.pushState({ sheet: true }, "", location.href)' in src            # a sheet: Back closes it
+    assert 'window.addEventListener("popstate"' in src
+
+
+def test_the_print_alert_controls_moved_to_settings():
+    from pathlib import Path
+    printers = (Path(web_app.__file__).parent / "static" / "printers.js").read_text(encoding="utf-8")
+    tab = printers[printers.index("function printersTab()"):printers.index("// ----- Print alerts on this phone")]
+    assert "push/" not in tab and "pushBox" not in tab and "Notify this phone" not in tab      # not on the Printers page any more
+    panel = printers[printers.index("function alertsPanel("):]
+    for call in ('"push/key"', '"push/subscribe"', '"push/unsubscribe"', '"push/test"'):
+        assert call in panel, call                                                     # what a subscription does is unchanged
+    assert "SW.toggle(" in panel and "alertsPanel(" in _app_js() and "PUSH &&" in _app_js()   # only when alerts are offered
+    assert 'localStorage.getItem("spoolwarden.printer")' in printers

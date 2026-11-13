@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.net
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -27,6 +28,9 @@ import okhttp3.Response
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+
+/** What the client says for an error reply that carries no `message` of its own ([ApiError.notFromHub] knows it). */
+internal fun apiStandIn(status: Int) = "The server returned an error ($status)"
 
 /**
  * The filament-kit server's JSON API.
@@ -55,7 +59,7 @@ class Api(
         val body = buildJsonObject { put("code", code) }
         return call(request("api", "pair", auth = false).post(body.toBody()))
             .jsonObject["token"]?.jsonPrimitive?.contentOrNull
-            ?: throw ApiError(200, "bad_response", "The server did not return a token")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return a token")
     }
 
     /** [photos] must already be prepared JPEGs. A read calls Claude, so it gets a long timeout. */
@@ -209,7 +213,9 @@ class Api(
                 execute(request("app.apk", auth = false).get().build(), DOWNLOAD_S).use { resp ->
                     if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string())
                     val total = resp.body.contentLength()
-                    resp.body.byteStream().use { src -> copyToDisk(src, part) { done -> onProgress(done, total) } }
+                    resp.body.byteStream().use { src ->
+                        copyToDisk(src, part, check = { ensureActive() }) { done -> onProgress(done, total) }
+                    }
                 }
                 to.delete()
                 if (!part.renameTo(to)) throw storageError("Could not write ${to.name}")
@@ -232,7 +238,7 @@ class Api(
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
         }
         val printer = call(request("api", "printers").post(body.toBody())).jsonObject["printer"]
-            ?: throw ApiError(200, "bad_response", "The server did not return the printer")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return the printer")
         return decode(printer)
     }
 
@@ -245,7 +251,7 @@ class Api(
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
         }
         val printer = call(request("api", "printers").post(body.toBody())).jsonObject["printer"]
-            ?: throw ApiError(200, "bad_response", "The server did not return the printer")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return the printer")
         return decode(printer)
     }
 
@@ -282,7 +288,7 @@ class Api(
     suspend fun startMap(id: String): String =
         call(request("api", "printers", id, "map").post(ByteArray(0).toRequestBody(null)))
             .jsonObject["job_id"]?.jsonPrimitive?.contentOrNull
-            ?: throw ApiError(200, "bad_response", "The server did not return a job")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return a job")
 
     suspend fun mapStatus(id: String): MapStatus = decode(call(request("api", "printers", id, "map").get()))
 
@@ -344,7 +350,7 @@ class Api(
 
     suspend fun undoUsage(entryId: String): UsageEntry {
         val entry = call(request("api", "usage", entryId, "undo").post(ByteArray(0).toRequestBody(null)))
-            .jsonObject["entry"] ?: throw ApiError(200, "bad_response", "The server did not return the entry")
+            .jsonObject["entry"] ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return the entry")
         return decode(entry)
     }
 
@@ -403,7 +409,7 @@ class Api(
     suspend fun setLineParent(lineId: String, parent: String): ProfileLine {
         val body = buildJsonObject { put("bambu_parent", parent) }
         val line = call(request("api", "profiles", "lines", lineId).patch(body.toBody())).jsonObject["line"]
-            ?: throw ApiError(200, "bad_response", "The server did not return the line")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return the line")
         return decode(line)
     }
 
@@ -441,7 +447,7 @@ class Api(
             try {
                 json.parseToJsonElement(text)
             } catch (_: Exception) {
-                throw ApiError(resp.code, "bad_response", "The server sent a reply the app could not read")
+                throw ApiError(resp.code, ApiError.BAD_RESPONSE, "The server sent a reply the app could not read")
             }
         }
     }
@@ -465,13 +471,17 @@ class Api(
     private fun offline(message: String): ApiError =
         if (localNetworkMissing()) ApiError(0, "local_network", LOCAL_NETWORK_MESSAGE) else ApiError(0, "offline", message)
 
-    /** Network read errors are `offline`; errors writing [part] (disk full, no folder) are `storage`. */
-    private fun copyToDisk(src: java.io.InputStream, part: File, onWritten: (Long) -> Unit) {
+    /**
+     * Network read errors are `offline`; errors writing [part] (disk full, no folder) are `storage`. [check] runs before
+     * each chunk and throws when the caller has cancelled, so a cancelled download stops at the next chunk.
+     */
+    private fun copyToDisk(src: java.io.InputStream, part: File, check: () -> Unit = {}, onWritten: (Long) -> Unit) {
         try {
             part.outputStream().use { out ->
                 val buf = ByteArray(64 * 1024)
                 var done = 0L
                 while (true) {
+                    check()
                     val n = try {
                         src.read(buf)
                     } catch (e: IOException) {
@@ -499,7 +509,7 @@ class Api(
             null
         }
         val code = if (status == 401) "unauthorized" else obj?.get("error")?.jsonPrimitive?.contentOrNull ?: genericCode(status)
-        val message = obj?.get("message")?.jsonPrimitive?.contentOrNull ?: "The server returned an error ($status)"
+        val message = obj?.get("message")?.jsonPrimitive?.contentOrNull ?: apiStandIn(status)
         val extra = JsonObject(obj.orEmpty().filterKeys { it != "error" && it != "message" })
         val sent = if (status == 401) auth?.removePrefix("Bearer ")?.trim()?.ifBlank { null } else null
         return ApiError(status, code, message, extra, sent)
@@ -513,7 +523,7 @@ class Api(
     }
 
     private fun spool(body: JsonElement): JsonObject =
-        body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, "bad_response", "The server did not return a spool")
+        body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return a spool")
 
     private inline fun <reified T> decode(body: JsonElement): T = json.decodeFromJsonElement(body)
 

@@ -138,9 +138,9 @@ internal class SwType(private val tokens: SwTypeTokens, window: WindowClass) {
     )
 }
 
-/** Control height, row and gap of the theme; [control] is the phone height on a Phone window. */
-internal class SwDensity(sizes: SwSizes, window: WindowClass) {
-    val control: Dp = if (window == WindowClass.Phone) sizes.controlPhone else sizes.control
+/** Control height, row and gap of the theme; [control] is the phone height at every window class. */
+internal class SwDensity(sizes: SwSizes) {
+    val control: Dp = sizes.controlPhone
     val row: Dp = sizes.row
     val gap: Dp = sizes.gap
 }
@@ -201,7 +201,7 @@ internal fun SpoolwardenTheme(look: Look, appearance: Appearance, content: @Comp
         LocalSwType provides SwType(t.type, window),
         LocalSpacing provides t.space,
         LocalSwSizes provides t.sizes,
-        LocalSwDensity provides SwDensity(t.sizes, window),
+        LocalSwDensity provides SwDensity(t.sizes),
         LocalSwShapes provides SwShapes(t.radius),
         LocalSwElevation provides if (dark) t.elevationDark else t.elevationLight,
         LocalSwMotion provides if (reduceMotion) SwMotion.Off else t.motion,
@@ -217,12 +217,15 @@ internal fun SpoolwardenTheme(look: Look, appearance: Appearance, content: @Comp
         ) {
             CompositionLocalProvider(
                 LocalContentColor provides colors.text,
-                LocalTextSelectionColors provides TextSelectionColors(colors.accent, colors.accentSoft),
+                LocalTextSelectionColors provides colors.toSelectionColors(),
                 content = content,
             )
         }
     }
 }
+
+/** The selection handle is text-coloured (accentText); accent is only a labelled fill (0014). */
+internal fun SpoolwardenColors.toSelectionColors() = TextSelectionColors(accentText, accentSoft)
 
 /** The window's class, from its own width (so split screen and freeform windows get the layout their width calls for). */
 @Composable

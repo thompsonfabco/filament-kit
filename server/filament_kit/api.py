@@ -963,6 +963,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         code = (await _json(request)).get("code")
         try:
             token = await run_in_threadpool(pairing.redeem_code, code)
+        except pairing.CodeSpent as e:
+            return _err(401, "code_expired", str(e))
         except pairing.PairingError as e:
             return _err(401, "unauthorized", str(e))
         return JSONResponse({"token": token})

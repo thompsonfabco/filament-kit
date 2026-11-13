@@ -15,15 +15,11 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/PinnedTls.kt | the s
 android/app/src/main/java/com/thompsonfabco/filamentkit/pairing/PairingPayload.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/session/AppViewModel.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/session/PairRouter.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/LocalNetworkAccess.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/LocalNetworkAccess.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/Weights.kt | weight on the scale | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | color | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | module | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | retry | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | "OK" | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | retry | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | weight on the scale | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReaderTexts.kt | color | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReaderTexts.kt | retry | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
@@ -38,12 +34,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | phone web app | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | setup page | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | intake history | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | profile | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | retry | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | unfinished add | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | module | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | pc sync | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
@@ -65,14 +55,8 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/SlotMapHelp.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/AddProfileScreen.kt | blank = | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/AddProfileScreen.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/AddProfileViewModel.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/ParentField.kt | blank = | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchScreen.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/LicencesScreen.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/SettingsScreen.kt | module | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/SettingsScreen.kt | setup page | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/SettingsScreen.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LinkSealedScreen.kt | gross weight | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LinkSealedScreen.kt | retry | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadFlowScreen.kt | "OK" | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
@@ -82,7 +66,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/update/ApkInstaller.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/update/UpdateTexts.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/update/Updater.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup.js | ai_intake | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup.js | filament library | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup.js | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
@@ -127,10 +110,8 @@ server/filament_kit/web/static/app.js | blank = | today's string, route, key or 
 server/filament_kit/web/static/app.js | color | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | dry run | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | gross weight | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/web/static/app.js | intake history | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | scale weight | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | setup page | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/web/static/printers.js | HMS | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | setup page | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | the kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

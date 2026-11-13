@@ -1,5 +1,7 @@
 package com.thompsonfabco.filamentkit.net
 
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -14,6 +16,7 @@ import mockwebserver3.RecordedRequest
 import okhttp3.tls.HandshakeCertificates
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -346,6 +349,25 @@ class ApiTest {
         val e = failure { blocked.locations() }
         assertEquals("local_network", e.code)
         assertEquals(LOCAL_NETWORK_MESSAGE, e.message)
+    }
+
+    @Test fun aCancelledDownloadStopsReadingAndLeavesNoFile() = runBlocking {
+        server.enqueue(
+            MockResponse.Builder().code(200).body(okio.Buffer().write(ByteArray(2_000_000)))
+                .throttleBody(64 * 1024, 100, java.util.concurrent.TimeUnit.MILLISECONDS).build(),
+        )
+        val f = tmp.newFile("slow.apk")
+        f.delete()
+        var written = 0L
+        val job = kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            api.downloadApk(f) { done, _ -> written = done }
+        }
+        while (written == 0L) kotlinx.coroutines.delay(10)
+        kotlinx.coroutines.withTimeout(5_000) { job.cancelAndJoin() }
+        assertTrue(job.isCancelled)
+        assertTrue("it stopped well before the end", written < 2_000_000)
+        assertFalse(f.exists())
+        assertFalse(java.io.File(f.parentFile, f.name + ".part").exists())
     }
 
     @Test fun downloadApkWriteFailureIsNotOffline() {

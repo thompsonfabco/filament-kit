@@ -39,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -72,6 +73,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.thompsonfabco.filamentkit.nav.AddProfileRoute
+import com.thompsonfabco.filamentkit.nav.AddProfileTitle
 import com.thompsonfabco.filamentkit.nav.AddOpened
 import com.thompsonfabco.filamentkit.nav.AddRoute
 import com.thompsonfabco.filamentkit.nav.HomeGraph
@@ -86,8 +88,12 @@ import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.RecentGraph
 import com.thompsonfabco.filamentkit.nav.RecentRoute
 import com.thompsonfabco.filamentkit.nav.RecordRoute
+import com.thompsonfabco.filamentkit.nav.SettingsAppearanceRoute
+import com.thompsonfabco.filamentkit.nav.SettingsDeveloperRoute
 import com.thompsonfabco.filamentkit.nav.SettingsGraph
+import com.thompsonfabco.filamentkit.nav.SettingsHubRoute
 import com.thompsonfabco.filamentkit.nav.SettingsRoute
+import com.thompsonfabco.filamentkit.nav.SettingsUpdatesRoute
 import com.thompsonfabco.filamentkit.nav.SpoolsGraph
 import com.thompsonfabco.filamentkit.nav.SpoolsRoute
 import com.thompsonfabco.filamentkit.nav.Tab
@@ -120,7 +126,6 @@ import com.thompsonfabco.filamentkit.session.isPaired
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.tags.disableTagReader
 import com.thompsonfabco.filamentkit.tags.enableTagReader
-import com.thompsonfabco.filamentkit.ui.LocalNetworkPanel
 import com.thompsonfabco.filamentkit.ui.rememberLocalNetworkAccess
 import com.thompsonfabco.filamentkit.ui.add.AddSpoolsScreen
 import com.thompsonfabco.filamentkit.ui.add.AddViewModel
@@ -130,15 +135,27 @@ import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.ui.add.TagTaps
 import com.thompsonfabco.filamentkit.ui.components.AppearanceMenu
 import com.thompsonfabco.filamentkit.ui.components.HubFacts
+import com.thompsonfabco.filamentkit.ui.components.HubNotice
+import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.HubSheet
 import com.thompsonfabco.filamentkit.ui.components.HubSheetActions
+import com.thompsonfabco.filamentkit.ui.components.LocalNetworkNotice
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwConnectionChip
+import com.thompsonfabco.filamentkit.ui.components.SwDialog
+import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwNav
+import com.thompsonfabco.filamentkit.ui.components.SwToastHost
+import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
+import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
+import com.thompsonfabco.filamentkit.ui.home.labelReaderOff
 import com.thompsonfabco.filamentkit.ui.home.showLabelPhotos
 import com.thompsonfabco.filamentkit.ui.home.versionLine
 import com.thompsonfabco.filamentkit.ui.pair.NetPairingBackend
@@ -153,9 +170,14 @@ import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
-import com.thompsonfabco.filamentkit.ui.settings.LicencesScreen
+import com.thompsonfabco.filamentkit.ui.settings.HubPage
+import com.thompsonfabco.filamentkit.ui.settings.SettingsActions
+import com.thompsonfabco.filamentkit.ui.settings.SettingsFacts
+import com.thompsonfabco.filamentkit.ui.settings.SettingsGroup
+import com.thompsonfabco.filamentkit.ui.settings.SettingsGroupPage
+import com.thompsonfabco.filamentkit.ui.settings.SettingsHub
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
-import com.thompsonfabco.filamentkit.ui.settings.SetupPageTexts
+import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
 import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
 import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
 import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
@@ -190,7 +212,11 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(appearance, systemDark) { appEdgeToEdge(if (dark) Appearance.Dark else Appearance.Light) }
                 // The next launch follows the choice.
                 LaunchedEffect(appearance) { applyNightMode(appearance) }
-                AppFrame(appearance, handleInsets = false) { FilamentKitApp(app, start.paired, appearance) }
+                // the shell's toast queue: screens reach it through LocalToast
+                val toast = remember { SwToastState() }
+                AppFrame(appearance, handleInsets = false) {
+                    CompositionLocalProvider(LocalToast provides toast) { FilamentKitApp(app, start.paired, appearance, toast) }
+                }
             }
         }
     }
@@ -212,7 +238,7 @@ class MainActivity : ComponentActivity() {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appearance) {
+private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appearance, toast: SwToastState) {
     // API 37: every LAN socket needs ACCESS_LOCAL_NETWORK. Asked once at start; the session waits for it.
     val localNetwork = rememberLocalNetworkAccess(autoRequest = true, onGranted = app.session::refresh)
     val nav = rememberNavController()
@@ -290,7 +316,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     fun finishPairing(sameHub: Boolean) {
         app.router.clear()
         pairScope.launch {
-            val hubNow = hubIdentity(app.settings.server.first())
+            // a read error keeps the stacks: it says nothing about which Hub is stored
+            val hubNow = try { hubIdentity(app.settings.server.first()) } catch (e: java.io.IOException) { hubBefore }
             if (nav.previousBackStackEntry == null || (!sameHub && hubNow != hubBefore)) {
                 // first start, or another Hub: nothing of the old one stays (stacks, saved stacks, their view models)
                 nav.clearSavedStacks()
@@ -360,6 +387,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     AppearanceMenu(appearance, app::setAppearance)
                 }
             },
+            snackbarHost = { SwToastHost(toast) },
             containerColor = SpoolwardenTheme.colors.bg,
             contentWindowInsets = when {
                 !navVisible -> WindowInsets.safeDrawing
@@ -397,7 +425,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                                         Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
                                         VersionLine(version)
                                     }
-                                    LocalNetworkPanel(localNetwork)
+                                    LocalNetworkNotice(localNetwork)
                                 }
                             } else {
                                 val servers = remember { app.discovery.servers() }
@@ -445,24 +473,42 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                                 )
                             }
                         }
+                        val printersVm: HomePrintersViewModel = viewModel(factory = viewModelFactory {
+                            initializer { HomePrintersViewModel(load = { currentApi().printers() }) }
+                        })
+                        val homePrinters by printersVm.state.collectAsStateWithLifecycle()
+                        val showPrinters = info?.printersOn != false
+                        // read again with each connection check, while Home is on screen
+                        LaunchedEffect(lifecycle, online, showPrinters) {
+                            if (!online || !showPrinters) return@LaunchedEffect
+                            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                                while (true) {
+                                    printersVm.refresh()
+                                    delay(CONNECTION_POLL_MS)
+                                }
+                            }
+                        }
                         HomeScreen(
-                            serverName = config?.name.orEmpty(),
                             connection = connection,
                             drafts = drafts,
                             update = update,
-                            version = version,
+                            printers = homePrinters,
+                            showPrinters = showPrinters,
                             onAddSpools = { nav.navigate(AddRoute()) },
                             onAddByHand = { nav.navigate(AddRoute(manual = true)) },
-                            labelPhotos = labelPhotos,
-                            onAddProfile = { nav.navigate(AddProfileRoute) },
-                            onSearch = { tabTapped(Tab.Spools) },
-                            onPrinters = { tabTapped(Tab.Printers) },
-                            onHistory = { tabTapped(Tab.Recent) },
-                            onSettings = { tabTapped(Tab.Settings) },
+                            labelReaderOff = labelReaderOff(info),
                             onResumeDraft = { id -> nav.navigate(AddRoute(draft = id)) },
                             onDiscardDraft = app::discardDraft,
-                            onRetryConnection = app.session::refresh,
+                            onOpenPrinter = { id ->
+                                // the Printers stack goes back to its root first, so Back from the printer lands on the list
+                                nav.selectTab(Tab.Printers)
+                                nav.popBackStack<PrintersRoute>(inclusive = false)
+                                nav.navigate(PrinterRoute(id))
+                            },
+                            onOpenPrinters = { tabTapped(Tab.Printers) },
+                            onRefreshPrinters = printersVm::refresh,
                             onReviewCertificate = app.router::pairAgain,
+                            onPairAgain = app.router::pairAgain,
                             onInstallUpdate = { updater?.install() },
                             onConfirmInstall = { updater?.confirmInstall() },
                             presets = presets,
@@ -494,7 +540,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             presetsNoteIsError = presetsNoteIsError,
                             presetUpdates = presetUpdates,
                             onPresetsChanged = { presetsReload++ },
-                            localNetworkPanel = { LocalNetworkPanel(localNetwork) },
+                            onAddCatalogLine = { nav.navigate(AddProfileRoute) },
+                            localNetworkPanel = { LocalNetworkNotice(localNetwork) },
                             extra = { if (BuildConfig.DEBUG) SimulateTag() },
                         )
                     }
@@ -502,7 +549,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<AddRoute> { e ->
                         val a = api
                         if (a == null) {
-                            NotPaired(::pushPairing)
+                            HubNoticePage(::pushPairing)
                             return@composable
                         }
                         val route = e.toRoute<AddRoute>()
@@ -525,18 +572,21 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     }
 
                     composable<AddProfileRoute> {
-                        val a = api
-                        if (a == null) {
-                            NotPaired(::pushPairing)
-                            return@composable
-                        }
                         val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
                             initializer { AddProfileViewModel(ProfileApi.of(::currentApi)) }
                         })
+                        val savedText = stringResource(R.string.catalog_saved)
                         AddProfileScreen(
                             vm = profileVm,
                             onBack = { nav.popBackStack() },
+                            // back to the screen it came from; the toast outlives this screen, so it runs in the shell's scope
+                            onSaved = {
+                                nav.popBackStack()
+                                pairScope.launch { toast.show(savedText) }
+                            },
                             onPairAgain = app.router::pairAgain,
+                            // no pairing: the form and its typing stay, the Hub notice sits inline (05 2.7)
+                            paired = api != null,
                         )
                     }
                 }
@@ -545,7 +595,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<SpoolsRoute> {
                         val a = api
                         if (a == null) {
-                            NotPaired(::pushPairing)
+                            HubNoticePage(::pushPairing)
                             return@composable
                         }
                         val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
@@ -567,7 +617,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<PrintersRoute> {
                         val a = api
                         if (a == null) {
-                            NotPaired(::pushPairing)
+                            HubNoticePage(::pushPairing)
                             return@composable
                         }
                         val trustFailed by app.trustFailed.collectAsStateWithLifecycle()
@@ -578,7 +628,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<PrinterRoute> { e ->
                         val a = api
                         if (a == null) {
-                            NotPaired(::pushPairing)
+                            HubNoticePage(::pushPairing)
                             return@composable
                         }
                         val id = e.toRoute<PrinterRoute>().id
@@ -596,7 +646,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<PrinterMapRoute> { e ->
                         val a = api
                         if (a == null) {
-                            NotPaired(::pushPairing)
+                            HubNoticePage(::pushPairing)
                             return@composable
                         }
                         ManualMapEntry(a, e.toRoute<PrinterMapRoute>().id, onBack = { nav.popBackStack() }, onPairAgain = app.router::pairAgain)
@@ -607,7 +657,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<RecentRoute> {
                         val a = api
                         if (a == null) {
-                            NotPaired(::pushPairing)
+                            HubNoticePage(::pushPairing)
                             return@composable
                         }
                         HistoryListEntry(
@@ -620,7 +670,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<RecordRoute> { e ->
                         val a = api
                         if (a == null) {
-                            NotPaired(::pushPairing)
+                            HubNoticePage(::pushPairing)
                             return@composable
                         }
                         val list = remember(e) { nav.getBackStackEntry<RecentRoute>() }
@@ -633,27 +683,61 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 }
 
                 navigation<SettingsGraph>(startDestination = SettingsRoute) {
+                    val settingsFacts = SettingsFacts(
+                        appearance = appearance,
+                        hub = config?.let { SettingsHub(it.name, hubAddress(connection, it), it.fingerprint, info?.version) },
+                        hubState = shown,
+                        update = update,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        developer = BuildConfig.DEBUG,
+                    )
+                    val settingsActions = SettingsActions(
+                        onAppearance = app::setAppearance,
+                        skipFingerprintCheck = skipFingerprintCheck,
+                        onSkipFingerprintCheck = app::setSkipFingerprintCheck,
+                        onPairAgain = app.router::pairAgain,
+                        onForget = {
+                            app.forget {
+                                nav.clearSavedStacks()
+                                nav.navigate(PairGraph) {
+                                    popUpTo(nav.graph.id) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        setupUrl = { HubPage.url(app.session.baseUrl()) },
+                        update = UpdateActions(
+                            install = { updater?.install() },
+                            cancel = { updater?.cancel() },
+                            openSettings = { updater?.openPermissionSettings() },
+                            tapToInstall = { updater?.confirmInstall() },
+                            tryAgain = { updater?.checkNow() },
+                        ),
+                        onCheckForUpdates = { updater?.checkNow() },
+                        onSimulateTag = TagEvents::emit,
+                    )
                     composable<SettingsRoute> {
                         SettingsScreen(
-                            config = config,
-                            onPairAgain = app.router::pairAgain,
-                            onForget = {
-                                app.forget {
-                                    nav.clearSavedStacks()
-                                    nav.navigate(PairGraph) {
-                                        popUpTo(nav.graph.id) { inclusive = true }
-                                        launchSingleTop = true
-                                    }
-                                }
+                            facts = settingsFacts,
+                            onOpen = { group ->
+                                nav.navigate(
+                                    when (group) {
+                                        SettingsGroup.Appearance -> SettingsAppearanceRoute
+                                        SettingsGroup.Hub -> SettingsHubRoute
+                                        SettingsGroup.Updates -> SettingsUpdatesRoute
+                                        SettingsGroup.Licences -> LicencesRoute
+                                        SettingsGroup.Developer -> SettingsDeveloperRoute
+                                    },
+                                )
                             },
-                            onLicences = { nav.navigate(LicencesRoute) },
-                            skipFingerprintCheck = skipFingerprintCheck,
-                            onSkipFingerprintCheck = app::setSkipFingerprintCheck,
-                            setupUrl = { SetupPageTexts.url(app.session.baseUrl()) },
+                            detail = { group -> SettingsGroupPage(group, settingsFacts, settingsActions) },
                         )
                     }
-
-                    composable<LicencesRoute> { LicencesScreen() }
+                    composable<SettingsAppearanceRoute> { SettingsGroupPage(SettingsGroup.Appearance, settingsFacts, settingsActions) }
+                    composable<SettingsHubRoute> { SettingsGroupPage(SettingsGroup.Hub, settingsFacts, settingsActions) }
+                    composable<SettingsUpdatesRoute> { SettingsGroupPage(SettingsGroup.Updates, settingsFacts, settingsActions) }
+                    composable<LicencesRoute> { SettingsGroupPage(SettingsGroup.Licences, settingsFacts, settingsActions) }
+                    composable<SettingsDeveloperRoute> { SettingsGroupPage(SettingsGroup.Developer, settingsFacts, settingsActions) }
                 }
             }
         }
@@ -687,21 +771,21 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     }
 
     leaveAddFor?.let { request ->
-        AlertDialog(
-            onDismissRequest = { leaveAddFor = null },
-            title = { Text(stringResource(R.string.common_leave_title)) },
-            text = { Text(stringResource(R.string.common_leave_body, stringResource(R.string.add_card_new_spool))) },
-            dismissButton = { TextButton(onClick = { leaveAddFor = null }) { Text(stringResource(R.string.common_stay)) } },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        leaveAddFor = null
-                        nav.replaceAdd(request)
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = SpoolwardenTheme.colors.bad),
-                ) { Text(stringResource(R.string.common_leave_without_saving)) }
-            },
-        )
+        SwDialog(
+            title = stringResource(R.string.common_leave_title),
+            onClose = { leaveAddFor = null },
+            confirm = SwDialogButton(
+                stringResource(R.string.common_leave_without_saving),
+                onClick = {
+                    leaveAddFor = null
+                    nav.replaceAdd(request)
+                },
+                kind = SwButtonKind.DestructiveFilled,
+            ),
+            cancel = SwAction(stringResource(R.string.common_stay)) { leaveAddFor = null },
+        ) {
+            Text(stringResource(R.string.common_leave_body, stringResource(R.string.add_card_new_spool)))
+        }
     }
 
     // The spool card, over whatever screen is open (not over pairing or the add flow).
@@ -744,8 +828,12 @@ private fun placeTitle(destination: NavDestination?): String = stringResource(
         destination == null -> R.string.nav_home
         destination.hasRoute(PairRoute::class) -> R.string.pair_title
         destination.hasRoute(AddRoute::class) -> R.string.home_add_title
-        destination.hasRoute(AddProfileRoute::class) -> R.string.catalog_add_line
+        destination.hasRoute(AddProfileRoute::class) -> AddProfileTitle
         destination.hasRoute(LicencesRoute::class) -> R.string.settings_licences_title
+        destination.hasRoute(SettingsAppearanceRoute::class) -> R.string.appearance_title
+        destination.hasRoute(SettingsHubRoute::class) -> R.string.hub_sheet_title
+        destination.hasRoute(SettingsUpdatesRoute::class) -> R.string.settings_updates_title
+        destination.hasRoute(SettingsDeveloperRoute::class) -> R.string.settings_developer_title
         destination.tab() == Tab.Recent -> R.string.nav_recently_added
         else -> (destination.tab() ?: Tab.Home).label
     },
@@ -794,13 +882,11 @@ internal fun AppFrame(appearance: Appearance = Appearance.System, handleInsets: 
     }
 }
 
-/** Shown instead of a screen that needs the server when no server is paired. */
+/** Shown instead of a screen that needs the Hub when no Hub is paired: the Hub notice of 05-android-app 3.4. */
 @Composable
-private fun NotPaired(onPair: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Not paired", style = MaterialTheme.typography.headlineSmall)
-        Text("Pair this phone with your server first.")
-        Button(onClick = onPair) { Text("Pair") }
+private fun HubNoticePage(onPair: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(SpoolwardenTheme.space.s4)) {
+        HubNotice(HubNoticeKind.NoLongerPaired, onPair)
     }
 }
 

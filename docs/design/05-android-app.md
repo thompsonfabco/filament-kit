@@ -20,7 +20,7 @@ Contents: 1 Baseline · 2 App shell · 3 Shared parts and states · 4 Pairing ·
 | Toolkit | Jetpack Compose, Material 3, one `MainActivity`, edge to edge. No XML layouts. |
 | Android versions | minSdk 29, target and compile SDK as today. |
 | Theme | `SpoolwardenTheme(look, appearance)` (F6.2) wraps everything. It supplies the Material 3 `ColorScheme`, `Typography`, `Shapes` and the Console density from the tokens of F4. Dynamic colour is off. No component uses a literal colour. Sizes are the tokens of F4 read as dp, and fixed dimensions are `size` entries read through `SpoolwardenTheme.sizes` (listed below this table); status colours come from `--ok`, `--warn`, `--bad`, `--info` and their `-soft` grounds, never from Material's `primary`/`error` alone. |
-| Window size classes | Compact (phone), medium (tablet, small window), expanded (large tablet, desktop window) as in F7. Read with `currentWindowAdaptiveInfo()`. Rotation and multi-window are supported on every screen; state survives both (view models plus `SavedStateHandle`). |
+| Window size classes | Compact (phone), medium (tablet, small window), expanded (large tablet, desktop window) as in F7. Read with `currentWindowAdaptiveInfo()` (or the version of it the Compose release in use provides). Rotation and multi-window are supported on every screen; state survives both (view models plus `SavedStateHandle`). |
 | Navigation | Navigation Compose, one `NavHost`, type-safe routes (`@Serializable` route classes). Every screen in this document is a destination; sheets and dialogs that carry their own state are `dialog` or bottom-sheet destinations. Nothing is navigated with local `remember` state. |
 | Icons | Spoolwarden's own vector drawables (F10). No Material icon library. |
 | Strings | Every user-visible text is in `res/values/strings.xml` (section 15). |
@@ -207,7 +207,7 @@ line, then:
 | `tag/{uid}/link` | Link to a sealed spool: find (7.8) | Shared | `tag/{uid}` |
 | `tag/{uid}/link/{spoolId}` | Link to a sealed spool: preview, conflict (7.8) | Shared | `tag/{uid}/link` |
 | `printers` | Printers (9.1) | Printers root | `home` tab |
-| `printers/add/{serial}` | Add a Bambu printer (dialog destination, 9.2) | Printers | `printers` |
+| `printers/add/{serial}` | Add a Bambu Lab printer (dialog destination, 9.2) | Printers | `printers` |
 | `printers/add-klipper` | Add a Klipper printer (dialog destination, 9.3) | Printers | `printers` |
 | `printers/{id}` | Printer (9.4) | Printers | `printers` |
 | `printers/{id}/slots/{slot}/pick` | Pick a spool for a slot (9.6) | Printers | `printers/{id}` |
@@ -879,7 +879,7 @@ States: the screen opens with the spool summary it was given (search row or tag 
 change from the Hub's answer. Offline: actions disabled with "Needs the Hub. Reconnecting…".
 
 TalkBack order: back, title, connection, appearance, header (one node: "Polymaker PolyTerra PLA Charcoal Black,
-spool 214, PLA, colour 2B2B2E"), remaining (one node: "620 grams left of 1000, 62 percent"), result line, Update
+spool 214, PLA, colour 2B2B2E"), remaining (one node: "62 percent left: 620 of 1000 grams"), result line, Update
 weight, Load into a printer, Move, More actions, Details rows.
 
 ### 7.3 Update weight (sheet destination `spools/{id}/weight`)
@@ -1025,7 +1025,7 @@ while the printer screen is visible), `POST api/printers/{id}/command` with `{ac
 | Configured printers | Panel, one row per printer: status shape and word (vocabulary below), name (`--fs-b` `--fw-label`), model, job line when printing ("Printing · 42 % · 1 h 12 min left"), slot swatches (up to 8, then "+4"), and, when the printer needs something, a line with the triangle and the fix ("Enter the Access Code again.", "The last slot mapping stopped twice. A report would help."). Tapping opens `printers/{id}` (right pane on expanded width). A printer whose Access Code is wrong opens its screen with the Access Code dialog (9.9) already open. | Panel, `ListItem` |
 | Found on the network | Group title "Found on the network" (`--fs-xs` uppercase). Rows for printers the Hub sees but that are not set up: model, the status "Not configured", address in `--mono`, trailing "Add" (outlined; opens 9.2). Ground `--accent-soft`. | Panel, `ListItem`, `OutlinedButton` |
 | Add a Klipper printer | Outlined button under the lists; opens 9.3. | `OutlinedButton` |
-| Empty | Empty state with the printer icon: title "No printers yet", text "The Hub finds Bambu printers on its network by itself. Turn the printer on, then refresh. Klipper printers are added by address." Buttons "Refresh" (main) and "Add a Klipper printer". | Empty state |
+| Empty | Empty state with the printer icon: title "No printers yet", text "The Hub finds Bambu Lab printers on its network by itself: turn the printer on, then add it here with its Access Code. A Klipper printer is added by its address." Buttons "Refresh" (main) and "Add a Klipper printer". | Empty state |
 
 Printer state vocabulary. The badge words are those of `02-components.md` 7.1; what the state is comes in the fix
 sentence that always follows a "Needs a look".
@@ -1037,12 +1037,17 @@ sentence that always follows a "Needs a look".
 | `wrong_code` | triangle, `--warn` | Needs a look | "The printer did not accept the Access Code. Enter the Access Code again." |
 | `needs_developer_mode` | triangle, `--warn` | Needs a look | "The printer refuses remote control. Turn on LAN mode and Developer Mode on the printer." |
 | `cert_changed` | triangle, `--warn` | Needs a look | "The printer's certificate changed. Forget its old certificate in Printer settings." |
-| `not_configured` | hollow circle, `--muted` | Not configured | "Add it with its Access Code." |
+| `not_configured` | hollow circle, `--muted` | Not configured | Bambu Lab: "Add it with its Access Code." Klipper: "Use this printer to add it." |
+| `unknown_model` (Klipper) | filled circle, `--ok` | Connected | Note line (diamond, `--info`): "Model not known; slots are read as a generic Klipper printer." The job line and swatches are shown. |
+| `unauthorized` (Klipper) | triangle, `--warn` | Needs a look | "Moonraker refused the API key. Replace it in Printer settings." |
+| `klippy_not_ready` (Klipper) | triangle, `--warn` | Needs a look | "Klipper is not ready on the printer. Check it in Mainsail or Fluidd." |
+| `connecting` | inline spinner | "Connecting…" (not a badge) | none |
+| any other value | triangle, `--warn` | Needs a look | The Hub's word (underscores as spaces, sentence case) and its fix text when it sends one |
 
 While a job is known, the job state follows the badge as words (not a badge): "Printing", "Paused", "Preparing",
 "Slicing", "Finished", "Print failed", "Idle".
 
-### 9.2 Add a Bambu printer (dialog destination `printers/add/{serial}`)
+### 9.2 Add a Bambu Lab printer (dialog destination `printers/add/{serial}`)
 
 `BasicAlertDialog` with a form; on compact width it is a `ModalBottomSheet` (F7: dialogs become bottom sheets on
 phones).
@@ -1420,7 +1425,7 @@ A panel on 10.2, titled "Ask the Label Reader to correct it".
 |---|---|
 | Ready | Field "What is wrong?" (placeholder "e.g. brand is Polymaker", up to 3 lines); hint "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept."; button "Ask the Label Reader" (outlined). Empty note: error "Say what is wrong first, e.g. brand is Polymaker." |
 | Waiting | Progress line and "Asking the Label Reader… (up to a minute)". |
-| Proposal | Before-and-after change list (02 7.9) with `--accent-soft` ground and a 1 dp `--accent-text` outline: heading "Proposal: 2 changes", one row per change: field name, old value struck through in `--muted`, arrow, new value at `--fw-label` ("Name: PolyTerra PLA Charcoal Black → PolyTerra PLA Charcoal Black (Matte)"); TalkBack reads "Name, PolyTerra PLA Charcoal Black, becomes PolyTerra PLA Charcoal Black (Matte)". With no photo kept: "No photo was kept: it worked from the saved values and your note." Buttons "Accept" (main) and "Discard" (outlined). |
+| Proposal | Before-and-after change list (02 7.9) with `--accent-soft` ground and a 1 dp `--accent-text` outline: heading "Proposal: 2 changes", one row per change: field name, old value struck through in `--muted`, arrow, new value at `--fw-label` ("Name: PolyTerra PLA Charcoal Black → PolyTerra PLA Charcoal Black (Matte)"); TalkBack reads "Name, PolyTerra PLA Charcoal Black, becomes PolyTerra PLA Charcoal Black (Matte)". With no photo kept: "No photo was kept for this record: the Label Reader worked from the saved values and your note." Buttons "Accept" (main) and "Discard" (outlined). |
 | No change | "The Label Reader changed nothing." |
 | Accepted | `ok` line "Accepted. 2 fields changed; revision 2 keeps the old values." |
 | Discarded | Hollow-circle line "Proposal discarded. Nothing changed." |
@@ -1458,9 +1463,21 @@ The panel is absent until the app is paired.
 Top bar title "Slicer presets", back arrow. The status lines of 11.1 as field rows (Built, Last build, On your PC).
 An `info` line: "Presets are built on the Hub and installed on your PC by Slicer Sync the next time the slicers are
 closed." A panel "Missing a product line?" with the text "If a filament's line is not in the Filament Catalog, add
-it so presets can be built for it." and the outlined button "Add a line to the Filament Catalog" (opens 8). A last
-line: "Attach filaments to lines and build presets now on the Hub page or in the web app." with the text button
-"Open the Hub page".
+it so presets can be built for it." and the outlined button "Add a line to the Filament Catalog" (opens 8).
+
+A panel "Product lines" lists the lines the Hub knows, as on the Hub page and in the web app (the
+app's existing product-lines route). One row per line: headline "<brand> <product line>", supporting
+"<material> · <n> presets", and a second supporting line "Bambu Studio parent: <name>" or "Bambu Studio parent:
+none" with the triangle (a line without a parent builds no presets). The row's action is the text button "Change
+parent"; it opens a sheet titled "Bambu Studio parent of <line>" with the field "Find a parent" (a search over the
+parents Slicer Sync has reported), the list of matches as radio rows, and the buttons "Save" (main) and "Cancel".
+Saving shows the inline result "Saved. A preset build was asked for." on the row; the Hub's refusal is shown as
+given. No parents reported yet: the sheet says "Slicer Sync has not reported any parents yet. It reports them
+when it runs." and has only "Close". Empty list: "No lines yet. They are made from the filaments in Spoolman at the
+next build or when a spool is added." Loading: three skeleton rows. The list is paged at 50.
+
+A last line: "Attach filaments to lines and build presets now on the Hub page or in the web app." with the text
+button "Open the Hub page".
 
 ---
 
@@ -1541,7 +1558,7 @@ The update panel appears on 12.4, and as a one-line notice on Home (5) that link
 | Installing | "Tap Install in the window Android shows." | none |
 | Waiting for the install to be confirmed (Android's install window was closed or went to the background without an answer) | `info` "The update is downloaded. Tap to install to open Android's install window again." On Home the notice reads "Update downloaded: tap to install." | "Tap to install" (main; opens Android's install window again without downloading) |
 | Installed | The app restarts on the new version; snackbar "Updated to 0.5.3." | none |
-| Signature refused | `bad` "Android refused this update: it is signed by a different key than the installed app." and the text button "What this means", which opens a dialog: "The app on your Hub was built by someone else than the app on this phone. To switch, uninstall this app and install the one from the Hub. Drafts on this phone are lost." | "Try again" (outlined) |
+| Signature refused | `bad` "Android refused this update because it is not signed like the app on this phone. Do not install it; check where the app on your Hub came from." and the text button "What this means", which opens a dialog: title "An update signed with a different key", text "An update signed with a different key is what a forged app looks like, so Android refuses it and the app on this phone stays as it is. If you built or replaced the app on your Hub yourself, that is the reason. If you did not, do not install it: check where the app on your Hub came from.", button "Close". The app never tells the person to uninstall in this case, here or anywhere else: uninstalling is the one step that would get a forged app past this protection. | "Try again" (outlined; it picks up a corrected copy on the Hub) |
 | Failures | `bad` with one of: "Could not reach the Hub. Check that you are on the same network.", "The Hub has no app update to download.", "The Hub's certificate changed.", "A newer version is already installed.", "The download was damaged. Try again.", "Not enough storage on this phone.", "The install was blocked on this phone.", "This update does not work on this Android version.", "The download timed out. Try again.", "The update could not be installed." | "Try again" (main) |
 
 ---
@@ -1569,7 +1586,7 @@ The update panel appears on 12.4, and as a one-line notice on Home (5) that link
 | More icon | "More actions" (on a row: "More actions for Workshop X1") |
 | Status shapes next to a word | none (decorative); the word is read |
 | Swatch | "Colour 2B2B2E"; empty slot "Empty slot" |
-| Level bar | merged with its text: "620 grams left of 1000, 62 percent" |
+| Level bar | merged with its text: "62 percent left: 620 of 1000 grams" |
 | Photo thumbnail | "Label photo 1 of 2" (record) / "Photo 2" (draft) |
 | Remove photo | "Remove photo 2" |
 | Camera picture | "Live camera of Workshop X1" |
@@ -1717,6 +1734,7 @@ Every route, screen, dialog and flow of today's app (`filament-kit` Android app)
 | "Add spool" | Home "Add by hand" 5 |
 | "Add from label photos" | Home "Add from label photos" 5 |
 | "Add profile" | Slicer presets screen 11.2 and spool panel overflow 6.3, opening `catalog/new` 8 |
+| "Existing lines" list on the Add profile screen, with "Change parent" on each line | Product lines panel of the Slicer presets screen 11.2 ("Change parent" opens a sheet) |
 | "Search" | Bottom bar "Spools" 2.3 |
 | "Printers" | Bottom bar "Printers" 2.3; Home Printers panel 5 |
 | "Settings" | Bottom bar "Settings" 2.3 |

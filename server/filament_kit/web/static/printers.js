@@ -3,7 +3,6 @@
 // Everything from the server goes in through textContent / element properties, never innerHTML.
 "use strict";
 function printersTab() {
-  const PUSH = document.body.dataset.push === "1";
   const API = BASE + "/api/printers";
   const HEX = /^[0-9A-Fa-f]{6}$/;
   let printers = [], current = null, es = null, lastStatus = null, camOn = false;
@@ -16,45 +15,61 @@ function printersTab() {
   const camBtn = h("button", { class: "secondary", textContent: "Show camera", on: { click: () => camera(!camOn) } });
   const units = h("div");
   const loadBox = h("div", { class: "card hidden" });   // the load picker: outside `units`, which every update redraws
-  const slotMsg = h("div");
+  const slotMsg = resultLine();   // the answer to Load and Unload
   const usageBox = h("div");
   const mapBox = h("div");
+  const mapLine = resultLine();   // a map poll that fails keeps the map and says how old it is (04 3.5)
   const reportBox = h("div");     // the saved report's link: outside mapBox, which loadMap redraws
+  const repLine = resultLine();   // the answer to Collect a report
   const manualBox = h("div");     // Map by loading filament: outside mapBox, which loadMap redraws
-  const msg = h("div");
-  const conn = h("p", { class: "muted" });
-  const pushBox = h("div");
+  const manualLine = resultLine();   // its notes and refusals, and a poll that fails: outside manualBox, which every step redraws
+  const msg = resultLine();       // the answer to Pause, Resume, Stop and the light
+  const conn = h("p", { class: "result", role: "status" });   // the live stream: Reconnecting…
   const manageBox = h("div");     // Manage printers: add, rename, address, Access Code, certificate, forget
+  const manageNote = resultLine();   // what a change in Manage printers did
   const el = h("section", { class: "hidden" },
-    h("h1", { textContent: "Printers" }), picker, head, conn, alerts, controls, camBtn, camBox, msg,
+    picker, head, conn, alerts, controls, camBtn, camBox, msg,
     h("h2", { textContent: "Filament" }), units, slotMsg, loadBox,
     h("h2", { textContent: "Usage" }), usageBox,
-    h("h2", { textContent: "Slots" }), mapBox, reportBox, manualBox, pushBox,
-    h("h2", { textContent: "Manage printers" }), manageBox);
+    h("h2", { textContent: "Slots" }), mapBox, mapLine, reportBox, repLine, manualBox, manualLine,
+    h("h2", { textContent: "Manage printers" }), manageBox, manageNote);
 
   async function pj(path, body) {
     return api(path ? "printers/" + path : "printers", body === undefined ? {} : { method: "POST", body });
   }
-  function say(text, ok) { msg.replaceChildren(h("pre", { class: ok ? "ok" : "err", textContent: text })); }
+  // A confirmation or a question is a sheet (04 12), never window.confirm / window.prompt. openHere (app.js) gives it the
+  // same-address history entry, so the phone's Back closes it. A refusal from run() shows inside the sheet (SW.ask asks err.text()),
+  // in the words of 04 3.6 (the Hub's own text as given).
+  function sheetAsk(o) {
+    const run = o.run;
+    return SW.ask({ open: openHere, ...o, run: run && (async (v, c) => { try { return await run(v, c); } catch (e) { throw Object.assign(e, { text: () => says(e) }); } }) });
+  }
+  const lineNodes = (lines) => [lines].flat().flatMap((t, i) => (i ? [h("br"), t] : [t]));   // a result of several lines
+  const needs = (key) => (v) => (v.trim() ? null : SW.t(key));
+  const codeField = (hint) => SW.field({ type: "secret", label: SW.t("common_field_access_code"), hint, check: needs("common_error_access_code") });
+  const printerName = () => { const p = printers.find((x) => x.id === current); return (p && p.name) || current; };
 
   async function load() {
+    const loading = SW.loading(head, { thing: SW.t("nav_printers"), items: 1 });
     try {
       printers = (await pj("")).printers;
-    } catch (e) { head.replaceChildren(fail(e)); return; }
+      loading.done();
+    } catch (e) { const line = resultLine(); loading.done(line); failed(line, e, load); return; }
     picker.replaceChildren(...printers.map((p) => h("option", { value: p.id, textContent: p.name || p.id })));
     picker.classList.toggle("hidden", printers.length < 2);
     manageClosed();
     if (!printers.length) { head.replaceChildren(h("p", { class: "muted", textContent: "No printer is set up on the server yet: add one under Manage printers." })); manage(); return; }
     let want = null;
-    try { want = localStorage.getItem("printer"); } catch {}
+    try { want = localStorage.getItem("spoolwarden.printer") || localStorage.getItem("printer"); } catch {}   // "printer" is the key before S3.3
     choose(printers.some((p) => p.id === want) ? want : printers[0].id);
   }
 
   function choose(id) {
     current = id; picker.value = id;
-    try { localStorage.setItem("printer", id); } catch {}
-    camera(false); camBtn.classList.toggle("hidden", !camKind()); closeLoad(); slotMsg.replaceChildren();
-    stream(); loadUsage(); loadMap(); manualStop(); manualBox.replaceChildren(); clearReport();
+    try { localStorage.setItem("spoolwarden.printer", id); } catch {}
+    camera(false); camBtn.classList.toggle("hidden", !camKind()); closeLoad(); clear(slotMsg); clear(msg);
+    usageBox.replaceChildren(); mapBox.replaceChildren(); clear(mapLine); clear(repLine);   // the last printer's data must not show for this one
+    stream(); loadUsage(); loadMap(); manualStop(); manualBox.replaceChildren(); clear(manualLine); clearReport();
   }
   // "mjpeg" (an <img>) or "hls" (a <video>); null: this model has no camera we can show
   const isKlipper = () => (printers.find((x) => x.id === current) || {}).family === "klipper";
@@ -72,13 +87,13 @@ function printersTab() {
     es = new EventSource(`${API}/${encodeURIComponent(current)}/events`);
     es.onmessage = (ev) => {
       let d; try { d = JSON.parse(ev.data); } catch { return; }
-      if (d.error) { conn.textContent = d.error; return; }
+      if (d.error) { put(conn, "warn", d.error); return; }   // the Hub's own text, said once while it stays the same
       const was = lastStatus && isLive(lastStatus.status);
-      conn.textContent = ""; lastStatus = d; render(d);
+      clear(conn); lastStatus = d; render(d);
       if (was && !isLive(d.status)) loadUsage();      // a job ended: its usage entry is new
     };
-    es.onopen = () => { conn.textContent = ""; };
-    es.onerror = () => { conn.textContent = "Reconnecting…"; };
+    es.onopen = () => { clear(conn); };
+    es.onerror = () => { put(conn, "run", SW.t("printer_reconnecting")); };
   }
   function stopStream() { if (es) { es.close(); es = null; } }
 
@@ -94,7 +109,7 @@ function printersTab() {
       live ? h("p", { class: "muted", textContent: [`${s.percent || 0}%`, s.stage, s.total_layers ? `layer ${s.layer ?? "?"}/${s.total_layers}` : "", fmtMin(s.remaining_min)].filter(Boolean).join(" · ") }) : null,
       h("p", { class: "muted", textContent: (s.temps || []).map((t) => `${t.name} ${t.cur ?? "-"}${t.tgt ? "/" + t.tgt : ""}°`).join(" · ") }));
     const a = [];
-    for (const x of s.hms || []) a.push(h("p", { class: "err", textContent: x.text || `HMS ${x.code}` }));
+    for (const x of s.hms || []) a.push(note("bad", x.text || SW.t("printer_alert_code", { code: x.code })));
     for (const n of s.notes || []) a.push(h("p", { class: "muted", textContent: n }));
     alerts.replaceChildren(...a);
     drawControls(s, live);
@@ -109,17 +124,28 @@ function printersTab() {
     if (s.light) b.push(h("button", { class: "secondary", textContent: s.light === "on" ? "Light off" : "Light on", on: { click: () => cmd(s.light === "on" ? "light_off" : "light_on") } }));
     controls.replaceChildren(...b);
   }
+  // what each command is called, and the sentence that says it was done (04 3.2)
+  const COMMANDS = { pause: ["printer_pause", "printer_result_paused"], resume: ["printer_resume", "printer_resumed_line"],
+    stop: ["printer_stop", "printer_stopped_line"], light_on: ["printer_light_on", "printer_light_on_line"],
+    light_off: ["printer_light_off", "printer_result_light_off"] };
   async function cmd(action, confirm) {
-    say("Sending…", true);
-    try {
+    const [name, done] = COMMANDS[action];
+    await act(msg, SW.t("common_working"), async () => {
       const r = await pj(`${encodeURIComponent(current)}/command`, confirm ? { action, confirm: true } : { action });
-      const inner = r.reply || {};
-      if (inner.ok === false) say("The printer said no: " + JSON.stringify((inner.reply || {}).reason || inner.reply || ""), false);
-      else say("Done.", true);
-    } catch (e) { say(e.message, false); }
+      const inner = r.reply || {}, why = (inner.reply || {}).reason;
+      if (inner.ok === false) {                                  // the printer refused: its reason as sent, else our own sentence
+        return { kind: "bad", text: typeof why === "string" && why ? SW.t("printer_said_no", { error: why }) : SW.t("common_result_refused", { name: printerName(), action: SW.t(name) }) };
+      }
+      SW.toast(SW.t(done));
+      return SW.t(done);
+    }, { alert: action === "stop" });
   }
-  function stop() {
-    if (window.confirm("Stop this print? It cannot be resumed.")) cmd("stop", true);
+  async function stop() {
+    const job = ((lastStatus || {}).status || {}).job, printer = printerName();
+    const go = await sheetAsk({ kind: "destructive", title: SW.t("printer_stop_dialog_title"),
+      text: job ? SW.t("printer_stop_dialog_body", { job, printer }) : SW.t("printer_stop_dialog_body_nojob", { printer }),
+      cancel: SW.t("printer_stop_keep"), confirm: SW.t("printer_stop") });
+    if (go) cmd("stop", true);
   }
 
   // ----- camera -----
@@ -140,7 +166,7 @@ function printersTab() {
     const v = h("video", { class: "cam", playsInline: true, muted: true, autoplay: true, controls: true });
     v.muted = true;
     if (!v.canPlayType("application/vnd.apple.mpegurl")) {
-      camBox.append(h("p", { class: "err", textContent: "This browser cannot play the printer's camera (it needs HLS: use Safari on iPhone or Mac)." }));
+      camBox.append(note("bad", SW.t("printer_camera_no_hls")));
       return;
     }
     v.addEventListener("error", () => camFail());
@@ -150,7 +176,7 @@ function printersTab() {
   }
   function camFail() {
     if (!camOn) return;
-    camBox.replaceChildren(h("p", { class: "err", textContent: "The camera did not start. Check that the printer is on, LAN mode liveview is enabled, and not too many views are open." }));
+    camBox.replaceChildren(note("bad", SW.t("printer_camera_failed")));
   }
 
   // ----- filament per unit -----
@@ -180,20 +206,21 @@ function printersTab() {
   // dryAgain: a dry run asked for while another slot call ran; the latest pick's runs when that call ends
   let slotBusy = false, loadSlot = null, loadSpool = null, dryAgain = null;
   const slotPath = (label) => `${encodeURIComponent(current)}/slots/${encodeURIComponent(label)}`;
-  function slotSay(lines, ok) { slotMsg.replaceChildren(h("pre", { class: ok ? "ok" : "err", textContent: [lines].flat().join("\n") })); }
+  function slotSay(lines, kind) { SW.result(slotMsg, kind, lineNodes(lines)); }
   function spoolTitle(s) { return `${s.vendor || ""} ${s.name || ""}`.trim() || `spool #${s.id}`; }
 
   function openLoad(sl) {
-    loadSlot = sl.label; loadSpool = null; slotMsg.replaceChildren();
+    loadSlot = sl.label; loadSpool = null; clear(slotMsg);
     const q = h("input", { type: "search", placeholder: "Search: brand, colour, material", enterKeyHint: "search",
                            on: { keydown: (e) => { if (e.key === "Enter") search(); } } });
     const results = h("div", { class: "list" });
-    const plan = h("div");
-    const go = h("button", { textContent: "Load", disabled: true, on: { click: () => doLoad(false, plan, go) } });
+    const line = resultLine();         // the answer to Use the last tapped tag and to Search
+    const plan = resultLine();         // the plan of a pick, or why it failed
+    const go = h("button", { textContent: "Load", on: { click: () => doLoad(false, plan, go) } });
     const picked = h("p", { class: "muted", textContent: "Pick a spool: tap its tag on a reader, or search." });
     function pick(s, btn) {
       for (const b of results.querySelectorAll(".pick")) b.classList.toggle("on", b === btn);
-      loadSpool = s; go.disabled = true; plan.replaceChildren();
+      loadSpool = s; clear(plan); disabled(go, SW.t("spool_load_working_out"));
       picked.textContent = `S${s.id} ${spoolTitle(s)} (${s.location || "?"}${s.remaining_g != null ? ", " + Math.round(s.remaining_g) + " g" : ""})`;
       doLoad(true, plan, go);           // the dry run first: the user sees the plan before anything is sent
     }
@@ -202,30 +229,33 @@ function printersTab() {
         h("div", { class: "muted", textContent: `${s.location || "?"} · ${s.remaining_g ?? "?"} g` }));
       return b;
     }
-    async function lastTap() {
-      try {
+    async function lastTap(button) {
+      await act(line, SW.t("common_working"), async () => {
         const t = await pj("tagged");
         if (!t.spool) {
           results.replaceChildren(h("p", { class: "muted", textContent: t.nfc_id ? `Tag ${t.nfc_id} is not linked to a spool.` : "No tag read yet: tap one." }));
-          return;
+          return null;
         }
         const b = row(t.spool);
         results.replaceChildren(b); pick(t.spool, b);
-      } catch (e) { results.replaceChildren(fail(e)); }
+        return null;
+      }, { button });
     }
-    async function search() {
-      try {
+    async function search(button) {
+      await act(line, SW.t("common_searching"), async () => {
         const res = await api(`find?q=${encodeURIComponent(q.value)}&sealed=0`);
         const rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ id: s.spool_id, vendor: f.vendor, name: f.name, location: s.location, remaining_g: s.remaining_g })));
         results.replaceChildren(...(rows.length ? rows.slice(0, 60).map(row) : [h("p", { class: "muted", textContent: "No spools match." })]));
-      } catch (e) { results.replaceChildren(fail(e)); }
+        return null;
+      }, { button });
     }
     loadBox.replaceChildren(
       h("h3", { textContent: `Load into ${sl.label}` }),
-      h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Use the last tapped tag", on: { click: lastTap } })),
-      h("div", { class: "row" }, q, h("button", { class: "fit", textContent: "Search", on: { click: search } })),
-      results, picked, plan,
+      h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Use the last tapped tag", on: { click: (e) => lastTap(e.currentTarget) } })),
+      h("div", { class: "row" }, q, h("button", { class: "fit", textContent: "Search", on: { click: (e) => search(e.currentTarget) } })),
+      line, results, picked, plan,
       h("div", { class: "row" }, go, h("button", { class: "secondary", textContent: "Cancel", on: { click: closeLoad } })));
+    disabled(go, SW.t("spool_load_pick_first"), () => q);          // until a spool is picked and its plan is shown
     loadBox.classList.remove("hidden");
     loadBox.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -241,94 +271,119 @@ function printersTab() {
     if (!loadSpool || !loadSlot) return;
     if (slotBusy) { if (dry) dryAgain = { plan, go }; return; }   // not dropped: runs for the latest pick after
     const s = loadSpool, label = loadSlot;
-    slotBusy = true; go.disabled = true;
-    plan.replaceChildren(h("p", { class: "muted", textContent: dry ? "Checking…" : "Loading…" }));
+    slotBusy = true; disabled(go, SW.t(dry ? "spool_load_working_out" : "common_load_wait"));
+    SW.result(plan, "run", SW.t(dry ? "spool_load_working_out" : "common_load_wait"));
     try {
       const r = await pj(`${slotPath(label)}/load`, dry ? { spool_id: s.id, dry_run: true } : { spool_id: s.id, dry_run: false });
       if (loadSpool !== s) return;      // another spool was picked meanwhile
       const moved = (r.moved_back || []).filter((m) => m.id !== s.id)
-        .map((m) => `Spool #${m.id ?? "?"} now in ${label} goes back to ${m.location || "its previous place"}`);
+        .map((m) => SW.t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: label, location: m.location || SW.t("spool_load_previous_place") }));
       if (dry) {
-        const nozzle = r.nozzle_assumed ? `Nozzle size not reported by the printer; assuming ${r.nozzle_mm ?? 0.4} mm`
-          : (r.nozzle_mm ? `Nozzle: ${r.nozzle_mm} mm` : "");
-        plan.replaceChildren(h("pre", { class: "ok", textContent: [`Load ${spoolTitle(s)} into ${label}`,
-          "Preset: " + ((r.preset && r.preset.name) || "none"), nozzle, ...moved, ...(r.problems || [])].filter(Boolean).join("\n") }));
-        go.disabled = false;
+        const nozzle = r.nozzle_assumed ? SW.t("spool_load_plan_nozzle_assumed", { mm: r.nozzle_mm ?? 0.4 })
+          : (r.nozzle_mm ? SW.t("spool_load_plan_nozzle", { mm: r.nozzle_mm }) : "");
+        SW.result(plan, (r.problems || []).length ? "warn" : "ok", lineNodes([SW.t("spool_load_plan", { spool: spoolTitle(s), slot: label }),
+          SW.t("spool_load_plan_preset", { preset: (r.preset && r.preset.name) || SW.t("common_value_none") }), nozzle, ...moved, ...(r.problems || [])].filter(Boolean)));
+        disabled(go, null);
       } else {
         closeLoad();
-        slotSay([r.confirmed ? `Loaded into ${label}` : `Sent to ${label}`,
-          r.confirmed ? "" : "The printer accepted it but hasn't shown the change yet", ...moved, ...(r.problems || [])].filter(Boolean), true);
+        SW.toast(SW.t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_toast", { slot: label }));
+        slotSay([SW.t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_line", { slot: label }), ...moved, ...(r.problems || [])], "ok");
       }
     } catch (e) {
-      if (loadSpool === s) plan.replaceChildren(fail(e));
+      if (loadSpool === s) {
+        failed(plan, e, () => doLoad(dry, plan, go));
+        disabled(go, dry ? SW.t("spool_load_see_above") : null);   // a refused Load can be pressed again; a failed plan has to be picked again
+      }
     } finally { slotDone(); }
   }
 
   // Spoolman only (the printer's slot setting stays): the dry run says where the spool goes, then a confirm
   async function unload(sl, sp) {
     if (slotBusy) return;
-    slotBusy = true; slotMsg.replaceChildren(h("p", { class: "muted", textContent: "Checking…" }));
+    slotBusy = true; SW.result(slotMsg, "run", SW.t("common_checking"));
     try {
       const plan = await pj(`${slotPath(sl.label)}/unload`, { dry_run: true });
-      const where = plan.location || ((plan.moved_back || [])[0] || {}).location || "its previous place";
+      const where = plan.location || ((plan.moved_back || [])[0] || {}).location || SW.t("spool_load_previous_place");
       const name = sp.name || `spool #${sp.id}`;
-      slotMsg.replaceChildren();
-      if (!window.confirm(`Unload ${name} from ${sl.label}? It goes back to ${where}.`)) return;
-      const r = await pj(`${slotPath(sl.label)}/unload`, { dry_run: false });
-      slotSay([`Unloaded ${name} from ${sl.label}.`,
-        ...(r.moved_back || []).map((m) => `Moved back: #${m.id ?? "?"} → ${m.location || "its previous place"}`)], true);
-    } catch (e) { slotSay(e.message, false); } finally { slotDone(); }
+      clear(slotMsg);
+      const r = await sheetAsk({ kind: "confirm", title: SW.t("printer_unload_title", { slot: sl.label }),
+        text: SW.t("printer_unload_body", { spool: name, slot: sl.label, location: where }), confirm: SW.t("common_unload"),
+        run: () => pj(`${slotPath(sl.label)}/unload`, { dry_run: false }) });
+      if (!r) return;
+      SW.toast(SW.t("printer_unload_line", { name, slot: sl.label }));
+      slotSay([SW.t("printer_unload_line", { name, slot: sl.label }),
+        ...(r.moved_back || []).map((m) => SW.t("printer_unload_moved_back", { id: m.id ?? "?", location: m.location || SW.t("spool_load_previous_place") }))], "ok");
+    } catch (e) { failed(slotMsg, e, () => unload(sl, sp)); } finally { slotDone(); }
   }
 
   // ----- usage + re-map -----
   async function loadUsage() {
     const id = current;
-    try {
+    await fill(usageBox, SW.t("printer_group_used"), async () => {
       const r = await pj(`${encodeURIComponent(id)}/usage`);
-      if (id !== current) return;
+      if (id !== current) return null;
       const rows = (r.entries || []).slice(0, 20).map((e) => h("div", { class: "row" },
         h("span", { textContent: `${(e.at || "").replace("T", " ").slice(0, 16)} · ${e.job || "job"} · ${e.slot || ""} · ${e.grams ?? "?"} g${e.undone ? " (undone)" : ""}` }),
         e.undone ? null : h("button", { class: "secondary", textContent: "Undo", on: { click: () => undo(e) } })));
-      usageBox.replaceChildren(...(rows.length ? rows : [h("p", { class: "muted", textContent: "Nothing recorded in the last days." })]));
-    } catch (e) { usageBox.replaceChildren(fail(e)); }
+      return rows.length ? rows : [h("p", { class: "muted", textContent: "Nothing recorded in the last days." })];
+    }, { quiet: usageBox.childElementCount > 0 });      // a refresh after a job keeps what is shown until the new list arrives
   }
   async function undo(e) {
-    if (!window.confirm(`Put ${e.grams ?? "?"} g back on the spool?`)) return;
-    try { await pj(`${encodeURIComponent(current)}/usage/${encodeURIComponent(e.id)}/undo`, {}); say("Undone.", true); } catch (x) { say(x.message, false); }
+    const when = (e.at || "").replace("T", " ").slice(0, 16);
+    const back = await sheetAsk({ kind: "confirm", title: SW.t("printer_usage_undo_title"), cancel: SW.t("common_keep"), confirm: SW.t("printer_usage_undo_confirm"),
+      text: SW.t("printer_usage_undo_body", { grams: e.grams ?? "?", job: e.job || "?", slot: e.slot || "?", time: when }),
+      run: () => pj(`${encodeURIComponent(current)}/usage/${encodeURIComponent(e.id)}/undo`, {}) });
+    if (!back) return;
+    SW.toast(SW.t("printer_used_put_back", { grams: e.grams ?? "?" }));
+    SW.result(msg, "ok", SW.t("printer_used_put_back", { grams: e.grams ?? "?" }));
     loadUsage();
   }
-  let mapTimer = null;
-  async function loadMap() {
+  let mapTimer = null, mapAt = null;      // mapAt: when the map last arrived
+  // the map as the Hub gave it; Re-map and Map by loading filament wait while a mapping runs, and say so
+  function mapNodes(m) {
+    const running = m.state === "running";
+    const collect = h("button", { class: m.report_wanted ? "" : "secondary", textContent: "Collect a report", on: { click: (e) => collectReport(e.currentTarget) } });
+    const remapBtn = h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", on: { click: remap } });
+    const byLoad = h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: (e) => manualMap(e.currentTarget) } });
+    const buttons = h("div", { class: "row" }, collect, remapBtn, byLoad);
+    disabled(remapBtn, running ? SW.t("printers_map_running_reason") : null);
+    disabled(byLoad, running ? SW.t("printers_map_running_reason") : null);
+    return [
+      h("p", { class: "muted", textContent: m.outcome_text ? `${m.outcome_text}${running && m.step ? " " + m.step : ""}`
+        : `${m.calibrated ? "Mapped" : "Not mapped yet"} · ${m.state}${m.step ? " · " + m.step : ""}${m.stale ? " · layout changed" : ""}` }),
+      ...(m.next_step && !running ? [h("p", { textContent: m.next_step })] : []),
+      ...(m.problems_old && (m.problems || []).length ? [h("p", { class: "muted", textContent: "From an earlier mapping, it may be fixed by now. Re-map the slots to check:" })] : []),
+      ...(m.problems || []).map((t) => (m.problems_old ? h("p", { class: "muted", textContent: t }) : note("bad", t))),
+      ...(m.notes || []).map((t) => h("p", { class: "muted", textContent: t })),
+      ...(m.report_wanted ? [h("p", { class: "muted", textContent: m.report_why || "A printer report would help." })] : []),
+      // every printer (interface parity, 2026-11-10); it stands out when the kit says a report would help
+      buttons];
+  }
+  // poll: the 3 s refresh while a mapping runs; a poll that fails keeps the map and says how old it is (04 3.5)
+  async function loadMap(poll) {
     clearTimeout(mapTimer);
     const id = current;
     if (isKlipper()) {      // the kit's slot map and report are for Bambu printers; Klipper has only Map by loading filament
-      mapBox.replaceChildren(h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: manualMap } }));
+      mapBox.replaceChildren(h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: (e) => manualMap(e.currentTarget) } }));
       return;
     }
-    try {
+    const again = () => { mapTimer = setTimeout(() => loadMap(true), 3000); };
+    const draw = async () => {
       const m = await pj(`${encodeURIComponent(id)}/map`);
-      if (id !== current) return;
-      const running = m.state === "running";
-      mapBox.replaceChildren(
-        h("p", { class: "muted", textContent: m.outcome_text ? `${m.outcome_text}${running && m.step ? " " + m.step : ""}`
-          : `${m.calibrated ? "Mapped" : "Not mapped yet"} · ${m.state}${m.step ? " · " + m.step : ""}${m.stale ? " · layout changed" : ""}` }),
-        ...(m.next_step && !running ? [h("p", { textContent: m.next_step })] : []),
-        ...(m.problems_old && (m.problems || []).length ? [h("p", { class: "muted", textContent: "From an earlier mapping, it may be fixed by now. Re-map the slots to check:" })] : []),
-        ...(m.problems || []).map((t) => h("p", { class: m.problems_old ? "muted" : "err", textContent: t })),
-        ...(m.notes || []).map((t) => h("p", { class: "muted", textContent: t })),
-        ...(m.report_wanted ? [h("p", { class: "muted", textContent: m.report_why || "A printer report would help." })] : []),
-        // every printer (interface parity, 2026-11-10); it stands out when the kit says a report would help
-        h("button", { class: m.report_wanted ? "" : "secondary", textContent: "Collect a report", on: { click: collectReport } }),
-        h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", disabled: running, on: { click: remap } }),
-        h("button", { class: "secondary", textContent: "Map by loading filament", disabled: running, on: { click: manualMap } }));
-      if (running) mapTimer = setTimeout(loadMap, 3000);
-    } catch (e) { mapBox.replaceChildren(fail(e)); }
+      if (id !== current) return null;
+      mapAt = Date.now(); clear(mapLine);
+      if (m.state === "running") again();
+      return mapNodes(m);
+    };
+    if (!poll) { mapAt = null; await fill(mapBox, SW.t("printer_map_title_bambu"), draw); return; }
+    try { const kids = await draw(); if (kids && id === current) mapBox.replaceChildren(...kids); }
+    catch (e) { if (id === current) { stale(mapLine, mapAt ?? Date.now()); again(); } }
   }
   // The report holds no serial, address, name or account id: the server builds it from an allow-list.
   let reportUrl = null;
   function clearReport() { if (reportUrl) URL.revokeObjectURL(reportUrl); reportUrl = null; reportBox.replaceChildren(); }
-  async function collectReport() {
-    try {
+  async function collectReport(button) {
+    await act(repLine, SW.t("common_working"), async () => {
       const r = await pj(`${encodeURIComponent(current)}/report`, {});
       clearReport();      // one link at a time; the old one's object URL is freed
       reportUrl = URL.createObjectURL(new Blob([r.xml], { type: "application/xml" }));
@@ -336,22 +391,25 @@ function printersTab() {
       reportBox.replaceChildren(
         ...(r.live === false ? [h("p", { class: "muted", textContent: "The printer could not be reached: this report is built from what the kit saved." })] : []),
         h("p", {}, a));
-    } catch (e) { say(e.message, false); }
+      return null;
+    }, { button });
   }
   // ----- Map by loading filament: the owner loads each slot, the printer says which one it sees (the kit's session,
   // shared with the setup page and the Android app; nothing is sent to the printer) -----
   let manual = null;      // {id, v, timer, shown, picks}
   function manualStop() { if (manual) clearTimeout(manual.timer); manual = null; }
   const mpath = (id, what) => `${encodeURIComponent(id)}/manual-map${what ? "/" + what : ""}`;
-  async function manualMap() {
+  async function manualMap(button) {
     const id = current;
-    let v;
-    try { v = await pj(mpath(id, "start"), {}); } catch (e) { manualBox.replaceChildren(fail(e)); return; }
-    if (id !== current) return;
-    manualStop();
-    manual = { id, v, timer: null, shown: null, picks: {}, fails: 0 };
-    drawManual();
-    manual.timer = setTimeout(manualTick, 2000);
+    await act(manualLine, SW.t("common_working"), async () => {
+      const v = await pj(mpath(id, "start"), {});
+      if (id !== current) return null;
+      manualStop();
+      manual = { id, v, timer: null, shown: null, picks: {}, fails: 0, okAt: Date.now() };
+      drawManual();
+      manual.timer = setTimeout(manualTick, 2000);
+      return null;
+    }, { button });
   }
   async function manualSend(what, body) {
     const m = manual;
@@ -359,28 +417,31 @@ function printersTab() {
     try {
       const r = await pj(mpath(m.id, what), { session: m.v.session, ...body });
       if (m !== manual) return;
-      if (what === "offer") { m.v.offer_report = false; drawManual(r.message, true); return; }
+      clear(manualLine);
+      if (what === "offer") { m.v.offer_report = false; drawManual(); SW.result(manualLine, "ok", r.message); return; }
       m.v = r; drawManual();
-    } catch (e) { if (m === manual) drawManual(e.message, false); }
+    } catch (e) { if (m === manual) failed(manualLine, e); }
   }
   async function manualTick() {
     const m = manual;
     if (!m) return;
     if (!m.v.open) { drawManual(); return; }
     const was = JSON.stringify(m.v);
-    try { m.v = await pj(mpath(m.id)); } catch (e) {
+    try { m.v = await pj(mpath(m.id)); m.okAt = Date.now(); } catch (e) {
       if (m !== manual) return;
-      // a Wi-Fi blip: the session is still open on the kit, so keep asking, slower each time (like the Android screen)
-      if (++m.fails >= 8) { manualBox.replaceChildren(fail(e)); manual = null; return; }
-      drawManual(`Lost touch with the kit (${e.message}); trying again…`, false);
+      // a Wi-Fi blip: the session is still open on the kit, so keep asking, slower each time (like the Android screen);
+      // what is on the screen stays, with how old it is (04 3.5)
+      if (++m.fails >= 8) { manualBox.replaceChildren(); failed(manualLine, e, () => manualMap()); manual = null; return; }
+      stale(manualLine, m.okAt);
       m.timer = setTimeout(manualTick, Math.min(2000 * 2 ** m.fails, 20000));
       return;
     }
     if (m !== manual) return;
+    if (m.fails) clear(manualLine);
     if (JSON.stringify(m.v) !== was || m.fails) { m.fails = 0; drawManual(); }   // unchanged: a choice being made stays as it is
     m.timer = setTimeout(manualTick, 2000);
   }
-  function drawManual(note, ok) {
+  function drawManual() {
     const m = manual, v = m.v, st = v.step;
     // a redraw rebuilds the selects: a choice the owner is making survives it while the same position is asked
     const pos = st ? st.position.id : null;
@@ -424,83 +485,80 @@ function printersTab() {
         h("p", { textContent: "Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you choose to." }),
         h("div", { class: "row" },
           h("button", { class: "secondary", textContent: "Yes, how do I share it?", on: { click: () => manualSend("offer", { share: true }) } }),
-          h("button", { class: "secondary", textContent: "No thanks", on: { click: () => manualSend("offer", { share: false }) } }))) : null,
-      note ? h("pre", { class: ok ? "ok" : "err", textContent: note }) : null));
+          h("button", { class: "secondary", textContent: "No thanks", on: { click: () => manualSend("offer", { share: false }) } }))) : null));
     if (!v.open) loadMap();
   }
   // ----- Manage printers: the kit's own printer list (what the setup page's Printers tab edits), changed here too -----
-  const manageNote = h("div");
   function manageClosed() {
     if (!manageBox.firstChild) manageBox.replaceChildren(h("button", { class: "secondary", textContent: "Add or change printers", on: { click: () => manage() } }));
   }
-  async function manageDo(path, body, done) {
-    try {
-      const r = await pj(path, body);
-      closeForm();
-      await manage(`${done}${r.note ? " " + r.note : ""}`, true);
-      const was = current;
-      await load();
-      if (printers.some((p) => p.id === was)) choose(was);
-    } catch (e) { manageNote.replaceChildren(h("pre", { class: "err", textContent: e.message })); }
+  // After a change the sheet has closed: the list and the page are read again.
+  async function manageAfter(done, r) {
+    await manage(`${done}${r && r.note ? " " + r.note : ""}`, true);
+    const was = current;
+    await load();
+    if (printers.some((p) => p.id === was)) choose(was);
   }
-  // An inline form in the page (not window.prompt): secrets are password fields, and a wrong value is named before anything is sent.
-  // fields: [{key, label, secret, optional, value}]; submit(values) returns an error text, or sends the change.
-  const formBox = h("div");
-  function closeForm() { formBox.replaceChildren(); }
-  function openForm(title, intro, fields, label, submit) {
-    const inputs = fields.map((f) => h("input", { type: f.secret ? "password" : "text", value: f.value || "", ariaLabel: f.label,
-      autocomplete: f.secret ? "new-password" : "off", autocapitalize: "off", spellcheck: false,
-      on: { keydown: (e) => { if (e.key === "Enter") go(); } } }));
-    const err = h("div");
-    function go() {
-      const v = {};
-      fields.forEach((f, i) => { v[f.key] = inputs[i].value.trim(); });
-      const miss = fields.find((f) => !f.optional && !v[f.key]);
-      const bad = miss ? `${miss.label} is needed.` : submit(v);
-      err.replaceChildren(...(bad ? [h("pre", { class: "err", textContent: bad })] : []));
-    }
-    formBox.replaceChildren(h("div", { class: "card" }, h("h3", { textContent: title }),
-      intro ? h("p", { class: "muted", textContent: intro }) : null,
-      ...fields.map((f, i) => h("label", {}, f.label, inputs[i])), err,
-      h("div", { class: "row" }, h("button", { textContent: label, on: { click: go } }),
-        h("button", { class: "secondary", textContent: "Cancel", on: { click: closeForm } }))));
-    inputs[0].focus();
-    formBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  // A change asked for in a sheet (04 12): send(values) gives [path, body, done text]; it is sent from the sheet, so a
+  // refusal shows inside it with the typed values kept; the lists are read again once it has closed.
+  async function change(o, send) {
+    let r = null, done = "";
+    const ok = await sheetAsk({ kind: "entry", busy: SW.t("common_saving"), ...o, run: async (v) => {
+      const [path, body, text] = send(v.map((x) => x.trim()));
+      r = await pj(path, body); done = text;
+    } });
+    if (ok) await manageAfter(done, r);
   }
   // a whole number from 1 to 65535, or null
   function parsePort(t) { const n = /^\d{1,5}$/.test(t) ? Number(t) : 0; return n >= 1 && n <= 65535 ? n : null; }
+  const addressField = (label, hint, value) => SW.field({ label, hint, value, mono: true, check: needs("common_error_address"), attrs: { autocapitalize: "off", spellcheck: "false" } });
+  const portField = (value) => SW.field({ type: "number", label: SW.t("printer_field_port"), value, check: (v) => (parsePort(v.trim()) === null ? SW.t("common_error_port") : null) });
+  const keyField = (o) => SW.field({ type: "secret", label: SW.t("common_moonraker_key"), ...o });
   function manageRow(p, changes) {
     const bambu = p.family !== "klipper", id = encodeURIComponent(p.id), name = p.name || p.id;
     const where = bambu ? p.ip : p.host;
-    const edit = (body, done) => manageDo(`${id}/edit`, body, done);
-    const CODE_AT = "on the printer: Settings > Network/LAN";
+    const edit = (body, done) => [`${id}/edit`, body, done];
     const buttons = !changes ? [] : p.configured ? [
       h("button", { class: "secondary", textContent: "Rename", on: { click: () =>
-        openForm(`Rename ${name}`, "", [{ key: "name", label: "New name", value: name }], "Rename", (v) => { edit({ name: v.name }, "Renamed."); }) } }),
+        change({ title: SW.t("printers_rename_title"), confirm: SW.t("common_rename"),
+          fields: [SW.field({ label: SW.t("common_field_name"), value: name, check: needs("common_error_name") })] },
+        ([n]) => edit({ name: n }, SW.t("printer_set_renamed", { name: n }))) } }),
       h("button", { class: "secondary", textContent: "Address", on: { click: () => {
-        // the kit never sends a stored secret to a new host it can't vouch for: it asks for it again (review R103)
-        const fields = [{ key: "address", label: "IP address or host name", value: where || "" }];
-        let intro = "";
-        if (bambu && !p.pinned) { fields.push({ key: "code", label: "Access Code", secret: true }); intro = `${name} has no certificate pinned yet: its Access Code is sent with the new address (${CODE_AT}).`; }
-        if (!bambu) { fields.push({ key: "key", label: "Moonraker API key (optional)", secret: true, optional: true }); intro = "The API key is sent only to the new address; empty means none (a stored key is cleared)."; }
-        openForm(`Address of ${name}`, intro, fields, "Save", (v) => {
-          edit({ address: v.address, ...(bambu && !p.pinned ? { access_code: v.code } : {}), ...(!bambu ? { api_key: v.key } : {}) }, "Address saved.");
-        });
+        // an address change asks for the Access Code again, pinned or not (staging 2026-11-12); a Klipper printer's stored key
+        // goes only to the new address, so it is asked for too (review R103; empty means none)
+        const addr = bambu ? addressField(SW.t("printer_address_bambu_label"), SW.t("printer_address_bambu_help"), where || "")
+          : addressField(SW.t("common_address"), SW.t("printer_address_klipper_help"), where || "");
+        const code = bambu ? codeField(SW.t("printer_address_code_help")) : null;
+        const key = bambu ? null : keyField({ optional: true, hint: SW.t("printer_address_key_help") });
+        change({ title: SW.t("printers_change_address_title", { printer: name }), confirm: SW.t("printers_change_address"), fields: [addr, code, key].filter(Boolean) },
+          ([a, c]) => edit({ address: a, ...(bambu ? { access_code: c } : { api_key: c }) }, SW.t("printer_set_address_changed", { address: a })));
       } } }),
       bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () =>
-        openForm(`Access Code of ${name}`, `Find it ${CODE_AT}.`, [{ key: "code", label: "Access Code", secret: true }], "Save", (v) => { edit({ access_code: v.code }, "Access Code saved."); }) } }) : null,
+        change({ title: SW.t("printers_access_code_title", { printer: name }), confirm: SW.t("printers_replace_access_code"), fields: [codeField(SW.t("common_hint_access_code"))] },
+          ([c]) => edit({ access_code: c }, SW.t("printer_set_code_replaced"))) } }) : null,
       bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () =>
-        openForm(`Forget the certificate of ${name}`, `The next connection trusts whatever answers at its address, so give its Access Code (${CODE_AT}).`,
-          [{ key: "code", label: "Access Code", secret: true }], "Forget certificate", (v) => { edit({ unpin: true, access_code: v.code }, "Certificate forgotten; the Access Code is saved."); }) } }) : null,
+        change({ kind: "destructive", title: SW.t("printers_forget_cert_title", { printer: name }), text: SW.t("printer_set_cert_text", { printer: name }),
+          confirm: SW.t("printers_forget_cert"), fields: [codeField(SW.t("common_hint_access_code"))] },
+          ([c]) => edit({ unpin: true, access_code: c }, SW.t("printer_set_cert_forgotten"))) } }) : null,
       bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () =>
-        openForm(`Moonraker API key of ${name}`, "Empty clears it.", [{ key: "key", label: "API key", secret: true, optional: true }], "Save",
-          (v) => { edit({ api_key: v.key }, v.key ? "API key saved." : "API key cleared."); }) } }),
-      h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${name}? ${bambu ? "Its Access Code is deleted." : "Its API key is deleted."}`)) manageDo(`${id}/forget`, {}, `${name} forgotten.`); } } }),
+        change({ title: SW.t("printers_key_title", { printer: name }), confirm: SW.t("common_save_key"),
+          fields: [keyField({ check: needs("printers_error_key") })] },
+          ([k]) => edit({ api_key: k }, SW.t("printer_set_key_saved"))) } }),
+      h("button", { class: "secondary", textContent: "Forget", on: { click: async () => {
+        let r = null;
+        const ok = await sheetAsk({ kind: "destructive", title: SW.t("printers_forget_title", { printer: name }),
+          text: SW.t(bambu ? "printers_forget_body_bambu" : "printers_forget_body_klipper", { product: SW.t("app_name") }), confirm: SW.t("printers_forget"),
+          busy: SW.t("common_working"), run: async () => { r = await pj(`${id}/forget`, {}); } });
+        if (ok) await manageAfter(SW.t("printers_forgotten", { printer: name }), r);
+      } } }),
     ] : bambu && p.ip ? [
-      h("button", { textContent: "Add", on: { click: () =>
-        openForm(`Add ${name}`, `Find the Access Code ${CODE_AT}.`,
-          [{ key: "code", label: "Access Code", secret: true }, { key: "name", label: "A name for it (optional)", value: name, optional: true }], "Add",
-          (v) => { manageDo("add", { serial: p.id, access_code: v.code, ...(v.name ? { name: v.name } : {}) }, `${v.name || name} added.`); }) } }),
+      h("button", { textContent: "Add", on: { click: () => {
+        const model = p.model_name || name;
+        change({ title: SW.t("printer_add_title", { model }), text: SW.t("add_model_found", { address: p.ip }), confirm: SW.t("common_add_printer"),
+          busy: SW.t("printer_add_connecting"),
+          fields: [codeField(SW.t("common_hint_access_code")), SW.field({ label: SW.t("common_field_name_optional"), placeholder: model })] },
+          ([c, n]) => ["add", { serial: p.id, access_code: c, name: n || name }, SW.t("printers_added_connecting")]);
+      } } }),
     ] : [];
     return h("div", { class: "card" },
       h("p", {}, h("b", { textContent: name }), ` · ${p.model_name || p.model || (bambu ? "Bambu" : "Klipper")} · ${where || "no address yet"} · ${p.configured ? String(p.state).replace(/_/g, " ") : "seen on the network, not added"}`),
@@ -508,61 +566,24 @@ function printersTab() {
   }
   async function manage(note, ok) {
     let list, changes;
-    try { ({ printers: list, changes } = await pj("manage")); } catch (e) { manageBox.replaceChildren(fail(e)); return; }
+    const loading = SW.loading(manageBox, { thing: SW.t("nav_printers"), items: 2 });
+    try { ({ printers: list, changes } = await pj("manage")); loading.done(); }
+    catch (e) { const line = resultLine(); loading.done(line); failed(line, e, () => manage(note, ok)); return; }
     const klipperAdd = h("button", { class: "secondary", textContent: "Add a Klipper printer", on: { click: () =>
-      openForm("Add a Klipper printer", "", [{ key: "host", label: "Moonraker's IP address or host name" }, { key: "port", label: "Moonraker's port", value: "7125" },
-        { key: "name", label: "A name for it (optional)", optional: true }], "Add", (v) => {
-        const port = parsePort(v.port);
-        if (port === null) return "The port must be a whole number from 1 to 65535.";
-        manageDo("add", { family: "klipper", host: v.host, port, ...(v.name ? { name: v.name } : {}) }, "Klipper printer added.");
-      }) } });
-    manageNote.replaceChildren(...(note ? [h("pre", { class: ok ? "ok" : "err", textContent: note })] : []));
+      change({ title: SW.t("common_add_klipper_printer"), confirm: SW.t("common_add_printer"), busy: SW.t("printer_add_connecting"),
+        fields: [addressField(SW.t("common_address"), SW.t("printer_address_klipper_help"), ""), portField("7125"), SW.field({ label: SW.t("common_field_name_optional") })] },
+        ([host, port, n]) => ["add", { family: "klipper", host, port: parsePort(port), ...(n ? { name: n } : {}) }, SW.t("printers_added_connecting")]) } });
+    if (note) SW.result(manageNote, ok ? "ok" : "bad", note); else clear(manageNote);
     manageBox.replaceChildren(
       h("p", { class: "muted", textContent: changes
         ? "A Bambu printer on the network shows up here by itself; add it with its Access Code. Anyone on the home network can use this page."
         : "Read-only here: printer changes from the public address are off. Open this page on the home network to add, change or forget a printer, or turn them on in the setup page's Settings." }),
-      ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []), formBox, manageNote);
+      ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []));
   }
   async function remap() {
-    if (!window.confirm("Re-map the slots? The printer loads each slot briefly; do it when it is idle.")) return;
-    try { await pj(`${encodeURIComponent(current)}/map`, {}); } catch (e) { say(e.message, false); }
-    loadMap();
-  }
-
-  // ----- Web Push (only when the server has web.push on) -----
-  function pushUi() {
-    if (!PUSH) return;
-    const ok = "serviceWorker" in navigator && "PushManager" in window;
-    pushBox.replaceChildren(h("h2", { textContent: "Alerts" }), ok
-      ? h("div", { class: "row" },
-        h("button", { class: "secondary", textContent: "Notify this phone", on: { click: subscribe } }),
-        h("button", { class: "secondary", textContent: "Stop", on: { click: unsubscribe } }),
-        h("button", { class: "secondary", textContent: "Test", on: { click: () => pj("push/test", {}).then(() => say("Sent.", true), (e) => say(e.message, false)) } }))
-      : h("p", { class: "muted", textContent: "This browser cannot receive push alerts (on iPhone, add the app to the home screen first)." }));
-  }
-  function b64(s) {
-    const pad = "=".repeat((4 - (s.length % 4)) % 4);
-    const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
-    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-  }
-  async function subscribe() {
-    try {
-      if ((await Notification.requestPermission()) !== "granted") throw new Error("Notifications are blocked for this site.");
-      const reg = await navigator.serviceWorker.register(BASE + "/sw.js");
-      await navigator.serviceWorker.ready;
-      const key = (await pj("push/key")).key;
-      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
-      await pj("push/subscribe", { subscription: sub.toJSON() });
-      say("This phone will get print alerts.", true);
-    } catch (e) { say(e.message, false); }
-  }
-  async function unsubscribe() {
-    try {
-      const reg = await navigator.serviceWorker.getRegistration(BASE + "/");
-      const sub = reg && (await reg.pushManager.getSubscription());
-      if (sub) { await pj("push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
-      say("Alerts off for this phone.", true);
-    } catch (e) { say(e.message, false); }
+    const go = await sheetAsk({ kind: "confirm", title: SW.t("printers_map_title", { printer: printerName() }), text: SW.t("printers_map_body"),
+      confirm: SW.t("printers_map_slots"), run: () => pj(`${encodeURIComponent(current)}/map`, {}) });
+    if (go) loadMap();
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -572,7 +593,63 @@ function printersTab() {
   let loaded = false;
   return {
     el,
-    enter() { if (!loaded) { loaded = true; pushUi(); load(); } else if (current) { stream(); loadUsage(); loadMap(); } },
+    enter() { if (!loaded) { loaded = true; load(); } else if (current) { stream(); loadUsage(); loadMap(); } },
     leave() { stopStream(); camera(false); clearTimeout(mapTimer); closeLoad(); },
   };
+}
+
+// ----- Print alerts on this phone (04 9.2): the group of the Settings sheet; the Hub's push/key, push/subscribe,
+// push/unsubscribe and push/test, as when it was on the Printers tab. Called by app.js only when print alerts are offered. -----
+function alertsPanel(addToHome) {
+  const ok = "serviceWorker" in navigator && "PushManager" in window;
+  const pj = (path, body) => api("printers/" + path, body === undefined ? {} : { method: "POST", body });
+  const said = (e) => Object.assign(e, { text: () => says(e) });          // SW.toggle and SW.result show err.text()
+  const line = h("p", { class: "alerts__state" });
+  const testBox = h("p", { class: "result", role: "status" });
+  const setState = (word, text) => line.replaceChildren(SW.status(word, text ? { text } : {}));
+  const b64 = (s) => {
+    const pad = "=".repeat((4 - (s.length % 4)) % 4);
+    const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  };
+  async function subscribe() {
+    if ((await Notification.requestPermission()) !== "granted") { paint(false); throw said(new Error(SW.t("settings_alerts_blocked"))); }
+    const reg = await navigator.serviceWorker.register(BASE + "/sw.js");
+    await navigator.serviceWorker.ready;
+    const key = (await pj("push/key")).key;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
+    await pj("push/subscribe", { subscription: sub.toJSON() });
+  }
+  async function unsubscribe() {
+    const reg = await navigator.serviceWorker.getRegistration(BASE + "/");
+    const sub = reg && (await reg.pushManager.getSubscription());
+    if (sub) { await pj("push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+  }
+  function paint(on) {
+    if (!ok) setState("note", SW.t("settings_alerts_unsupported", { product: SW.t("app_name") }));
+    else if (window.Notification && Notification.permission === "denied") setState("needs_look", SW.t("settings_alerts_blocked"));
+    else if (on) setState("on", SW.t("settings_alerts_on"));
+    else setState("off");
+  }
+  paint(false);
+  if (!ok) {                                                  // an iPhone in the browser: the way to a Home Screen app (04 10.1)
+    return h("div", { class: "alerts" }, line, addToHome ? SW.btn(SW.t("nav_more_home_screen"), { run: addToHome, action: "home" }) : null);
+  }
+  const makeToggle = (checked) => SW.toggle({ label: SW.t("settings_alerts_toggle"), checked,
+    apply: async (on) => {
+      try { if (on) await subscribe(); else await unsubscribe(); } catch (e) { paint(!on); throw said(e); }
+      paint(on);
+      return on ? SW.t("settings_alerts_on") : SW.t("status_off");
+    } });
+  const slot = h("div", {}, makeToggle(false));
+  navigator.serviceWorker.getRegistration(BASE + "/").then((reg) => reg && reg.pushManager.getSubscription()).then((sub) => {
+    if (sub) { slot.replaceChildren(makeToggle(true)); paint(true); }     // this phone is already subscribed
+  }).catch(() => {});
+  const test = SW.btn(SW.t("settings_alerts_test"), { action: "test", run: async () => {
+    SW.busy(test, SW.t("common_working"));
+    try { await pj("push/test", {}); SW.result(testBox, "ok", SW.t("settings_alerts_sent")); }
+    catch (e) { SW.result(testBox, "bad", says(e)); }
+    finally { SW.idle(test); }
+  } });
+  return h("div", { class: "alerts" }, line, slot, test, testBox);
 }

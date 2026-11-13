@@ -117,7 +117,7 @@ Token names are the same in every theme. A theme (section 6) supplies the values
 Rules:
 - Semantic colours (`ok`, `warn`, `bad`, `info`) are separate from the accent and mean the same in every theme.
 - `--accent` is only ever the fill of a part that carries its own label or icon in `--on-accent` (the main button,
-  the chosen part of a segmented choice, the skip link). A theme may make it light, as Palette does, so it is never text, an icon, an
+  the skip link, the icon tile of the current section in the list navigation). A theme may make it light, as Palette does, so it is never text, an icon, an
   outline, or a mark that has to be seen on its own against a surface. All of those use `--accent-text`, which is
   checked at 4.5:1 on `--bg`, `--surface` and `--surface-2` in every theme.
 - Text pairs must reach 4.5:1: `--text`, `--muted`, `--accent-text`, `--ok`, `--warn`, `--bad`, `--info` on `--bg`,
@@ -166,7 +166,9 @@ Density is a theme property: a theme sets `--ctl`, `--row` and `--gap`. It never
 
 A few fixed dimensions are not steps of the space scale (the 420 px drawer, the 1 px hairline, the 3 px navigation
 mark, thumbnail and QR sizes). Each is a named entry in the `size` group of `tokens.json` and is used by that name;
-components still contain no bare numbers.
+components still contain no bare numbers. Hairlines and marks use the size tokens `--hairline` and `--nav-mark`
+(never a bare `1px` or `3px`). A maximum width of text, a field or a panel may be written in the component in `rem`
+or `ch`, because it must grow with the text size. Nothing else is a bare number.
 
 ## 5. Appearance: Light, Dark, System
 

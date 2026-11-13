@@ -1,10 +1,3 @@
 # --accent outside a labelled fill (07 CON-9, AUT-2). One line each:
 #   <path from the repository root> | <finding> | <reason>
 # A line whose finding is gone must be dropped (09 open point 4); a rewritten file removes its lines.
-server/filament_kit/web/static/app.css | var(--accent) in .list button.pick.on | today's stylesheet with its own :root names; removed by S3.2
-server/filament_kit/web/static/app.css | var(--accent) in .spin | today's stylesheet with its own :root names; removed by S3.2
-server/filament_kit/web/static/app.css | var(--accent) in .tabs button.on | today's stylesheet with its own :root names; removed by S3.2
-server/filament_kit/web/static/app.css | var(--accent) in a | today's stylesheet with its own :root names; removed by S3.2
-server/filament_kit/web/static/app.css | var(--accent) in button | today's stylesheet with its own :root names; removed by S3.2
-server/filament_kit/web/static/app.css | var(--accent) in button.secondary | today's stylesheet with its own :root names; removed by S3.2
-server/filament_kit/web/static/app.css | var(--accent) in progress | today's stylesheet with its own :root names; removed by S3.2

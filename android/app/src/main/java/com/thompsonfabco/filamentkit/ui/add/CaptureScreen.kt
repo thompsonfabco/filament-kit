@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -32,8 +31,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -55,14 +52,25 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.components.HubNotice
+import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwSpinner
 import com.thompsonfabco.filamentkit.ui.parseWeight
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -250,7 +258,7 @@ private fun CameraCapture(onPhoto: (ByteArray) -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         AndroidView({ previewView }, Modifier.fillMaxWidth().aspectRatio(3f / 4f))
         Spacer(Modifier.height(8.dp))
-        (problem ?: shotError)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        (problem ?: shotError)?.let { NoticeCard(NoticeKind.Bad, it) }
         Button(
             enabled = !shooting && problem == null,
             onClick = {
@@ -311,39 +319,44 @@ private suspend fun cameraProvider(context: Context): ProcessCameraProvider = su
 private fun hasCamera(context: Context) =
     ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
-/** A spinner with a line of text. */
+/** A spinner with a line of text; the line is a polite live region, so what is under way is announced. */
 @Composable
 internal fun Busy(text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(Modifier.size(24.dp))
-        Spacer(Modifier.width(12.dp))
+    Row(
+        Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2),
+    ) {
+        SwSpinner()
         Text(text)
     }
 }
 
-/** The current problem, with the actions that fit it. */
+/**
+ * The current problem as a notice line with the actions that fit it. A changed certificate and a lost pairing are the
+ * Hub notices of 05-android-app 3.4 (the fingerprints are shown on the pairing screen, not here).
+ */
 @Composable
 internal fun ErrorCard(error: AddError, vm: AddViewModel, onPairAgain: () -> Unit, kept: Boolean) {
-    Card(
-        Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-    ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(error.message, color = MaterialTheme.colorScheme.onErrorContainer)
-            if (error.expectedFingerprint != null && error.actualFingerprint != null) {
-                Text("Paired certificate: ${groups(error.expectedFingerprint)}", style = MaterialTheme.typography.bodySmall)
-                Text("Certificate now: ${groups(error.actualFingerprint)}", style = MaterialTheme.typography.bodySmall)
-            }
+    val dismiss = SwAction(stringResource(R.string.common_dismiss), vm::dismissError)
+    val hub = when {
+        error.expectedFingerprint != null && error.actualFingerprint != null -> HubNoticeKind.CertificateChanged
+        error.pairAgain -> HubNoticeKind.NoLongerPaired
+        else -> null
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s1)) {
+        if (hub != null) {
+            HubNotice(hub, onPairAgain, more = listOf(dismiss))
             error.detail?.let { Text("Server says: $it", style = MaterialTheme.typography.bodySmall) }
-            if (kept) Text("Your photos and edits are kept.", style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (error.canRetry) Button(onClick = vm::retry) { Text("Retry") }
-                if (error.canDropTag) Button(onClick = vm::dropTagAndRetry) { Text("Add without the tag") }
-                if (error.pairAgain) Button(onClick = onPairAgain) { Text("Pair again") }
-                TextButton(onClick = vm::dismissError) { Text("OK") }
+        } else {
+            val actions = buildList {
+                if (error.canRetry) add(SwAction(stringResource(R.string.common_try_again), vm::retry))
+                if (error.canDropTag) add(SwAction("Add without the tag", vm::dropTagAndRetry))
+                add(dismiss)
             }
+            val lines = listOfNotNull(error.message, error.detail?.let { "Server says: $it" })
+            NoticeCard(NoticeKind.Bad, lines.joinToString(System.lineSeparator()), actions = actions)
         }
+        if (kept) Text("Your photos and edits are kept.", style = MaterialTheme.typography.bodySmall)
     }
 }
-
-private fun groups(fp: String) = fp.chunked(4).joinToString(" ")

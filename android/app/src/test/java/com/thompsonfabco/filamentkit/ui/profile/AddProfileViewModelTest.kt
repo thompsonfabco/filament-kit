@@ -11,8 +11,7 @@ import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Line
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Material
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.MaxVolumetric
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Notes
-import com.thompsonfabco.filamentkit.ui.profile.ProfileField.NozzleHigh
-import com.thompsonfabco.filamentkit.ui.profile.ProfileField.NozzleLow
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Nozzle
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Parent
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Vendor
 import kotlinx.coroutines.Dispatchers
@@ -50,8 +49,7 @@ class AddProfileViewModelTest {
         vm.set(Vendor, " SUNLU ")
         vm.set(Line, "PLA+ 2.0")
         vm.set(Material, "PLA")
-        vm.set(NozzleLow, "205")
-        vm.set(NozzleHigh, "230")
+        vm.set(Nozzle, "205-230")
         vm.set(Bed, "55-65")
         vm.set(Density, "1.24")
         vm.set(MaxVolumetric, "21")
@@ -87,10 +85,10 @@ class AddProfileViewModelTest {
         assertEquals(expected, entry)
     }
 
-    @Test fun onlyTheGivenRangeKeysAreSent() {
-        val entry = buildProfileEntry(mapOf(Vendor to "A", Line to "B", Material to "PETG", NozzleHigh to "250", Notes to "dry first"))
+    @Test fun aSingleNozzleTemperatureIsBothEndsOfTheRange() {
+        val entry = buildProfileEntry(mapOf(Vendor to "A", Line to "B", Material to "PETG", Nozzle to "250", Notes to "dry first"))
         assertEquals(
-            Json.parseToJsonElement("""{"nozzle_temperature_range_high":["250"]}"""),
+            Json.parseToJsonElement("""{"nozzle_temperature_range_low":["250"],"nozzle_temperature_range_high":["250"]}"""),
             entry["fields"],
         )
         assertEquals(Json.parseToJsonElement("""{"_notes":"dry first"}"""), entry["published_ranges"])
@@ -109,33 +107,67 @@ class AddProfileViewModelTest {
         assertTrue(vm.state.value.canSave)
     }
 
-    @Test fun successSaysPresetsAreRebuilt() = runTest(dispatcher) {
+    @Test fun successLeavesAnEmptyFormAndSaysSaved() = runTest(dispatcher) {
         val vm = AddProfileViewModel(api)
         filled(vm)
         vm.save()
         advanceUntilIdle()
         val s = vm.state.value
-        assertEquals("Saved. Presets are rebuilt in a minute.", s.saved)
+        assertTrue(s.saved)
+        assertTrue("the form is gone with its values", s.values.isEmpty())
         assertTrue(s.problems.isEmpty())
-        assertNull(s.error)
+        assertNull(s.failure)
         assertFalse(s.saving)
+        assertFalse("leaving after a save does not ask", s.dirty)
     }
 
-    @Test fun saveIsOffAfterASuccessUntilTheFormIsEdited() = runTest(dispatcher) {
+    @Test fun saveIsOffWhileSavingAndAfterASuccess() = runTest(dispatcher) {
         val vm = AddProfileViewModel(api)
         filled(vm)
         vm.save()
+        vm.save() // ignored: the first is still running
         advanceUntilIdle()
-        assertFalse(vm.state.value.canSave)
         vm.save()
         advanceUntilIdle()
         assertEquals(1, api.posted.size)
-        vm.set(Density, "1.2")
-        assertTrue(vm.state.value.canSave)
+        assertFalse(vm.state.value.canSave)
     }
 
-    @Test fun invalidEntryProblemsBecomeTheFieldErrorsList() = runTest(dispatcher) {
-        val problems = listOf("fields.filament_density '9' is outside 0.5-3.0 g/cm3", "nozzle range low 240 is above high 230")
+    @Test fun typingMakesTheFormDirty() {
+        val vm = AddProfileViewModel(api)
+        assertFalse(vm.state.value.dirty)
+        vm.set(Notes, "  ")
+        assertFalse(vm.state.value.dirty)
+        vm.set(Notes, "dry first")
+        assertTrue(vm.state.value.dirty)
+    }
+
+    @Test fun readsRanges() {
+        assertEquals("190" to "220", readRange("190-220"))
+        assertEquals("190" to "220", readRange(" 190 – 220 "))
+        assertEquals("205" to "205", readRange("205"))
+        assertEquals("55.5" to "65", readRange("55.5-65"))
+        assertNull(readRange("hot"))
+        assertNull(readRange("190-"))
+    }
+
+    @Test fun anUnreadableNozzleRangeIsCaughtBeforeSending() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        filled(vm)
+        vm.set(Nozzle, "hot")
+        vm.save()
+        advanceUntilIdle()
+        assertTrue(api.posted.isEmpty())
+        assertEquals(setOf(Nozzle), vm.state.value.badRange)
+        vm.set(Nozzle, "190-220")
+        assertTrue(vm.state.value.badRange.isEmpty())
+    }
+
+    @Test fun invalidEntryProblemsAreListedAndNamedFieldsGetThemToo() = runTest(dispatcher) {
+        val problems = listOf(
+            "fields.filament_density '9' is outside 0.5-3.0 g/cm3", "nozzle range low 240 is above high 230",
+            "the entry has no meaning",
+        )
         api.failure = ApiError(
             400, "invalid_entry", "the entry is not valid",
             JsonObject(mapOf("problems" to JsonArray(problems.map(::JsonPrimitive)))),
@@ -146,10 +178,21 @@ class AddProfileViewModelTest {
         advanceUntilIdle()
         val s = vm.state.value
         assertEquals(problems, s.problems)
-        assertNull(s.saved)
-        assertNull("problems are shown instead of a general error", s.error)
+        assertEquals(setOf(Density, Nozzle), s.fieldProblems.keys)
+        assertEquals(problems[0], s.fieldProblems[Density])
+        assertFalse(s.saved)
+        assertNull("problems are shown instead of a general failure", s.failure)
+        assertEquals("the typing is kept", "1.24", s.values[Density])
         vm.set(Density, "1.2")
-        assertTrue("an edit clears them", vm.state.value.problems.isEmpty())
+        assertTrue("an edit clears them", vm.state.value.problems.isEmpty() && vm.state.value.fieldProblems.isEmpty())
+    }
+
+    @Test fun problemsNameTheirField() {
+        assertEquals(ProfileField.MaxVolumetric, fieldOf("fields.filament_max_volumetric_speed 'x' is not a number"))
+        assertEquals(ProfileField.Parent, fieldOf("bambu_parent 'Foo' is not a Bambu Studio preset"))
+        assertEquals(ProfileField.Bed, fieldOf("bed range 70-60 is reversed"))
+        assertEquals(ProfileField.Vendor, fieldOf("vendor is empty"))
+        assertNull(fieldOf("schema_version must be 1"))
     }
 
     @Test fun invalidEntryWithoutProblemsShowsTheMessage() = runTest(dispatcher) {
@@ -161,30 +204,128 @@ class AddProfileViewModelTest {
         assertEquals(listOf("the entry is not valid"), vm.state.value.problems)
     }
 
-    @Test fun otherErrorsShowAPlainMessageOrTheServerText() = runTest(dispatcher) {
+    @Test fun otherFailuresAreNamedForTheScreen() = runTest(dispatcher) {
         val vm = AddProfileViewModel(api)
         filled(vm)
         api.failure = ApiError(0, "offline", "socket")
         vm.save()
         advanceUntilIdle()
-        assertEquals(OFFLINE, vm.state.value.error)
+        assertEquals(SaveFailure.Unreachable, vm.state.value.failure)
         api.failure = ApiError(500, "weird_code", "library store is locked")
         vm.save()
         advanceUntilIdle()
-        assertEquals("library store is locked", vm.state.value.error)
+        assertEquals(SaveFailure.Message, vm.state.value.failure)
+        assertEquals("library store is locked", vm.state.value.message)
         api.failure = ApiError(401, "unauthorized", "x")
         vm.save()
         advanceUntilIdle()
-        assertTrue(vm.state.value.pairAgain)
-    }
-
-    @Test fun aChangedCertificateAsksForPairing() = runTest(dispatcher) {
+        assertEquals(SaveFailure.NotPaired, vm.state.value.failure)
         api.failure = FingerprintMismatch("aa", "bb")
-        val vm = AddProfileViewModel(api)
-        filled(vm)
         vm.save()
         advanceUntilIdle()
-        assertTrue(vm.state.value.pairAgain)
+        assertEquals(SaveFailure.CertificateChanged, vm.state.value.failure)
+        api.failure = IllegalStateException("odd")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(SaveFailure.Unknown, vm.state.value.failure)
+    }
+
+    @Test fun theFailureGoesOnEditAndOnSuccess() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        filled(vm)
+        api.failure = FingerprintMismatch("aa", "bb")
+        vm.save()
+        advanceUntilIdle()
+        vm.set(Notes, "edited")
+        assertNull(vm.state.value.failure)
+        vm.save()
+        advanceUntilIdle()
+        api.failure = null
+        vm.save()
+        advanceUntilIdle()
+        assertNull(vm.state.value.failure)
+        assertTrue(vm.state.value.saved)
+    }
+
+    @Test fun pairingClearsAStaleFailureAndReloadsTheLines() = runTest(dispatcher) {
+        api.linesFailure = ApiError(0, "offline", "No Hub is paired.")
+        val vm = AddProfileViewModel(api)
+        filled(vm)
+        api.failure = ApiError(0, "offline", "No Hub is paired.")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(SaveFailure.Unreachable, vm.state.value.failure)
+        assertTrue(vm.state.value.linesLoadFailed)
+
+        api.linesFailure = null
+        api.failure = null
+        vm.onPaired()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.failure)
+        assertNull(vm.state.value.lineFailure)
+        assertEquals(listOf("example--pla"), vm.state.value.lines?.map { it.lineId })
+    }
+
+    @Test fun listsTheHubsLinesAndReparentsOne() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Bambu PLA Basic"), synced = true)
+        val vm = AddProfileViewModel(api)
+        assertNull("loading until the Hub answers", vm.state.value.lines)
+        advanceUntilIdle()
+        assertEquals(listOf("example--pla"), vm.state.value.lines?.map { it.lineId })
+
+        vm.editParent(vm.state.value.lines!!.single())
+        advanceUntilIdle()
+        assertEquals(listOf("Bambu PLA Basic"), vm.state.value.editing?.parents?.parents)
+
+        vm.setLineParent("Bambu PLA Basic")
+        advanceUntilIdle()
+
+        assertEquals(listOf("example--pla" to "Bambu PLA Basic"), api.reparented)
+        assertEquals("Bambu PLA Basic", vm.state.value.lines?.single()?.bambuParent)
+        assertEquals("example--pla", vm.state.value.parentSavedFor)
+        assertNull(vm.state.value.editing)
+    }
+
+    @Test fun aBlankParentIsNeverSent() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        vm.editParent(vm.state.value.lines!!.single())
+        advanceUntilIdle()
+        vm.setLineParent(" ")
+        advanceUntilIdle()
+        assertTrue(api.reparented.isEmpty())
+    }
+
+    @Test fun aRefusedParentShowsTheHubsMessageAndKeepsTheLine() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        vm.editParent(vm.state.value.lines!!.single())
+        advanceUntilIdle()
+        api.failure = ApiError(400, "unknown_parent", "Bambu Studio has no such preset")
+        vm.setLineParent("Nope")
+        advanceUntilIdle()
+        assertEquals(SaveFailure.Message, vm.state.value.lineFailure)
+        assertEquals("Bambu Studio has no such preset", vm.state.value.lineMessage)
+        assertNull(vm.state.value.lines?.single()?.bambuParent)
+        assertNull(vm.state.value.parentSavedFor)
+    }
+
+    @Test fun aFailedLoadLeavesAnEmptyList() = runTest(dispatcher) {
+        api.linesFailure = ApiError(0, "offline", "socket")
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        assertEquals(emptyList<ProfileLine>(), vm.state.value.lines)
+        assertEquals(SaveFailure.Unreachable, vm.state.value.lineFailure)
+        assertTrue(vm.state.value.linesLoadFailed)
+
+        api.linesFailure = null
+        vm.retryLines()
+        assertNull("loading again", vm.state.value.lines)
+        advanceUntilIdle()
+        assertEquals(listOf("example--pla"), vm.state.value.lines?.map { it.lineId })
+        assertNull(vm.state.value.lineFailure)
+        assertFalse(vm.state.value.linesLoadFailed)
     }
 
     @Test fun parentsAreLoadedForTheMaterialAfterAPause() = runTest(dispatcher) {
@@ -196,68 +337,6 @@ class AddProfileViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("PETG"), api.parentCalls)
         assertEquals(ParentList(listOf("Generic PETG", "SUNLU PETG"), true), vm.state.value.parents)
-    }
-
-    @Test
-    fun listsTheServersLinesAndReparentsOne() = runTest(dispatcher) {
-        api.parentLists["PLA"] = ParentList(listOf("Bambu PLA Basic"), synced = true)
-        val vm = AddProfileViewModel(api)
-        advanceUntilIdle()
-        assertEquals(listOf("sunlu--pla"), vm.state.value.lines.map { it.lineId })
-
-        vm.editParent(vm.state.value.lines.single())
-        advanceUntilIdle()
-        assertEquals(listOf("Bambu PLA Basic"), vm.state.value.editing?.parents?.parents)
-
-        vm.setLineParent("Bambu PLA Basic")
-        advanceUntilIdle()
-
-        assertEquals(listOf("sunlu--pla" to "Bambu PLA Basic"), api.reparented)
-        assertEquals("Bambu PLA Basic", vm.state.value.lines.single().bambuParent)
-        assertNull(vm.state.value.editing)
-    }
-
-    @Test
-    fun aSavedProfileAppearsInTheExistingLines() = runTest(dispatcher) {
-        val vm = AddProfileViewModel(api)
-        advanceUntilIdle()
-        assertEquals(1, vm.state.value.lines.size)
-        api.lines = api.lines + ProfileLine(lineId = "sunlu--pla-plus-2-0", vendor = "SUNLU", product = "PLA+ 2.0", material = "PLA")
-        filled(vm)
-
-        vm.save()
-        advanceUntilIdle()
-
-        assertEquals(2, api.lineCalls)
-        assertEquals(listOf("sunlu--pla", "sunlu--pla-plus-2-0"), vm.state.value.lines.map { it.lineId })
-    }
-
-    @Test
-    fun aBlankParentIsNeverSentToTheServer() = runTest(dispatcher) {
-        val vm = AddProfileViewModel(api)
-        advanceUntilIdle()
-        vm.editParent(vm.state.value.lines.single())
-        advanceUntilIdle()
-
-        vm.setLineParent(" ")
-        advanceUntilIdle()
-
-        assertTrue(api.reparented.isEmpty())
-    }
-
-    @Test
-    fun aRefusedParentShowsTheServersMessageAndKeepsTheLine() = runTest(dispatcher) {
-        val vm = AddProfileViewModel(api)
-        advanceUntilIdle()
-        vm.editParent(vm.state.value.lines.single())
-        advanceUntilIdle()
-        api.failure = ApiError(400, "unknown_parent", "Bambu Studio has no such preset")
-
-        vm.setLineParent("Nope")
-        advanceUntilIdle()
-
-        assertEquals("Bambu Studio has no such preset", vm.state.value.lineError)
-        assertNull(vm.state.value.lines.single().bambuParent)
     }
 }
 
@@ -272,12 +351,12 @@ private class FakeProfileApi : ProfileApi {
         return parentLists[material] ?: ParentList(emptyList(), synced = false)
     }
 
-    var lineCalls = 0
-    var lines = listOf(ProfileLine(lineId = "sunlu--pla", vendor = "SUNLU", product = "PLA", material = "PLA"))
+    var linesFailure: Exception? = null
+    var lines = listOf(ProfileLine(lineId = "example--pla", vendor = "Example", product = "PLA", material = "PLA"))
     val reparented = mutableListOf<Pair<String, String>>()
 
     override suspend fun profileLines(): List<ProfileLine> {
-        lineCalls++
+        linesFailure?.let { throw it }
         return lines
     }
 

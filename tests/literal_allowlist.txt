@@ -1,22 +1,16 @@
 # Literal colours and values in components (AUT-2; 08 test 5), found by tests/test_design_lints.py. One line each:
 #   <path from the repository root> | <finding> | <reason>
 # A line whose finding is gone must be dropped (09 open point 4); a rewritten file removes its lines.
-android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | 24.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/ColorSwatch.kt | Color(0xFF000000 | filament colour from the data
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/LocalNetworkAccess.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/LocalNetworkAccess.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/ColorSwatch.kt | Color(0xFF000000 | alpha mask over the 6-digit filament colour read from the data (not a theme or status colour)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 24.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 6.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 96.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 28.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 6.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | 10.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
@@ -27,10 +21,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreen
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | 64.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | 96.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | 24.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/HomeScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | 6.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | 4.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
@@ -66,87 +56,14 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScre
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | 14.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/AddProfileScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/AddProfileScreen.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/AddProfileScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchScreen.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/LicencesScreen.kt | 24.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/LicencesScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/SettingsScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/SettingsScreen.kt | 24.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LinkSealedScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LinkSealedScreen.kt | 6.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LinkSealedScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadFlowScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 32.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 4.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-server/filament_kit/web/static/app.css | #000 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #12151b | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #1b1f27 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #1c212b | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #1f8a4c | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #2e8cd6 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #2f3644 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #47c37c | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #4ba8f0 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #667085 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #98a2b3 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #b54708 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #c4320a | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #d9dde4 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #e8eaee | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #f0a24b | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #f2704c | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #f4f5f7 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | #fff | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | -3px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .15rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .1rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .3rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .45rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .4rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .55rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .5rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .65rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .6rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | .7rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 1.1rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 1.2rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 1.3rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 10px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 12px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 16px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 1rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 2.6rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 2.75rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 2.8rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 24px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 40rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 44px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 4px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 4rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 6px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 6rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 84px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 8px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 8rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 999px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | 99px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | duration 1s | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: .75rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: .7rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: .82rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: .8rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: .95rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: .9rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: 1.1rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: 1.4rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | font-size: 1rem | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | line-height: 44px | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | opacity: .45 | today's own palette and lengths; replaced by tokens in S3.2
-server/filament_kit/web/static/app.css | rgba( | today's own palette and lengths; replaced by tokens in S3.2

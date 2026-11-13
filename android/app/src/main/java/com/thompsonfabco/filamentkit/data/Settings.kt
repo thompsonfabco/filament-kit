@@ -8,9 +8,12 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -48,6 +51,13 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
         prefs[KEY]?.let { text -> runCatching { json.decodeFromString<ServerConfig>(text) }.getOrNull() }
     }
 
+    /** One read for the startup: the paired server, or null when unpaired or the store cannot be read. */
+    suspend fun serverOrNull(): ServerConfig? = try {
+        server.first()
+    } catch (e: IOException) {
+        null
+    }
+
     override suspend fun save(config: ServerConfig) {
         store.edit { it[KEY] = json.encodeToString(ServerConfig.serializer(), config) }
     }
@@ -72,6 +82,15 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
             "dark" -> Appearance.Dark
             else -> Appearance.System
         }
+    }.retryWhen { e, _ ->
+        // a read error shows System for now and tries again, so a later choice still arrives
+        if (e is IOException) {
+            emit(Appearance.System)
+            delay(RETRY_MS)
+            true
+        } else {
+            false
+        }
     }
 
     suspend fun setAppearance(appearance: Appearance) {
@@ -79,6 +98,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     companion object {
+        private const val RETRY_MS = 1000L
         private val KEY = stringPreferencesKey("server")
         private val APPEARANCE = stringPreferencesKey("appearance")
         private val SKIP_FINGERPRINT = booleanPreferencesKey("skip_fingerprint_check")
