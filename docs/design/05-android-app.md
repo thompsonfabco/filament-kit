@@ -20,7 +20,7 @@ Contents: 1 Baseline · 2 App shell · 3 Shared parts and states · 4 Pairing ·
 | Toolkit | Jetpack Compose, Material 3, one `MainActivity`, edge to edge. No XML layouts. |
 | Android versions | minSdk 29, target and compile SDK as today. |
 | Theme | `SpoolwardenTheme(look, appearance)` (F6.2) wraps everything. It supplies the Material 3 `ColorScheme`, `Typography`, `Shapes` and the Console density from the tokens of F4. Dynamic colour is off. No component uses a literal colour. Sizes are the tokens of F4 read as dp, and fixed dimensions are `size` entries read through `SpoolwardenTheme.sizes` (listed below this table); status colours come from `--ok`, `--warn`, `--bad`, `--info` and their `-soft` grounds, never from Material's `primary`/`error` alone. |
-| Window size classes | Compact (phone), medium (tablet, small window), expanded (large tablet, desktop window) as in F7. Read with `currentWindowAdaptiveInfo()`. Rotation and multi-window are supported on every screen; state survives both (view models plus `SavedStateHandle`). |
+| Window size classes | Compact (phone), medium (tablet, small window), expanded (large tablet, desktop window) as in F7. Read with `currentWindowAdaptiveInfo()` (or the version of it the Compose release in use provides). Rotation and multi-window are supported on every screen; state survives both (view models plus `SavedStateHandle`). |
 | Navigation | Navigation Compose, one `NavHost`, type-safe routes (`@Serializable` route classes). Every screen in this document is a destination; sheets and dialogs that carry their own state are `dialog` or bottom-sheet destinations. Nothing is navigated with local `remember` state. |
 | Icons | Spoolwarden's own vector drawables (F10). No Material icon library. |
 | Strings | Every user-visible text is in `res/values/strings.xml` (section 15). |
@@ -207,7 +207,7 @@ line, then:
 | `tag/{uid}/link` | Link to a sealed spool: find (7.8) | Shared | `tag/{uid}` |
 | `tag/{uid}/link/{spoolId}` | Link to a sealed spool: preview, conflict (7.8) | Shared | `tag/{uid}/link` |
 | `printers` | Printers (9.1) | Printers root | `home` tab |
-| `printers/add/{serial}` | Add a Bambu printer (dialog destination, 9.2) | Printers | `printers` |
+| `printers/add/{serial}` | Add a Bambu Lab printer (dialog destination, 9.2) | Printers | `printers` |
 | `printers/add-klipper` | Add a Klipper printer (dialog destination, 9.3) | Printers | `printers` |
 | `printers/{id}` | Printer (9.4) | Printers | `printers` |
 | `printers/{id}/slots/{slot}/pick` | Pick a spool for a slot (9.6) | Printers | `printers/{id}` |
@@ -879,7 +879,7 @@ States: the screen opens with the spool summary it was given (search row or tag 
 change from the Hub's answer. Offline: actions disabled with "Needs the Hub. Reconnecting…".
 
 TalkBack order: back, title, connection, appearance, header (one node: "Polymaker PolyTerra PLA Charcoal Black,
-spool 214, PLA, colour 2B2B2E"), remaining (one node: "620 grams left of 1000, 62 percent"), result line, Update
+spool 214, PLA, colour 2B2B2E"), remaining (one node: "62 percent left: 620 of 1000 grams"), result line, Update
 weight, Load into a printer, Move, More actions, Details rows.
 
 ### 7.3 Update weight (sheet destination `spools/{id}/weight`)
@@ -1025,7 +1025,7 @@ while the printer screen is visible), `POST api/printers/{id}/command` with `{ac
 | Configured printers | Panel, one row per printer: status shape and word (vocabulary below), name (`--fs-b` `--fw-label`), model, job line when printing ("Printing · 42 % · 1 h 12 min left"), slot swatches (up to 8, then "+4"), and, when the printer needs something, a line with the triangle and the fix ("Enter the Access Code again.", "The last slot mapping stopped twice. A report would help."). Tapping opens `printers/{id}` (right pane on expanded width). A printer whose Access Code is wrong opens its screen with the Access Code dialog (9.9) already open. | Panel, `ListItem` |
 | Found on the network | Group title "Found on the network" (`--fs-xs` uppercase). Rows for printers the Hub sees but that are not set up: model, the status "Not configured", address in `--mono`, trailing "Add" (outlined; opens 9.2). Ground `--accent-soft`. | Panel, `ListItem`, `OutlinedButton` |
 | Add a Klipper printer | Outlined button under the lists; opens 9.3. | `OutlinedButton` |
-| Empty | Empty state with the printer icon: title "No printers yet", text "The Hub finds Bambu printers on its network by itself. Turn the printer on, then refresh. Klipper printers are added by address." Buttons "Refresh" (main) and "Add a Klipper printer". | Empty state |
+| Empty | Empty state with the printer icon: title "No printers yet", text "The Hub finds Bambu Lab printers on its network by itself: turn the printer on, then add it here with its Access Code. A Klipper printer is added by its address." Buttons "Refresh" (main) and "Add a Klipper printer". | Empty state |
 
 Printer state vocabulary. The badge words are those of `02-components.md` 7.1; what the state is comes in the fix
 sentence that always follows a "Needs a look".
@@ -1042,7 +1042,7 @@ sentence that always follows a "Needs a look".
 While a job is known, the job state follows the badge as words (not a badge): "Printing", "Paused", "Preparing",
 "Slicing", "Finished", "Print failed", "Idle".
 
-### 9.2 Add a Bambu printer (dialog destination `printers/add/{serial}`)
+### 9.2 Add a Bambu Lab printer (dialog destination `printers/add/{serial}`)
 
 `BasicAlertDialog` with a form; on compact width it is a `ModalBottomSheet` (F7: dialogs become bottom sheets on
 phones).
@@ -1420,7 +1420,7 @@ A panel on 10.2, titled "Ask the Label Reader to correct it".
 |---|---|
 | Ready | Field "What is wrong?" (placeholder "e.g. brand is Polymaker", up to 3 lines); hint "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept."; button "Ask the Label Reader" (outlined). Empty note: error "Say what is wrong first, e.g. brand is Polymaker." |
 | Waiting | Progress line and "Asking the Label Reader… (up to a minute)". |
-| Proposal | Before-and-after change list (02 7.9) with `--accent-soft` ground and a 1 dp `--accent-text` outline: heading "Proposal: 2 changes", one row per change: field name, old value struck through in `--muted`, arrow, new value at `--fw-label` ("Name: PolyTerra PLA Charcoal Black → PolyTerra PLA Charcoal Black (Matte)"); TalkBack reads "Name, PolyTerra PLA Charcoal Black, becomes PolyTerra PLA Charcoal Black (Matte)". With no photo kept: "No photo was kept: it worked from the saved values and your note." Buttons "Accept" (main) and "Discard" (outlined). |
+| Proposal | Before-and-after change list (02 7.9) with `--accent-soft` ground and a 1 dp `--accent-text` outline: heading "Proposal: 2 changes", one row per change: field name, old value struck through in `--muted`, arrow, new value at `--fw-label` ("Name: PolyTerra PLA Charcoal Black → PolyTerra PLA Charcoal Black (Matte)"); TalkBack reads "Name, PolyTerra PLA Charcoal Black, becomes PolyTerra PLA Charcoal Black (Matte)". With no photo kept: "No photo was kept for this record: the Label Reader worked from the saved values and your note." Buttons "Accept" (main) and "Discard" (outlined). |
 | No change | "The Label Reader changed nothing." |
 | Accepted | `ok` line "Accepted. 2 fields changed; revision 2 keeps the old values." |
 | Discarded | Hollow-circle line "Proposal discarded. Nothing changed." |
@@ -1569,7 +1569,7 @@ The update panel appears on 12.4, and as a one-line notice on Home (5) that link
 | More icon | "More actions" (on a row: "More actions for Workshop X1") |
 | Status shapes next to a word | none (decorative); the word is read |
 | Swatch | "Colour 2B2B2E"; empty slot "Empty slot" |
-| Level bar | merged with its text: "620 grams left of 1000, 62 percent" |
+| Level bar | merged with its text: "62 percent left: 620 of 1000 grams" |
 | Photo thumbnail | "Label photo 1 of 2" (record) / "Photo 2" (draft) |
 | Remove photo | "Remove photo 2" |
 | Camera picture | "Live camera of Workshop X1" |

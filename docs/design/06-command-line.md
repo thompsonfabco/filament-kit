@@ -1017,7 +1017,7 @@ Printers
                   A report would help.
                   Fix: sudo spoolwarden printer report "Study A1 mini"
 Slicer presets
-  ● OK            Last build 2026-11-12 03:05: 48 presets, no problems
+  ● OK            Last build 2026-11-12 03:05. Presets: 48. Problems: none
   ◆ note          Slicer Sync last reported 2026-11-12 07:30
 Filament Catalog
   ● OK            Version 2026.11.2 (signed release), 3 local additions
@@ -1039,7 +1039,7 @@ Filament Catalog
 | Weigh Station | `Answering at <url>`, `Tag reader seen`, `Scale seen`, `Paired with <address>` / `… not seen`, `Not paired` | per row: check the cable; `sudo spoolwarden pair --weigh-station` |
 | Devices | note `Paired devices: N` | (none) |
 | Printers | one row per printer with its state word (section 6.1); one needs-a-look row per printer problem | `sudo spoolwarden printer report "<name>"`, or the fix for that state |
-| Slicer presets | `Last build <time>: N presets, no problems` / `… M problems` with each problem as a detail line; note `Slicer Sync last reported <time>` or needs a look `Slicer Sync: not set up`; note for the waiting text | `sudo spoolwarden presets status`; `sudo spoolwarden pair --slicer-sync` |
+| Slicer presets | `Last build <time>. Presets: N. Problems: none` / `… Problems: M` with each problem as a detail line; note `Slicer Sync last reported <time>` or needs a look `Slicer Sync: not set up`; note for the waiting text | `sudo spoolwarden presets status`; `sudo spoolwarden pair --slicer-sync` |
 | Filament Catalog | `Version <v> (<source>), N local additions` / `Not downloaded yet` / `Last check failed: <why>` | `sudo spoolwarden catalog update` |
 
 - A group whose feature is switched off prints one row: `○ off  Switched off in Features.` (no Fix; it is not a
@@ -1106,7 +1106,7 @@ A Klipper printer shows `API key  set` and `Lane data  auto` in place of Certifi
 | `printer add` | Bambu: `Added Workshop X1 (serial 00M00A000000001).` plus the Hub's note. Klipper: `Added Garage Voron as garage-voron (voron.example:7125).`, the Hub's note if any, then what detect found, indented: `  Model: Voron 2.4 (not verified)` and `  Slots: T0, T1`, each with the Hub's reason on the next line, indented further, when it gives one | Asks for what the flags do not give (8.7). Flags: `--address`, `--name`, `--serial`, `--access-code -`; Klipper `--klipper --address --port --name --api-key -`. |
 | `printer use` | `Added mainsailos (192.0.2.57:7125).` | Optional `--api-key -` |
 | `printer rename` | `Renamed Workshop X1 to Workshop X1C.` | |
-| `printer address` | `Saved. Workshop X1 is at 192.0.2.42.` plus the Hub's note | A Bambu printer's address change asks for its Access Code (8.7), as the Hub page's Change address dialog does. |
+| `printer address` | `Saved. Workshop X1 is at 192.0.2.42.` plus the Hub's note | A Bambu Lab printer's address change asks for its Access Code (8.7), as the Hub page's Change address dialog does. |
 | `printer access-code` | `Saved the Access Code of Workshop X1.` | |
 | `printer api-key` | `Saved the API key of Garage Voron.` / `Cleared the API key of Garage Voron.` | |
 | `printer lane-data` | `Saved. Lane data: auto.` | |
@@ -1236,7 +1236,7 @@ Undone: revision 2. Record 35 is revised by AI again.
 - A change line is `<Field>: <before> → <after>`; when it does not fit, the after value goes on the next line,
   indented, starting with the arrow.
 - Revise with nothing to change: `The Label Reader changed nothing.` (exit 0). No photo kept:
-  `Note: no photo was kept for this record; it worked from the saved values and your note.`
+  `Note: no photo was kept for this record; the Label Reader worked from the saved values and your note.`
 - Revise when the Label Reader is off: `Error: the Label Reader is off on this Hub, so only edits by hand
   work.` with `Fix: sudo spoolwarden recent edit 35 name="…"`.
 - Edit with values equal to the current ones: `Nothing changed.` (exit 0).
@@ -1306,8 +1306,8 @@ Paired: Shop phone.
 
 | Command | Output |
 |---|---|
-| `presets status` | Lines in the Hub page's order: `Lines: 14.`; `Last build 2026-11-12 03:05: 48 presets, 12 for Orca Slicer, no problems.` (or `No build yet.`); the last attempt's error, if any; the waiting text; `Installed on the PC: the build of 2026-11-12 03:05, written 2026-11-12 07:30.` or `Installed on the PC: nothing yet.`; `Slicer Sync: last reported 2026-11-12 07:30.` or `▲ needs a look  Slicer Sync: not set up.` with `Fix: sudo spoolwarden pair --slicer-sync`; `Updates: 3 on 2 lines. Presets already in your slicers are never replaced unless you accept them.`; `Delete in Bambu Studio: <name>` and `Delete in Orca Slicer: <name>` lines; problems as `▲ needs a look` lines |
-| `presets build` | Runs the build here and waits for it, as today, with `◐ Building the Slicer presets…` (section 6.6). Then `● done  Built 48 presets, no problems.` or `● done  Built 48 presets, 2 problems:` followed by one `▲ needs a look  <problem>` line per problem (exit 0). Still waiting for the Slicer Sync's first run: `i note  <the Hub's waiting text>` (exit 0). Failed: `× failed  The build failed: <why>. The last good build stays in use.` with `Fix: see what it logged: sudo spoolwarden logs <the build's service>` (exit 1). |
+| `presets status` | Lines in the Hub page's order: `Lines: 14.`; `Last build 2026-11-12 03:05. Presets: 48 (12 for Orca Slicer). Problems: none.` (or `No build yet.`); the last attempt's error, if any; the waiting text; `Installed on the PC: the build of 2026-11-12 03:05, written 2026-11-12 07:30.` or `Installed on the PC: nothing yet.`; `Slicer Sync: last reported 2026-11-12 07:30.` or `▲ needs a look  Slicer Sync: not set up.` with `Fix: sudo spoolwarden pair --slicer-sync`; `Updates: 3 on 2 lines. Presets already in your slicers are never replaced unless you accept them.`; `Delete in Bambu Studio: <name>` and `Delete in Orca Slicer: <name>` lines; problems as `▲ needs a look` lines |
+| `presets build` | Runs the build here and waits for it, as today, with `◐ Building the Slicer presets…` (section 6.6). Then `● done  Presets built: 48. Problems: none.` or `● done  Presets built: 48. Problems: 2:` followed by one `▲ needs a look  <problem>` line per problem (exit 0). Still waiting for the Slicer Sync's first run: `i note  <the Hub's waiting text>` (exit 0). Failed: `× failed  The build failed: <why>. The last good build stays in use.` with `Fix: see what it logged: sudo spoolwarden logs <the build's service>` (exit 1). |
 | `presets lines` | Table `ID`, `LINE` (long column), `MATERIAL`, `PRESETS`; under each row two dim detail lines: `parents: Bambu Studio <name> (<source>) · Orca Slicer <name> (<source>)` and `filaments: 86, 88` (or `filaments: none`). Empty: `No lines yet. They are made from the Spoolman filaments at the next build or addition.` |
 | `presets set-parent` | `Saved. A build was asked for.` When the Slicer Sync has reported no parents: `Error: the Slicer Sync has not reported any parents yet. It reports them when it runs.` |
 | `presets restore-deleted` | `The next build brings back the presets deleted in Bambu Studio. A build was asked for.` |
@@ -1641,7 +1641,7 @@ this design.
 | Recently added: list, show | N | Y | Y | Y | Y | app: remains |
 | Recently added: revise, edit, undo | N | Y | Y | Y | Y | app: remains |
 | Records kept (Recently added setting) | N | Y | N | Y | Y | none for the command line |
-| Printer list; add a Bambu printer with its Access Code | Y | Y | Y | P (inside `config` only) | Y (`printer list`, `printer add`) | **closed** |
+| Printer list; add a Bambu Lab printer with its Access Code | Y | Y | Y | P (inside `config` only) | Y (`printer list`, `printer add`) | **closed** |
 | Add a Klipper printer | N | Y | Y | Y | Y (`printer add --klipper`) | app: remains |
 | Find Klipper printers | N | Y | P | Y | Y (`printer scan`, `use`, `dismiss`) | none for the command line |
 | Test, rename, change address, replace Access Code or API key, lane data, detect, forget certificate, forget printer | Y | Y | Y | P (rename and remove in `config`; unpin; API key) | Y (one `printer` command each) | **closed** |
