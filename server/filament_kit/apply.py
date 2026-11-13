@@ -595,6 +595,17 @@ def _web_state(ex: _Exec) -> None:
     web_access.grant(web.pw_uid, kit.st_uid)
 
 
+def _put_back(path: Path, old: bytes | None) -> None:
+    """Restore a file's old bytes with one atomic replace (or remove it when it did not exist)."""
+    if old is None:
+        path.unlink(missing_ok=True)
+        return
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(old)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
 def _remote_install(ex: _Exec, host: str) -> None:
     """Router files, certbot hooks and a placeholder certificate so nginx starts before certbot has run. When
     `nginx -t` fails, the router conf and proxy conf go back to what they were (or away), so a bad conf never
@@ -633,8 +644,13 @@ def _remote_install(ex: _Exec, host: str) -> None:
         # the mark names both while the certificate changes, so a crash at any point leaves it provably the kit's
         both = [new] + ([hashlib.sha256(old_cert).hexdigest()] if old_cert is not None else [])
         ex.write(remote.PLACEHOLDER_MARK, ("\n".join(both) + "\n").encode("ascii"), 0o644)
+        old_key = key.read_bytes() if key.exists() else None
         ex.write(f"{remote.TLS_DIR}/privkey.pem", key_pem, 0o600)
-        ex.write(f"{remote.TLS_DIR}/fullchain.pem", cert_pem, 0o644)
+        try:
+            ex.write(f"{remote.TLS_DIR}/fullchain.pem", cert_pem, 0o644)
+        except BaseException:       # a stop between the two replaces: put the old key back so the pair still matches
+            _put_back(key, old_key)
+            raise
         ex.write(remote.PLACEHOLDER_MARK, (new + "\n").encode("ascii"), 0o644)
     try:
         ex.cmd(["nginx", "-t"])

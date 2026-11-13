@@ -164,12 +164,7 @@ def test_a_crash_while_it_changes_leaves_either_certificate_provably_ours():
     assert remote.placeholder_due(pem, mark_of(new) + mark_of(pem), HOST, NOW)  # and renewed in its turn
 
 
-@pytest.mark.parametrize("step", [
-    0,
-    pytest.param(1, marks=pytest.mark.xfail(strict=True, reason="the key is replaced before the certificate: a stop "
-                                            "between the two leaves a pair that does not match (product gap, FB-089)")),
-    2,
-])
+@pytest.mark.parametrize("step", [0, 1, 2])
 def test_each_write_on_the_way_leaves_a_mark_that_holds_the_cert_on_disk(tmp_path, monkeypatch, step):
     tls = _tls(tmp_path)
     tls.mkdir(parents=True)
