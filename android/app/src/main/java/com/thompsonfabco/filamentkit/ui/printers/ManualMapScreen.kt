@@ -44,12 +44,9 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = leave) { Text("Back") }
-            Column {
-                Text(ManualMapHelp.TITLE, style = MaterialTheme.typography.headlineSmall)
-                printerName?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            }
+        Column {
+            Text(ManualMapHelp.TITLE, style = MaterialTheme.typography.headlineSmall)
+            printerName?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
         s.mismatch?.let { (expected, actual) ->
             MismatchNotice(expected, actual, onPairAgain)

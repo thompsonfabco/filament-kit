@@ -68,6 +68,20 @@ interface IntakeApi {
     suspend fun vendors(): List<VendorChoice> = emptyList()
 
     companion object {
+        /** Calls go to whatever [current] returns at that moment, so a new client (trusted certificate, re-pair) is used at once. */
+        fun of(current: () -> Api): IntakeApi = object : IntakeApi {
+            private fun api() = current()
+            override suspend fun read(photos: List<ByteArray>, hint: String, tag: String?) = api().read(photos, hint, tag)
+            override suspend fun retry(readId: String) = api().retry(readId)
+            override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String?) =
+                api().add(items, dryRun, tag, readId)
+            override suspend fun locations() = api().locations()
+            override suspend fun propose(vendor: String, line: String, material: String) = api().propose(vendor, line, material)
+            override suspend fun parents(material: String) = api().parents(material)
+            override suspend fun filaments(q: String) = api().filaments(q)
+            override suspend fun vendors() = api().vendors()
+        }
+
         fun of(api: Api): IntakeApi = object : IntakeApi {
             override suspend fun read(photos: List<ByteArray>, hint: String, tag: String?) = api.read(photos, hint, tag)
             override suspend fun retry(readId: String) = api.retry(readId)
@@ -392,6 +406,9 @@ class AddViewModel(
     fun setSealed(sealed: Boolean) = edit { it.copy(sealed = sealed, weight = if (sealed) null else it.weight) }
 
     fun clearTag() = changeTag(null)
+
+    /** A tag tapped while this flow's screen is showing (the screen passes it; see [taps] for tests). */
+    fun onTag(uid: String) = setTag(uid)
 
     /** Taps while a call is running are ignored, so the tag sent is the tag the user saw. */
     private fun setTag(uid: String) {

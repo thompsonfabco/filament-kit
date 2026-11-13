@@ -59,8 +59,7 @@ fun PrintersScreen(
         onStopOrDispose { }
     }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Printers", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = viewModel::refresh, enabled = !state.loading) { Text("Refresh") }
         }
         state.mismatch?.let { (expected, actual) ->

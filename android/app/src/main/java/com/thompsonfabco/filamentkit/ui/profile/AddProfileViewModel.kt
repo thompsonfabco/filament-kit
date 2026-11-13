@@ -31,6 +31,15 @@ interface ProfileApi {
     suspend fun setLineParent(lineId: String, parent: String): ProfileLine
 
     companion object {
+        /** Calls go to whatever [current] returns at that moment (see `IntakeApi.of`). */
+        fun of(current: () -> Api): ProfileApi = object : ProfileApi {
+            private fun api() = current()
+            override suspend fun parents(material: String) = api().parents(material)
+            override suspend fun addLocalProfile(entry: JsonObject) = api().addLocalProfile(entry)
+            override suspend fun profileLines() = api().profileLines()
+            override suspend fun setLineParent(lineId: String, parent: String) = api().setLineParent(lineId, parent)
+        }
+
         fun of(api: Api): ProfileApi = object : ProfileApi {
             override suspend fun parents(material: String) = api.parents(material)
             override suspend fun addLocalProfile(entry: JsonObject) = api.addLocalProfile(entry)

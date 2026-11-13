@@ -2,7 +2,6 @@ package com.thompsonfabco.filamentkit.ui.history
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -44,6 +43,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.HistoryRecord
@@ -54,38 +54,38 @@ import com.thompsonfabco.filamentkit.ui.printers.UnpairedNotice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The Intake history section: the list, and one record when opened (Back returns to the list). */
+/** Recently added: the list of intake records. */
 @Composable
-fun HistoryEntry(api: Api, onBack: () -> Unit, onPairAgain: () -> Unit) {
+fun HistoryListEntry(api: Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
     val backend = remember(api) { HistoryBackend.of(api) }
-    val apiKey = System.identityHashCode(api)
-    val list = viewModel(key = "history-$apiKey") { HistoryListViewModel(backend) }
-    var openId by rememberSaveable { mutableStateOf<String?>(null) }
-    val id = openId
-    if (id == null) {
-        HistoryListScreen(list, onOpen = { openId = it }, onBack = onBack, onPairAgain = onPairAgain)
-    } else {
-        BackHandler { openId = null }
-        val vm = viewModel(key = "history-record-$apiKey-$id") { RecordViewModel(backend, id) }
-        // A record can open with no list loaded (restored after process death): load it for the AI flag.
-        LaunchedEffect(id) { list.ensureLoaded() }
-        val ai = list.state.collectAsState().value.aiAvailable
-        RecordScreen(vm, list, ai, onBack = { openId = null; list.refresh() }, onPairAgain = onPairAgain)
-    }
+    val list = viewModel(key = System.identityHashCode(api).toString()) { HistoryListViewModel(backend) }
+    HistoryListScreen(list, onOpen = onOpen, onPairAgain = onPairAgain)
+}
+
+/**
+ * One record. The list's view model belongs to [listOwner] (the list's own back stack entry), so the record shares the
+ * list's data and the list refreshes when the person comes back.
+ */
+@Composable
+fun HistoryRecordEntry(api: Api, id: String, listOwner: ViewModelStoreOwner, onBack: () -> Unit, onPairAgain: () -> Unit) {
+    val backend = remember(api) { HistoryBackend.of(api) }
+    val apiKey = System.identityHashCode(api).toString()
+    val list = viewModel(viewModelStoreOwner = listOwner, key = apiKey) { HistoryListViewModel(backend) }
+    val vm = viewModel(key = apiKey) { RecordViewModel(backend, id) }
+    // A record can open with no list loaded (restored after process death): load it for the AI flag.
+    LaunchedEffect(id) { list.ensureLoaded() }
+    val ai = list.state.collectAsState().value.aiAvailable
+    RecordScreen(vm, list, ai, onBack = { list.refresh(); onBack() }, onPairAgain = onPairAgain)
 }
 
 @Composable
-private fun HistoryListScreen(vm: HistoryListViewModel, onOpen: (String) -> Unit, onBack: () -> Unit, onPairAgain: () -> Unit) {
+private fun HistoryListScreen(vm: HistoryListViewModel, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
     val s by vm.state.collectAsState()
     LifecycleStartEffect(vm) {
         vm.refresh()
         onStopOrDispose { }
     }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text(HistoryTexts.TITLE, style = MaterialTheme.typography.headlineSmall)
-        }
         s.mismatch?.let { (e, a) -> MismatchNotice(e, a, onPairAgain); return@Column }
         if (s.unauthorized) { UnpairedNotice(onPairAgain); return@Column }
         s.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -151,10 +151,7 @@ private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Bo
     var enlarged by rememberSaveable { mutableStateOf<Int?>(null) }
     var note by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text("Intake record", style = MaterialTheme.typography.headlineSmall)
-        }
+        Text("Intake record", style = MaterialTheme.typography.headlineSmall)
         s.mismatch?.let { (e, a) -> MismatchNotice(e, a, onPairAgain); return@Column }
         if (s.unauthorized) { UnpairedNotice(onPairAgain); return@Column }
         val r = s.record
