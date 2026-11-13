@@ -34,6 +34,7 @@ except ImportError:  # Windows dev PCs: no cross-process lock (the service only 
 TOKEN_TTL = 600
 MAX_ATTEMPTS = 5
 LAST_SEEN_STALE = 60
+SPENT_KEEP = max(3600, TOKEN_TTL)   # how long a spent code is remembered, to tell "used up" from "never issued"
 _lock = threading.Lock()
 
 
@@ -60,6 +61,10 @@ class PairingError(Exception):
 
 class CertUnreadable(PairingError):
     """The certificate exists but this user may not read it (the CLI run without sudo)."""
+
+
+class CodeSpent(PairingError):
+    """The code was valid a short while ago: expired, redeemed, or dropped at the attempt limit."""
 
 
 @dataclass
@@ -246,6 +251,15 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def _spent_read(now: float) -> list:
+    """spent.json without entries past SPENT_KEEP. It holds the hash of a code, never the code."""
+    return [e for e in _read("spent.json") if e["at"] > now - SPENT_KEEP]
+
+
+def _spent_add(spent: list, codes: list, at: float) -> list:
+    return spent + [{"hash": _hash(c), "at": at} for c in codes]
+
+
 def _new_token() -> str:
     return secrets.token_urlsafe(32)
 
@@ -295,7 +309,10 @@ def issue(device_hint: str = "", role: str | None = None, scope: str | None = No
         })
         _write("devices.json", devs)
 
-        pending = [p for p in _read("pending.json") if p["expires"] > now]
+        pending = _read("pending.json")
+        spent = _spent_add(_spent_read(now), [p["code"] for p in pending if p["expires"] <= now], now)
+        pending = [p for p in pending if p["expires"] > now]
+        _write("spent.json", spent)
         pending.append({"code": code, "device": device_id, "expires": expires, "attempts": 0})
         _write("pending.json", pending)
 
@@ -310,18 +327,27 @@ def issue(device_hint: str = "", role: str | None = None, scope: str | None = No
 def redeem_code(code: str) -> str:
     with _locked():
         now = time.time()
-        pending = [p for p in _read("pending.json") if p["expires"] > now]
+        allp = _read("pending.json")
+        pending = [p for p in allp if p["expires"] > now]
+        spent = _spent_add(_spent_read(now), [p["code"] for p in allp if p["expires"] <= now], now)
+        well_formed = isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code)
         match = None
-        if isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code):
+        if well_formed:
             match = next((p for p in pending if hmac.compare_digest(p["code"], code)), None)
         if match is None:
             # A wrong guess counts against every live code; at the limit a code is dropped.
             for p in pending:
                 p["attempts"] += 1
+            dropped = [p["code"] for p in pending if p["attempts"] >= MAX_ATTEMPTS]
+            spent = _spent_add(spent, dropped, now)
             _write("pending.json", [p for p in pending if p["attempts"] < MAX_ATTEMPTS])
+            _write("spent.json", spent)
+            if well_formed and any(hmac.compare_digest(e["hash"], _hash(code)) for e in spent):
+                raise CodeSpent("pairing code expired or already used")
             raise PairingError("invalid, expired or locked pairing code")
         pending.remove(match)
         _write("pending.json", pending)
+        _write("spent.json", _spent_add(spent, [match["code"]], now))
         devs = _load_devices()
         token = _new_token()
         for d in devs:
@@ -345,8 +371,10 @@ def authorize(token: str) -> tuple[str, str | None] | None:
                 now = time.time()
                 if d.get("claimed") is None:
                     d["claimed"] = d["paired"] = d["last_seen"] = now
-                    pend = [p for p in _read("pending.json") if p["device"] != d["id"]]
-                    _write("pending.json", pend)
+                    allp = _read("pending.json")
+                    pend = [p for p in allp if p["device"] != d["id"]]
+                    _write("pending.json", pend)   # the QR claim uses the code up
+                    _write("spent.json", _spent_add(_spent_read(now), [p["code"] for p in allp if p["device"] == d["id"]], now))
                     _write("devices.json", devs)
                 elif d["last_seen"] is None or now - d["last_seen"] > LAST_SEEN_STALE:
                     d["last_seen"] = now

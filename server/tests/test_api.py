@@ -434,3 +434,14 @@ def test_filaments_and_vendors_for_a_manual_add(sm):
     r = c.post("/api/intake/add", headers=auth(tok), json={"items": [{**item, "count": 2}], "dry_run": False})
     assert r.status_code == 200, r.text
     assert len(r.json()["spool_ids"]) == 2 and "existing filament" in r.json()["lines"][0]
+
+
+def test_pair_tells_a_spent_code_from_a_wrong_one(sm):
+    c = client(sm)
+    p = pairing.issue()
+    wrong = "000000" if p.code != "000000" else "111111"
+    r = c.post("/api/pair", json={"code": wrong})
+    assert r.status_code == 401 and r.json()["error"] == "unauthorized"
+    assert c.post("/api/pair", json={"code": p.code}).status_code == 200
+    r = c.post("/api/pair", json={"code": p.code})
+    assert r.status_code == 401 and r.json()["error"] == "code_expired"
