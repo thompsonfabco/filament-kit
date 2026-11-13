@@ -254,7 +254,7 @@ private fun PhotoStrip(photos: List<File>, onRemove: (Int) -> Unit) {
             Box(Modifier.size(side)) {
                 Thumbnail(file, Modifier.size(side), stringResource(R.string.a11y_photo_draft, i + 1))
                 SwIconButton(
-                    R.drawable.sw_ic_close, stringResource(R.string.a11y_photo_remove, i + 1), { onRemove(i) },
+                    R.drawable.sw_ic_close, stringResource(R.string.add_photo_remove, (i + 1).toString(), photos.size), { onRemove(i) },
                     Modifier.align(Alignment.TopEnd),
                 )
             }

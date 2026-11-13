@@ -185,7 +185,7 @@ internal fun SpoolPanel(
                         missing.isNotEmpty() ->
                             AddStatusLine(AddStatus.Bad, stringResource(R.string.add_review_needs, fieldNames(missing)))
                         marks.values.any { it == Mark.Low } ->
-                            AddStatusLine(AddStatus.Bad, stringResource(R.string.add_review_mark_low))
+                            AddStatusLine(AddStatus.Bad, stringResource(R.string.confidence_low))
                         estimated > 0 ->
                             AddStatusLine(AddStatus.Warn, stringResource(R.string.add_review_estimated, estimated))
                         else -> AddStatusLine(AddStatus.Ok, stringResource(R.string.add_review_ready))
@@ -241,7 +241,7 @@ private fun PanelFields(ctx: PanelContext, state: AddUiState, vm: AddViewModel) 
     val i = ctx.index
     val count = item.int("count")
     val sealed = item.bool("sealed") == true
-    val gramsUnit = stringResource(R.string.common_unit_grams)
+    val gramsUnit = stringResource(R.string.unit_g)
     val errGrams = stringResource(R.string.common_error_grams)
     val errWhole = stringResource(R.string.add_review_error_whole)
     val errDensity = stringResource(R.string.add_review_error_density)
@@ -316,7 +316,7 @@ private fun PanelFields(ctx: PanelContext, state: AddUiState, vm: AddViewModel) 
         if (state.manual || "density" in ctx.serverErrors) {
             val guess = defaultDensity(item.str("material"))
             NumberRow(
-                ctx, "density", R.string.common_field_density, suffix = stringResource(R.string.common_unit_density),
+                ctx, "density", R.string.common_field_density, suffix = stringResource(R.string.unit_g_cm3),
                 problem = errDensity, hint = stringResource(R.string.common_hint_leave_empty_auto),
                 placeholder = guess?.let(::grams),
             ) { vm.setNumber(i, "density", it) }
@@ -325,13 +325,13 @@ private fun PanelFields(ctx: PanelContext, state: AddUiState, vm: AddViewModel) 
             FieldPair(
                 {
                     NumberRow(
-                        ctx, "nozzle", R.string.common_field_nozzle_optional, suffix = stringResource(R.string.common_unit_celsius),
+                        ctx, "nozzle", R.string.common_field_nozzle_optional, suffix = stringResource(R.string.unit_c),
                         problem = errDegrees,
                     ) { vm.setNumber(i, "nozzle", it) }
                 },
                 {
                     NumberRow(
-                        ctx, "bed", R.string.common_field_bed_optional, suffix = stringResource(R.string.common_unit_celsius),
+                        ctx, "bed", R.string.common_field_bed_optional, suffix = stringResource(R.string.unit_c),
                         problem = errDegrees,
                     ) { vm.setNumber(i, "bed", it) }
                 },
@@ -377,9 +377,9 @@ private fun Supporting(error: String?, hint: String?, mark: Mark?): (@Composable
             (error ?: hint)?.let { Text(it) }
             when (mark) {
                 Mark.Estimated -> AddStatusLine(AddStatus.Warn, stringResource(R.string.add_review_mark_estimated))
-                Mark.NotOnLabel -> AddStatusLine(AddStatus.Muted, stringResource(R.string.add_review_mark_not_on_label))
-                Mark.Medium -> AddStatusLine(AddStatus.Warn, stringResource(R.string.add_review_mark_medium))
-                Mark.Low -> AddStatusLine(AddStatus.Bad, stringResource(R.string.add_review_mark_low))
+                Mark.NotOnLabel -> AddStatusLine(AddStatus.Muted, stringResource(R.string.confidence_not_on_label))
+                Mark.Medium -> AddStatusLine(AddStatus.Warn, stringResource(R.string.confidence_medium))
+                Mark.Low -> AddStatusLine(AddStatus.Bad, stringResource(R.string.confidence_low))
                 null -> Unit
             }
         }
@@ -389,9 +389,9 @@ private fun Supporting(error: String?, hint: String?, mark: Mark?): (@Composable
 @Composable
 private fun markWord(mark: Mark?): String? = when (mark) {
     Mark.Estimated -> stringResource(R.string.add_review_mark_estimated)
-    Mark.NotOnLabel -> stringResource(R.string.add_review_mark_not_on_label)
-    Mark.Medium -> stringResource(R.string.add_review_mark_medium)
-    Mark.Low -> stringResource(R.string.add_review_mark_low)
+    Mark.NotOnLabel -> stringResource(R.string.confidence_not_on_label)
+    Mark.Medium -> stringResource(R.string.confidence_medium)
+    Mark.Low -> stringResource(R.string.confidence_low)
     null -> null
 }
 

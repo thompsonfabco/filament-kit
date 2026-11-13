@@ -701,7 +701,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         }
         // a read or an add that ends while the person is elsewhere is answered with a snackbar (05 6.2, 6.5)
         val readDoneText = stringResource(R.string.add_photos_read_done)
-        val readDoneAction = stringResource(R.string.add_photos_read_done_action)
+        val readDoneAction = stringResource(R.string.common_check)
         val addedText = stringResource(R.string.add_done_title)
         LaunchedEffect(app) {
             launch {

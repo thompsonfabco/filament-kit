@@ -67,7 +67,7 @@ fun PreviewScreen(
             NoticeCard(
                 NoticeKind.Bad, p.text,
                 actions = listOf(
-                    SwAction(stringResource(R.string.add_preview_fix)) {
+                    SwAction(stringResource(R.string.common_fix)) {
                         if (p.index != null && p.key != null) vm.fixField(p.index, p.key) else vm.backToCheck()
                     },
                 ),
@@ -177,7 +177,7 @@ fun DoneScreen(
         bar = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
                 SwButton(stringResource(R.string.add_done_more), onAddMore, Modifier.weight(1f))
-                SwButton(stringResource(R.string.common_done), onDone, Modifier.weight(1f), kind = SwButtonKind.Main)
+                SwButton(stringResource(R.string.status_done), onDone, Modifier.weight(1f), kind = SwButtonKind.Main)
             }
             state.historyId?.let { hid ->
                 SwButton(

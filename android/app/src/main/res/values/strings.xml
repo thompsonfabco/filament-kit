@@ -1707,9 +1707,11 @@
         <item quantity="one">%1$d photo at a time. Remove one to add another.</item>
         <item quantity="other">%1$d photos at a time. Remove one to add another.</item>
     </plurals>
+    <string name="add_done_status">Added</string>
     <!-- 1=number 2=count -->
     <string name="add_photo_remove">Remove photo %1$s of %2$d</string>
     <string name="add_photo_remove_this">Remove this photo</string>
+    <string name="add_photos_title">Photos</string>
     <!-- 1=name -->
     <string name="add_photo_unreadable">%1$s: this image cannot be read. Try another photo.</string>
     <string name="add_read_labels">Read labels</string>

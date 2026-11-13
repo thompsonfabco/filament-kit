@@ -81,7 +81,7 @@ fun ReviewScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
                 if (!state.manual) SwButton(stringResource(R.string.add_back_to_photos), vm::backToPhotos, Modifier.weight(1f))
                 SwButton(
-                    stringResource(R.string.add_review_preview), vm::preview, Modifier.weight(1f), kind = SwButtonKind.Main,
+                    stringResource(R.string.common_preview), vm::preview, Modifier.weight(1f), kind = SwButtonKind.Main,
                     enabled = state.items.isNotEmpty() && state.countsValid && state.taresValid && state.complete,
                 )
             }
