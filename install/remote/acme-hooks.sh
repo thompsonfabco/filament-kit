@@ -18,9 +18,10 @@ pair_ok() {
   [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
-# put a matching pair from directory $1 in place; each file is copied whole, then renamed
+# put a matching pair that has not expired from directory $1 in place; each file is copied whole, then renamed
 take_pair() {
   pair_ok "$1/fullchain.pem" "$1/privkey.pem" || return 1
+  openssl x509 -checkend 0 -noout -in "$1/fullchain.pem" >/dev/null 2>&1 || return 1
   cp "$1/privkey.pem" "$T/privkey.pem.tmp" && chmod 600 "$T/privkey.pem.tmp" &&
     mv "$T/privkey.pem.tmp" "$T/privkey.pem" || return 1
   cp "$1/fullchain.pem" "$T/fullchain.pem.tmp" && chmod 644 "$T/fullchain.pem.tmp" &&
@@ -56,10 +57,10 @@ case "$1" in
     command -v openssl >/dev/null 2>&1 || exit 0
     pair_ok "$T/fullchain.pem" "$T/privkey.pem" && exit 0
     HOST=$(cat "$R/etc/mcp-router/host" 2>/dev/null)
-    if take_pair "$T/previous"; then
-      echo "filament-kit: the saved certificate and key did not belong together, so the previous working pair was put back."
-    elif [ -n "$HOST" ] && take_pair "$R/etc/letsencrypt/live/$HOST"; then
+    if [ -n "$HOST" ] && take_pair "$R/etc/letsencrypt/live/$HOST"; then
       echo "filament-kit: the saved certificate and key did not belong together, so a fresh copy was taken from the certificate store."
+    elif take_pair "$T/previous"; then
+      echo "filament-kit: the saved certificate and key did not belong together, so the previous working pair was put back."
     else
       echo "filament-kit: the saved certificate and key do not belong together and no good copy was found; run 'filament-kit apply' to make them again."
     fi

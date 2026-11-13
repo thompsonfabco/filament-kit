@@ -417,6 +417,15 @@ def test_remote_install_writes_the_nginx_start_check_and_reloads_systemd_after_i
     assert ran.index(["systemctl", "daemon-reload"]) < ran.index(["nginx", "-t"])
 
 
+def test_the_nginx_start_check_is_listed_before_the_distro_nginx_test():
+    """The distro's unit runs `nginx -t` first and a failure stops the start; a drop-in only appends, so the list is
+    cleared and ours goes first, then the test again (systemd runs ExecStartPre in the order given)."""
+    pre = [l.split("=", 1)[1] for l in remote.NGINX_DROPIN_TEXT.splitlines() if l.startswith("ExecStartPre=")]
+    assert pre[0] == ""                                  # reset: the unit's own lines are dropped
+    assert pre[1] == f"-{remote.HOOK} check"             # the check, which may fail without stopping the start
+    assert pre[2].startswith("/usr/sbin/nginx -t") and len(pre) == 3
+
+
 # ---- v0.3.0: the kit's own route marker (the ops router writes "written by mcp-route" too) ----
 
 OPS_FIRST_LINE = ('# MCP server "@NAME@" -> 127.0.0.1:@PORT@   (written by mcp-route; public base '

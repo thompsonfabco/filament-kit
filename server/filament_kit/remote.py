@@ -35,7 +35,10 @@ LEGACY_DAYS = 31        # up to 0.4.x the placeholder lasted 30 days and had no 
 TIMER_DROPIN = "/etc/systemd/system/certbot.timer.d/acme-window.conf"
 NGINX_DROPIN = "/etc/systemd/system/nginx.service.d/filament-kit-pair.conf"  # checks the certificate and key at start
 NGINX_DROPIN_TEXT = ("# Before every nginx start, make sure the certificate and key match (filament-kit)\n"
-                     f"[Service]\nExecStartPre=-{HOOK} check\n")
+                     "# The check goes first: the distro's own `nginx -t` fails on a mismatched pair and would stop"
+                     " the start before the check could repair it, so that line is listed again after ours.\n"
+                     f"[Service]\nExecStartPre=\nExecStartPre=-{HOOK} check\n"
+                     "ExecStartPre=/usr/sbin/nginx -t -q -g 'daemon on; master_process on;'\n")
 DEPLOY_HOOK_FILE = "/etc/letsencrypt/renewal-hooks/deploy/filament-kit"
 KIT_ROUTES = ROUTER_DIR + "/kit-routes"  # names of the routes this kit added, one per line
 # In the first line of every route the kit's mcp-route writes. The filament-ops router's mcp-route writes
