@@ -36,8 +36,13 @@ data class ServerInfo(
     /** The label-photo add flow is offered: `ai_intake` is on (or the server is too old to say). */
     val labelReading: Boolean get() = modules == null || AI_INTAKE in modules
 
+    /** The Printers Feature is on (Bambu or Klipper; or the server is too old to say). */
+    val printersOn: Boolean get() = modules == null || PRINTERS in modules || KLIPPER in modules
+
     companion object {
         const val AI_INTAKE = "ai_intake"
+        const val PRINTERS = "printers"
+        const val KLIPPER = "klipper"
     }
 }
 
@@ -279,6 +284,14 @@ data class Printer(
 ) {
     /** What to show for the model: its name, else the code an older server sent, else null. */
     val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }
+
+    /** The [state] codes the Home panel tells apart; the others all mean "needs a look". */
+    companion object {
+        const val STATE_CONNECTED = "connected"
+        const val STATE_OFFLINE = "offline"
+        const val STATE_WRONG_CODE = "wrong_code"
+        const val STATE_NOT_CONFIGURED = "not_configured"
+    }
 }
 
 @Serializable

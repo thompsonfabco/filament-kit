@@ -166,6 +166,14 @@
     <string name="home_printers_more">and %1$d more</string>
     <string name="home_printers_empty">No printers yet.</string>
     <string name="home_printers_add">Add a printer</string>
+    <!-- 1=hours 2=minutes -->
+    <string name="home_printer_left_hours">%1$s h %2$s min</string>
+    <!-- 1=minutes -->
+    <string name="home_printer_left_minutes">%1$s min</string>
+    <!-- 1=state 2=percent -->
+    <string name="home_printer_job">%1$s · %2$s %%</string>
+    <string name="home_draft_yesterday">Yesterday</string>
+    <string name="home_update_ready_plain">Update ready.</string>
     <string name="settings_title">Settings</string>
     <string name="settings_hub_title">Hub connection</string>
     <string name="settings_updates_title">App updates</string>

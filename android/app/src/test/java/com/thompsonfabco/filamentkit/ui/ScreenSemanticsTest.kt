@@ -47,6 +47,7 @@ import com.thompsonfabco.filamentkit.net.UsageEntry
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.components.TOP_BAR_TAG
+import com.thompsonfabco.filamentkit.ui.home.HomePrintersState
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.printers.CameraSource
 import com.thompsonfabco.filamentkit.ui.printers.PrinterBackend
@@ -85,7 +86,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * AUT-8 (07-accessibility 15): Home, Spools, Printers and Printer as they are, Settings as rebuilt (S4.15), drawn under the top bar that
+ * AUT-8 (07-accessibility 15): Home (with the Label Reader on and off, with printers loading, empty and listed), Spools, Printers and Printer as they are, Settings as rebuilt (S4.15), drawn under the top bar that
  * names them, in light and dark at font scale 1 and 2. Data is fake (RFC 5737 addresses, `*.example`). Each later
  * screen step adds its screen here.
  */
@@ -138,23 +139,59 @@ class ScreenSemanticsTest {
         }
     }
 
+    private fun draft(id: String, photos: Int, hint: String, tag: String?, created: Long) = Draft(
+        id = id, photos = List(photos) { File("p$it.jpg") }, hint = hint, tag = tag, weightGrams = null,
+        sealed = false, readResult = null, editedItems = null, created = created,
+    )
+
+    private fun homePrinter(id: String, name: String, state: String, summary: PrinterSummary? = null) =
+        Printer(id = id, name = name, model = "X1C", serial = id, ip = "192.0.2.4", configured = true, state = state, summary = summary)
+
+    private fun showHome(
+        labelPhotos: Boolean = true,
+        printers: HomePrintersState = HomePrintersState(
+            printers = listOf(
+                homePrinter("A1", "Workshop X1", "connected", PrinterSummary("RUNNING", 42, 72, "Benchy")),
+                homePrinter("B2", "Garage Voron", "connected"),
+                homePrinter("C3", "Study A1 mini", "offline"),
+                homePrinter("D4", "Spare P1S", "wrong_code"),
+                homePrinter("E5", "Fifth", "connected"),
+            ),
+        ),
+        update: UpdateUi = UpdateUi(available = 3, offeredVersion = "0.5.3"),
+    ) = host("Home") {
+        HomeScreen(
+            connection = Connection.Online("192.0.2.10"),
+            drafts = listOf(
+                draft("d1", 2, "3 of the grey ones", "04A1", System.currentTimeMillis() - 180_000),
+                draft("d2", 1, "", null, 1_700_000_000_000L),
+            ),
+            update = update, printers = printers, onAddSpools = {}, onAddByHand = {}, onResumeDraft = {},
+            onDiscardDraft = {}, onOpenPrinter = {}, onOpenPrinters = {}, onRefreshPrinters = {},
+            onReviewCertificate = {}, onPairAgain = {}, onInstallUpdate = {}, onConfirmInstall = {},
+            labelPhotos = labelPhotos,
+        )
+    }
+
     @Test fun home() {
-        host("Home") {
-            HomeScreen(
-                serverName = "Workshop Hub", connection = Connection.Online("192.0.2.10"),
-                drafts = listOf(
-                    Draft(
-                        id = "d1", photos = listOf(File("a.jpg"), File("b.jpg")), hint = "grey", tag = null, weightGrams = null,
-                        sealed = false, readResult = null, editedItems = null, created = 1_700_000_000_000L,
-                    ),
-                ),
-                update = UpdateUi(), version = "App 1.0.0", onAddSpools = {}, onAddByHand = {}, onAddProfile = {},
-                onSearch = {}, onPrinters = {}, onSettings = {}, onResumeDraft = {}, onDiscardDraft = {},
-                onRetryConnection = {}, onReviewCertificate = {}, onInstallUpdate = {}, onConfirmInstall = {},
-                labelPhotos = true,
-            )
-        }
-        auditAllFour("Add spool")
+        showHome()
+        auditAllFour("Add by hand")
+    }
+
+    @Test fun homeWithTheLabelReaderOff() {
+        showHome(labelPhotos = false)
+        auditAllFour("Add by hand")
+        rule.onNodeWithText("Add from label photos").assertDoesNotExist()
+    }
+
+    @Test fun homeWhilePrintersLoadAndWithoutAnUpdate() {
+        showHome(printers = HomePrintersState(loading = true), update = UpdateUi())
+        auditAllFour("Add by hand")
+    }
+
+    @Test fun homeWithNoPrintersAndTheHubNewerThanTheApp() {
+        showHome(printers = HomePrintersState(printers = emptyList()), update = UpdateUi(serverTooNew = true))
+        auditAllFour("No printers yet.")
     }
 
     @Test fun spools() {

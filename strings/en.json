@@ -151,6 +151,11 @@
   "home_printers_more": "and {count} more",
   "home_printers_empty": "No printers yet.",
   "home_printers_add": "Add a printer",
+  "home_printer_left_hours": "{hours} h {minutes} min",
+  "home_printer_left_minutes": "{minutes} min",
+  "home_printer_job": "{state} · {percent} %",
+  "home_draft_yesterday": "Yesterday",
+  "home_update_ready_plain": "Update ready.",
 
   "settings_title": "Settings",
   "settings_hub_title": "Hub connection",
