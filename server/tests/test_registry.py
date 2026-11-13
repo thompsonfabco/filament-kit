@@ -219,6 +219,7 @@ def test_an_existing_entry_keeps_its_stored_name_even_when_shared():
     registry.upsert(Printer("S2", "Bench", "C12", "10.0.0.6", "x", True))   # shared before the fix
     assert registry.add_bambu("S2", "Bench", "C12", "10.0.0.6", "12345678").name == "Bench"
     assert registry.set_code("S2", "87654321", replace=True).name == "Bench"
+    assert registry.set_code("S2", "87654321", "Bench", replace=True).name == "Bench"   # the stored name given again
     assert registry.add_bambu("S2", "Shed", "C12", "10.0.0.6", "12345678").name == "Shed"   # a new name still applies
 
 
