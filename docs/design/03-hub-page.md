@@ -263,7 +263,7 @@ two groups separated by a hairline.
 
 - **Desktop and tablet:** the navigation rail, `--rail` wide, icon above a `--fs-xs` label; labels that do not fit
   in two lines ("Recently added", "Slicer presets", "Flash a device") break into two lines, never truncate. The
-  active entry has `--accent-soft` ground, weight 600 label, the 3 px `--accent` mark at the rail's inner edge and
+  active entry has `--accent-soft` ground, weight 600 label, the 3 px `--accent-text` mark at the rail's inner edge and
   `aria-current="page"`. Hover shows the live summary as a tooltip.
 - **Phone:** the bottom bar with Overview, Printers, Recent, Settings, More. More opens the More sheet: the six
   other sections, each a row with icon, name, live summary and chevron; the active one has `aria-current="page"`.

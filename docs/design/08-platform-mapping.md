@@ -474,18 +474,18 @@ On Android the theme has two layers:
 | Token | CSS custom property | Material 3 `ColorScheme` role(s) | `SpoolwardenColors` field |
 |---|---|---|---|
 | `--bg` | `--bg` | `background`, `surfaceDim` | `bg` |
-| `--surface` | `--surface` | `surface`, `surfaceBright`, `surfaceContainerLowest`, `surfaceContainerLow`, `surfaceContainer`, `surfaceContainerHigh`, `surfaceTint`, `inverseOnSurface` | `surface` |
+| `--surface` | `--surface` | `surface`, `surfaceBright`, `surfaceContainerLowest`, `surfaceContainerLow`, `surfaceContainer`, `surfaceContainerHigh`, `surfaceTint`, `inverseOnSurface`, `onPrimary`, `onSecondary`, `onTertiary` | `surface` |
 | `--surface-2` | `--surface-2` | `surfaceVariant`, `surfaceContainerHighest` | `surface2` |
 | `--surface-3` | `--surface-3` | none | `surface3` |
 | `--text` | `--text` | `onBackground`, `onSurface`, `inverseSurface` | `text` |
 | `--muted` | `--muted` | `onSurfaceVariant` | `muted` |
 | `--border` | `--border` | `outlineVariant` | `border` |
 | `--border-strong` | `--border-strong` | `outline` | `borderStrong` |
-| `--accent` | `--accent` | `primary`, `secondary`, `tertiary` | `accent` |
+| `--accent` | `--accent` | none (the fill of the main button and of the chosen segment, through `SwButton` and the segmented choice) | `accent` |
 | `--accent-hover` | `--accent-hover` | none | `accentHover` |
-| `--on-accent` | `--on-accent` | `onPrimary`, `onSecondary`, `onTertiary` | `onAccent` |
+| `--on-accent` | `--on-accent` | none (the label on `accent`) | `onAccent` |
 | `--accent-soft` | `--accent-soft` | `primaryContainer`, `secondaryContainer`, `tertiaryContainer` | `accentSoft` |
-| `--accent-text` | `--accent-text` | `onPrimaryContainer`, `onSecondaryContainer`, `onTertiaryContainer` | `accentText` |
+| `--accent-text` | `--accent-text` | `primary`, `secondary`, `tertiary`, `onPrimaryContainer`, `onSecondaryContainer`, `onTertiaryContainer` | `accentText` |
 | `--ok` | `--ok` | none | `ok` |
 | `--ok-soft` | `--ok-soft` | none | `okSoft` |
 | `--warn` | `--warn` | none | `warn` |
@@ -501,7 +501,14 @@ On Android the theme has two layers:
 
 Rules:
 
-- `inversePrimary` has no token of its own: it is the `accent` of the other appearance of the same theme.
+- `inversePrimary` has no token of its own: it is the `accent-text` of the other appearance of the same theme.
+- **Why `primary` is `accent-text`, not `accent`.** Material draws `primary` as content on surfaces: the label of
+  a text button, a checked box, a switch that is on, a progress indicator, the cursor and the focused label of a
+  field, the selected tab. A theme's `accent` may be too light for that (Spool light: 2.20:1 on `surface`), while
+  `accent-text` is checked at 4.5:1 on `bg`, `surface` and `surface-2` in every theme. So every stock component is
+  readable without being told its colours, and `onPrimary` is `surface`, which has the same ratio against it. Only
+  the filled main button and the chosen segment take `accent` and `onAccent`, from `SpoolwardenColors`
+  (`07-accessibility.md` CON-8 and CON-9).
 - Any role the table does not name (for example the `…Fixed` roles of newer Material versions) is still set
   explicitly by `toColorScheme()`, never left at Material's baseline purple: container-like roles take
   `accentSoft`, their `on…` roles take `accentText`. A Spoolwarden composable never reads such a role.
@@ -876,7 +883,7 @@ Rules for every Android composable below:
 | Shell (2.1) | `shell`, `shell__main`, `skip` | `SwNav`: a `NavigationSuiteScaffold` around a `Scaffold` | Ground `bg`; insets from the scaffolds; no skip link (section 14) |
 | Top bar (2.2) | `topbar`, `topbar__brand`, `topbar__mark`, `topbar__name`, `topbar__hub`, `topbar__version`, `topbar__tools` | `SwTopBar`: `TopAppBar(expandedHeight = sizes.top)` with `pinnedScrollBehavior()`, and a `HorizontalDivider` under it | Ground `surface`, tonal 0, `e0`, 1 dp `border` below; title `titleLarge` on Tablet and Desktop, `titleMedium` on Phone; Hub name `bodySmall` in `muted`; actions: Hub connection chip and appearance icon (`05-android-app.md` section 2.2); no lock chip and no job indicator (`02-components.md` 3.1, 8.4); insets: status bar and horizontal display cutout |
 | Hub connection chip (web app, `04-web-app.md` 2.2; app, `05-android-app.md` 2.2) | `chip chip--connection` | `SwConnectionChip` on `AssistChip` | Height `space.s6`, touch area 48 dp; shape `r`; border `borderStrong`; leading `StatusLabel` shape; word `labelLarge` |
-| Navigation, `nav` = rail (2.3) | `nav`, `nav__item`, `nav__icon`, `nav__label` | `NavigationRail` (`NavigationSuiteType.NavigationRail`) on Tablet and Desktop | `Modifier.width(sizes.rail)`; container `surface`, 1 dp `border` at the end edge; `NavigationRailItemDefaults.colors` with indicator `accentSoft`, selected icon and label `accentText`, unselected `muted`; labels always shown in `labelSmall`, the current one at `--fw-title`; the 3 dp `accent` mark at the outer edge of the current item drawn with `Modifier.drawBehind`; the two groups split by a 1 dp `border` divider |
+| Navigation, `nav` = rail (2.3) | `nav`, `nav__item`, `nav__icon`, `nav__label` | `NavigationRail` (`NavigationSuiteType.NavigationRail`) on Tablet and Desktop | `Modifier.width(sizes.rail)`; container `surface`, 1 dp `border` at the end edge; `NavigationRailItemDefaults.colors` with indicator `accentSoft`, selected icon and label `accentText`, unselected `muted`; labels always shown in `labelSmall`, the current one at `--fw-title`; the 3 dp `accentText` mark at the outer edge of the current item drawn with `Modifier.drawBehind`; the two groups split by a 1 dp `border` divider |
 | Navigation, `nav` = sidebar (2.3) | the same classes | `PermanentNavigationDrawer` (`NavigationSuiteType.NavigationDrawer`) on Desktop, `NavigationRail` on Tablet | Width `sizes.sideW` (web `--side-w`); items `density.control` high, shape `r`, current item as the rail |
 | Navigation, `nav` = pills (2.3) | the same classes | `PrimaryScrollableTabRow` under the top bar, with a trailing "More" tab opening `SwMenu` | Current pill `accentSoft` / `accentText`; shape `shapes.rL` |
 | Navigation, `nav` = list (2.3) | the same classes | The list pane of `ListDetailPaneScaffold`, items as `ListItem` with `supportingContent` summary and a chevron | Pane width `sizes.listW` (web `--list-w`); the chosen section opens in the pane beside it (Tablet, Desktop) or replaces it (Phone) |
@@ -892,7 +899,7 @@ Rules for every Android composable below:
 | Lock chip, job indicator (3.1, 8.4) | `chip chip--lock`, `chip chip--job` | none | The app is allowed to change things by its pairing and starts no Hub jobs |
 | Unlock dialog (3.2) | `dialog` with `field field--secret` | none | As above |
 | Appearance control (3.3) | `appearance segmented` (wide), `btn btn--ghost btn--icon appearance appearance--menu` (phone) | `SwSegmented` in Settings > Appearance; `SwIconButton` opening `SwMenu` in the top bar | Sun, moon and half-circle icons with the words; the current menu item carries the check icon in `accentText` |
-| Theme picker (3.4) | `theme-picker`, `theme-picker__tile`, `theme-picker__preview` | `SwThemeTile(look)`: a `Card` with `Modifier.selectable(role = Role.RadioButton)` inside `Modifier.selectableGroup()`, holding a drawn preview and a `RadioButton` | Drawn in its own theme's tokens (section 9); chosen tile: 2 dp `accent` border and `accentSoft` ground; name `titleSmall`, line `bodySmall`; a grid on Tablet and Desktop |
+| Theme picker (3.4) | `theme-picker`, `theme-picker__tile`, `theme-picker__preview` | `SwThemeTile(look)`: a `Card` with `Modifier.selectable(role = Role.RadioButton)` inside `Modifier.selectableGroup()`, holding a drawn preview and a `RadioButton` | Drawn in its own theme's tokens (section 9); chosen tile: 2 dp `accentText` border and `accentSoft` ground; name `titleSmall`, line `bodySmall`; a grid on Tablet and Desktop |
 
 ### 10.3 Actions
 
@@ -913,14 +920,14 @@ Rules for every Android composable below:
 
 | Component | Web | Android | Tokens and notes |
 |---|---|---|---|
-| Field, shared rules (5.1) | `field`, `field__label`, `field__control`, `field__hint`, `field__error` | `SwTextField` on `OutlinedTextField` | Material's floating label inside the outline, "(optional)" in the label text; `supportingText` for the hint (`bodySmall` in `muted`) or the error (`bodySmall` in `bad`, starting with the octagon shape); `isError`; shape `r` passed explicitly; `OutlinedTextFieldDefaults.colors` with containers `surface`, unfocused border `borderStrong`, focused border `focus`, error border `bad`, cursor `accent`, label `muted`; text style `type.input`; height is Material's own, not `--ctl` (section 14). An error summary at the top of a form is a `NoticeCard` of kind bad |
+| Field, shared rules (5.1) | `field`, `field__label`, `field__control`, `field__hint`, `field__error` | `SwTextField` on `OutlinedTextField` | Material's floating label inside the outline, "(optional)" in the label text; `supportingText` for the hint (`bodySmall` in `muted`) or the error (`bodySmall` in `bad`, starting with the octagon shape); `isError`; shape `r` passed explicitly; `OutlinedTextFieldDefaults.colors` with containers `surface`, unfocused border `borderStrong`, focused border `focus`, error border `bad`, cursor `accentText`, label `muted`; text style `type.input`; height is Material's own, not `--ctl` (section 14). An error summary at the top of a form is a `NoticeCard` of kind bad |
 | Text field (5.2) | `field` | `SwTextField(singleLine = true)` | `KeyboardOptions(capitalization, autoCorrect = false, keyboardType = Uri or Ascii)`; search with `ImeAction.Search` |
 | Secret field (5.3) | `field field--secret`, `field__action` | `SwSecretField` on `OutlinedSecureTextField` | A trailing `SwButton(kind = Quiet)` saying "Show" / "Hide" switches `textObfuscationMode` (words, because the icon set has no eye: foundations section 10); its content description names the field ("Show Access Code"); `KeyboardType.Password` (`NumberPassword` for codes); never prefilled |
 | Number field with unit (5.4) | `field field--number`, `field__unit` | `SwTextField` with `suffix` | Value in `type.data`; unit in `type.dataSmall`, `muted`; `KeyboardType.Number` or `Decimal` |
 | Select (5.5) | `field field--select`, `field__chevron` | `SwSelect` on `ExposedDropdownMenuBox` with a read-only `SwTextField` and `ExposedDropdownMenu` | Menu styled as `SwMenu`; chevron icon at the small size in `muted` |
-| Toggle (5.6) | `toggle`, `toggle__row`, `toggle__word` | `SwSwitch`: `Switch` in a `Row(Modifier.toggleable(role = Role.Switch))` | Track `accent` / `surface3`, thumb `onAccent` / `muted`, unchecked border `borderStrong`; no thumb icon; the word "On" / "Off" follows in `type.dataSmall`, `accentText` / `muted`; row at least 48 dp |
+| Toggle (5.6) | `toggle`, `toggle__row`, `toggle__word` | `SwSwitch`: `Switch` in a `Row(Modifier.toggleable(role = Role.Switch))` | Track `accentText` / `surface3`, thumb `surface` / `muted`, unchecked border `borderStrong`; no thumb icon; the word "On" / "Off" follows in `type.dataSmall`, `accentText` / `muted`; row at least 48 dp |
 | Segmented choice (5.7) | `segmented`, `segmented__option`; `segmented--wide` | `SwSegmented` on `SingleChoiceSegmentedButtonRow` + `SegmentedButton`; the cards variant as a `Column(Modifier.selectableGroup())` of `Card`s with a `RadioButton` | Height `density.control`; outer shape `r`; active ground `accentSoft`, content `accentText` at `--fw-title`; inactive ground `surface`, content `muted`; border `borderStrong`; each option shows its own icon in place of Material's check mark |
-| Checkbox (5.8) | `check`, `check__input`, `check__label` | `SwCheckbox`: `Checkbox(onCheckedChange = null)` in a `Row(Modifier.toggleable(role = Role.Checkbox))`; `TriStateCheckbox` for select-all | Box `accent` with `onAccent` mark when checked, `borderStrong` when not; the whole row toggles; row at least 48 dp |
+| Checkbox (5.8) | `check`, `check__input`, `check__label` | `SwCheckbox`: `Checkbox(onCheckedChange = null)` in a `Row(Modifier.toggleable(role = Role.Checkbox))`; `TriStateCheckbox` for select-all | Box `accentText` with `surface` mark when checked, `borderStrong` when not; the whole row toggles; row at least 48 dp |
 | File field (5.9) | `field field--file` | `SwFileField`: a `SwButton(kind = Plain)` that launches the photo picker (`PickMultipleVisualMedia`) or `GetContent()` | Thumbnails as 7.6; the app's own camera capture is a screen on the camera surface (10.6) |
 | Text area (5.10) | `field` with a `textarea` | `SwTextField(singleLine = false, minLines = 3, maxLines = 10)` | The character count in `supportingText` |
 | Form group, "panel" (5.11) | `group`, `group__head`, `group__title`, `group__body`, `group__foot` | `SwPanel(title, actions, footer)` on `OutlinedCard`; on the Settings screen a `Column` section | Ground `surface`, border 1 dp `border`, shape `r`, `e0`, tonal 0; header at least 48 dp with the title in `titleMedium` (`--fs-l`, weight 650: foundations section 9); body padding `s4`; footer ground `surface2` with a 1 dp `border` above it, the result line at the start and the buttons at the end |
@@ -960,7 +967,7 @@ Rules for every Android composable below:
 |---|---|---|---|
 | Inline spinner (8.1) | `spinner` | `SwSpinner`: `CircularProgressIndicator(Modifier.size(space.s4), strokeWidth = space.s1 / 2)` | Current content colour; the label "Working…" in its place under reduced motion (section 6.5) |
 | Step progress (8.2) | `steps`, `steps__step` | Step line: `Text` with `SwProgress`; numbered steps: a custom `Column` of numbered rows | As `02-components.md` 8.2 |
-| Determinate bar (8.3) | `progress`, `progress__fill`; `progress--indeterminate` | `SwProgress` on `LinearProgressIndicator` | Height `space.s1`; colour `accent`, solid; track `surface3`; `gapSize = 0.dp`, no stop indicator; indeterminate without a value |
+| Determinate bar (8.3) | `progress`, `progress__fill`; `progress--indeterminate` | `SwProgress` on `LinearProgressIndicator` | Height `space.s1`; colour `accentText`, solid; track `surface3`; `gapSize = 0.dp`, no stop indicator; indeterminate without a value |
 | Background-job strip (8.4) | `job`, `job__head`, `job__log` | `SwJobPanel`: a `Card` docked above the `NavigationBar`, only where `05-android-app.md` shows a Hub job | Ground `surface`, border 1 dp `borderStrong`, shape `r`, elevation `e0` (foundations section 4.3 keeps `e2` for dialogs, sheets, menus and toasts); `SwProgress` along its edge; the log expands as a `SwCodeBlock` |
 | The Hub is restarting (8.5) | `job` with `data-state="restarting"` | none | The connection chip shows "Connecting…" |
 | Inline result (8.6) | `result`, `result--block` | `ResultLine(kind, text)`: a `Row` of the status shape or icon and `Text` | Text `bodyMedium`; shape in the kind's colour; polite live region (`liveRegion = LiveRegionMode.Polite`; web `role="status"`) |

@@ -796,7 +796,7 @@ when the page is left or hidden. Until the first message arrives, the status and
 | Facts | model · address (`--mono`) |
 | Connection | a badge (3.3) from the printer's `state`: `connected` Connected · `offline` Offline · `not_configured` Not configured · every problem state Needs a look, followed by a sentence: `wrong_code` "Wrong Access Code. Replace it under Printer settings.", `needs_developer_mode` "The printer needs developer mode (LAN only) for this.", `cert_changed` "The printer's certificate changed. Forget it under Printer settings if you replaced the printer.", any other state the Hub's word (underscores as spaces, sentence case). Under it: the Hub's fix text. |
 | Print state | a sentence with its shape (3.3), from `gcode_state`: RUNNING "Printing", PAUSE "Paused", PREPARE "Preparing", FINISH "Finished", FAILED "Print failed", IDLE "Idle" (others: the word in sentence case), then ": <job name>" |
-| Progress | while Printing, Paused or Preparing: progress bar (4 px, `--accent`) with the percent at the right (`--mono`), then "Layer <n> of <total> · <time> left" and the stage when the printer reports one; <time> is "<h> h <m> min", or "<m> min" under one hour |
+| Progress | while Printing, Paused or Preparing: progress bar (4 px, `--accent-text`) with the percent at the right (`--mono`), then "Layer <n> of <total> · <time> left" and the stage when the printer reports one; <time> is "<h> h <m> min", or "<m> min" under one hour |
 | Temperatures | "<name> <current> / <target> °C" joined by " · " (`--mono` numbers) |
 | Printer alerts | one octagon line each: the printer's text, or "Printer alert <code>" |
 | Notes | `--muted` lines |
@@ -838,7 +838,7 @@ One group per unit, headed "<label> · <type>" (for example "AMS A · AMS 2 Pro"
 | Slot | label in `--mono` ("A1", "T0") |
 | Swatch | the medium swatch of 02-components 7.3, the slot's colour; dashed outline when empty, hatched "no colour" without one |
 | Name | the spool's name, else the slot's material type, else the state; under it `--muted` "<hex> · <g> g left", "Empty" or "Reading…" (the hex accompanies the swatch, F4.1) |
-| In use | as the slot strip (02-components 7.5): the active slot carries the words "In use" in `--accent-text` weight 650 and a 3 px `--accent` mark on its left, not only bold text |
+| In use | as the slot strip (02-components 7.5): the active slot carries the words "In use" in `--accent-text` weight 650 and a 3 px `--accent-text` mark on its left, not only bold text |
 | Buttons | on their own line under the name: "Load" (always) and "Unload" (when the slot holds a spool); each `--ctl` (44 px) high, at least `calc(2 * var(--ctl))` (88 px) wide |
 
 Empty: "The printer reports no slots." Results of load and unload appear in a line under that slot's row.
@@ -1115,7 +1115,7 @@ weight."; "Nothing changed." when no field differs; then, from the Hub, "The spo
 | Field | label "What is wrong?", placeholder "e.g. brand is Polymaker", helper "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept." | |
 | "Ask the Label Reader" | default button; aria-disabled with "Say what is wrong first." while the field is empty | POST `history/<id>/revise` `{item, note}` |
 | Waiting | working shape and "Asking the Label Reader… (up to a minute)" | |
-| Proposal | the before-and-after change list (02-components 7.9) on `--accent-soft` with an `--accent` outline: "Proposal: <n> changes" then one row per change: field name, old value struck through, arrow (read as "becomes"), new value (600); or "The Label Reader changed nothing." When the record has no photo: `--muted` "No photo was kept: it worked from the saved values and your note." | |
+| Proposal | the before-and-after change list (02-components 7.9) on `--accent-soft` with an `--accent-text` outline: "Proposal: <n> changes" then one row per change: field name, old value struck through, arrow (read as "becomes"), new value (600); or "The Label Reader changed nothing." When the record has no photo: `--muted` "No photo was kept: it worked from the saved values and your note." | |
 | "Accept" | filled | POST `history/<id>/apply` `{proposal}`; result "Accepted. 2 fields changed; revision 2 keeps the old values." State becomes "Revised by AI". |
 | "Discard" | default | nothing is sent; line "Proposal discarded. Nothing changed." |
 

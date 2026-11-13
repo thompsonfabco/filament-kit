@@ -100,11 +100,11 @@ Token names are the same in every theme. A theme (section 6) supplies the values
 | `--muted` | Secondary text, placeholders | `#545e68` | `#98a4ae` |
 | `--border` | Hairlines between things | `#d6dce1` | `#253039` |
 | `--border-strong` | Outlines of controls (3:1 against the surface) | `#7d8892` | `#66737e` |
-| `--accent` | Main action fill, active navigation mark | `#00788a` | `#3cccd8` |
+| `--accent` | Fill of the main action, always behind a label in `--on-accent` | `#00788a` | `#3cccd8` |
 | `--accent-hover` | Hover on accent fill | `#00636f` | `#6bdbe4` |
 | `--on-accent` | Text and icons on `--accent` | `#ffffff` | `#04262b` |
 | `--accent-soft` | Selected chip, active navigation ground | `#e0f2f4` | `#0e2a30` |
-| `--accent-text` | Links and accent-coloured text on surfaces | `#006474` | `#5fd6e0` |
+| `--accent-text` | Everything accent-coloured that stands on a surface: links, icons, marks, a checked box, a switch that is on, a progress fill | `#006474` | `#5fd6e0` |
 | `--ok` / `--ok-soft` | Good state: text or icon / its ground | `#1a7a3c` / `#e3f3e8` | `#5ccf88` / `#0f2619` |
 | `--warn` / `--warn-soft` | Needs attention | `#8a5700` / `#fbf0d5` | `#efb946` / `#2a210e` |
 | `--bad` / `--bad-soft` | Error, destructive | `#b42519` / `#fbe7e5` | `#ff7d73` / `#311816` |
@@ -116,6 +116,10 @@ Token names are the same in every theme. A theme (section 6) supplies the values
 
 Rules:
 - Semantic colours (`ok`, `warn`, `bad`, `info`) are separate from the accent and mean the same in every theme.
+- `--accent` is only ever the fill of a part that carries its own label or icon in `--on-accent` (the main button,
+  the chosen part of a segmented choice, the skip link). A theme may make it light, as Spool does, so it is never text, an icon, an
+  outline, or a mark that has to be seen on its own against a surface. All of those use `--accent-text`, which is
+  checked at 4.5:1 on `--bg`, `--surface` and `--surface-2` in every theme.
 - Text pairs must reach 4.5:1: `--text`, `--muted`, `--accent-text`, `--ok`, `--warn`, `--bad`, `--info` on `--bg`,
   `--surface` and `--surface-2`; each semantic colour on its own `-soft` ground; `--on-accent` on `--accent`;
   `--on-bad` on `--bad`. Control outlines and focus rings must reach 3:1 against what is behind them. A test

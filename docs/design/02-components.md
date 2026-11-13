@@ -304,7 +304,7 @@ rail (Console)     sidebar (Workbench)       pills (Spool)                      
 | Label | `--fs-xs` weight 600 | `--fs-m` weight 600 | `--fs-m` weight 600 | `--fs-b` weight 600 |
 | Summary | hidden | hidden | hidden | `--fs-s` `--muted` |
 | Group heading | visually hidden; groups split by a 1 px `--border` hairline | `--fs-xs` uppercase, 0.05em spacing, `--muted` | hidden (System group lives in More) | `--fs-xs` uppercase, `--muted`, above a grouped `--surface` block with `--r` |
-| Active | `--accent-soft` ground, `--accent-text`, weight 650, 3 px `--accent` mark on the outer edge | same, mark on the left edge | `--accent-soft` ground, `--accent-text` | `--surface-3` ground, icon tile `--accent` with `--on-accent` |
+| Active | `--accent-soft` ground, `--accent-text`, weight 650, 3 px `--accent-text` mark on the outer edge | same, mark on the left edge | `--accent-soft` ground, `--accent-text` | `--surface-3` ground, icon tile `--accent` with `--on-accent` |
 
 Ground of the rail, sidebar and section pane: `--surface` with a 1 px `--border` edge. Icon colour `--muted`, active
 `--accent-text`.
@@ -386,7 +386,7 @@ full and a short form, and the CSS shows the short form only here.
 **Sizes and tokens.** Height `--tab` plus the bottom safe-area inset; `--surface` ground, 1 px `--border` top hairline.
 Cells: min height 52 px (`calc(var(--s7) + var(--s1))`), label `--fs-xs` weight 600. Active: `--accent-soft` highlight
 behind the icon (`calc(var(--s7) + var(--s3))` wide, `calc(var(--s5) + var(--s2))` tall, radius `--r-l`), label
-`--accent-text` weight 650, and the 3 px `--accent` mark on the top edge. Fixed to the bottom; `z-index` above the
+`--accent-text` weight 650, and the 3 px `--accent-text` mark on the top edge. Fixed to the bottom; `z-index` above the
 page, below dialogs.
 
 **States.**
@@ -545,7 +545,7 @@ connection chip of the web app and the Android app (`chip--connection`, below).
 |---|---|---|---|
 | `locked` | `i-lock` | Locked | `--text`, `--border-strong` |
 | `unlocked` | `i-lock-open` | Unlocked | `--ok`, `--ok` |
-| `trusted` | `i-shield` | Trusted computer | `--accent-text`, `--accent` |
+| `trusted` | `i-shield` | Trusted computer | `--accent-text`, `--accent-text` |
 
 **States.**
 - Default: one of the three `data-state` values above.
@@ -739,7 +739,7 @@ themes and Save (a Hub setting, so it needs the setup code).
 
 **Sizes and tokens.** Tiles in a grid: four columns on desktop, two on tablet and phone, gap `--s3`. Tile: padding
 `--s3`, 1 px `--border-strong`, `--r`; preview area aspect 4:3, `--r-s`; name `--fs-b` weight 650; line `--fs-s`
-`--muted`. Checked tile: 2 px `--accent` border (1 px border plus 1 px inset), `--accent-soft` ground, check icon
+`--muted`. Checked tile: 2 px `--accent-text` border (1 px border plus 1 px inset), `--accent-soft` ground, check icon
 `--accent-text` in the top right. The preview drawing is plain elements styled by tokens: each theme's token blocks
 also match `[data-preview="<look>"]`, in light and in both dark selectors, so a tile shows its theme in the current
 appearance.
@@ -1239,8 +1239,8 @@ lowers security. Turning it off opens a destructive dialog (9.1) naming the risk
 badge (7.1) beside the state word. Turning it back on asks nothing.
 
 **Sizes and tokens.** Track `calc(var(--s6) + var(--s2))` by `--s5` (40 by 24 px), radius half its height, 1 px
-`--border-strong`, `--surface-3` ground; thumb `--s4`, `--muted`. On: track `--accent` with border `--accent`, thumb
-`--on-accent`, moved by `--s4` over `--t-fast`. State word `--fs-s` `--mono`, `--muted` (Off) or `--accent-text`
+`--border-strong`, `--surface-3` ground; thumb `--s4`, `--muted`. On: track `--accent-text` with border `--accent-text`, thumb
+`--surface`, moved by `--s4` over `--t-fast`. State word `--fs-s` `--mono`, `--muted` (Off) or `--accent-text`
 (On). The row is at least 44 px high and the label is part of the hit area.
 
 **States.**
@@ -1291,7 +1291,7 @@ in `mono`). The cards variant draws each option as a card with the radio, a bold
 `calc(var(--ctl) - var(--s2))` with a hit area reaching 44 px, padding `0 var(--s3)`, `--fs-m`, `--muted`; checked
 `--accent-soft` ground, `--accent-text`, weight 650. `segmented--wide` stretches segments to equal widths. Cards
 variant: grid of two columns (one on phones), gap `--s2`, card padding `--s3`, 1 px `--border-strong`, `--r`;
-checked card `--accent-soft` with a 1 px inset `--accent`.
+checked card `--accent-soft` with a 1 px inset `--accent-text`.
 
 **States.**
 - Default: one option checked.
@@ -1333,7 +1333,7 @@ selection of collection items, and on/off settings that are saved with a group's
 
 **Anatomy.** Native checkbox, label text, optional second line (`check__desc`).
 
-**Sizes and tokens.** Box `calc(var(--s4) + var(--s1) / 2)` (18 px), `accent-color: var(--accent)`; row min height
+**Sizes and tokens.** Box `calc(var(--s4) + var(--s1) / 2)` (18 px), `accent-color: var(--accent-text)`; row min height
 44 px, gap `--s2`, `--fs-m`; description `--fs-s` `--muted`. The whole row is the hit area.
 
 **States.**
@@ -1374,7 +1374,7 @@ On wide screens the field is also a drop zone. The photos variant (`field--photo
 thumbnails (7.6) with a Remove button on each and a count "Photos: 2 of 8".
 
 **Sizes and tokens.** As 5.1; selector button as `btn` (4.1). Drop zone: 1 px dashed `--border-strong`, `--r`,
-padding `--s4`; while a file is dragged over it `--accent-soft` ground and `--accent` border. Thumbnails 96 px
+padding `--s4`; while a file is dragged over it `--accent-soft` ground and `--accent-text` border. Thumbnails 96 px
 (`calc(var(--s7) * 2)`) in a wrapping grid, gap `--s2`; their Remove buttons are 44 px.
 
 **States.**
@@ -1914,7 +1914,7 @@ dirty (5.11). In `list` it also shows each group's one-line summary ("Set", "3 l
 
 **Sizes and tokens.** Wide screens: a sticky column 200 px wide (`calc(var(--s7) * 4 + var(--s1) * 2)`) at the
 left of the groups, top offset `calc(var(--top) + var(--s4))`; links height `--ctl`, padding `0 var(--s3)`, `--r`,
-`--fs-m`, `--muted`; current link `--surface` ground, `--text`, weight 650, a 2 px `--accent` mark on its left and a
+`--fs-m`, `--muted`; current link `--surface` ground, `--text`, weight 650, a 2 px `--accent-text` mark on its left and a
 1 px `--border` ring. Tablet: a sticky row under the top bar on `--bg` with a 1 px `--border` below, links as chips
 (1 px `--border`, height `calc(var(--s6) + var(--s1))` = 36 px plus hit area) that **wrap** onto a second line rather than scroll. Phone: one sticky
 button "Group: General" (`btn`, full width) that opens a bottom sheet listing the groups. Dirty mark `--fs-xs`
@@ -2191,7 +2191,7 @@ is in use; offer Load and Unload where the interface has them.
 **Sizes and tokens.** Compact: swatches gap `--s1`. Full: rows min height 44 px, grid
 `calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) 7rem auto` (30 px, 18 px), gap
 `--s2`, padding `var(--s1) var(--s3)`, 1 px `--border` between rows, the list in `--surface` with 1 px `--border` and `--r`. Active row:
-3 px `--accent` mark on its left and "In use" in `--accent-text` weight 650. On phones the bar is hidden (the
+3 px `--accent-text` mark on its left and "In use" in `--accent-text` weight 650. On phones the bar is hidden (the
 percentage stays) and the last column shrinks to 4.5rem.
 
 **States.**
@@ -2256,7 +2256,7 @@ Placeholder 1 px dashed `--border-strong`, icon `--muted`. Viewer: `dialog--wide
 - Default: as above.
 - Hover: thumbnail border `--border-strong`, `cursor: zoom-in`.
 - Focus: 2 px `--focus` ring.
-- Pressed: border `--accent`.
+- Pressed: border `--accent-text`.
 - Disabled: not applicable.
 - Loading: a skeleton box of the same size (width and height are set, so nothing shifts); in the viewer a spinner in
   the image area.
@@ -2406,7 +2406,7 @@ value, struck through; an arrow; new value, bold; an optional note), a sentence 
 and the actions **Accept** (primary) and **Discard**. A compact variant without actions and container (`changes--compact`)
 is used inside revision lists.
 
-**Sizes and tokens.** Container 1 px `--accent`, `--accent-soft` ground, `--r`, padding `--s3`; heading `--fs-s`
+**Sizes and tokens.** Container 1 px `--accent-text`, `--accent-soft` ground, `--r`, padding `--s3`; heading `--fs-s`
 weight 650. Each change: `--surface`, 1 px `--border`, `--r`, padding `var(--s2) var(--s3)`, grid
 `minmax(6rem, auto) minmax(0, 1fr) auto minmax(0, 1fr)`, gap `--s2`, `--fs-m`; old value `--muted` with
 `line-through`; new value weight 600; values in `mono` with units. On phones the field name takes its own line and
@@ -2550,7 +2550,7 @@ person goes through in steps (Restore a backup, Map by loading filament, pairing
    bar (8.3) whose value is the share of steps done.
 2. **Numbered steps** (`steps`, the person does them): an ordered list; each step has a number circle, a title and
    its content (fields, buttons, result). Each step is **done** (check icon in the circle, `--ok`), **current**
-   (circle `--accent` border, title weight 650) or **later** (`--muted`).
+   (circle `--accent-text` border, title weight 650) or **later** (`--muted`).
 
 **Sizes and tokens.** Step line as the inline result (8.6) with the bar `max-width: 20rem` under the sentence.
 Numbered steps: grid `var(--s5) minmax(0, 1fr)`, gap `--s3`; circle `--s5`, 1 px `--border-strong`, `--fs-s` `mono`
@@ -2597,7 +2597,7 @@ bar is a `progressbar` with `aria-valuetext` "Step 2 of 4".
 **Anatomy.** A label (what, and the value: "Uploading… 42 %", "62 % · layer 120 of 310 · 1 h 12 min left"), a track
 and its fill. An indeterminate variant (`progress--indeterminate`) is used when the amount is not known.
 
-**Sizes and tokens.** Height `--s1`, radius half the height, track `--surface-3`, fill `--accent`, fill width from
+**Sizes and tokens.** Height `--s1`, radius half the height, track `--surface-3`, fill `--accent-text`, fill width from
 `--level` (set by script), changing over `--t`. Label `--fs-s`, numbers `mono`. A failed task's fill is `--bad`.
 
 **States.**

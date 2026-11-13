@@ -122,6 +122,8 @@ Tooling · S · Depends on: S0.4 · Beside: S0.6, S0.7
 - **Change:** extend the check to every pair of 07 3.1 and 3.2 for the eight token sets, `--focus` on `--surface-2`,
   and the Material roles of 07 CON-8 read from the generated Kotlin values (AUT-1; 08 test 3). The two advisory
   pairs become required.
+  For CON-8, `primary` is read from `accent-text` and `onPrimary` from `surface` (08 4.1), so `primary` on
+  `surface` and on the `surfaceContainer` roles is a required pair in all eight sets.
 - **Keep:** today's 248 required pairs and their results.
 - **Check:** AUT-1 passes; a deliberately lowered value in a copy of `tokens.json` makes it fail with the message
   form of AUT-1.
