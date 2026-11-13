@@ -429,7 +429,7 @@ private fun PrintersPanel(
                 secondary = SwAction(stringResource(R.string.common_try_again), onRefresh),
             )
             list == null && state.failed -> NoticeCard(
-                NoticeKind.Bad, state.message ?: stringResource(R.string.common_hub_no_answer),
+                NoticeKind.Bad, state.message ?: stringResource(failureText(state)),
                 actions = listOf(SwAction(stringResource(R.string.common_try_again), onRefresh)),
             )
             list == null -> SwSkeletonRows(PRINTER_SKELETON_ROWS)
@@ -437,7 +437,7 @@ private fun PrintersPanel(
                 // the data stays when a read fails; while the Hub is simply offline the top notice says so
                 if (state.failed && !offline && connection !is Connection.CertChanged && connection != Connection.Unpaired) {
                     NoticeCard(
-                        NoticeKind.Bad, state.message ?: stringResource(R.string.common_hub_unreachable),
+                        NoticeKind.Bad, state.message ?: stringResource(failureText(state)),
                         actions = listOf(SwAction(stringResource(R.string.common_try_again), onRefresh)),
                     )
                 }
@@ -461,6 +461,10 @@ private fun PrintersPanel(
         }
     }
 }
+
+/** 05 3.5: the Hub's own message (shown as given), else no route or timeout, else an answer not understood. */
+private fun failureText(state: HomePrintersState): Int =
+    if (state.unexpected) R.string.common_hub_answer_unknown else R.string.common_hub_unreachable
 
 private const val PRINTER_SKELETON_ROWS = 2
 

@@ -7,6 +7,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
 import com.thompsonfabco.filamentkit.update.UpdateUi
+import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
@@ -96,6 +97,8 @@ data class HomePrintersState(
     val loading: Boolean = false,
     val failed: Boolean = false,
     val message: String? = null,
+    /** The failure was an answer the app could not read (05 3.5), not a missing route. */
+    val unexpected: Boolean = false,
     /** When [printers] was read (epoch millis), for the offline notice. */
     val loadedAt: Long? = null,
 )
@@ -121,8 +124,10 @@ class HomePrintersViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val refusal = (e as? ApiError)?.takeIf { it.status > 0 }?.message
-                _state.update { it.copy(loading = false, failed = true, message = refusal) }
+                // a refusal keeps the Hub's own words; no route or a timeout is "cannot reach"; anything else is an answer not understood
+                val refusal = (e as? ApiError)?.takeIf { it.status > 0 }?.message?.ifBlank { null }
+                val unexpected = e !is ApiError && e !is IOException
+                _state.update { it.copy(loading = false, failed = true, message = refusal, unexpected = unexpected) }
             }
         }
     }

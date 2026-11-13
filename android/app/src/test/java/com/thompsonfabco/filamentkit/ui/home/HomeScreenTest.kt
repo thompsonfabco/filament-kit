@@ -204,7 +204,7 @@ class HomeScreenTest {
 
     @Test fun aFailedFirstReadWhileOnlineSaysSoWithTryAgain() {
         show(printers = HomePrintersState(failed = true))
-        text("The Hub did not answer. Check that it is on, then try again.").assertExists()
+        text("Cannot reach the Hub. Check that this phone is on the home network.").assertExists()
         text("Try again").performClick()
         assertEquals(listOf("refresh"), calls)
     }
@@ -324,6 +324,12 @@ class HomeScreenTest {
     @Test fun onlyOfflineSaysCannotReachTheHubWithTryAgain() {
         show(connection = Connection.Offline, printers = HomePrintersState(failed = true))
         text("Cannot reach the Hub").assertExists()
+        text("Try again").assertExists()
+    }
+
+    @Test fun anAnswerTheAppCannotReadHasItsOwnWords() {
+        show(printers = HomePrintersState(failed = true, unexpected = true))
+        text("The Hub sent an answer this app does not understand. Update the app or the Hub, then try again.").assertExists()
         text("Try again").assertExists()
     }
 

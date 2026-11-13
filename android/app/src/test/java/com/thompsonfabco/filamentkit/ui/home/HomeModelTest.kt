@@ -197,6 +197,20 @@ class HomePrintersViewModelTest {
         assertFalse(vm.state.value.loading)
     }
 
+    @Test fun noRouteIsNotAnUnexpectedAnswerButAnUnreadableOneIs() {
+        var boom: Exception = java.io.IOException("timeout")
+        val vm = HomePrintersViewModel({ throw boom })
+        vm.refresh()
+        dispatcher.scheduler.runCurrent()
+        assertTrue(vm.state.value.failed)
+        assertFalse(vm.state.value.unexpected)
+        boom = IllegalStateException("not json")
+        vm.refresh()
+        dispatcher.scheduler.runCurrent()
+        assertTrue(vm.state.value.unexpected)
+        assertNull(vm.state.value.message)
+    }
+
     @Test fun theHubsOwnRefusalIsKept() {
         val vm = HomePrintersViewModel({ throw ApiError(503, "unavailable", "The printers service is restarting.") })
         vm.refresh()
