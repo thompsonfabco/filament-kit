@@ -822,7 +822,7 @@ class SetupPage:
 
         def run() -> dict:
             try:
-                pr = pairing.issue(device_hint=KINDS[kind])
+                pr = pairing.issue(device_hint=KINDS[kind], scope="station" if kind == "station" else None)
             except pairing.PairingError as e:
                 raise Refused(503, str(e)) from None
             fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())

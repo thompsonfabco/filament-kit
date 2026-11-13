@@ -12,7 +12,8 @@ approves on the setup page after comparing a code. Protocol version 2 (commit, t
    (`comparison_code`); they never travel. The station shows them on its screen and says them; the Devices tab shows
    them next to the station's name and address. The owner taps Pair only if they match (with the setup code).
 4. The station polls `GET /api/station/pair-request/<request_id>`: 202 while it waits, 200 {token} once approved (the
-   token goes out once; a station token reaches only /api/station/*), 410 when refused or expired.
+   token goes out again only within GRACE seconds, for a lost reply; a station token reaches only /api/station/*), 410
+   when refused or expired.
 
 Why the commitment: a man in the middle sees the station's values before the kit does. If the station chose the only
 free input, the attacker could try request after request towards the kit until one showed the station's digits (a
@@ -20,8 +21,8 @@ million tries is about a second). Here the attacker has to commit towards the ki
 before it learns the station's secret, so the two codes match only by a one-in-a-million chance.
 
 At most MAX_PENDING requests wait at once, each for TTL seconds; an address the owner refused may not ask again
-until its request would have run out. A token waits here (the state folder, 600) only until the station fetches it;
-an approval nobody fetches is revoked when it runs out.
+until its request would have run out. A token waits here (the state folder, 600) only until the station fetched it and
+GRACE passed; an approval nobody fetches is revoked when it runs out.
 """
 from __future__ import annotations
 
@@ -38,6 +39,7 @@ TTL = 600
 # are few (3) and short-lived (TTL). Raising either gives such an attacker more tries at the six-digit code
 # (audit v0.5.0, finding 4; R61).
 MAX_PENDING = 3
+GRACE = 120     # seconds a fetched token can be fetched again (a lost reply); 0 gives it out once, as before
 FILE = "station-requests.json"
 HEX64 = re.compile(r"[0-9a-f]{64}")
 REQUEST_ID = HEX64
@@ -83,6 +85,8 @@ def _live(rows: list, now: float) -> list:
         if not isinstance(r, dict):
             continue
         if r.get("expires", 0) > now:
+            if r.get("state") == "fetched" and now - r.get("fetched", 0) > GRACE:
+                r.pop("token", None)        # the grace for a lost reply is over
             out.append(r)
         elif r.get("state") == "approved" and r.get("token"):
             _UNFETCHED.append(r["token"])
@@ -157,11 +161,14 @@ def _poll(request_id, now: float | None = None) -> tuple[int, dict]:
             pairing._write(FILE, live)
             return 410, {"error": "gone", "message": "the request was refused or ran out; ask again"}
         if mine.get("state") == "approved":
-            token = mine.pop("token")
-            mine["state"] = "fetched"           # kept until it runs out: the refused-address rule needs no gap
+            mine["state"], mine["fetched"] = "fetched", now     # kept until it runs out: the refused-address rule needs no gap
             pairing._write(FILE, live)
-            return 200, {"token": token}
+            return 200, {"token": mine["token"]}
         if mine.get("state") == "fetched":
+            # a reply lost on the way (Wi-Fi drop): the station's next poll gets the same token, for GRACE seconds
+            if mine.get("token") and now - mine.get("fetched", 0) <= GRACE:
+                return 200, {"token": mine["token"]}
+            pairing._write(FILE, live)          # _live dropped the token
             return 410, {"error": "gone", "message": "the pairing was given out already"}
         if len(live) != len(rows):
             pairing._write(FILE, live)
@@ -195,7 +202,7 @@ def _decide(rid: str, approve: bool, now: float | None = None) -> dict:
         name = mine["name"]
     token = None
     if approve:
-        p = pairing.issue(device_hint="station")
+        p = pairing.issue(device_hint=f"station: {name}", scope="station")
         token = pairing.redeem_code(p.code)          # claimed now: the device shows as paired at once
     with pairing._locked():
         rows = _live(pairing._read(FILE), now)

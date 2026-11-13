@@ -140,7 +140,7 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
               f"fix: run `{cmd}` on {where}", file=sys.stderr)
         return 1
     try:
-        pr = pairing.issue(device_hint="pc" if pc else "station" if station else "")
+        pr = pairing.issue(device_hint="pc" if pc else "station" if station else "", scope="station" if station else None)
     except pairing.PairingError as e:
         # /etc/filament-kit is root's: as a user the certificate cannot be read (or even seen)
         unreadable = isinstance(e, pairing.CertUnreadable) or not _is_root()
@@ -288,7 +288,7 @@ def cmd_station_pair_local() -> int:
               "pair` here", file=sys.stderr)
         return 1
     try:
-        result = server_api.pair_with_link(server_api.parse_link(pairing.issue(device_hint="station").qr))
+        result = server_api.pair_with_link(server_api.parse_link(pairing.issue(device_hint="station", scope="station").qr))
     except (pairing.PairingError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
