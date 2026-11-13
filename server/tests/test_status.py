@@ -65,7 +65,7 @@ def test_summarize_stage_progress_eta_temps():
     assert s["temps"]["bed"] == {"current": 64, "target": 65}
     assert s["temps"]["chamber"] == {"current": 35, "target": 0}
     assert s["light"] == "on"
-    assert s["hms"] == [{"code": "0700_8200_0002_0001", "text": "Printer alert HMS 0700_8200_0002_0001"}]
+    assert s["hms"] == [{"code": "0700_8200_0002_0001", "text": status.hms_text("0700_8200_0002_0001")}]
     assert s["updated"] == int(NOW - 3)
 
 
@@ -154,6 +154,19 @@ def test_summarize_never_raises_on_odd_reports(report):
     s = status.summarize(report, spools, printer_name="Shop")
     assert set(s) >= {"gcode_state", "percent", "remaining_min", "ams", "hms", "temps"}
     assert isinstance(s["gcode_state"], str) and isinstance(s["percent"], int)
+
+
+def test_hms_text_known_code_is_a_sentence_unknown_gets_the_link():
+    known = status.hms_text("0300_0100_0001_0001")
+    assert known.startswith("Heatbed temperature is abnormal") and "0300_0100_0001_0001" in known
+    assert "http" not in known
+    unknown = status.hms_text("0700_8200_0002_0001")
+    assert unknown.startswith("Printer alert HMS 0700_8200_0002_0001")
+    assert unknown.endswith("https://wiki.bambulab.com/en/hms/home")
+    second = status.hms_text("0300_0100_0001_0002")
+    assert "open circuit" in second and "short" not in second
+    s = status.summarize({"hms": [{"attr": 0x03000100, "code": 0x00010001}]}, [], now=NOW)
+    assert s["hms"][0]["text"] == known
 
 
 def test_hms_code_tolerates_bad_values():
