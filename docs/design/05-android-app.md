@@ -1621,6 +1621,9 @@ announced once when they start and once when they end, not on every percent.
   `common_try_again`, `common_hub_unreachable`).
 - A lint check fails the build when a string literal is passed to `Text`, `label`, `placeholder`,
   `supportingText`, `contentDescription` or a snackbar call.
+- The product's name is never written into a text: the catalogue holds it once (`app_name`, also the launcher
+  label) and texts that name it use the `{product}` placeholder, which the generator fills
+  (`08-platform-mapping.md` section 12). The command's name is held the same way (`command_name`, `{command}`).
 - Text that comes from the Hub (its messages, printer alerts, the Label Reader's questions, names) is shown as
   given and never translated or reworded by the app.
 - Wording follows F2: the names of F2 everywhere ("Hub", "Hub page", "Label Reader", "Weigh Station", "Recently
