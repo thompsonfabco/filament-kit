@@ -227,6 +227,7 @@ import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
 import com.thompsonfabco.filamentkit.ui.spool.TagScreen
 import com.thompsonfabco.filamentkit.ui.spool.TagViewModel
+import com.thompsonfabco.filamentkit.ui.spool.toSpoolSummary
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
@@ -987,7 +988,11 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onOpenRecord = { hid -> nav.navigate(RecordRoute(hid)) { popUpTo<RecordRoute> { inclusive = true } } },
                             onEdit = { item -> nav.navigate(RecordEditRoute(e.toRoute<RecordRoute>().hid, item)) },
                             onOpenPhoto = { n -> nav.navigate(RecordPhotoRoute(e.toRoute<RecordRoute>().hid, n)) },
-                            onOpenSpool = { spoolVm?.open(it) },
+                            onOpenSpool = { json ->
+                                val spool = json.toSpoolSummary()
+                                SpoolCache.put(spool)
+                                nav.navigate(SpoolRoute(spool.id))
+                            },
                             onPairAgain = app.router::pairAgain,
                         )
                     }
