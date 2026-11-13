@@ -28,12 +28,14 @@ function serve() {
 async function withBrowser(exe, fn) {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "sw-audit-"));
   const server = await serve();
+  // On Linux CI runners the browser's sandbox cannot start (no user namespaces) and /dev/shm is small
+  const linux = process.platform === "linux" ? ["--no-sandbox", "--disable-dev-shm-usage"] : [];
   const proc = spawn(exe, ["--headless=new", "--remote-debugging-port=0", "--user-data-dir=" + profile, "--no-first-run",
-    "--no-default-browser-check", "--disable-extensions", "--disable-sync", "about:blank"], { stdio: "ignore" });
+    "--no-default-browser-check", "--disable-extensions", "--disable-sync", ...linux, "about:blank"], { stdio: "ignore" });
   let ws = null;
   try {
     const portFile = path.join(profile, "DevToolsActivePort");
-    for (let i = 0; i < 150 && !fs.existsSync(portFile); i++) await sleep(100);
+    for (let i = 0; i < 300 && !fs.existsSync(portFile); i++) await sleep(100);     // up to 30 s on a cold runner
     const [port, wsPath] = fs.readFileSync(portFile, "utf8").split("\n");
     ws = new WebSocket(`ws://127.0.0.1:${port}${wsPath}`);
     await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });

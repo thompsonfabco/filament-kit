@@ -160,8 +160,19 @@ def edge():
 EDGE = edge()
 
 
+def _node_has_websocket():
+    """The runner talks to the browser with Node's own WebSocket (Node 22 and later); older Node has none."""
+    if not shutil.which("node"):
+        return False
+    r = subprocess.run(["node", "-e", "process.exit(typeof WebSocket === 'function' ? 0 : 1)"], capture_output=True)
+    return r.returncode == 0
+
+
+NODE_WS = _node_has_websocket()
+
+
 # 09 S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding
-@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed, so the page audit (AUT-5) did not run")
+@pytest.mark.skipif(not NODE_WS, reason="node 22 or later (with WebSocket) is not installed, so the page audit (AUT-5) did not run")
 @pytest.mark.skipif(EDGE is None, reason="Microsoft Edge is not installed (or set SW_EDGE to its path), so the page "
                                          "audit (AUT-5) on the sample page did not run")
 def test_page_audit_on_the_sample():
