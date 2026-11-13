@@ -1719,7 +1719,6 @@ window.SW_TEXT = Object.freeze({
   "catalog_saved": "Saved to the Filament Catalog. Slicer presets are rebuilt in a minute.",
   "catalog_title": "New catalog line",
   "catalog_change_parent": "Change parent",
-  "catalog_error_range": "Enter a range like 190-230.",
   "catalog_leave_thing": "the new catalog line",
   "catalog_line_material": "{material} · {presets}",
   "catalog_line_name": "{brand} {line}",

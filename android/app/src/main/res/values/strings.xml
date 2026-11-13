@@ -2342,7 +2342,6 @@
     <string name="catalog_saved">Saved to the Filament Catalog. Slicer presets are rebuilt in a minute.</string>
     <string name="catalog_title">New catalog line</string>
     <string name="catalog_change_parent">Change parent</string>
-    <string name="catalog_error_range">Enter a range like 190-230.</string>
     <string name="catalog_leave_thing">the new catalog line</string>
     <!-- 1=material 2=presets -->
     <string name="catalog_line_material">%1$s · %2$s</string>
