@@ -167,9 +167,10 @@ def test_the_page_audit_passes_on_every_section(hub):
     assert out["views"] == len(SECTIONS) * 2 * 2 and out["failing"] == 0      # ten sections, two widths, light and dark
 
 
-def test_devices_and_flash_do_not_scroll_sideways_at_320_px_in_a_wide_font(hub):
+def test_devices_and_flash_do_not_scroll_sideways_at_320_px_in_a_wide_font(monkeypatch, hub):
     """A Linux runner has no Segoe UI or Consolas and falls back to DejaVu, which is wider: the layout must hold there
     too, so these two sections (the ones a Linux CI run found wider than 320 px) run with the page's font tokens swapped for wide faces (the runner's --wide-font)."""
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "runnervm8axu0")      # a CI runner's name: the web app address gets long
     fonts = ["--font-dir", os.environ["AUT5_FONT_DIR"]] if os.environ.get("AUT5_FONT_DIR") else ["--wide-font"]      # DejaVu files, if a folder has them
     run = _run("--url", hub, "--views", "#devices,#flash", "--widths", "320", *fonts)      # no allow-list: only the scroll is asked about
     assert run.returncode in (0, 1), run.stdout + run.stderr
