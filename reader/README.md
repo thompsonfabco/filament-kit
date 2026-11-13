@@ -10,7 +10,7 @@ It started as the H2D-only reader of h2d-filament-scanner; this version has no h
 ## Hardware
 
 An ESP32-C3 Super Mini with a PN532 NFC board, an SSD1306 OLED, a rotary encoder and a buzzer. The parts list, pins,
-wiring, board and case are in the [bench-reader guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/bench-reader) of the
+wiring, board and case are in the [Printer Station guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/printer-station) of the
 [filament-kit-hardware](https://github.com/thompsonfabco/filament-kit-hardware) repository. Pins and polarities in the firmware are in the CONFIG block at the top of
 `src/main.cpp`.
 

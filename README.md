@@ -116,7 +116,7 @@ the setup's console. It keeps both stable and Beta Bambu Studio current (v0.4.0)
 
 A small ESP32-C3 box next to the printer: tap a spool's tag, turn the knob to a slot, and the spool is loaded
 there. It talks to the `web` module: make its token with `sudo filament-kit reader token --name bench`. Its API and firmware build are in [reader/README.md](reader/README.md), and its parts and wiring in the
-[hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/bench-reader).
+[hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/printer-station).
 
 ## Supported printers
 
