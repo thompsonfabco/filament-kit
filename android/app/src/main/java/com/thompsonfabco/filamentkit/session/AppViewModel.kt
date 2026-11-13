@@ -59,11 +59,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _draftList = MutableStateFlow<List<Draft>>(emptyList())
     val draftList: StateFlow<List<Draft>> = _draftList.asStateFlow()
 
+    init {
+        purgeDrafts()
+    }
+
     /** The last [PairRouter.requests] value the navigation host acted on (survives rotation). */
     var handledPairRequests = 0
 
     /** True when a server is stored with a usable token (start on Home); false (none, or revoked) starts on Pair. */
     suspend fun isPaired(): Boolean = settings.server.first().isPaired()
+
+    /** At start: delete expired, photo-less and unreadable drafts ([DraftStore.purge]), then show what is left. */
+    private fun purgeDrafts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { drafts.purge(DraftStore.MAX_AGE_MS) }
+            refreshDrafts()
+        }
+    }
+
+    /** Home → Discard (confirmed): delete the draft and its photos. */
+    fun discardDraft(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { drafts.delete(id) }
+            refreshDrafts()
+        }
+    }
 
     fun refreshDrafts() {
         viewModelScope.launch(Dispatchers.IO) {

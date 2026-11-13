@@ -5,6 +5,7 @@ import com.thompsonfabco.filamentkit.net.BuildInfo
 import com.thompsonfabco.filamentkit.net.InstalledInfo
 import com.thompsonfabco.filamentkit.net.PcInfo
 import com.thompsonfabco.filamentkit.net.ProfileStatus
+import com.thompsonfabco.filamentkit.net.UpdatesInfo
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.TimeZone
@@ -86,5 +87,22 @@ class PresetsCardTest {
         assertEquals(null, stampMillis(null))
         assertEquals("soon", formatStamp("soon", utc))
         assertEquals("unknown time", formatStamp(null, utc))
+    }
+
+    @Test fun buildNowIsOfferedOnlyWhileNoPcSyncIsSetUp() {
+        assertEquals(PresetActions(canBuild = true, hints = emptyList()), presetActions(ProfileStatus()))
+        val withPc = presetActions(ProfileStatus(pc = PcInfo("pc-1", null)))
+        assertEquals(false, withPc.canBuild)
+        assertEquals(listOf("To build now, $SETUP_PAGE_HINT."), withPc.hints)
+    }
+
+    @Test fun waitingUpdatesPointToTheSetupPageAndAcceptedOnesAreNotCounted() {
+        val a = presetActions(ProfileStatus(updates = UpdatesInfo(count = 3, lines = 2, accepted = 1)))
+        assertEquals(
+            listOf("2 presets in your slicers can be updated. To see what would change and accept it, $SETUP_PAGE_HINT."),
+            a.hints,
+        )
+        assertEquals(emptyList<String>(), presetActions(ProfileStatus(updates = UpdatesInfo(count = 2, lines = 1, accepted = 2))).hints)
+        assertEquals(1, presetActions(ProfileStatus(updates = UpdatesInfo(count = 1))).hints.size)
     }
 }

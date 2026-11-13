@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +21,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,6 +59,8 @@ fun HomeScreen(
     onPrinters: () -> Unit,
     onSettings: () -> Unit,
     onResumeDraft: (id: String) -> Unit,
+    /** Delete an unfinished add and its photos (asked to confirm first). */
+    onDiscardDraft: (id: String) -> Unit,
     onRetryConnection: () -> Unit,
     onReviewCertificate: () -> Unit,
     onInstallUpdate: () -> Unit,
@@ -64,6 +71,11 @@ fun HomeScreen(
     /** The Presets card; null while the status is unknown. [showPresets] false hides the card (not paired yet). */
     presets: ProfileStatus? = null,
     showPresets: Boolean = true,
+    /** The Presets card's Build now: [onBuildPresets], while [buildingPresets]; [presetsNote] is the outcome. */
+    onBuildPresets: () -> Unit = {},
+    buildingPresets: Boolean = false,
+    presetsNote: String? = null,
+    presetsNoteIsError: Boolean = false,
     /** Offer the label-photo add flow ([showLabelPhotos]). */
     labelPhotos: Boolean = false,
     /** Shown while [connection] is [Connection.NeedsLocalNetwork] (explanation, Allow, Open app settings). */
@@ -92,11 +104,11 @@ fun HomeScreen(
         OutlinedButton(onClick = onHistory, modifier = Modifier.fillMaxWidth()) { Text("Intake history") }
         Button(onClick = onPrinters, modifier = Modifier.fillMaxWidth()) { Text("Printers") }
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings") }
-        if (showPresets) PresetsCard(presets)
+        if (showPresets) PresetsCard(presets, onBuild = onBuildPresets, building = buildingPresets, buildNote = presetsNote, buildFailed = presetsNoteIsError)
 
         if (drafts.isNotEmpty()) {
             Text("Unfinished adds", style = MaterialTheme.typography.titleMedium)
-            drafts.forEach { d -> DraftRow(d) { onResumeDraft(d.id) } }
+            drafts.forEach { d -> DraftRow(d, onClick = { onResumeDraft(d.id) }, onDiscard = { onDiscardDraft(d.id) }) }
         }
         extra()
     }
@@ -167,14 +179,25 @@ private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
 }
 
 @Composable
-private fun DraftRow(draft: Draft, onClick: () -> Unit) {
+private fun DraftRow(draft: Draft, onClick: () -> Unit, onDiscard: () -> Unit) {
+    var confirming by remember { mutableStateOf(false) }
     val photos = if (draft.photos.size == 1) "1 photo" else "${draft.photos.size} photos"
     val detail = listOfNotNull(photos, draft.hint.ifBlank { null }, draft.tag?.let { "tag $it" }).joinToString(" · ")
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(Modifier.padding(12.dp)) {
             Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(draft.created)))
             Text(detail, style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { confirming = true }) { Text("Discard") }
         }
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Discard this unfinished add?") },
+            text = { Text("Its $photos will be deleted from this phone. Nothing is removed from the server.") },
+            confirmButton = { TextButton(onClick = { confirming = false; onDiscard() }) { Text("Discard") } },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Keep") } },
+        )
     }
 }
 
