@@ -483,9 +483,9 @@ OVERVIEW_PRELUDE = """
     && !document.querySelector('[aria-busy="true"]:not(button)'));
   const text = document.querySelector("main").innerText;
   if (/\bnull\b|undefined/.test(text)) throw new Error("Overview: a stray null or undefined: " + text.slice(0, 300));
-  if (!document.querySelector(".overview__meta").textContent.includes("Setup:")) throw new Error("Overview: no setup in the meta line");
+  if (!document.querySelector(".page-head__meta").textContent.includes("Setup:")) throw new Error("Overview: no setup in the meta line");
   if (document.querySelectorAll(".tiles .tile").length !== 4) throw new Error("Overview: not four tiles");
-  if (!document.querySelector(".overview__head .btn--ghost")) throw new Error("Overview: no Run the checks again");
+  if (!document.querySelector(".page-head__actions .btn--ghost")) throw new Error("Overview: no Run the checks again in the header");
   if (!document.querySelector(".coll--checks .coll__group")) throw new Error("Overview: the checks are not in groups");
 """
 

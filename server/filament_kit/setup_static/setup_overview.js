@@ -108,7 +108,7 @@ function metaLine(r, checkedAt) {
   const u = r.update;
   const job = r.job && r.job.running ? h("a", { href: "#job", textContent: SW.t("overview_job_running", { job_title: jobTitle(r.job.name) }),
     on: { click: (e) => { e.preventDefault(); hubJobs().chip.click(); } } }) : null;
-  return h("p", { class: "page-head__meta overview__meta" },
+  return h("p", { class: "page-head__meta" },
     h("span", { textContent: SW.t("overview_meta_version", { version: r.version_text || r.version }) }),
     h("span", { textContent: SW.t("common_setup_line", { setup: SW.t(SETUP_NAME[S.mode] || "features_setup_custom") }) }),
     u.newer ? h("a", { href: "#updates" }, SW.status("note", { text: SW.t("nav_summary_updates_available", { latest: u.latest }) })) : null,
@@ -203,13 +203,13 @@ function checksView(rows) {
 }
 
 function overviewTab() {
-  const meta = h("div"), banner = h("div"), body = h("div"), badges = h("span", { class: "overview__badges" });
+  const banner = h("div"), body = h("div"), badges = h("span", { class: "overview__badges" });
   const note = h("div", { role: "status" });     // the hidden-values note
   let checkedAt = Date.now();
   const show = (r) => {
     checkedAt = Date.now();
     const view = checksView(r.rows);
-    meta.replaceChildren(metaLine(r, checkedAt));
+    if (page.dataset.section === OVERVIEW) pageHead(metaLine(r, checkedAt), head);      // not once another section is open
     banner.replaceChildren(...[halfBanner(r)].filter(Boolean));
     const marks = [];
     if (view.bad) marks.push(SW.status("needs_look", { small: true, text: SW.t("overview_badge_look", { count: view.bad }) }));
@@ -219,16 +219,22 @@ function overviewTab() {
     note.replaceChildren(...(r.redacted ? [lockNote("lock_hidden_note")] : []));
   };
   // addresses and serials load by themselves once the page is open, and are read again without the code when it locks
-  const read = (open) => readRegion(body, OVERVIEW, () => (open ? api("overview", { code: theCode() }) : api("overview")), show);
+  const read = (open) => {
+    const done = readRegion(body, OVERVIEW, () => (open ? api("overview", { code: theCode() }) : api("overview")), show);
+    const sr = body.querySelector(".skeleton .sr");
+    if (sr) sr.textContent = SW.t("overview_loading");      // the skeleton says what 03 4.3 says
+    return done;
+  };
   let open = SW.lock.state !== "locked";
   const again = SW.btn(SW.t("overview_run_checks"), { cls: "btn--ghost", icon: "refresh", run: async () => {
     SW.busy(again, SW.t("common_checking"));
     try { await read(open); } finally { SW.idle(again); }
   } });
+  const head = h("div", { class: "page-head__actions" }, again);      // Run the checks again, in the section header
+  pageHead(null, head);
   whenOpen(body, (now) => { open = now; return read(now); });
-  return [meta, banner, todoCard(), tiles(),
+  return [banner, todoCard(), tiles(),
     h("section", { class: "card overview__checks", "aria-labelledby": "overview-checks-title" },
-      h("div", { class: "overview__head" }, h("h2", { id: "overview-checks-title", textContent: SW.t("overview_checks_title") }), badges,
-        h("div", { class: "actions" }, again)),
+      h("div", { class: "overview__head" }, h("h2", { id: "overview-checks-title", textContent: SW.t("overview_checks_title") }), badges),
       body), note];
 }

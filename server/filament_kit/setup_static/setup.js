@@ -396,7 +396,8 @@ function navItem(s) {
 // the live summaries of the More sheet, from the replies the page already has (02 12: a section without data shows none)
 function summaries() {
   const put = (s, text) => { const el = navEl.querySelector(`a[href="#${s}"] .nav__summary`); if (el) el.textContent = text || ""; };
-  const P = S.printers.on ? S.printers.list.filter((p) => p.configured) : [];
+  if (S.summaries) { for (const s of Object.keys(TABS)) put(s, S.summaries[s]); return; }      // the Hub's own lines (N7)
+  const P = S.printers.on ? S.printers.list.filter((p) => p.configured) : [];      // an older Hub: what the page can tell
   const up = P.filter((p) => p.state === "connected").length;
   put("printers", P.length ? SW.t("nav_summary_printers", { connected: up, offline: P.length - up }) : "");
   put("devices", SW.t("nav_summary_devices", { paired: S.devices.length, count: S.readers.list.length }));

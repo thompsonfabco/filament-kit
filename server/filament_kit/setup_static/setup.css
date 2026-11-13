@@ -141,8 +141,6 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 /* Overview (S2.2) */
 .overview__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin-bottom: var(--s2); }
 .overview__head > h2 { margin: 0; }
-.overview__head > .actions { margin-left: auto; }
-.overview__meta { margin: 0 0 var(--s3); }
 .overview__half { margin: var(--s3) 0; }
 .overview__half .code { flex-basis: 100%; }
 .overview__clear { margin: 0 0 var(--s2); }
