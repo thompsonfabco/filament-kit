@@ -380,7 +380,6 @@ def test_web_unexpected_errors_are_generic(app, monkeypatch, caplog):
 
 
 def test_web_read_refunds_only_when_claude_was_not_reached(app, sm, fake, monkeypatch):
-    from anthropic import APIConnectionError  # noqa: F401 - only for the error type below
     from filament_kit.spoolman import SpoolmanError
     reads = config.paths().state / "reads.json"
 
@@ -510,14 +509,9 @@ def test_picker_names_filaments_without_a_vendor():
 
 # ---------- the public prefix (nginx strips it) ----------
 
-def test_intake_with_a_slash_redirects_within_the_public_prefix(app):
-    """nginx strips the public path (/filament) before the app sees a request, so a redirect the app builds from the
-    request's own URL would lose it: /filament/intake/ must lead to /filament/intake, not /intake."""
-    with _client(app) as c:
-        r = c.get("/intake/", follow_redirects=False)
-        assert r.status_code in (301, 302, 303, 307, 308), r.status_code
-        assert r.headers["location"] in (BASE, ORIGIN + BASE)
-        assert _client(app, AWAY).get("/intake/", follow_redirects=False).status_code == 403
+def test_intake_with_a_slash_is_refused_off_the_lan(app):
+    """The redirect itself (kept within the public prefix) is test_slash_redirects_stay_within_the_public_prefix."""
+    assert _client(app, AWAY).get("/intake/", follow_redirects=False).status_code == 403
 
 
 def test_router_streams_sse_under_the_public_prefix():
