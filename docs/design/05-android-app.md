@@ -237,7 +237,8 @@ Back rules, in this order:
    "the new catalog line", buttons "Stay" (focused first) and "Leave without saving" (danger)). Add spools never asks:
    it saves its draft on every change (6.1).
 2. A screen that is writing something the person cannot safely abandon (a load into a printer, 7.6) ignores Back
-   and shows the snackbar "Loading into the printer… wait for its answer."
+   and shows the snackbar "Loading into the printer… wait for its answer." A dialog or sheet that is writing
+   anything else stays open on Back or a tap outside and shows "Still working. Wait for it to finish."
 3. Otherwise Back pops one destination.
 4. At the root of Spools, Printers, Recent or Settings, Back selects Home. At the root of Home, Back leaves the app.
 
@@ -1086,7 +1087,7 @@ autoplays sound.
 +--------------------------------------+
 | (o) Printing · benchy.3mf            |
 | [==========---------]  42 %          |
-| layer 120 of 284 · 1 h 12 min left · |
+| Layer 120 of 284 · 1 h 12 min left · |
 | done about 15:40                     |
 | Nozzle 215 → 215 °C · Bed 60 → 60 °C |
 |                                      |
@@ -1124,7 +1125,7 @@ Top bar: title the printer's name, back arrow, overflow "More actions": "Printer
 | Element | Text / behaviour |
 |---|---|
 | State line | Status shape and word (9.1 vocabulary) and the job name: "Printing · benchy.3mf". Not connected: the word and the fix line in the state's colour. No status yet: "No live status from the printer yet." |
-| Progress | While printing: determinate progress line, "42 %" at its end in `--mono`, and under it "layer 120 of 284 · 1 h 12 min left · done about 15:40" (`--mono` for numbers). |
+| Progress | While printing: determinate progress line, "42 %" at its end in `--mono`, and under it "Layer 120 of 284 · 1 h 12 min left · done about 15:40" (`--mono` for numbers). |
 | Temperatures | One line, `--mono`: "Nozzle 215 → 215 °C · Bed 60 → 60 °C · Chamber 31 °C"; two nozzles: "Nozzle 1 …, Nozzle 2 …". |
 | Alerts | One `bad` notice line per printer alert with the printer's text, or "Printer alert <code>" (the code as the printer sends it, `--mono`) when it gives only a code. |
 | Messages | The Hub's notes as `info` lines. |
@@ -1309,15 +1310,14 @@ The same texts on the Hub page and in the web app, where they show the same thin
 
 | Where | Text |
 |---|---|
-| Progress line (9.4), facts joined by " · " | "<n> %" · "layer <n> of <m>" · "<time> left" · "done about <clock time>" |
+| Progress line (9.4), facts joined by " · " | "<n> %" · "Layer <n> of <m>" · "<time> left" · "done about <clock time>" (the line under the bar starts with "Layer …", as in the web app) |
 | Results of the controls (9.4) | "Resumed." · "Paused." · "Stopped." · "Light on." · "Light off." |
-| Stop dialog title (9.4) | "Stop <file name>?" or, when the printer gives no name, "Stop the print?" (two whole sentences, not a name filled into one) |
-| Load preview rows (9.6) | "Preset: <name>" or "Preset: none" · "Nozzle: <n> mm" or "The printer does not report its nozzle size; assuming <n> mm." · "Spool <id>, now in <slot>, goes back to <location>." (when the place is not known: "Spool <id>, now in <slot>, goes back to its previous place.") |
+| Stop dialog (9.4) when the printer gives no job name | Title as always "Stop the print?"; body "Stop the print on <printer>? It cannot be resumed." (a whole second text; no phrase is filled into the usual body) |
+| Load preview rows (7.6) | "Preset: <name>" or "Preset: none" · "Nozzle: <n> mm" or "Nozzle size not reported by the printer; assuming <n> mm" · "Spool <id> now in <slot> goes back to <location>" (when the place is not known, the whole text "Spool <id> now in <slot> goes back to its previous place") |
 | Map by loading rows (9.8) | "<slot>: <status>"; the nozzle as "Right nozzle" or "Left nozzle" |
 | Printer settings (9.9) | Field "Name", error "Enter a name."; results "Saved." |
 | Sharing a printer report | No app can take the file: "No app on this phone can share or save the file." |
-| Back or a tap outside while a dialog or sheet is still writing | Snackbar "Still working. Wait for it to finish."; for a load: "Still loading into the printer. Wait for its answer." The dialog stays open. |
-
+| Back or a tap outside while a dialog or sheet is still writing (2.5 rule 2) | Snackbar: for a load "Loading into the printer… wait for its answer."; for any other write (Unload, Map slots, Put it back, Forget, the settings dialogs) "Still working. Wait for it to finish." The dialog stays open. |
 
 ---
 
