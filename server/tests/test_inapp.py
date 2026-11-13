@@ -135,15 +135,16 @@ def test_deleted():
     assert inapp.deleted("C @H2D 0.4", snapshot=snap, live=live, before=set(), reset=False, restore=False) is False
 
 
-def test_deleted_class_folds_once_and_agrees_with_the_function():
-    """FA-055: `Deleted` answers like `deleted` for every combination, restore chosen per call."""
+def test_deleted_class_folds_the_sets_and_restore_is_chosen_per_call():
+    """FA-055: `Deleted` casefolds the three sets itself; expected answers are written out, not taken from `deleted`."""
     snap, live, before = {"A @H2D 0.4", "B @H2D 0.4"}, {"B @H2D 0.4"}, {"c @h2d 0.4"}
-    for reset in (False, True):
-        gone = inapp.Deleted(snapshot=snap, live=live, before=before, reset=reset)
-        for name in ("a @h2d 0.4", "B @H2D 0.4", "C @H2D 0.4", "D @H2D 0.4"):
-            for restore in (False, True):
-                assert gone(name, restore=restore) is inapp.deleted(
-                    name, snapshot=snap, live=live, before=before, reset=reset, restore=restore)
+    gone = inapp.Deleted(snapshot=snap, live=live, before=before, reset=False)
+    assert gone("a @h2d 0.4", restore=False) is True      # installed, now gone from the app (case differs)
+    assert gone("b @H2D 0.4", restore=False) is False     # still in the app
+    assert gone("C @H2D 0.4", restore=False) is True      # deleted before (case differs)
+    assert gone("D @H2D 0.4", restore=False) is False     # unknown
+    assert gone("a @h2d 0.4", restore=True) is False and gone("C @H2D 0.4", restore=True) is False
+    assert inapp.Deleted(snapshot=snap, live=live, before=before, reset=True)("a @h2d 0.4", restore=False) is False
 
 
 def test_app_reset_keeps_note_lines_below_mark():

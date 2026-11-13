@@ -115,7 +115,7 @@ def deleted(name: str, *, snapshot: set[str], live: set[str], before: set[str], 
 
 
 class Deleted:
-    """`deleted` with the three name sets casefolded once (FA-055); call it per preset: `gone(name, restore=...)`."""
+    """`deleted` with the three name sets casefolded once per line (FA-055); call it per preset: `gone(name, restore=...)`."""
 
     def __init__(self, *, snapshot: set[str], live: set[str], before: set[str], reset: bool):
         self.reset = reset

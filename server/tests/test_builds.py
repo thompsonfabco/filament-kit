@@ -466,9 +466,10 @@ def test_empty_system_upload_is_refused_and_keeps_the_old_store():
     pair("a")
     builds.store_upload("system", io.BytesIO(system_zip()), device_id="a")
     s1 = builds.system_store()
-    with pytest.raises(builds.ProfileError) as e:
-        builds.store_upload("system", io.BytesIO(zip_of({"readme.txt": "x"})), device_id="a")
-    assert e.value.status == 400
+    for empty in (zip_of({}), zip_of({"BBL/": ""})):        # no entries at all; only the BBL/ folder entry
+        with pytest.raises(builds.ProfileError) as e:
+            builds.store_upload("system", io.BytesIO(empty), device_id="a")
+        assert e.value.status == 400
     assert builds.system_store() is s1 and s1.names() == set(TG.presets())
 
 

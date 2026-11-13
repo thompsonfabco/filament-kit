@@ -77,6 +77,15 @@ def test_base_name(store):
     assert store.base_name("fdm_filament_pla") == "fdm_filament_pla"
 
 
+def test_with_base_uses_one_index_and_keeps_resolving_lazily(store):
+    """FA-054: the base -> names index is built once; presets are still resolved (and reported) only when asked."""
+    first = store._with_base("Generic PLA")
+    assert first and all(store.base_name(n) == "Generic PLA" for n, _cfg in first)
+    index = store._names_by_base
+    assert store._with_base("Generic PLA") == first and store._names_by_base is index
+    assert store._with_base("no such base") == []
+
+
 def test_merge_nil_keeps_parent_value():
     assert bbl.merge({"a": ["nil", "5"], "b": "x"}, {"a": ["1", "2"], "c": 3}) == {"a": ["1", "5"], "b": "x", "c": 3}
     assert bbl.merge({"a": ["nil"]}, {"a": ["1", "2"]}) == {"a": ["nil"]}  # different length: child wins as is
