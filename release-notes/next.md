@@ -42,9 +42,9 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 
 ## More of the new design is merged
 
-- **Android app:** Settings, app updates and licences; pairing with one screen per step; Home; the Printers list, adding and finding Klipper printers; adding a line to the Filament Catalog. All in the new design.
+- **Android app:** Settings, app updates and licences; pairing with one screen per step; Home; the Printers list, adding and finding Klipper printers; adding a line to the Filament Catalog; Recently added (what was read, how sure the Label Reader was, a record's changes, editing and undo); Spools and the spool screen (loading and linking tags, with a tag read during a load held until it finishes). All in the new design.
 - **Phone web app:** sheets replace the browser's own confirm and prompt boxes; results, errors and reasons appear in place; the add preview works per item with colour finding and paging; spools can be read and edited from the phone, with the usage source shown; the offline helper (service worker) is always served.
-- **The Hub:** every printer's state comes in one read; the status shows groups and section summaries; the label reader's confidence and engine are reported; a settings group saves at once, and the last backup time is shown; an address you enter for the Hub can be tested before it is saved.
+- **The Hub:** every printer's state comes in one read; the status shows groups and section summaries; the label reader's confidence and engine are reported; a settings group saves at once, and the last backup time is shown; an address you enter for the Hub can be tested before it is saved. A reader that gives no per-field numbers (the Cloud reader, for one) is shown as not rated instead of as sure.
 - **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `filament-kit modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
 
 ## Still to come
