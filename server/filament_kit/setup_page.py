@@ -480,7 +480,7 @@ class SetupPage:
         req.setdefault("client", _CLIENT.get())       # the address the helper's lockout counts against
         r = await anyio.to_thread.run_sync(self.helper, req)
         if not r.get("ok"):
-            extra = {k: r[k] for k in ("needs", "trust_gone", "tries_left", "retry_at", "field") if k in r}
+            extra = {k: r[k] for k in ("needs", "trust_gone", "tries_left", "retry_at", "field", "errors") if k in r}
             raise Refused(int(r.get("status") or 500), str(r.get("error") or "the setup helper refused"), **extra)
         return r
 
@@ -540,6 +540,14 @@ class SetupPage:
             out.append(row)
         return out
 
+    def _last_backup(self) -> str | None:
+        try:
+            r = self.helper({"op": "backup_last"})
+        except Exception:  # noqa: BLE001 - a line on the page; the helper may be down
+            return None
+        last = r.get("last") if r.get("ok") else None
+        return last if isinstance(last, str) else None
+
     def _state_body(self) -> dict:
         from . import cli
         cfg = config.load()
@@ -569,6 +577,8 @@ class SetupPage:
             "web": {"public_set": bool((cfg.get("web") or {}).get("public_url"))},
             "station": {"url": (cfg.get("station") or {}).get("url")},
             "apply": jobs.view(0, with_text=False),
+            # the time of the newest backup, no code (N12): nothing else about backups leaves the root-only folder
+            "backup": {"last": self._last_backup()},
             # the Label Reader's Cloud reads in the last 24 h and the limit (the same count as the Overview's check)
             "cloud_reads": {"used": cli._reads_today(), "limit": cfg["reads_per_day"]},
         }
