@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -189,6 +190,7 @@ class TrustAction(
     val canTrust: (expected: String) -> Boolean,
     val trust: (expected: String, actual: String) -> Unit,
     val failed: Boolean = false,
+    val reset: () -> Unit = {},
 )
 
 internal const val TRUST_FAILED = "The new certificate could not be trusted yet. Check that the server is reachable and " +
@@ -198,6 +200,8 @@ internal const val TRUST_FAILED = "The new certificate could not be trusted yet.
 internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () -> Unit, trust: TrustAction? = null) {
     // the Pair screen's words and grouped fingerprint, for a saved pairing whose certificate changed
     val text = PairTexts.mismatch(Mismatch(expected, actual), host = "")
+    // a failure belongs to the notice it was shown under: gone when it leaves or shows another certificate
+    DisposableEffect(expected, actual) { onDispose { trust?.reset?.invoke() } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
         Text(text.body)

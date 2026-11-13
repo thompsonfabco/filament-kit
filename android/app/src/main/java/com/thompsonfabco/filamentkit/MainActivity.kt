@@ -399,7 +399,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 return@composable
             }
             val trustFailed by app.trustFailed.collectAsStateWithLifecycle()
-            val trust = TrustAction({ config.canTrust(it) }, { e, a -> app.trustCertificate(e, a) }, trustFailed)
+            val trust = TrustAction({ config.canTrust(it) }, { e, a -> app.trustCertificate(e, a) }, trustFailed, app::clearTrustFailed)
             PrintersEntry(a, onPairAgain = app.router::pairAgain, trust = trust)
         }
     }
