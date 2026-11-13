@@ -547,7 +547,7 @@ def test_a_running_mapping_is_followed_again_after_a_reload(mapped):
 def test_a_family_with_its_module_off_is_not_rendered():
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     assert '...(P.klipper ? [h("option"' in text and '...(P.bambu ? [h("option"' in text
-    assert "P.klipper ? scanCard()" in text and "P.klipper ? packCard()" in text
+    assert "P.klipper ? scanCard : null" in text and "P.klipper ? packCard : null" in text
 
 
 def test_map_by_loading_filament_on_a_klipper_printer(env, helper, manager, kl):
@@ -578,7 +578,7 @@ def test_the_printers_tab_links_the_live_view_in_the_phone_web_app():
     card = text.split("function liveCard()")[1].split("\n}\n")[0]
     assert 'replace(/\/setup\/?$/, "") + "/intake#printers"' in card
     assert 'rel: "noopener"' in card and "Open the live printer view" in card
-    assert "P.bambu ? liveCard() : null" in text
+    assert "P.bambu ? liveCard : null" in text
 
 
 @pytest.mark.skipif(not __import__("shutil").which("node"), reason="needs node")

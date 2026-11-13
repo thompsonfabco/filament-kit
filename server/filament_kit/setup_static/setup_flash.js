@@ -156,10 +156,10 @@ async function flashHere(dev, a, box) {
   let tok = null;
   try {
     if (dev.settings) {         // its token first: with none, nothing is written
-      say(box, "Making the Printer Station's token…", true);
+      working(box, "Making the Printer Station's token…");
       tok = await api("flash/provision", { code: theCode(), name: a.name || undefined });
     }
-    say(box, "Getting the firmware from this kit…", true);
+    working(box, "Getting the firmware from this kit…");
     const r = await fetch(`/setup/api/firmware/${dev.id}.bin`, { credentials: "same-origin" });
     if (!r.ok) throw new Error(`this kit did not give the firmware (HTTP ${r.status})`);
     const data = new Uint8Array(await r.arrayBuffer());
@@ -167,12 +167,12 @@ async function flashHere(dev, a, box) {
     const transport = new Transport(port, false);
     try {
       const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, terminal: quietTerminal });
-      say(box, "Connecting to the board…", true);
+      working(box, "Connecting to the board…");
       await loader.main();
       await loader.writeFlash({
         fileArray: [{ data, address: 0 }], flashMode: "keep", flashFreq: "keep", flashSize: "keep",
         eraseAll: false, compress: true,
-        reportProgress: (_i, written, total) => say(box, `Writing the ${dev.title} firmware: ${Math.floor((written * 100) / total)}%`, true),
+        reportProgress: (_i, written, total) => working(box, `Writing the ${dev.title} firmware: ${Math.floor((written * 100) / total)}%`),
       });
       await loader.after("hard_reset");
     } catch (e) {
@@ -184,9 +184,9 @@ async function flashHere(dev, a, box) {
       say(box, `Done: the ${dev.title} firmware (${dev.version}) is written. Plug the panel into the station computer; the station finds it by itself.`, true);
       return;
     }
-    say(box, "Written. Waiting for the Printer Station to start…", true);
+    working(box, "Written. Waiting for the Printer Station to start…");
     const settings = { ssid: a.ssid, pass: a.pass, base: tok.base, token: tok.token, buzzer_low: a.buzzer === "low" };
-    const res = await provisionOverSerial(info, settings, (t) => say(box, t, true));
+    const res = await provisionOverSerial(info, settings, (t) => working(box, t));
     if (!res.ok) throw new Error(res.message);
     say(box, `${res.message} (Reader token ${tok.id}; remove it on the Devices tab when the station is retired.)`, true);
   } catch (e) {
@@ -211,7 +211,7 @@ function flashTab() {
       const dev = devs.find((d) => d.id === flashPick.device);
       const choose = (key, value, label) => h("button", {
         class: flashPick[key] === value ? "" : "secondary", textContent: label,
-        on: { click: () => { flashPick[key] = value; box.replaceChildren(); draw(); } } });
+        on: { click: () => { flashPick[key] = value; fill(box); draw(); } } });
       const kids = [
         h("p", { class: "muted", textContent: "Writes this kit's own firmware to the device's ESP32-C3 over USB, from the files of the installed kit version. Use a data cable (a charge-only one shows nothing)." }),
         h("div", { class: "row" }, h("span", { textContent: "Device: " }),
@@ -261,7 +261,7 @@ function flashTab() {
               const a = answers();
               if (!a) return;
               change(box, "flash/server", { ...a, port: portSel ? portSel.value : boards[0].port, name: a.name || undefined },
-                () => { box.replaceChildren(); followApply(true); }, [pass, again]);
+                () => { fill(box); followApply(true); }, [pass, again]);
             } } })));
         }
       }

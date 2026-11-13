@@ -107,7 +107,7 @@ def test_an_entry_under_the_page_body_limit_goes_to_the_library(app, monkeypatch
 
 def test_the_settings_tab_has_the_card():
     src = (STATIC / "setup.js").read_text(encoding="utf-8")
-    assert "libraryCard()" in src
+    assert " libraryCard, " in src
     tabs = (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
     assert "function libraryCard(" in tabs and '"library_update"' in tabs and '"library_rollback"' in tabs
     assert library_tab.routes

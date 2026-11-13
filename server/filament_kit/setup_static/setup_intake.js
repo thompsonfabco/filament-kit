@@ -14,8 +14,8 @@ const histPath = (id, what) => `intake/history/${encodeURIComponent(id)}${what ?
 // close the record being edited); the record redraws itself from the answer.
 function intakePost(box, path, body, done) {
   return coded(box, async () => {
-    box.replaceChildren(h("p", { class: "muted", textContent: path.endsWith("/revise") ? "Asking the AI… (up to a minute)" : "Saving…" }));
-    try { done(await api(path, { ...body, code: theCode() })); } catch (e) { if (e.locked) box.replaceChildren(); throw e; }
+    working(box, path.endsWith("/revise") ? "Asking the AI… (up to a minute)" : SW.t("common_saving"));
+    try { done(await api(path, { ...body, code: theCode() })); } catch (e) { if (e.locked) fill(box); throw e; }
   });
 }
 
@@ -47,7 +47,7 @@ function intakeRow(r, ai) {
   detail.mark = h("span", { textContent: INTAKE_STATE[r.state] || r.state });     // redrawn after a change
   const names = [...new Set(r.spools.map((s) => `${s.vendor} ${s.name}`))].join(", ");
   const open = h("button", { class: "secondary", textContent: "Open", on: { click: () => intakeDetail(r.id, ai, detail) } });
-  return h("div", { class: "item" },
+  return h("div", { class: "item", "data-key": r.id },
     h("div", { class: "row" }, ...(r.photos ? [intakePhoto(r.id, 1)] : []),
       h("p", {}, h("b", { textContent: names || "no spools" }),
         ` · ${when} · ${r.source} · `, detail.mark, ` · spool ${r.spools.map((s) => s.spool_id).join(", ")}`),
@@ -58,10 +58,10 @@ function intakeRow(r, ai) {
 async function intakeDetail(id, ai, detail) {
   let rec;
   try { rec = await api(histPath(id)); } catch (e) { say(detail, e.message, false); return; }
-  const note = h("div");
+  const note = boxFor("record:" + id);     // the record's result slot (Undo): kept when the record is drawn again
   const photos = Array.from({ length: rec.photos }, (_, i) => intakePhoto(id, i + 1));
   const items = rec.saved.map((s) => {
-    const inputs = {};
+    const inputs = {}, at = boxFor("record:" + id + ":" + s.item);     // the item's own slot, under its controls
     const fields = INTAKE_FIELDS.map(([k, label]) => {
       const v = s.values[k];
       inputs[k] = h("input", { value: v == null ? "" : String(v), ariaLabel: label });
@@ -73,16 +73,16 @@ async function intakeDetail(id, ai, detail) {
         const was = s.values[k] == null ? "" : String(s.values[k]), now = inputs[k].value.trim();
         if (now !== was) values[k] = now === "" ? null : (INTAKE_NUM.has(k) ? Number(now) : now);
       }
-      if (!Object.keys(values).length) { say(note, "Nothing changed.", false); return; }
-      intakePost(note, histPath(id, "apply"), { item: s.item, values }, (r) => intakeDone(r, id, ai, detail));
+      if (!Object.keys(values).length) { say(at, "Nothing changed.", "neutral"); return; }
+      intakePost(at, histPath(id, "apply"), { item: s.item, values }, (r) => intakeDone(r, id, ai, detail, null, at));
     } } });
     const ask = h("textarea", { rows: 2, placeholder: "e.g. brand is Polymaker", ariaLabel: "What is wrong", disabled: !ai });
     const revise = h("button", { class: "secondary", textContent: "Ask the AI to correct it", disabled: !ai, on: { click: () =>
-      intakePost(note, histPath(id, "revise"), { item: s.item, note: ask.value }, (p) => intakeProposal(p, id, ai, detail, note)) } });
-    return h("div", { class: "item" },
+      intakePost(at, histPath(id, "revise"), { item: s.item, note: ask.value }, (p) => intakeProposal(p, id, ai, detail, at)) } });
+    return h("div", { class: "item", "data-key": s.item },
       h("p", { textContent: `Item ${s.item + 1}: spool ${s.spool_ids.join(", ")} (filament ${s.filament_id})${s.spool_ids.length > 1 ? "; changes apply to all of them" : ""}` }),
       h("div", { class: "row" }, ...fields), save,
-      h("div", {}, ask, revise, ai ? null : h("p", { class: "muted", textContent: "Label reading is off on this server, so only edits by hand." })));
+      h("div", {}, ask, revise, ai ? null : h("p", { class: "muted", textContent: "Label reading is off on this server, so only edits by hand." })), at);
   });
   const live = (rec.revisions || []).filter((v) => !v.undone);
   const last = live[live.length - 1];
@@ -107,15 +107,16 @@ function intakeProposal(p, id, ai, detail, note) {
     p.reader ? h("p", { class: "muted", textContent: `Read again by ${p.reader === "local" ? "the local reader" : "Claude"}${p.confidence != null ? ", " + Math.round(p.confidence * 100) + " % sure" : ""}${p.note ? " (" + p.note + ")" : ""}.` }) : null,
     ...rows,
     p.changes.length ? h("div", { class: "row" },
-      h("button", { textContent: "Accept", on: { click: () => intakePost(note, histPath(id, "apply"), { proposal: p.proposal }, (r) => intakeDone(r, id, ai, detail)) } }),
-      h("button", { class: "secondary", textContent: "Discard", on: { click: () => note.replaceChildren() } })) : null);
+      h("button", { textContent: "Accept", on: { click: () => intakePost(note, histPath(id, "apply"), { proposal: p.proposal }, (r) => intakeDone(r, id, ai, detail, null, note)) } }),
+      h("button", { class: "secondary", textContent: "Discard", on: { click: () => fill(note) } })) : null);
 }
 
-function intakeDone(r, id, ai, detail, text) {
+// `at`: the slot of the control that asked (an item's, or the record's)
+function intakeDone(r, id, ai, detail, text, at) {
   if (detail.mark) detail.mark.textContent = INTAKE_STATE[r.state] || r.state;
   const v = r.revisions[r.revisions.length - 1] || {};
   const fl = v.filaments || {};
-  intakeDetail(id, ai, detail).then(() => detail.append(h("pre", { class: "ok", textContent: text || (
+  intakeDetail(id, ai, detail).then(() => say(at || boxFor("record:" + id), text || (
     "Saved." + (fl.to !== fl.from ? ` The spools now use filament ${fl.to}${fl.created ? " (new)" : ""}.` : "")
-    + (fl.orphaned && fl.orphaned.length ? ` Filament ${fl.orphaned.join(", ")} has no spools left; it was not deleted.` : "")) })));
+    + (fl.orphaned && fl.orphaned.length ? ` Filament ${fl.orphaned.join(", ")} has no spools left; it was not deleted.` : "")), true));
 }

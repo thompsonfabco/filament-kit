@@ -61,6 +61,11 @@ pre.err, p.err { border-color: var(--bad); color: var(--bad); }
 pre.ok { border-color: var(--ok); }
 img.qr { display: block; width: var(--qr); height: var(--qr); max-width: 100%; padding: 0; }
 .hidden { display: none; }
+/* result slots (02 8.6): a panel without a kind stacks its lines, a Hub text keeps its line breaks, and in a row the
+   slot goes under the controls */
+:where(.page) .result:not([data-state]):not(:empty) { display: block; }
+:where(.page) .result__text { white-space: pre-line; }
+.row > .result { flex-basis: 100%; }
 
 /* the icon sprite is inline at the top of <body> (S0.10); taken out of the flow here too, in case components.css loads late */
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }

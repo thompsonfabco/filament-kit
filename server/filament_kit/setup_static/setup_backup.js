@@ -27,8 +27,9 @@ async function upload(path, file, code) {
   return d;
 }
 
+// Back up now, each backup's Download, the days to keep and the restore each say their result under their own row
 function backupCard() {
-  const body = h("div"), box = boxFor("backup"), rbox = boxFor("restore");
+  const body = h("div"), box = boxFor("backup"), keep = boxFor("backup:keep"), rbox = boxFor("restore");
   const list = h("div");
   const show = async () => {
     try {
@@ -36,22 +37,22 @@ function backupCard() {
       const days = h("input", { type: "number", min: 1, max: 365, value: String(r.keep_days), ariaLabel: "Days to keep" });
       fill(list,
         r.backups.length ? null : h("p", { class: "muted", textContent: `No backups in ${r.folder} yet.` }),
-        ...r.backups.map((b) => h("div", { class: "row item" },
+        ...r.backups.map((b) => { const at = boxFor("backup:" + b.name); return h("div", { class: "row item", "data-key": b.name },
           h("span", { textContent: `${b.at} · ${b.kind === "daily" ? "nightly" : b.kind === "pre-restore" ? "before a restore" : "made here"} · ${Math.max(1, Math.round(b.size / 1024))} KiB` }),
-          h("button", { class: "secondary", textContent: "Download", on: { click: () => coded(box, async () => {
-            say(box, "Preparing the zip…", true);
+          h("button", { class: "secondary", textContent: "Download", on: { click: () => coded(at, async () => {
+            working(at, "Preparing the zip…");
             await download("backups/download", { name: b.name, code: theCode() }, b.download);
-            box.replaceChildren();
-          }) } }))),
+            fill(at);
+          }) } }), at); }),
         h("div", { class: "row" }, h("label", {}, "Keep nightly backups for ", days, " days"),
-          h("button", { class: "secondary", textContent: "Save", on: { click: () => change(box, "backups/keep", { days: Number(days.value) }, (x) => say(box, `Backups are kept for ${x.days} days.`, true)) } })));
+          h("button", { class: "secondary", textContent: "Save", on: { click: () => change(keep, "backups/keep", { days: Number(days.value) }, (x) => say(keep, `Backups are kept for ${x.days} days.`, true)) } }), keep));
     } catch (e) { if (e.locked) throw e; say(list, e.message, false); }
   };
   const file = h("input", { type: "file", accept: ".zip,application/zip", ariaLabel: "Backup zip" });
   const restore = () => {
     if (!file.files.length) { say(rbox, "Choose the backup zip first.", false); return; }
     coded(rbox, async () => {
-      say(rbox, "Uploading and checking…", true);
+      working(rbox, "Uploading and checking…");
       checked(await upload("restore/upload", file.files[0], theCode()));
     });
   };
@@ -64,15 +65,15 @@ function backupCard() {
       h("p", { class: "muted", textContent: "Afterwards the setup code is the one from the backup." }),
       h("p", { class: "muted", textContent: `Checked copy: SHA-256 ${s.sha256}. Only this copy is restored.` }),
       h("div", { class: "row" }, h("label", {}, "Type restore to go on: ", word),
-        h("button", { textContent: "Restore", on: { click: () => change(rbox, "job", { name: "restore", confirm: word.value.trim(), sha256: s.sha256 }, () => { rbox.replaceChildren(); followApply(true); }) } }),
-        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => change(rbox, "restore/forget", {}, () => rbox.replaceChildren()) } })));
+        h("button", { textContent: "Restore", on: { click: () => change(rbox, "job", { name: "restore", confirm: word.value.trim(), sha256: s.sha256 }, () => { fill(rbox); followApply(true); }) } }),
+        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => change(rbox, "restore/forget", {}, () => fill(rbox)) } })));
   };
   fill(body,
     h("p", { class: "muted", textContent: "One zip with everything the kit keeps: spools, settings, printers, pairings and the certificate. The zip is not encrypted and holds the setup secrets (the keys, Access Codes and certificate): store it somewhere safe." }),
-    h("div", { class: "row" }, h("button", { textContent: "Back up now", on: { click: () => startJob(box, "backup") } })),
+    h("div", { class: "row" }, h("button", { textContent: "Back up now", on: { click: () => startJob(box, "backup") } }), box),
     codeRead("common_list_locked", list, show),
     h("p", { class: "muted", textContent: "Restore: bring this machine to the state in a backup zip, from this computer or another." }),
     h("div", { class: "row" }, file, h("button", { class: "secondary", textContent: "Upload and check", on: { click: restore } })),
     rbox);
-  return card("Backups", body, box);
+  return card("Backups", body);
 }

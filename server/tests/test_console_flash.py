@@ -243,7 +243,7 @@ def test_the_tab_and_its_assets_are_served(app):
         r = client(app).get("/setup/" + name)
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
     js = (STATIC / "setup.js").read_text(encoding="utf-8")
-    assert 'flash: ["nav_flash_device", "flash", () => flashTab()]' in js
+    assert 'flash: ["nav_flash_device", "flash", () => [flashTab]]' in js
     assert 'reader_setup: "Setting up the Printer Station"' in (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
 
 

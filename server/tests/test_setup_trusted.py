@@ -316,7 +316,7 @@ def test_the_page_offers_it_in_the_unlock_dialog_and_keeps_the_rules():
     # S1.5: no offer after an unrelated change; the unlock dialog's checkbox, there while the feature is on
     assert "offerTrust" not in trust and "SW.lock.trustOffered = !!T.enabled" in trust
     setup = (STATIC / "setup.js").read_text(encoding="utf-8")
-    assert "offerTrust" not in setup and "codeIn" not in setup and "trustCard()" in setup
+    assert "offerTrust" not in setup and "codeIn" not in setup and "readersCard, trustCard]" in setup
     # the code is held in memory by the shared script and sent in the body, never stored by the page
     assert "const theCode = () => SW.lock.code" in setup and "code: theCode()" in setup
     every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("setup*.js"))
@@ -329,4 +329,4 @@ def test_the_script_is_served_and_the_second_question_stays(app):
     assert c.get("/setup/setup_trust.js").status_code == 200
     tabs = (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
     # update and rollback ask in their dialogs (S1.6), trusted or not
-    assert "if (question) asking(" in tabs and 'startJob(box, "update", {' in tabs and 'startJob(box, "rollback",\n' in tabs
+    assert "if (question) asking(" in tabs and 'startJob(box, "update", {' in tabs and 'startJob(back, "rollback",\n' in tabs

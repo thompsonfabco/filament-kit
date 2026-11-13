@@ -2,27 +2,29 @@
 // Add or accept only: the one thing here that replaces a preset in a slicer is Accept, and the PC sync does that.
 "use strict";
 
+// the tab's one region; a change draws it again and waits for its read (later) before it says the result
 let presetsBody = null;
 
 function updatesList(box, r) {
   const what = r.chosen.map((u) => h("li", { textContent:
     `${u.target === "orca" ? "Orca Slicer" : "Bambu Studio"}: ${u.name}${u.file ? ` (in your file ${u.file})` : ""}: ${u.keys.slice(0, 6).join(", ")}${u.keys.length > 6 ? ", ..." : ""}` }));
-  fill(box,
+  say(box, [
     h("p", { textContent: r.chosen.length ? `${r.chosen.length} update${r.chosen.length === 1 ? "" : "s"} ${r.dry_run ? "would be accepted; nothing was changed." : "accepted; the PC sync writes them at its next run, after its backup."}` : "No updates to accept." }),
     r.chosen.length ? h("ul", {}, ...what) : null,
-    r.dry_run && r.chosen.length ? h("button", { textContent: "Accept these", on: { click: () => accept(box, r) } }) : null);
+    r.dry_run && r.chosen.length ? h("button", { textContent: "Accept these", on: { click: () => accept(box, r) } }) : null], r.dry_run ? "info" : true);
 }
 
-// Accepts what the list showed, by name and build: the server refuses once a newer build has changed it.
+// Accepts what the list showed, by name and build: the server refuses once a newer build has changed it. The change
+// reads the tab again (its region).
 async function accept(box, shown) {
   const r = await change(box, "presets/updates", { all: true, dry_run: false, stamp: shown.stamp, names: shown.chosen.map((u) => u.name) }, () => {});
-  if (r) { updatesList(box, r); loadPresets(); }
+  if (r) updatesList(box, r);
 }
 
 function parentButton(line, target, box) {
   const words = target === "orca" ? "Orca parent" : "Bambu Studio parent";
   return h("button", { class: "secondary", textContent: `Set ${words}`, on: { click: async () => {
-    box.replaceChildren(h("p", { class: "muted", textContent: "…" }));
+    working(box, "…");
     let p;
     try { p = await api(`presets/parents?material=${encodeURIComponent(line.material)}&target=${target}`); } catch (e) { say(box, e.message, false); return; }
     if (!p.parents.length) { say(box, "The PC sync has not reported any parents yet. It reports them when it runs.", false); return; }
@@ -30,11 +32,9 @@ function parentButton(line, target, box) {
     const pick = h("select", { ariaLabel: words }, ...p.parents.map((n) => h("option", { value: n, textContent: n, selected: n === now })));
     fill(box, h("label", {}, `${words} of ${line.vendor} ${line.product}: `, pick),
       h("div", { class: "row" },
-        h("button", { textContent: "Save", on: { click: async () => {
-          const r = await change(box, `presets/lines/${encodeURIComponent(line.line_id)}/parent`, { parent: pick.value, target }, () => say(box, "Saved. A build was asked for.", true));
-          if (r) loadPresets();
-        } } }),
-        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => box.replaceChildren() } })));
+        h("button", { textContent: "Save", on: { click: () => change(box, `presets/lines/${encodeURIComponent(line.line_id)}/parent`, { parent: pick.value, target },
+          () => say(box, "Saved. A build was asked for.", true)) } }),
+        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => fill(box) } })));
   } } });
 }
 
@@ -42,7 +42,7 @@ function lineRow(line, canOrca) {
   const box = boxFor(`line:${line.line_id}`);       // a message here outlives the redraw a change brings
   const parent = line.bambu_parent ? `${line.bambu_parent} (${line.parent_source})` : "none";
   const orca = line.orca_parent ? `${line.orca_parent} (${line.orca_parent_source})` : "none";
-  return h("div", { class: "item" },
+  return h("div", { class: "item", "data-key": line.line_id },
     h("p", {}, h("b", { textContent: `${line.vendor} ${line.product}` }), ` · ${line.material} · ${line.presets} preset${line.presets === 1 ? "" : "s"}`),
     h("p", { class: "muted", textContent: `Bambu Studio parent: ${parent}${canOrca ? ` · Orca parent: ${orca}` : ""}` }),
     h("div", { class: "row" }, parentButton(line, "bambu", box), canOrca ? parentButton(line, "orca", box) : null),
@@ -84,6 +84,6 @@ async function loadPresets() {
 
 function presetsTab() {
   presetsBody = h("div");
-  loadPresets();
+  later(loadPresets());
   return [presetsBody];
 }
