@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.TextUnit
 
 // The token holders SpoolwardenTokens.kt (generated from tokens/tokens.json) fills. Resolved objects come with the theme composable.
 
-internal enum class Look { Console, Workbench, Spool, Panes }
+internal enum class Look { Console, Workbench, Palette, Panes }
 
 internal enum class NavStyle { Rail, Sidebar, Pills, List }
 
