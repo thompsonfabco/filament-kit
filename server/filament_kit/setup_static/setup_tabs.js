@@ -237,25 +237,6 @@ function remoteCard() {
   return el;
 }
 
-// "Follow nightly builds" (default off): updates.channel through the jobs channel_nightly / channel_stable
-const NIGHTLY_ASK = "Follow nightly builds? They are untested and unsigned: the kit checks a download only against "
-  + "the nightly's own checksum list, which proves nothing about who built it. The newest nightly is installed now, and "
-  + "each new one after it. Turn this off to go back to signed releases.";
-function nightlyCard(u, box) {
-  const on = u.channel === "nightly";
-  const sw = h("input", { type: "checkbox", checked: on, on: { change: () => {
-    sw.checked = on;            // the switch shows what the server does; the job changes it
-    startJob(box, on ? "channel_stable" : "channel_nightly", on
-      ? "Go back to signed releases? The latest release replaces the nightly build now." : NIGHTLY_ASK);
-  } } });
-  return card("Nightly builds",
-    h("label", { class: "row" }, sw, " Follow nightly builds"),
-    h("p", { class: "muted", textContent: on
-      ? `On: ${u.installed_text || u.installed} is installed, and each new nightly is installed after it. Nightly builds are untested and unsigned.`
-      : "Off: only signed releases are installed. Nightly builds are untested and unsigned." }),
-    u.update_refused ? h("p", { class: "err", textContent: u.update_refused }) : null);
-}
-
 function updatesTab() {
   const out = h("div", {}, h("p", { class: "muted", textContent: "Reading…" }));
   const box = boxFor("updates");
@@ -274,7 +255,6 @@ function updatesTab() {
         u.newer && u.update_refused ? h("p", { class: "err", textContent: u.update_refused }) : null,
         box),
       u.notes ? card(u.newer ? `What ${u.latest} brings` : `Release notes of ${u.latest}`, h("pre", { textContent: u.notes })) : null,
-      nightlyCard(u, box),
       card("Roll back",
         u.previous ? h("p", {}, `Goes back to ${u.previous}, the version this one replaced. Settings and data stay.`) : h("p", { class: "muted", textContent: "No earlier version is kept, so there is nothing to roll back to." }),
         u.previous && u.going_back ? h("pre", { textContent: u.going_back }) : null,
