@@ -162,4 +162,8 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .cards > .group { margin-top: 0; }
 .disclosure > summary { display: flex; align-items: center; min-height: calc(var(--s7) - var(--s1)); font-size: var(--fs-m);
                         font-weight: var(--fw-label); cursor: pointer; }
+.disclosure__chevron { margin-left: auto; color: var(--muted); transition: transform var(--t); }
+.disclosure[open] > summary .disclosure__chevron { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .disclosure__chevron { transition: none; } }
+.presets__updates { margin-top: var(--s4); }
 .disclosure__body { display: grid; gap: var(--s3); padding-top: var(--s3); }

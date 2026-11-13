@@ -836,6 +836,7 @@ function presetsTab() {
   const upBox = h("div");      // presets in the slicers that a newer build would change: shown, then accepted
   const upLine = resultLine(); // the answer to Restore and Accept; kept in the list, so it stays while the list is read again
   const buildBtn = SW.btn(SW.t("presets_build"), { cls: "btn--primary", action: "build", run: (e) => build(e.currentTarget) });
+  upBox.className = "presets__updates";
   const el = h("section", { class: "hidden" }, h("p", { class: "muted", textContent: SW.t("presets_intro") }), box, upBox);
 
   const kvRow = (key, ...value) => h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: key }), h("dd", { class: "kv__value" }, ...value));
@@ -885,7 +886,9 @@ function presetsTab() {
         const p = await api(`parents?q=${encodeURIComponent(text)}`);
         const want = SW.t("presets_orca_default", { material });
         fillSel(orca, p.orca_parents, want); fillSel(bs, p.bs_templates, want);
-        clear(newRes);
+        if (p.note && (!p.orca_parents.length || !p.bs_templates.length)) {   // no parents to pick yet: the Hub says why, and Create waits
+          put(newRes, "warn", p.note); disabled(create, p.note, () => q._control);
+        } else { clear(newRes); disabled(create, null); }
       } catch (e) { failed(newRes, e, () => parents(text)); }
     }
     const q = SW.field({ type: "search", label: SW.t("presets_parent"), hint: SW.t("presets_parent_help"), value: material, onSearch: parents });
@@ -899,7 +902,8 @@ function presetsTab() {
         return null;
       }, { button: e.currentTarget });
     } });
-    const details = h("details", { class: "disclosure" }, h("summary", { textContent: SW.t(lines.length ? "presets_new_line_with_lines" : "presets_new_line_none") }),
+    const details = h("details", { class: "disclosure" }, h("summary", {}, h("span", { textContent: SW.t(lines.length ? "presets_new_line_with_lines" : "presets_new_line_none") }),
+      SW.icon("chevron", "icon--s disclosure__chevron")),
       h("div", { class: "disclosure__body" }, nm, q, orca, bs, h("div", {}, create), newRes));
     details.addEventListener("toggle", () => {       // while the disclosure is open, Create line is the card's only filled button
       if (add) add.classList.toggle("btn--primary", !details.open);
@@ -919,29 +923,39 @@ function presetsTab() {
   // Updates: the list names each preset and what changes; Accept takes exactly that list (the server refuses it once a
   // newer build has come, and the list is loaded again). Slicer Sync writes accepted presets at its next run.
   async function updates(quiet) {
-    await fill(upBox, SW.t("web_presets_updates_title"), async () => {
+    await fill(upBox, SW.t("presets_updates_title"), async () => {
       const u = await api("updates");
-      const restore = h("div", {}, SW.btn(SW.t("web_presets_restore"), { action: "restore", run: (e) =>
+      const waiting = (u.updates || []).filter((x) => !x.accepted);
+      const summary = u.count ? SW.t("presets_updates_summary", { count: u.count, lines: u.lines,
+        accepted: u.accepted ? SW.t("presets_updates_accepted", { count: u.accepted }) : "" }) : SW.t("presets_updates_none");
+      const restore = SW.btn(SW.t("presets_restore_deleted"), { cls: "btn--ghost", action: "restore", run: (e) =>
         act(upLine, SW.t("common_working"), async () => {
           await api("restore_deleted", { body: {} }); setTimeout(() => updates(true), 3000);
-          return SW.t("web_presets_restore_done");
-        }, { button: e.currentTarget }) }));
-      const waiting = (u.updates || []).filter((x) => !x.accepted);
-      if (!waiting.length) return group(SW.t("web_presets_updates_title"),
-        h("p", { class: "muted", textContent: u.accepted ? SW.t("web_presets_updates_none_accepted", { count: u.accepted }) : SW.t("web_presets_updates_none") }), restore, upLine);
-      const accept = SW.btn(SW.t("web_presets_updates_accept", { count: waiting.length }), { cls: "btn--primary", action: "accept-updates", run: (e) =>
+          return SW.t("presets_restore_asked");
+        }, { button: e.currentTarget }) });
+      const shown = h("div"), shownLine = resultLine();     // the change list, with Accept under it, once asked for
+      const accept = SW.btn(SW.t("presets_updates_accept"), { cls: "btn--primary", action: "accept-updates", run: (e) =>
         act(upLine, SW.t("common_working"), async () => {
           try {
             const r = await api("updates_accept", { body: { stamp: u.stamp, names: waiting.map((x) => x.name) } });
             setTimeout(() => updates(true), 3000);
-            return SW.t("web_presets_updates_accepted", { count: r.accepted.length });
-          } catch (err) { setTimeout(() => updates(true), 4000); throw err; }
+            return SW.t("presets_updates_accepted_result", { count: r.accepted.length });
+          } catch (err) {
+            if (!(err instanceof SW.HubError) || err.status !== 409) { setTimeout(() => updates(true), 4000); throw err; }
+            updates(true);                                    // a newer build came: the list is read again
+            return { kind: "warn", text: SW.t("presets_updates_stale") };
+          }
         }, { button: e.currentTarget }) });
-      return group(SW.t("web_presets_updates_title"),
-        h("p", { class: "muted", textContent: SW.t("web_presets_updates_intro") }),
-        h("ul", {}, ...waiting.map((x) => h("li", { textContent: SW.t("web_presets_updates_row", { name: x.name, target: x.target, keys: x.keys.join(", ") }) }))),
-        h("div", {}, accept),
-        (u.yours || []).length ? h("p", { class: "muted", textContent: SW.t("web_presets_updates_yours", { names: u.yours.join(", ") }) }) : null, restore, upLine);
+      const keys = (x) => x.keys.slice(0, 6).join(", ") + (x.keys.length > 6 ? ", …" : "");
+      const show = SW.btn(SW.t("presets_updates_show"), { action: "show-updates", run: () => {
+        shown.replaceChildren(...(waiting.length ? [h("ul", {}, ...waiting.map((x) => h("li", { textContent: SW.t("presets_updates_line",
+          { target: x.target, name: x.name, file: x.file || `${x.name}.json`, keys: keys(x) }) }))), h("div", {}, accept)] : []));
+        SW.result(shownLine, "ok", SW.t(waiting.length ? "presets_updates_would" : "presets_updates_nothing", { count: waiting.length }));
+      } });
+      return group(SW.t("presets_updates_title"),
+        h("p", { class: "muted", textContent: summary }),
+        (u.yours || []).length ? h("p", { class: "muted", textContent: SW.t("presets_updates_yours", { count: u.yours.length }) }) : null,
+        h("div", {}, show), shownLine, shown, h("div", {}, restore), upLine);
     }, { quiet });
   }
   return { el, enter: () => { load(); updates(); } };
