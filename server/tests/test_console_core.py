@@ -331,6 +331,34 @@ def test_job_view_follows_a_log_from_an_offset(app):
     assert c.get("/setup/api/job?from=x").status_code == 400
 
 
+def test_job_progress_is_null_without_step_lines(app):
+    c = client(app)
+    assert c.get("/setup/api/job").json()["progress"] is None                     # no job at all
+    write_log(setup_helper.header("backup") + "\nwriting the archive\n")
+    assert c.get("/setup/api/job").json()["progress"] is None                     # running, no steps: indeterminate
+    write_log(setup_helper.header("backup") + "\nwriting the archive\n\n==> finished (exit 0)\n")
+    assert c.get("/setup/api/job").json()["progress"] is None                     # finished, never counted
+    write_log(setup_helper.header("backup") + "\n==> step 0 of 0 nothing\n")
+    assert c.get("/setup/api/job").json()["progress"] is None                     # zero steps is no count
+
+
+def test_job_progress_follows_the_newest_complete_step_line(app):
+    c = client(app)
+    head = setup_helper.header("update") + "\n"
+    write_log(head + "==> step 1 of 4 downloading\nsome output\n==> step 3 of 4 installing\n==> step 4 of")
+    r = c.get("/setup/api/job").json()
+    assert r["running"] is True and r["progress"] == 0.75                         # the half-written line is not read
+    write_log(head + "==> step 1 of 3 a\n==> step 2 of 3 b\n")
+    assert c.get("/setup/api/job").json()["progress"] == 0.667
+    write_log(head + "==> step 9 of 3 too far\n")
+    assert c.get("/setup/api/job").json()["progress"] == 1.0                      # clamped
+    write_log(head + "==> step 1 of 3 a\n\n==> finished (exit 0)\n")
+    assert c.get("/setup/api/job").json()["progress"] == 1.0                      # done counts as all steps
+    write_log(head + "==> step 1 of 4 a\n\n==> finished (exit 2)\n")
+    r = c.get("/setup/api/job").json()
+    assert r["exit"] == 2 and r["progress"] == 0.25                               # a failure stays where it stopped
+
+
 PLANTED_LOG = [
     "at 192.0.2.41 now", "Spoolman http://192.0.2.31:7912/api", "PUT /api/sync/live?user_id=1234567890 200",
     "fkit://pair?h=kit&t=PAIRTOKEN&fp=ab", "http://me:hunter2@kit.mylan.net:7912/x", f"serial {SERIAL} seen",

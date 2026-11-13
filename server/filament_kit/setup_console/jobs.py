@@ -11,6 +11,10 @@ line waits until it has ended.
 
 The server restarts during apply, update and rollback; the log lives in /run, so the page comes back and reads on.
 `version` tells it when the server it reloaded under is another release.
+
+`progress` is the fraction (0 to 1) of the job's newest complete `==> step K of N` line, so the page can draw a determinate
+bar (docs/design N13); null when the job writes no step lines, which the page shows as an indeterminate bar. A job that
+finished with exit 0 after writing step lines reports 1.
 """
 from __future__ import annotations
 
@@ -28,6 +32,7 @@ STALE_AFTER = 65 * 60       # past the unit's TimeoutStartSec: a job with no las
 GONE_AFTER = 15.0           # seconds a log may stand with no unit behind it (the unit writes it, then ends)
 GONE_MEMO = 2.0
 _FINISHED = re.compile(rb"^==> finished \(exit (-?[0-9]+)\)\s*$", re.M)
+_STEP = re.compile(rb"^==> step ([0-9]{1,6}) of ([0-9]{1,6})\b[^\n]*\n", re.M)
 _memo_lock = threading.Lock()
 _memo: tuple | None = None  # (the bytes it was made from, the redacted text): a page polls once a second
 _gone_memo: tuple | None = None  # (when it was asked, the answer)
@@ -71,9 +76,20 @@ def _unit_gone(age: float) -> bool:
     return gone
 
 
+def _progress(data: bytes, done: bool, exit_code: int | None) -> float | None:
+    """The fraction of the newest complete step line in `data`, or None when there is none (or it says 0 steps)."""
+    steps = [m for m in _STEP.finditer(data) if int(m.group(2)) > 0]
+    if not steps:
+        return None
+    if done and exit_code == 0:
+        return 1.0
+    k, n = int(steps[-1].group(1)), int(steps[-1].group(2))
+    return round(min(max(k / n, 0.0), 1.0), 3)
+
+
 def view(start: int, *, with_text: bool = True, whole: bool = False) -> dict:
     empty = {"seen": False, "name": None, "running": False, "exit": None, "lost": False, "text": "", "next": 0,
-             "version": __version__, "redacted": not whole}
+             "version": __version__, "redacted": not whole, "progress": None}
     path = setup_helper.job_log()
     try:
         data, age = path.read_bytes(), time.time() - path.stat().st_mtime
@@ -82,9 +98,11 @@ def view(start: int, *, with_text: bool = True, whole: bool = False) -> dict:
     ends = list(_FINISHED.finditer(data))
     done = bool(ends)
     lost = not done and (age > STALE_AFTER or _unit_gone(age))
+    exit_code = int(ends[-1].group(1)) if done else None
     out = {"seen": True, "name": setup_helper.job_name_of(data.split(b"\n", 1)[0].decode("utf-8", "replace")),
-           "running": not done and not lost, "exit": int(ends[-1].group(1)) if done else None, "lost": lost,
-           "version": __version__, "redacted": not whole, "text": "", "next": 0}
+           "running": not done and not lost, "exit": exit_code, "lost": lost,
+           "version": __version__, "redacted": not whole, "text": "", "next": 0,
+           "progress": _progress(data, done, exit_code)}
     if not with_text:
         return out
     if whole:
