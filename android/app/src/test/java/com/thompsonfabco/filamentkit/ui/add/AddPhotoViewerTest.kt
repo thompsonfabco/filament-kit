@@ -1,11 +1,19 @@
 package com.thompsonfabco.filamentkit.ui.add
 
+import android.graphics.Bitmap
 import android.os.Build
 import androidx.activity.ComponentDialog
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTouchInput
@@ -16,7 +24,11 @@ import androidx.compose.ui.test.performClick
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
+import com.thompsonfabco.filamentkit.ui.theme.LocalWindowClass
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import com.thompsonfabco.filamentkit.ui.theme.WindowClass
+import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertEquals
@@ -36,17 +48,26 @@ class AddPhotoViewerTest {
     /** The thumbnail's lower right: its remove button sits in the upper right corner. */
     private fun SemanticsNodeInteraction.tapThumbnail() = performTouchInput { click(Offset(width * 0.75f, height * 0.75f)) }
 
-    private fun show(photos: Int): AddViewModel {
+    private var window by mutableStateOf(WindowClass.Phone)
+
+    private fun show(photos: Int, loader: (suspend (File) -> ImageBitmap?)? = null): AddViewModel {
         val dir = kotlin.io.path.createTempDirectory("add-drafts").toFile().also { it.deleteOnExit() }
         val vm = AddViewModel(FakeIntakeApi(), DraftStore(dir), taps = emptyFlow(), prepare = { it }, io = Dispatchers.Unconfined)
         repeat(photos) { vm.addPhoto(byteArrayOf(it.toByte(), 2, 3)) }
+        window = WindowClass.Phone
         rule.setContent {
             var step by mutableStateOf(AddStep.Photos)
             SpoolwardenTheme(Look.Console, Appearance.Light) {
-                AddSpoolsScreen(
-                    vm, step, onStep = { step = it }, onPop = {}, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
-                    onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {}, camera = { _, _ -> },
-                )
+                // the window class is the test's to change, as a phone turned sideways changes it
+                CompositionLocalProvider(
+                    LocalWindowClass provides window,
+                    *listOfNotNull(loader?.let { LocalThumbnailLoader provides it }).toTypedArray(),
+                ) {
+                    AddSpoolsScreen(
+                        vm, step, onStep = { step = it }, onPop = {}, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
+                        onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {}, camera = { _, _ -> },
+                    )
+                }
             }
         }
         rule.waitForIdle()
@@ -78,5 +99,49 @@ class AddPhotoViewerTest {
         rule.waitForIdle()
         assertEquals(1, vm.state.value.photos.size)
         rule.onNodeWithContentDescription("Close photo").assertDoesNotExist()
+    }
+
+    @Test fun aTapAsTheDecodedPictureReplacesThePlaceholderStillOpensTheViewer() {
+        val decoded = CompletableDeferred<Unit>()
+        show(2) { _ ->
+            decoded.await()
+            Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).asImageBitmap()
+        }
+        rule.onNodeWithContentDescription("Photo 2").performTouchInput { down(Offset(width * 0.75f, height * 0.75f)) }
+        // the picture arrives between the finger going down and coming up
+        decoded.complete(Unit)
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Photo 2").performTouchInput { up() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Photo 2 of 2").assertExists()
+    }
+
+    @Test fun theThumbnailIsAButton() {
+        show(1)
+        rule.onNodeWithContentDescription("Photo 1").assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+    }
+
+    @Test fun theViewerStaysOpenWhenTheWindowChangesClass() {
+        show(3)
+        rule.onNodeWithContentDescription("Photo 2").tapThumbnail()
+        rule.waitForIdle()
+        rule.onNodeWithText("Photo 2 of 3").assertExists()
+        window = WindowClass.Tablet
+        rule.waitForIdle()
+        rule.onNodeWithText("Photo 2 of 3").assertExists()
+        window = WindowClass.Phone
+        rule.waitForIdle()
+        rule.onNodeWithText("Photo 2 of 3").assertExists()
+    }
+
+    @Test fun theViewerClosesWhenItsPhotoIsRemoved() {
+        val vm = show(2)
+        rule.onNodeWithContentDescription("Photo 1").tapThumbnail()
+        rule.waitForIdle()
+        rule.onNodeWithText("Photo 1 of 2").assertExists()
+        rule.runOnUiThread { vm.removePhoto(0) }
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Close photo").assertDoesNotExist()
+        assertEquals(1, vm.state.value.photos.size)
     }
 }
