@@ -5,7 +5,6 @@ import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.data.SettingsStore
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
-import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -217,6 +216,39 @@ class PairViewModelTest {
         assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
     }
 
+    @Test fun anErrorPageWithNoHubMessageIsNotAHub() {
+        // the shape Api.errorFor gives a non-JSON error page
+        val page = ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
+        backend.pairResult = { throw page }
+        vm.submitAddress("10.0.0.2", "")
+        vm.confirmFingerprint()
+        vm.submitCode("123456")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+    }
+
+    @Test fun aNonJsonUnauthorizedPageIsNotAHubEither() {
+        backend.pairResult = { throw ApiError(401, "unauthorized", "The server returned an error (401)", noHubMessage = true) }
+        vm.submitAddress("10.0.0.2", "")
+        vm.confirmFingerprint()
+        vm.submitCode("123456")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+    }
+
+    @Test fun aServiceThatDoesNotSpeakTlsOnTheProbeIsNotAHub() {
+        backend.probeResult = { throw javax.net.ssl.SSLException("Unable to parse TLS packet header") }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+        backend.probeResult = { throw javax.net.ssl.SSLHandshakeException("handshake failure") }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(PairMessage.Res(R.string.pair_error_not_hub), ui.error)
+    }
+
+    @Test fun aTimeoutOnTheProbeIsStillUnreachable() {
+        backend.probeResult = { throw java.net.SocketTimeoutException("timeout") }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(PairMessage.Res(R.string.common_hub_unreachable), ui.error)
+    }
+
     @Test fun whatTheHubSaysItselfIsShownWhenTheTableHasNoRowForIt() {
         backend.pairResult = { throw ApiError(429, "rate_limited", "Too many tries. Wait a minute.") }
         vm.submitAddress("10.0.0.2", "")
@@ -311,7 +343,9 @@ class PairViewModelTest {
         val blocked = PairViewModel(settings, backend, CoroutineScope(UnconfinedTestDispatcher()), localNetworkMissing = { true })
         backend.probeResult = { throw IOException("EPERM") }
         blocked.submitAddress("10.0.0.2", "")
-        assertEquals(PairMessage.Raw(LOCAL_NETWORK_MESSAGE), blocked.state.value.error)
+        assertEquals(PairMessage.LocalNetwork, blocked.state.value.error)
+        blocked.localNetworkGranted()
+        assertNull("the notice is over once access is granted", blocked.state.value.error)
     }
 
     @Test fun qrParseErrorIsAFixedMessage() {

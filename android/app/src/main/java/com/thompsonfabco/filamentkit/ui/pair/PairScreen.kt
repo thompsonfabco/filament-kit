@@ -138,6 +138,7 @@ internal fun PairStartScreen(
     onEnterAddress: () -> Unit,
     /** The Hub stopped accepting this phone (4.1). */
     unpairedBanner: Boolean = false,
+    access: LocalNetworkAccess? = null,
 ) {
     PairPage {
         if (unpairedBanner) NoticeCard(NoticeKind.Bad, stringResource(R.string.pair_banner_unpaired))
@@ -147,7 +148,7 @@ internal fun PairStartScreen(
             stringResource(if (ui.busy) R.string.common_connecting else R.string.pair_start_scan), onScan,
             Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = !ui.busy, busy = ui.busy,
         )
-        ui.error?.let { NoticeCard(NoticeKind.Bad, it.text()) }
+        ui.error?.let { PairErrorLine(it, access) }
         FoundHubs(discovered, enabled = !ui.busy, onPick = onPick)
         SwButton(stringResource(R.string.pair_start_enter_address), onEnterAddress, Modifier.fillMaxWidth(), enabled = !ui.busy)
     }

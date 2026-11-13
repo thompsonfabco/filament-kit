@@ -28,6 +28,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
@@ -64,6 +66,8 @@ import com.thompsonfabco.filamentkit.ui.pair.PairNetworkAccessScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairStartScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairUi
 import com.thompsonfabco.filamentkit.ui.pair.ScanProblem
+import com.thompsonfabco.filamentkit.ui.pair.ScannerFrame
+import com.thompsonfabco.filamentkit.ui.pair.ScannerState
 import com.thompsonfabco.filamentkit.ui.pair.Step
 import com.thompsonfabco.filamentkit.ui.printers.CameraSource
 import com.thompsonfabco.filamentkit.ui.printers.PrinterBackend
@@ -116,7 +120,7 @@ class ScreenSemanticsTest {
     private var dark by mutableStateOf(false)
     private var fontScale by mutableStateOf(1f)
     private var density = 1f
-    private var title = ""
+    private var title: String? = ""
 
     private fun host(title: String, screen: @Composable () -> Unit) {
         this.title = title
@@ -130,6 +134,18 @@ class ScreenSemanticsTest {
                         Box(Modifier.weight(1f)) { screen() }
                     }
                 }
+            }
+        }
+    }
+
+    /** A screen drawn as the shell draws it with no top bar (the scanner). */
+    private fun hostNoBar(screen: @Composable () -> Unit) {
+        title = null
+        rule.setContent {
+            val base = LocalDensity.current
+            density = base.density
+            CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
+                SpoolwardenTheme(Look.Console, if (dark) Appearance.Dark else Appearance.Light) { screen() }
             }
         }
     }
@@ -492,6 +508,36 @@ class ScreenSemanticsTest {
             PairCertificateScreen(Mismatch(fp, "f".repeat(64), MismatchSource.MANUAL), canTrust = false, {}, {}, {})
         }
         auditAllFour("The Hub's certificate changed while pairing")
+    }
+
+    // The scanner route as drawn: no top bar; close button, hint chip and viewfinder over a stubbed camera.
+    @Test fun theScannerWithTheCamera() {
+        hostNoBar {
+            ScannerFrame(ScannerState.Scanning, onClose = {}, onTryAgain = {}, onEnterAddress = {}) { Box(Modifier.fillMaxSize()) }
+        }
+        auditAllFour("Point the camera at the QR code")
+        rule.onNodeWithContentDescription("Close the scanner").assertExists()
+        rule.onNodeWithContentDescription("Camera viewfinder. Point it at the QR code.").assertExists()
+    }
+
+    @Test fun theScannerRouteWithoutTheCamera() {
+        hostNoBar { ScannerFrame(ScannerState.Denied, onClose = {}, onTryAgain = {}, onEnterAddress = {}) {} }
+        auditAllFour("Try again")
+    }
+
+    @Test fun theScannerRouteWhoseCameraFailed() {
+        hostNoBar { ScannerFrame(ScannerState.CameraFailed, onClose = {}, onTryAgain = {}, onEnterAddress = {}) {} }
+        auditAllFour("Enter the address instead")
+    }
+
+    @Test fun aMissingLocalNetworkPermissionShowsThePanelOfTheAccessStep() {
+        host("Pair with your Hub") {
+            PairAddressScreen(
+                PairUi(step = Step.Address, error = PairMessage.LocalNetwork), { _, _ -> }, {},
+                access = LocalNetworkAccess(false, false, {}, {}),
+            )
+        }
+        auditAllFour("Allow local network access")
     }
 
     @Test fun theScannerWithoutTheCamera() {

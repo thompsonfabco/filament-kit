@@ -26,8 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.em
 import com.thompsonfabco.filamentkit.R
-import com.thompsonfabco.filamentkit.ui.components.NoticeCard
-import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.LocalNetworkAccess
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -36,7 +35,12 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /** 4.5: Back goes to the first screen; the typed address stays while the step is under another. */
 @Composable
-internal fun PairAddressScreen(ui: PairUi, onSubmit: (host: String, port: String) -> Unit, onBack: () -> Unit) {
+internal fun PairAddressScreen(
+    ui: PairUi,
+    onSubmit: (host: String, port: String) -> Unit,
+    onBack: () -> Unit,
+    access: LocalNetworkAccess? = null,
+) {
     BackHandler(onBack = onBack)
     var host by rememberSaveable { mutableStateOf(ui.host) }
     var port by rememberSaveable { mutableStateOf(ui.port.toString()) }
@@ -73,7 +77,7 @@ internal fun PairAddressScreen(ui: PairUi, onSubmit: (host: String, port: String
                 stringResource(if (ui.busy) R.string.common_connecting else R.string.pair_address_connect),
                 { onSubmit(host, port) }, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = ui.busy,
             )
-            if (ui.errorField == null) ui.error?.let { NoticeCard(NoticeKind.Bad, it.text()) }
+            if (ui.errorField == null) ui.error?.let { PairErrorLine(it, access) }
         }
     }
 }
@@ -95,7 +99,7 @@ internal fun PairFingerprintScreen(ui: PairUi, onMatches: () -> Unit, onDiffers:
 
 /** 4.7: the six digits; Pair stays off until all six are typed, and the sixth does not submit by itself. */
 @Composable
-internal fun PairCodeScreen(ui: PairUi, onSubmit: (String) -> Unit, onBack: () -> Unit) {
+internal fun PairCodeScreen(ui: PairUi, onSubmit: (String) -> Unit, onBack: () -> Unit, access: LocalNetworkAccess? = null) {
     BackHandler(onBack = onBack)
     var code by remember { mutableStateOf("") } // not saved state: a secret, as the Access Code fields
     val focus = remember { FocusRequester() }
@@ -128,7 +132,7 @@ internal fun PairCodeScreen(ui: PairUi, onSubmit: (String) -> Unit, onBack: () -
                     color = SpoolwardenTheme.colors.muted,
                 )
             }
-            ui.error?.let { NoticeCard(NoticeKind.Bad, it.text()) }
+            ui.error?.let { PairErrorLine(it, access) }
         }
     }
 }

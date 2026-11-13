@@ -447,27 +447,24 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onPick = { pairVm.connectDiscovered(it.host, it.port) },
                             onEnterAddress = { pairVm.startManual() },
                             unpairedBanner = notice is PairNotice.Unpaired || (config != null && !config.isPaired()),
+                            access = localNetwork,
                         )
                     }
                     composable<PairNetworkAccessRoute> { PairNetworkAccessScreen(localNetwork, BuildConfig.VERSION_NAME) }
                     composable<PairScanRoute> {
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
+                        // closing, a result and "enter the address" may arrive twice; only the entry on screen is popped
+                        val leave = { nav.currentDestination?.hasRoute(PairScanRoute::class) == true && nav.popBackStack() }
                         QrScanner(
-                            onResult = { text ->
-                                nav.popBackStack()
-                                pairVm.onQrScanned(text)
-                            },
-                            onClose = { nav.popBackStack() },
-                            onEnterAddress = {
-                                nav.popBackStack()
-                                pairVm.startManual()
-                            },
+                            onResult = { text -> if (leave()) pairVm.onQrScanned(text) },
+                            onClose = { leave() },
+                            onEnterAddress = { if (leave()) pairVm.startManual() },
                         )
                     }
                     composable<PairAddressRoute> {
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
-                        PairAddressScreen(ui, pairVm::submitAddress, pairVm::back)
+                        PairAddressScreen(ui, pairVm::submitAddress, pairVm::back, localNetwork)
                     }
                     composable<PairFingerprintRoute> {
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
@@ -477,7 +474,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<PairCodeRoute> {
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
-                        PairCodeScreen(ui, pairVm::submitCode, pairVm::back)
+                        PairCodeScreen(ui, pairVm::submitCode, pairVm::back, localNetwork)
                     }
                     composable<PairCertificateRoute> {
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)

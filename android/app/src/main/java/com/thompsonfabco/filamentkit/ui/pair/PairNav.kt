@@ -100,6 +100,7 @@ internal fun PairRouteSync(
             vm.showMismatch(notice.expected, notice.actual)
         }
     }
+    LaunchedEffect(accessGranted) { if (accessGranted) vm.localNetworkGranted() }
     val target = pairRouteFor(ui, accessGranted)
     // Done leaves through the caller's finishing step, not by a destination of its own.
     LaunchedEffect(target, ui.step == Step.Done) { if (ui.step != Step.Done) nav.showPairStep(target) }

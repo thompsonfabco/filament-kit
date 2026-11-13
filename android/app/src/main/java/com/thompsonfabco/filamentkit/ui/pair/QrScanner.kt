@@ -51,6 +51,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.thompsonfabco.filamentkit.R
@@ -58,6 +60,8 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.openAppSettings
+import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -105,10 +109,21 @@ fun QrScanner(
         }
     }
 
-    val colors = SpoolwardenTheme.colors
-    val space = SpoolwardenTheme.space
-    Box(modifier.fillMaxSize().background(colors.bg)) {
-        if (granted && !cameraFailed) {
+    // the camera is dark in both appearances: the scanner uses the theme's dark set
+    SpoolwardenTheme(Look.Console, Appearance.Dark) {
+        val state = when {
+            cameraFailed -> ScannerState.CameraFailed
+            granted -> ScannerState.Scanning
+            denied -> ScannerState.Denied
+            else -> ScannerState.Asking
+        }
+        ScannerFrame(
+            state = state,
+            onClose = onClose,
+            onTryAgain = tryAgain,
+            onEnterAddress = onEnterAddress,
+            modifier = modifier,
+        ) {
             CameraPreview(
                 onResult = { text ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -116,15 +131,41 @@ fun QrScanner(
                 },
                 onFailed = { cameraFailed = true },
             )
+        }
+    }
+}
+
+/** What the scanner shows (05-android-app 4.4). */
+internal enum class ScannerState { Asking, Scanning, Denied, CameraFailed }
+
+/**
+ * The scanner as drawn, without the camera: [preview] fills the screen under the viewfinder, the hint chip and the close
+ * button; the system bars sit on a `scrim` band; a refused or failed camera is a panel in its place.
+ */
+@Composable
+internal fun ScannerFrame(
+    state: ScannerState,
+    onClose: () -> Unit,
+    onTryAgain: () -> Unit,
+    onEnterAddress: () -> Unit,
+    modifier: Modifier = Modifier,
+    preview: @Composable () -> Unit,
+) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val viewfinder = stringResource(R.string.a11y_qr_viewfinder)
+    Box(modifier.fillMaxSize().background(colors.bg)) {
+        if (state == ScannerState.Scanning) {
+            preview()
             Box(
                 Modifier.align(Alignment.Center).fillMaxWidth(VIEWFINDER_FRACTION).aspectRatio(1f)
-                    .border(space.s1 / 2, colors.borderStrong),
+                    .border(space.s1 / 2, colors.borderStrong).semantics { contentDescription = viewfinder },
             )
         }
-        when {
-            cameraFailed -> ScanProblem(false, onEnterAddress, onEnterAddress, Modifier.align(Alignment.Center))
-            granted -> Unit
-            denied -> ScanProblem(true, tryAgain, onEnterAddress, Modifier.align(Alignment.Center))
+        when (state) {
+            ScannerState.CameraFailed -> ScanProblem(false, onEnterAddress, onEnterAddress, Modifier.align(Alignment.Center))
+            ScannerState.Denied -> ScanProblem(true, onTryAgain, onEnterAddress, Modifier.align(Alignment.Center))
+            else -> Unit
         }
         // the system bars stay visible over a scrim band
         Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(colors.scrim))
@@ -140,7 +181,7 @@ fun QrScanner(
             Box(Modifier.align(Alignment.Start).clip(CircleShape).background(colors.surface)) {
                 SwIconButton(R.drawable.sw_ic_close, stringResource(R.string.pair_scan_close), onClose)
             }
-            if (granted && !cameraFailed) {
+            if (state == ScannerState.Scanning) {
                 Surface(shape = SpoolwardenTheme.shapes.r, color = colors.surface, contentColor = colors.text) {
                     Text(
                         stringResource(R.string.pair_scan_hint), Modifier.padding(horizontal = space.s3, vertical = space.s2),

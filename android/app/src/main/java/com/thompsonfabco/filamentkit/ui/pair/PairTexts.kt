@@ -3,6 +3,10 @@ package com.thompsonfabco.filamentkit.ui.pair
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.LocalNetworkAccess
+import com.thompsonfabco.filamentkit.ui.components.LocalNetworkNotice
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 
 /** What the certificate question says (05-android-app 4.8), by [MismatchSource]. */
 internal class MismatchText(
@@ -55,4 +59,15 @@ internal fun mismatchText(source: MismatchSource): MismatchText = when (source) 
 internal fun PairMessage.text(): String = when (this) {
     is PairMessage.Res -> stringResource(id, *args.toTypedArray())
     is PairMessage.Raw -> text
+    PairMessage.LocalNetwork -> stringResource(R.string.network_text)
+}
+
+/** A failure under a step's button: the notice line, or for a missing local network permission the panel of 05 3.3. */
+@Composable
+internal fun PairErrorLine(message: PairMessage, access: LocalNetworkAccess?) {
+    if (message == PairMessage.LocalNetwork && access != null) {
+        LocalNetworkNotice(access)
+    } else {
+        NoticeCard(NoticeKind.Bad, message.text())
+    }
 }

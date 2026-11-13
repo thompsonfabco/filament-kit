@@ -8,14 +8,15 @@ import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.data.SettingsStore
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
-import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.LocalNetwork
 import com.thompsonfabco.filamentkit.pairing.parsePairingUri
 import java.io.IOException
+import javax.net.ssl.SSLException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 const val DEFAULT_PORT = 8710
@@ -32,6 +33,9 @@ data class Mismatch(val expected: String, val actual: String, val source: Mismat
 sealed interface PairMessage {
     data class Res(@StringRes val id: Int, val args: List<String> = emptyList()) : PairMessage
     data class Raw(val text: String) : PairMessage
+
+    /** The app may not use the local network: shown as the notice of 05 3.3, and gone once access is granted. */
+    data object LocalNetwork : PairMessage
 }
 
 /** The field a message concerns; a message with none belongs under the step's button. */
@@ -223,6 +227,11 @@ class PairViewModel(
         }
     }
 
+    /** Local network access was granted: the notice that asked for it is over. */
+    fun localNetworkGranted() {
+        _state.update { if (it.error == PairMessage.LocalNetwork) it.copy(error = null) else it }
+    }
+
     /** Leave an error or mismatch and start over. */
     fun pairAgain() {
         confirmed = false
@@ -262,9 +271,13 @@ class PairViewModel(
     private fun errorText(e: Exception): PairMessage {
         val unreachable = e is ApiError && e.code == "offline" || e is IOException && e !is FingerprintMismatch
         return when {
-            e is ApiError && e.code == "local_network" -> PairMessage.Raw(LOCAL_NETWORK_MESSAGE)
-            unreachable && localNetworkMissing() -> PairMessage.Raw(LOCAL_NETWORK_MESSAGE)
+            e is ApiError && e.code == "local_network" -> PairMessage.LocalNetwork
+            unreachable && localNetworkMissing() -> PairMessage.LocalNetwork
+            // a service that does not speak TLS, or whose handshake fails: something answers, but not a Hub
+            e is SSLException && e !is FingerprintMismatch -> PairMessage.Res(R.string.pair_error_not_hub)
             unreachable -> PairMessage.Res(R.string.common_hub_unreachable)
+            // an error page of another service (no Hub message): not a Hub, whatever the status
+            e is ApiError && e.noHubMessage && e.status > 0 -> PairMessage.Res(R.string.pair_error_not_hub)
             e is ApiError && e.code == "unauthorized" -> PairMessage.Res(R.string.pair_error_refused)
             e is ApiError && (e.code == "bad_response" || e.status == 404 || e.status == 405) ->
                 PairMessage.Res(R.string.pair_error_not_hub)
