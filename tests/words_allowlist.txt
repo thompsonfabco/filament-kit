@@ -11,7 +11,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/LocalNetwork.kt | fi
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | ai_intake | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | color | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | gcode_state | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/PinnedTls.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/pairing/PairingPayload.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/session/AppViewModel.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

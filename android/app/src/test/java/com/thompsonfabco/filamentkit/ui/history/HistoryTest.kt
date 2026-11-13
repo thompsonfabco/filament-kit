@@ -192,7 +192,7 @@ class HistoryTest {
             assertEquals(code, Ask.Failed(want), vm.state.value.ask)
         }
         // a page with no message of the Hub's own is an answer the app does not understand
-        fake.error = ApiError(502, "internal", apiStandIn(502))
+        fake.error = ApiError(502, "internal", com.thompsonfabco.filamentkit.net.apiStandIn(502))
         vm.ask("x")
         runCurrent()
         assertEquals(Ask.Failed(RecentFailure.Unexpected), vm.state.value.ask)
