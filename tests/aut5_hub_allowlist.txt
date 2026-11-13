@@ -26,7 +26,6 @@
 #devices | hit area under 44 x 44 | div > section.card > div.row > button.btn--primary | 4 | Devices (today's markup); removed by S2.9
 #devices | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 14 | Devices (today's markup); removed by S2.9
 #devices | hit area under 44 x 44 | div > section.card > div.row > input | 2 | Devices (today's markup); removed by S2.9
-#features | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 34 | Features (today's markup); removed by S2.12
 #settings | field attribute differs from 07 9.1 | div > div.row > label > input | 12 | Settings (today's markup); removed by S2.19
 #settings | field without a label | div > div > div.row > input | 4 | Settings (today's markup); removed by S2.19
 #settings | field without a label | div > section.card > div.row > input | 24 | Settings (today's markup); removed by S2.19

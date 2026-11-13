@@ -372,3 +372,103 @@ def test_the_updates_section_passes_the_audit_with_an_update_available_held_back
     run = _run("--url", hub, "--views", "#updates", "--ready", ready, *fonts)
     assert run.returncode == 0, run.stdout + run.stderr
     assert json.loads(run.stdout)["views"] == 4
+
+
+FEATURES_PRELUDE = LOGS_PRELUDE.replace("Logs: ", "Features: ").replace('.querySelector(".logs__out")', '.querySelector("main")').replace(
+    'const show = () => document.querySelector(".logs__controls .btn--primary");', 'const show = () => document.querySelector(".coll--features");')
+FEATURES_PRELUDE += """
+  const row = (n) => document.querySelector('.coll--features [data-key="' + n + '"]');
+  const button = (n) => row(n).querySelector("button");
+  const drawer = () => document.querySelector("dialog.dialog--drawer[open]");
+  const loaded = async () => { await until("no drawer", drawer); await until("the preview did not load", () => !drawer().querySelector(".skeleton")); };
+"""
+
+# a feature turned off and on again with the keyboard's own actions only: focus a button, press it (click), press Apply
+FEATURES_TURN_OFF_AND_ON = """(async () => {""" + FEATURES_PRELUDE + """
+  await unlocked();
+  const on = async () => (await (await fetch("/setup/api/state")).json()).modules.find((m) => m.name === "backup").on;
+  for (const [word, named, title, now] of [["Turn off", "Turn off Nightly backup", "Turn off Nightly backup?", false],
+                                           ["Turn on", "Turn on Nightly backup", "Turn on Nightly backup?", true]]) {
+    const b = button("backup");
+    if (b.textContent.trim() !== word || b.getAttribute("aria-label") !== named) throw new Error("Features: the button reads " + b.textContent + " / " + b.getAttribute("aria-label"));
+    b.focus();
+    b.click();
+    await loaded();
+    if (drawer().querySelector(".dialog__title").textContent !== title) throw new Error("Features: the drawer is titled " + drawer().querySelector(".dialog__title").textContent);
+    if (!drawer().contains(document.activeElement) || !document.activeElement.matches('[data-action="confirm"]')) throw new Error("Features: Apply does not have the focus");
+    if (location.hash !== "#features/backup") throw new Error("Features: the address is " + location.hash);
+    document.activeElement.click();
+    await until("the drawer did not close", () => !drawer());
+    await until("the row was not drawn again", () => button("backup").getAttribute("aria-label") !== named);
+    if (document.activeElement !== button("backup")) throw new Error("Features: the focus did not come back to the row's button");
+    if (!document.querySelector(".toast").textContent.includes("Saved; applying")) throw new Error("Features: no toast after the change");
+    if ((await on()) !== now) throw new Error("Features: the Hub did not change");
+    if (location.hash !== "#features") throw new Error("Features: the address is " + location.hash + " after closing");
+  }
+})()"""
+
+# the web feature needs an address: the drawer asks for it, refuses an empty one, and stays open for the audit
+FEATURES_DRAWER_OPEN = """(async () => {""" + FEATURES_PRELUDE + """
+  await unlocked();
+  const cards = [...document.querySelectorAll(".segmented--cards .segmented__input")];
+  if (cards.map((c) => c.value).join() !== "server,all-in-one,station,custom") throw new Error("Features: setups " + cards.map((c) => c.value));
+  if (!cards[3].checked || cards[0].checked || !cards[2].disabled) throw new Error("Features: Custom (printers are on) is not the checked setup or Weigh Station only is not off");
+  if (!document.querySelector(".card .code__text").textContent.includes("features setup weigh-station --hub ")) throw new Error("Features: no command for a Weigh Station only machine");
+  if (row("server").querySelector("button") || !row("server").textContent.includes("Always on while this page is open.")) throw new Error("Features: the Hub service row has a button");
+  if (!row("ai_intake").querySelector(".features__tag")) throw new Error("Features: no Uses AI tag");
+  button("web").focus();
+  button("web").click();
+  await loaded();
+  const field = drawer().querySelector(".field");
+  if (!field || !field.textContent.includes("Public https address of the web app")) throw new Error("Features: no address field");
+  document.activeElement.matches("input") || (() => { throw new Error("Features: the address field does not have the focus"); })();
+  drawer().querySelector('[data-action="confirm"]').click();
+  await until("no field error", () => drawer() && !drawer().querySelector(".field__error").hidden);
+})()"""
+
+
+# the same, Locked (the Hub over plain http answers no change, but the drawer only reads): the drawer of a feature with a field
+FEATURES_DRAWER_OPEN_LOCKED = """(async () => {""" + FEATURES_PRELUDE + """
+  await until("the page did not finish its first reads", () => !document.querySelector(".chip--lock .skeleton__line") && !document.querySelector('[aria-busy="true"]:not(button)'));
+  await until("the features were not drawn", () => show());
+  button("web").focus();
+  button("web").click();
+  await loaded();
+})()"""
+
+
+def test_a_feature_turns_off_and_on_again_by_keyboard_in_the_new_design(hub_change):
+    run = _run("--url", hub_change, "--views", "#features", "--ready", FEATURES_TURN_OFF_AND_ON)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert config.load()["modules"]["backup"] is True
+
+
+def test_features_and_its_preview_drawer_pass_the_audit(hub_change):
+    """AUT-5 on Features with the drawer open (a feature that needs an address), and nothing of Features allowed."""
+    run = _run("--url", hub_change, "--views", "#features", "--ready", FEATURES_DRAWER_OPEN)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert json.loads(run.stdout)["views"] == 4
+    assert not [l for l in ALLOW.read_text(encoding="utf-8").splitlines() if l.startswith("#features |")]
+
+
+def test_features_does_not_scroll_sideways_at_320_px_in_a_wide_font_with_a_long_hostname(monkeypatch, hub):
+    """The cards, the command for a Weigh Station only machine, the collection and the drawer hold long words: nothing
+    may widen the page on a runner without Segoe UI and Consolas (DejaVu is wider)."""
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "runnervm8axu0-workshop-hub-with-a-very-long-name")
+    fonts = ["--font-dir", os.environ["AUT5_FONT_DIR"]] if os.environ.get("AUT5_FONT_DIR") else ["--wide-font"]
+    run = _run("--url", hub, "--views", "#features", "--widths", "320", *fonts, "--ready", FEATURES_DRAWER_OPEN_LOCKED)
+    assert run.returncode in (0, 1), run.stdout + run.stderr
+    found = [(r["view"], r["scheme"], f["detail"]) for r in json.loads(run.stdout).get("report", [])
+             for f in r["findings"] if f["check"] == "sideways scroll"]
+    assert not found, found
+
+
+def test_no_two_hub_page_scripts_declare_the_same_top_level_name():
+    """The Hub page's scripts are classic scripts that share one global scope: a second `const cell` is a SyntaxError that
+    stops the later script, and only the page shows it."""
+    import re
+    seen: dict[str, str] = {}
+    for path in sorted((ROOT / "server" / "filament_kit" / "setup_static").glob("setup*.js")):
+        for name in re.findall(r"^(?:const|let|var|function|async function|class)\s+([A-Za-z_$][\w$]*)", path.read_text(encoding="utf-8"), re.M):
+            assert name not in seen, f"{name} is declared in {seen[name]} and in {path.name}"
+            seen[name] = path.name

@@ -1,4 +1,4 @@
-"""The mode presets (`modules set`) on the Modules tab.
+"""The setup presets (`modules set`) in the Features section of the Hub page.
 
     GET  modules/preview?mode=M              what the preset would do; changes nothing (route in setup_page.py)
     POST modules/mode {code, mode[, settings]}   the root helper's `mode`

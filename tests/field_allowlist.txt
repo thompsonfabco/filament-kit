@@ -4,7 +4,6 @@
 server/filament_kit/setup_static/setup.js | input | 1 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_backup.js | input | 3 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_devices.js | input | 1 | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_features.js | input | 2 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_flash.js | input | 2 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_flash.js | select | 2 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_intake.js | input | 1 | built inline today; moves into the field component when the view is rebuilt

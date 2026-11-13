@@ -748,12 +748,14 @@
     <!-- 1=feature -->
     <string name="features_drawer_on">Turn on %1$s?</string>
     <string name="features_drawer_public_placeholder">https://hub.example/filament</string>
+    <string name="features_drawer_required">This setting is needed before the feature can be turned on.</string>
     <string name="features_drawer_public_prompt">Public https address of the web app</string>
     <string name="features_drawer_refused_server">This page belongs to the Hub service. To switch it off, run on the Hub: `sudo filament-kit features off hub`.</string>
     <!-- 1=setup -->
     <string name="features_drawer_setup">Change the setup to %1$s?</string>
     <string name="features_drawer_unchanged">Nothing to change.</string>
     <string name="features_filter_all">All</string>
+    <string name="features_filter_legend">Show features</string>
     <!-- 1=count -->
     <string name="features_filter_off">Off %1$d</string>
     <!-- 1=count -->
@@ -787,6 +789,7 @@
     <string name="features_name_remote">Remote access</string>
     <string name="features_name_server">Hub service</string>
     <string name="features_name_spoolman">Spoolman</string>
+    <string name="features_name_station">Weigh Station</string>
     <string name="features_name_updates">Automatic updates</string>
     <string name="features_name_web">Web access</string>
     <!-- 1=list -->
@@ -797,6 +800,7 @@
     <string name="features_setup_custom_line">Features chosen one by one.</string>
     <string name="features_setup_disabled">A machine with this setup has no Hub page.</string>
     <string name="features_setup_server_line">The Hub: inventory, printers, Slicer presets and this page.</string>
+    <string name="features_setup_server">Hub</string>
     <string name="features_setup_station">Weigh Station only</string>
     <!-- 1=hub_address -->
     <string name="features_setup_station_command">sudo filament-kit features setup weigh-station --hub %1$s</string>
@@ -804,6 +808,10 @@
     <string name="features_setup_station_note">A Weigh Station only machine has no Hub page. To make one, on that machine run</string>
     <string name="features_setup_title">Setup</string>
     <string name="features_turn_on">Turn on</string>
+    <!-- 1=feature -->
+    <string name="features_turn_on_named">Turn on %1$s</string>
+    <!-- 1=feature -->
+    <string name="features_turn_off_named">Turn off %1$s</string>
     <string name="features_uses_ai">Uses AI</string>
     <string name="flash_board">Board</string>
     <!-- 1=port 2=product_name -->
