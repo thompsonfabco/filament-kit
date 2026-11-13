@@ -1,8 +1,7 @@
-# Coming next: the design upgrade (notes in progress, not a release)
+# 0.6.0 release notes in progress: the design upgrade (not yet a release)
 
 This file collects what the redesign of the setup page, the phone web app, the Android app and the command line
-changes for you, as the parts merge. It is not a release yet and carries no version number; the first release that
-includes these parts takes its text from here.
+changes for you, as the parts merge. These are the notes for version 0.6.0; it is not released yet, and the release's text is taken from here.
 
 ## Already merged: the groundwork
 
