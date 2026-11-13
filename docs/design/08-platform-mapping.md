@@ -781,7 +781,7 @@ section 10) read the composition locals and pick their arrangement; screens neve
 Phone; on Tablet and Desktop `NavigationRail` for rail, `NavigationDrawer` (Desktop) or `NavigationRail` (Tablet)
 for sidebar, none with a `PrimaryScrollableTabRow` under the top bar for pills, and none with the list pane of
 `ListDetailPaneScaffold` for list (section 10.1). `nav` applies at Tablet and Desktop only. On Phone, Console,
-Workbench and Spool use the bottom bar, and Panes opens on its list of sections and drills in (foundations
+Workbench and Palette use the bottom bar, and Panes opens on its list of sections and drills in (foundations
 section 6).
 
 **`SpoolwardenTheme`.** Hand-written in `SpoolwardenTheme.kt`; the values come from the generated

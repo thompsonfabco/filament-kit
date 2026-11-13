@@ -204,7 +204,7 @@ Four themes ship; **Console is the default.**
 | **Palette** | Colour-led and roomy, spool rings, large type and buttons, warm amber accent, 20 px radius | Pill tabs in the top bar | Large tiles with a spool ring | Full-height sheet, one step at a time |
 | **Panes** | Flat grouped lists like a phone's settings, green accent, 10 px radius | A list of sections in the left pane | Rows with a chevron | Its own pane (two or three panes side by side) |
 
-On phones Console, Workbench and Spool use a bottom bar; Panes opens on the list of sections and drills in.
+On phones Console, Workbench and Palette use a bottom bar; Panes opens on the list of sections and drills in.
 
 ### 6.1 What a theme is made of
 

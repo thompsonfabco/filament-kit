@@ -1486,7 +1486,7 @@ On expanded width the list is the left pane and the chosen group the right pane 
 | Element | Text / behaviour |
 |---|---|
 | Appearance | Group title "Appearance". Segmented control with icons and words: "Light", "Dark", "System". Applies at once. |
-| Theme | Group title "Theme". Four preview tiles in a 2 × 2 grid on compact and medium width, one row of four on expanded width: each tile a small drawing of the theme in its own colours, the name and one line: "Console" "Dense and technical"; "Workbench" "Calm cards"; "Spool" "Colourful and roomy"; "Panes" "Simple lists". The tiles are a radio group; the chosen one has a 2 dp `--accent-text` outline and a check mark. Choosing applies at once, with no save button. |
+| Theme | Group title "Theme". Four preview tiles in a 2 × 2 grid on compact and medium width, one row of four on expanded width: each tile a small drawing of the theme in its own colours, the name and one line: "Console" "Dense and technical"; "Workbench" "Calm cards"; "Palette" "Colourful and roomy"; "Panes" "Simple lists". The tiles are a radio group; the chosen one has a 2 dp `--accent-text` outline and a check mark. Choosing applies at once, with no save button. |
 | Note | "These choices are kept on this phone only." |
 
 Stored in the app's settings store (DataStore) beside each other. When nothing is chosen yet the app uses System and
