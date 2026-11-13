@@ -5,10 +5,13 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
@@ -43,8 +46,13 @@ interface SettingsStore {
 class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** What is stored; an unreadable store reads as empty (System appearance, unpaired) so the splash is always released. */
+    private val data: Flow<Preferences> = store.data.catch { e ->
+        if (e is IOException) emit(emptyPreferences()) else throw e
+    }
+
     /** The paired server, or null when unpaired (or the stored value is unreadable). */
-    val server: Flow<ServerConfig?> = store.data.map { prefs ->
+    val server: Flow<ServerConfig?> = data.map { prefs ->
         prefs[KEY]?.let { text -> runCatching { json.decodeFromString<ServerConfig>(text) }.getOrNull() }
     }
 
@@ -57,7 +65,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     /** Off unless the user turned it on. It belongs to the phone, so forgetting a server leaves it as it is. */
-    val skipFingerprintCheck: Flow<Boolean> = store.data.map { it[SKIP_FINGERPRINT] ?: false }
+    val skipFingerprintCheck: Flow<Boolean> = data.map { it[SKIP_FINGERPRINT] ?: false }
 
     override suspend fun skipsFingerprintCheck(): Boolean = skipFingerprintCheck.first()
 
@@ -66,7 +74,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     /** Light, dark or follow the phone; System when nothing (or something unknown) is stored. */
-    val appearance: Flow<Appearance> = store.data.map { prefs ->
+    val appearance: Flow<Appearance> = data.map { prefs ->
         when (prefs[APPEARANCE]) {
             "light" -> Appearance.Light
             "dark" -> Appearance.Dark

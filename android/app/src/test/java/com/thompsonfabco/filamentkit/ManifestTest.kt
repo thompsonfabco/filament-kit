@@ -17,6 +17,11 @@ import org.xmlpull.v1.XmlPullParser
 class ManifestTest {
     private val context = RuntimeEnvironment.getApplication()
 
+    @Test fun theLauncherLabelIsTheCatalogueAppName() {
+        assertEquals(context.getString(R.string.app_name), context.packageManager.getApplicationLabel(context.applicationInfo).toString())
+        assertEquals(R.string.app_name, context.applicationInfo.labelRes)
+    }
+
     @Test fun backupIsOff() {
         assertEquals(0, context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_ALLOW_BACKUP)
     }

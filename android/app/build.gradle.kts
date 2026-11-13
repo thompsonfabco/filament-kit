@@ -19,7 +19,6 @@ android {
 
     defaultConfig {
         applicationId = "com.thompsonfabco.filamentkit"
-        manifestPlaceholders["appLabel"] = "filament-kit"
         minSdk = 29
         targetSdk = 37
         // The update check compares this with the server's app/version.txt; tools/make_release.sh passes the same
