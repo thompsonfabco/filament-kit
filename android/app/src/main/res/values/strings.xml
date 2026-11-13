@@ -146,7 +146,7 @@
     <string name="home_add_text">Photograph each label, check what was read, then add. Nothing is saved until you add.</string>
     <string name="home_add_from_photos">Add from label photos</string>
     <string name="home_add_by_hand">Add by hand</string>
-    <string name="home_label_reader_off">The Label Reader is switched off on this Hub. Add the spool by hand, or switch it on on the Hub page under Features.</string>
+    <string name="home_label_reader_off">The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page.</string>
     <string name="home_drafts_title">Drafts</string>
     <!-- 1=count -->
     <plurals name="home_draft_photos">
@@ -166,6 +166,13 @@
     <string name="home_printers_more">and %1$d more</string>
     <string name="home_printers_empty">No printers yet.</string>
     <string name="home_printers_add">Add a printer</string>
+    <!-- 1=hours 2=minutes -->
+    <string name="home_printer_left_hours">%1$s h %2$s min</string>
+    <!-- 1=minutes -->
+    <string name="home_printer_left_minutes">%1$s min</string>
+    <!-- 1=state 2=percent -->
+    <string name="home_printer_job">%1$s · %2$s %%</string>
+    <string name="home_draft_yesterday">Yesterday</string>
     <string name="settings_title">Settings</string>
     <string name="settings_hub_title">Hub connection</string>
     <string name="settings_updates_title">App updates</string>

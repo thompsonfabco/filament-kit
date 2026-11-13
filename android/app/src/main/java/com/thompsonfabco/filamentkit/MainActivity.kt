@@ -151,8 +151,10 @@ import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
+import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
+import com.thompsonfabco.filamentkit.ui.home.labelReaderOff
 import com.thompsonfabco.filamentkit.ui.home.showLabelPhotos
 import com.thompsonfabco.filamentkit.ui.home.versionLine
 import com.thompsonfabco.filamentkit.ui.pair.NetPairingBackend
@@ -470,24 +472,42 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                                 )
                             }
                         }
+                        val printersVm: HomePrintersViewModel = viewModel(factory = viewModelFactory {
+                            initializer { HomePrintersViewModel(load = { currentApi().printers() }) }
+                        })
+                        val homePrinters by printersVm.state.collectAsStateWithLifecycle()
+                        val showPrinters = info?.printersOn != false
+                        // read again with each connection check, while Home is on screen
+                        LaunchedEffect(lifecycle, online, showPrinters) {
+                            if (!online || !showPrinters) return@LaunchedEffect
+                            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                                while (true) {
+                                    printersVm.refresh()
+                                    delay(CONNECTION_POLL_MS)
+                                }
+                            }
+                        }
                         HomeScreen(
-                            serverName = config?.name.orEmpty(),
                             connection = connection,
                             drafts = drafts,
                             update = update,
-                            version = version,
+                            printers = homePrinters,
+                            showPrinters = showPrinters,
                             onAddSpools = { nav.navigate(AddRoute()) },
                             onAddByHand = { nav.navigate(AddRoute(manual = true)) },
-                            labelPhotos = labelPhotos,
-                            onAddProfile = { nav.navigate(AddProfileRoute) },
-                            onSearch = { tabTapped(Tab.Spools) },
-                            onPrinters = { tabTapped(Tab.Printers) },
-                            onHistory = { tabTapped(Tab.Recent) },
-                            onSettings = { tabTapped(Tab.Settings) },
+                            labelReaderOff = labelReaderOff(info),
                             onResumeDraft = { id -> nav.navigate(AddRoute(draft = id)) },
                             onDiscardDraft = app::discardDraft,
-                            onRetryConnection = app.session::refresh,
+                            onOpenPrinter = { id ->
+                                // the Printers stack goes back to its root first, so Back from the printer lands on the list
+                                nav.selectTab(Tab.Printers)
+                                nav.popBackStack<PrintersRoute>(inclusive = false)
+                                nav.navigate(PrinterRoute(id))
+                            },
+                            onOpenPrinters = { tabTapped(Tab.Printers) },
+                            onRefreshPrinters = printersVm::refresh,
                             onReviewCertificate = app.router::pairAgain,
+                            onPairAgain = app.router::pairAgain,
                             onInstallUpdate = { updater?.install() },
                             onConfirmInstall = { updater?.confirmInstall() },
                             presets = presets,
@@ -519,6 +539,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             presetsNoteIsError = presetsNoteIsError,
                             presetUpdates = presetUpdates,
                             onPresetsChanged = { presetsReload++ },
+                            onAddCatalogLine = { nav.navigate(AddProfileRoute) },
                             localNetworkPanel = { LocalNetworkNotice(localNetwork) },
                             extra = { if (BuildConfig.DEBUG) SimulateTag() },
                         )

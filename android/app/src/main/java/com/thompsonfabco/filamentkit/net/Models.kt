@@ -36,8 +36,13 @@ data class ServerInfo(
     /** The label-photo add flow is offered: `ai_intake` is on (or the server is too old to say). */
     val labelReading: Boolean get() = modules == null || AI_INTAKE in modules
 
+    /** The Printers Feature is on (Bambu or Klipper; or the server is too old to say). */
+    val printersOn: Boolean get() = modules == null || PRINTERS in modules || KLIPPER in modules
+
     companion object {
         const val AI_INTAKE = "ai_intake"
+        const val PRINTERS = "printers"
+        const val KLIPPER = "klipper"
     }
 }
 
@@ -224,7 +229,14 @@ class ApiError(
     override val message: String,
     val extra: JsonObject = JsonObject(emptyMap()),
     val sentToken: String? = null,
-) : Exception(message)
+) : Exception(message) {
+    /** The reply was not the Hub speaking: unreadable (`bad_response`) or an error page without the Hub's own `message`. */
+    val notFromHub: Boolean get() = code == BAD_RESPONSE || message.isBlank() || message == apiStandIn(status)
+
+    companion object {
+        const val BAD_RESPONSE = "bad_response"
+    }
+}
 
 // ---- printer models (Task 16) ------------------------------------------------------------------------
 // Mirrors the server's printer routes (`api.py` `_printer_view`, `bridge/status.py` `summarize`).
@@ -279,6 +291,14 @@ data class Printer(
 ) {
     /** What to show for the model: its name, else the code an older server sent, else null. */
     val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }
+
+    /** The [state] codes the Home panel tells apart; the others all mean "needs a look". */
+    companion object {
+        const val STATE_CONNECTED = "connected"
+        const val STATE_OFFLINE = "offline"
+        const val STATE_WRONG_CODE = "wrong_code"
+        const val STATE_NOT_CONFIGURED = "not_configured"
+    }
 }
 
 @Serializable

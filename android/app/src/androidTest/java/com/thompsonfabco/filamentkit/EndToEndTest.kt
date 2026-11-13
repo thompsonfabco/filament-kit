@@ -92,7 +92,7 @@ class EndToEndTest {
         click("Printers")
         waitFor("No printers found yet", substring = true, timeoutMs = 30_000)
         Espresso.pressBack()
-        waitFor("Search")
+        waitFor("Add by hand")
 
         // Add spools: photo (injected), tag, weight → Read.
         click("Add from label photos") // shown while the server has ai_intake on
@@ -128,7 +128,7 @@ class EndToEndTest {
         assertTrue(exists("linked tag $uid to spool $spoolId"))
         Log.i(TAG, "ADDED spool=$spoolId tag=$uid")
         click("Done")
-        waitFor("Search")
+        waitFor("Add by hand")
 
         // Tap the new tag on Home: the card shows the new spool.
         emitUntil(uid) { exists("Gross weight (g)") }
@@ -149,7 +149,7 @@ class EndToEndTest {
     /** Resumes `main` at its unpair step on the phone `main` left paired (same tag), without another paid Read. */
     @Test fun unpair() {
         assumeTrue(arg("fkPhase") == "unpair")
-        waitFor("Search") // Home: still paired
+        waitFor("Add by hand") // Home: still paired
         unpairedOnServerLandsOnPair(need("fkTag"))
     }
 
@@ -172,7 +172,7 @@ class EndToEndTest {
         assumeTrue(arg("fkPhase") == "cold")
         waitFor("Pair with your server")
         waitFor(UNPAIRED_MESSAGE)
-        assertFalse(exists("Add spool"))
+        assertFalse(exists("Add by hand"))
     }
 
     @Test fun forget() {
@@ -205,7 +205,7 @@ class EndToEndTest {
         click("It matches")
         field("6-digit code").performTextInput(code)
         click("Pair")
-        waitFor("Search", timeoutMs = 30_000) // Home
+        waitFor("Add by hand", timeoutMs = 30_000) // Home
         Log.i(TAG, "PAIRED ${allText()}")
     }
 

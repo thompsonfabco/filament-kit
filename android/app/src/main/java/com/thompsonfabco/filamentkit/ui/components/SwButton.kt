@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -19,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.R
@@ -40,6 +42,9 @@ internal enum class SwButtonKind {
     DestructiveFilled,
 }
 
+/** Marks the filled main button for the one-filled-button tests (05-android-app 5). */
+internal val MAIN_BUTTON_TAG = SwTag.MainButton.name
+
 /** A label and what it does: the buttons of a notice or an empty state. */
 internal class SwAction(val label: String, val onClick: () -> Unit)
 
@@ -56,6 +61,8 @@ internal fun SwButton(
     kind: SwButtonKind = SwButtonKind.Plain,
     enabled: Boolean = true,
     busy: Boolean = false,
+    /** A drawing before the words (decoration: the words name the button). */
+    @DrawableRes icon: Int? = null,
 ) {
     val colors = SpoolwardenTheme.colors
     val shape = SpoolwardenTheme.shapes.r
@@ -63,14 +70,14 @@ internal fun SwButton(
     val sized = modifier.heightIn(min = SpoolwardenTheme.density.control)
     val padding = PaddingValues(horizontal = SpoolwardenTheme.space.s3)
     val line = SpoolwardenTheme.sizes.hairline
-    val content: @Composable RowScope.() -> Unit = { ButtonLabel(text, busy) }
+    val content: @Composable RowScope.() -> Unit = { ButtonLabel(text, busy, icon) }
     when (kind) {
         SwButtonKind.Main -> {
             val interaction = remember { MutableInteractionSource() }
             val pressed by interaction.collectIsPressedAsState()
             Button(
-                onClick = onClick, modifier = sized, enabled = active, shape = shape, contentPadding = padding,
-                interactionSource = interaction,
+                onClick = onClick, modifier = sized.testTag(MAIN_BUTTON_TAG), enabled = active, shape = shape,
+                contentPadding = padding, interactionSource = interaction,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (pressed) colors.accentHover else colors.accent, contentColor = colors.onAccent,
                     disabledContainerColor = colors.surface2, disabledContentColor = colors.muted,
@@ -111,13 +118,17 @@ internal fun SwButton(
 private fun flat() = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
 
 @Composable
-private fun RowScope.ButtonLabel(text: String, busy: Boolean) {
+private fun RowScope.ButtonLabel(text: String, busy: Boolean, icon: Int?) {
     if (busy && reducedMotion) {
         Text(stringResource(R.string.common_working), style = MaterialTheme.typography.labelLarge)
         return
     }
     if (busy) {
         SwSpinner()
+        Spacer(Modifier.width(SpoolwardenTheme.space.s2))
+    }
+    if (icon != null && !busy) {
+        SwIcon(icon, null)
         Spacer(Modifier.width(SpoolwardenTheme.space.s2))
     }
     Text(text, style = MaterialTheme.typography.labelLarge)
