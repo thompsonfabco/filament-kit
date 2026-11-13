@@ -1,12 +1,12 @@
 """Task 6: Orca presets beside Bambu Studio's in one build (two trees), and the family install unchanged.
 
 The golden test pins the family install (no Orca store, no slicer_printers, presets_orca false): its build zip,
-current.json and deleted.json must stay byte-identical to the ones made before the Orca target existed
-(tests/data/golden/family/, written by the pre-change code with FK_WRITE_GOLDEN=1).
+current.json and deleted.json must stay identical to the ones made before the Orca target existed
+(tests/data/golden/family/). The zip is compared by its members' names and decompressed bytes: its compressed bytes
+depend on the zlib in use. The golden files are rewritten by tools/regen_golden_family.py, never by a test run.
 """
 import io
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -58,18 +58,35 @@ def _family_files(stamp: str) -> dict[str, bytes]:
             "deleted.json": (TB.profiles_dir() / "deleted.json").read_bytes()}
 
 
-def test_family_build_is_byte_identical_to_before_the_orca_target(env, fixed_ids):
+def _same_as_golden(name: str, got: bytes) -> None:
+    want = (GOLDEN / name).read_bytes()
+    if name.endswith(".zip"):
+        import zipfile
+        g, w = zipfile.ZipFile(io.BytesIO(got)), zipfile.ZipFile(io.BytesIO(want))
+        assert g.namelist() == w.namelist(), name
+        assert w.namelist(), name
+        for member in w.namelist():
+            assert g.read(member) == w.read(member), (name, member)
+    else:
+        assert got == want, name
+
+
+def test_regenerate_golden_family(request, env, fixed_ids):
+    """Not a test: tools/regen_golden_family.py runs it (with --write-golden) to rewrite the golden files."""
+    if not request.config.getoption("--write-golden", default=False):
+        pytest.skip("only run by tools/regen_golden_family.py")
+    GOLDEN.mkdir(parents=True, exist_ok=True)
+    for n, b in _family_files(_family_build(env)).items():
+        (GOLDEN / n).write_bytes(b)
+
+
+def test_family_build_is_identical_to_before_the_orca_target(env, fixed_ids):
     stamp = _family_build(env)
     got = _family_files(stamp)
-    if os.environ.get("FK_WRITE_GOLDEN") == "1":
-        GOLDEN.mkdir(parents=True, exist_ok=True)
-        for n, b in got.items():
-            (GOLDEN / n).write_bytes(b)
-    want = {n: (GOLDEN / n).read_bytes() for n in got}
     m = builds.manifest(stamp)
     assert m["inapp"] and m["deleted"], "the scenario must exercise in-app edits and deletions"
     for n in got:
-        assert got[n] == want[n], n
+        _same_as_golden(n, got[n])
     view = builds.state_view("a")["build"]
     assert set(view) == {"stamp", "live_hash", "created", "presets", "problems"}
 
@@ -329,7 +346,7 @@ def test_orca_store_alone_leaves_the_family_build_and_lines_unchanged(env, fixed
     stamp = _family_build(env)
     got = _family_files(stamp)
     for n in got:
-        assert got[n] == (GOLDEN / n).read_bytes(), n
+        _same_as_golden(n, got[n])
     row = json.loads((TB.profiles_dir() / "lines.json").read_text(encoding="utf-8"))["lines"][0]
     assert (row["orca_parent"], row["orca_parent_source"]) == ("Generic PLA", "material")     # not re-chosen
 

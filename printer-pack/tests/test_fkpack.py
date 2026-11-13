@@ -6,6 +6,8 @@ server tests' FakeMoonraker).
 import ast
 import http.client
 import os
+import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -445,11 +447,83 @@ def test_load_temp_rules():
     assert lt.temp_for({"material": "PA12"}) == 0
 
 
-@pytest.mark.parametrize("rel", ["fkpack.py", "scripts/fk_spool_check.py", "scripts/fk_load_temp.py",
-                                 "lasttag/lasttag.py"])
+PY39_FILES = ["fkpack.py", "scripts/fk_spool_check.py", "scripts/fk_load_temp.py", "lasttag/lasttag.py"]
+NEWER_MODULES = {"tomllib", "wsgiref.types"}                       # stdlib modules that 3.9 lacks
+NEWER_NAMES = {"pairwise", "bit_count", "TaskGroup", "ExceptionGroup", "stdlib_module_names", "TypeAlias", "ParamSpec",
+               "Self", "StrEnum", "aiter", "anext"}                  # names that 3.9 lacks (builtins, itertools, typing, ...)
+
+
+def py39_problems(src: str) -> list:
+    """What 3.9 rejects that its grammar (ast feature_version) still accepts: `X | Y` in an annotation, a parenthesised
+    multi-item `with`, newer stdlib modules and names, `zip(strict=)`."""
+    tree = ast.parse(src, feature_version=(3, 9))
+    future = any(isinstance(n, ast.ImportFrom) and n.module == "__future__" and any(a.name == "annotations" for a in n.names)
+                 for n in tree.body)
+    found = []
+
+    def union(node, where):
+        if node is not None and any(isinstance(n, ast.BinOp) and isinstance(n.op, ast.BitOr) for n in ast.walk(node)):
+            found.append(f"{where}: X | Y annotation")
+
+    for n in ast.walk(tree):
+        if not future:                          # without the future import an annotation is evaluated when def runs
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                union(n.returns, f"line {n.lineno}")
+                for a in n.args.posonlyargs + n.args.args + n.args.kwonlyargs + [n.args.vararg, n.args.kwarg]:
+                    union(a.annotation if a else None, f"line {n.lineno}")
+            elif isinstance(n, ast.AnnAssign):
+                union(n.annotation, f"line {n.lineno}")
+        if isinstance(n, (ast.With, ast.AsyncWith)) and len(n.items) > 1:
+            line = src.splitlines()[n.lineno - 1]
+            if re.match(r"(async\s+)?with\s*\(", line[n.col_offset:]):
+                found.append(f"line {n.lineno}: parenthesised with")
+        if isinstance(n, ast.Import):
+            found += [f"line {n.lineno}: import {a.name}" for a in n.names if a.name in NEWER_MODULES]
+        if isinstance(n, ast.ImportFrom) and n.module in NEWER_MODULES:
+            found.append(f"line {n.lineno}: from {n.module}")
+        if isinstance(n, ast.ImportFrom) and n.module != "__future__":
+            found += [f"line {n.lineno}: {a.name}" for a in n.names if a.name in NEWER_NAMES]
+        if isinstance(n, ast.Attribute) and n.attr in NEWER_NAMES:
+            found.append(f"line {n.lineno}: .{n.attr}")
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ("aiter", "anext"):
+            found.append(f"line {n.lineno}: {n.func.id}()")
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "zip" and any(k.arg == "strict" for k in n.keywords):
+            found.append(f"line {n.lineno}: zip(strict=)")
+    return found
+
+
+@pytest.mark.parametrize("rel", PY39_FILES)
 def test_runs_on_py39(rel):
     """The printer may have Python 3.9 (Debian 11): no newer syntax anywhere in what runs there."""
-    ast.parse((PACK / rel).read_text(encoding="utf-8"), feature_version=(3, 9))
+    assert py39_problems((PACK / rel).read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.parametrize("src", [
+    "def f(x: int | None): pass",
+    "def f() -> int | None: pass",
+    "x: int | None = None",
+    "with (open('a') as a, open('b') as b):\n    pass",
+    "import tomllib",
+    "from itertools import pairwise",
+    "list(zip([1], [2], strict=True))",
+    "(5).bit_count()",
+])
+def test_py39_guard_can_fail(src):
+    """ast.parse(feature_version=(3, 9)) accepts all of these; they break on 3.9 at import or run time."""
+    ast.parse(src, feature_version=(3, 9))
+    assert py39_problems(src)
+
+
+def test_py39_guard_allows_the_future_import():
+    assert py39_problems("from __future__ import annotations\ndef f(x: int | None): pass") == []
+
+
+@pytest.mark.parametrize("rel", PY39_FILES)
+@pytest.mark.skipif(not shutil.which("python3.9"), reason="no Python 3.9 interpreter here")
+def test_compiles_on_a_real_py39(rel):
+    done = subprocess.run([shutil.which("python3.9"), "-c", "import sys; compile(open(sys.argv[1], encoding='utf-8').read(), sys.argv[1], 'exec')",
+                           str(PACK / rel)], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
 
 
 def test_restart_offered_when_printer_cfg_was_replaced(data, moon):

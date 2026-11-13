@@ -318,11 +318,15 @@ def test_real_paho_sends_no_connect_to_a_changed_leaf(tmp_path):
         m.sync()
         assert wait_until(lambda: m.state(SERIAL) == "cert_changed", 10)
         assert wait_until(lambda: srv.received, 10)
-        time.sleep(3)                                  # longer than paho's first retry delay
+        end = time.monotonic() + 3                     # a window longer than paho's first retry delay
+        while time.monotonic() < end and srv.connections <= 1:
+            time.sleep(0.05)                           # ...left at once when a second connection shows
     finally:
         m.stop()
         srv.close()
-    assert srv.handshakes == 1                         # no retry loop
+    # no retry loop. Connections, not an exact handshake count: the client closes as soon as it has read the leaf, and
+    # under load the reset can reach the server before its own handshake finished (see the camera test below)
+    assert srv.connections == 1 and srv.handshakes <= 1
     for data in srv.received:
         assert CODE.encode() not in data
         assert not data.startswith(b"\x10")            # no MQTT CONNECT packet at all

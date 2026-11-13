@@ -1,7 +1,12 @@
 """Linux package files, checked as text (they run on Linux and on GitHub; the WSL run is in the LINUX report).
 Repo files are found from this test file, never from the installed package."""
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 LINUX = ROOT / "pc-sync" / "linux"
@@ -37,6 +42,40 @@ def test_uninstall_keeps_the_token_unless_purge():
     assert text.count('rm -rf "$data"') == 1             # only with --purge
     assert 'rm -rf "$opt" "$opt.old"' in text
     assert '"$state/systemd/timers/stamp-filament-kit-sync.timer"' in text      # Persistent=true's stamp
+
+
+def _bash_runs() -> bool:
+    bash = shutil.which("bash")
+    if not bash:
+        return False
+    try:        # on Windows a plain `bash` can be WSL's, which cannot read these paths
+        return subprocess.run([bash, str(LINUX / "uninstall.sh"), "--bogus"], capture_output=True, timeout=30).returncode == 2
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+@pytest.mark.skipif(not _bash_runs(), reason="needs a bash that can run uninstall.sh")
+def test_uninstall_run_keeps_the_data_unless_purge(tmp_path):
+    """The text checks above cannot see where `rm -rf "$data"` sits; run the script against a temp HOME."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("XDG_")}
+    home = tmp_path / "home"
+    env["HOME"] = str(home)
+    data = home / ".local" / "share" / "filament-kit-sync"
+    opt = home / ".local" / "opt" / "filament-kit-sync"
+
+    def run(*args):
+        data.mkdir(parents=True, exist_ok=True)
+        (data / "token").write_text("secret", encoding="utf-8")
+        opt.mkdir(parents=True, exist_ok=True)
+        return subprocess.run([shutil.which("bash"), str(LINUX / "uninstall.sh"), *args], env=env, capture_output=True,
+                              text=True, timeout=60)
+
+    kept = run()
+    assert kept.returncode == 0, kept.stderr
+    assert (data / "token").read_text(encoding="utf-8") == "secret" and not opt.exists()
+    purged = run("--purge")
+    assert purged.returncode == 0, purged.stderr
+    assert not data.exists() and not opt.exists()
 
 
 def test_build_names_the_tarball():
