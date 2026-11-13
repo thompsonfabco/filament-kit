@@ -792,7 +792,7 @@ when the page is left or hidden. Until the first message arrives, the status and
 |---|---|
 | Title | printer name (`--fs-xl`) |
 | Facts | model · address (`--mono`) |
-| Connection | a badge (3.3) from the printer's `state`: `connected` Connected · `offline` Offline · `not_configured` Not configured · every problem state Needs a look, followed by a sentence: `wrong_code` "Wrong Access Code. Replace it under Printer settings.", `needs_developer_mode` "The printer needs developer mode (LAN only) for this.", `cert_changed` "The printer's certificate changed. Forget it under Printer settings if you replaced the printer.", any other state the Hub's word (underscores as spaces, sentence case). Under it: the Hub's fix text. |
+| Connection | a badge (3.3) and the sentence under it from the printer's `state`, as the printer states table of `02-components.md` 7.1 gives them, the same in every interface. Under it: the Hub's fix text when it sends one. |
 | Print state | a sentence with its shape (3.3), from `gcode_state`: RUNNING "Printing", PAUSE "Paused", PREPARE "Preparing", FINISH "Finished", FAILED "Print failed", IDLE "Idle" (others: the word in sentence case), then ": <job name>" |
 | Progress | while Printing, Paused or Preparing: progress bar (4 px, `--accent-text`) with the percent at the right (`--mono`), then "Layer <n> of <total> · <time> left" and the stage when the printer reports one; <time> is "<h> h <m> min", or "<m> min" under one hour |
 | Temperatures | "<name> <current> / <target> °C" joined by " · " (`--mono` numbers) |

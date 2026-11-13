@@ -2012,6 +2012,23 @@ uses the same words for the same states. Anything else is a sentence.
 `--s1`; shape `--s2` (triangle and octagon `calc(var(--s2) + var(--s1) / 2)`, 1.2). The two icons used as shapes
 (`i-info`, `i-pencil`) are drawn by `status__shape` at `--s3` (12 px), not with `icon--s` (16 px). Colour as the table, for shape and word. No ground and no border: a badge is text.
 
+**Printer states.** A printer's `state` from the Hub is shown the same way in every interface: the badge, and under
+it the sentence (in the command line, the `Fix:` line).
+
+| `state` | Badge | Sentence under it |
+|---|---|---|
+| `connected` | Connected | none |
+| `unknown_model` (Klipper) | Connected | Note (diamond): "Model not known; slots are read as a generic Klipper printer." The job line and the slots are shown as for any connected printer. |
+| `connecting` | none: the inline spinner (8.1) with "Connecting…" | none |
+| `offline` | Offline | "Check that the printer is on and on the same network as the Hub." |
+| `not_configured` | Not configured | Bambu Lab: "Add it with its Access Code." Klipper: "Use this printer to add it." |
+| `wrong_code` | Needs a look | "The printer did not accept the Access Code. Enter the Access Code again." |
+| `unauthorized` (Klipper) | Needs a look | "Moonraker refused the API key. Replace it in Printer settings." |
+| `needs_developer_mode` | Needs a look | "The printer refuses remote control. Turn on LAN mode and Developer Mode on the printer." |
+| `cert_changed` | Needs a look | "The printer's certificate changed. Forget its old certificate in Printer settings." |
+| `klippy_not_ready` (Klipper) | Needs a look | "Klipper is not ready on the printer. Check it in Mainsail or Fluidd." |
+| any other value | Needs a look | The Hub's word (underscores as spaces, sentence case), and the Hub's fix text when it sends one |
+
 **States.**
 - Default: one of the sixteen.
 - Hover: none; a badge is not a control (inside a link it follows the link).

@@ -548,7 +548,7 @@ Klipper printers a scan found that are not configured (`configured: false`).
 | Expand | Icon button with chevron, "Details for <name>", `aria-expanded`, `aria-controls` | P1 (on phone a ghost button "Details" at the card's foot) |
 | Printer (sortable) | Name in weight 600; under it the model in `--muted`. When both families are on, a tag "Bambu Lab" or "Klipper" after the name. | P1 |
 | Address (sortable) | `ip` (Bambu Lab) or `host:port` (Klipper) in `--mono`, or "No address yet" in `--muted`; under it "SN <serial>" (Bambu Lab) or "Moonraker" (Klipper). Hidden values read "Hidden while locked". | P3 |
-| State (sortable) | Status badge from `state`: `connected` → "Connected"; `offline` → "Offline"; `not_configured` → "Not configured"; any other value → "Needs a look" (triangle) followed by the state's sentence (the value with underscores as spaces) | P1 |
+| State (sortable) | Status badge and sentence from `state`, as the printer states table of `02-components.md` 7.1 gives them (the Klipper states `unknown_model`, `unauthorized`, `klippy_not_ready` and `connecting` included) | P1 |
 | Slots | Slot strip of filament swatches with fill level and "<loaded> of <total> loaded"; or "No slot data while offline"; or "No slots read yet" | P1 |
 | Connection | Bambu Lab: "Certificate pinned" or "Certificate not pinned yet"; "Slots mapped" when mapped. Klipper: "Moonraker API key" with status badge "Set" (OK) or "Not set" (Note); "Lane data: <auto, on or off>" | P3 |
 | Actions | Default button **Test connection** ("Test" on tablet) and icon button "More actions for <name>" (overflow menu) | P1 |
