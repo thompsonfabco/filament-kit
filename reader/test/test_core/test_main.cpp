@@ -541,6 +541,39 @@ void test_lists_due_survives_millis_wrap() {
   TEST_ASSERT_FALSE(listsDue(5000, 0xFFFFFFFFu - 4000, false, true, 60000, 10000));  // 9 s apart
 }
 
+// Dead server, the real timing: how much of the time is the loop blocked in refreshes?
+static double deadServerBlockedShare(uint32_t totalMs, uint32_t& worstBlockMs) {
+  uint32_t now = 0, lastAt = 0, blocked = 0; int fails = 1;   // boot refresh failed
+  worstBlockMs = 0;
+  while (now < totalMs) {
+    if (listsDue(now, lastAt, false, true, 60000, listRetryMs(fails))) {
+      now += LIST_QUICK_BLOCK_MS;                // the whole attempt times out
+      blocked += LIST_QUICK_BLOCK_MS;
+      if (LIST_QUICK_BLOCK_MS > worstBlockMs) worstBlockMs = LIST_QUICK_BLOCK_MS;
+      lastAt = now; fails++;                     // stamped when the refresh ends
+    } else {
+      now += 50;                                 // a loop pass
+    }
+  }
+  return (double)blocked / totalMs;
+}
+
+void test_dead_server_leaves_loop_responsive() {
+  uint32_t worst;
+  TEST_ASSERT_TRUE(deadServerBlockedShare(10 * 60000u, worst) < 0.20);
+  TEST_ASSERT_TRUE(deadServerBlockedShare(60 * 60000u, worst) < 0.10);
+  TEST_ASSERT_TRUE(worst <= 5000);               // one refresh never holds the loop > 5 s
+}
+
+void test_retry_backs_off_and_caps() {
+  TEST_ASSERT_EQUAL(10000, listRetryMs(0));
+  TEST_ASSERT_EQUAL(10000, listRetryMs(1));
+  TEST_ASSERT_EQUAL(20000, listRetryMs(2));
+  TEST_ASSERT_EQUAL(40000, listRetryMs(3));
+  TEST_ASSERT_EQUAL(60000, listRetryMs(4));
+  TEST_ASSERT_EQUAL(60000, listRetryMs(50));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_parse_printers_basic);
@@ -587,6 +620,8 @@ int main(int, char**) {
   RUN_TEST(test_lists_due_retries_fast_while_server_down);
   RUN_TEST(test_lists_due_normal_refresh_needs_screen);
   RUN_TEST(test_lists_due_survives_millis_wrap);
+  RUN_TEST(test_dead_server_leaves_loop_responsive);
+  RUN_TEST(test_retry_backs_off_and_caps);
   RUN_TEST(test_wanted_label_prefers_saved);
   RUN_TEST(test_unit_dropping_out_briefly_keeps_selection);
   return UNITY_END();

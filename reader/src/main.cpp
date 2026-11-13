@@ -136,11 +136,13 @@ static const uint32_t RESULT_HOLD_MS   = 4000;
 // "Load filament" (queued) prompt stays up longer — you're walking to the AMS.
 static const uint32_t QUEUED_HOLD_MS   = 15000;
 // Printer + slot lists: refreshed at boot, every LIST_REFRESH_MS while the screen
-// is lit (every LIST_RETRY_MS while the server is down), and LIST_AFTER_SET_MS after a set (to show the new contents).
+// is lit (backing off from 10 s to 60 s while the server is down), and LIST_AFTER_SET_MS after a set (to show the new contents).
 static const uint32_t LIST_REFRESH_MS   = 60000;
 static const uint32_t LIST_AFTER_SET_MS = 5000;
-// While the server is down the lists are retried this often (screen on or off).
-static const uint32_t LIST_RETRY_MS     = 10000;
+// While the server is down the lists are retried after 10 s, 20 s, 40 s, then every
+// 60 s (listRetryMs), screen on or off.
+// A tap does not re-check when the last refresh failed less than this ago.
+static const uint32_t TAP_RECHECK_MS    = 5000;
 // Long labels/names scroll one column per MARQUEE_STEP_MS.
 static const uint32_t MARQUEE_STEP_MS  = 350;
 // =============================================================================
@@ -238,7 +240,7 @@ void showPicker() {
     display.setTextSize(1);
     display.setCursor(0, 20);
     if (WiFi.status() != WL_CONNECTED) display.print("No WiFi");
-    else if (!serverOk)                display.print("Server unreachable\nretrying every 60 s");
+    else if (!serverOk)                display.print("Server unreachable\nretrying...");
     else                               display.print("No printers set up\non the server");
     if (updateReady) { display.setCursor(0, 54); display.print("update: hold knob 4s"); }
     display.display();
@@ -352,11 +354,13 @@ class CappedString : public Stream {
 };
 static const int HTTP_TOO_BIG = -100;   // our code: reply refused for size
 
-int apiRequest(const String& url, const char* body, String& resp) {
+// quick: one short attempt (background retries and taps), see LIST_QUICK_TIMEOUT_MS.
+int apiRequest(const String& url, const char* body, String& resp, bool quick = false) {
   int code = -1;
-  for (int attempt = 0; attempt < 2; attempt++) {
+  for (int attempt = 0; attempt < (quick ? 1 : 2); attempt++) {
     apiHttp.setReuse(true);
-    apiHttp.setTimeout(6000);
+    apiHttp.setTimeout(quick ? LIST_QUICK_TIMEOUT_MS : 6000);
+    apiHttp.setConnectTimeout(quick ? LIST_QUICK_TIMEOUT_MS : 5000);
     if (!apiHttp.begin(apiTls, url)) { apiTls.stop(); continue; }
     apiHttp.addHeader("X-Auth-Token", READER_TOKEN);
     if (body) { apiHttp.addHeader("Content-Type", "application/json"); code = apiHttp.POST(body); }
@@ -403,16 +407,17 @@ void saveSlot(const std::string& label) {
 }
 
 // ---- printer + slot lists ---------------------------------------------------
-uint32_t listsAt = 0;
+uint32_t listsAt = 0;       // when the last refresh ended
+int      listFails = 0;     // failed refreshes in a row
 
 // Slots of the selected printer; keeps `label` selected when it still exists.
 // A failed fetch keeps the last good list only when it is this printer's.
-bool fetchSlots(const std::string& label) {
+bool fetchSlots(const std::string& label, bool quick) {
   const PrinterEntry* p = curPrinter();
   if (!p) { slotCache.apply("", false, {}); menu.slot = 0; return false; }
   String resp;
   String url = joinUrl(READER_BASE, "printers/" + urlEncode(p->id) + "/slots").c_str();
-  int code = apiRequest(url, nullptr, resp);
+  int code = apiRequest(url, nullptr, resp, quick);
   std::vector<SlotEntry> fresh;
   bool ok = code == 200 && parseSlots(resp.c_str(), fresh);
   resp = "";                                   // free the text before keeping the list
@@ -430,25 +435,34 @@ uint32_t settleAt = 0;   // when to save the selection after the knob stops (0 =
 // Both lists. Re-selects the SAVED printer and slot label (the current ones only
 // while a knob turn is not saved yet), so a unit that drops out for one refresh
 // does not move the choice for good. On a failure the last good lists stay.
-void refreshLists() {
-  listsAt = millis();
-  if (WiFi.status() != WL_CONNECTED) { serverOk = false; return; }
+bool refreshListsNow(bool quick) {
+  if (WiFi.status() != WL_CONNECTED) { serverOk = false; return false; }
   std::string wantPrinter = !savedPrinter.empty() ? savedPrinter
                                                   : (curPrinter() ? curPrinter()->id : std::string());
   std::string wantLabel = wantedLabel(savedLabel, curSlot() ? curSlot()->label : std::string(),
                                       settleAt != 0 && menu.mode == MODE_SLOTS);
   String resp;
-  int code = apiRequest(urlPrinters, nullptr, resp);
+  int code = apiRequest(urlPrinters, nullptr, resp, quick);
   bool ok = code == 200 && parsePrinters(resp.c_str(), printers);
   resp = "";
   if (!ok) {
     Serial.printf("printers: HTTP %d\n", code);
     serverOk = false;
-    return;
+    return false;
   }
   int i = findPrinter(printers, wantPrinter);
   menu.printer = i < 0 ? 0 : i;
-  serverOk = fetchSlots(wantLabel);
+  serverOk = fetchSlots(wantLabel, quick);
+  return serverOk;
+}
+
+// listsAt is stamped when the refresh ENDS, so a slow failing one cannot be due again
+// at once; listFails drives the retry back-off (listRetryMs).
+// quick: one short attempt, used for retries and taps so a dead server cannot hold the loop.
+void refreshLists(bool quick = false) {
+  bool ok = refreshListsNow(quick);
+  listsAt = millis();
+  listFails = ok ? 0 : listFails + 1;
 }
 
 // ---- POST a scan --------------------------------------------------------------
@@ -457,11 +471,20 @@ void sendScan(const String& uid) {
   const SlotEntry* s = curSlot();
   if (WiFi.status() != WL_CONNECTED) { showResult("Scan", "No WiFi", true); buzzError(); return; }
   if (!p || !s) {
-    // no usable slot (server was down at the last refresh): one refresh before refusing
-    refreshLists();
-    p = curPrinter(); s = curSlot();
+    // No usable slot (server was down at the last refresh): one quick refresh before
+    // refusing, unless one failed a moment ago. The scan is NOT posted after it: the
+    // refresh may have moved the choice, so the user sees it first and taps again.
+    if (!(listFails > 0 && millis() - listsAt < TAP_RECHECK_MS)) {
+      showResult("Scan", "Checking server...", false);
+      refreshLists(true);
+      if (curPrinter() && curSlot()) {
+        showResult("Server back", "check printer and slot,\ntap again", false);
+        buzzTick();
+        return;
+      }
+    }
+    showResult("Scan", "No slot", true); buzzError(); return;
   }
-  if (!p || !s) { showResult("Scan", "No slot", true); buzzError(); return; }
   // copy: a refresh after this call must not pull the strings out from under us
   PrinterEntry printer = *p;
   SlotEntry slot = *s;
@@ -907,8 +930,8 @@ void loop() {
 
   // background refreshes (skipped while a result or the printer list is showing)
   if (!resultUntil && menu.mode == MODE_SLOTS && !settleAt) {
-    if (listsDue(millis(), listsAt, serverOk, scr != SCR_OFF, LIST_REFRESH_MS, LIST_RETRY_MS)) {
-      refreshLists(); if (scr != SCR_OFF) redraw();
+    if (listsDue(millis(), listsAt, serverOk, scr != SCR_OFF, LIST_REFRESH_MS, listRetryMs(listFails))) {
+      refreshLists(listFails > 0); if (scr != SCR_OFF) redraw();
     }
     if (millis() - updCheckAt > UPD_CHECK_MS) { checkForUpdate(); if (scr != SCR_OFF) redraw(); }
   }

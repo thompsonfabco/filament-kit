@@ -123,6 +123,12 @@ bool listsDue(uint32_t now, uint32_t lastAt, bool serverOk, bool screenOn,
   return screenOn && age > refreshMs;
 }
 
+uint32_t listRetryMs(int failures) {
+  uint32_t ms = 10000;
+  for (int i = 1; i < failures && ms < 60000; i++) ms *= 2;
+  return ms > 60000 ? 60000 : ms;
+}
+
 std::string slotContents(const SlotEntry& s) {
   if (s.present == PRESENT_NO) return "empty";
   if (!s.spool.empty()) return s.type.empty() ? s.spool : s.type + " " + s.spool;

@@ -26,7 +26,7 @@ wiring, board and case are in the [Printer Station guide](https://github.com/tho
 - **Hold 4 s**: check for a firmware update and install it.
 
 The top line shows the printer's name, the middle the slot label, the bottom what is in the slot. Long names
-and labels scroll. The lists are read at power-on, every 60 s while the screen is lit, and 5 s after a set.
+and labels scroll. The lists are read at power-on, every 60 s while the screen is lit, and 5 s after a set. While the server is unreachable it is retried after 10 s, 20 s, 40 s, then every 60 s (screen on or off), one short attempt each.
 The screen dims after 2 minutes and turns off after 10; the first turn or press only wakes it.
 
 The reader remembers the printer (by id) and the slot (by label) across power cuts and updates. If the AMS
@@ -78,7 +78,7 @@ pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). This contract is fixe
   bytes is skipped (ids are never cut, they go back in URLs).
 - The reader re-selects the saved printer id and slot label after every refresh, so a unit that is missing from
   one reply only moves the selection until it is back. If the slots of a newly picked printer cannot be read, the
-  reader shows "No slots" and refuses scans rather than keep the old printer's slots.
+  reader shows "No slots" and refuses scans rather than keep the old printer's slots. A tap with no usable slot first tries one quick refresh and, if it works, shows the choice and asks for a second tap (the scan is never sent to a slot you have not seen).
 
 `POST <READER_BASE>/scan` with `{"uid": "4:c7:96:11:9:22:89", "printer": "h2d", "slot": "A1"}`
 → a JSON object `{"status": ..., "message": ..., "filament": ...}`:
