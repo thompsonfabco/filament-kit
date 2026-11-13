@@ -9,12 +9,11 @@ import com.thompsonfabco.filamentkit.net.Api
 // The Printers section, one entry per route: the list, one printer, and the manual slot map of one printer.
 // Each route has its own back stack entry, so its view models are its own and a visit to the map starts fresh.
 
-/** The printers list. */
+/** The printers list; its calls go to whatever client [currentApi] returns at that moment. */
 @Composable
-fun PrintersListEntry(api: Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit, trust: TrustAction? = null) {
-    val backend = remember(api) { ApiPrinterBackend(api) }
-    val vm = viewModel(key = System.identityHashCode(api).toString()) { PrintersViewModel(backend) }
-    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain, trust = trust)
+fun PrintersListEntry(currentApi: () -> Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+    val vm = viewModel { PrintersViewModel(ApiPrinterBackend(currentApi)) }
+    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain)
 }
 
 /** One printer's screen; [onManualMap] opens the manual slot map, [onBack] also runs after the printer is removed. */

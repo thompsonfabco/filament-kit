@@ -667,9 +667,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             HubNoticePage(::pushPairing)
                             return@composable
                         }
-                        val trustFailed by app.trustFailed.collectAsStateWithLifecycle()
-                        val trust = TrustAction({ config.canTrust(it) }, { x, y -> app.trustCertificate(x, y) }, trustFailed, app::clearTrustFailed)
-                        PrintersListEntry(a, onOpen = { nav.navigate(PrinterRoute(it)) }, onPairAgain = app.router::pairAgain, trust = trust)
+                        PrintersListEntry(::currentApi, onOpen = { nav.navigate(PrinterRoute(it)) }, onPairAgain = app.router::pairAgain)
                     }
 
                     composable<PrinterRoute> { e ->

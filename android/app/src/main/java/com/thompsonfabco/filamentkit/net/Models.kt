@@ -290,6 +290,8 @@ data class Printer(
     val family: String = "bambu",
     /** A certificate is pinned for it (never which); servers before the printer edit routes send none. */
     val pinned: Boolean = false,
+    /** A Klipper printer's Moonraker host name or address; none for a Bambu printer. */
+    val host: String? = null,
 ) {
     /** What to show for the model: its name, else the code an older server sent, else null. */
     val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }
@@ -302,6 +304,16 @@ data class Printer(
         const val STATE_NOT_CONFIGURED = "not_configured"
     }
 }
+
+/** One Moonraker the Hub's scan answered from (`POST /api/printers/scan`); [configured] when it is already a printer. */
+@Serializable
+data class KlipperFound(
+    val id: String = "",
+    val host: String,
+    @Serializable(with = LenientInt::class) val port: Int = 7125,
+    val name: String = "",
+    val configured: Boolean = false,
+)
 
 @Serializable
 data class Temp(

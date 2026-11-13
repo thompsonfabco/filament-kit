@@ -8,6 +8,7 @@ import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.KlipperFound
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
@@ -26,22 +27,37 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 
 /** The printer calls the view models need; [ApiPrinterBackend] adapts [Api], tests pass a fake. */
 interface PrinterBackend {
     suspend fun printers(): List<Printer>
     suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer
     suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer
+    suspend fun scanKlipper(subnet: String?): List<KlipperFound>
+
+    /** Sets a Klipper printer's Moonraker API key (the Hub's add route takes none). */
+    suspend fun setApiKey(id: String, key: String)
     suspend fun printer(id: String): PrinterDetail
     suspend fun command(id: String, action: String): CommandResult
     suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult
 }
 
-class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBackend, PrinterEditBackend {
+class ApiPrinterBackend(private val current: () -> Api) : PrinterBackend, PrinterToolsBackend, PrinterEditBackend {
+    constructor(api: Api) : this({ api })
+
+    /** Each call goes to the session's client of that moment, so a screen never holds an old one. */
+    private val api: Api get() = current()
+
     override suspend fun printers() = api.printers()
     override suspend fun addPrinter(serial: String, accessCode: String, name: String?) = api.addPrinter(serial, accessCode, name)
     override suspend fun addKlipperPrinter(host: String, port: Int, name: String?) = api.addKlipperPrinter(host, port, name)
+    override suspend fun scanKlipper(subnet: String?) = api.scanKlipper(subnet)
+    override suspend fun setApiKey(id: String, key: String) {
+        api.editPrinter(id, buildJsonObject { put("api_key", key) })
+    }
     override suspend fun printer(id: String) = api.printer(id)
     override suspend fun command(id: String, action: String) = api.command(id, action)
     override suspend fun unload(id: String, label: String, dryRun: Boolean) = api.unload(id, label, dryRun)
@@ -426,140 +442,5 @@ class PrinterViewModel(
             return if (ok) "$label: the printer replied \"${result ?: "ok"}\"."
             else "$label: the printer refused (${text("reason") ?: result ?: "no reason given"})."
         }
-    }
-}
-
-data class AddDialog(
-    val serial: String,
-    val name: String,
-    val busy: Boolean = false,
-    val error: String? = null,
-)
-
-/** The "Add a Klipper printer" dialog; the fields live in the dialog, only the outcome is kept here. */
-data class KlipperDialog(
-    val busy: Boolean = false,
-    val error: String? = null,
-)
-
-data class PrintersUiState(
-    val printers: List<Printer> = emptyList(),
-    val loading: Boolean = false,
-    val message: String? = null,
-    val dialog: AddDialog? = null,
-    val klipper: KlipperDialog? = null,
-    val unauthorized: Boolean = false,
-    val mismatch: Pair<String, String>? = null,
-)
-
-/** The printers list and the "Add printer" dialog. The Access Code is only passed through, never kept. */
-class PrintersViewModel(private val backend: PrinterBackend) : ViewModel() {
-    private val _state = MutableStateFlow(PrintersUiState())
-    val state: StateFlow<PrintersUiState> = _state.asStateFlow()
-
-    fun refresh() {
-        _state.update { it.copy(loading = true) }
-        viewModelScope.launch { load() }
-    }
-
-    private suspend fun load() {
-        guard(onError = { msg -> _state.update { it.copy(message = msg) } }) {
-            val list = backend.printers()
-            _state.update { it.copy(printers = list, message = null) }
-        }
-        _state.update { it.copy(loading = false) }
-    }
-
-    fun openAdd(p: Printer) = _state.update {
-        it.copy(dialog = AddDialog(serial = p.serial, name = if (p.name == p.serial) "" else p.name))
-    }
-
-    /** Closes the dialog and reloads, since the printer's state may have changed meanwhile. */
-    fun cancelAdd() {
-        _state.update { it.copy(dialog = null) }
-        refresh()
-    }
-
-    fun submitAdd(accessCode: String, name: String) {
-        val d = _state.value.dialog ?: return
-        if (d.busy) return
-        val code = accessCode.trim()
-        if (code.isEmpty()) {
-            _state.update { it.copy(dialog = d.copy(error = "Enter the Access Code. ${PrinterHelp.ACCESS_CODE_HELP}.")) }
-            return
-        }
-        _state.update { it.copy(dialog = d.copy(name = name, busy = true, error = null)) }
-        viewModelScope.launch {
-            guard(
-                onError = { msg -> _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, error = msg)) } },
-                describe = PrinterHelp::addMessage,
-            ) {
-                val p = backend.addPrinter(d.serial, code, name.trim().ifBlank { null })
-                val problem = if (p.state == "connected") null else PrinterHelp.fix(p.state)
-                if (problem == null) {
-                    _state.update { it.copy(dialog = null) }
-                    load()
-                } else {
-                    _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, error = problem)) }
-                }
-            }
-        }
-    }
-
-    fun openAddKlipper() = _state.update { it.copy(klipper = KlipperDialog()) }
-
-    fun cancelAddKlipper() {
-        _state.update { it.copy(klipper = null) }
-    }
-
-    /** Adds a Klipper printer by its Moonraker address; [port] is the dialog's text, blank meaning the default 7125. */
-    fun submitAddKlipper(host: String, port: String, name: String) {
-        val d = _state.value.klipper ?: return
-        if (d.busy) return
-        val address = host.trim()
-        val portText = port.trim().ifEmpty { DEFAULT_KLIPPER_PORT.toString() }
-        val portNumber = portText.toIntOrNull()?.takeIf { it in 1..65535 }
-        val problem = when {
-            address.isEmpty() -> "Enter the printer's address: the IP address or host name of its Moonraker."
-            portNumber == null -> "The port must be a number between 1 and 65535."
-            else -> null
-        }
-        if (problem != null || portNumber == null) {
-            _state.update { it.copy(klipper = d.copy(error = problem)) }
-            return
-        }
-        _state.update { it.copy(klipper = d.copy(busy = true, error = null)) }
-        viewModelScope.launch {
-            guard(
-                onError = { msg -> _state.update { s -> s.copy(klipper = s.klipper?.copy(busy = false, error = msg)) } },
-                describe = PrinterHelp::addMessage,
-            ) {
-                backend.addKlipperPrinter(address, portNumber, name.trim().ifBlank { null })
-                _state.update { it.copy(klipper = null) }
-                load()
-            }
-        }
-    }
-
-    private suspend fun guard(
-        onError: (String) -> Unit,
-        describe: (ApiError) -> String = PrinterHelp::message,
-        block: suspend () -> Unit,
-    ) {
-        try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: FingerprintMismatch) {
-            _state.update { it.copy(mismatch = e.expected to e.actual) }
-        } catch (e: ApiError) {
-            if (e.code == "unauthorized") _state.update { it.copy(unauthorized = true) } else onError(describe(e))
-        } catch (e: Exception) {
-            onError(PrinterHelp.UNEXPECTED)
-        }
-    }
-
-    companion object {
-        const val DEFAULT_KLIPPER_PORT = 7125
     }
 }

@@ -1,235 +1,473 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.net.KlipperFound
 import com.thompsonfabco.filamentkit.net.Printer
-import com.thompsonfabco.filamentkit.ui.pair.MismatchSource
-import com.thompsonfabco.filamentkit.ui.pair.mismatchText
-import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
+import com.thompsonfabco.filamentkit.net.PrinterSummary
+import com.thompsonfabco.filamentkit.ui.ColorSwatch
+import com.thompsonfabco.filamentkit.ui.components.HubNotice
+import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.components.ScreenState
+import com.thompsonfabco.filamentkit.ui.components.StatusKind
+import com.thompsonfabco.filamentkit.ui.components.StatusLabel
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwDialog
+import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
+import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
+import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwIconButton
+import com.thompsonfabco.filamentkit.ui.components.SwMenu
+import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
+import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import kotlinx.coroutines.launch
 
-/** The printers the server knows; tapping a set-up printer opens it, an unset one asks for its Access Code. */
+/**
+ * The printers the Hub knows (05-android-app 9.1): the set-up printers with status, job and slots, the printers it
+ * found that are not set up, and the ways to add one. Tapping a set-up printer opens it with [onOpen].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrintersScreen(
     viewModel: PrintersViewModel,
     onOpen: (id: String) -> Unit,
     onPairAgain: () -> Unit,
-    trust: TrustAction? = null,
+    modifier: Modifier = Modifier,
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleStartEffect(viewModel) {
         viewModel.refresh()
         onStopOrDispose { }
     }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = viewModel::refresh, enabled = !state.loading) { Text("Refresh") }
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val addedText = state.added?.let { stringResource(R.string.printer_add_done, it) }
+    LaunchedEffect(state.added) {
+        if (addedText != null) {
+            viewModel.addedShown()
+            scope.launch { toast?.show(addedText) }
         }
-        state.mismatch?.let { (expected, actual) ->
-            MismatchNotice(expected, actual, onPairAgain, trust)
-            return@Column
+    }
+    val space = SpoolwardenTheme.space
+    val offline = state.problem is Problem.Unreachable
+    // the progress line shows a refresh, so the pull gesture only starts one
+    PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+            verticalArrangement = Arrangement.spacedBy(space.s3),
+        ) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                Overflow(viewModel::refresh, viewModel::openFind, { viewModel.openAddKlipper() })
+            }
+            if (state.mismatch != null) HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+            if (state.unauthorized) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+            ScreenState(
+                loaded = state.loaded,
+                loading = state.loading,
+                isEmpty = state.printers.isEmpty(),
+                empty = {
+                    SwEmptyState(
+                        icon = R.drawable.sw_ic_printer,
+                        title = stringResource(R.string.printers_empty_title),
+                        text = stringResource(R.string.printer_list_empty_text),
+                        primary = SwAction(stringResource(R.string.common_refresh), viewModel::refresh),
+                        secondary = SwAction(stringResource(R.string.printers_add_klipper)) { viewModel.openAddKlipper() },
+                    )
+                },
+                error = state.problem?.takeUnless { offline }?.let { problemText(it) },
+                onTryAgain = viewModel::refresh,
+                offline = offline,
+                loadedSecondsAgo = (System.currentTimeMillis() - state.loadedAt).coerceAtLeast(0) / MS_PER_S,
+            ) {
+                PrinterLists(state, offline, onOpen, onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper)
+            }
         }
-        if (state.unauthorized) {
-            UnpairedNotice(onPairAgain)
-            return@Column
+    }
+    state.dialog?.let { AddBambuDialog(it, viewModel) }
+    state.klipper?.let { AddKlipperDialog(it, viewModel) }
+    state.find?.let { FindSheetContent(it, viewModel) }
+}
+
+private const val MS_PER_S = 1000L
+
+@Composable
+private fun Overflow(onRefresh: () -> Unit, onFind: () -> Unit, onAddKlipper: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
+        SwMenu(open, { open = false }) {
+            SwMenuItem(stringResource(R.string.common_refresh), { open = false; onRefresh() }, icon = R.drawable.sw_ic_refresh)
+            SwMenuItem(stringResource(R.string.printers_find_klipper), { open = false; onFind() }, icon = R.drawable.sw_ic_search)
+            SwMenuItem(stringResource(R.string.printers_add_klipper), { open = false; onAddKlipper() }, icon = R.drawable.sw_ic_plus)
         }
-        state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (state.printers.isEmpty() && !state.loading && state.message == null) {
-            Text("No printers found yet. The server finds Bambu printers on its network by itself; make sure the " +
-                "printer is turned on, then tap Refresh. A Klipper printer is added by its address.")
-            Button(onClick = viewModel::openAddKlipper) { Text("Add a Klipper printer") }
+    }
+}
+
+@Composable
+private fun ColumnScope.PrinterLists(
+    state: PrintersUiState,
+    offline: Boolean,
+    onOpen: (String) -> Unit,
+    onAdd: (Printer) -> Unit,
+    onAddKlipper: (host: String, port: Int) -> Unit,
+) {
+    val space = SpoolwardenTheme.space
+    val configured = state.configured
+    if (configured.isNotEmpty()) {
+        Panel {
+            configured.forEachIndexed { i, p ->
+                if (i > 0) Divider()
+                PrinterRow(p, state.swatches[p.id].orEmpty()) { onOpen(p.id) }
+            }
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(state.printers, key = { it.id }) { p ->
-                PrinterRow(p) {
-                    if (!p.configured || p.state == "wrong_code") viewModel.openAdd(p) else onOpen(p.id)
+    }
+    val found = state.found
+    if (found.isNotEmpty()) {
+        Text(
+            stringResource(R.string.printers_found_title).uppercase(),
+            Modifier.padding(top = space.s2).semantics { heading() },
+            style = MaterialTheme.typography.labelSmall,
+            color = SpoolwardenTheme.colors.muted,
+        )
+        Panel(ground = SpoolwardenTheme.colors.accentSoft) {
+            found.forEachIndexed { i, p ->
+                if (i > 0) Divider()
+                FoundRow(p, enabled = !offline) {
+                    if (p.family == "klipper") {
+                        onAddKlipper(p.host ?: p.ip.orEmpty(), PrintersViewModel.DEFAULT_KLIPPER_PORT)
+                    } else {
+                        onAdd(p)
+                    }
                 }
             }
-            if (state.printers.isNotEmpty()) item {
-                OutlinedButton(onClick = viewModel::openAddKlipper) { Text("Add a Klipper printer") }
-            }
         }
     }
-    state.dialog?.let { AddPrinterDialog(it, viewModel) }
-    state.klipper?.let { AddKlipperDialog(it, viewModel) }
-}
-
-@Composable
-private fun PrinterRow(p: Printer, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Spacer(Modifier.size(14.dp).clip(CircleShape).background(stateColor(p.state)))
-            Column(Modifier.weight(1f)) {
-                Text(p.name, style = MaterialTheme.typography.titleMedium)
-                Text(listOfNotNull(p.shownModel, PrinterHelp.stateLabel(p.state)).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall)
-                PrinterHelp.jobLine(p.summary)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                if (!p.configured) Text("Tap to add this printer", color = MaterialTheme.colorScheme.primary)
-                else if (p.state == "wrong_code") Text("Tap to enter the Access Code again", color = MaterialTheme.colorScheme.primary)
-            }
-        }
+    Column {
+        SwButton(
+            stringResource(R.string.printers_add_klipper), { onAddKlipper("", PrintersViewModel.DEFAULT_KLIPPER_PORT) },
+            kind = SwButtonKind.Plain, enabled = !offline,
+        )
+        if (offline) NeedsHubReason()
     }
 }
 
-
+/** A panel (05-android-app 3.1): [ground], 1 dp `border`, `r` corners, no shadow; rows sit in it separated by dividers. */
 @Composable
-internal fun stateColor(state: String): Color = when (state) {
-    "connected" -> SpoolwardenTheme.colors.ok
-    "wrong_code", "cert_changed" -> SpoolwardenTheme.colors.bad
-    "needs_developer_mode" -> SpoolwardenTheme.colors.warn
-    else -> SpoolwardenTheme.colors.muted
+private fun Panel(ground: Color = SpoolwardenTheme.colors.surface, content: @Composable ColumnScope.() -> Unit) {
+    val shape = SpoolwardenTheme.shapes.r
+    Column(
+        Modifier.fillMaxWidth().clip(shape).background(ground, shape)
+            .border(SpoolwardenTheme.sizes.hairline, SpoolwardenTheme.colors.border, shape),
+        content = content,
+    )
 }
 
-/** Asks for the Access Code. The code lives only in this dialog's memory and goes straight to the server. */
 @Composable
-private fun AddPrinterDialog(d: AddDialog, viewModel: PrintersViewModel) {
+private fun Divider() {
+    HorizontalDivider(thickness = SpoolwardenTheme.sizes.hairline, color = SpoolwardenTheme.colors.border)
+}
+
+/** "Bambu Lab X1 Carbon", "Voron 2.4 (Klipper)": what the printer is, in the model's own name. */
+@Composable
+private fun modelLine(p: Printer): String {
+    val model = p.shownModel
+    return if (p.family == "klipper") {
+        if (model == null) stringResource(R.string.common_klipper) else stringResource(R.string.printer_list_model_klipper, model)
+    } else {
+        if (model == null) stringResource(R.string.common_bambu_lab) else stringResource(R.string.printer_list_model_bambu, model)
+    }
+}
+
+@Composable
+private fun PrinterRow(p: Printer, slots: List<SlotLook>, onClick: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val open = stringResource(R.string.a11y_action_open)
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(onClickLabel = open, onClick = onClick)
+            .padding(space.s3),
+        horizontalArrangement = Arrangement.spacedBy(space.s3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(space.s1)) {
+            Text(p.name, style = MaterialTheme.typography.titleSmall)
+            Text(modelLine(p), style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            Row(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically) {
+                StatusLabel(statusKind(p.state), small = true)
+                jobWord(p.summary?.gcodeState.orEmpty()).takeIf { p.state == "connected" }?.let { word ->
+                    Text("·", style = MaterialTheme.typography.bodySmall, color = colors.muted)
+                    Text(jobText(word, p.summary), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (slots.isNotEmpty()) Swatches(slots)
+            fixLine(p.state)?.let { fix ->
+                Row(horizontalArrangement = Arrangement.spacedBy(space.s1)) {
+                    Icon(
+                        painterResource(NoticeKind.Warn.shape), contentDescription = null,
+                        modifier = Modifier.padding(top = space.s1 / 2).size(NoticeKind.Warn.side(space)), tint = colors.warn,
+                    )
+                    Text(stringResource(fix), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
+    }
+}
+
+/** "Printing · 42 % · 1 h 12 min left", or just "Idle" for a state with no progress. */
+@Composable
+private fun jobText(word: JobWord, summary: PrinterSummary?): String {
+    val state = stringResource(word.word)
+    if (!word.progress || summary == null) return state
+    if (summary.remainingMin <= 0) return stringResource(R.string.printer_list_job_percent, state, summary.percent)
+    val (hours, minutes) = hoursAndMinutes(summary.remainingMin)
+    val left = if (hours > 0) {
+        stringResource(R.string.printer_time_hours, hours, minutes)
+    } else {
+        stringResource(R.string.printer_time_minutes, minutes)
+    }
+    return stringResource(R.string.printers_job_line, state, summary.percent, left)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Swatches(slots: List<SlotLook>) {
+    val space = SpoolwardenTheme.space
+    val (shown, more) = shownSlots(slots)
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(space.s1), verticalArrangement = Arrangement.spacedBy(space.s1),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        shown.forEach { slot ->
+            val words = if (slot.empty) {
+                stringResource(R.string.a11y_swatch_empty)
+            } else {
+                stringResource(R.string.a11y_swatch, slot.hex.removePrefix("#").uppercase())
+            }
+            ColorSwatch(slot.hex, Modifier.semantics { contentDescription = words }, empty = slot.empty)
+        }
+        if (more > 0) {
+            Text(stringResource(R.string.printers_slots_more, more), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun FoundRow(p: Printer, enabled: Boolean, onAdd: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val address = (if (p.family == "klipper") p.host else null) ?: p.ip
+    val model = modelLine(p)
+    val addFor = stringResource(R.string.printer_find_add_for, model)
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).padding(space.s3),
+        horizontalArrangement = Arrangement.spacedBy(space.s3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(space.s1)) {
+            Text(model, style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically) {
+                StatusLabel(StatusKind.NotConfigured, small = true)
+                if (!address.isNullOrBlank()) {
+                    Text("·", style = MaterialTheme.typography.bodySmall, color = colors.muted)
+                    Text(address, style = SpoolwardenTheme.type.dataSmall)
+                }
+            }
+        }
+        SwButton(
+            stringResource(R.string.common_add), onAdd, Modifier.semantics { contentDescription = addFor },
+            kind = SwButtonKind.Plain, enabled = enabled,
+        )
+    }
+}
+
+/** 9.2: asks for the Access Code. The code lives only in this form's memory and goes straight to the Hub. */
+@Composable
+private fun AddBambuDialog(d: AddDialog, viewModel: PrintersViewModel) {
     var code by remember(d.serial) { mutableStateOf("") }
     var name by remember(d.serial) { mutableStateOf(d.name) }
-    AlertDialog(
-        onDismissRequest = { if (!d.busy) viewModel.cancelAdd() },
-        title = { Text("Add printer") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Serial: ${d.serial}", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(name, { name = it }, label = { Text("Name (optional)") }, singleLine = true,
-                    enabled = !d.busy)
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { code = it },
-                    label = { Text("Access Code") },
-                    singleLine = true,
-                    enabled = !d.busy,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-                )
-                Text(PrinterHelp.ACCESS_CODE_HELP, style = MaterialTheme.typography.bodySmall)
-                if (d.busy) Text("Connecting to the printer…")
-                d.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { viewModel.submitAdd(code, name) }, enabled = !d.busy) { Text("Add") }
-        },
-        dismissButton = {
-            TextButton(onClick = viewModel::cancelAdd, enabled = !d.busy) { Text("Cancel") }
-        },
-    )
+    val title = stringResource(R.string.printer_add_title, d.model)
+    SwDialog(
+        title = title,
+        onClose = { if (!d.busy) viewModel.cancelAdd() },
+        confirm = SwDialogButton(
+            label = stringResource(if (d.busy) R.string.printer_add_connecting else R.string.printer_add_button),
+            onClick = { viewModel.submitAdd(code, name) },
+            kind = SwButtonKind.Main,
+            enabled = code.isNotBlank(),
+            busy = d.busy,
+        ),
+        cancel = if (d.busy) null else SwAction(stringResource(R.string.common_cancel), viewModel::cancelAdd),
+    ) {
+        val facts = stringResource(R.string.printer_add_facts, d.model, d.serial)
+        Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
+        FormField(
+            code, { code = it }, stringResource(R.string.common_access_code), secret = true, enabled = !d.busy,
+            hint = stringResource(R.string.common_access_code_help),
+            error = if (d.codeMissing) stringResource(R.string.printer_error_access_code) else null,
+        )
+        FormField(
+            name, { name = it }, stringResource(R.string.common_name_optional), enabled = !d.busy,
+            placeholder = stringResource(R.string.printer_add_name_placeholder),
+        )
+        d.problem?.let { NoticeCard(NoticeKind.Bad, problemText(it)) }
+    }
 }
 
-/** Asks for a Klipper printer's name and the address of its Moonraker (the API key, if it needs one, is set later). */
+/** 9.3: the address and port of a Klipper printer's Moonraker, its name and, if Moonraker asks for one, its API key. */
 @Composable
 private fun AddKlipperDialog(d: KlipperDialog, viewModel: PrintersViewModel) {
-    var name by remember { mutableStateOf("") }
-    var host by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf(PrintersViewModel.DEFAULT_KLIPPER_PORT.toString()) }
-    AlertDialog(
-        onDismissRequest = { if (!d.busy) viewModel.cancelAddKlipper() },
-        title = { Text("Add a Klipper printer") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Name (optional)") }, singleLine = true,
-                    enabled = !d.busy)
-                OutlinedTextField(host, { host = it }, label = { Text("Address") }, singleLine = true,
-                    enabled = !d.busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false))
-                OutlinedTextField(port, { port = it }, label = { Text("Port") }, singleLine = true, enabled = !d.busy,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                Text("The IP address or host name of the printer's Moonraker, and its port (usually 7125).",
-                    style = MaterialTheme.typography.bodySmall)
-                if (d.busy) Text("Connecting to the printer…")
-                d.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { viewModel.submitAddKlipper(host, port, name) }, enabled = !d.busy) { Text("Add") }
-        },
-        dismissButton = {
-            TextButton(onClick = viewModel::cancelAddKlipper, enabled = !d.busy) { Text("Cancel") }
-        },
-    )
+    var host by remember(d.host, d.port) { mutableStateOf(d.host) }
+    var port by remember(d.host, d.port) { mutableStateOf(d.port.toString()) }
+    var name by remember(d.host, d.port) { mutableStateOf("") }
+    var key by remember(d.host, d.port) { mutableStateOf("") }
+    SwDialog(
+        title = stringResource(R.string.printers_add_klipper),
+        onClose = { if (!d.busy) viewModel.cancelAddKlipper() },
+        confirm = SwDialogButton(
+            label = stringResource(if (d.busy) R.string.printer_klipper_connecting else R.string.printer_add_button),
+            onClick = { viewModel.submitAddKlipper(host, port, name, key) },
+            kind = SwButtonKind.Main,
+            busy = d.busy,
+        ),
+        cancel = if (d.busy) null else SwAction(stringResource(R.string.common_cancel), viewModel::cancelAddKlipper),
+    ) {
+        FormField(
+            host, { host = it }, stringResource(R.string.printer_field_address), enabled = !d.busy, mono = true,
+            placeholder = stringResource(R.string.printer_klipper_address_placeholder), keyboard = KeyboardType.Uri,
+            error = if (d.addressMissing) stringResource(R.string.printer_error_address) else null,
+        )
+        FormField(
+            port, { port = it }, stringResource(R.string.printer_field_port), enabled = !d.busy, mono = true,
+            keyboard = KeyboardType.Number,
+            error = if (d.portInvalid) stringResource(R.string.printer_error_port) else null,
+        )
+        FormField(name, { name = it }, stringResource(R.string.common_name_optional), enabled = !d.busy)
+        FormField(
+            key, { key = it }, stringResource(R.string.printer_field_moonraker_key_optional), secret = true,
+            enabled = !d.busy, hint = stringResource(R.string.printer_moonraker_key_hint),
+        )
+        d.problem?.let { NoticeCard(NoticeKind.Bad, problemText(it)) }
+    }
 }
 
-/** "Trust the new certificate" on the changed-certificate notice: the Pair screen's path, offered when [canTrust]. */
-class TrustAction(
-    val canTrust: (expected: String) -> Boolean,
-    val trust: (expected: String, actual: String) -> Unit,
-    val failed: Boolean = false,
-    val reset: () -> Unit = {},
-)
-
-internal const val TRUST_FAILED = "The new certificate could not be trusted yet. Check that the server is reachable and " +
-    "try again, or pair again."
-
+/** 9.3: "Find Klipper printers", a sheet with the network to search and what answered. */
 @Composable
-internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () -> Unit, trust: TrustAction? = null) {
-    // the Pair screen's words and grouped fingerprint, for a saved pairing whose certificate changed
-    val text = mismatchText(MismatchSource.STORED)
-    // a failure belongs to the notice it was shown under: gone when it leaves or shows another certificate
-    DisposableEffect(expected, actual) { onDispose { trust?.reset?.invoke() } }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
-        Text(text.body)
-        Text(text.actualLabel)
-        Text(groupFingerprint(actual), fontFamily = FontFamily.Monospace)
-        text.whereToCheck?.let { Text(it) }
-        val trustLabel = text.trustButton?.takeIf { trust?.canTrust(expected) == true }
-        if (trustLabel == null) {
-            Button(onClick = onPairAgain) { Text(text.button) }
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = { trust?.trust?.invoke(expected, actual) }, modifier = Modifier.weight(1f)) {
-                    Text(trustLabel, textAlign = TextAlign.Center)
-                }
-                OutlinedButton(onClick = onPairAgain, modifier = Modifier.weight(1f)) {
-                    Text(text.button, textAlign = TextAlign.Center)
-                }
-            }
-            if (trust?.failed == true) Text(TRUST_FAILED, color = MaterialTheme.colorScheme.error)
+private fun FindSheetContent(f: FindSheet, viewModel: PrintersViewModel) {
+    val space = SpoolwardenTheme.space
+    var network by remember { mutableStateOf("") }
+    SwSheet(onDismiss = viewModel::closeFind) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = space.s4)
+                .padding(bottom = space.s4),
+            verticalArrangement = Arrangement.spacedBy(space.s3),
+        ) {
+            Text(
+                stringResource(R.string.printers_find_klipper), Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            FormField(
+                network, { network = it }, stringResource(R.string.printer_find_network), enabled = !f.searching,
+                mono = true, placeholder = stringResource(R.string.printer_find_placeholder),
+                hint = stringResource(R.string.printer_find_hint), keyboard = KeyboardType.Uri,
+            )
+            SwButton(
+                stringResource(if (f.searching) R.string.printer_find_searching else R.string.printer_find_search),
+                { viewModel.search(network) }, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = f.searching,
+            )
+            f.problem?.let { FindProblem(it) }
+            f.results?.let { results -> FindResults(results, f.network, viewModel) }
         }
     }
 }
 
 @Composable
-internal fun UnpairedNotice(onPairAgain: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("This phone is no longer paired with the server.", color = MaterialTheme.colorScheme.error)
-        Button(onClick = onPairAgain) { Text("Pair again") }
+private fun FindProblem(problem: Problem) {
+    if (problem is Problem.FeatureOff) {
+        val feature = if (problem.module == "klipper") stringResource(R.string.common_klipper) else problem.module
+        NoticeCard(
+            NoticeKind.Info, stringResource(R.string.common_feature_off_hint),
+            title = stringResource(R.string.common_feature_off_title, feature),
+        )
+    } else {
+        NoticeCard(NoticeKind.Bad, problemText(problem))
+    }
+}
+
+@Composable
+private fun FindResults(results: List<KlipperFound>, network: String, viewModel: PrintersViewModel) {
+    val space = SpoolwardenTheme.space
+    if (results.isEmpty()) {
+        Text(
+            if (network.isEmpty()) stringResource(R.string.printer_find_none_own) else stringResource(R.string.printer_find_none, network),
+            style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted,
+        )
+        return
+    }
+    Panel {
+        results.forEachIndexed { i, r ->
+            if (i > 0) Divider()
+            val address = "${r.host}:${r.port}"
+            val addFor = stringResource(R.string.printer_find_add_for, address)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).padding(space.s3),
+                horizontalArrangement = Arrangement.spacedBy(space.s3),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(address, Modifier.weight(1f), style = SpoolwardenTheme.type.data)
+                SwButton(
+                    stringResource(R.string.common_add), { viewModel.openAddKlipper(r.host, r.port) },
+                    Modifier.semantics { contentDescription = addFor }, kind = SwButtonKind.Plain,
+                )
+            }
+        }
     }
 }

@@ -66,6 +66,7 @@ import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.DiscoveredServer
+import com.thompsonfabco.filamentkit.net.KlipperFound
 import com.thompsonfabco.filamentkit.net.MapStatus
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
@@ -278,7 +279,18 @@ class ScreenSemanticsTest {
         val backend = FakePrinters()
         val vm = PrintersViewModel(backend)
         host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
-        auditAllFour("Spare P1S")
+        auditAllFour("Bambu Lab P1S")
+        // the set-up printers with their status words and fix lines, the group of found ones, and the Klipper button
+        for (shown in listOf("Workshop X1", "Garage Voron", "Study A1 mini", "Found on the network".uppercase(), "Add a Klipper printer")) {
+            rule.onNodeWithText(shown, substring = true).assertExists()
+        }
+        rule.onNodeWithText("The printer did not accept the Access Code. Enter the Access Code again.").assertExists()
+    }
+
+    @Test fun printersEmpty() {
+        val vm = PrintersViewModel(FakePrinters(emptyList()))
+        host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
+        auditAllFour("No printers yet")
     }
 
     @Test fun printer() {
@@ -742,20 +754,30 @@ class ScreenSemanticsTest {
         assertTrue(audit().any { "own click" in it })
     }
 
-    private class FakePrinters : PrinterBackend {
+    private class FakePrinters(private val list: List<Printer>? = null) : PrinterBackend {
         private val online = Printer(
             id = "ABC123", name = "Workshop X1", model = "X1C", serial = "ABC123", ip = "192.0.2.40", configured = true,
             state = "connected", summary = PrinterSummary("RUNNING", 42, 31, "Benchy"),
         )
         private val unset = Printer(id = "DEF456", name = "Spare P1S", model = "P1S", serial = "DEF456", ip = "192.0.2.41")
+        private val klipper = Printer(
+            id = "klipper-1", name = "Garage Voron", model = "Voron 2.4", serial = "klipper-1", configured = true,
+            state = "connected", family = "klipper", host = "voron.example", summary = PrinterSummary("IDLE", 0, 0),
+        )
+        private val wrongCode = Printer(
+            id = "GHI789", name = "Study A1 mini", model = "A1 mini", serial = "GHI789", ip = "192.0.2.42",
+            configured = true, state = "wrong_code",
+        )
         private val status = PrinterStatus(
             gcodeState = "RUNNING", job = "Benchy", percent = 42, remainingMin = 31,
             ams = listOf(AmsUnit(unit = 0, slots = listOf(AmsSlot(slot = 0, label = "A1", type = "PLA", colorHex = "2B2B2E")))),
         )
 
-        override suspend fun printers() = listOf(online, unset)
+        override suspend fun printers() = list ?: listOf(online, klipper, wrongCode, unset)
         override suspend fun addPrinter(serial: String, accessCode: String, name: String?) = online
         override suspend fun addKlipperPrinter(host: String, port: Int, name: String?) = online
+        override suspend fun scanKlipper(subnet: String?) = emptyList<KlipperFound>()
+        override suspend fun setApiKey(id: String, key: String) = Unit
         override suspend fun printer(id: String) = PrinterDetail(online, status)
         override suspend fun command(id: String, action: String) = CommandResult(ok = true)
         override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult = error("not used")
