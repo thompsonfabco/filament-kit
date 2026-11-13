@@ -1036,3 +1036,33 @@ def test_release_version_job_refuses_a_tag_off_main_unless_switched_off():
     assert "fetch-depth: 0" in version_job
     assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in version_job
     assert "${{ vars.FK_RELEASE_ANY_BRANCH }}" in version_job
+
+
+def test_get_e2e_final_read_has_a_timeout_when_a_descendant_holds_the_pipe():
+    pytest.importorskip("cryptography")
+    import importlib.util
+    import os
+    import signal
+    import time
+    sys.path.insert(0, str(ROOT / "tools"))
+    spec = importlib.util.spec_from_file_location("get_e2e_under_test", ROOT / "tools" / "test_get_e2e.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    child = "import subprocess, sys, time; c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); " \
+            "print(c.pid, flush=True); time.sleep(60)"
+    proc = subprocess.Popen([sys.executable, "-c", child], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    pid = None
+    try:
+        time.sleep(1.5)
+        proc.kill()                      # the child lives on and keeps the pipe open
+        started = time.time()
+        out = mod._final_output(proc, grace=1)
+        assert time.time() - started < 20
+        pid = int(out.split()[0]) if out.split() else None
+    finally:
+        proc.kill()
+        if pid:
+            try:
+                os.kill(pid, signal.SIGTERM)     # the one this test started, by PID
+            except OSError:
+                pass
