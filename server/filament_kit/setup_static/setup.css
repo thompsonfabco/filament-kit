@@ -75,6 +75,18 @@ img.qr { display: block; width: var(--qr); height: var(--qr); max-width: 100%; p
 :where(.page) .result:not([data-state]):not(:empty) { display: block; }
 :where(.page) .result__text { white-space: pre-line; }
 .row > .result { flex-basis: 100%; }
+/* Slicer presets, Product lines (03 8.2): the column template of the collection (02 6.1). The expand column is for narrow
+   screens, where the parents are in the expansion; a Hub without Orca Slicer presets has no Orca parent column. */
+.coll--lines { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) max-content minmax(0, 1.5fr) minmax(0, 1.5fr) max-content; }
+.coll--lines-one { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) max-content minmax(0, 1.5fr) max-content; }
+.coll--lines .coll__cell[data-col="expand"] { display: none; }
+.coll--lines .coll__sort { min-width: calc(var(--s7) - var(--s1)); }
+/* a line led by a status mark carries a Hub text (a problem names a file): it wraps inside its card */
+.card .status { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 1024px) {
+  .coll--lines, .coll--lines-one { grid-template-columns: auto minmax(0, 2fr) minmax(0, 1fr) max-content max-content; }
+  .coll--lines .coll__cell[data-col="expand"] { display: flex; }
+}
 
 /* the icon sprite is inline at the top of <body> (S0.10); taken out of the flow here too, in case components.css loads late */
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }

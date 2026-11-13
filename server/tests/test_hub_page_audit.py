@@ -277,6 +277,19 @@ def test_a_log_that_arrives_after_the_page_locked_is_not_shown(hub_change, monke
     assert run.returncode == 0, run.stdout + run.stderr
 
 
+def test_the_page_audit_passes_on_slicer_presets_switched_off(hub_app):
+    cfg = config.load()
+    cfg["modules"]["presets"] = False
+    config.save(cfg)
+    running = _serve(*hub_app)
+    try:
+        run = _run("--url", running.url + "/setup", "--views", "#presets")       # no allow-list: nothing of this section is allowed
+        assert run.returncode == 0, run.stdout + run.stderr
+        assert json.loads(run.stdout)["views"] == 4 and json.loads(run.stdout)["failing"] == 0      # two widths, light and dark
+    finally:
+        running.stop()
+
+
 def test_an_unlabelled_button_added_to_the_served_page_fails_the_audit(planted):
     run = _run("--url", planted, "--views", VIEWS, "--allow", str(ALLOW))      # with the whole allow-list on
     assert run.returncode == 1, run.stdout + run.stderr

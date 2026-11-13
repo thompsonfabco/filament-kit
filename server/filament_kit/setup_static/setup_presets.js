@@ -1,82 +1,163 @@
-// The console's Presets tab. Loaded after setup.js; everything from the server goes in through textContent, as there.
-// Add or accept only: the one thing here that replaces a preset in a slicer is Accept, and the PC sync does that.
+// The Slicer presets section (03 8). Loaded after setup.js; everything from the server goes in through textContent, as there.
+// Add or accept only: the one thing here that replaces a preset in a slicer is Accept, and Slicer Sync does that.
 "use strict";
 
-// the tab's one region; a change draws it again and waits for its read (later) before it says the result
+// the section's one region; a change draws it again and waits for its read (later) before it says the result
 let presetsBody = null;
 const PRESETS = "presets";       // the section's name in TABS; its catalogue keys start with it
+const TARGET = { bambu: "presets_target_bambu", orca: "presets_target_orca" };
+const LIST_KEYS = 6;             // keys named per update in the change list
 
+// a line of the change list: "<slicer>: <name> (in your file <file>): <up to 6 keys>, …"
+function updateLine(u) {
+  const keys = u.keys.slice(0, LIST_KEYS).join(", ") + (u.keys.length > LIST_KEYS ? ", …" : "");
+  return SW.t(u.file ? "presets_updates_line" : "presets_updates_line_nofile",
+    { target: SW.t(TARGET[u.target === "orca" ? "orca" : "bambu"]), name: u.name, file: u.file, keys });
+}
+
+// what Show what would change found: the list, and under it Accept these (a dry run changes nothing)
 function updatesList(box, r) {
-  const what = r.chosen.map((u) => h("li", { textContent:
-    `${u.target === "orca" ? "Orca Slicer" : "Bambu Studio"}: ${u.name}${u.file ? ` (in your file ${u.file})` : ""}: ${u.keys.slice(0, 6).join(", ")}${u.keys.length > 6 ? ", ..." : ""}` }));
-  say(box, [
-    h("p", { textContent: r.chosen.length ? `${r.chosen.length} update${r.chosen.length === 1 ? "" : "s"} ${r.dry_run ? "would be accepted; nothing was changed." : "accepted; the PC sync writes them at its next run, after its backup."}` : "No updates to accept." }),
-    r.chosen.length ? h("ul", {}, ...what) : null,
-    r.dry_run && r.chosen.length ? h("button", { textContent: "Accept these", on: { click: () => accept(box, r) } }) : null], r.dry_run ? "info" : true);
+  if (!r.chosen.length) { say(box, SW.t("presets_updates_nothing"), "info"); return; }
+  say(box, [h("p", {}, SW.t("presets_updates_would", { count: r.chosen.length })),
+    h("ul", {}, ...r.chosen.map((u) => h("li", {}, updateLine(u)))),
+    SW.btn(SW.t("presets_updates_accept"), { cls: "btn--primary", action: "accept", run: () => accept(box, r) })], "info");
 }
 
-// Accepts what the list showed, by name and build: the server refuses once a newer build has changed it. The change
-// reads the tab again (its region).
+// Accepts what the list showed, by name and build: the Hub refuses once a newer build has changed it (409): the list is then
+// cleared and the person is asked to show it again. The change reads the section again (its region).
 async function accept(box, shown) {
-  const r = await change(box, "presets/updates", { all: true, dry_run: false, stamp: shown.stamp, names: shown.chosen.map((u) => u.name) }, () => {});
-  if (r) updatesList(box, r);
+  await needCode(async () => {
+    working(box, SW.t("common_saving"));
+    let r;
+    try { r = await api("presets/updates", { all: true, dry_run: false, stamp: shown.stamp, names: shown.chosen.map((u) => u.name), code: theCode() }); } catch (e) {
+      if (e.locked) { SW.result(box, null); throw e; }
+      if (e.status === 409) say(box, SW.t("presets_updates_stale"), "warn"); else say(box, e.message, false);
+      return;
+    }
+    await refresh(box);
+    say(box, SW.t("presets_updates_accepted_result", { count: r.chosen.length }), true);
+  });
 }
 
-function parentButton(line, target, box) {
-  const words = target === "orca" ? "Orca parent" : "Bambu Studio parent";
-  return h("button", { class: "secondary", textContent: `Set ${words}`, on: { click: async () => {
-    working(box, "…");
-    let p;
-    try { p = await api(`presets/parents?material=${encodeURIComponent(line.material)}&target=${target}`); } catch (e) { say(box, e.message, false); return; }
-    if (!p.parents.length) { say(box, "The PC sync has not reported any parents yet. It reports them when it runs.", false); return; }
-    const now = target === "orca" ? line.orca_parent : line.bambu_parent;
-    const pick = h("select", { ariaLabel: words }, ...p.parents.map((n) => h("option", { value: n, textContent: n, selected: n === now })));
-    fill(box, h("label", {}, `${words} of ${line.vendor} ${line.product}: `, pick),
-      h("div", { class: "row" },
-        h("button", { textContent: "Save", on: { click: () => change(box, `presets/lines/${encodeURIComponent(line.line_id)}/parent`, { parent: pick.value, target },
-          () => say(box, "Saved. A build was asked for.", true)) } }),
-        h("button", { class: "secondary", textContent: "Cancel", on: { click: () => fill(box) } })));
-  } } });
+// Set parent: reads the parents Slicer Sync reported for the line's material, then asks in a dialog (03 8.2)
+async function setParent(line, target, box, opener) {
+  const name = SW.t("presets_line_title", { vendor: line.vendor, product: line.product });
+  working(box, SW.t("common_reading"));
+  let p;
+  try { p = await api(`presets/parents?material=${encodeURIComponent(line.material)}&target=${target}`); } catch (e) { say(box, e.message, false); return; }
+  SW.result(box, null);
+  const o = { title: SW.t("presets_parent_title", { line: name }), text: SW.t("presets_parent_subline", { target: SW.t(TARGET[target]), material: line.material }), opener };
+  if (!p.parents.length) { await SW.ask({ ...o, kind: "info", text: SW.t("presets_parent_empty"), body: h("p", { class: "muted" }, o.text) }); return; }
+  const now = target === "orca" ? line.orca_parent : line.bambu_parent;
+  const pick = SW.field({ type: "select", name: "parent", label: SW.t("presets_parent_label"), options: p.parents.map((n) => ({ value: n, label: n })),
+    value: p.parents.includes(now) ? now : undefined });
+  await asking(box, `presets/lines/${encodeURIComponent(line.line_id)}/parent`, { ...o, kind: "entry", fields: [pick], confirm: SW.t("presets_parent_save") },
+    (values) => ({ parent: values[0], target }), () => say(box, SW.t("presets_parent_saved"), true));
 }
 
-function lineRow(line, canOrca) {
-  const box = boxFor(`line:${line.line_id}`);       // a message here outlives the redraw a change brings
-  const parent = line.bambu_parent ? `${line.bambu_parent} (${line.parent_source})` : "none";
-  const orca = line.orca_parent ? `${line.orca_parent} (${line.orca_parent_source})` : "none";
-  return h("div", { class: "item", "data-key": line.line_id },
-    h("p", {}, h("b", { textContent: `${line.vendor} ${line.product}` }), ` · ${line.material} · ${line.presets} preset${line.presets === 1 ? "" : "s"}`),
-    h("p", { class: "muted", textContent: `Bambu Studio parent: ${parent}${canOrca ? ` · Orca parent: ${orca}` : ""}` }),
-    h("div", { class: "row" }, parentButton(line, "bambu", box), canOrca ? parentButton(line, "orca", box) : null),
+// ----- the section header (02 2.1): a line under the title and the main action at the right -----
+function drawHead(v) {
+  if (!v.on) { pageHead(); return; }
+  const b = v.build;
+  pageHead(h("p", { class: "page-head__meta" },
+    h("span", { class: "mono" }, b ? SW.t("presets_meta_build", { stamp: b.stamp, count: v.presets, orca: v.orca_presets == null ? 0 : v.orca_presets }) : SW.t("presets_build_none")),
+    v.pc ? SW.status("ok", { text: SW.t("presets_meta_sync") }) : null),
+    h("div", { class: "page-head__actions" },
+      SW.btn(SW.t("presets_build_now"), { cls: "btn--primary", action: "build", run: () => buildNow() })));
+}
+const buildNow = () => { const box = boxFor("presets"); return change(box, "presets/build", {}, () => say(box, SW.t("presets_build_asked"), true)); };
+
+// ----- Build -----
+function buildCard(v) {
+  const box = boxFor("presets"), a = v.last_attempt, b = v.build;
+  return card(SW.t("presets_build_title"),
+    h("p", {}, b ? SW.t("presets_build_summary", { stamp: b.stamp, presets: v.presets, orca: v.orca_presets == null ? 0 : v.orca_presets, count: b.problems || 0 }) : SW.t("presets_build_none")),
+    a && !a.ok ? h("p", {}, SW.status("failed", { text: SW.t("presets_build_failed", { error: a.error }) })) : null,
+    v.waiting_text ? h("p", {}, SW.status("note", { text: v.waiting_text })) : null,
+    v.pc ? h("p", {}, SW.status("ok"), " ", SW.t("presets_sync_ok"))
+      : h("p", {}, SW.status("note", { text: SW.t("status_not_configured") }), " ", SW.t("presets_sync_not_set"), " ", h("a", { href: "#devices" }, SW.t("presets_sync_link"))),
+    v.problems.length ? h("ul", {}, ...v.problems.map((p) => h("li", {}, SW.status("failed", { text: p })))) : null,
+    v.stale.length || v.orca_stale.length ? h("h3", { class: "detail__heading" }, SW.t("presets_stale_title")) : null,
+    ...v.stale.map((n) => h("p", { class: "muted" }, SW.t("presets_stale_bambu", { name: n }))),
+    ...v.orca_stale.map((n) => h("p", { class: "muted" }, SW.t("presets_stale_orca", { name: n }))),
+    h("div", { class: "row" },
+      SW.btn(SW.t("presets_restore_deleted"), { cls: "btn--ghost", action: "restore-deleted", run: () => change(box, "presets/restore_deleted", {}, () => say(box, SW.t("presets_restore_asked"), true)) })),
     box);
 }
 
+// ----- Updates (address #presets/updates) -----
+function updatesCard(v) {
+  const up = v.updates, box = boxFor("presetUpdates");
+  const el = card(SW.t("presets_updates_title"),
+    h("p", {}, up.count ? SW.t("presets_updates_summary", { count: up.count, lines: up.lines,
+      accepted: up.accepted ? SW.t("presets_updates_accepted", { count: up.accepted }) : "" }) : SW.t("presets_updates_none")),
+    up.yours ? h("p", { class: "muted" }, SW.t("presets_updates_yours", { count: up.yours })) : null,
+    up.count ? h("div", { class: "row" }, SW.btn(SW.t("presets_updates_show"), { action: "show-updates",
+      run: () => change(box, "presets/updates", { all: true, dry_run: true }, (r) => updatesList(box, r)) })) : null,
+    box);
+  el.id = "presets-updates";
+  return el;
+}
+
+// ----- Product lines: a collection (02 6.1); the parents of a narrow screen are in the row's expansion -----
+const sortHead = (col, label) => h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "aria-sort": col === "title" ? "ascending" : undefined },
+  h("button", { class: "coll__sort", type: "button", "data-sort": col }, label, SW.icon("chevron", "icon--s")));
+const plainHead = (col, label, prio) => h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio }, label);
+const cell = (col, prio, key, ...kids) => h("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": prio },
+  key ? h("span", { class: "coll__key", "aria-hidden": "true" }, key) : null, ...kids);
+
+function lineItem(line, canOrca, cols) {
+  const box = boxFor(`line:${line.line_id}`), id = "preset-line-" + line.line_id;       // a message here outlives the redraw a change brings
+  const name = SW.t("presets_line_title", { vendor: line.vendor, product: line.product });
+  const parentText = (p, source) => (p ? SW.t("presets_parent_value", { name: p, source }) : SW.t("common_none"));
+  const bambu = parentText(line.bambu_parent, line.parent_source), orca = parentText(line.orca_parent, line.orca_parent_source);
+  const expand = SW.iconBtn("chevron", SW.t("detail_for", { name }), { cls: "coll__expand" });
+  expand.setAttribute("aria-expanded", "false");
+  expand.setAttribute("aria-controls", id);
+  const more = SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), icon: "chevron", action: "set-parent" });
+  const targets = [["bambu", true], ["orca", canOrca]].filter((t) => t[1]).map(([target]) => ({ label: SW.t(TARGET[target]), run: () => setParent(line, target, box, more) }));
+  SW.menu(more, targets, { label: SW.t("presets_set_parent") });
+  const facts = h("dl", { class: "kv" },
+    h("div", { class: "kv__row" }, h("dt", { class: "kv__key" }, SW.t("common_field_bambu_parent")), h("dd", { class: "kv__value" }, bambu)),
+    canOrca ? h("div", { class: "kv__row" }, h("dt", { class: "kv__key" }, SW.t("presets_col_orca_parent")), h("dd", { class: "kv__value" }, orca)) : null);
+  return h("div", { class: "coll__item", role: "rowgroup", "data-key": line.line_id, "data-id": line.line_id },
+    h("div", { class: "coll__row", role: "row" },
+      cell("expand", undefined, null, expand),
+      cell("title", 1, null, h("span", { class: "coll__title" }, name)),
+      cell("material", 2, SW.t("common_field_material"), line.material),
+      cell("presets", 1, SW.t("presets_col_presets"), String(line.presets)),
+      cell("bambu_parent", 3, SW.t("common_field_bambu_parent"), bambu),
+      canOrca ? cell("orca_parent", 3, SW.t("presets_col_orca_parent"), orca) : null,
+      cell("actions", 1, null, h("div", { class: "actions" }, more))),
+    h("div", { class: "coll__row coll__row--result", role: "row", hidden: !box.dataset.state }, h("div", { class: "coll__cell", role: "cell", "aria-colspan": cols }, box)),
+    h("div", { class: "coll__row coll__row--detail", role: "row", hidden: true }, h("div", { class: "coll__cell", role: "cell", "aria-colspan": cols },
+      h("section", { class: "detail", id, hidden: true, "aria-label": name }, facts))));
+}
+
+function linesCard(v) {
+  const canOrca = v.orca_presets != null, cols = canOrca ? 7 : 6;
+  if (v.lines_error) return card(SW.t("presets_lines_title"), SW.errorState({ title: SW.t(PRESETS + "_lines_error", { reason: "" }).trim(), text: hubText(v.lines_error), level: 3, onTry: loadPresets }));
+  if (!v.lines.length) return card(SW.t("presets_lines_title"), h("p", { class: "muted" }, SW.t("presets_lines_none")));
+  const table = h("div", { class: "coll coll--lines" + (canOrca ? "" : " coll--lines-one"), role: "table", "aria-label": SW.t("presets_lines_title") },
+    h("div", { class: "coll__head", role: "rowgroup" }, h("div", { class: "coll__row", role: "row" },
+      h("div", { class: "coll__cell", role: "columnheader", "data-col": "expand" }, h("span", { class: "sr" }, SW.t("common_details"))),
+      sortHead("title", SW.t("common_field_line")),
+      plainHead("material", SW.t("common_field_material"), 2),
+      plainHead("presets", SW.t("presets_col_presets"), 1),
+      plainHead("bambu_parent", SW.t("common_field_bambu_parent"), 3),
+      canOrca ? plainHead("orca_parent", SW.t("presets_col_orca_parent"), 3) : null,
+      h("div", { class: "coll__cell", role: "columnheader", "data-col": "actions" }, h("span", { class: "sr" }, SW.t("common_actions"))))),
+    ...v.lines.map((l) => lineItem(l, canOrca, cols)));
+  SW.collection(table, { name: "presets-lines", sort: "title:ascending" });
+  return card(SW.t("presets_lines_title"), table);
+}
+
 function drawPresets(v) {
+  drawHead(v);
   if (!v.on) { fill(presetsBody, switchedOff(PRESETS)); return; }
-  const box = boxFor("presets"), upBox = boxFor("presetUpdates");
-  const a = v.last_attempt, b = v.build;
-  const up = v.updates;
-  fill(presetsBody,
-    card("Build",
-      h("p", { textContent: b ? `Last build ${b.stamp}: ${v.presets} presets${v.orca_presets != null ? `, ${v.orca_presets} for Orca Slicer` : ""}, ${b.problems || 0} problems.` : "No build yet." }),
-      a && !a.ok ? h("p", { class: "muted", textContent: a.error }) : null,
-      v.waiting_text ? h("p", { class: "muted", textContent: v.waiting_text }) : null,
-      h("p", { class: "muted", textContent: v.pc ? "The PC sync has reported in." : "PC sync: not set up. Pair it on the Devices tab." }),
-      v.problems.length ? h("ul", {}, ...v.problems.map((p) => h("li", { textContent: p }))) : null,
-      ...v.stale.map((n) => h("p", { class: "muted", textContent: `Delete in Bambu Studio: ${n}` })),
-      ...v.orca_stale.map((n) => h("p", { class: "muted", textContent: `Delete in Orca Slicer: ${n}` })),
-      h("div", { class: "row" },
-        h("button", { textContent: "Build now", on: { click: () => change(box, "presets/build", {}, () => say(box, "A build was asked for.", true)) } }),
-        h("button", { class: "secondary", textContent: "Restore deleted presets", on: { click: () => change(box, "presets/restore_deleted", {}, () => say(box, "The next build brings back the presets deleted in Bambu Studio. A build was asked for.", true)) } })),
-      box),
-    card("Updates",
-      h("p", { textContent: up.count ? `${up.count} update${up.count === 1 ? "" : "s"} available on ${up.lines} line${up.lines === 1 ? "" : "s"}${up.accepted ? `, ${up.accepted} accepted (the PC sync writes them next)` : ""}. Presets already in your slicers are never replaced unless you accept here.` : "No updates. Presets already in your slicers are never replaced on their own." }),
-      up.yours ? h("p", { class: "muted", textContent: `${up.yours} generated preset${up.yours === 1 ? "" : "s"} ${up.yours === 1 ? "differs" : "differ"} from your own preset of the same name in Bambu Studio. Yours stay: rename or delete yours to get ours.` }) : null,
-      up.count ? h("button", { class: "secondary", textContent: "Show what would be accepted", on: { click: () => change(upBox, "presets/updates", { all: true, dry_run: true }, (r) => updatesList(upBox, r)) } }) : null,
-      upBox),
-    card("Product lines",
-      v.lines_error ? SW.errorState({ title: SW.t(PRESETS + "_lines_error", { reason: "" }).trim(), text: hubText(v.lines_error), level: 3, onTry: loadPresets }) : null,
-      v.lines.length ? null : h("p", { class: "muted", textContent: "No lines yet. They are made from the Spoolman filaments at the next build or intake." }),
-      ...v.lines.map((l) => lineRow(l, v.orca_presets != null))));
+  fill(presetsBody, buildCard(v), updatesCard(v), linesCard(v));
+  if (!presetsBody._seen && location.hash === "#presets/updates") document.getElementById("presets-updates").scrollIntoView();
+  presetsBody._seen = true;
 }
 
 function loadPresets() {

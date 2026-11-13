@@ -7,7 +7,6 @@ server/filament_kit/setup_static/setup_flash.js | input | 2 | built inline today
 server/filament_kit/setup_static/setup_flash.js | select | 2 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_intake.js | input | 1 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_intake.js | textarea | 1 | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_presets.js | select | 1 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_printers.js | input | 5 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_printers.js | select | 5 | built inline today; moves into the field component when the view is rebuilt
 server/filament_kit/setup_static/setup_tabs.js | input | 8 | built inline today; moves into the field component when the view is rebuilt

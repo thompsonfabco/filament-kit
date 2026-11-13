@@ -988,6 +988,8 @@
     <string name="presets_error">Could not read the Slicer presets. %1$s</string>
     <!-- 1=reason -->
     <string name="presets_lines_error">Could not read the product lines. %1$s</string>
+    <!-- 1=vendor -->
+    <string name="presets_line_title">%1$s filament-kit</string>
     <string name="presets_lines_none">No product lines yet. They are made from the filaments in Spoolman at the next build or when spools are added.</string>
     <string name="presets_lines_title">Product lines</string>
     <!-- 1=stamp 2=count 3=orca -->
@@ -1013,6 +1015,8 @@
     <string name="presets_restore_deleted">Bring back deleted presets</string>
     <string name="presets_set_parent">Set parent</string>
     <!-- 1=name -->
+    <string name="presets_set_parent_for">Set parent for %1$s</string>
+    <!-- 1=name -->
     <string name="presets_stale_bambu">Delete by hand in Bambu Studio: %1$s</string>
     <!-- 1=name -->
     <string name="presets_stale_orca">Delete by hand in Orca Slicer: %1$s</string>
@@ -1032,10 +1036,13 @@
     </plurals>
     <!-- 1=target 2=name 3=file 4=keys -->
     <string name="presets_updates_line">%1$s: %2$s (in your file %3$s): %4$s</string>
+    <!-- 1=target 2=name 3=keys -->
+    <string name="presets_updates_line_nofile">%1$s: %2$s: %3$s</string>
     <string name="presets_updates_none">No updates. Presets already in your slicers are never replaced on their own.</string>
     <string name="presets_updates_nothing">No updates to accept.</string>
     <string name="presets_updates_show">Show what would change</string>
     <string name="presets_updates_stale">The updates changed since this list was shown. Show them again.</string>
+    <string name="presets_updates_title">Updates</string>
     <!-- 1=count 2=lines 3=accepted -->
     <plurals name="presets_updates_summary">
         <item quantity="one">%1$d update on %2$s line%3$s. Presets already in your slicers are never replaced unless you accept here.</item>

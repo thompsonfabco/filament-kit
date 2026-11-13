@@ -214,6 +214,15 @@ const slot = () => h("div", { class: "result result--block", role: "status" });
 const boxes = {};
 const boxFor = (key) => boxes[key] || (boxes[key] = slot());
 const sections = h("div");
+// A section's own parts of the page header (02 2.1): `meta`, a line under the title, and `actions`, its buttons at the right.
+// Drawn again with the section's region; cleared when the section is drawn again or another opens.
+let headParts = [];
+function pageHead(meta, actions) {
+  for (const el of headParts) el.remove();
+  headParts = [meta, actions].filter(Boolean);
+  if (meta) pageTitle.after(meta);
+  if (actions) page.firstElementChild.append(actions);
+}
 
 // ----- regions (02 1.4 "Redraw only what changed"; 03 2.2, 2.7): each card of a section is drawn by its own builder.
 // A change reads the state again and draws only its own region (and the one its builder names in `also`). What is
@@ -314,6 +323,7 @@ function render() {
   if (now === shown) { for (const r of sections.children) if (r._key) keep.set(r._key, capture(r)); }
   else for (const b of Object.values(boxes)) if (b.dataset.state) SW.result(b, null);
   shown = now;
+  pageHead();
   page.dataset.section = now;
   pageTitle.textContent = SW.t(TABS[now][0]);
   const regions = TABS[now][2]().filter(Boolean).map((m, i) => draw(m, m.name || "#" + i)).filter(Boolean);
