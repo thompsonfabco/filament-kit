@@ -84,6 +84,13 @@ def test_its_refused_token_says_a_restart_fixes_it(env, caplog):  # noqa: F811
 
 
 def test_a_wrong_host_on_intake_says_how_to_add_a_name(app):
-    r = client(app, base="https://rebind.example.com:8710").get("/intake")
+    c = client(app, base="https://rebind.example.com:8710")
+    r = c.get("/intake/api/vendors")                        # the API keeps its JSON answer
     assert r.status_code == 403 and "Names for this page" in r.json()["error"]
     assert r.json()["error"].startswith("Open the setup page") and "kit.local" not in r.json()["error"]   # F2
+    page = c.get("/intake")                                 # the page: the refusal page, "Not at this address" (04 11.1)
+    assert page.status_code == 403 and page.headers["content-type"].startswith("text/html")
+    assert "<h1>Not at this address</h1>" in page.text and "Names for this page" in page.text
+    assert "kit.local" not in page.text and "data-base" not in page.text      # no Hub data on the refusal page
+    assert c.get("/intake/shared/tokens.css").status_code == 200 and c.get("/intake/app.css").status_code == 200
+    assert c.get("/intake/app.js").status_code == 403       # only the refusal page's own files answer a refused name

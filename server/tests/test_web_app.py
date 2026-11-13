@@ -264,7 +264,9 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
         assert "/intake/shared/strings.js" not in r.text and "/intake/shared/components.js" not in r.text   # S3.3 and later
         for name in ("theme-init.js", "tokens.css", "components.css"):
             assert c.get(f"/intake/shared/{name}").status_code == 200
-    assert _client(app, AWAY).get("/intake/shared/tokens.css").status_code == 403   # no lifespan: the app ran once above
+    away = _client(app, AWAY)                                   # no lifespan: the app ran once above
+    assert away.get("/intake/shared/tokens.css").status_code == 200   # the refusal page's files (S3.16)
+    assert away.get("/intake/shared/strings.js").status_code == 403
 
 
 def test_page_needs_no_sign_in_and_has_csp(app):

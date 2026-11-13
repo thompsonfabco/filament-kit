@@ -120,3 +120,14 @@ img.thumb.big { max-width: 100%; cursor: zoom-out; }
 label.filebtn.wide { display: flex; }
 label.filebtn.wide > button { flex: 1 1 auto; }
 .row.spaced { margin-top: var(--s2); }
+
+/* the refusal and sign-in pages (04 11): one centred column, no navigation */
+main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4))); max-width: none; margin: 0 auto;
+                  padding: var(--s5); }
+.standalone__brand { display: flex; gap: var(--s2); align-items: center; margin: var(--s5) 0;
+                     font-size: var(--fs-l); font-weight: var(--fw-title); }
+.standalone h1 { font-size: var(--fs-xl); }
+.standalone p + p { margin-top: var(--s3); }
+.standalone > p:last-child { margin-top: var(--s5); }
+.standalone__form { display: grid; gap: var(--s4); margin-top: var(--s5); }
+.standalone__wide { width: 100%; }

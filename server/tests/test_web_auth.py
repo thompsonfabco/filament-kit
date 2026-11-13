@@ -415,8 +415,16 @@ def test_login_page_headers_and_escaping(store, passfile):
     assert "<script>x" not in page.text and "&lt;script&gt;" in page.text
     h = page.headers
     assert h["content-security-policy"] == (
-        "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self' " + " ".join(
-            sorted(auth.CALLBACKS)))
+        "default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
+        "form-action 'self' " + " ".join(sorted(auth.CALLBACKS)))
+    # 04 11.2: the web app's stylesheet and the Show button's script, no style inside the page (AUT-2, N24)
+    assert "<style" not in page.text and " style=" not in page.text
+    for f in ("intake/shared/theme-init.js", "intake/shared/tokens.css", "intake/shared/components.css",
+              "intake/app.css", "intake/signin.js"):
+        assert f"'{f}'" in page.text, f
+    assert "<h1>Allow &lt;script&gt;x&lt;/script&gt;?</h1>" in page.text and "<title>filament-kit sign-in</title>" in page.text
+    assert "class=field__label for=pass>Passphrase</label>" in page.text and "autofocus" in page.text
+    assert "aria-controls=pass" in page.text and ">Allow</button>" in page.text
     assert h["x-frame-options"] == "DENY" and h["cache-control"] == "no-store"
     assert h["referrer-policy"] == "same-origin" and h["x-content-type-options"] == "nosniff"
 
@@ -440,6 +448,10 @@ def test_login_wrong_passphrase_then_lockout(store, passfile, clock):
         cid = _register(c).json()["client_id"]
         r, rid = _sign_in(c, cid, _pkce()[1], passphrase="nope")
         assert r.status_code == 401
+        # 04 11.2: the form again, the error under the field, the field empty and focused
+        assert "<p class=field__error id=pass-error>Wrong passphrase.</p>" in r.text
+        assert "aria-describedby=pass-error aria-invalid=true" in r.text and "autofocus" in r.text
+        assert "nope" not in r.text and "name=passphrase" in r.text
         for _ in range(4):
             r = c.post("/login", data={"req": rid, "passphrase": "nope"}, headers={"Origin": ORIGIN})
             assert r.status_code == 401
@@ -469,6 +481,7 @@ def test_login_without_passphrase_file(store, tmp_path):
         cid = _register(c).json()["client_id"]
         r, _ = _sign_in(c, cid, _pkce()[1])
         assert r.status_code == 503
+        assert "Settings &gt; Web passphrase, or run `sudo filament-kit web passphrase` on the Hub." in r.text
     assert lock.fails == []  # a server problem is not a wrong guess
 
 
@@ -489,6 +502,25 @@ def test_lan_only_blocks_outsiders(store, passfile, path):
         r = c.get(path)
     assert r.status_code == 403 and "home network" in r.text
     assert r.headers["content-security-policy"].startswith("default-src 'none'")
+    assert "<style" not in r.text and " style=" not in r.text
+
+
+def test_outsiders_get_the_refusal_page_and_its_files(store, passfile):
+    """04 11.1: /intake outside the home network is the refusal page; the files it links answer anyone, the rest does
+    not."""
+    with TestClient(_app(store, passfile), client=AWAY) as c:
+        page = c.get("/intake")
+        assert page.status_code == 403 and "<h1>Only on the home network</h1>" in page.text
+        assert "filament-kit only works on the home network. Connect this phone" in page.text
+        assert "<title>filament-kit</title>" in page.text and ">Try again</a>" in page.text
+        assert "intake/shared/tokens.css" in page.text and "<form" not in page.text
+        for path in ("/intake/shared/theme-init.js", "/intake/shared/tokens.css", "/intake/shared/components.css",
+                     "/intake/app.css"):
+            assert c.get(path).status_code != 403, path
+        for path in ("/intake/app.js", "/intake/signin.js", "/intake/shared/strings.js"):
+            assert c.get(path).status_code == 403, path
+    with TestClient(_app(store, passfile), client=("2001:db8::7", 1)) as c:
+        assert "IPv6" in c.get("/intake").text                     # the Hub's IPv6 hint as a second paragraph
 
 
 def test_lan_only_lets_lan_and_loopback_through(store, passfile):
