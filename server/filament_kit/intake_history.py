@@ -8,7 +8,7 @@ station, the CLI). A save that followed a label read names its `read_id`; the re
     <state>/intake-history/<id>/photo<n>.jpg  the photos actually sent to the AI (n from 1)
     <state>/intake-history/pending/<read_id>/ a read not saved yet: read.json + photo<n>.jpg
 
-record.json: {id, at, source, device, state, read_id, read: {items, hint} | null, weight, tag,
+record.json: {id, at, source, device, state, read_id, read: {items, hint, engine} | null, weight, tag,
               saved: [{item, values, spool_ids, filament_id}], revisions: [...], proposals: {...}}
 
 Revisions change Spoolman (`apply`) without ever editing a filament other spools share: identity fields (vendor, name,
@@ -33,6 +33,7 @@ import time
 from pathlib import Path
 
 from . import config
+from . import read_confidence
 from .pairing import _write_atomic, make_state_dir
 
 log = logging.getLogger(__name__)
@@ -166,9 +167,10 @@ def stash_read(read_id: str, images: list[bytes], result: dict, hint: str = "", 
             make_state_dir(d)
             for i, data in enumerate(images, 1):
                 _write_atomic(d / f"photo{i}.jpg", data, 0o600, state_owned=True)
-            body = {"items": [{k: it.get(k) for k in (*FIELDS, "count", "sealed", "match")}
+            body = {"items": [{k: it.get(k) for k in (*FIELDS, "count", "sealed", "match", "confidence",
+                                                      "confidence_levels")}
                               for it in (result.get("items") or []) if isinstance(it, dict)],
-                    "hint": hint or "", "tag": tag}
+                    "hint": hint or "", "tag": tag, "engine": result.get("engine")}
             _write_atomic(d / "read.json", json.dumps(body).encode("utf-8"), 0o600, state_owned=True)
     except Exception:  # noqa: BLE001 - history is a convenience; the read itself succeeded
         log.exception("intake history: cannot keep read %s", read_id)
@@ -200,7 +202,8 @@ def record_save(saved: list[dict], *, source: str, device: str | None = None, re
                 shutil.rmtree(p, ignore_errors=True)
             rec = {"id": rid, "at": _now(), "source": source if source in SOURCES else "phone",
                    "device": (device or "")[:80], "state": "detected", "read_id": read_id if read else None,
-                   "read": ({"items": read.get("items") or [], "hint": read.get("hint") or ""} if read else None),
+                   "read": ({"items": read.get("items") or [], "hint": read.get("hint") or "",
+                             "engine": read.get("engine")} if read else None),
                    "weight": weight if isinstance(weight, (int, float)) and not isinstance(weight, bool) else None,
                    "tag": tag or (read or {}).get("tag") or None,
                    "saved": [{"item": i, "values": {k: s["values"].get(k) for k in FIELDS},
@@ -230,7 +233,16 @@ def _summary(rec: dict) -> dict:
                            "name": v.get("name"), "material": v.get("material"), "color_hex": v.get("color_hex")})
     return {"id": rec["id"], "at": rec.get("at"), "source": rec.get("source"), "state": rec.get("state"),
             "photos": len(_photos(d)), "undoable": any(not r.get("undone") for r in rec.get("revisions") or []),
-            "spools": spools}
+            "spools": spools, **_read_facts(rec)}
+
+
+def _read_facts(rec: dict) -> dict:
+    """`confidence` (read_confidence.summary of the stored read; None for a record typed by hand or kept before
+    confidence was stored) and `engine` ({reader, model, tier} or None)."""
+    read = rec.get("read") if isinstance(rec.get("read"), dict) else {}
+    items = [it for it in read.get("items") or [] if isinstance(it, dict)]
+    eng = read.get("engine") if isinstance(read.get("engine"), dict) else None
+    return {"confidence": read_confidence.summary([it.get("confidence_levels") for it in items]), "engine": eng}
 
 
 def _size() -> int:
@@ -450,6 +462,7 @@ def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = Tru
         _save(rec)
     return {"proposal": pid, "item": it["item"], "before": before, "after": after, "changes": changes,
             "no_photo": not images, "reader": out.get("reader"), "confidence": out.get("confidence"),
+            "engine": out.get("engine"),
             "note": out.get("note")}
 
 
