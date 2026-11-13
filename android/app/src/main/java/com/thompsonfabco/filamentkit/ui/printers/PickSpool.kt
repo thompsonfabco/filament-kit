@@ -99,10 +99,13 @@ data class PickUiState(
     val unlinkedTag: String? = null,
     /** The load went through: [confirmed] is whether the printer already shows it. */
     val loaded: Boolean? = null,
-    /** A tag tapped while the load was written: it opens when the load ends (the last tap wins). */
+    /**
+     * A tag tapped while the load was written (the last tap wins). After a load that went through it opens at once; after
+     * a refused or lost one it waits until the preview is left, so the reason stays readable.
+     */
     val heldTag: String? = null,
-    /** Counts the taps held, so the screen says "Tag read. It opens when loading has finished." for each. */
-    val tagWaits: Int = 0,
+    /** A tap was held and the screen has not said so yet: "Tag read. It opens when loading has finished." once per tap. */
+    val tagWaitPending: Boolean = false,
 )
 
 /**
@@ -173,11 +176,12 @@ class PickSpoolViewModel(
      */
     fun onTag(uid: String) {
         if (_state.value.preview?.writing == true) {
-            _state.update { it.copy(heldTag = uid, tagWaits = it.tagWaits + 1) }
+            _state.update { it.copy(heldTag = uid, tagWaitPending = true) }
             return
         }
         tagLookup?.cancel()
-        _state.update { it.copy(unlinkedTag = null, problem = null) }
+        // a newer tap replaces one still held after a refused or lost load
+        _state.update { it.copy(unlinkedTag = null, problem = null, heldTag = null) }
         tagLookup = viewModelScope.launch {
             try {
                 val found = backend.tag(uid)
@@ -226,11 +230,23 @@ class PickSpoolViewModel(
         }
     }
 
-    /** Back from the preview to the results; refused while the real load is being written. */
+    /** Back from the preview to the results; refused while the real load is being written. A tag held meanwhile opens now. */
     fun back() {
         if (_state.value.preview?.writing == true) return
         dryRun?.cancel()
-        _state.update { it.copy(preview = null) }
+        val held = _state.value.heldTag
+        _state.update { it.copy(preview = null, heldTag = null) }
+        if (held != null) onTag(held)
+    }
+
+    /** The screen says it showed the "Tag read" wait text. */
+    fun tagWaitShown() = _state.update { it.copy(tagWaitPending = false) }
+
+    /** The held tag, taken for a screen that leaves the preview by leaving itself ("Done", "Open the printer"). */
+    fun takeHeldTag(): String? {
+        val held = _state.value.heldTag
+        _state.update { it.copy(heldTag = null) }
+        return held
     }
 
     val writing: Boolean get() = _state.value.preview?.writing == true
@@ -255,10 +271,7 @@ class PickSpoolViewModel(
                 _state.update {
                     it.copy(preview = it.preview?.copy(writing = false, problem = problem.first, hubNotice = problem.second, dropped = dropped))
                 }
-                // the load is over and not lost: the tag that waited is read as on any other tap (after a lost answer it is let go)
-                val held = _state.value.heldTag
-                _state.update { it.copy(heldTag = null) }
-                if (held != null && !dropped) onTag(held)
+                // a tag that waited stays held: it opens when the preview is left, so this reason stays readable
             } finally {
                 gate.set(false)
             }
@@ -321,7 +334,13 @@ fun PickSpoolScreen(
     // the load being written ignores Back and says why (05-android-app 2.5 rule 2)
     val scope = rememberCoroutineScope()
     BackHandler(enabled = s.preview?.writing == true) { scope.launch { toast?.show(wait) } }
-    LaunchedEffect(s.tagWaits) { if (s.tagWaits > 0) toast?.show(tagWait) }
+    LaunchedEffect(s.tagWaitPending) {
+        if (s.tagWaitPending) {
+            viewModel.tagWaitShown()
+            // not in this effect: clearing the flag restarts it, which would cut the toast short
+            scope.launch { toast?.show(tagWait) }
+        }
+    }
     LaunchedEffect(s.loaded) {
         s.loaded?.let {
             val held = s.heldTag
@@ -377,7 +396,14 @@ fun PickSpoolScreen(
             }
         }
     }
-    s.preview?.let { PreviewDialog(it, s.unlinkedTag != null, printerName.orEmpty(), slot, viewModel, onPairAgain, onLeave) }
+    // leaving the preview by leaving the screen hands the held tag on to where the screen went back to
+    val leave = {
+        val held = viewModel.takeHeldTag()
+        onLeave()
+        held?.let(onOpenTag)
+        Unit
+    }
+    s.preview?.let { PreviewDialog(it, s.unlinkedTag != null, printerName.orEmpty(), slot, viewModel, onPairAgain, leave) }
 }
 
 @Composable

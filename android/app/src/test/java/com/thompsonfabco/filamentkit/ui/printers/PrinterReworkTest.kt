@@ -175,11 +175,10 @@ class PickSpoolViewModelTest {
         assertEquals(1, v.state.value.preview!!.spool.id)
         assertEquals("no lookup while the load is written", listOf(1 to true, 1 to false), fake.loads)
         assertEquals("4:77:90:f", v.state.value.heldTag)
-        assertEquals("each tap says it is waiting", 2, v.state.value.tagWaits)
         assertNull("no message appears over the load being written", v.state.value.unlinkedTag)
     }
 
-    @Test fun aHeldTagIsReadWhenTheLoadIsRefused() = runTest(dispatcher) {
+    @Test fun aHeldTagWaitsInARefusedPreviewAndOpensWhenItIsLeft() = runTest(dispatcher) {
         fake.tags["4:77:90:e"] = spoolJson(7)
         val open = CompletableDeferred<Unit>()
         fake.writeGate = open
@@ -189,11 +188,15 @@ class PickSpoolViewModelTest {
         v.confirm(); runCurrent()
         v.onTag("4:77:90:e"); runCurrent()
         open.complete(Unit); runCurrent()
+        assertEquals("the refusal stays on screen", 1, v.state.value.preview!!.spool.id)
+        assertNotNull(v.state.value.preview!!.problem)
+        assertEquals("the tag is kept", "4:77:90:e", v.state.value.heldTag)
+        v.back(); runCurrent()
         assertNull("used once", v.state.value.heldTag)
-        assertEquals("the tag's spool is picked as on any other tap", 7, v.state.value.preview!!.spool.id)
+        assertEquals("the tag's spool opens on leaving", 7, v.state.value.preview!!.spool.id)
     }
 
-    @Test fun aHeldTagIsLetGoWhenTheAnswerToTheLoadWasLost() = runTest(dispatcher) {
+    @Test fun aHeldTagWaitsAfterALostAnswerAndIsTakenByDoneOrOpenThePrinter() = runTest(dispatcher) {
         fake.tags["4:77:90:e"] = spoolJson(7)
         val open = CompletableDeferred<Unit>()
         fake.writeGate = open
@@ -203,9 +206,57 @@ class PickSpoolViewModelTest {
         v.confirm(); runCurrent()
         v.onTag("4:77:90:e"); runCurrent()
         open.complete(Unit); runCurrent()
-        assertNull(v.state.value.heldTag)
         assertEquals("the unknown load stays on screen", 1, v.state.value.preview!!.spool.id)
         assertTrue(v.state.value.preview!!.dropped)
+        assertEquals("the tag is kept", "4:77:90:e", v.state.value.heldTag)
+        assertEquals("4:77:90:e", v.takeHeldTag())
+        assertNull("used once", v.state.value.heldTag)
+        assertNull(v.takeHeldTag())
+    }
+
+    @Test fun aHeldTagWaitingAfterALostAnswerOpensOnBack() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        v.back(); runCurrent()
+        assertEquals(7, v.state.value.preview!!.spool.id)
+    }
+
+    @Test fun aNewerTapReplacesATagStillHeldAfterARefusal() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        fake.tags["4:77:90:f"] = spoolJson(8)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(409, "printer_busy", "The printer is printing.")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        v.onTag("4:77:90:f"); runCurrent()
+        assertNull(v.state.value.heldTag)
+        assertEquals(8, v.state.value.preview!!.spool.id)
+        v.back(); runCurrent()
+        assertNull("the older tag does not come back", v.state.value.preview)
+    }
+
+    @Test fun theWaitSaidAboutAHeldTagIsOneShot() = runTest(dispatcher) {
+        fake.writeGate = CompletableDeferred()
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        assertTrue(v.state.value.tagWaitPending)
+        v.tagWaitShown()
+        assertFalse("said once, not again when the screen comes up anew", v.state.value.tagWaitPending)
+        v.onTag("4:77:90:f"); runCurrent()
+        assertTrue("each new tap says it is waiting", v.state.value.tagWaitPending)
     }
 
     @Test fun aSlowTagLookupDoesNotReplaceALaterRowTap() = runTest(dispatcher) {
@@ -540,6 +591,25 @@ class TagEventsHandOnTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
         runCurrent()
         assertEquals(listOf("04:dd"), got)
+    }
+
+    @Test fun aHandedOnTapIsKeptUntilSomethingListens() = runTest {
+        val got = mutableListOf<String>()
+        TagEvents.emitWhenListening("04:ff", backgroundScope, waitMs = 500)
+        advanceTimeBy(2000); runCurrent()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        assertEquals(listOf("04:ff"), got)
+    }
+
+    @Test fun aNewerTapIsNotOverriddenByAnOlderHandedOnTap() = runTest {
+        val got = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        TagEvents.emitWhenListening("04:old", backgroundScope, waitMs = 500)
+        TagEvents.emit("04:new")
+        advanceTimeBy(2000); runCurrent()
+        assertEquals(listOf("04:new"), got)
     }
 
     @Test fun aHandedOnTapComesAnywayWhenNobodyListens() = runTest {
