@@ -136,6 +136,30 @@ def test_capture_strips_secrets(moonraker, tmp_path):
     assert json.loads((tmp_path / "status.json").read_text())["print_stats"]["state"] == "standby"
 
 
+def _capture_with_private_values(moonraker, tmp_path, *extra):
+    cap = _capture_tool()
+    moonraker.hostname = "voron-lab"
+    moonraker.webcams = [{"name": "cam", "stream_url": "http://cam-lab.example.net:8080/webcam/?action=stream",
+                          "snapshot_url": "http://198.51.100.20/snap", "icon": "/webcam/icon"}]
+    moonraker.server_config = {"spoolman": {"server": "http://198.51.100.7:7912"},
+                               "files": {"path": "/home/tester/printer_data/gcodes", "alt": r"C:\Users\Tester\gc"}}
+    assert cap.main(["--host", moonraker.host, "--port", str(moonraker.port), "--out", str(tmp_path), *extra]) == 0
+    return "".join(p.read_text() for p in tmp_path.iterdir())
+
+
+def test_capture_scrubs_host_name_addresses_urls_and_user_paths(moonraker, tmp_path):
+    blob = _capture_with_private_values(moonraker, tmp_path)
+    for private in ("voron-lab", "cam-lab", "198.51.100", "tester", "Tester", moonraker.host):
+        assert private not in blob
+    assert "printer.example" in blob and "/webcam/?action=stream" in blob and "/home/user/printer_data" in blob
+    assert json.loads((tmp_path / "info.json").read_text())["hostname"] == "printer.example"
+
+
+def test_capture_keep_addresses_leaves_them(moonraker, tmp_path):
+    blob = _capture_with_private_values(moonraker, tmp_path, "--keep-addresses")
+    assert "voron-lab" in blob and "cam-lab" in blob and "/home/tester/" in blob
+
+
 # ---------- redirects are refused: the API key must never follow one, to the same host or another ----------
 
 class _Redirects:
