@@ -54,6 +54,13 @@ fi
 if [ "${1:-}" = reader ] && { [ "${2:-}" = token ] || [ "${2:-}" = revoke ] || [ "${2:-}" = setup ]; }; then
     exec "$BIN" "$@"
 fi
+# `local-intake install` / `remove` install or remove the local reader's service, `token` writes its root-owned token
+# file and `plan` saves what an install needs in the root-owned store for the setup page; `status` and `test` only
+# read and run as the user below.
+if [ "${1:-}" = local-intake ] && { [ "${2:-}" = install ] || [ "${2:-}" = remove ] || [ "${2:-}" = token ] \
+        || [ "${2:-}" = plan ]; }; then
+    exec "$BIN" "$@"
+fi
 
 if [ "$(id -u)" -eq 0 ]; then
     # `library add <file>`: the service user may not be able to read a file in the caller's home folder,
