@@ -15,6 +15,17 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.OnBackPressedDispatcher
 import androidx.compose.ui.test.onAllNodesWithText
 import com.thompsonfabco.filamentkit.nav.AddProfileTitle
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.drafts.DraftStore
+import com.thompsonfabco.filamentkit.net.AddResult
+import com.thompsonfabco.filamentkit.net.FilamentChoice
+import com.thompsonfabco.filamentkit.net.ReadResult
+import com.thompsonfabco.filamentkit.net.VendorChoice
+import com.thompsonfabco.filamentkit.ui.add.AddSpoolsScreen
+import com.thompsonfabco.filamentkit.ui.add.AddViewModel
+import com.thompsonfabco.filamentkit.ui.add.FakeIntakeApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.emptyFlow
 import org.robolectric.RuntimeEnvironment
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonArray
@@ -152,7 +163,7 @@ import com.thompsonfabco.filamentkit.ui.history.RecordScreen
 import com.thompsonfabco.filamentkit.ui.history.RecordViewModel
 
 /**
- * AUT-8 (07-accessibility 15): Home (with the Label Reader on and off, with printers loading, empty and listed), Spools, Printers, Printer and the pairing screens as they are, Settings as rebuilt (S4.15), drawn under the top bar that
+ * AUT-8 (07-accessibility 15): Home (with the Label Reader on and off, with printers loading, empty and listed), Spools, Printers, Printer and the pairing screens as they are, Add spools as rebuilt (S4.7: every step and its states), Settings as rebuilt (S4.15), drawn under the top bar that
  * names them, in light and dark at font scale 1 and 2. Data is fake (RFC 5737 addresses, `*.example`). Each later
  * screen step adds its screen here.
  */
@@ -489,6 +500,247 @@ class ScreenSemanticsTest {
         // the notice lists the problem and the Density field carries it again under itself
         assertEquals(2, rule.onAllNodesWithText(DENSITY_PROBLEM, substring = true).fetchSemanticsNodes().size)
         auditAllFour("Save to the catalog", CATALOG_SECTIONS)
+    }
+
+    // ---- Add spools (S4.7): every step and its states, drawn under the top bar "Add spools" ----
+
+    private val addApi = FakeIntakeApi()
+
+    private fun addVm(manual: Boolean = false): AddViewModel {
+        val dir = kotlin.io.path.createTempDirectory("add-drafts").toFile().also { it.deleteOnExit() }
+        return AddViewModel(
+            addApi, DraftStore(dir), taps = emptyFlow(), prepare = { it }, io = Dispatchers.Unconfined, manual = manual,
+        )
+    }
+
+    private fun addItem(name: String = "PolyTerra PLA Charcoal Black", material: String = "PLA", estimated: Boolean = false, count: Int = 1) =
+        buildJsonObject {
+            put("vendor", "Example Filaments")
+            put("name", name)
+            put("material", material)
+            put("color_hex", "2B2B2E")
+            put("net", 1000)
+            put("tare", 250)
+            put("count", count)
+            put("sealed", true)
+            put("sealed_reason", "in a vacuum bag")
+            put("existing_filament_id", 41)
+            put("estimates", JsonArray(if (estimated) listOf(JsonPrimitive("tare")) else emptyList()))
+        }
+
+    private fun addHost(vm: AddViewModel, camera: @Composable (Int, (ByteArray) -> Unit) -> Unit = { _, _ -> Text("camera") }) =
+        host(RuntimeEnvironment.getApplication().getString(R.string.home_add_title)) {
+            AddSpoolsScreen(
+                vm, onClose = {}, onDone = {}, onPairAgain = {}, onAddByHand = {}, onAddCatalogLine = { _, _, _ -> },
+                onOpenRecord = {}, camera = camera,
+            )
+        }
+
+    /** Takes [photos] photos and reads [items]: the view model ends on Check the spools. */
+    private fun AddViewModel.readItems(vararg items: JsonObject, photos: Int = 1) {
+        addApi.readResults += ReadResult(JsonArray(items.toList()), listOf("Is the grey one PLA or PETG?"), null, null, "r1")
+        repeat(photos) { addPhoto(byteArrayOf(1, 2, 3)) }
+        rule.waitForIdle()
+        read()
+        rule.waitForIdle()
+    }
+
+    @Test fun addPhotosBeforeTheFirstPhoto() {
+        val vm = addVm()
+        addHost(vm)
+        rule.waitForIdle()
+        rule.onNodeWithText("Take at least one photo first.").assertExists()
+        auditAllFour("Take at least one photo first.", listOf("Photos"))
+    }
+
+    @Test fun addPhotosWithoutTheCameraPermissionOffersToAllowIt() {
+        val vm = addVm()
+        host(RuntimeEnvironment.getApplication().getString(R.string.home_add_title)) {
+            AddSpoolsScreen(
+                vm, onClose = {}, onDone = {}, onPairAgain = {}, onAddByHand = {}, onAddCatalogLine = { _, _, _ -> },
+                onOpenRecord = {},
+            )
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText("The camera is needed to photograph labels.").assertExists()
+        auditAllFour("Allow camera", listOf("Photos"))
+    }
+
+    @Test fun addPhotosWithPhotosAndATag() {
+        val vm = addVm()
+        addHost(vm)
+        vm.addPhoto(byteArrayOf(1))
+        vm.addPhoto(byteArrayOf(2))
+        vm.onTag("04A1B2")
+        rule.waitForIdle()
+        vm.setSealed(false)
+        rule.waitForIdle()
+        rule.onNodeWithText("Read labels (2 photos)").assertExists()
+        auditAllFour("Remove", listOf("Photos"))
+    }
+
+    @Test fun addPhotosWhileTheHubReads() {
+        val vm = addVm()
+        addHost(vm)
+        vm.addPhoto(byteArrayOf(1))
+        rule.waitForIdle()
+        addApi.gate = CompletableDeferred()
+        vm.read()
+        rule.waitForIdle()
+        rule.onNodeWithText("Cancel reading").assertExists()
+        auditAllFour("Cancel reading", listOf("Photos"))
+        addApi.gate?.complete(Unit)
+        addApi.gate = null
+    }
+
+    @Test fun addPhotosAfterAReadThatFailed() {
+        val vm = addVm()
+        addHost(vm)
+        vm.addPhoto(byteArrayOf(1))
+        rule.waitForIdle()
+        addApi.readFailures += ApiError(429, "rate_limited", "x")
+        vm.read()
+        rule.waitForIdle()
+        rule.onNodeWithText("The Label Reader is busy. Wait a minute, then try again.").assertExists()
+        auditAllFour("Your photos and edits are kept.", listOf("Photos"))
+    }
+
+    @Test fun addCheckTheSpools() {
+        val vm = addVm()
+        addHost(vm)
+        vm.readItems(addItem(estimated = true), addItem(name = "", material = "", count = 2), addItem(name = "PolyLite"), photos = 2)
+        rule.onNodeWithText("The Label Reader asks:").assertExists()
+        rule.onNodeWithText("3 spools · 1 value estimated · 1 spool needs fields").assertExists()
+        auditAllFour("Back to photos", listOf("Check the spools"))
+    }
+
+    @Test fun addCheckWithAPanelOpenOnTheHandPath() {
+        addApi.filamentList = { listOf(FilamentChoice(41, "Example Filaments", "PolyTerra Charcoal", "PLA", colorHex = "2B2B2E", spools = 3)) }
+        addApi.vendorList = listOf(VendorChoice(1, "Example Filaments", 250.0))
+        val vm = addVm(manual = true)
+        addHost(vm)
+        rule.waitForIdle()
+        rule.onNodeWithText("Example Filaments PolyTerra Charcoal").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Add another filament").assertExists()
+        auditAllFour("Add another filament", listOf("Check the spools"))
+    }
+
+    @Test fun addCheckOnTheHandPathBeforeAnyPick() {
+        addApi.filamentList = { emptyList() }
+        val vm = addVm(manual = true)
+        addHost(vm)
+        rule.waitForIdle()
+        rule.onNodeWithText("No filament matches. Use New filament.").assertExists()
+        auditAllFour("Find the filament", listOf("Check the spools", "Find the filament"))
+    }
+
+    @Test fun addCheckWhenNothingWasFound() {
+        val vm = addVm()
+        addHost(vm)
+        vm.readItems()
+        rule.onNodeWithText("No spools found in these photos").assertExists()
+        auditAllFour("No spools found in these photos", listOf("Check the spools"))
+    }
+
+    @Test fun addCheckWithTheHubsWarningThatTheSpoolsWereAddedBefore() {
+        val vm = addVm()
+        addHost(vm)
+        vm.readItems(addItem())
+        vm.preview()
+        rule.waitForIdle()
+        addApi.addFailures += ApiError(0, "offline", "x")
+        vm.confirm()
+        rule.waitForIdle()
+        rule.onNodeWithText("These spools may have been added already", substring = true).assertExists()
+        auditAllFour("Back to photos", listOf("Check the spools"))
+    }
+
+    @Test fun addPreview() {
+        val vm = addVm()
+        addHost(vm)
+        vm.readItems(addItem(count = 2), addItem(name = "PolyLite"))
+        addApi.addResults += AddResult(emptyList(), listOf("2 spools of Example Filaments PolyTerra into Shelf 2"), true)
+        vm.preview()
+        rule.waitForIdle()
+        rule.onNodeWithText("Add 3 spools").assertExists()
+        auditAllFour("Nothing is saved yet.", listOf("Preview", "What the Hub will do"))
+    }
+
+    @Test fun addPreviewWhileTheHubChecks() {
+        val vm = addVm()
+        addHost(vm)
+        vm.readItems(addItem())
+        addApi.gate = CompletableDeferred()
+        vm.preview()
+        rule.waitForIdle()
+        rule.onNodeWithText("Checking with the Hub…").assertExists()
+        auditAllFour("Checking with the Hub…", listOf("Preview"))
+        addApi.gate?.complete(Unit)
+        addApi.gate = null
+    }
+
+    @Test fun addPreviewWithAProblemFromTheHub() {
+        val vm = addVm()
+        addHost(vm)
+        vm.readItems(addItem())
+        addApi.addFailures += ApiError(400, "bad_request", "Example Filaments PolyTerra PLA Charcoal Black: net must be a positive number")
+        vm.preview()
+        rule.waitForIdle()
+        rule.onNodeWithText("Fix").assertExists()
+        auditAllFour("Fix", listOf("Preview"))
+    }
+
+    @Test fun addPreviewWhileTheAddRuns() {
+        val vm = addVm()
+        addHost(vm)
+        vm.readItems(addItem())
+        vm.preview()
+        rule.waitForIdle()
+        addApi.gate = CompletableDeferred()
+        vm.confirm()
+        rule.waitForIdle()
+        rule.onNodeWithText("Adding to Spoolman…").assertExists()
+        auditAllFour("Adding to Spoolman…", listOf("Preview"))
+        addApi.gate?.complete(Unit)
+        addApi.gate = null
+    }
+
+    @Test fun addPreviewAsksBeforeAddingAgain() {
+        val vm = addVm()
+        addHost(vm)
+        vm.readItems(addItem())
+        vm.preview()
+        rule.waitForIdle()
+        addApi.addFailures += ApiError(0, "offline", "x")
+        vm.confirm()
+        rule.waitForIdle()
+        vm.preview()
+        rule.waitForIdle()
+        vm.confirm()
+        rule.waitForIdle()
+        // a phone shows the dialog as a sheet: its words and buttons, light and dark at font scale 1 and 2
+        for (isDark in listOf(false, true)) for (scale in listOf(1f, 2f)) {
+            dark = isDark
+            fontScale = scale
+            rule.waitForIdle()
+            for (text in listOf("Add these spools again?", "Cancel", "Add again")) rule.onNodeWithText(text).assertExists()
+            rule.onNodeWithText("Add again").assertHeightIsAtLeast(44.dp)
+        }
+    }
+
+    @Test fun addSpoolsAdded() {
+        val vm = addVm()
+        addHost(vm)
+        vm.onTag("04A1B2")
+        vm.readItems(addItem())
+        vm.preview()
+        rule.waitForIdle()
+        addApi.addResults += AddResult(listOf(212), listOf("Added 1 spool"), false, "h-9")
+        vm.confirm()
+        rule.waitForIdle()
+        rule.onNodeWithText("Open in Recently added").assertExists()
+        auditAllFour("Open in Recently added", listOf("Spools added"))
     }
 
     @Test fun settings() {

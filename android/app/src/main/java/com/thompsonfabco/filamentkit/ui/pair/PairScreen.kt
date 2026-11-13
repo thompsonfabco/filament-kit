@@ -147,6 +147,7 @@ internal fun PairStartScreen(
         SwButton(
             stringResource(if (ui.busy) R.string.common_connecting else R.string.pair_start_scan), onScan,
             Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = !ui.busy, busy = ui.busy,
+            icon = R.drawable.sw_ic_camera,
         )
         ui.error?.let { PairErrorLine(it, access) }
         FoundHubs(discovered, enabled = !ui.busy, onPick = onPick)

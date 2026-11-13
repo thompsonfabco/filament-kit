@@ -2241,6 +2241,7 @@
         <item quantity="other">Add %1$d spools</item>
     </plurals>
     <string name="add_preview_adding">Adding to Spoolman…</string>
+    <string name="add_preview_adding_wait">Adding to Spoolman… wait for the Hub\'s answer.</string>
     <!-- 1=note -->
     <string name="add_preview_again_body">%1$s Adding again can create duplicate spools. Check Spoolman first and only continue if they are missing.</string>
     <string name="add_preview_again_confirm">Add again</string>
@@ -2248,6 +2249,8 @@
     <string name="add_preview_checking">Checking with the Hub…</string>
     <string name="add_preview_hub_does">What the Hub will do</string>
     <string name="add_preview_nothing_saved">Nothing is saved yet.</string>
+    <string name="add_preview_reply_lost">The connection to the Hub was lost while adding, so the spools may have been added. Check Spoolman before trying again; Try again first runs a new preview.</string>
+    <string name="add_preview_title">Preview</string>
     <string name="add_read_busy">The Label Reader is busy. Wait a minute, then try again.</string>
     <string name="add_read_cloud">The Hub can\'t reach the Label Reader\'s cloud service. Try again in a minute.</string>
     <string name="add_read_kept">Your photos and edits are kept.</string>
@@ -2266,10 +2269,14 @@
     <string name="add_review_blocked_fields">Spool %1$s still needs: %2$s.</string>
     <!-- 1=example -->
     <string name="add_review_colour_error">Enter 6 hex digits, e.g. %1$s.</string>
+    <string name="add_review_colour_label">Colour (hex)</string>
+    <string name="add_review_collapsed">Collapsed</string>
     <!-- 1=count -->
     <string name="add_review_count">×%1$d</string>
     <string name="add_review_empty_text">Go back to the photos and read them again, or add by hand.</string>
     <string name="add_review_empty_title">No spools found in these photos</string>
+    <string name="add_review_expanded">Expanded</string>
+    <string name="add_review_error_at">No @ (leave out the printer part)</string>
     <string name="add_review_error_degrees">Enter degrees above 0.</string>
     <string name="add_review_error_density">Enter a density above 0.</string>
     <string name="add_review_error_whole">Enter a whole number.</string>
@@ -2282,6 +2289,8 @@
     </plurals>
     <string name="add_review_hand_empty">Pick a filament above, or tap New filament.</string>
     <string name="add_review_line_hint">Presets are made per line.</string>
+    <string name="add_review_line_limit">Up to 100 characters.</string>
+    <string name="add_review_lost_note">the connection was lost before the Hub answered</string>
     <string name="add_review_mark_estimated">Estimated: check this</string>
     <!-- 1=fields -->
     <string name="add_review_needs">Needs: %1$s</string>
@@ -2316,6 +2325,10 @@
     <string name="add_review_to_catalog">Add this line to the Filament Catalog</string>
     <!-- 1=brand 2=weight -->
     <string name="add_review_vendor_option">%1$s · %2$s g spool</string>
+    <!-- 1=grams -->
+    <string name="add_review_weight_unused">The weight (%1$s g) was not filled in: it is only used for one opened spool.</string>
+    <!-- 1=step 2=total -->
+    <string name="add_step">Step %1$s of %2$s</string>
     <string name="app_update_downloaded">The update is downloaded. Tap to install to open Android\'s install window again.</string>
     <string name="app_update_downloaded_home">Update downloaded: tap to install.</string>
     <!-- 1=percent -->

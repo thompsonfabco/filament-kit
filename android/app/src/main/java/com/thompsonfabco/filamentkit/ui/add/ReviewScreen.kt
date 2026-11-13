@@ -2,515 +2,286 @@ package com.thompsonfabco.filamentkit.ui.add
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
-import com.thompsonfabco.filamentkit.net.ParentList
-import com.thompsonfabco.filamentkit.net.VendorChoice
+import androidx.compose.ui.text.input.ImeAction
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.net.FilamentChoice
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
-import com.thompsonfabco.filamentkit.ui.TARE_PROBLEM
-import com.thompsonfabco.filamentkit.ui.parseWeight
-import com.thompsonfabco.filamentkit.ui.tareProblem
-import com.thompsonfabco.filamentkit.ui.profile.ParentField
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
+import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwProgress
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
+import com.thompsonfabco.filamentkit.ui.theme.WindowClass
+
+/** The spools whose panels are open; saved, so a rotation keeps them. */
+private val OpenSaver = listSaver<Set<Int>, Int>(save = { it.toList() }, restore = { it.toSet() })
+
+/** The most filaments the picker lists (05-android-app 6.4); the rest are "N more: type more of the name". */
+private const val MAX_FILAMENTS_SHOWN = 20
 
 /**
- * Step 2: what the label reader read (questions on top), one editable card per proposed spool, then a preview (dry run) and
- * Add. Ends with the new spool ids. A manual add ([AddUiState.manual]) shows the filament picker on top instead and
- * offers [onClose] (Cancel) where the photo flow goes back to its photos.
+ * Step 2, "Check the spools" (05-android-app 6.3): the summary in words, the Label Reader's questions and notices, one
+ * panel per proposed spool that opens in place (one at a time on a phone, any number from medium width), and the
+ * sticky bar with "Back to photos" and "Preview", the reason Preview is off above it. A hand add starts with the
+ * filament picker (6.4) instead of photos. Nothing here asks before leaving: the draft is saved on every change.
  */
 @Composable
 fun ReviewScreen(
     state: AddUiState,
     vm: AddViewModel,
-    onDone: () -> Unit,
     onPairAgain: () -> Unit,
+    onAddByHand: () -> Unit,
+    onAddCatalogLine: (vendor: String, line: String, material: String) -> Unit,
     modifier: Modifier = Modifier,
-    onClose: () -> Unit = {},
 ) {
-    val scroll = rememberScrollState()
-    // The preview and the button that saves are at the very end: bring them into view.
-    LaunchedEffect(state.stage) {
-        if (state.stage == Stage.Preview) {
-            withFrameNanos { }
-            scroll.animateScrollTo(scroll.maxValue)
-        }
+    val space = SpoolwardenTheme.space
+    val wide = SpoolwardenTheme.window != WindowClass.Phone
+    var open by rememberSaveable(stateSaver = OpenSaver) { mutableStateOf(if (state.items.isEmpty()) emptySet() else setOf(0)) }
+    var picker by rememberSaveable { mutableStateOf(true) }
+    val missing = state.missing
+    val firstMissing = missing.indexOfFirst { it.isNotEmpty() }
+    // "Fix" and "Show" and a new or restored spool open their panel; a phone keeps only that one open
+    LaunchedEffect(state.focus, state.reveal) {
+        val target = state.focus?.first ?: state.reveal
+        if (target != null) open = if (wide) open + target else setOf(target)
+        if (state.reveal != null) vm.revealDone()
     }
-    Column(modifier.verticalScroll(scroll).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (state.stage == Stage.Done) {
-            DoneSection(state, vm, onDone)
-            return@Column
-        }
-        Text(if (state.manual) "Add spool" else "Check the spools", style = MaterialTheme.typography.headlineSmall)
-        val editable = state.stage == Stage.Review || state.stage == Stage.Preview
-        if (state.manual) FilamentPicker(state, vm, editable)
-        if (state.questions.isNotEmpty()) {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
-                containerColor = SpoolwardenTheme.colors.infoSoft, contentColor = SpoolwardenTheme.colors.info)) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("${state.readInfo?.name ?: "Claude"} asks", fontWeight = FontWeight.Bold)
-                    state.questions.forEach { Text("• $it") }
-                }
+    AddPage(
+        AddStep.Check, state, modifier,
+        bar = {
+            state.error?.let { AddErrorNotice(it, vm, onPairAgain, onAddByHand, kept = state.draftId != null) }
+            Reasons(state, missing, firstMissing, vm)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                if (!state.manual) SwButton(stringResource(R.string.add_back_to_photos), vm::backToPhotos, Modifier.weight(1f))
+                SwButton(
+                    stringResource(R.string.add_review_preview), vm::preview, Modifier.weight(1f), kind = SwButtonKind.Main,
+                    enabled = state.items.isNotEmpty() && state.countsValid && state.taresValid && state.complete,
+                )
             }
+        },
+    ) {
+        state.addedBefore?.let { before ->
+            NoticeCard(NoticeKind.Warn, addedBeforeText(before))
         }
-        state.readInfo?.let { r ->
-            r.line?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            r.note?.let { Text("Note: $it", style = MaterialTheme.typography.bodySmall) }
-        }
-        state.notices.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-        state.tag?.let {
-            Text(
-                "Tag $it will be linked when you add exactly one opened spool.",
-                style = MaterialTheme.typography.bodySmall,
+        if (state.items.isNotEmpty()) Summary(state, missing)
+        if (state.questions.isNotEmpty()) {
+            NoticeCard(
+                NoticeKind.Info, state.questions.joinToString(System.lineSeparator()) { BULLET + it },
+                title = stringResource(R.string.add_review_questions),
             )
+        }
+        state.notices.forEach { NoticeCard(NoticeKind.Info, it.string()) }
+        state.tag?.let { NoticeCard(NoticeKind.Info, stringResource(R.string.add_review_tag_note, it)) }
+        if (state.manual) {
+            FilamentPicker(state, vm, open = picker || state.items.isEmpty(), onOpen = { picker = true }) { picker = false }
         }
         if (state.items.isEmpty()) {
-            Text(
-                if (state.manual) "Pick a filament above, or tap New filament."
-                else "No spools to add. Go back to the photos and read again.",
-            )
-        }
-
-        state.items.forEachIndexed { i, item ->
-            key(state.generation, i) {
-                ItemCard(
-                    i, item, state.locations, state.parents, state.parentError, vm, editable,
-                    vendors = if (state.manual) state.vendors else emptyList(),
-                    fieldErrors = state.fieldErrors[i].orEmpty(),
-                    showFilamentFields = state.manual,
-                    readerName = state.readInfo?.name ?: "Claude",
+            if (state.manual) {
+                Text(
+                    stringResource(R.string.add_review_hand_empty), style = MaterialTheme.typography.bodyMedium,
+                    color = SpoolwardenTheme.colors.muted,
+                )
+            } else {
+                SwEmptyState(
+                    icon = R.drawable.sw_ic_spool,
+                    title = stringResource(R.string.add_review_empty_title),
+                    text = stringResource(R.string.add_review_empty_text),
+                    primary = SwAction(stringResource(R.string.add_back_to_photos), vm::backToPhotos),
+                    secondary = SwAction(stringResource(R.string.home_add_by_hand), onAddByHand),
                 )
             }
         }
-
-        state.error?.let { ErrorCard(it, vm, onPairAgain, kept = state.draftId != null) }
-        state.addedBefore?.let { before ->
-            NoticeCard(NoticeKind.Bad, "Check Spoolman before adding these spools again.", title = before.note)
-        }
-        if (state.askAddAgain) AddAgainDialog(state.addedBefore, vm)
-        when (state.stage) {
-            Stage.Previewing -> Busy("Checking…")
-            Stage.Adding -> Busy("Adding to Spoolman…")
-            Stage.Preview -> {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("Preview (nothing saved yet)", fontWeight = FontWeight.Bold)
-                        state.previewLines.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-                    }
-                }
-                val total = state.items.sumOf { it.int("count") ?: 0 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BackButton(state.manual, vm, onClose)
-                    Button(onClick = vm::confirm) { Text("Add $total spool${if (total == 1) "" else "s"}") }
-                }
-            }
-            else -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BackButton(state.manual, vm, onClose)
-                    Button(
-                        onClick = vm::preview,
-                        enabled = state.items.isNotEmpty() && state.countsValid && state.taresValid && state.complete,
-                    ) { Text("Preview") }
-                }
-                if (!state.countsValid) Text("Enter a spool count for every item.", style = MaterialTheme.typography.bodySmall)
-                if (!state.taresValid) Text(TARE_PROBLEM, style = MaterialTheme.typography.bodySmall)
-                if (!state.complete) {
-                    state.missing.forEachIndexed { i, keys ->
-                        if (keys.isNotEmpty()) {
-                            Text(
-                                "Spool ${i + 1} still needs: ${keys.joinToString { FIELD_NAMES[it] ?: it }}.",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
+        state.items.forEachIndexed { i, _ ->
+            androidx.compose.runtime.key(state.generation, i) {
+                SpoolPanel(
+                    state, i, expanded = i in open,
+                    onToggle = { open = if (i in open) open - i else if (wide) open + i else setOf(i) },
+                    focusKey = state.focus?.takeIf { it.first == i }?.second,
+                    onFocused = vm::focusDone,
+                    vm = vm,
+                    onRemove = {
+                        // the open panels after the removed one move up
+                        open = open.filter { it != i }.map { if (it > i) it - 1 else it }.toSet()
+                        vm.removeItem(i)
+                    },
+                    onAddCatalogLine = onAddCatalogLine,
+                )
             }
         }
     }
 }
 
-/** The real add after one that may already have written spools: only after an explicit "I checked". */
+/** The summary in words: "3 spools · 2 values estimated · 1 spool needs fields" (a part that is zero is left out). */
 @Composable
-private fun AddAgainDialog(before: AddedBefore?, vm: AddViewModel) {
-    AlertDialog(
-        onDismissRequest = vm::cancelAddAgain,
-        title = { Text("Add these spools again?") },
-        text = {
-            Text(
-                (before?.note?.let { "$it\n\n" } ?: "") +
-                    "Adding again can create duplicate spools. Check Spoolman first and only continue if they are missing.",
-            )
-        },
-        confirmButton = { Button(onClick = vm::addAgain) { Text("I checked — add again") } },
-        dismissButton = { TextButton(onClick = vm::cancelAddAgain) { Text("Cancel") } },
-    )
-}
-
-@Composable
-private fun DoneSection(state: AddUiState, vm: AddViewModel, onDone: () -> Unit) {
-    Text("Spools added", style = MaterialTheme.typography.headlineSmall)
+private fun Summary(state: AddUiState, missing: List<List<String>>) {
+    val estimated = state.items.sumOf { marksOf(it, state.manual).values.count { m -> m == Mark.Estimated } }
+    val needing = missing.count { it.isNotEmpty() }
+    val spools = pluralStringResource(R.plurals.add_review_summary_spools, state.items.size, state.items.size)
+    val values = if (estimated > 0) pluralStringResource(R.plurals.add_review_summary_estimated, estimated, estimated) else null
+    val fields = if (needing > 0) pluralStringResource(R.plurals.add_review_summary_missing, needing, needing) else null
     Text(
-        if (state.spoolIds.isEmpty()) "No new spool ids were returned."
-        else "New spool${if (state.spoolIds.size == 1) "" else "s"}: ${state.spoolIds.joinToString { "#$it" }}",
+        if (values != null && fields != null) stringResource(R.string.add_review_summary, spools, values, fields)
+        else listOfNotNull(spools, values, fields).joinToString(" · "),
+        style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted,
     )
-    state.resultLines.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = vm::startOver) { Text("Add more") }
-        Button(onClick = onDone) { Text("Done") }
+}
+
+/** Why "Preview" is off, above the bar (never below the button), with "Show" for the spool that still needs fields. */
+@Composable
+private fun Reasons(state: AddUiState, missing: List<List<String>>, firstMissing: Int, vm: AddViewModel) {
+    val style = MaterialTheme.typography.bodySmall
+    val muted = SpoolwardenTheme.colors.muted
+    when {
+        state.items.isEmpty() && state.manual ->
+            Text(stringResource(R.string.add_review_hand_empty), style = style, color = muted)
+        !state.countsValid -> Text(stringResource(R.string.add_review_blocked_count), style = style, color = muted)
+        !state.taresValid -> Text(stringResource(R.string.common_error_grams), style = style, color = muted)
+        firstMissing >= 0 -> {
+            val keys = missing[firstMissing]
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.add_review_blocked_fields, firstMissing + 1, fieldNames(keys)),
+                    Modifier.weight(1f), style = style, color = muted,
+                )
+                SwButton(stringResource(R.string.common_show), { vm.fixField(firstMissing, keys.first()) }, kind = SwButtonKind.Quiet)
+            }
+        }
     }
 }
 
-/** Manual add: Cancel leaves the flow; the photo flow goes back to its photos. */
+/** The warning that spools may exist already: the Hub's partial-failure words, or the lost reply's note. */
 @Composable
-private fun BackButton(manual: Boolean, vm: AddViewModel, onClose: () -> Unit) {
-    if (manual) OutlinedButton(onClick = onClose) { Text("Cancel") }
-    else OutlinedButton(onClick = vm::backToPhotos) { Text("Back to photos") }
+internal fun addedBeforeText(before: AddedBefore): String = when {
+    before.spoolIds.isNotEmpty() && before.hubMessage != null ->
+        pluralStringResource(
+            R.plurals.add_done_partial, before.spoolIds.size, before.hubMessage, spoolNumbers(before.spoolIds.map { it.toInt() }),
+        )
+    before.spoolIds.isNotEmpty() ->
+        stringResource(R.string.add_review_added_before, spoolList(before.spoolIds.map { it.toInt() }))
+    else -> stringResource(R.string.add_review_added_before, stringResource(R.string.add_review_lost_note))
 }
 
-/** Manual add: search Spoolman's filaments (tap one to add a spool of it) or start a new filament. */
+/** "212 and 213": the numbers, set in the phone's language. */
 @Composable
-private fun FilamentPicker(state: AddUiState, vm: AddViewModel, enabled: Boolean) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+internal fun spoolNumbers(ids: List<Int>): String = android.icu.text.ListFormatter.getInstance().format(ids.map { it.toString() })
+
+/** "spool 212 and spool 213". */
+@Composable
+internal fun spoolList(ids: List<Int>): String =
+    android.icu.text.ListFormatter.getInstance().format(ids.map { stringResource(R.string.add_done_spool, it) })
+
+private const val BULLET = "• "
+
+/**
+ * Hand path (05-android-app 6.4): "Find the filament" with a search that answers 300 ms after typing stops, the rows
+ * of what Spoolman has (at most 20), and "New filament". After a pick it folds into "Add another filament".
+ */
+@Composable
+private fun FilamentPicker(state: AddUiState, vm: AddViewModel, open: Boolean, onOpen: () -> Unit, onPicked: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    val colors = SpoolwardenTheme.colors
+    val enabled = state.stage == Stage.Review
+    AddPanel {
+        if (!open) {
+            Row(
+                Modifier.fillMaxWidth().defaultMinSize(minHeight = SpoolwardenTheme.sizes.row)
+                    .clickable(role = Role.Button, onClick = onOpen).padding(horizontal = space.s3),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space.s2),
+            ) {
+                SwIcon(R.drawable.sw_ic_plus, null, tint = colors.accentText)
+                Text(stringResource(R.string.add_picker_another), style = MaterialTheme.typography.labelLarge, color = colors.accentText)
+            }
+            return@AddPanel
+        }
+        Column(Modifier.padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
+            Text(
+                stringResource(R.string.add_picker_title), Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (state.filamentsLoading) {
+                SwProgress(null)
+                Text(stringResource(R.string.add_picker_looking), style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            }
             OutlinedTextField(
                 value = state.filamentQuery, onValueChange = vm::setFilamentQuery, enabled = enabled, singleLine = true,
-                label = { Text("Find a filament in Spoolman") }, placeholder = { Text("e.g. sunlu petg") },
+                label = { Text(stringResource(R.string.add_picker_label)) },
+                placeholder = { Text(stringResource(R.string.add_picker_placeholder)) },
+                leadingIcon = { SwIcon(R.drawable.sw_ic_search, null) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 modifier = Modifier.fillMaxWidth(),
             )
-            when {
-                state.filamentsError != null -> Text(state.filamentsError, color = MaterialTheme.colorScheme.error)
-                state.filamentsLoading && state.filaments.isEmpty() -> Text("Looking…", style = MaterialTheme.typography.bodySmall)
-                state.filaments.isEmpty() -> Text("No filament matches. Use New filament.", style = MaterialTheme.typography.bodySmall)
+            state.filamentsError?.let { NoticeCard(NoticeKind.Bad, it.string()) }
+            if (state.filamentsError == null && !state.filamentsLoading && state.filaments.isEmpty()) {
+                Text(stringResource(R.string.add_picker_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             }
-            state.filaments.take(MAX_FILAMENTS_SHOWN).forEach { f ->
-                Row(
-                    Modifier.fillMaxWidth().clickable(enabled = enabled) { vm.pickFilament(f) }.padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Swatch(f.colorHex)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        listOfNotNull(
-                            "${f.vendor} ${f.name.orEmpty()}".trim(),
-                            f.material?.ifBlank { null },
-                            if (f.spools == 1) "1 spool" else "${f.spools} spools",
-                        ).joinToString(" · "),
-                        modifier = Modifier.weight(1f),
-                    )
+            Column {
+                state.filaments.take(MAX_FILAMENTS_SHOWN).forEachIndexed { i, f ->
+                    if (i > 0) HorizontalDivider(color = colors.border)
+                    FilamentRow(f, enabled) {
+                        vm.pickFilament(f)
+                        onPicked()
+                    }
                 }
             }
             if (state.filaments.size > MAX_FILAMENTS_SHOWN) {
                 Text(
-                    "${state.filaments.size - MAX_FILAMENTS_SHOWN} more: type more of the name to narrow it down.",
-                    style = MaterialTheme.typography.bodySmall,
+                    stringResource(R.string.add_picker_more, state.filaments.size - MAX_FILAMENTS_SHOWN),
+                    style = MaterialTheme.typography.bodySmall, color = colors.muted,
                 )
             }
-            OutlinedButton(onClick = vm::newFilament, enabled = enabled) { Text("New filament") }
-        }
-    }
-}
-
-private const val MAX_FILAMENTS_SHOWN = 20
-
-/** Field names for the "still needs" line. */
-private val FIELD_NAMES = mapOf(
-    "vendor" to "vendor", "name" to "name", "material" to "material", "net" to "net weight",
-    "tare" to "empty spool weight", "density" to "density", "count" to "spool count",
-)
-
-@Composable
-private fun ItemCard(
-    index: Int,
-    item: JsonObject,
-    locations: List<String>,
-    parents: Map<String, ParentList>,
-    parentError: String?,
-    vm: AddViewModel,
-    enabled: Boolean,
-    vendors: List<VendorChoice> = emptyList(),
-    /** The server's complaint per item key (shown at that field). */
-    fieldErrors: Map<String, String> = emptyMap(),
-    /** Manual add: also density, nozzle and bed (used for a new filament). */
-    showFilamentFields: Boolean = false,
-    /** Who read the labels, for the reader's own remarks (sealed reason). */
-    readerName: String = "Claude",
-) {
-    val estimates = (item["estimates"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
-    fun label(text: String, key: String) = if (key in estimates) "$text (estimated)" else text
-    val count = item.int("count")
-    val sealed = item.bool("sealed") == true
-    val err = fieldErrors::get
-
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Swatch(item.str("color_hex"))
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "${item.str("vendor").orEmpty()} ${item.str("name").orEmpty()}".ifBlank { "New filament" },
-                        fontWeight = FontWeight.Bold,
-                    )
-                    item.str("match")?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                    item.int(AddViewModel.FROM_FILAMENT)?.let { id ->
-                        val n = item.int(AddViewModel.FROM_SPOOLS) ?: 0
-                        Text(
-                            "In Spoolman as filament #$id ($n spool${if (n == 1) "" else "s"}). A different vendor " +
-                                "or name makes a new filament.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-                TextButton(onClick = { vm.removeItem(index) }, enabled = enabled) { Text("Remove") }
-            }
-            item.str("sealed_reason")?.let { Text("$readerName: $it", style = MaterialTheme.typography.bodySmall) }
-            ReaderTexts.item(item)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-
-            VendorField(label("Vendor", "vendor"), item.str("vendor"), vendors, enabled, err("vendor"),
-                onPick = { vm.pickVendor(index, it) }) { vm.setText(index, "vendor", it) }
-            TextField(label("Name", "name"), item.str("name"), enabled, error = err("name")) { vm.setText(index, "name", it) }
-            TextField(label("Line", "line"), item.str("line"), enabled, check = ::intakeTextProblem, error = err("line")) {
-                vm.setText(index, "line", it)
-            }
-            TextField(label("Material", "material"), item.str("material"), enabled, error = err("material")) {
-                vm.setText(index, "material", it)
-            }
-            val parent = item.str("bambu_parent").orEmpty()
-            val picked = item.bool(AddViewModel.PICKED) == true
-            ParentField(
-                parent, item.str("material")?.let { parents[it] }, enabled,
-                onPick = { vm.setParent(index, it) },
-                onType = { vm.typeParent(index, it) },
-                onCommit = { vm.commitParent(index) },
-                error = parentError?.takeIf { picked } ?: intakeTextProblem(parent) ?: err("bambu_parent"),
+            SwButton(
+                stringResource(R.string.add_new_filament), { vm.newFilament(); onPicked() }, Modifier.fillMaxWidth(),
+                enabled = enabled,
             )
-            if (item.bool("line_exists") == true) {
-                Text("The Bambu Studio parent applies to every colour of this line.", style = MaterialTheme.typography.bodySmall)
-            }
-            TextField(label("Colour (hex)", "color_hex"), item.str("color_hex"), enabled, error = err("color_hex")) {
-                vm.setText(index, "color_hex", it)
-            }
-            NumberField(label("Spools", "count"), item.num("count"), enabled, whole = true, error = err("count")) {
-                vm.setCount(index, it?.toInt())
-            }
-            NumberField(label("Net weight (g)", "net"), item.num("net"), enabled, error = err("net")) {
-                vm.setNumber(index, "net", it)
-            }
-            NumberField(label("Empty spool (g)", "tare"), item.num("tare"), enabled, problem = ::tareProblem, error = err("tare")) {
-                vm.setNumber(index, "tare", it)
-            }
-            if (showFilamentFields || "density" in fieldErrors) {
-                val guess = defaultDensity(item.str("material"))
-                NumberField(
-                    label("Density (g/cm³)", "density"), item.num("density"), enabled, error = err("density"),
-                    problem = { "Enter a density above 0" },
-                    placeholder = guess?.let { "Blank = $it" },
-                ) { vm.setNumber(index, "density", it) }
-            }
-            if (showFilamentFields) {
-                NumberField("Nozzle °C (optional)", item.num("nozzle"), enabled, error = err("nozzle"),
-                    problem = { "Enter degrees above 0" }) { vm.setNumber(index, "nozzle", it) }
-                NumberField("Bed °C (optional)", item.num("bed"), enabled, error = err("bed"),
-                    problem = { "Enter degrees above 0" }) { vm.setNumber(index, "bed", it) }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = sealed, onCheckedChange = { vm.setItemSealed(index, it) }, enabled = enabled,
-                    modifier = Modifier.semantics { contentDescription = "Still sealed" },
-                )
-                Text("Still sealed (in its bag or box)")
-            }
-            if (count == 1 && !sealed) {
-                NumberField("Weight with spool (g, blank = full)", item.num("gross"), enabled, error = err("gross")) {
-                    vm.setNumber(index, "gross", it)
-                }
-            }
-            LocationField(item.str("location"), locations, enabled, err("location")) { vm.setLocation(index, it) }
-            fieldErrors.filterKeys { it !in SHOWN_KEYS }.values.forEach {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
         }
     }
 }
 
-/** Keys with their own field in the card (other field errors are listed under it). */
-private val SHOWN_KEYS = setOf(
-    "vendor", "name", "line", "material", "color_hex", "count", "net", "tare", "density", "nozzle", "bed", "gross",
-    "location", "bambu_parent",
-)
-
-/** Free text with the server's vendors as suggestions; picking one also fills a blank empty-spool weight. */
+/** A filament Spoolman has: swatch, "<brand> <name>", and "<material> · 3 spools". */
 @Composable
-private fun VendorField(
-    label: String,
-    initial: String?,
-    vendors: List<VendorChoice>,
-    enabled: Boolean,
-    error: String?,
-    onPick: (VendorChoice) -> Unit,
-    onChange: (String) -> Unit,
-) {
-    if (vendors.isEmpty()) {
-        TextField(label, initial, enabled, error = error, onChange = onChange)
-        return
-    }
-    var text by remember { mutableStateOf(initial.orEmpty()) }
-    var open by remember { mutableStateOf(false) }
-    Box {
-        OutlinedTextField(
-            value = text, onValueChange = { text = it; onChange(it) }, enabled = enabled, singleLine = true,
-            isError = error != null, supportingText = error?.let { { Text(it) } },
-            label = { Text(label) },
-            trailingIcon = { TextButton(onClick = { open = true }, enabled = enabled) { Text("Pick") } },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        val typed = text.trim().lowercase()
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            vendors.filter { typed.isEmpty() || typed in it.name.lowercase() }.ifEmpty { vendors }.forEach { v ->
-                DropdownMenuItem(
-                    text = { Text(v.name + (v.tare?.let { " · ${grams(it)} g spool" } ?: "")) },
-                    onClick = { text = v.name; onPick(v); open = false },
-                )
-            }
+private fun FilamentRow(f: FilamentChoice, enabled: Boolean, onPick: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    Row(
+        Modifier.fillMaxWidth().defaultMinSize(minHeight = SpoolwardenTheme.sizes.row)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onPick).padding(vertical = space.s2),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space.s3),
+    ) {
+        ColorSwatch(f.colorHex)
+        Column(Modifier.weight(1f)) {
+            Text("${f.vendor} ${f.name.orEmpty()}".trim(), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                pluralStringResource(R.plurals.add_picker_result, f.spools, f.material.orEmpty(), f.spools),
+                style = MaterialTheme.typography.bodySmall, color = SpoolwardenTheme.colors.muted,
+            )
         }
     }
 }
-
-@Composable
-private fun Swatch(hex: String?) {
-    val known = hex?.takeIf { HEX.matches(it) }
-    ColorSwatch(known, Modifier.semantics { contentDescription = if (known != null) "Colour #$hex" else "No colour" })
-}
-
-@Composable
-private fun TextField(
-    label: String,
-    initial: String?,
-    enabled: Boolean,
-    check: ((String) -> String?)? = null,
-    /** The server's complaint about this field. */
-    error: String? = null,
-    onChange: (String) -> Unit,
-) {
-    var text by remember { mutableStateOf(initial.orEmpty()) }
-    val problem = check?.invoke(text) ?: error
-    OutlinedTextField(
-        value = text, onValueChange = { text = it; onChange(it) }, enabled = enabled, singleLine = true,
-        isError = problem != null, supportingText = problem?.let { { Text(it) } },
-        label = { Text(label) }, modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-@Composable
-/**
- * [whole]: a count (whole number, 0 allowed so the user sees the error). Otherwise grams: finite and above 0.
- * [problem] replaces the generic message for bad text (null = fine). [error] is the server's complaint.
- */
-private fun NumberField(
-    label: String,
-    initial: Double?,
-    enabled: Boolean,
-    whole: Boolean = false,
-    problem: ((String) -> String?)? = null,
-    error: String? = null,
-    placeholder: String? = null,
-    onChange: (Double?) -> Unit,
-) {
-    var text by remember { mutableStateOf(initial?.let(::grams).orEmpty()) }
-    fun parse(t: String): Double? = if (whole) {
-        t.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 && it == Math.floor(it) && it <= Int.MAX_VALUE }
-    } else parseWeight(t)
-    val bad = text.isNotBlank() && parse(text) == null
-    val badText = (problem?.invoke(text) ?: if (whole) "Enter a whole number" else "Enter grams above 0")
-        .takeIf { bad } ?: error
-    OutlinedTextField(
-        value = text,
-        onValueChange = {
-            text = it
-            val v = parse(it)
-            if (it.isBlank() || v != null) onChange(v)
-        },
-        enabled = enabled, singleLine = true, isError = badText != null,
-        supportingText = badText?.let { { Text(it) } },
-        placeholder = placeholder?.let { { Text(it) } },
-        keyboardOptions = KeyboardOptions(keyboardType = if (whole) KeyboardType.Number else KeyboardType.Decimal),
-        label = { Text(label) }, modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-/** Free text with the server's known locations as suggestions; blank = the server places it. */
-@Composable
-private fun LocationField(
-    initial: String?,
-    locations: List<String>,
-    enabled: Boolean,
-    error: String?,
-    onChange: (String) -> Unit,
-) {
-    var text by remember { mutableStateOf(initial.orEmpty()) }
-    var open by remember { mutableStateOf(false) }
-    Box {
-        OutlinedTextField(
-            value = text, onValueChange = { text = it; onChange(it) }, enabled = enabled, singleLine = true,
-            isError = error != null, supportingText = error?.let { { Text(it) } },
-            label = { Text("Location") }, placeholder = { Text("Blank = automatic") },
-            trailingIcon = if (locations.isNotEmpty()) ({ TextButton(onClick = { open = true }, enabled = enabled) { Text("Pick") } }) else null,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Automatic") }, onClick = { text = ""; onChange(""); open = false })
-            locations.forEach { loc ->
-                DropdownMenuItem(text = { Text(loc) }, onClick = { text = loc; onChange(loc); open = false })
-            }
-        }
-    }
-}
-
-private val HEX = Regex("[0-9A-Fa-f]{6}")
-
-private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
-private fun JsonObject.num(key: String): Double? = (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.contentOrNull?.toDoubleOrNull()
-private fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.intOrNull
-private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull

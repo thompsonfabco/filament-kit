@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.add
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
@@ -14,29 +15,25 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -48,103 +45,175 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.thompsonfabco.filamentkit.R
-import com.thompsonfabco.filamentkit.ui.components.HubNotice
-import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
-import com.thompsonfabco.filamentkit.ui.components.SwAction
-import com.thompsonfabco.filamentkit.ui.components.SwSpinner
+import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwIconButton
+import com.thompsonfabco.filamentkit.ui.openAppSettings
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Step 1 of adding spools: label photos (1–8), an optional tag (tapped while this screen is open), the weight on the
- * scale or "Sealed", an optional note for Claude, then Read.
+ * Step 1 of adding spools (05-android-app 6.2): label photos (1 to 8), an optional tag (tapped while this screen is
+ * open), "Still sealed" and the weight with spool, an optional note for the Label Reader, then "Read labels". While
+ * the Hub reads, the camera and the photo controls give way to a panel with "Cancel reading". [camera] draws the
+ * live camera and its button; a test passes a stand-in because a test has no camera.
  */
 @Composable
 fun CaptureScreen(
     state: AddUiState,
     vm: AddViewModel,
-    onCancel: () -> Unit,
     onPairAgain: () -> Unit,
+    onAddByHand: () -> Unit,
     modifier: Modifier = Modifier,
+    camera: @Composable (photos: Int, onPhoto: (ByteArray) -> Unit) -> Unit = { n, onPhoto -> CameraCapture(n, onPhoto) },
 ) {
     val reading = state.stage == Stage.Reading
-    Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            "Photograph each label (several photos of one spool are fine). Nothing is saved until you check and add.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        if (state.photos.size < AddViewModel.MAX_PHOTOS && !reading) {
-            CameraCapture(onPhoto = vm::addPhoto)
-        }
-        Text("Photos: ${state.photos.size} of ${AddViewModel.MAX_PHOTOS}", style = MaterialTheme.typography.labelLarge)
-        PhotoStrip(state.photos, onRemove = vm::removePhoto, enabled = !reading)
-
-        TagRow(state.tag, onClear = vm::clearTag, enabled = !reading)
-        WeightFields(state, vm, enabled = !reading)
-        OutlinedTextField(
-            value = state.hint, onValueChange = vm::setHint, enabled = !reading,
-            label = { Text("Note for the label reader (optional)") },
-            placeholder = { Text("e.g. 3 of the grey ones") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        state.error?.let { ErrorCard(it, vm, onPairAgain, kept = state.draftId != null) }
-        if (reading) {
-            Busy("Reading ${state.photos.size} photo${if (state.photos.size == 1) "" else "s"}… (up to a minute)")
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onCancel) { Text("Close") }
-                if (state.items.isNotEmpty()) {
-                    OutlinedButton(onClick = vm::showReview) { Text("Back to review") }
-                }
-                Button(onClick = vm::read, enabled = state.photos.isNotEmpty()) { Text("Read labels") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TagRow(tag: String?, onClear: () -> Unit, enabled: Boolean) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (tag == null) {
-                Text("No tag. To link one, hold the spool's tag to the back of the phone (optional).", Modifier.weight(1f))
+    val space = SpoolwardenTheme.space
+    val wide = SpoolwardenTheme.window != WindowClass.Phone
+    val showCamera = state.photos.size < AddViewModel.MAX_PHOTOS && !reading
+    AddPage(
+        AddStep.Photos, state, modifier,
+        bar = {
+            state.error?.let { AddErrorNotice(it, vm, onPairAgain, onAddByHand, kept = state.draftId != null) }
+            if (reading) {
+                SwButton(
+                    stringResource(R.string.add_photos_cancel_reading), vm::cancelRead, Modifier.fillMaxWidth(),
+                )
             } else {
-                Text("Tag $tag", Modifier.weight(1f))
-                TextButton(onClick = onClear, enabled = enabled) { Text("Remove tag") }
+                if (state.photos.isEmpty()) {
+                    Text(
+                        stringResource(R.string.add_photos_need_photo), style = MaterialTheme.typography.bodySmall,
+                        color = SpoolwardenTheme.colors.muted,
+                    )
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                    if (state.items.isNotEmpty()) {
+                        SwButton(stringResource(R.string.add_back_to_check), vm::showReview, Modifier.weight(1f))
+                    }
+                    SwButton(
+                        pluralStringResource(R.plurals.add_photos_read, state.photos.size, state.photos.size), vm::read,
+                        Modifier.weight(1f), kind = SwButtonKind.Main, enabled = state.photos.isNotEmpty(),
+                    )
+                }
             }
+        },
+    ) {
+        Text(stringResource(R.string.add_photos_intro), style = MaterialTheme.typography.bodyMedium)
+        if (reading) {
+            AddPanel {
+                Column(Modifier.padding(space.s4)) {
+                    AddBusy(pluralStringResource(R.plurals.add_photos_reading, state.photos.size, state.photos.size))
+                }
+            }
+            return@AddPage
+        }
+        // from medium width the camera sits on the left (up to `previewMax`) and the other controls on the right
+        if (wide && showCamera) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s4)) {
+                Column(Modifier.weight(1f).widthIn(max = SpoolwardenTheme.sizes.previewMax)) {
+                    camera(state.photos.size, vm::addPhoto)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(space.s3)) { Controls(state, vm) }
+            }
+        } else {
+            if (showCamera) camera(state.photos.size, vm::addPhoto)
+            Controls(state, vm)
         }
     }
 }
 
+/** The photo strip, the tag row, "Still sealed", the weight and the note. */
 @Composable
-private fun WeightFields(state: AddUiState, vm: AddViewModel, enabled: Boolean) {
+private fun Controls(state: AddUiState, vm: AddViewModel) {
+    PhotoStrip(state.photos, onRemove = vm::removePhoto)
+    TagRow(state.tag, onClear = vm::clearTag)
+    SealedRow(state.sealed, vm::setSealed)
+    WeightField(state, vm)
+    OutlinedTextField(
+        value = state.hint, onValueChange = vm::setHint,
+        label = { Text(stringResource(R.string.add_photos_note_label)) },
+        placeholder = { Text(stringResource(R.string.add_photos_note_placeholder)) },
+        minLines = 1, maxLines = 3,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/** No tag, or the tag that was tapped (in `--mono`) with "Remove". */
+@Composable
+private fun TagRow(tag: String?, onClear: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    Row(
+        Modifier.fillMaxWidth().defaultMinSize(minHeight = SpoolwardenTheme.sizes.row),
+        horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SwIcon(R.drawable.sw_ic_tag, null, tint = SpoolwardenTheme.colors.muted)
+        Column(Modifier.weight(1f)) {
+            if (tag == null) {
+                Text(stringResource(R.string.add_photos_tag_none), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    stringResource(R.string.add_photos_tag_hint), style = MaterialTheme.typography.bodySmall,
+                    color = SpoolwardenTheme.colors.muted,
+                )
+            } else {
+                Text(stringResource(R.string.common_tag, tag), style = SpoolwardenTheme.type.data)
+                Text(
+                    stringResource(R.string.add_photos_tag_linked_hint), style = MaterialTheme.typography.bodySmall,
+                    color = SpoolwardenTheme.colors.muted,
+                )
+            }
+        }
+        if (tag != null) SwButton(stringResource(R.string.common_remove), onClear, kind = SwButtonKind.Quiet)
+    }
+}
+
+/** "Still sealed (in its bag or box)", on by default; the whole row toggles. */
+@Composable
+internal fun SealedRow(sealed: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().defaultMinSize(minHeight = SpoolwardenTheme.sizes.row)
+            .toggleable(value = sealed, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(R.string.common_still_sealed), Modifier.weight(1f).padding(end = SpoolwardenTheme.space.s3),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Switch(checked = sealed, onCheckedChange = null)
+    }
+}
+
+/** The weight with spool: only for one opened spool, so it is off while "Still sealed" is on. */
+@Composable
+private fun WeightField(state: AddUiState, vm: AddViewModel) {
     var text by remember(state.generation) { mutableStateOf(state.weight?.let(::grams).orEmpty()) }
     LaunchedEffect(state.sealed) { if (state.sealed) text = "" }
     val bad = text.isNotBlank() && parseWeight(text) == null
@@ -154,49 +223,57 @@ private fun WeightFields(state: AddUiState, vm: AddViewModel, enabled: Boolean) 
             text = it
             vm.setWeight(parseWeight(it))
         },
-        enabled = enabled && !state.sealed,
-        label = { Text("Weight on the scale, with spool (g)") },
-        supportingText = { Text(if (bad) "Enter grams, e.g. 812" else "Only used for one opened spool") },
+        enabled = !state.sealed,
+        label = { Text(stringResource(R.string.common_field_weight_with_spool_optional)) },
+        supportingText = {
+            Text(
+                stringResource(
+                    when {
+                        bad -> R.string.common_error_grams
+                        state.sealed -> R.string.add_photos_weight_sealed
+                        else -> R.string.add_photos_weight_hint
+                    },
+                ),
+            )
+        },
         isError = bad,
         singleLine = true,
+        textStyle = SpoolwardenTheme.type.data,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         modifier = Modifier.fillMaxWidth(),
     )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Sealed (still in its bag or box)", Modifier.weight(1f))
-        Switch(
-            checked = state.sealed, onCheckedChange = vm::setSealed, enabled = enabled,
-            modifier = Modifier.semantics { contentDescription = "Sealed" },
-        )
-    }
 }
 
+/** Square thumbnails with a close button in the corner (48 dp to touch); the photos are numbered for TalkBack. */
 @Composable
-private fun PhotoStrip(photos: List<File>, onRemove: (Int) -> Unit, enabled: Boolean) {
+private fun PhotoStrip(photos: List<File>, onRemove: (Int) -> Unit) {
     if (photos.isEmpty()) return
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val side = SpoolwardenTheme.sizes.thumb
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2)) {
         itemsIndexed(photos, key = { _, f -> f.path }) { i, file ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Thumbnail(file, Modifier.size(96.dp))
-                TextButton(
-                    onClick = { onRemove(i) }, enabled = enabled,
-                    modifier = Modifier.semantics { contentDescription = "Remove photo ${i + 1}" },
-                ) { Text("Remove") }
+            Box(Modifier.size(side)) {
+                Thumbnail(file, Modifier.size(side), stringResource(R.string.a11y_photo_draft, i + 1))
+                SwIconButton(
+                    R.drawable.sw_ic_close, stringResource(R.string.a11y_photo_remove, i + 1), { onRemove(i) },
+                    Modifier.align(Alignment.TopEnd),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun Thumbnail(file: File, modifier: Modifier) {
+private fun Thumbnail(file: File, modifier: Modifier, description: String) {
     val bitmap by produceState<ImageBitmap?>(null, file) {
         value = withContext(Dispatchers.IO) { decodeThumbnail(file, 256) }
     }
+    val colors = SpoolwardenTheme.colors
+    val frame = modifier.clip(SpoolwardenTheme.shapes.r).border(SpoolwardenTheme.sizes.hairline, colors.border, SpoolwardenTheme.shapes.r)
     val b = bitmap
     if (b == null) {
-        Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant))
+        Box(frame.background(colors.surface2).semantics { contentDescription = description })
     } else {
-        Image(b, contentDescription = "Photo ${file.nameWithoutExtension.removePrefix("photo")}", modifier, contentScale = ContentScale.Crop)
+        Image(b, contentDescription = description, modifier = frame, contentScale = ContentScale.Crop)
     }
 }
 
@@ -209,18 +286,36 @@ private fun decodeThumbnail(file: File, maxSide: Int): ImageBitmap? {
     return BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
 }
 
-/** CameraX preview with a shutter button. Each shot is saved to a cache file (EXIF orientation kept) and handed on. */
+/**
+ * The live camera (3:4, `r` corners, 1 dp `border`) with "Take photo" and the count "2 of 8" in `--mono`. Without the
+ * camera permission a panel stands in its place: "Allow camera", or, when Android will not ask again, "Open app
+ * settings". Each shot is saved to a cache file (EXIF orientation kept) and handed on.
+ */
 @Composable
-private fun CameraCapture(onPhoto: (ByteArray) -> Unit) {
+internal fun CameraCapture(photos: Int, onPhoto: (ByteArray) -> Unit) {
     val context = LocalContext.current
+    val space = SpoolwardenTheme.space
     var granted by remember { mutableStateOf(hasCamera(context)) }
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
+    var noAsk by remember { mutableStateOf(false) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        granted = it
+        // denied and Android will not show its question again: only the app's settings can allow it
+        val activity = context as? Activity
+        noAsk = !it && activity != null && !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
+    }
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
     if (!granted) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("The camera is needed to photograph labels.")
-                TextButton(onClick = { ask.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
+        AddPanel {
+            Column(Modifier.padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s2)) {
+                Text(
+                    stringResource(if (noAsk) R.string.add_photos_camera_no_ask else R.string.add_photos_camera_needed),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                SwButton(
+                    stringResource(if (noAsk) R.string.common_open_app_settings else R.string.add_photos_camera_allow),
+                    { if (noAsk) context.openAppSettings() else ask.launch(Manifest.permission.CAMERA) },
+                    Modifier.fillMaxWidth(), kind = SwButtonKind.Main,
+                )
             }
         }
         return
@@ -229,8 +324,8 @@ private fun CameraCapture(onPhoto: (ByteArray) -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
     val previewView = remember { PreviewView(context) }
-    var problem by remember { mutableStateOf<String?>(null) }
-    var shotError by remember { mutableStateOf<String?>(null) }
+    var problem by remember { mutableStateOf(false) }
+    var shotFailed by remember { mutableStateOf(false) }
     var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var shooting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -242,11 +337,11 @@ private fun CameraCapture(onPhoto: (ByteArray) -> Unit) {
             val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
             p.unbindAll()
             p.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
-            problem = null
+            problem = false
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            problem = "The camera could not be started: ${e.message ?: "no camera found"}"
+            problem = true
         }
     }
     DisposableEffect(lifecycleOwner) {
@@ -255,35 +350,50 @@ private fun CameraCapture(onPhoto: (ByteArray) -> Unit) {
         }
     }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        AndroidView({ previewView }, Modifier.fillMaxWidth().aspectRatio(3f / 4f))
-        Spacer(Modifier.height(8.dp))
-        (problem ?: shotError)?.let { NoticeCard(NoticeKind.Bad, it) }
-        Button(
-            enabled = !shooting && problem == null,
-            onClick = {
-                shooting = true
-                shotError = null
-                scope.launch {
-                    try {
-                        val file = withContext(Dispatchers.IO) { File.createTempFile("shot", ".jpg", context.cacheDir) }
-                        val bytes = try {
-                            takePicture(capture, file, context)
-                            withContext(Dispatchers.IO) { file.readBytes() }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(space.s2)) {
+        AndroidView(
+            { previewView },
+            Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(SpoolwardenTheme.shapes.r)
+                .border(SpoolwardenTheme.sizes.hairline, SpoolwardenTheme.colors.border, SpoolwardenTheme.shapes.r),
+        )
+        if (problem) NoticeCard(NoticeKind.Bad, stringResource(R.string.add_photos_camera_error))
+        if (shotFailed) NoticeCard(NoticeKind.Bad, stringResource(R.string.add_photos_photo_failed))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space.s3)) {
+            SwButton(
+                stringResource(if (shooting) R.string.add_photos_taking else R.string.add_photos_take),
+                {
+                    shooting = true
+                    shotFailed = false
+                    scope.launch {
+                        try {
+                            val file = withContext(Dispatchers.IO) { File.createTempFile("shot", ".jpg", context.cacheDir) }
+                            val bytes = try {
+                                takePicture(capture, file, context)
+                                withContext(Dispatchers.IO) { file.readBytes() }
+                            } finally {
+                                withContext(NonCancellable + Dispatchers.IO) { file.delete() }
+                            }
+                            onPhoto(bytes)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            shotFailed = true
                         } finally {
-                            withContext(NonCancellable + Dispatchers.IO) { file.delete() }
+                            shooting = false
                         }
-                        onPhoto(bytes)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        shotError = "The photo failed: ${e.message ?: "camera error"}. Try again."
-                    } finally {
-                        shooting = false
                     }
-                }
-            },
-        ) { Text(if (shooting) "Taking photo…" else "Take photo") }
+                },
+                Modifier.weight(1f),
+                // "Read labels" becomes the main action once there is a photo
+                kind = if (photos == 0) SwButtonKind.Main else SwButtonKind.Plain,
+                enabled = !shooting && !problem,
+                icon = R.drawable.sw_ic_camera,
+            )
+            Text(
+                stringResource(R.string.add_photos_count, photos, AddViewModel.MAX_PHOTOS),
+                style = SpoolwardenTheme.type.data, color = SpoolwardenTheme.colors.muted,
+            )
+        }
     }
 }
 
@@ -319,44 +429,3 @@ private suspend fun cameraProvider(context: Context): ProcessCameraProvider = su
 private fun hasCamera(context: Context) =
     ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
-/** A spinner with a line of text; the line is a polite live region, so what is under way is announced. */
-@Composable
-internal fun Busy(text: String) {
-    Row(
-        Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2),
-    ) {
-        SwSpinner()
-        Text(text)
-    }
-}
-
-/**
- * The current problem as a notice line with the actions that fit it. A changed certificate and a lost pairing are the
- * Hub notices of 05-android-app 3.4 (the fingerprints are shown on the pairing screen, not here).
- */
-@Composable
-internal fun ErrorCard(error: AddError, vm: AddViewModel, onPairAgain: () -> Unit, kept: Boolean) {
-    val dismiss = SwAction(stringResource(R.string.common_dismiss), vm::dismissError)
-    val hub = when {
-        error.expectedFingerprint != null && error.actualFingerprint != null -> HubNoticeKind.CertificateChanged
-        error.pairAgain -> HubNoticeKind.NoLongerPaired
-        else -> null
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s1)) {
-        if (hub != null) {
-            HubNotice(hub, onPairAgain, more = listOf(dismiss))
-            error.detail?.let { Text("Server says: $it", style = MaterialTheme.typography.bodySmall) }
-        } else {
-            val actions = buildList {
-                if (error.canRetry) add(SwAction(stringResource(R.string.common_try_again), vm::retry))
-                if (error.canDropTag) add(SwAction("Add without the tag", vm::dropTagAndRetry))
-                add(dismiss)
-            }
-            val lines = listOfNotNull(error.message, error.detail?.let { "Server says: $it" })
-            NoticeCard(NoticeKind.Bad, lines.joinToString(System.lineSeparator()), actions = actions)
-        }
-        if (kept) Text("Your photos and edits are kept.", style = MaterialTheme.typography.bodySmall)
-    }
-}

@@ -1,14 +1,14 @@
 package com.thompsonfabco.filamentkit.ui.profile
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,14 +16,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /**
- * The Bambu Studio parent. Once the PC has synced Bambu Studio's presets ([ParentList.synced]) the field is read-only
- * and only "Pick" sets it (a listed name, or Automatic = blank). Before that it is free text: [onType] per keystroke,
- * [onCommit] when the field loses focus or Done is pressed. [error] is shown under the field.
+ * The Bambu Studio parent of a line (05-android-app 6.3). Once the PC has synced Bambu Studio's presets
+ * ([ParentList.synced]) it is a drop-down with "Automatic" first and only a listed name can be picked ([onPick]; blank
+ * is Automatic). Before that it is a plain text field: [onType] per keystroke, [onCommit] when it loses focus or Done is
+ * pressed, with the note that the presets are not synced to the Hub yet. "Applies to every colour of this line." is
+ * always under it. [error] (the Hub's own words, or ours) replaces the notes under the field.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ParentField(
     value: String,
@@ -33,32 +40,45 @@ internal fun ParentField(
     onType: (String) -> Unit = onPick,
     onCommit: () -> Unit = {},
     error: String? = null,
+    modifier: Modifier = Modifier,
 ) {
-    var open by remember { mutableStateOf(false) }
     val synced = parents?.synced == true
-    val list = if (synced) parents.parents else emptyList()
-    val note = when {
-        error != null -> error
-        synced -> "Pick from Bambu Studio's presets."
-        parents != null -> "Bambu Studio's presets are not synced yet; type the name."
-        else -> null
-    }
-    Box {
+    val unsynced = stringResource(R.string.common_bambu_parent_unsynced)
+    val leaveEmpty = stringResource(R.string.common_hint_leave_empty_auto)
+    val applies = stringResource(R.string.common_bambu_parent_applies)
+    val note = listOfNotNull(
+        error,
+        unsynced.takeIf { error == null && parents != null && !synced },
+        leaveEmpty.takeIf { error == null && !synced },
+        applies,
+    ).joinToString(" ")
+    val label: @Composable () -> Unit = { Text(stringResource(R.string.common_field_bambu_parent)) }
+    val supporting: @Composable () -> Unit = { Text(note) }
+    if (!synced) {
         OutlinedTextField(
-            value = value, onValueChange = { if (!synced) onType(it) }, enabled = enabled, singleLine = true,
-            readOnly = synced,
-            isError = error != null,
-            label = { Text("Bambu Studio parent") },
-            placeholder = { Text("Blank = chosen automatically") },
-            supportingText = note?.let { { Text(it) } },
-            trailingIcon = if (synced) ({ TextButton(onClick = { open = true }, enabled = enabled) { Text("Pick") } }) else null,
+            value = value, onValueChange = onType, enabled = enabled, singleLine = true,
+            isError = error != null, label = label, supportingText = supporting,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onCommit() }),
-            modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) onCommit() },
+            modifier = modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) onCommit() },
         )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Automatic") }, onClick = { onPick(""); open = false })
-            list.forEach { p -> DropdownMenuItem(text = { Text(p) }, onClick = { onPick(p); open = false }) }
+        return
+    }
+    var open by remember { mutableStateOf(false) }
+    val automatic = stringResource(R.string.common_option_automatic)
+    ExposedDropdownMenuBox(expanded = open && enabled, onExpandedChange = { open = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = value.ifEmpty { automatic }, onValueChange = {}, readOnly = true, enabled = enabled,
+            singleLine = true, isError = error != null, label = label, supportingText = supporting,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(
+            expanded = open && enabled, onDismissRequest = { open = false },
+            containerColor = SpoolwardenTheme.colors.surface, shape = SpoolwardenTheme.shapes.r,
+        ) {
+            SwMenuItem(automatic, { onPick(""); open = false }, checked = value.isEmpty())
+            parents?.parents.orEmpty().forEach { p -> SwMenuItem(p, { onPick(p); open = false }, checked = p == value) }
         }
     }
 }

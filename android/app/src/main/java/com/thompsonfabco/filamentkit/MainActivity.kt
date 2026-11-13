@@ -198,6 +198,7 @@ import com.thompsonfabco.filamentkit.ui.printers.TrustAction
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
 import com.thompsonfabco.filamentkit.ui.settings.HubPage
@@ -870,12 +871,31 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onClose = { nav.popBackStack() },
                             onDone = { nav.popBackStack<HomeRoute>(inclusive = false) },
                             onPairAgain = app.router::pairAgain,
+                            // leaves this add (its draft stays on the phone) for one by hand
+                            onAddByHand = { nav.replaceAdd(AddRoute(manual = true)) },
+                            // the Filament Catalog form opens filled from the panel; Back returns here with the draft
+                            onAddCatalogLine = { brand, line, material ->
+                                nav.currentBackStackEntry?.savedStateHandle?.set(CATALOG_PREFILL, arrayListOf(brand, line, material))
+                                nav.navigate(AddProfileRoute)
+                            },
+                            onOpenRecord = { hid ->
+                                nav.popBackStack<HomeRoute>(inclusive = false)
+                                nav.selectTab(Tab.Recent)
+                                nav.navigate(RecordRoute(hid))
+                            },
                         )
                     }
 
                     composable<AddProfileRoute> {
                         val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
-                            initializer { AddProfileViewModel(ProfileApi.of(::currentApi)) }
+                            initializer {
+                                // opened from a panel of Add spools: brand, line and material come with it
+                                val prefill = nav.previousBackStackEntry?.savedStateHandle?.remove<ArrayList<String>>(CATALOG_PREFILL)
+                                val initial = prefill?.takeIf { it.size == 3 }?.let {
+                                    mapOf(ProfileField.Vendor to it[0], ProfileField.Line to it[1], ProfileField.Material to it[2])
+                                }.orEmpty()
+                                AddProfileViewModel(ProfileApi.of(::currentApi), initial)
+                            }
                         })
                         val savedText = stringResource(R.string.catalog_saved)
                         AddProfileScreen(
@@ -1247,3 +1267,6 @@ private fun SimulateTag() {
         Button(onClick = { TagEvents.emit(uid.trim()) }) { Text("Simulate tag") }
     }
 }
+
+/** The saved-state key under which an add's panel hands brand, line and material to the Filament Catalog form. */
+private const val CATALOG_PREFILL = "catalog_prefill"

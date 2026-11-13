@@ -110,3 +110,7 @@ server/filament_kit/web/static/printers.js | setup page | 1 | today's string, ro
 server/filament_kit/web/static/printers.js | the kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolModel.kt | color | 1 | wire identifier (a JSON key of the Hub's answer), never shown; the screen's texts are in the catalogue (S4.8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | module | wire identifier (the Hub's error code `module_off`), never shown (S4.7)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | color | wire identifier (the item key `color_hex`), never shown (S4.7)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | color | wire identifier (the item key `color_hex`), never shown (S4.7)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/SpoolPanel.kt | color | wire identifier (the item key `color_hex`), never shown (S4.7)
