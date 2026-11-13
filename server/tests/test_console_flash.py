@@ -244,7 +244,9 @@ def test_the_tab_and_its_assets_are_served(app):
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
     js = (STATIC / "setup.js").read_text(encoding="utf-8")
     assert 'flash: ["nav_flash_device", "flash", () => [flashTab]]' in js
-    assert 'reader_setup: "Setting up the Printer Station"' in (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
+    # the job strip titles the station setup job from the catalogue (02 8.4)
+    assert '"reader_setup"' in (ROOT / "web-shared" / "components-jobs.js").read_text(encoding="utf-8")
+    assert '"job_title_reader_setup": "Setting up a Tag Reader"' in (ROOT / "strings" / "en.json").read_text(encoding="utf-8")
 
 
 def test_the_vendored_esptool_js_is_the_published_bundle():
