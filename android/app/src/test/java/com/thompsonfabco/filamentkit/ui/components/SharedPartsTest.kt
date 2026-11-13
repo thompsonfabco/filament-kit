@@ -297,6 +297,72 @@ class SharedPartsTest {
         rule.onNodeWithText("Removed.").assertDoesNotExist()
     }
 
+    @Test fun queuedToastsEachGetTheirOwnTimeAndOneNeverClosesAnother() {
+        val (state, scope) = toastHost()
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle {
+            scope().launch { state.show("First", actionLabel = "Undo") }
+            scope().launch { state.show("Second") }
+        }
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.onNodeWithText("First").assertExists()
+        // past the 5 s of a plain toast: the first has an action, so it is held 10 s, and the second still waits
+        rule.mainClock.advanceTimeBy(TOAST_MS + 1_500)
+        rule.onNodeWithText("First").assertExists()
+        rule.onNodeWithText("Second").assertDoesNotExist()
+        rule.mainClock.advanceTimeBy(TOAST_WITH_ACTION_MS - TOAST_MS - 1_500 + 1_000)
+        rule.onNodeWithText("First").assertDoesNotExist()
+        // the second is shown now and is held its own 5 s from here
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.onNodeWithText("Second").assertExists()
+        rule.mainClock.advanceTimeBy(1_500)
+        rule.onNodeWithText("Second").assertExists()
+        rule.mainClock.advanceTimeBy(1_500)
+        rule.onNodeWithText("Second").assertDoesNotExist()
+    }
+
+    // --- dialog ---
+
+    private fun dialog(confirmed: () -> Unit = {}, cancelled: () -> Unit = {}) = themed {
+        SwDialog(
+            title = "Leave without saving?", onClose = cancelled,
+            confirm = SwDialogButton("Leave", confirmed, kind = SwButtonKind.DestructiveFilled),
+            cancel = SwAction("Stay", cancelled),
+        ) { Text("Your changes are not saved.") }
+    }
+
+    @Test fun onAPhoneTheDialogIsABottomSheetWithStackedButtonsConfirmingOnTop() {
+        var left = 0
+        var stayed = 0
+        dialog({ left++ }, { stayed++ })
+        rule.onNodeWithText("Leave without saving?").assertExists()
+        rule.onNodeWithText("Your changes are not saved.").assertExists()
+        val leave = rule.onNodeWithText("Leave").fetchSemanticsNode().boundsInWindow
+        val stay = rule.onNodeWithText("Stay").fetchSemanticsNode().boundsInWindow
+        assertTrue("confirming button above Cancel: $leave $stay", leave.top < stay.top)
+        assertEquals("full width, both", leave.width, stay.width, 1f)
+        rule.onNodeWithText("Leave").assertTouchAtLeast48dp().performClick()
+        assertEquals(1, left)
+        rule.onNodeWithText("Stay").performClick()
+        assertEquals(1, stayed)
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w900dp-h700dp")
+    @Test fun onATabletTheDialogIsACentredPanelWithTheConfirmingButtonLast() {
+        var left = 0
+        dialog({ left++ })
+        rule.onNodeWithText("Your changes are not saved.").assertExists()
+        val leave = rule.onNodeWithText("Leave").fetchSemanticsNode().boundsInWindow
+        val stay = rule.onNodeWithText("Stay").fetchSemanticsNode().boundsInWindow
+        assertTrue("Cancel before the confirming button in reading order: $stay $leave", stay.left < leave.left)
+        assertEquals("same row", stay.top, leave.top, 8f)
+        val panel = rule.onNodeWithText("Leave without saving?").fetchSemanticsNode().boundsInWindow
+        assertTrue("at most 30 rem (480 dp) wide", leave.right - stay.left <= 480f)
+        assertTrue(panel.left > 100f)
+        rule.onNodeWithText("Leave").performClick()
+        assertEquals(1, left)
+    }
+
     // --- local network notice ---
 
     @Test fun theLocalNetworkNoticeAsksThenPointsToSettings() {

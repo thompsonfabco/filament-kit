@@ -260,7 +260,7 @@ private fun AmsBlock(u: AmsUnit, busy: String?, onUnload: (AmsSlot) -> Unit) {
         u.slots.forEach { slot ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val empty = PrinterHelp.slotEmpty(slot)
-                ColorSwatch(slot.colorHex, 16.dp, empty = empty)
+                ColorSwatch(slot.colorHex, empty = empty)
                 val spool = slot.spool
                 Text(listOfNotNull(
                     slot.label,

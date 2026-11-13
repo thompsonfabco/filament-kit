@@ -338,20 +338,24 @@ internal fun Busy(text: String) {
  */
 @Composable
 internal fun ErrorCard(error: AddError, vm: AddViewModel, onPairAgain: () -> Unit, kept: Boolean) {
+    val dismiss = SwAction(stringResource(R.string.common_dismiss), vm::dismissError)
+    val hub = when {
+        error.expectedFingerprint != null && error.actualFingerprint != null -> HubNoticeKind.CertificateChanged
+        error.pairAgain -> HubNoticeKind.NoLongerPaired
+        else -> null
+    }
     Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s1)) {
-        when {
-            error.expectedFingerprint != null && error.actualFingerprint != null ->
-                HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
-            error.pairAgain -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-            else -> {
-                val actions = buildList {
-                    if (error.canRetry) add(SwAction(stringResource(R.string.common_try_again), vm::retry))
-                    if (error.canDropTag) add(SwAction("Add without the tag", vm::dropTagAndRetry))
-                    add(SwAction(stringResource(R.string.common_dismiss), vm::dismissError))
-                }
-                val lines = listOfNotNull(error.message, error.detail?.let { "Server says: $it" })
-                NoticeCard(NoticeKind.Bad, lines.joinToString(System.lineSeparator()), actions = actions)
+        if (hub != null) {
+            HubNotice(hub, onPairAgain, more = listOf(dismiss))
+            error.detail?.let { Text("Server says: $it", style = MaterialTheme.typography.bodySmall) }
+        } else {
+            val actions = buildList {
+                if (error.canRetry) add(SwAction(stringResource(R.string.common_try_again), vm::retry))
+                if (error.canDropTag) add(SwAction("Add without the tag", vm::dropTagAndRetry))
+                add(dismiss)
             }
+            val lines = listOfNotNull(error.message, error.detail?.let { "Server says: $it" })
+            NoticeCard(NoticeKind.Bad, lines.joinToString(System.lineSeparator()), actions = actions)
         }
         if (kept) Text("Your photos and edits are kept.", style = MaterialTheme.typography.bodySmall)
     }

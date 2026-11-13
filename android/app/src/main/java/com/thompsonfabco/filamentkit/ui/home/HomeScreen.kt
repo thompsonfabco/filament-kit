@@ -36,6 +36,10 @@ import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.update.UpdateTexts
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwDialog
+import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import java.text.DateFormat
@@ -204,13 +208,14 @@ private fun DraftRow(draft: Draft, onClick: () -> Unit, onDiscard: () -> Unit) {
         }
     }
     if (confirming) {
-        AlertDialog(
-            onDismissRequest = { confirming = false },
-            title = { Text("Discard this unfinished add?") },
-            text = { Text("Its $photos will be deleted from this phone. Nothing is removed from the server.") },
-            confirmButton = { TextButton(onClick = { confirming = false; onDiscard() }) { Text("Discard") } },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Keep") } },
-        )
+        SwDialog(
+            title = "Discard this unfinished add?",
+            onClose = { confirming = false },
+            confirm = SwDialogButton("Discard", onClick = { confirming = false; onDiscard() }, kind = SwButtonKind.DestructiveFilled),
+            cancel = SwAction("Keep") { confirming = false },
+        ) {
+            Text("Its $photos will be deleted from this phone. Nothing is removed from the server.")
+        }
     }
 }
 

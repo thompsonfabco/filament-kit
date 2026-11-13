@@ -4,14 +4,13 @@
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | 24.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/ColorSwatch.kt | Color(0xFF000000 | filament colour from the data
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/ColorSwatch.kt | Color(0xFF000000 | alpha mask over the 6-digit filament colour read from the data (not a theme or status colour)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | 96.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 28.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 6.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | 10.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
@@ -76,7 +75,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LinkSealedScree
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadFlowScreen.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 12.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 16.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 32.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 4.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 8.dp | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 server/filament_kit/setup_static/setup.css | #12151b | today's own palette and lengths; replaced by tokens in S1.1

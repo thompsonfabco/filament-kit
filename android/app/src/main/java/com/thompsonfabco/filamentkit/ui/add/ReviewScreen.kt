@@ -421,7 +421,7 @@ private fun VendorField(
 @Composable
 private fun Swatch(hex: String?) {
     val known = hex?.takeIf { HEX.matches(it) }
-    ColorSwatch(known, 28.dp, Modifier.semantics { contentDescription = if (known != null) "Colour #$hex" else "No colour" })
+    ColorSwatch(known, Modifier.semantics { contentDescription = if (known != null) "Colour #$hex" else "No colour" })
 }
 
 @Composable

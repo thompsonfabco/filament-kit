@@ -41,7 +41,7 @@ internal fun StatusLabel(kind: StatusKind, modifier: Modifier = Modifier, small:
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(space.s1), verticalAlignment = Alignment.CenterVertically) {
         Icon(
             painterResource(kind.shape), contentDescription = null,
-            modifier = Modifier.size(if (kind.large) space.s2 + space.s1 else space.s2),
+            modifier = Modifier.size(if (kind.large) space.s2 + space.s1 / 2 else space.s2),
             tint = colour,
         )
         Text(

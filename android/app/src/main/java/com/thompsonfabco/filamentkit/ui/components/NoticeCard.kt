@@ -23,8 +23,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenColors
+import com.thompsonfabco.filamentkit.ui.theme.Spacing
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /** The four kinds of inline notice (02-components 8.8): each has its own shape, so colour is never the only sign. */
@@ -41,6 +44,13 @@ internal enum class NoticeKind(
     Info(R.drawable.sw_ic_info, false, { it.info }, { it.infoSoft });
 
     fun colour(colors: SpoolwardenColors): Color = strong(colors)
+
+    /** The drawn size: a status shape is `s2` (triangle and octagon `s2` + 2 dp), the info icon `s3` + `s1`. */
+    fun side(space: Spacing): Dp = when {
+        this == Info -> space.s3 + space.s1
+        large -> space.s2 + space.s1 / 2
+        else -> space.s2
+    }
     fun ground(colors: SpoolwardenColors): Color = soft(colors)
 }
 
@@ -64,18 +74,12 @@ internal fun NoticeCard(
         modifier.fillMaxWidth(),
         shape = SpoolwardenTheme.shapes.r,
         colors = CardDefaults.cardColors(containerColor = kind.ground(colors), contentColor = colors.text),
-        elevation = CardDefaults.cardElevation(),
+        elevation = CardDefaults.cardElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
     ) {
         Row(Modifier.padding(space.s3), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
             Icon(
                 painterResource(kind.shape), contentDescription = null,
-                modifier = Modifier.padding(top = space.s1).size(
-                    when {
-                        kind == NoticeKind.Info -> space.s3 + space.s1
-                        kind.large -> space.s2 + space.s1
-                        else -> space.s2
-                    },
-                ),
+                modifier = Modifier.padding(top = space.s1).size(kind.side(space)),
                 tint = kind.colour(colors),
             )
             Column(Modifier.weight(1f)) {
@@ -109,9 +113,15 @@ internal enum class HubNoticeKind(@StringRes val text: Int, @StringRes val actio
  * [onAction] opens the pairing graph. The fingerprints are not here: the certificate screen shows them.
  */
 @Composable
-internal fun HubNotice(kind: HubNoticeKind, onAction: () -> Unit, modifier: Modifier = Modifier) {
+internal fun HubNotice(
+    kind: HubNoticeKind,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Other buttons after the Hub notice's own, such as "Dismiss" where the person may put the problem away. */
+    more: List<SwAction> = emptyList(),
+) {
     NoticeCard(
         NoticeKind.Bad, stringResource(kind.text), modifier,
-        actions = listOf(SwAction(stringResource(kind.action), onAction)),
+        actions = listOf(SwAction(stringResource(kind.action), onAction)) + more,
     )
 }

@@ -5,35 +5,63 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import com.thompsonfabco.filamentkit.ui.components.TOP_BAR_TAG
 
 /**
  * The checks of AUT-8 (07-accessibility 15) on a semantics tree, as a list of findings (empty: the tree passes):
- * every clickable node has text or a content description (AND-1); the tree has exactly one heading, the top bar's
- * title (AND-2); every clickable is at least 48 x 48 dp (AND-6); no checkbox, switch or radio button has its own
- * click handler inside a row that has text (AND-5).
+ * every clickable node has text or a content description (AND-1); the top app bar holds exactly one heading and it is
+ * the screen's title, and every section title the test lists is a heading (AND-2; other headings are allowed); every
+ * clickable is at least 48 x 48 dp (AND-6); no checkbox, switch or radio button has its own click handler inside a
+ * row that has text (AND-5).
  */
 internal object SemanticsAudit {
     private const val MIN_TARGET_DP = 48
 
-    /** [merged] is the root of the merged tree, [unmerged] of the unmerged one; [density] is pixels per dp. */
-    fun findings(merged: SemanticsNode, unmerged: SemanticsNode, density: Float): List<String> = buildList {
+    /** Material's smallest drawn control (a 40 dp button), which its minimum interactive size grows to 48 dp. */
+    private const val MATERIAL_CONTROL_DP = 40
+
+    /**
+     * [merged] is the root of the merged tree, [unmerged] of the unmerged one; [density] is pixels per dp; [title] is
+     * the top bar's title; [sectionTitles] are the section titles the screen shows.
+     */
+    fun findings(
+        merged: SemanticsNode,
+        unmerged: SemanticsNode,
+        density: Float,
+        title: String,
+        sectionTitles: List<String> = emptyList(),
+    ): List<String> = buildList {
         val all = merged.flatten()
         all.filter { it.isClickable() }.forEach { node ->
             val name = node.name()
             if (name.isBlank()) add("clickable without text or content description at ${node.boundsInRoot}")
-            // the layout slot of the control: Material's minimum interactive size grows a 40 or 44 dp button to 48 dp
-            // there while the drawn button stays smaller; a bare `clickable` gets no such slot (Compose widens the
-            // touch area of every pointer input to 48 dp, so touch bounds cannot tell a small control from a large one)
-            val widthDp = node.layoutInfo.width / density
-            val heightDp = node.layoutInfo.height / density
-            if (widthDp < MIN_TARGET_DP || heightDp < MIN_TARGET_DP) {
-                add("clickable \"$name\" is ${widthDp}x$heightDp dp, under $MIN_TARGET_DP x $MIN_TARGET_DP")
+            // The clickable's own bounds count, not the box around it (outer padding is not touchable). Material's
+            // minimum interactive size is the one exception: it grows a 40 or 44 dp button's layout slot to 48 dp
+            // and the node itself stays smaller. (Compose widens the touch area of every pointer input to 48 dp, so
+            // touch bounds cannot tell a small control from a large one.)
+            if (!reaches(node.size.width / density, node.layoutInfo.width / density) ||
+                !reaches(node.size.height / density, node.layoutInfo.height / density)
+            ) {
+                add("clickable \"$name\" is ${node.size.width / density}x${node.size.height / density} dp, under $MIN_TARGET_DP x $MIN_TARGET_DP")
             }
         }
-        val headings = unmerged.flatten().filter { it.config.getOrNull(SemanticsProperties.Heading) != null }
-        if (headings.size != 1) add("expected exactly one heading, found ${headings.size}")
+        val all2 = unmerged.flatten()
+        val bar = all2.firstOrNull { it.config.getOrNull(SemanticsProperties.TestTag) == TOP_BAR_TAG }
+        val inBar = bar?.flatten().orEmpty().filter { it.isHeading() }
+        when {
+            bar == null -> add("no top app bar in the screen")
+            inBar.size != 1 -> add("expected exactly one heading in the top app bar, found ${inBar.size}")
+            inBar[0].name() != title -> add("the top bar heading is \"${inBar[0].name()}\", not the title \"$title\"")
+        }
+        sectionTitles.forEach { section ->
+            if (all2.none { it.isHeading() && it.name() == section }) add("section title \"$section\" is not a heading")
+        }
         all.filter { it.isToggleWithoutRow() }.forEach { add("checkbox, switch or radio button with its own click beside text at ${it.boundsInRoot}") }
     }
+
+    private fun reaches(node: Float, slot: Float) = node >= MIN_TARGET_DP || (slot >= MIN_TARGET_DP && node >= MATERIAL_CONTROL_DP)
+
+    private fun SemanticsNode.isHeading() = config.getOrNull(SemanticsProperties.Heading) != null
 
     /** How many clickable nodes the tree holds (a test that audits none has audited nothing). */
     fun clickableCount(merged: SemanticsNode): Int = merged.flatten().count { it.isClickable() }

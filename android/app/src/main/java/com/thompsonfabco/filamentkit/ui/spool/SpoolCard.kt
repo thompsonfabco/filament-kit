@@ -87,7 +87,7 @@ fun SpoolHost(
 @Composable
 fun SpoolSummaryRow(spool: SpoolSummary) {
     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ColorSwatch(spool.colorHex, 32.dp)
+        ColorSwatch(spool.colorHex)
         Column {
             Text("${spool.brand} ${spool.name}".trim(), style = MaterialTheme.typography.titleMedium)
             Text(

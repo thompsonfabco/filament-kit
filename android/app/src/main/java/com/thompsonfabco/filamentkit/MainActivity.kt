@@ -136,7 +136,11 @@ import com.thompsonfabco.filamentkit.ui.components.HubSheet
 import com.thompsonfabco.filamentkit.ui.components.HubSheetActions
 import com.thompsonfabco.filamentkit.ui.components.LocalNetworkNotice
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwConnectionChip
+import com.thompsonfabco.filamentkit.ui.components.SwDialog
+import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwNav
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
@@ -699,21 +703,21 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     }
 
     leaveAddFor?.let { request ->
-        AlertDialog(
-            onDismissRequest = { leaveAddFor = null },
-            title = { Text(stringResource(R.string.common_leave_title)) },
-            text = { Text(stringResource(R.string.common_leave_body, stringResource(R.string.web_card_new_spool))) },
-            dismissButton = { TextButton(onClick = { leaveAddFor = null }) { Text(stringResource(R.string.common_stay)) } },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        leaveAddFor = null
-                        nav.replaceAdd(request)
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = SpoolwardenTheme.colors.bad),
-                ) { Text(stringResource(R.string.common_leave_without_saving)) }
-            },
-        )
+        SwDialog(
+            title = stringResource(R.string.common_leave_title),
+            onClose = { leaveAddFor = null },
+            confirm = SwDialogButton(
+                stringResource(R.string.common_leave_without_saving),
+                onClick = {
+                    leaveAddFor = null
+                    nav.replaceAdd(request)
+                },
+                kind = SwButtonKind.DestructiveFilled,
+            ),
+            cancel = SwAction(stringResource(R.string.common_stay)) { leaveAddFor = null },
+        ) {
+            Text(stringResource(R.string.common_leave_body, stringResource(R.string.web_card_new_spool)))
+        }
     }
 
     // The spool card, over whatever screen is open (not over pairing or the add flow).

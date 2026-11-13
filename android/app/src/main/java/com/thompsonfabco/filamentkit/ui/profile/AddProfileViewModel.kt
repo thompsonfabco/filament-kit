@@ -75,6 +75,8 @@ data class AddProfileUiState(
     val problems: List<String> = emptyList(),
     val error: String? = null,
     val pairAgain: Boolean = false,
+    /** With [pairAgain]: the server's certificate changed (else the phone is no longer paired). */
+    val certChanged: Boolean = false,
     val lines: List<ProfileLine> = emptyList(),
     val editing: LineParentEdit? = null,
     val lineError: String? = null,
@@ -200,7 +202,7 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
     }
 
     private fun failed(s: AddProfileUiState, e: Exception): AddProfileUiState = when {
-        e is FingerprintMismatch -> s.copy(error = CERT_CHANGED, pairAgain = true)
+        e is FingerprintMismatch -> s.copy(error = CERT_CHANGED, pairAgain = true, certChanged = true)
         e !is ApiError -> s.copy(error = "Unexpected response from the server")
         e.code == "invalid_entry" -> {
             val list = (e.extra["problems"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }

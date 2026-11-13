@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -17,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -39,6 +41,7 @@ import com.thompsonfabco.filamentkit.net.UnloadResult
 import com.thompsonfabco.filamentkit.net.UsageEntry
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
+import com.thompsonfabco.filamentkit.ui.components.TOP_BAR_TAG
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.printers.CameraSource
 import com.thompsonfabco.filamentkit.ui.printers.PrinterBackend
@@ -82,8 +85,10 @@ class ScreenSemanticsTest {
     private var dark by mutableStateOf(false)
     private var fontScale by mutableStateOf(1f)
     private var density = 1f
+    private var title = ""
 
     private fun host(title: String, screen: @Composable () -> Unit) {
+        this.title = title
         rule.setContent {
             val base = LocalDensity.current
             density = base.density
@@ -98,11 +103,11 @@ class ScreenSemanticsTest {
         }
     }
 
-    private fun audit(): List<String> {
+    private fun audit(sectionTitles: List<String> = emptyList()): List<String> {
         rule.waitForIdle()
         val merged = rule.onRoot().fetchSemanticsNode()
         val unmerged = rule.onRoot(useUnmergedTree = true).fetchSemanticsNode()
-        return SemanticsAudit.findings(merged, unmerged, density)
+        return SemanticsAudit.findings(merged, unmerged, density, title, sectionTitles)
     }
 
     /** Light and dark, font scale 1 and 2, on the screen already shown. */
@@ -194,16 +199,47 @@ class ScreenSemanticsTest {
         assertTrue(found.toString(), found.any { "under 48 x 48" in it })
     }
 
-    @Test fun aScreenWithoutItsHeadingFails() {
-        rule.setContent { Text("No heading anywhere") }
-        rule.waitForIdle()
-        val none = SemanticsAudit.findings(rule.onRoot().fetchSemanticsNode(), rule.onRoot(useUnmergedTree = true).fetchSemanticsNode(), 1f)
-        assertTrue(none.any { "found 0" in it })
+    @Test fun aClickableWithOuterPaddingAroundItFails() {
+        // the box around it is 48 dp, the clickable inside is 20 dp
+        host("Planted") { Box(Modifier.padding(14.dp).size(20.dp).clickable { }) { Text("x") } }
+        val found = audit()
+        assertTrue(found.toString(), found.any { "under 48 x 48" in it })
     }
 
-    @Test fun aScreenWithTwoHeadingsFails() {
-        host("Planted") { Text("Second title", Modifier.semantics { heading() }) }
+    @Test fun aTopBarWithoutItsHeadingFails() {
+        rule.setContent { Box(Modifier.testTag(TOP_BAR_TAG)) { Text("Planted") } }
+        title = "Planted"
+        assertTrue(audit().any { "found 0" in it })
+    }
+
+    @Test fun twoHeadingsInTheTopBarFail() {
+        rule.setContent {
+            Box(Modifier.testTag(TOP_BAR_TAG)) {
+                Column {
+                    Text("Planted", Modifier.semantics { heading() })
+                    Text("Second", Modifier.semantics { heading() })
+                }
+            }
+        }
+        title = "Planted"
         assertTrue(audit().any { "found 2" in it })
+    }
+
+    @Test fun aTopBarHeadingThatIsNotTheTitleFails() {
+        host("Planted") { }
+        title = "Something else"
+        assertTrue(audit().any { "not the title" in it })
+    }
+
+    @Test fun aListedSectionTitleMustBeAHeadingButOtherHeadingsAreFine() {
+        host("Planted") {
+            Column {
+                Text("Server")
+                Text("Another section", Modifier.semantics { heading() })
+            }
+        }
+        assertTrue(audit(listOf("Server")).any { "section title \"Server\"" in it })
+        assertEquals(emptyList<String>(), audit(listOf("Another section")))
     }
 
     @Test fun aCheckboxWithItsOwnClickBesideTextFails() {

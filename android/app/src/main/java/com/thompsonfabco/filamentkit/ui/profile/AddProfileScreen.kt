@@ -27,17 +27,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.ui.components.HubNotice
+import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
-import com.thompsonfabco.filamentkit.ui.components.SwAction
 
 /**
  * "Add profile": the owner's own spec values for a product line (saved on the server as a local library entry, from
@@ -107,9 +106,10 @@ fun AddProfileScreen(vm: AddProfileViewModel, onBack: () -> Unit, onPairAgain: (
                 title = "The server could not use these values",
             )
         }
-        s.error?.let { problem ->
-            val again = if (s.pairAgain) listOf(SwAction(stringResource(R.string.common_pair_again), onPairAgain)) else emptyList()
-            NoticeCard(NoticeKind.Bad, problem, actions = again)
+        if (s.pairAgain) {
+            HubNotice(if (s.certChanged) HubNoticeKind.CertificateChanged else HubNoticeKind.NoLongerPaired, onPairAgain)
+        } else {
+            s.error?.let { NoticeCard(NoticeKind.Bad, it) }
         }
         s.saved?.let { Text(it, fontWeight = FontWeight.Bold) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
