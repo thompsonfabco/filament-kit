@@ -966,8 +966,8 @@ def test_the_printers_tab_has_manage_printers():
         assert words in text, words
     # review R103's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
     # address with its code, a Klipper move with its key
-    assert "edit({ unpin: true, access_code: c }" in text
-    assert "edit({ address: a, access_code: c }" in text and "edit({ address: a, api_key: k }" in text
+    assert "edit({ unpin: true, access_code: v.code }" in text
+    assert "...(bambu && !p.pinned ? { access_code: v.code } : {})" in text and "...(!bambu ? { api_key: v.key } : {})" in text
 
 
 # ---------- a Klipper printer's id is a slug (user report: SV08 MAX "no such printer", "Reconnecting...") ----------
@@ -1006,3 +1006,42 @@ def test_every_printer_route_takes_the_id_shape_the_kit_makes():
     for bad in ("..", "a/b", "a b", "x" * 65, ""):
         assert not pa.ENTRY.fullmatch(bad), bad
     assert not hasattr(pa, "SERIAL")
+
+
+def test_manage_printers_uses_inline_fields_not_prompts():
+    """FB-044: no window.prompt (it cannot mask a secret); the Access Code and API key fields are password inputs; the Klipper
+    add is one form, and its port must be 1-65535 instead of silently becoming 7125 (FB-045a)."""
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    code = " ".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
+    assert "window.prompt" not in code and "prompt(" not in code
+    assert 'type: f.secret ? "password" : "text"' in text
+    assert text.count("secret: true") >= 6
+    assert "|| 7125" not in text and "parsePort(v.port)" in text and "The port must be a whole number from 1 to 65535." in text
+    assert "n >= 1 && n <= 65535" in text
+
+
+def test_the_list_carries_the_printer_family(app):
+    from filament_kit.web.printers_app import LIST_FIELDS
+    assert "family" in LIST_FIELDS
+
+
+def test_klipper_printers_get_no_remap_or_report_buttons():
+    """FB-025: the kit refuses the map and report routes for a Klipper printer, so the page shows only Map by loading filament."""
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    klip = text.index("if (isKlipper()) {")
+    assert klip < text.index("/map`);") and text.index("return;", klip) < text.index("/map`);")
+    assert 'x.id === current) || {}).family === "klipper"' in text
+
+
+def test_the_report_link_is_replaced_and_its_url_freed_and_usage_refreshes_at_job_end():
+    """FB-026"""
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    assert "URL.revokeObjectURL(reportUrl)" in text and "reportBox.replaceChildren(" in text
+    assert "mapBox.append" not in text
+    assert "if (was && !isLive(d.status)) loadUsage();" in text
+
+
+def test_a_failed_manual_map_poll_backs_off_and_keeps_polling():
+    """FB-045b"""
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    assert "if (++m.fails >= 8)" in text and "Math.min(2000 * 2 ** m.fails, 20000)" in text
