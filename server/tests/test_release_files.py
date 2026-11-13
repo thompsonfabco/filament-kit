@@ -110,6 +110,41 @@ def test_release_publishes_with_generated_notes():
     assert "generate_release_notes: true" in _read(".github/workflows/release.yml")
 
 
+def _publish_step() -> str:
+    text = _read(".github/workflows/release.yml")
+    return text[text.index("uses: softprops/action-gh-release@"):]
+
+
+def _marker_step() -> str:
+    """The whole 'Pre-release marker' step: from its name line up to the next step."""
+    text = _read(".github/workflows/release.yml")
+    start = text.index("- name: Pre-release marker")
+    rest = text[start + 1:]
+    nxt = re.search(r"^\s+- (name|uses):", rest, re.M)
+    assert nxt, "no step after the marker step"
+    return text[start:start + 1 + nxt.start()]
+
+
+def test_release_prerelease_marker_step_tests_the_notes_marker_file():
+    step = _marker_step()
+    assert re.search(r"^\s+id: pre$", step, re.M)  # the publish step reads steps.pre.outputs
+    assert not re.search(r"^\s+(- )?if:", step, re.M)  # it must run on every release
+    assert 'test -f "release-notes/v${VERSION}.prerelease"' in step
+    assert "VERSION: ${{ needs.version.outputs.version }}" in step
+    out = r'>> "\$GITHUB_OUTPUT"\s*$'
+    assert re.search(r"then\s+echo prerelease=true " + out + r"\s+echo make_latest=false " + out, step, re.M)
+    # without the marker both outputs are empty, so the action sends what it sent before the marker existed
+    assert re.search(r"else\s+(#.*\s+)?echo prerelease= " + out + r"\s+echo make_latest= " + out, step, re.M)
+
+
+def test_release_publish_is_driven_by_the_marker_for_both_inputs():
+    step = _publish_step()
+    assert "prerelease: ${{ steps.pre.outputs.prerelease }}" in step
+    assert "make_latest: ${{ steps.pre.outputs.make_latest }}" in step
+    # no literal value that would ignore the marker
+    assert not re.search(r"^\s+(prerelease|make_latest):\s*(true|false|legacy)\s*$", step, re.M)
+
+
 def test_release_notes_are_written_for_the_current_version():
     """The workflow refuses a tag without release-notes/v<version>.md and publishes it as the release body."""
     text = _read(".github/workflows/release.yml")
