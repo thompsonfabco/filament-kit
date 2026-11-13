@@ -3,7 +3,7 @@
 // tests/page_audit.js in it and prints the findings as JSON. Test-only: never shipped, never run on a Hub.
 //
 //   node tests/aut5_run.mjs --url http://127.0.0.1:8799/intake --views "#add,#spools" [--widths 1280,320]
-//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/aut5_allowlist.txt] [--wide-font]
+//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/aut5_allowlist.txt] [--wide-font] [--font-dir <dir>]
 //
 // Besides the audit's own checks, each pass fails on: sideways scroll (content wider than the layout viewport), a view
 // that did not open (the address or title is not the one asked for), and an uncaught error in the page.
@@ -19,6 +19,8 @@
 // of every pass. --wide-font swaps the page's two font tokens (--sans, --mono) for wide faces (Verdana and Lucida
 // Console, or DejaVu Sans and Sans Mono where those are installed): a Linux runner falls back to DejaVu, which is wider
 // than the fonts a Windows or Mac machine has, so this shows there what a layout does when the text is wider. A
+// --font-dir <dir> loads DejaVuSans*.ttf and DejaVuSansMono*.ttf from that folder as DejaVu Sans / DejaVu Sans Mono (what
+// a Linux runner falls back to; the files are not in the repository) and points both tokens at them. A
 // "sideways scroll" finding names the widest element that reaches past the viewport.
 // Exit 0: no findings; 1: findings, or allow-list counts that do not match (printed); 2: the run itself failed (no
 // browser found, the browser closed, a call timed out); 3: a browser was found but could not start headless here
@@ -45,8 +47,22 @@ const WIDE_FONT = "document.addEventListener('DOMContentLoaded', () => { const s
   "s.replaceSync(':root{--sans:Verdana,\"DejaVu Sans\",sans-serif !important;" +
   "--mono:\"Lucida Console\",\"DejaVu Sans Mono\",\"Courier New\",monospace !important}'); " +
   "document.adoptedStyleSheets = [...document.adoptedStyleSheets, s]; });";
+// the same, with the DejaVu files of --font-dir (read here, loaded in the page as FontFace objects: the page's content
+// security policy does not apply to them); the page waits for them through window.__fonts
+function dejavuScript(dir) {
+  const face = (family, file, weight) => `faces.push(new FontFace(${JSON.stringify(family)}, Uint8Array.from(atob("${
+    readFileSync(join(dir, file)).toString("base64")}"), (c) => c.charCodeAt(0)).buffer, { weight: "${weight}" }));`;
+  return `(() => { const faces = [];
+    ${face("DejaVu Sans", "DejaVuSans.ttf", 400)} ${face("DejaVu Sans", "DejaVuSans-Bold.ttf", 700)}
+    ${face("DejaVu Sans Mono", "DejaVuSansMono.ttf", 400)} ${face("DejaVu Sans Mono", "DejaVuSansMono-Bold.ttf", 700)}
+    window.__fonts = Promise.all(faces.map((f) => f.load().then(() => document.fonts.add(f))));
+    document.addEventListener("DOMContentLoaded", () => { const s = new CSSStyleSheet();
+      s.replaceSync(':root{--sans:"DejaVu Sans",sans-serif !important;--mono:"DejaVu Sans Mono",monospace !important}');
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, s]; }); })();`;
+}
 // the element that makes the page wider than the viewport: the one whose right edge goes furthest past it (selector
-// path, how far, its text); elements inside a box that scrolls or clips on its own do not count
+// path, how far, its text); elements inside a box that scrolls or clips on their own do not count, and a box
+// is skipped when a child of it reaches past too (the grid or flex parent that only grew with its content)
 const WIDEST = `(() => {
   const vw = document.documentElement.clientWidth, name = (e) => e.tagName.toLowerCase() + (e.id ? "#" + e.id : "") +
     [...e.classList].slice(0, 2).map((c) => "." + c).join("");
@@ -54,11 +70,11 @@ const WIDEST = `(() => {
   for (const e of document.body.querySelectorAll("*")) {
     const r = e.getBoundingClientRect();
     if (!r.width || r.right <= vw + 0.5 || getComputedStyle(e).visibility === "hidden") continue;
-    let clipped = false;
+    let clipped = getComputedStyle(e).position === "fixed";      // a fixed box never widens the page
     for (let p = e.parentElement; p && p !== document.documentElement; p = p.parentElement) {
-      if (/auto|scroll|hidden|clip/.test(getComputedStyle(p).overflowX) && p.getBoundingClientRect().right <= vw + 0.5) { clipped = true; break; }
+      if (getComputedStyle(p).position === "fixed" || /auto|scroll|hidden|clip/.test(getComputedStyle(p).overflowX) && p.getBoundingClientRect().right <= vw + 0.5) { clipped = true; break; }
     }
-    if (clipped) continue;
+    if (clipped || [...e.children].some((c) => c.getBoundingClientRect().right > vw + 0.5)) continue;      // the innermost element
     if (!best || r.right > best.right) best = { e, right: r.right };
   }
   if (!best) return "";
@@ -190,7 +206,8 @@ async function main() {
     };
     await send("Page.enable");
     await send("Runtime.enable");
-    if (args["wide-font"]) await send("Page.addScriptToEvaluateOnNewDocument", { source: WIDE_FONT });
+    if (args["font-dir"]) await send("Page.addScriptToEvaluateOnNewDocument", { source: dejavuScript(args["font-dir"]) });
+    else if (args["wide-font"]) await send("Page.addScriptToEvaluateOnNewDocument", { source: WIDE_FONT });
     const report = [], passes = [];
     let pass = 0;
     for (const scheme of SCHEMES) {
@@ -205,6 +222,7 @@ async function main() {
         errors.length = 0;
         await send("Page.navigate", { url: url.href + VIEWS[0] });
         await loaded();
+        if (args["font-dir"]) await send("Runtime.evaluate", { expression: "window.__fonts", awaitPromise: true });
         for (const view of VIEWS) {
           // errors are taken when the view is reported: what the page threw while loading is the first view's, and
           // what arrives later belongs to the view open at that time
