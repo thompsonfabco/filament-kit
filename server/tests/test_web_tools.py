@@ -17,6 +17,12 @@ from filament_kit.spoolman import Spoolman  # noqa: E402
 from filament_kit.web import mcp_tools, slots  # noqa: E402
 from filament_kit.web.mcp_tools import Problem  # noqa: E402
 
+
+def _ensure_saved(vendor, product, material, *, bambu_parent, library, store):
+    with lines_mod.transaction() as ls:
+        return lines_mod.ensure(ls, vendor, product, material, bambu_parent=bambu_parent, library=library,
+                                store=store, used_fids=set())
+
 BBL = Path(__file__).parent / "data" / "bbl"
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2,
          "overflow": "Overflow", "sealed_location": "Sealed stock"}
@@ -183,7 +189,7 @@ def store(monkeypatch):
 
 def test_preset_status_lists_uncovered(tools, sm):
     add(sm, item(), item(vendor="ELEGOO", name="PETG Black", material="PETG", tare=154))
-    lines_mod.ensure_saved("SUNLU", "PLA+", "PLA", bambu_parent=None, library=_lib(), store=None)
+    _ensure_saved("SUNLU", "PLA+", "PLA", bambu_parent=None, library=_lib(), store=None)
     st = tools.preset_status()
     names = {f["name"]: f for f in st["uncovered_filaments"]}
     assert set(names) == {"PLA+ Grey", "PETG Black"}
@@ -200,7 +206,7 @@ def _lib():
 def test_list_and_add_filaments_to_line(tools, sm, spoolman_fake_store):
     (a,) = add(sm, item())
     fid = sm.get(f"spool/{a}")["filament"]["id"]
-    lines_mod.ensure_saved("SUNLU", "PLA+", "PLA", bambu_parent=None, library=_lib(), store=None)
+    _ensure_saved("SUNLU", "PLA+", "PLA", bambu_parent=None, library=_lib(), store=None)
     out = tools.add_filaments_to_line("SUNLU PLA+", [fid])
     assert out["line_id"] == "sunlu--pla-plus" or fid in out["filament_ids"]
     (ln,) = tools.list_lines("sunlu")["lines"]
