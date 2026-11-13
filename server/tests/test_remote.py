@@ -407,6 +407,16 @@ def test_remote_install_restores_the_previous_router_conf_when_nginx_test_fails(
     assert f"put back the previous {remote.ROUTER_CONF}, {remote.PROXY_CONF}" in capsys.readouterr().out
 
 
+def test_remote_install_writes_the_nginx_start_check_and_reloads_systemd_after_it(tmp_path):
+    root = tmp_path / "root"
+    ran = []
+    apply.execute([Action("remote_install", "fk.example.org")], run=ran.append, resources=INSTALL, root=root)
+    drop = root / remote.NGINX_DROPIN.lstrip("/")
+    assert f"ExecStartPre=-{remote.HOOK} check" in drop.read_text()
+    assert ["systemctl", "daemon-reload"] in ran
+    assert ran.index(["systemctl", "daemon-reload"]) < ran.index(["nginx", "-t"])
+
+
 # ---- v0.3.0: the kit's own route marker (the ops router writes "written by mcp-route" too) ----
 
 OPS_FIRST_LINE = ('# MCP server "@NAME@" -> 127.0.0.1:@PORT@   (written by mcp-route; public base '

@@ -628,6 +628,7 @@ def _remote_install(ex: _Exec, host: str) -> None:
     ex.write(remote.DEPLOY_HOOK_FILE, f"#!/bin/sh\nexec {remote.HOOK} deploy\n".encode("utf-8"), 0o755)
     # nginx loads the certificate and key at start: this drop-in has the hook check they match first (it never blocks)
     ex.write(remote.NGINX_DROPIN, remote.NGINX_DROPIN_TEXT.encode("utf-8"), 0o644)
+    ex.ok(["systemctl", "daemon-reload"])     # systemd reads the drop-in only after this
     for d, mode in ((remote.ROUTE_DIR, 0o755), (remote.TLS_DIR, 0o750)):
         _under(ex.root, d).mkdir(parents=True, exist_ok=True)
         os.chmod(_under(ex.root, d), mode)
