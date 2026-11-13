@@ -1041,11 +1041,24 @@ snake case; `{count}` is the number a plural depends on.
   "appearance_system": "System",
   "printer_forget": "Forget printer",
   "printer_forget_question": "Forget {printer}?",
-  "printer_forget_body_bambu": "Spoolwarden stops connecting to it and deletes its Access Code. To use it again, add it again.",
-  "printer_forget_body_klipper": "Spoolwarden stops connecting to it and deletes its Moonraker API key, if one is saved.",
+  "command_name": "spoolwarden",
+  "printer_forget_body_bambu": "{product} stops connecting to it and deletes its Access Code. To use it again, add it again.",
+  "printer_forget_body_klipper": "{product} stops connecting to it and deletes its Moonraker API key, if one is saved.",
+  "status_fix_run": "Run {command} status on the Hub.",
   "spools_added": { "one": "{count} spool added", "other": "{count} spools added" }
 }
 ```
+
+**The product's name is held once.** `app_name` is the only entry whose text contains the product's name, and
+`command_name` the only one that contains the command's name. Every other text that names either uses the
+reserved placeholders `{product}` and `{command}`; the generator fills them from those two entries, so they are
+not arguments at run time: `strings.js` and `strings.xml` hold the finished text, and no caller passes the name.
+The app's launcher label is `@string/app_name`; the web app manifest's `name` and `short_name` (section 13), the
+top bar and the browser tab take the same entry. Where a part of this design writes "Spoolwarden" or
+`spoolwarden` inside a text, it stands for these two entries. A change of the product's name is therefore a
+change of two lines and a regeneration. Test 7 also fails when any other entry contains the value of `app_name`
+or of `command_name` as a word. Addresses and identifiers that are not text on screen (the deep-link scheme,
+storage keys, file and package names) are not part of the catalogue and do not follow these entries.
 
 **Generated files.**
 

@@ -151,7 +151,9 @@ Tooling · M · Depends on: S0.4, S0.7 · Beside: S0.5
 - **Files today:** none; every text is written in the code (`setup_static/*`, `web/static/*`, Kotlin under `<app>/ui/`,
   `cli.py`).
 - **Change:** `strings/en.json` with the texts of 02 to 06 under the keys of 05 15 (`<screen>_<element>[_<state>]`,
-  `common_…`, `theme_<key>_name`, `theme_<key>_line`); the generator writes `strings/strings.js` and
+  `common_…`, `theme_<key>_name`, `theme_<key>_line`), the product's name only in `app_name` and the command's
+  only in `command_name`, every other text naming them through `{product}` and `{command}` (08 12); the generator
+  writes `strings/strings.js` and
   `res/values/strings.xml` (08 12); 08 test 7 (key and text equality; the literal scan with today's literals in
   `tests/strings_allowlist.txt`) and test 8 (theme names agree). Nothing reads the catalogue yet: the Hub page
   starts in S1.3, the web app in S3.3 and the app in S4.3.
@@ -714,12 +716,18 @@ app · M · Depends on: S0.4, S0.9 · Beside: Stage 3 steps
   `res/values/themes.xml`, `res/values-night/themes.xml`; hard-coded status colours in `<app>/ui/home/HomeScreen.kt`
   (105-112), `<app>/ui/printers/PrintersScreen.kt` (97-102), `<app>/ui/printers/PrinterScreen.kt` (197),
   `MjpegView.kt` (166), `HlsPlayer.kt` (93); `<app>/ui/ColorSwatch.kt` (310-357).
-- **Change:** the hand-written `SpoolwardenTheme` (08 4 to 6) wraps everything in Console; the appearance choice is
-  read from the app's settings store (default System; its menu arrives in S4.2); status colours come from the tokens;
-  the window background from `sw_window.xml`; dynamic colour stays off. The whole app changes look at once.
+- **Change:** the hand-written `SpoolwardenTheme(look, appearance)` (08 4 to 6, 9) wraps everything; `look` has the
+  one value Console and the `nav`, `collection` and `detail` composition locals exist with Console's choices as
+  their defaults, so later steps add themes without changing a caller. The appearance choice is read from the
+  app's settings store (default System; its menu arrives in S4.2) and applied as 08 8 says, including
+  `android:configChanges="uiMode"` on `MainActivity` and `setApplicationNightMode`, so a change of light or dark
+  never recreates the activity or drops what is being typed. Status colours come from the tokens; the window
+  background from `sw_window.xml`; dynamic colour stays off. The whole app changes look at once.
 - **Keep:** screens, texts, navigation.
-- **Check:** 08 test 5 Kotlin part (the camera's black ground and the swatch fill listed in the allow-list with their
-  reasons); AUT-1 Material roles; manual: release checklist step 7 (Home with TalkBack) in light and dark.
+- **Check:** 08 test 5 Kotlin part, with the app's entries removed from `tests/literal_allowlist.txt` in this step
+  (the camera's black ground and the swatch fill stay listed with their reasons); AUT-1 Material roles; the app's
+  own `ColorSchemeTest` (08 9), added in this step; manual: release checklist step 7 (Home with TalkBack) in light
+  and dark, and a switch of the phone between light and dark while a field holds typed text (the text stays).
 
 ### S4.2 Shell and navigation
 app · L · Depends on: S4.1 · Beside: Stage 3 steps
@@ -729,7 +737,9 @@ app · L · Depends on: S4.1 · Beside: Stage 3 steps
 - **Change:** 05 2: `NavigationSuiteScaffold` with the destinations of 05 2.3; the top app bar (place title,
   connection chip with the Hub connection sheet, appearance menu); type-safe routes, every screen a destination
   (the Printers local state becomes routes); Back as 08 14; gating with the Hub notice; the splash screen. Recent
-  arrives with S4.12 (open point 9). An NFC tap keeps opening today's spool card until S4.8.
+  is a destination from this step: today's Recently added screens move onto the routes of 05 2.4 (`recent`,
+  `recent/{hid}` and those of its sub-screens that exist today) with their behaviour unchanged; S4.12 rebuilds
+  them. An NFC tap keeps opening today's spool card until S4.8.
 - **Keep:** what each screen shows inside.
 - **Check:** manual: release checklist step 7 (dialogs announced, focus returned, Back).
 
@@ -997,9 +1007,9 @@ Hub page, web app · M · Depends on: S6.1, S2.19, S3.3 · Beside: S6.3
 ### S6.3 Theme picker on Android
 app · M · Depends on: S6.1, S4.15 · Beside: S6.2
 - **Files today:** `<app>/ui/theme/SpoolwardenTheme.kt` (S4.1); `<app>/ui/settings/SettingsScreen.kt`.
-- **Change:** 05 12.2, 08 9: `SpoolwardenTheme(look, appearance)` with the `nav`, `collection` and `detail`
-  composition locals; the picker in Settings > Appearance with the Console tile; the choice in the app's settings
-  store; first start uses `look` from the Hub.
+- **Change:** 05 12.2, 08 9: the picker in Settings > Appearance with the Console tile; the choice in the app's
+  settings store, passed to `SpoolwardenTheme(look, appearance)` (its signature and the `nav`, `collection` and
+  `detail` locals exist since S4.1); first start uses `look` from the Hub.
 - **Keep:** Console as today.
 - **Check:** AUT-8 on Settings.
 
@@ -1243,14 +1253,15 @@ Things the design parts leave open. Each needs a decision before the step named;
    only if S2.4, S3.11 or S4.11 change the interval.
 8. **The headless browser for AUT-5.** 07 15 names a headless browser but not which; it runs only in tests, and its
    licence and where it runs are open. Needed by S0.11 and S1.11.
-9. **The app's Recent destination before S4.12.** 05 2.3 has five destinations; Recently added is new in the app and
-   comes in S4.12. S4.2 builds the bar without Recent until then. The alternative is moving S4.12 before S4.5.
+9. **Settled: the app's Recent destination.** The app has Recently added screens, so S4.2 builds the bar with all
+   five destinations and moves those screens onto the `recent` routes unchanged; S4.12 rebuilds them.
 10. **A printer's id and its serial.** 06 writes `/api/printers/<serial>/…`, 05 `api/printers/{id}/…`; whether they
     are the same value is not stated. Needed by S5.5 (naming a printer by serial or id).
 11. **"The web app answers on this Hub (port 8101)" in 06 9.12.** Whether this is the web service's own port behind
     the Hub's address or the Hub's 8710 is not stated. Needed by S5.8 (`web status`).
-12. **The app label and the rename.** 05 1 sets the label "Spoolwarden"; whether it changes with the wording (S7.2)
-    or with the code rename is open. The application id stays with the rename.
+12. **Settled: the name on screen and the rename.** The product's name is one catalogue entry (`app_name`, also the
+    app's label) and the command's name another (`command_name`); 08 12. Until the code is renamed they hold the
+    old name; the rename changes the two entries. The application id stays with the rename.
 13. **When the rename lands.** S5.9, the command names in S3.16, S7.1 and S7.3, and the version that removes the
     `filament-kit` wrapper (06 2 gives "0.8.0" as an example) follow it.
 14. **When the unreleased Hub code is released.** S2.15 and S2.18 release code that exists but is not in a release;
