@@ -120,9 +120,10 @@ def test_install_downloads_checks_unpacks_and_runs_the_installer(key, server, tm
     assert (store / "assets" / "cpu-models-0.1.0.tar.gz").read_bytes() == b"CPU MODELS 0.1.0"
     assert not (store / "assets" / "gpu-adapter-0.1.0.tar.gz").exists()           # the cpu tier's assets only
     cmd = run.calls[0]
-    assert cmd[0] == "bash" and cmd[1] == str(store / "filament-kit-image-0.1.0" / "install" / "filament-kit-image.sh")
-    assert cmd[2:] == ["--tier", "cpu", "--port", "7915", "--bind", "127.0.0.1", "--user", "filament-kit-image",
-                       "--prefix", "/opt/filament-kit-image", "--assets", str(store / "assets")]
+    script = store / "filament-kit-vision-0.1.0" / "install" / "filament-kit-vision.sh"
+    assert cmd[0] == "bash" and cmd[1] == str(script)
+    assert cmd[2:] == ["--tier", "cpu", "--port", "7915", "--bind", "127.0.0.1", "--user", "filament-kit-vision",
+                       "--prefix", "/opt/filament-kit-vision", "--assets", str(store / "assets")]
     assert "installer output line" in said and (store / "SHA256SUMS.sig").is_file()
 
 
@@ -135,9 +136,9 @@ def test_a_changed_asset_installs_nothing(key, server, tmp_path):
 
 
 @pytest.mark.parametrize("tar,match", [
-    (lambda v: mrf.code_tarball(v, extra=_entry("filament-kit-image-0.1.0/../../evil", 3)), "unexpected entry"),
-    (lambda v: mrf.code_tarball(v, extra=_link("filament-kit-image-0.1.0/link")), "unexpected entry"),
-    (lambda v: mrf.code_tarball(v, script=False), "has no filament-kit-image-0.1.0/install"),
+    (lambda v: mrf.code_tarball(v, extra=_entry("filament-kit-vision-0.1.0/../../evil", 3)), "unexpected entry"),
+    (lambda v: mrf.code_tarball(v, extra=_link("filament-kit-vision-0.1.0/link")), "unexpected entry"),
+    (lambda v: mrf.code_tarball(v, script=False), "has no filament-kit-vision-0.1.0/install"),
 ])
 def test_a_bad_tarball_installs_nothing(key, server, tar, match):
     s = server({"0.1.0": mrf.make_release(key, tarball=tar("0.1.0"))})
@@ -186,7 +187,7 @@ def test_remove_runs_the_installed_releases_uninstaller(key, server, tmp_path):
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
     run = Run()
     assert lii.remove(run=run) is True
-    assert run.calls[0][2:] == ["--uninstall", "--prefix", "/opt/filament-kit-image"]
+    assert run.calls[0][2:] == ["--uninstall", "--prefix", "/opt/filament-kit-vision"]
     assert lii.installed() is None and not (tmp_path / "store").exists()
     assert lii.remove(run=Run()) is False
 
@@ -314,17 +315,17 @@ def test_remove_takes_the_fixed_prefix_and_a_script_inside_the_store(key, server
     _record(tmp_path, {**rec, "prefix": "/"})                       # a prefix in the record is never read
     run = Run()
     lii.remove(run=run)
-    assert run.calls[0][-2:] == ["--prefix", "/opt/filament-kit-image"]
+    assert run.calls[0][-2:] == ["--prefix", "/opt/filament-kit-vision"]
     assert run.calls[0][1].startswith(str((tmp_path / "store").resolve()))
 
 
 def test_remove_refuses_an_uninstaller_that_resolves_outside_the_store(key, server, tmp_path):
     s = server({"0.1.0": mrf.make_release(key)})
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
-    inst = tmp_path / "store" / "0.1.0" / "filament-kit-image-0.1.0" / "install"
+    inst = tmp_path / "store" / "0.1.0" / "filament-kit-vision-0.1.0" / "install"
     outside = tmp_path / "elsewhere"
     outside.mkdir()
-    (outside / "filament-kit-image.sh").write_text("echo evil")
+    (outside / "filament-kit-vision.sh").write_text("echo evil")
     import shutil
     shutil.rmtree(inst)
     try:
@@ -451,7 +452,7 @@ def test_the_kits_uninstaller_removes_the_reader_first():
     text = (Path(__file__).resolve().parents[2] / "install" / "uninstall.sh").read_text(encoding="utf-8")
     block = text.index('LI_STORE=/opt/filament-kit/local-intake')
     assert block < text.index("rm -rf /opt/filament-kit\n")
-    assert '--uninstall --prefix /opt/filament-kit-image' in text[block:]
+    assert '--uninstall --prefix /opt/filament-kit-vision' in text[block:]
 
 
 def test_the_uninstallers_version_read_is_digits_only(tmp_path):

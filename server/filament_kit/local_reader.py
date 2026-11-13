@@ -1,4 +1,4 @@
-"""The local label reader (the `local_intake` module): a separate program (filament-kit-image, its own repository and
+"""The local label reader (the `local_intake` module): a separate program (filament-kit-vision, its own repository and
 release), on this machine or another one on the network, that reads spool label photos without the cloud. The kit
 only talks to it over HTTP; this file is the whole of that conversation, so a change to the reader's API changes
 this file and nothing else.

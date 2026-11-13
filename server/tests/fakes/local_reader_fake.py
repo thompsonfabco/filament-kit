@@ -1,4 +1,4 @@
-"""A stand-in for the local label reader service (filament-kit-image's daemon; tests only, never real models), in the
+"""A stand-in for the local label reader service (filament-kit-vision's daemon; tests only, never real models), in the
 forms of contract v1 (the module's docs/api-contract.md).
 
 One Starlette app, state in a dict the test changes:
@@ -25,13 +25,13 @@ def reply(confidence: float = 0.93, tier: str = "cpu", **item) -> dict:
             "items": [{**ITEM, "confidence": confidence, "color_name": "Grey", "color_family": "grey",
                        "field_confidence": {"vendor": 0.97, "material": 0.99, "color": confidence}, **item}],
             "questions": [],
-            "reader": {"service": "filament-kit-image", "module_version": "0.1.0", "tier_used": tier,
+            "reader": {"service": "filament-kit-vision", "module_version": "0.1.0", "tier_used": tier,
                        "escalated": False, "fallback_reason": None, "model": f"fake-{tier}", "latency_ms": 240.5},
-            "usage": {"model": f"filament-kit-image/{tier}", "input_tokens": 0, "cached": 0, "output_tokens": 0}}
+            "usage": {"model": f"filament-kit-vision/{tier}", "input_tokens": 0, "cached": 0, "output_tokens": 0}}
 
 
 def new_data() -> dict:
-    return {"health": {"service": "filament-kit-image", "api_version": "1.0", "module_version": "0.1.0",
+    return {"health": {"service": "filament-kit-vision", "api_version": "1.0", "module_version": "0.1.0",
                        "status": "ok", "default_tier": "auto", "revise": True, "auth_required": False,
                        "tiers": {"cpu": {"usable": True, "reason": None},
                                  "gpu": {"usable": False, "reason": "no CUDA device", "loaded": False}},

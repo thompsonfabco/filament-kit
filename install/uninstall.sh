@@ -114,12 +114,12 @@ fi
 LI_STORE=/opt/filament-kit/local-intake
 if [ -f "$LI_STORE/installed.json" ]; then
     LI_VER=$(sed -n 's/.*"version": *"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' "$LI_STORE/installed.json" | head -n 1)
-    LI_SH="$LI_STORE/$LI_VER/filament-kit-image-$LI_VER/install/filament-kit-image.sh"
+    LI_SH="$LI_STORE/$LI_VER/filament-kit-vision-$LI_VER/install/filament-kit-vision.sh"
     if [ -n "$LI_VER" ] && [ -f "$LI_SH" ]; then
-        bash "$LI_SH" --uninstall --prefix /opt/filament-kit-image \
-            || echo "The local label reader's uninstaller failed: its unit and /opt/filament-kit-image may be left."
+        bash "$LI_SH" --uninstall --prefix /opt/filament-kit-vision \
+            || echo "The local label reader's uninstaller failed: its unit and /opt/filament-kit-vision may be left."
     else
-        echo "The local label reader's uninstaller was not found: its unit and /opt/filament-kit-image may be left."
+        echo "The local label reader's uninstaller was not found: its unit and /opt/filament-kit-vision may be left."
     fi
 fi
 rm -rf /opt/filament-kit

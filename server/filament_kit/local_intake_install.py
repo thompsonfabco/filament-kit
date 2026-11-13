@@ -1,6 +1,6 @@
 """Install, upgrade and remove the local label reader (the `local_intake` module) from its own signed releases.
 
-The reader is a separate program in its own repository (filament-kit-image). The kit ships none of its code: this
+The reader is a separate program in its own repository (filament-kit-vision). The kit ships none of its code: this
 file downloads a release, checks it the way the kit checks its own (`release.py`: ed25519 over SHA256SUMS, the key
 pinned here), unpacks it and runs that release's installer. The scheme is in the handoff
 `2026-11-12-1214-server-builder-release-signing-scheme.md`; the release layout this file expects:
@@ -9,12 +9,12 @@ pinned here), unpacks it and runs that release's installer. The scheme is in the
     manifest.json                                      {"version", "api_version": "1.x", "kit_min": "X.Y.Z",
                                                         "tiers": {"cpu": {"assets": [...], "disk_mb", "minutes",
                                                                           "download_mb"?}, "gpu": {...}, ...}}
-    filament-kit-image-<version>.tar.gz                the code; top folder filament-kit-image-<version>/ with
-                                                        install/filament-kit-image.sh
+    filament-kit-vision-<version>.tar.gz                the code; top folder filament-kit-vision-<version>/ with
+                                                        install/filament-kit-vision.sh
     the tier's model assets (named in the manifest)    put next to the code, given to the installer by --assets
 
-The installer runs as `bash install/filament-kit-image.sh --tier T --port P --bind 127.0.0.1 --user
-filament-kit-image --prefix <PREFIX> --assets <dir>` (and `--uninstall --prefix <PREFIX>`); it owns its systemd unit,
+The installer runs as `bash install/filament-kit-vision.sh --tier T --port P --bind 127.0.0.1 --user
+filament-kit-vision --prefix <PREFIX> --assets <dir>` (and `--uninstall --prefix <PREFIX>`); it owns its systemd unit,
 is idempotent (an upgrade is the newer release's installer over the old one), and exits 0 only when /v1/health
 answers. The kit then switches the module on, points `local_intake.url` at it and checks its health.
 
@@ -42,11 +42,11 @@ from . import local_reader, release
 # would mean no release can be verified, so nothing is installed.
 MODULE_PUBKEY = "adkFwUZin7sdhZJ1fdr9sOn8BtFIFuiFHrm2d5O0TPU="
 MODULE_REPO = "thompsonfabco/filament-kit-vision"
-NAME = "filament-kit-image"
+NAME = "filament-kit-vision"
 MANIFEST = "manifest.json"
 STORE = Path("/opt/filament-kit/local-intake")
-PREFIX = "/opt/filament-kit-image"
-SERVICE_USER = "filament-kit-image"
+PREFIX = "/opt/filament-kit-vision"
+SERVICE_USER = "filament-kit-vision"
 DEFAULT_PORT = 7915
 LIMIT_MANIFEST = 256 << 10
 LIMIT_ASSET = 8 << 30            # a model file: the GPU adapter is large
@@ -302,7 +302,7 @@ def _save_listed(fetcher, rel: dict, table: dict, name: str, dest: Path) -> None
 
 
 def _extract_code(tarball: Path, version: str, dest: Path) -> Path:
-    """Unpack the verified code tarball: plain files and folders under filament-kit-image-<version>/ only."""
+    """Unpack the verified code tarball: plain files and folders under filament-kit-vision-<version>/ only."""
     top = f"{NAME}-{version}"
     with tarfile.open(tarball, "r:gz") as tf:
         members = tf.getmembers()
