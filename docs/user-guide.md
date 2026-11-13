@@ -636,6 +636,43 @@ logs a warning; neither is a failure, and the library you already have (or none)
 
 Your own `library add` entries override the shared library for that line.
 
+## Flash a device
+
+The Printer Station (the NFC reader at a printer) and the intake panel are ESP32-C3 boards. The kit carries a
+ready-made firmware for each, so you need no toolchain: plug the board into a USB port with a data cable (a
+charge-only cable shows nothing) and write it from the setup page or the command line.
+
+**Printer Station, from the setup page.** Open the setup page in Chrome or Edge on a desktop or laptop computer and go
+to the **Flash a device** tab.
+
+1. Device: **Printer Station**. Plugged into: **This computer** (the board is on the computer you sit at) or **The kit
+   server** (the board is on the server's USB port; then pick the board if several are plugged in).
+2. Type the Wi-Fi name (2.4 GHz only) and its password twice. Pick the buzzer: high-triggered for the build in the
+   parts list, low-triggered for the older 3-pin module. A name is optional (for example "bench"). Type the setup code
+   if this computer isn't trusted.
+3. Press **Connect and write** and pick the board in the browser's list (from this computer), or **Write and set up**
+   (on the server).
+4. Wait for "Done. The Printer Station joined '<Wi-Fi>' and reached the kit." It takes up to about a minute and a half.
+   If it ends with a reason instead, it names what to fix: the Wi-Fi name or password, the kit's public address, or
+   "run this again". A failed run removes the reader's token again.
+5. Unplug it and power it where it lives. It keeps its settings and asks you to pick a printer with the knob.
+
+Writing from this computer needs Chrome or Edge on a desktop or laptop and the setup page opened over HTTPS; phones and
+other browsers can't reach USB from a page, and the tab says so and disables the button. The firmware comes from the
+installed kit, never from the internet. The Printer Station also needs the kit's public HTTPS address (`web.public_url`,
+see [Remote access](#remote-access)): it only calls the kit over that address, and the tab says so when it is missing.
+
+**Printer Station, from the command line.** Plug it into the server and run `sudo filament-kit reader setup`. It asks
+the same three questions (Wi-Fi name, password twice, buzzer) and ends the same way. To update a reader later, run it
+again with the board plugged in: it keeps its settings and writes the kit's newer firmware. A reader set up this way
+refuses updates over Wi-Fi unless you gave `--ota-pubkey`; see [reader/README.md](../reader/README.md).
+
+**Intake panel.** The same tab: Device **Intake panel**, then **This computer**, **Connect and write**; afterwards plug it
+into the station computer. A panel plugged straight into the station computer needs nothing from you: the station
+writes its firmware to it by itself (see [Reader, panel and beep](#reader-panel-and-beep)).
+
+The phone web app and the Android app can't write USB firmware; the setup page does it.
+
 ## Intake station
 
 The intake station weighs a spool and reads its NFC tag, so adding or opening a spool needs no typing. It runs as
