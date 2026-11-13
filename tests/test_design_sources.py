@@ -336,6 +336,36 @@ SVG = "{http://www.w3.org/2000/svg}"
 DRAWABLES = Path("android/app/src/main/res/drawable")
 
 
+# What a path may set (08 section 11, "Drawing"): icons nothing (the symbol carries the stroke); status shapes either a
+# currentColor fill, or no fill with a currentColor stroke of width 2. The product mark may also fill in currentColor.
+STATUS_FILLED = {"fill": "currentColor"}
+STATUS_STROKED = {"fill": "none", "stroke": "currentColor", "stroke-width": "2", "stroke-linecap": "round",
+                  "stroke-linejoin": "round"}
+
+
+def path_errors(where, svg, icon, product=False):
+    """What breaks the Drawing rule on the paths (and the root) of one icon or status shape."""
+    errors = []
+    for el in svg:
+        if el.tag != SVG + "path":
+            continue
+        attrs = {k: v for k, v in el.attrib.items() if k != "d"}
+        if icon:
+            if product and attrs == STATUS_FILLED:
+                continue
+            allowed = {}
+        else:
+            allowed = STATUS_FILLED if attrs.get("fill") == "currentColor" else STATUS_STROKED
+        if attrs != allowed:
+            errors.append(f"{where}: a path sets {attrs or 'nothing'}, which the {'icon' if icon else 'status shape'} "
+                          f"rule allows as {allowed or 'nothing'}")
+    if not icon:
+        root = {k: v for k, v in svg.attrib.items() if k not in ("viewBox", "id")}
+        if root:
+            errors.append(f"{where}: the root <svg> sets {root}")
+    return errors
+
+
 def icon_errors(root):
     """Every way the icon folders under root break test 6; an empty list passes."""
     errors = []
@@ -357,10 +387,15 @@ def icon_errors(root):
                 rules = {"fill": "none", "stroke-width": "1.75", "stroke-linecap": "round", "stroke-linejoin": "round"}
                 if name == "spoolwarden":
                     del rules["fill"]                    # the product mark may use fills
+                rules["stroke"] = "currentColor"
                 for key, value in rules.items():
                     if svg.get(key) != value:
                         errors.append(f'{where}: {key} is not "{value}"')
+            errors += path_errors(where, svg, icon, product=name == "spoolwarden")
         mark = "i-" if icon else "s-"
+        for el in sprite:
+            if el.get("id", "").startswith(mark):
+                errors += path_errors(f"icons/sprite.svg #{el.get('id')}", el, icon, product=el.get("id") == "i-spoolwarden")
         want_ids = {mark + n for n in names}
         have_ids = {el.get("id") for el in sprite if el.get("id", "").startswith(mark)}
         if have_ids != want_ids:
@@ -410,3 +445,18 @@ def test_icon_check_fails_on_plants(tmp_path):
     r = _icon_copy(tmp_path, "drawable")
     (r / DRAWABLES / "sw_ic_plus.xml").unlink()
     assert any("drawables differ" in e for e in icon_errors(r))
+    for name, rel, old, new, want in (
+            ("colour", "icons/src/plus.svg", "<path", '<path stroke="#000000"', "plus.svg: a path sets"),
+            ("pathwidth", "icons/src/plus.svg", "<path", '<path stroke-width="3"', "plus.svg: a path sets"),
+            ("pathfill", "icons/src/plus.svg", "<path", '<path fill="currentColor"', "plus.svg: a path sets"),
+            ("style", "icons/src/plus.svg", "<path", '<path style="stroke:red"', "plus.svg: a path sets"),
+            ("rootstroke", "icons/src/plus.svg", 'stroke="currentColor"', 'stroke="#000"', "plus.svg: stroke is not"),
+            ("status", "icons/status/filled.svg", 'fill="currentColor"', 'fill="#ff0000"', "filled.svg: a path sets"),
+            ("statuswidth", "icons/status/hollow.svg", 'stroke-width="2"', 'stroke-width="3"', "hollow.svg: a path sets"),
+            ("statusstroke", "icons/status/hollow.svg", 'stroke="currentColor"', 'stroke="red"', "hollow.svg: a path sets"),
+            ("statusroot", "icons/status/filled.svg", "<svg ", '<svg fill="red" ', "filled.svg: the root"),
+            ("sprite", "icons/sprite.svg", '<path d="M12 5v14 M5 12h14"/>', '<path stroke="red" d="M12 5v14 M5 12h14"/>',
+             "sprite.svg #i-plus: a path sets")):
+        r = _icon_copy(tmp_path, name)
+        _plant(r, rel, old, new)
+        assert any(want in e for e in icon_errors(r)), name

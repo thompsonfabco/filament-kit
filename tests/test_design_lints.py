@@ -2,11 +2,13 @@
 docs/design/08-platform-mapping.md 3.4 test 5, one test function per lint.
 
 They read the web sources (`setup_static/*`, `web/static/*`, `web-shared/*`) and the app's Kotlin (see test_design_sources.py). Today's
-findings are in the allow-lists next to this file, one line each: `<path> | <finding> | <reason>`. A finding outside
-its allow-list fails, and so does an allow-list line that no longer matches anything (09 open point 4), so a step that
-rewrites a file removes that file's lines.
+findings are in the allow-lists next to this file, one line each: `<path> | <finding> | <count> | <reason>`, the count
+being the number of findings of that kind in that file. A finding outside its allow-list fails, more findings than the
+count fail (a new `confirm()` in a listed file), and so do fewer, or none (the line must be lowered or dropped, 09 S0.7
+and open point 4), so a step that rewrites a file removes that file's lines.
 """
 import re
+import warnings
 from pathlib import Path
 
 from test_design_sources import ROOT, _kotlin_sources, _web_sources
@@ -38,13 +40,16 @@ class _Scan:
     def __init__(self, text, js):
         self.t, self.js, self.n = text, js, len(text)
         self.code = list(text)
+        self.plain = list(text)          # comments and regular expressions blanked, strings kept
         self.literals = []
         self._code(0, False)
 
-    def _blank(self, a, b):
+    def _blank(self, a, b, plain=True):
         for k in range(a, min(b, self.n)):
             if self.code[k] != "\n":
                 self.code[k] = " "
+                if plain:
+                    self.plain[k] = " "
 
     def _line(self, i):
         return self.t.count("\n", 0, i) + 1
@@ -139,12 +144,16 @@ class _Scan:
         content = "".join(parts)
         self.literals.append((content, self._line(start)))
         if content not in KEPT_STRINGS:
-            self._blank(begin, i)
+            self._blank(begin, i, plain=False)
         return i + (3 if triple else 1)
 
     @property
     def code_text(self):
         return "".join(self.code)
+
+    @property
+    def plain_text(self):
+        return "".join(self.plain)
 
 
 def _line_of(text, pos):
@@ -161,23 +170,31 @@ def _rel(f):
 
 
 def _entries(path):
-    """Allow-list lines as {(file, finding): reason}."""
+    """Allow-list lines as {(file, finding): (count, reason)}."""
     entries = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip() and not line.startswith("#"):
-            parts = [x.strip() for x in line.split("|", 2)]
-            assert len(parts) == 3 and all(parts), f"{path.name}: a line needs a file, a finding and a reason: {line!r}"
+            parts = [x.strip() for x in line.split("|", 3)]
+            assert len(parts) == 4 and all(parts) and parts[2].isdigit() and int(parts[2]) > 0, \
+                f"{path.name}: a line needs a file, a finding, a count above 0 and a reason: {line!r}"
             key = (parts[0], parts[1])
             assert key not in entries, f"{path.name}: listed twice: {line!r}"
-            entries[key] = parts[2]
+            entries[key] = (int(parts[2]), parts[3])
     return entries
 
 
 def _verdict(found, allowlist):
-    """found: {(file, finding): first line}. Returns (not listed, listed but gone)."""
-    allowed = set(_entries(allowlist))
-    new = sorted(f"{f}:{ln}: {what}" for (f, what), ln in found.items() if (f, what) not in allowed)
-    stale = sorted(f"{f} | {what}" for f, what in allowed if (f, what) not in found)
+    """found: {(file, finding): [lines]}. Returns (not listed or more than counted, counted but fewer or gone)."""
+    allowed = _entries(allowlist)
+    new, stale = [], []
+    for (f, what), lines in sorted(found.items()):
+        count = allowed.get((f, what), (0, ""))[0]
+        if len(lines) > count:
+            new.append(f"{f}:{lines[count]}: {what} ({len(lines)} found, {count} listed)")
+    for (f, what), (count, _) in sorted(allowed.items()):
+        n = len(found.get((f, what), []))
+        if n < count:
+            stale.append(f"{f} | {what} | listed {count}, found {n}")
     return new, stale
 
 
@@ -185,14 +202,15 @@ def _collect(files, finder):
     found = {}
     for f in files:
         for what, ln in finder(f.read_text(encoding="utf-8")):
-            found.setdefault((_rel(f), what), ln)
+            found.setdefault((_rel(f), what), []).append(ln)
     return found
 
 
 def _assert_lint(found, allowlist):
     new, stale = _verdict(found, allowlist)
-    assert not new, "not in the allow-list:\n" + "\n".join(new)
-    assert not stale, f"in {allowlist.name} but no longer found, drop the line:\n" + "\n".join(stale)
+    assert not new, "not in the allow-list, or more than its count:\n" + "\n".join(new)
+    assert not stale, f"in {allowlist.name} but fewer or no longer found, lower the count or drop the line:\n" + \
+        "\n".join(stale)
 
 
 # ---- AUT-2 / test 5: literal colours and values ----
@@ -235,6 +253,32 @@ def _blank_keep_lines(m):
     return re.sub(r"[^\n]", " ", m.group(0))
 
 
+def _plain_value(value):
+    return re.sub(r"\s*!\s*important\s*$", "", value.strip().lower()).strip()
+
+
+def _zero(token):
+    return re.fullmatch(r"0+(\.0+)?[a-z]*", token) is not None
+
+
+def _outline_off(prop, value):
+    """outline: none / 0 / 0 none / none !important, and the longhands outline-style and outline-width."""
+    tokens = _plain_value(value).split()
+    if prop == "outline":
+        return bool(tokens) and ("none" in tokens or "hidden" in tokens or _zero(tokens[0]))
+    if prop == "outline-style":
+        return tokens in (["none"], ["hidden"])
+    if prop == "outline-width":
+        return len(tokens) == 1 and _zero(tokens[0])
+    return False
+
+
+def _ring(shadow):
+    """A box-shadow draws a ring unless it is none or all zero lengths ("0 0 0 0")."""
+    v = _plain_value(shadow)
+    return v not in ("", "none", "initial", "unset") and not re.fullmatch(r"(?:0+(?:px)?\s*)+", v)
+
+
 def css_findings(text):
     """[(finding, line)] for component rules; tokens.css (the token block) is not read."""
     text = CSS_COMMENT.sub(_blank_keep_lines, text)
@@ -274,8 +318,8 @@ def css_findings(text):
                         out.append((f"opacity: {value}", ln))
                 except ValueError:
                     out.append((f"opacity: {value}", ln))
-            elif prop == "outline" and re.fullmatch(r"none|0", value) and "box-shadow" not in props:
-                out.append((f"outline: {value}", ln))
+            elif _outline_off(prop, value) and not any(_ring(v) for p, v, _, _ in decls if p == "box-shadow"):
+                out.append((f"{prop}: {_plain_value(value)}", ln))
             if prop not in ("font-size", "line-height") and not prop.startswith(DURATION_PROPS):
                 if not (FUNC_LENGTH.search(plain) and "var(" in value):
                     for lit in LENGTH.findall(plain):
@@ -381,6 +425,17 @@ def empty_label_findings(text):
     return [(f"empty {m.group(1)}", _line_of(code, m.start())) for m in EMPTY_LABEL.finditer(code)]
 
 
+ASSERTIVE = re.compile(
+    r"""role['"`]?\s*[=:,]\s*\\?['"`]?\s*(alert)(?![\w-])|aria-live['"`]?\s*[=:,]\s*\\?['"`]?\s*(assertive)(?![\w-])""")
+
+
+def assertive_findings(text):
+    """[(finding, line)] for every role="alert" and aria-live="assertive" (SR-19); a report for review, not a failure."""
+    plain = _Scan(text, js=True).plain_text
+    return [('role="alert"' if m.group(1) else 'aria-live="assertive"', _line_of(plain, m.start()))
+            for m in ASSERTIVE.finditer(plain)]
+
+
 def press_findings(text):
     code = _Scan(text, js=True).code_text
     return [(m.group(1), _line_of(code, m.start())) for m in PRESS.finditer(code)]
@@ -394,17 +449,26 @@ def test_fields_only_through_the_field_component():
     found = {}
     for f in _script_sources():
         for what, ln in field_findings(f.read_text(encoding="utf-8"), builders=_rel(f) == FIELD_COMPONENT_FILE):
-            found.setdefault((_rel(f), what), ln)
+            found.setdefault((_rel(f), what), []).append(ln)
     _assert_lint(found, FIELD_ALLOWLIST)
 
 
 def test_field_component_never_gets_an_empty_label():
     found = _collect(_script_sources(), empty_label_findings)
-    assert not found, "a field with an empty label (07 AUT-4):\n" + "\n".join(f"{f}:{ln}: {w}" for (f, w), ln in found.items())
+    assert not found, "a field with an empty label (07 AUT-4):\n" + "\n".join(f"{f}:{ln}: {w}" for (f, w), lns in found.items() for ln in lns)
 
 
 def test_no_press_down_handlers():
     _assert_lint(_collect(_script_sources(), press_findings), PRESS_ALLOWLIST)
+
+
+def test_assertive_announcements_are_reported():
+    """AUT-6 / SR-19: lists every role="alert" and aria-live="assertive" for the reviewer; the list shows in the
+    warnings summary of a test run and never fails it."""
+    found = _collect(_script_sources(), assertive_findings)
+    report = [f"{f}:{ln}: {what}" for (f, what), lns in sorted(found.items()) for ln in lns]
+    if report:
+        warnings.warn("SR-19 assertive announcements for review:\n" + "\n".join(report), stacklevel=1)
 
 
 # ---- AUT-7: the words lint ----
@@ -418,7 +482,8 @@ BANNED = [
     ("setup page", r"setup page"), ("setup console", r"setup console"), ("phone web app", r"phone web app"),
     ("android app", r"android app"), ("intake station", r"intake station"), ("intake panel", r"intake panel"),
     ("printer station", r"printer station"), ("bench reader", r"bench reader"), ("nfc reader", r"nfc reader"),
-    ("ai intake", r"(?:local )?ai intake"), ("intake history", r"intake history"), ("printer pack", r"printer pack"),
+    ("ai intake", r"(?:local )?ai intake"), ("intake history", r"intake history"), ("intake", r"intakes?"),
+    ("presets", r"(?<!slicer )presets"), ("printer pack", r"printer pack"),
     ("filament library", r"filament library"), ("pc sync", r"pc sync"), ("all-in-one", r"all-in-one"),
     ("color", r"colors?"),
     ("gross weight", r"gross weight"), ("weight on the scale", r"weight on the scale"),
@@ -428,15 +493,18 @@ BANNED = [
 ]
 BANNED_RX = [(name, re.compile(r"(?<![A-Za-z0-9])(?:%s)(?![A-Za-z0-9])" % pat, re.I)) for name, pat in BANNED]
 HMS = re.compile(r"(?<![A-Za-z0-9])HMS(?![A-Za-z0-9])")
-WHOLE_TEXTS = {"OK", "here", "Here", "click here", "Click here"}      # a whole button or link text (LNG-2)
+# a whole button or link text (LNG-2), compared without case, surrounding space and punctuation; the old mode words
+# server and station only as a whole text (the choice of a Setup), so "Hub server address" stays free
+WHOLE_TEXTS = {"ok", "here", "click here", "server", "station"}
+WHOLE_EDGE = " \t\r\n.,;:!?'\"\u2026\u2019()[]-"
 
 
 def word_findings_in(content):
     out = [name for name, rx in BANNED_RX if rx.search(content)]
     if HMS.search(content):
         out.append("HMS")
-    if content.strip() in WHOLE_TEXTS:
-        out.append(f'"{content.strip()}"')
+    if content.strip(WHOLE_EDGE).lower() in WHOLE_TEXTS:
+        out.append('"%s"' % {"ok": "OK"}.get(content.strip(WHOLE_EDGE).lower(), content.strip(WHOLE_EDGE).lower()))
     return out
 
 
@@ -487,6 +555,17 @@ def test_plants_are_found():
     assert [w for w, _ in css_findings("a { padding: 12px; margin: calc(var(--s2) + 1px); gap: 3px }")] == ["12px"]
     assert [w for w, _ in css_findings("a { opacity: .6 } b { outline: none }")] == ["opacity: .6", "outline: none"]
     assert css_findings("a:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus) }") == []
+    for decl in ("outline: none; box-shadow: none", "outline: none !important", "outline-style: none", "outline: 0 none",
+                 "OUTLINE:NONE", "outline: 0px", "outline-width: 0", "outline: none; box-shadow: 0 0 0 0 red"):
+        assert len(css_findings("a:focus { %s }" % decl)) == 1, decl
+    assert css_findings("a:focus { outline: 2px solid var(--focus); box-shadow: none }") == []
+    assert css_findings("a:focus { outline: none !important; box-shadow: inset 0 0 0 2px var(--focus) }") == []
+    src = "el.setAttribute('role', 'alert'); h('div', { role: 'alert' }); // role=\"alert\""
+    assert assertive_findings(src) == [('role="alert"', 1), ('role="alert"', 1)]
+    src = "e.innerHTML = `<p role=\"alert\">x</p><b aria-live='assertive'>`;"
+    assert [w for w, _ in assertive_findings(src)] == ['role="alert"', 'aria-live="assertive"']
+    assert assertive_findings('h("p", { role: "alertdialog", "aria-live": "polite" }); // aria-live="assertive"') == []
+    assert assertive_findings('e.setAttribute("aria-live", "assertive")') == [('aria-live="assertive"', 1)]
     assert [w for w, _ in kotlin_findings("val c = Color(0xFF112233); val d = Color.White; val e = Color.Transparent")] \
         == ["Color(0xFF112233", "Color.White"]
     assert [w for w, _ in kotlin_findings("Modifier.padding(12.dp, 0.dp, 2.dp); fontSize = 14.sp; x = 0.05.em")] == \
@@ -495,7 +574,31 @@ def test_plants_are_found():
     assert word_findings_in("Set the color of the dry run") == ["dry run", "color"] or \
         sorted(word_findings_in("Set the color of the dry run")) == ["color", "dry run"]
     assert word_findings_in("OK") == ['"OK"'] and word_findings_in("HMS error") == ["HMS"]
-    assert word_findings_in("Click here") == ['"Click here"']
+    assert word_findings_in("Click here") == ['"click here"']
+    assert [word_findings_in(s) for s in ("Ok", "HERE", "Click here.", " ok! ", "Server", "station")] == [['"OK"'], ['"here"'], ['"click here"'], ['"OK"'], ['"server"'], ['"station"']]
+    assert word_findings_in("Intake") == ["intake"] and word_findings_in("Open intake") == ["intake"]
+    assert word_findings_in("Presets") == ["presets"] and word_findings_in("Slicer presets") == []
+    assert word_findings_in("Okay, Hub address, here and there") == []
     assert word_findings_in("Features, Colour, okay, hereby, Retrying") == []
     assert [w for w, _ in word_findings('h("button", { textContent: "Modules" })', True)] == ["module"]
     assert [w for w, _ in word_findings('Text("OK")', False)] == ['"OK"']
+
+
+def test_counts_may_only_go_down(tmp_path):
+    lst = tmp_path / "list.txt"
+    lst.write_text("# c\na.js | confirm | 2 | reason | with a bar\n", encoding="utf-8")
+    assert _verdict({("a.js", "confirm"): [3, 9]}, lst) == ([], [])
+    new, stale = _verdict({("a.js", "confirm"): [3, 9, 20]}, lst)
+    assert new == ["a.js:20: confirm (3 found, 2 listed)"] and stale == []
+    new, stale = _verdict({("a.js", "confirm"): [3]}, lst)
+    assert new == [] and stale == ["a.js | confirm | listed 2, found 1"]
+    assert _verdict({}, lst)[1] == ["a.js | confirm | listed 2, found 0"]
+    new, _ = _verdict({("a.js", "confirm"): [3, 9], ("b.js", "confirm"): [1]}, lst)
+    assert new == ["b.js:1: confirm (1 found, 0 listed)"]
+    for bad in ("a.js | confirm | reason\n", "a.js | confirm | 0 | reason\n", "a.js | confirm | x | reason\n"):
+        lst.write_text(bad, encoding="utf-8")
+        try:
+            _entries(lst)
+        except AssertionError:
+            continue
+        raise AssertionError(bad)
