@@ -195,7 +195,7 @@ def _contrast(*args):
 def test_contrast_counts_the_old_pairs_and_the_new_ones():
     r = _contrast()
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "required pairs checked: 424 (of which 248 are the first version's); failed: 0" in r.stdout
+    assert "required pairs checked: 440 (of which 248 are the first version's); failed: 0" in r.stdout
     assert "advisory" not in r.stdout  # accent-text on accent-soft and text on surface-3 are required now
     rows = [line.split() for line in r.stdout.splitlines()]
     assert ["spool", "dark", "focus", "surface-2", "3.0"] == next(x for x in rows if x[:4] == ["spool", "dark", "focus", "surface-2"])[:5]
