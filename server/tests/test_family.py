@@ -92,3 +92,18 @@ def test_bambu_module_off():
 
 def test_klipper_entry_ids():
     assert family.is_klipper_entry("k-abc") and not family.is_klipper_entry("abc")
+
+
+def test_wait_settled_routes_and_reads_not_configured_when_the_module_is_off():
+    p, kid = _two()
+    assert p.wait_settled(kid, 1) == f"k:{kid}" and p.wait_settled("S1", 1) == "b:S1"
+    assert family.Printers(bambu=Fake("b"), klipper=None).wait_settled(kid, 1) == "not_configured"
+
+
+def test_bambu_command_with_the_module_off_raises():
+    registry.upsert(registry.Printer("S1", configured=True))
+    p = family.Printers(bambu=None, klipper=Fake("k"))
+    with pytest.raises(family.ModuleOff) as e:
+        p.command("S1", "pause")
+    assert e.value.family == "bambu"
+    assert p.summary("S1") is None and p.status("S1") is None
