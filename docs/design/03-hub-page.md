@@ -1625,7 +1625,8 @@ Desktop
 | Only the end is shown: the rest is too long for this page.                                       |
 +--------------------------------------------------------------------------------------------------+
 Tablet: the same; the controls wrap onto two lines.
-Phone:  controls stacked full width; the log's code block scrolls sideways inside itself, lines are not wrapped.
+Phone:  controls stacked full width. At every width the log's lines wrap inside the code block (components 7.7:
+        `white-space: pre-wrap; overflow-wrap: anywhere`); the block never scrolls sideways.
 ```
 
 ### 13.2 Controls
