@@ -3,7 +3,7 @@
 strings/en.json is the source; strings/strings.js and res/values/strings.xml are generated from it by
 tokens/build_tokens.py. Test 7 reads both generated files back (undoing the escaping and the placeholder numbering) and
 compares them with the source, keeps the product's and the command's name out of every entry but their own, and scans
-the hand-written Kotlin under `ui/` and the page scripts for text that reaches the screen without the catalogue.
+the hand-written Kotlin of the app (the whole main source set) and the page scripts for text that reaches the screen without the catalogue.
 Today's literals are in strings_allowlist.txt, one line each: `<path> | <literal> | <reason>`. A literal outside the
 list fails, and so does a line whose literal is gone (09 open point 4).
 """
@@ -154,7 +154,7 @@ def _key(literal):
 
 
 def _screen_sources():
-    kt = [f for f in _kotlin_sources() if "/ui/" in f.as_posix()]
+    kt = _kotlin_sources()        # the whole main source set: text reaches the screen from outside ui/ too
     return [(f, kotlin_literals) for f in kt] + [(f, script_literals) for f in _script_sources()]
 
 
