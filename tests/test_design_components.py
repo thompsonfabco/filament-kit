@@ -72,6 +72,26 @@ def test_size_limits(path):
     assert size < LIMITS[path], f"{path.name} is {size} bytes; the limit is {LIMITS[path]}"
 
 
+# 01 4.3, 02 1.2: hairlines and marks use --hairline and --nav-mark, never a bare 1px or 3px
+BARE_MARK = re.compile(r"(?<![\w.-])[13]px\b")
+
+
+def bare_marks(css):
+    text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), css, flags=re.S)   # comments keep their lines
+    return [text[:m.start()].count("\n") + 1 for m in BARE_MARK.finditer(text)]
+
+
+@pytest.mark.parametrize("path", [CSS] + ADDITIONS, ids=lambda p: p.name)
+def test_no_bare_hairline_or_mark(path):
+    lines = bare_marks(path.read_text(encoding="utf-8"))
+    assert not lines, f"{path.name}: bare 1px or 3px on line(s) {lines}; use var(--hairline) or var(--nav-mark)"
+
+
+def test_bare_marks_are_found():
+    assert bare_marks(".a{border:1px solid}\n.b{width:3px;outline:2px solid;inset:min(0px,1)}\n.c{top:11px;x:1.1px}") == [1, 2]
+    assert bare_marks(".a{border:var(--hairline) solid} /* 1px */") == []
+
+
 def test_every_class_of_the_script_is_drawn():
     css = "\n".join(p.read_text(encoding="utf-8") for p in [CSS] + ADDITIONS)
     used = script_classes(JS.read_text(encoding="utf-8")) | script_classes(MEDIA_JS.read_text(encoding="utf-8"))

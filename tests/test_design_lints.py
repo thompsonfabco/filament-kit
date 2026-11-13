@@ -310,9 +310,9 @@ def test_no_literal_values_in_components():
 # ---- AUT-2 / CON-9: --accent only as the fill of a labelled part ----
 
 ACCENT_USE = re.compile(r"var\(\s*--accent\s*[,)]")
-# the labelled fills of 07 CON-9, by their class in 02-components.md: the main button, the chosen part of a segmented
-# choice, the skip link, the icon tile of the current section in the list navigation
-LABELLED_FILLS = ("btn--primary", "segmented__option", "segmented__input", "skip", "nav__icon")
+# the labelled fills of 07 CON-9, by their class in 02-components.md: the main button, the skip link, the icon tile of
+# the current section in the list navigation (the chosen segment is --accent-soft with --accent-text, 02 5.7)
+LABELLED_FILLS = ("btn--primary", "skip", "nav__icon")
 LABELLED_FILL = re.compile(r"\.(?:" + "|".join(re.escape(c) for c in LABELLED_FILLS) + r")(?![\w-])")
 
 
@@ -459,6 +459,8 @@ def test_plants_are_found():
     assert accent_findings("a { color: var(--accent-text); border-color: var(--accent-hover) }") == []
     assert [w for w, _ in accent_findings("@media (max-width: 600px) { .bar, .btn--primary { fill: var(--accent) } }")] \
         == ["var(--accent) in .bar"]
+    assert [w for w, _ in accent_findings(".segmented__input:checked+.segmented__option { background: var(--accent) }")] == \
+        ["var(--accent) in .segmented__input:checked+.segmented__option"]
     assert dialog_findings("if (confirm('x')) y();") == [("confirm", 1)]
     assert [w for w, _ in dialog_findings("window.prompt('a'); self.alert(1); globalThis.confirm(2)")] == \
         ["prompt", "alert", "confirm"]
