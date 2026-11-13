@@ -207,8 +207,8 @@ function result(el, kind, content, o = {}) {
   return el;
 }
 // results are cleared when the person leaves the section
+const sec = (u) => (u.split("#")[1] || "").split(/[/?]/)[0];
 on(window, "hashchange", (e) => {
-  const sec = (u) => (u.split("#")[1] || "").split(/[/?]/)[0];
   if (sec(e.oldURL) !== sec(e.newURL)) for (const r of $$(".result[data-state]")) result(r, null);
 });
 
@@ -726,12 +726,20 @@ function formGroup(form, o = {}) {
 const dirtyGroups = () => [...groups].filter((g) => g.form.isConnected && g.dirty());
 const leaveText = (list = dirtyGroups()) => list.map((g, i) => t(i ? "form_leave_next" : "form_leave_first",
   { count: g.changed().length, group: $(".group__title", g.form).textContent })).join(", ");
-// unsaved-changes guard
+// unsaved-changes guard (5.11 behaviour 4): a link to another section, wherever it is, and Back or Forward
+const leave = (to) => leaveAsk(leaveText()).then((ok) => { if (ok) { for (const g of dirtyGroups()) g.reset(); location.hash = to; } });
 on(doc, "click", (e) => {
   const a = e.target.closest && e.target.closest('a[href^="#"]');
-  if (!a || a.closest(".subnav, dialog, .group") || !dirtyGroups().length) return;
+  if (!a || !a.hash || a.closest(".subnav, .group__summary") || sec(a.href) === sec(location.href) || !dirtyGroups().length) return;
   e.preventDefault();
-  leaveAsk(leaveText()).then((ok) => { if (ok) { for (const g of dirtyGroups()) g.reset(); location.hash = a.hash; } });
+  leave(a.hash);
+}, true);
+// Back or Forward: the address has already changed, so it is put back first (capture runs before the pages' listeners)
+on(window, "hashchange", (e) => {
+  if (sec(e.oldURL) === sec(e.newURL) || !dirtyGroups().length) return;
+  e.stopImmediatePropagation();
+  history.pushState(null, "", e.oldURL);
+  leave(new URL(e.newURL).hash);
 }, true);
 on(window, "beforeunload", (e) => { if (dirtyGroups().length) { e.preventDefault(); e.returnValue = ""; } });
 
