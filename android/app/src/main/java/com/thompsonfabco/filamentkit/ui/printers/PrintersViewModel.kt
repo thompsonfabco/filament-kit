@@ -7,6 +7,7 @@ import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.KlipperFound
 import com.thompsonfabco.filamentkit.net.Printer
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -121,6 +122,9 @@ class PrintersViewModel(
     private val now: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     private val _state = MutableStateFlow(PrintersUiState())
+    private var addJob: Job? = null
+    private var klipperJob: Job? = null
+    private var findJob: Job? = null
     val state: StateFlow<PrintersUiState> = _state.asStateFlow()
 
     fun refresh() {
@@ -132,7 +136,11 @@ class PrintersViewModel(
         guard(onError = { p -> if (!p.isHubNotice) _state.update { it.copy(problem = p) } }) {
             val list = backend.printers()
             _state.update {
-                it.copy(printers = list, problem = null, loaded = true, loadedAt = now(), unauthorized = false, mismatch = null)
+                it.copy(printers = list, problem = null, loaded = true, loadedAt = now(), unauthorized = false, mismatch = null,
+                    dialog = it.dialog?.let { d -> if (d.problem?.isHubNotice == true) d.copy(problem = null) else d },
+                    klipper = it.klipper?.let { k -> if (k.problem?.isHubNotice == true) k.copy(problem = null) else k },
+                    find = it.find?.let { f -> if (f.problem?.isHubNotice == true) f.copy(problem = null) else f },
+                )
             }
             _state.update { it.copy(loading = false) }
             val looks = slotLooks(list)
@@ -171,6 +179,7 @@ class PrintersViewModel(
 
     /** Closes the form and reloads, since the printer's state may have changed meanwhile. */
     fun cancelAdd() {
+        addJob?.cancel()
         _state.update { it.copy(dialog = null) }
         refresh()
     }
@@ -184,7 +193,7 @@ class PrintersViewModel(
             return
         }
         _state.update { it.copy(dialog = d.copy(name = name, busy = true, codeMissing = false, problem = null)) }
-        viewModelScope.launch {
+        addJob = viewModelScope.launch {
             guard(onError = { p -> _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, problem = p)) } }) {
                 val p = backend.addPrinter(d.serial, code, name.trim().ifBlank { null })
                 if (p.state == "connected") {
@@ -205,9 +214,11 @@ class PrintersViewModel(
     }
 
     fun cancelAddKlipper() {
-        val created = _state.value.klipper?.createdId != null
+        // a request that was running may have added the printer before it was cancelled: the list shows it either way
+        val worked = _state.value.klipper?.let { it.createdId != null || it.busy } == true
+        klipperJob?.cancel()
         _state.update { it.copy(klipper = null) }
-        if (created) refresh()
+        if (worked) refresh()
     }
 
     /**
@@ -232,7 +243,7 @@ class PrintersViewModel(
                 klipper = d.copy(busy = true, addressMissing = false, portInvalid = false, problem = null, keyProblem = null),
             )
         }
-        viewModelScope.launch {
+        klipperJob = viewModelScope.launch {
             guard(onError = { p -> _state.update { s -> s.copy(klipper = s.klipper?.copy(busy = false, problem = p)) } }) {
                 val id: String
                 val shown: String
@@ -264,7 +275,10 @@ class PrintersViewModel(
 
     fun openFind() = _state.update { it.copy(find = FindSheet()) }
 
-    fun closeFind() = _state.update { it.copy(find = null) }
+    fun closeFind() {
+        findJob?.cancel()
+        _state.update { it.copy(find = null) }
+    }
 
     /** Searches [network] (blank: the Hub's own) for Moonraker. */
     fun search(network: String) {
@@ -272,7 +286,7 @@ class PrintersViewModel(
         if (f.searching) return
         val typed = network.trim()
         _state.update { it.copy(find = f.copy(searching = true, problem = null)) }
-        viewModelScope.launch {
+        findJob = viewModelScope.launch {
             guard(onError = { p -> _state.update { s -> s.copy(find = s.find?.copy(searching = false, problem = p)) } }) {
                 val found = backend.scanKlipper(typed.ifEmpty { null }).filterNot { it.configured }
                 _state.update { it.copy(find = it.find?.copy(searching = false, results = found, network = typed)) }

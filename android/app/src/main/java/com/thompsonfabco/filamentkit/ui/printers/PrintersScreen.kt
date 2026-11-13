@@ -356,7 +356,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         } else {
             stringResource(R.string.printer_add_title, model)
         },
-        onClose = { if (!d.busy) viewModel.cancelAdd() },
+        onClose = viewModel::cancelAdd,
         confirm = SwDialogButton(
             label = stringResource(
                 when {
@@ -402,7 +402,7 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
     val fixed = d.busy || d.createdId != null
     SwDialog(
         title = stringResource(R.string.printers_add_klipper),
-        onClose = { if (!d.busy) viewModel.cancelAddKlipper() },
+        onClose = viewModel::cancelAddKlipper,
         confirm = SwDialogButton(
             label = stringResource(if (d.busy) R.string.printer_klipper_connecting else R.string.printer_add_button),
             onClick = { viewModel.submitAddKlipper(host, port, name, key) },

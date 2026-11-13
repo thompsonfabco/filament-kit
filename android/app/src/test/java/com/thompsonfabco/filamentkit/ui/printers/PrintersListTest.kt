@@ -13,6 +13,7 @@ import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
 import com.thompsonfabco.filamentkit.net.UnloadResult
 import com.thompsonfabco.filamentkit.ui.components.StatusKind
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -46,6 +47,7 @@ class PrintersListTest {
         val added = mutableListOf<Triple<String, Int, String?>>()
         var addResult: Printer? = null
         var addError: Exception? = null
+        var addGate: CompletableDeferred<Unit>? = null
         val keys = mutableListOf<Pair<String, String>>()
         var keyError: Exception? = null
         val scans = mutableListOf<String?>()
@@ -59,11 +61,13 @@ class PrintersListTest {
         val addedBambu = mutableListOf<String>()
         override suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer {
             addedBambu += serial
+            addGate?.await()
             addError?.let { throw it }
             return addResult!!
         }
         override suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
             added += Triple(host, port, name)
+            addGate?.await()
             addError?.let { throw it }
             return addResult!!
         }
@@ -332,6 +336,49 @@ class PrintersListTest {
         vm.search(""); runCurrent()
         assertEquals(Problem.CertificateChanged, vm.state.value.find!!.problem)
         assertFalse(vm.state.value.find!!.searching)
+    }
+
+    @Test fun aHubNoticeInTheFormGoesAfterRepair() = runTest(dispatcher) {
+        backend.addError = ApiError(401, "unauthorized", "x")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "")
+        runCurrent()
+        assertEquals(Problem.NoLongerPaired, vm.state.value.klipper!!.problem)
+        backend.addError = null
+        vm.refresh(); runCurrent()
+        assertNull("the notice goes with the good load", vm.state.value.klipper!!.problem)
+    }
+
+    @Test fun cancelWhileTheKlipperAddRunsCancelsItBeforeTheKeyStep() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        backend.addGate = CompletableDeferred()
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "", "k")
+        runCurrent()
+        assertTrue(vm.state.value.klipper!!.busy)
+        vm.cancelAddKlipper()
+        backend.addGate!!.complete(Unit)
+        runCurrent()
+        assertNull(vm.state.value.klipper)
+        assertTrue("the key step is never reached", backend.keys.isEmpty())
+        assertNull(vm.state.value.added)
+        assertTrue("the list is reloaded in case the add got through", vm.state.value.loaded)
+    }
+
+    @Test fun cancelWhileTheBambuAddRunsLeavesNoMessage() = runTest(dispatcher) {
+        backend.addResult = printer("A")
+        backend.addGate = CompletableDeferred()
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(printer("B", state = "not_configured", configured = false))
+        vm.submitAdd("12345678", "")
+        runCurrent()
+        vm.cancelAdd()
+        backend.addGate!!.complete(Unit)
+        runCurrent()
+        assertNull(vm.state.value.dialog)
+        assertNull(vm.state.value.added)
     }
 
     @Test fun replacingTheCodeSaysSoOnceAndSkipsTheAddedMessage() = runTest(dispatcher) {
