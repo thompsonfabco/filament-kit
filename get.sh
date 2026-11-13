@@ -130,7 +130,7 @@ fk_main() {
     local -a pass=()
     while [ $# -gt 0 ]; do
         case "$1" in
-            --version | --mode | --modules | --server | --set | --token-file | --repo | --api)
+            --version | --mode | --modules | --server | --hub | --set | --token-file | --repo | --api)
                 [ $# -ge 2 ] || fk_usage
                 case "$1" in
                     --version) version="$2" ;;

@@ -49,6 +49,8 @@ while [ $# -gt 0 ]; do
         --set=*) add_set "${1#--set=}"; shift ;;
         --server) [ $# -ge 2 ] || usage; SERVER_ADDR="$2"; shift 2 ;;
         --server=*) SERVER_ADDR="${1#--server=}"; shift ;;
+        --hub) [ $# -ge 2 ] || usage; SERVER_ADDR="$2"; shift 2 ;;
+        --hub=*) SERVER_ADDR="${1#--hub=}"; shift ;;
         --restore) [ $# -ge 2 ] || usage; RESTORE="$2"; shift 2 ;;
         --restore=*) RESTORE="${1#--restore=}"; shift ;;
         *) usage ;;
@@ -58,6 +60,11 @@ if [ -n "$RESTORE" ]; then
     [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup zip from the setup page or filament-kit backup create)"
     RESTORE="$(cd "$(dirname "$RESTORE")" && pwd)/$(basename "$RESTORE")"
 fi
+case "$MODE" in            # the Hub's setup names are the old words under new names
+    hub) MODE=server ;;
+    weigh-station) MODE=station ;;
+    hub-with-weigh-station) MODE=all-in-one ;;
+esac
 case "$MODE" in
     "" | server | station | all-in-one) ;;
     *) die "unknown mode '$MODE' (use server, station or all-in-one; to choose single modules use --modules a,b,c)" ;;
