@@ -14,6 +14,8 @@ THEME = Path("android/app/src/main/java/com/thompsonfabco/filamentkit/ui/theme")
 KT = THEME / "SpoolwardenTokens.kt"
 WINDOW = Path("android/app/src/main/res/values/sw_window.xml")
 WINDOW_NIGHT = Path("android/app/src/main/res/values-night/sw_window.xml")
+STRINGS_XML = Path("android/app/src/main/res/values/strings.xml")
+STRINGS = (Path("strings/en.json"), Path("strings/strings.js"))
 ANDROID_OUTPUTS = (KT, WINDOW, WINDOW_NIGHT)
 
 
@@ -46,24 +48,34 @@ def test_token_files_are_checked_out_with_lf():
         assert rule in attrs, rule
 
 
+def _flat(tmp_path):
+    """The token folder's files go in tmp_path/tokens, with strings/en.json beside it, which the generator also reads."""
+    (tmp_path / "tokens").mkdir()
+    (tmp_path / "strings").mkdir()
+    (tmp_path / "strings" / "en.json").write_bytes((ROOT / "strings" / "en.json").read_bytes())
+    return tmp_path / "tokens"
+
+
 def test_check_fails_on_a_crlf_css(tmp_path):
     # what a checkout without the LF rule would hand the check: it must say so rather than pass
+    d = _flat(tmp_path)
     for name in ("tokens.json", "build_tokens.py", "theme-init.js"):
-        (tmp_path / name).write_bytes((TOKENS / name).read_bytes())
-    (tmp_path / "tokens.css").write_bytes((TOKENS / "tokens.css").read_bytes().replace(b"\n", b"\r\n"))
-    r = subprocess.run([sys.executable, str(tmp_path / "build_tokens.py"), "--check"], capture_output=True, text=True,
-                       cwd=tmp_path, timeout=120)
+        (d / name).write_bytes((TOKENS / name).read_bytes())
+    (d / "tokens.css").write_bytes((TOKENS / "tokens.css").read_bytes().replace(b"\n", b"\r\n"))
+    r = subprocess.run([sys.executable, str(d / "build_tokens.py"), "--check"], capture_output=True, text=True,
+                       cwd=d, timeout=120)
     assert r.returncode == 1, r.stdout + r.stderr
 
 
 def test_check_fails_on_a_hand_edited_css(tmp_path):
     # the equality check must catch a tokens.css edited by hand: run a copy of the folder with one value changed
+    d = _flat(tmp_path)
     for name in ("tokens.json", "build_tokens.py", "tokens.css", "theme-init.js"):
-        (tmp_path / name).write_bytes((TOKENS / name).read_bytes())
-    css = tmp_path / "tokens.css"
+        (d / name).write_bytes((TOKENS / name).read_bytes())
+    css = d / "tokens.css"
     css.write_text(css.read_text(encoding="utf-8").replace("--s1: 4px", "--s1: 5px", 1), encoding="utf-8", newline="\n")
-    r = subprocess.run([sys.executable, str(tmp_path / "build_tokens.py"), "--check"], capture_output=True, text=True,
-                       cwd=tmp_path, timeout=120)
+    r = subprocess.run([sys.executable, str(d / "build_tokens.py"), "--check"], capture_output=True, text=True,
+                       cwd=d, timeout=120)
     assert r.returncode == 1, r.stdout + r.stderr
     assert "FAIL: tokens.css differs" in r.stderr
 
@@ -79,18 +91,20 @@ def _check_copy(tmp_path):
 
 
 def test_check_fails_on_a_hand_edited_theme_init(tmp_path):
-    _copy_folder(tmp_path, "tokens.json", "build_tokens.py", "tokens.css", "theme-init.js")
-    js = tmp_path / "theme-init.js"
+    d = _flat(tmp_path)
+    _copy_folder(d, "tokens.json", "build_tokens.py", "tokens.css", "theme-init.js")
+    js = d / "theme-init.js"
     js.write_text(js.read_text(encoding="utf-8").replace('"spool"', '"spools"', 1), encoding="utf-8", newline="\n")
-    r = _check_copy(tmp_path)
+    r = _check_copy(d)
     assert r.returncode == 1, r.stdout + r.stderr
     assert "FAIL: theme-init.js differs" in r.stderr
     assert "OK: tokens.css matches tokens.json" in r.stdout  # the other output is still reported on its own
 
 
 def test_check_fails_on_a_missing_theme_init(tmp_path):
-    _copy_folder(tmp_path, "tokens.json", "build_tokens.py", "tokens.css")
-    r = _check_copy(tmp_path)
+    d = _flat(tmp_path)
+    _copy_folder(d, "tokens.json", "build_tokens.py", "tokens.css")
+    r = _check_copy(d)
     assert r.returncode == 1, r.stdout + r.stderr
     assert "theme-init.js does not exist" in r.stderr
 
@@ -128,11 +142,15 @@ def test_theme_init_lists_exactly_the_theme_keys():
 
 
 def _mirror(tmp_path):
-    """A copy of the token folder and the three Android outputs, laid out as in the repository; --check passes on it."""
+    """A copy of the token folder, the Android and strings outputs and strings/en.json, laid out as in the repository;
+    --check passes on it."""
     for name in ("tokens.json", "build_tokens.py", "tokens.css", "theme-init.js"):
         (tmp_path / "tokens").mkdir(exist_ok=True)
         (tmp_path / "tokens" / name).write_bytes((TOKENS / name).read_bytes())
     for rel in ANDROID_OUTPUTS:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes((ROOT / rel).read_bytes())
+    for rel in (*STRINGS, STRINGS_XML):
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / rel).write_bytes((ROOT / rel).read_bytes())
     return tmp_path / "tokens" / "build_tokens.py"
@@ -149,6 +167,17 @@ def test_mirror_passes_the_check(tmp_path):
 
 def test_check_fails_on_a_hand_edited_android_file(tmp_path):
     for rel, old, new in ((KT, "s1 = 4.dp", "s1 = 5.dp"), (WINDOW, "#F3F5F6", "#000000"), (WINDOW_NIGHT, "#0B0F12", "#000000")):
+        script = _mirror(tmp_path)
+        f = tmp_path / rel
+        text = f.read_text(encoding="utf-8")
+        assert old in text, rel
+        f.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
+        r = _check(script)
+        assert r.returncode == 1 and "FAIL" in r.stderr, (rel, r.stdout + r.stderr)
+
+
+def test_check_fails_on_a_hand_edited_strings_file(tmp_path):
+    for rel, old, new in ((STRINGS[1], '"Back"', '"Go back"'), (STRINGS_XML, ">Back<", ">Go back<")):
         script = _mirror(tmp_path)
         f = tmp_path / rel
         text = f.read_text(encoding="utf-8")
