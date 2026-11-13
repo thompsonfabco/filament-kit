@@ -1,7 +1,7 @@
-"""A signed release of the local label reader (filament-kit-image) on a GitHub API look-alike (tests only).
+"""A signed release of the local label reader (filament-kit-vision) on a GitHub API look-alike (tests only).
 
 `make_release(priv, version, ...)` builds the assets the kit expects (local_intake_install's docstring): the code
-tarball with install/filament-kit-image.sh, a CPU model asset, a GPU adapter asset, manifest.json, SHA256SUMS and its
+tarball with install/filament-kit-vision.sh, a CPU model asset, a GPU adapter asset, manifest.json, SHA256SUMS and its
 ed25519 signature. `Served(files_by_version)` answers /repos/o/r/releases/latest and tags/v<version>, with assets
 behind a 302 as GitHub does.
 """
@@ -20,7 +20,7 @@ INSTALLER = b"#!/bin/bash\necho fake installer \"$@\"\n"
 
 def code_tarball(version: str, *, extra: tarfile.TarInfo | None = None, script: bool = True) -> bytes:
     buf = io.BytesIO()
-    top = f"filament-kit-image-{version}"
+    top = f"filament-kit-vision-{version}"
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         for d in (top, f"{top}/install"):
             ti = tarfile.TarInfo(d)
@@ -28,7 +28,7 @@ def code_tarball(version: str, *, extra: tarfile.TarInfo | None = None, script: 
             tf.addfile(ti)
         files = {f"{top}/README.md": b"reader\n"}
         if script:
-            files[f"{top}/install/filament-kit-image.sh"] = INSTALLER
+            files[f"{top}/install/filament-kit-vision.sh"] = INSTALLER
         for name, data in files.items():
             ti = tarfile.TarInfo(name)
             ti.size, ti.mode = len(data), 0o755
@@ -53,7 +53,7 @@ def manifest(version: str, **over) -> dict:
 
 def make_release(priv, version: str = "0.1.0", *, manifest_over: dict | None = None, tarball: bytes | None = None,
                  tamper_asset: bool = False, tamper_sig: bool = False) -> dict[str, bytes]:
-    files = {f"filament-kit-image-{version}.tar.gz": tarball if tarball is not None else code_tarball(version),
+    files = {f"filament-kit-vision-{version}.tar.gz": tarball if tarball is not None else code_tarball(version),
              f"cpu-models-{version}.tar.gz": b"CPU MODELS " + version.encode(),
              f"gpu-adapter-{version}.tar.gz": b"GPU ADAPTER " + version.encode(),
              "manifest.json": json.dumps(manifest(version, **(manifest_over or {}))).encode()}

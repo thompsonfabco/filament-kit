@@ -273,7 +273,7 @@ def local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
             yield Row(INFO, f"local label reader: last read {h['last_read_at']}")
     else:
         yield Row(FAIL, f"local label reader at {h['url']}: {h['error']}",
-                  "check that it runs (on its machine: systemctl status filament-kit-image), or set its address: "
+                  "check that it runs (on its machine: systemctl status filament-kit-vision), or set its address: "
                   "filament-kit config, 9) Label reader")
     order = intake.reader_order(cfg)
     names = {"local": "the local reader", "cloud": "Claude"}
