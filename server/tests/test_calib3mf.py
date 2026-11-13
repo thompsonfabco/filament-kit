@@ -1056,6 +1056,23 @@ def test_the_job_is_traced_in_the_log_with_codes_only(fake_ftp, printer, caplog)
     assert SERIAL not in every and all(x.startswith("printer 1 (H2D): calibration trace") for x in lines), lines
 
 
+def test_a_log_label_follows_a_change_of_the_printer_list_at_once():
+    """The flaky test_the_job_is_traced_in_the_log_with_codes_only: an earlier test in the same process had the
+    same serial as model ZZ9, and the cached label 'printer 1 (ZZ9)' outlived that registry for LABEL_TTL. A
+    write to the list now drops the cache, so the place and model are the list's own at once."""
+    registry.upsert(Printer(serial=SERIAL, name="New", model="ZZ9", ip="127.0.0.1", access_code=CODE,
+                            configured=True))
+    assert registry.log_label(SERIAL) == "printer 1 (ZZ9)"
+    registry.upsert(Printer(serial=SERIAL, name="H2D", model="H2D", ip="127.0.0.1", access_code=CODE,
+                            configured=True))
+    assert registry.log_label(SERIAL) == "printer 1 (H2D)"
+    registry.upsert(Printer(serial="0948AA000000001", name="", model="C12", ip="10.0.0.6", access_code=CODE,
+                            configured=True))
+    assert registry.log_label(SERIAL) == "printer 2 (H2D)"             # sorted by serial: the new one is first
+    registry.remove("0948AA000000001")
+    assert registry.log_label(SERIAL) == "printer 1 (H2D)"
+
+
 def test_a_log_names_a_printer_by_place_and_model_only():
     registry._LABELS.clear()
     registry.upsert(Printer(serial=SERIAL, name="Workshop H2D", model="O1D", ip="10.0.0.5", access_code=CODE,
