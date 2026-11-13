@@ -4,6 +4,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LocalEntryResult
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.ProfileLine
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Bed
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Density
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Line
@@ -196,6 +197,40 @@ class AddProfileViewModelTest {
         assertEquals(listOf("PETG"), api.parentCalls)
         assertEquals(ParentList(listOf("Generic PETG", "SUNLU PETG"), true), vm.state.value.parents)
     }
+
+    @Test
+    fun listsTheServersLinesAndReparentsOne() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Bambu PLA Basic"), synced = true)
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        assertEquals(listOf("sunlu--pla"), vm.state.value.lines.map { it.lineId })
+
+        vm.editParent(vm.state.value.lines.single())
+        advanceUntilIdle()
+        assertEquals(listOf("Bambu PLA Basic"), vm.state.value.editing?.parents?.parents)
+
+        vm.setLineParent("Bambu PLA Basic")
+        advanceUntilIdle()
+
+        assertEquals(listOf("sunlu--pla" to "Bambu PLA Basic"), api.reparented)
+        assertEquals("Bambu PLA Basic", vm.state.value.lines.single().bambuParent)
+        assertNull(vm.state.value.editing)
+    }
+
+    @Test
+    fun aRefusedParentShowsTheServersMessageAndKeepsTheLine() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        vm.editParent(vm.state.value.lines.single())
+        advanceUntilIdle()
+        api.failure = ApiError(400, "unknown_parent", "Bambu Studio has no such preset")
+
+        vm.setLineParent("Nope")
+        advanceUntilIdle()
+
+        assertEquals("Bambu Studio has no such preset", vm.state.value.lineError)
+        assertNull(vm.state.value.lines.single().bambuParent)
+    }
 }
 
 private class FakeProfileApi : ProfileApi {
@@ -207,6 +242,17 @@ private class FakeProfileApi : ProfileApi {
     override suspend fun parents(material: String): ParentList {
         parentCalls += material
         return parentLists[material] ?: ParentList(emptyList(), synced = false)
+    }
+
+    var lines = listOf(ProfileLine(lineId = "sunlu--pla", vendor = "SUNLU", product = "PLA", material = "PLA"))
+    val reparented = mutableListOf<Pair<String, String>>()
+
+    override suspend fun profileLines(): List<ProfileLine> = lines
+
+    override suspend fun setLineParent(lineId: String, parent: String): ProfileLine {
+        reparented += lineId to parent
+        failure?.let { throw it }
+        return lines.first { it.lineId == lineId }.copy(bambuParent = parent.ifEmpty { null }, parentSource = "user")
     }
 
     override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {

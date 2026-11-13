@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +66,39 @@ fun AddProfileScreen(vm: AddProfileViewModel, onBack: () -> Unit, onPairAgain: (
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+        if (s.lines.isNotEmpty()) {
+            Text("Existing lines", style = MaterialTheme.typography.titleMedium)
+            s.lines.forEach { line ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${line.vendor} ${line.product} (${line.material})")
+                        Text(
+                            "Parent: ${line.bambuParent ?: "automatic"}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Box {
+                        TextButton(onClick = { vm.editParent(line) }) { Text("Change parent") }
+                        val edit = s.editing?.takeIf { it.lineId == line.lineId }
+                        DropdownMenu(expanded = edit != null, onDismissRequest = vm::cancelEditParent) {
+                            val parents = edit?.parents
+                            if (parents == null) {
+                                DropdownMenuItem(text = { Text("Loading…") }, onClick = {}, enabled = false)
+                            } else {
+                                DropdownMenuItem(text = { Text("Automatic") }, onClick = { vm.setLineParent("") })
+                                if (!parents.synced) {
+                                    DropdownMenuItem(text = { Text("Presets not synced yet") }, onClick = {}, enabled = false)
+                                }
+                                parents.parents.forEach { p ->
+                                    DropdownMenuItem(text = { Text(p) }, onClick = { vm.setLineParent(p) })
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            s.lineError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
         if (s.problems.isNotEmpty()) {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
