@@ -81,7 +81,8 @@ fun PreviewScreen(
                 AddPanel {
                     state.items.forEachIndexed { i, item ->
                         if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border)
-                        PreviewRow(item)
+                        // the Hub's own per-item answer when it gives one, else what the app holds
+                        PreviewRow(item, state.previewItems.firstOrNull { it.int("index") == i } ?: state.previewItems.getOrNull(i))
                     }
                 }
                 if (state.previewLines.isNotEmpty()) {
@@ -118,11 +119,13 @@ fun PreviewScreen(
 
 /** One spool of the preview: swatch, name and count, where it goes, and whether the filament is new. */
 @Composable
-private fun PreviewRow(item: JsonObject) {
+private fun PreviewRow(item: JsonObject, hub: JsonObject?) {
     val space = SpoolwardenTheme.space
     val name = "${item.str("vendor").orEmpty()} ${item.str("name").orEmpty()}".trim()
-    val count = item.int("count")
-    val existing = item.int("existing_filament_id") ?: item.int(AddViewModel.FROM_FILAMENT)
+    val count = hub?.int("spools") ?: item.int("count")
+    val existing = if (hub != null) {
+        if (hub.str("filament") == "existing") hub.int("filament_id") else null
+    } else item.int("existing_filament_id") ?: item.int(AddViewModel.FROM_FILAMENT)
     Row(
         Modifier.fillMaxWidth().defaultMinSize(minHeight = SpoolwardenTheme.sizes.row)
             .semantics(mergeDescendants = true) {}.padding(space.s3),
@@ -139,7 +142,10 @@ private fun PreviewRow(item: JsonObject) {
                     Text(stringResource(R.string.add_review_count, count), style = SpoolwardenTheme.type.dataSmall)
                 }
             }
-            val where = item.str("location")
+            // where each spool goes: the Hub's placements, else the location the item names
+            val places = (hub?.get("placements") as? kotlinx.serialization.json.JsonArray).orEmpty()
+                .mapNotNull { (it as? JsonObject)?.str("location") }.distinct()
+            val where = places.joinToString(", ").ifBlank { null } ?: hub?.str("location") ?: item.str("location")
             Text(
                 listOfNotNull(
                     where,

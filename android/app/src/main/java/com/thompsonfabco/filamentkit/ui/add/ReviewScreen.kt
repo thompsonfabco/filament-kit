@@ -1,6 +1,8 @@
 package com.thompsonfabco.filamentkit.ui.add
 
+import android.content.Context
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,12 +44,6 @@ import com.thompsonfabco.filamentkit.ui.components.SwProgress
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 
-/** The spools whose panels are open; saved, so a rotation keeps them. */
-private val OpenSaver = listSaver<Set<Int>, Int>(save = { it.toList() }, restore = { it.toSet() })
-
-/** The most filaments the picker lists (05-android-app 6.4); the rest are "N more: type more of the name". */
-private const val MAX_FILAMENTS_SHOWN = 20
-
 /**
  * Step 2, "Check the spools" (05-android-app 6.3): the summary in words, the Label Reader's questions and notices, one
  * panel per proposed spool that opens in place (one at a time on a phone, any number from medium width), and the
@@ -65,14 +61,16 @@ fun ReviewScreen(
 ) {
     val space = SpoolwardenTheme.space
     val wide = SpoolwardenTheme.window != WindowClass.Phone
-    var open by rememberSaveable(stateSaver = OpenSaver) { mutableStateOf(if (state.items.isEmpty()) emptySet() else setOf(0)) }
+    // the open panels live in the flow, so they are as they were after a trip to the Preview step and back
+    val open = state.openPanels ?: if (state.items.isEmpty()) emptySet() else setOf(0)
+    val setOpen = vm::setOpenPanels
     var picker by rememberSaveable { mutableStateOf(true) }
     val missing = state.missing
     val firstMissing = missing.indexOfFirst { it.isNotEmpty() }
     // "Fix" and "Show" and a new or restored spool open their panel; a phone keeps only that one open
     LaunchedEffect(state.focus, state.reveal) {
         val target = state.focus?.first ?: state.reveal
-        if (target != null) open = if (wide) open + target else setOf(target)
+        if (target != null) setOpen(if (wide) open + target else setOf(target))
         if (state.reveal != null) vm.revealDone()
     }
     AddPage(
@@ -92,6 +90,8 @@ fun ReviewScreen(
         state.addedBefore?.let { before ->
             NoticeCard(NoticeKind.Warn, addedBeforeText(before))
         }
+        // the Hub refused a Bambu Studio parent: its words at the top as well as at the field
+        state.parentError?.let { NoticeCard(NoticeKind.Bad, it) }
         if (state.items.isNotEmpty()) Summary(state, missing)
         if (state.questions.isNotEmpty()) {
             NoticeCard(
@@ -124,13 +124,13 @@ fun ReviewScreen(
             androidx.compose.runtime.key(state.generation, i) {
                 SpoolPanel(
                     state, i, expanded = i in open,
-                    onToggle = { open = if (i in open) open - i else if (wide) open + i else setOf(i) },
+                    onToggle = { setOpen(if (i in open) open - i else if (wide) open + i else setOf(i)) },
                     focusKey = state.focus?.takeIf { it.first == i }?.second,
                     onFocused = vm::focusDone,
                     vm = vm,
                     onRemove = {
                         // the open panels after the removed one move up
-                        open = open.filter { it != i }.map { if (it > i) it - 1 else it }.toSet()
+                        setOpen(open.filter { it != i }.map { if (it > i) it - 1 else it }.toSet())
                         vm.removeItem(i)
                     },
                     onAddCatalogLine = onAddCatalogLine,
@@ -143,7 +143,7 @@ fun ReviewScreen(
 /** The summary in words: "3 spools · 2 values estimated · 1 spool needs fields" (a part that is zero is left out). */
 @Composable
 private fun Summary(state: AddUiState, missing: List<List<String>>) {
-    val estimated = state.items.sumOf { marksOf(it, state.manual).values.count { m -> m == Mark.Estimated } }
+    val estimated = state.items.sumOf { marksOf(it, state.manual).values.count { m -> m == Mark.Estimated || m == Mark.Medium } }
     val needing = missing.count { it.isNotEmpty() }
     val spools = pluralStringResource(R.plurals.add_review_summary_spools, state.items.size, state.items.size)
     val values = if (estimated > 0) pluralStringResource(R.plurals.add_review_summary_estimated, estimated, estimated) else null
@@ -180,24 +180,28 @@ private fun Reasons(state: AddUiState, missing: List<List<String>>, firstMissing
 
 /** The warning that spools may exist already: the Hub's partial-failure words, or the lost reply's note. */
 @Composable
-internal fun addedBeforeText(before: AddedBefore): String = when {
-    before.spoolIds.isNotEmpty() && before.hubMessage != null ->
-        pluralStringResource(
-            R.plurals.add_done_partial, before.spoolIds.size, before.hubMessage, spoolNumbers(before.spoolIds.map { it.toInt() }),
-        )
-    before.spoolIds.isNotEmpty() ->
-        stringResource(R.string.add_review_added_before, spoolList(before.spoolIds.map { it.toInt() }))
-    else -> stringResource(R.string.add_review_added_before, stringResource(R.string.add_review_lost_note))
+internal fun addedBeforeText(before: AddedBefore): String = before.text(LocalContext.current)
+
+/** [addedBeforeText] for a place with no composition (a snackbar of the shell). */
+internal fun AddedBefore.text(context: Context): String {
+    val ids = spoolIds.map { it.toInt() }
+    return when {
+        ids.isNotEmpty() && hubMessage != null ->
+            context.resources.getQuantityString(R.plurals.add_done_partial, ids.size, hubMessage, spoolNumbersOf(ids))
+        ids.isNotEmpty() -> context.getString(R.string.add_review_added_before, spoolListOf(context, ids))
+        else -> context.getString(R.string.add_review_added_before, context.getString(R.string.add_review_lost_note))
+    }
 }
 
 /** "212 and 213": the numbers, set in the phone's language. */
-@Composable
-internal fun spoolNumbers(ids: List<Int>): String = android.icu.text.ListFormatter.getInstance().format(ids.map { it.toString() })
+internal fun spoolNumbersOf(ids: List<Int>): String = android.icu.text.ListFormatter.getInstance().format(ids.map { it.toString() })
 
 /** "spool 212 and spool 213". */
+internal fun spoolListOf(context: Context, ids: List<Int>): String =
+    android.icu.text.ListFormatter.getInstance().format(ids.map { context.getString(R.string.add_done_spool, it) })
+
 @Composable
-internal fun spoolList(ids: List<Int>): String =
-    android.icu.text.ListFormatter.getInstance().format(ids.map { stringResource(R.string.add_done_spool, it) })
+internal fun spoolList(ids: List<Int>): String = spoolListOf(LocalContext.current, ids)
 
 private const val BULLET = "• "
 
@@ -244,7 +248,7 @@ private fun FilamentPicker(state: AddUiState, vm: AddViewModel, open: Boolean, o
                 Text(stringResource(R.string.add_picker_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             }
             Column {
-                state.filaments.take(MAX_FILAMENTS_SHOWN).forEachIndexed { i, f ->
+                state.filaments.take(AddViewModel.FILAMENTS_SHOWN).forEachIndexed { i, f ->
                     if (i > 0) HorizontalDivider(color = colors.border)
                     FilamentRow(f, enabled) {
                         vm.pickFilament(f)
@@ -252,9 +256,10 @@ private fun FilamentPicker(state: AddUiState, vm: AddViewModel, open: Boolean, o
                     }
                 }
             }
-            if (state.filaments.size > MAX_FILAMENTS_SHOWN) {
+            val shown = minOf(state.filaments.size, AddViewModel.FILAMENTS_SHOWN)
+            if (state.filamentsTotal > shown) {
                 Text(
-                    stringResource(R.string.add_picker_more, state.filaments.size - MAX_FILAMENTS_SHOWN),
+                    stringResource(R.string.add_picker_more, state.filamentsTotal - shown),
                     style = MaterialTheme.typography.bodySmall, color = colors.muted,
                 )
             }

@@ -228,4 +228,26 @@ class DestinationsTest {
         nav.closeAdd()
         assertTrue(nav.currentDestination.isTabRoot())
     }
+
+    @Test fun aTagTapIsTheDraftsTagOnPhotosAndCheckOnly() {
+        val nav = controller()
+        nav.navigate(AddPhotosRoute("d1"))
+        assertTrue(nav.currentDestination.takesTagTaps())
+        nav.navigate(AddReviewRoute("d1"))
+        assertTrue(nav.currentDestination.takesTagTaps())
+        nav.navigate(AddPreviewRoute("d1"))
+        assertFalse("on Preview the tap opens the tag (05 2.6)", nav.currentDestination.takesTagTaps())
+        nav.navigate(AddDoneRoute("d1"))
+        assertFalse(nav.currentDestination.takesTagTaps())
+    }
+
+    @Test fun aStepThatWasAlreadyPoppedDoesNotMoveTheStackAgain() {
+        val nav = controller()
+        nav.navigate(AddPhotosRoute("d1"))
+        nav.navigate(AddReviewRoute("d1"))
+        nav.popBackStack() // system Back from Check
+        nav.followStep("d1", AddStep.Check, AddStep.Photos) // the popped screen's late effect
+        assertTrue(nav.currentDestination?.hasRoute(AddPhotosRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
+    }
 }

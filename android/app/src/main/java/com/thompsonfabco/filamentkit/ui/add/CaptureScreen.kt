@@ -314,7 +314,9 @@ internal fun CameraCapture(photos: Int, onPhoto: (ByteArray) -> Unit) {
                 SwButton(
                     stringResource(if (noAsk) R.string.common_open_app_settings else R.string.add_photos_camera_allow),
                     { if (noAsk) context.openAppSettings() else ask.launch(Manifest.permission.CAMERA) },
-                    Modifier.fillMaxWidth(), kind = SwButtonKind.Main,
+                    Modifier.fillMaxWidth(),
+                    // "Read labels" is the main action once there is a photo
+                    kind = if (photos == 0) SwButtonKind.Main else SwButtonKind.Plain,
                 )
             }
         }
@@ -358,42 +360,37 @@ internal fun CameraCapture(photos: Int, onPhoto: (ByteArray) -> Unit) {
         )
         if (problem) NoticeCard(NoticeKind.Bad, stringResource(R.string.add_photos_camera_error))
         if (shotFailed) NoticeCard(NoticeKind.Bad, stringResource(R.string.add_photos_photo_failed))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space.s3)) {
-            SwButton(
-                stringResource(if (shooting) R.string.add_photos_taking else R.string.add_photos_take),
-                {
-                    shooting = true
-                    shotFailed = false
-                    scope.launch {
-                        try {
-                            val file = withContext(Dispatchers.IO) { File.createTempFile("shot", ".jpg", context.cacheDir) }
-                            val bytes = try {
-                                takePicture(capture, file, context)
-                                withContext(Dispatchers.IO) { file.readBytes() }
-                            } finally {
-                                withContext(NonCancellable + Dispatchers.IO) { file.delete() }
-                            }
-                            onPhoto(bytes)
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            shotFailed = true
+        SwButton(
+            stringResource(if (shooting) R.string.add_photos_taking else R.string.add_photos_take),
+            {
+                shooting = true
+                shotFailed = false
+                scope.launch {
+                    try {
+                        val file = withContext(Dispatchers.IO) { File.createTempFile("shot", ".jpg", context.cacheDir) }
+                        val bytes = try {
+                            takePicture(capture, file, context)
+                            withContext(Dispatchers.IO) { file.readBytes() }
                         } finally {
-                            shooting = false
+                            withContext(NonCancellable + Dispatchers.IO) { file.delete() }
                         }
+                        onPhoto(bytes)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        shotFailed = true
+                    } finally {
+                        shooting = false
                     }
-                },
-                Modifier.weight(1f),
-                // "Read labels" becomes the main action once there is a photo
-                kind = if (photos == 0) SwButtonKind.Main else SwButtonKind.Plain,
-                enabled = !shooting && !problem,
-                icon = R.drawable.sw_ic_camera,
-            )
-            Text(
-                stringResource(R.string.add_photos_count, photos, AddViewModel.MAX_PHOTOS),
-                style = SpoolwardenTheme.type.data, color = SpoolwardenTheme.colors.muted,
-            )
-        }
+                }
+            },
+            Modifier.fillMaxWidth(),
+            // "Read labels" becomes the main action once there is a photo
+            kind = if (photos == 0) SwButtonKind.Main else SwButtonKind.Plain,
+            enabled = !shooting && !problem,
+            icon = R.drawable.sw_ic_camera,
+            trailing = stringResource(R.string.add_photos_count, photos, AddViewModel.MAX_PHOTOS),
+        )
     }
 }
 

@@ -52,7 +52,7 @@ class DraftStore(private val dir: File) {
 
     fun create(manual: Boolean = false): Draft {
         val id = UUID.randomUUID().toString()
-        val draft = Draft(id, emptyList(), "", null, null, false, null, null, System.currentTimeMillis(), manual = manual)
+        val draft = Draft(id, emptyList(), "", null, null, true, null, null, System.currentTimeMillis(), manual = manual) // "Still sealed" starts on
         folder(id).mkdirs()
         write(draft)
         return draft
@@ -97,14 +97,16 @@ class DraftStore(private val dir: File) {
      * older than [maxAgeMs] and drafts with no photos (Home hides those, so nobody could discard them). A draft that
      * holds [Draft.addedBefore] is kept: it carries the "may already be added" warning. Returns how many were deleted.
      */
-    fun purge(maxAgeMs: Long, now: Long = System.currentTimeMillis()): Int {
+    fun purge(maxAgeMs: Long, now: Long = System.currentTimeMillis(), open: Set<String> = emptySet()): Int {
         var n = 0
         for (folder in dir.listFiles { f -> f.isDirectory }.orEmpty()) {
             val d = get(folder.name)
             val drop = when {
                 d == null -> true
+                folder.name in open -> false // an add that is open right now is never taken from under its screen
                 d.addedBefore != null -> false
-                else -> !d.hasContent || now - d.created > maxAgeMs
+                // a draft with nothing in it goes after a day; one just created or restored is never touched
+                else -> now - d.created > maxAgeMs || (!d.hasContent && now - d.created > EMPTY_GRACE_MS)
             }
             if (drop && folder.deleteRecursively()) n++
         }
@@ -146,6 +148,9 @@ class DraftStore(private val dir: File) {
     companion object {
         /** Drafts older than this are deleted at start ([purge]). */
         const val MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
+
+        /** A draft with nothing in it is deleted at start only when it is older than this. */
+        const val EMPTY_GRACE_MS = 24L * 60 * 60 * 1000
         private const val DRAFT_FILE = "draft.json"
         private val PHOTO = Regex("""photo(\d+)\.jpg""")
     }

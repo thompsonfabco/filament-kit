@@ -13,6 +13,7 @@ import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FilamentChoice
+import com.thompsonfabco.filamentkit.net.FilamentPage
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.ParentList
@@ -73,6 +74,9 @@ interface IntakeApi {
 
     suspend fun vendors(): List<VendorChoice> = emptyList()
 
+    /** The picker's page: [limit] rows and the total (the default asks for them all, older fakes keep compiling). */
+    suspend fun filamentPage(q: String, limit: Int): FilamentPage = filaments(q).let { FilamentPage(it, it.size) }
+
     companion object {
         /** Calls go to whatever [current] returns at that moment, so a new client (trusted certificate, re-pair) is used at once. */
         fun of(current: () -> Api): IntakeApi = object : IntakeApi {
@@ -86,6 +90,7 @@ interface IntakeApi {
             override suspend fun parents(material: String) = api().parents(material)
             override suspend fun filaments(q: String) = api().filaments(q)
             override suspend fun vendors() = api().vendors()
+            override suspend fun filamentPage(q: String, limit: Int) = api().filamentPage(q, limit)
         }
 
         fun of(api: Api): IntakeApi = object : IntakeApi {
@@ -98,6 +103,7 @@ interface IntakeApi {
             override suspend fun parents(material: String) = api.parents(material)
             override suspend fun filaments(q: String) = api.filaments(q)
             override suspend fun vendors() = api.vendors()
+            override suspend fun filamentPage(q: String, limit: Int) = api.filamentPage(q, limit)
         }
     }
 }
@@ -156,6 +162,10 @@ data class AddUiState(
     /** Notices of the read (the Hub's own words) and the app's note on a weight it could not use. */
     val notices: List<AddText> = emptyList(),
     val previewLines: List<String> = emptyList(),
+    /** What the Hub says each item does (its dry run, per item); empty from an older Hub: the rows use the app's own items. */
+    val previewItems: List<JsonObject> = emptyList(),
+    /** The spool panels that are open on the Check step (null: not touched yet, the first one is open); kept across the Preview step. */
+    val openPanels: Set<Int>? = null,
     /** The Hub's check came back with problems or failed: the preview is not usable and Add stays off. */
     val previewFailed: Boolean = false,
     /** What the Hub refused, one entry each (the Hub's words); each has a "Fix" back to the field. */
@@ -188,6 +198,8 @@ data class AddUiState(
     val filamentQuery: String = "",
     val filaments: List<FilamentChoice> = emptyList(),
     val filamentsLoading: Boolean = false,
+    /** How many filaments match in all (the Hub pages the picker); more than listed means "N more: type more". */
+    val filamentsTotal: Int = 0,
     val filamentsError: AddText? = null,
     /** Vendor suggestions for a new filament (manual add). */
     val vendors: List<VendorChoice> = emptyList(),
@@ -330,8 +342,8 @@ class AddViewModel(
             if (wait > 0) delay(wait)
             _state.update { it.copy(filamentsLoading = true, filamentsError = null) }
             try {
-                val list = api.filaments(q)
-                _state.update { it.copy(filaments = list, filamentsLoading = false) }
+                val page = api.filamentPage(q, FILAMENTS_SHOWN)
+                _state.update { it.copy(filaments = page.filaments, filamentsTotal = page.total, filamentsLoading = false) }
                 hubOk()
             } catch (e: CancellationException) {
                 throw e
@@ -750,7 +762,7 @@ class AddViewModel(
      * error is cleared (callers also drop [retryAction]).
      */
     private fun AddUiState.invalidated() =
-        (if (stage == Stage.Preview) copy(stage = Stage.Review, previewLines = emptyList()) else this)
+        (if (stage == Stage.Preview) copy(stage = Stage.Review, previewLines = emptyList(), previewItems = emptyList()) else this)
             .copy(error = null, parentError = null, fieldErrors = emptyMap(), previewFailed = false, problems = emptyList())
 
     /** "Preview": the Hub's check (`dry_run`) runs on entry to the Preview step. */
@@ -770,7 +782,10 @@ class AddViewModel(
         addJob?.cancel()
         retryAction = null
         _state.update {
-            it.copy(stage = Stage.Review, previewLines = emptyList(), previewFailed = false, problems = emptyList(), error = null)
+            it.copy(
+                stage = Stage.Review, previewLines = emptyList(), previewItems = emptyList(), previewFailed = false,
+                problems = emptyList(), error = null,
+            )
         }
     }
 
@@ -779,6 +794,9 @@ class AddViewModel(
         backToCheck()
         if (_state.value.stage == Stage.Review) _state.update { it.copy(focus = index to key) }
     }
+
+    /** Which spool panels are open (the screen's choice; kept while the person is on the Preview step). */
+    fun setOpenPanels(open: Set<Int>) = _state.update { it.copy(openPanels = open) }
 
     fun focusDone() = _state.update { it.copy(focus = null) }
 
@@ -832,7 +850,9 @@ class AddViewModel(
                 val res = api.add(JsonArray(s.items.map(::forAdd)), dryRun, s.tag, readId)
                 hubOk()
                 if (dryRun) {
-                    _state.update { it.copy(stage = Stage.Preview, previewLines = res.lines) }
+                    _state.update {
+                        it.copy(stage = Stage.Preview, previewLines = res.lines, previewItems = res.items.mapNotNull { x -> x as? JsonObject })
+                    }
                 } else {
                     val id = draft?.id
                     draft = null
@@ -987,6 +1007,9 @@ class AddViewModel(
 
     companion object {
         const val MAX_PHOTOS = 8
+
+        /** The most filaments the picker lists (05-android-app 6.4). */
+        const val FILAMENTS_SHOWN = 20
         internal const val PROPOSE_DEBOUNCE_MS = 500L
         internal const val PARENTS_MAX_AGE_MS = 5 * 60_000L
         /** App-only item key (kept in the draft, never sent): the user picked this item's Bambu parent. */
@@ -1142,6 +1165,8 @@ private fun describeApi(e: ApiError): AddError {
         e.code == "offline" && e.status == 0 -> again(AddText.of(R.string.common_hub_unreachable), false)
         e.code == "local_network" -> AddError(AddText.hub(LOCAL_NETWORK_MESSAGE), canRetry = true)
         e.code == "unauthorized" -> AddError(AddText.of(R.string.common_not_paired_notice), pairAgain = true)
+        // an error page of some other service (a bare 404) is not the Hub speaking: no code of the Hub's applies to it
+        e.code == ApiError.BAD_RESPONSE || e.notFromHub -> AddError(AddText.of(R.string.common_hub_answer_unknown), canRetry = true)
         e.code == "daily_cap" -> AddError(AddText.of(R.string.add_read_limit), canAddByHand = true)
         e.code == "bad_key" -> again(AddText.of(R.string.add_read_key_refused), false)
         e.code == "rate_limited" -> again(AddText.of(R.string.add_read_busy), false)
@@ -1152,8 +1177,7 @@ private fun describeApi(e: ApiError): AddError {
         e.code == "bad_photo" -> AddError(AddText.of(R.string.add_read_photo_unusable))
         e.code == "tag_conflict" -> AddError(AddText.of(R.string.add_read_tag_linked), canDropTag = true)
         e.code == "module_off" -> AddError(AddText.of(R.string.home_label_reader_off), canAddByHand = true)
-        // the Hub's own message goes through as given, unless it is not the Hub speaking
-        e.code == ApiError.BAD_RESPONSE || e.notFromHub -> AddError(AddText.of(R.string.common_hub_answer_unknown))
+        // the Hub's own message goes through as given
         else -> AddError(AddText.hub(e.message), canRetry = e.code != "bad_request" && e.code != "unknown_parent")
     }
 }

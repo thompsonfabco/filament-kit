@@ -58,7 +58,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
 /** How sure the Label Reader is of one field (05-android-app 6.3); a field read from the label has no mark. */
-internal enum class Mark { Estimated, NotOnLabel }
+internal enum class Mark { Estimated, NotOnLabel, Medium, Low }
 
 /** The fields of a read that can carry a mark (the ones the Label Reader fills from the label). */
 private val MARKABLE = listOf("vendor", "name", "line", "material", "color_hex", "net", "tare", "density")
@@ -71,11 +71,18 @@ internal fun marksOf(item: JsonObject, manual: Boolean): Map<String, Mark> {
     if (manual) return emptyMap()
     val estimates = (item["estimates"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
     val touched = (item[AddViewModel.TOUCHED] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
+    // the Hub's own levels per field (high, medium, low, not on the label) when it sends them
+    val levels = item["confidence_levels"] as? JsonObject
     return buildMap {
         for (key in MARKABLE) {
+            val level = (levels?.get(key) as? JsonPrimitive)?.contentOrNull
             when {
+                key in touched -> Unit
+                level == "not_on_label" -> put(key, Mark.NotOnLabel)
+                level == "low" -> put(key, Mark.Low)
                 key in estimates -> put(key, Mark.Estimated)
-                key !in touched && item.isEmptyField(key) -> put(key, Mark.NotOnLabel)
+                level == "medium" -> put(key, Mark.Medium)
+                levels == null && item.isEmptyField(key) -> put(key, Mark.NotOnLabel)
             }
         }
     }
@@ -135,7 +142,7 @@ internal fun SpoolPanel(
     val editable = state.stage == Stage.Review
     val marks = marksOf(item, state.manual)
     val missing = state.missing.getOrNull(index).orEmpty()
-    val estimated = marks.values.count { it == Mark.Estimated }
+    val estimated = marks.values.count { it == Mark.Estimated || it == Mark.Medium }
     val name = "${item.str("vendor").orEmpty()} ${item.str("name").orEmpty()}".trim()
     val headline = name.ifBlank { stringResource(R.string.add_new_filament) }
     val count = item.int("count")
@@ -177,6 +184,8 @@ internal fun SpoolPanel(
                     when {
                         missing.isNotEmpty() ->
                             AddStatusLine(AddStatus.Bad, stringResource(R.string.add_review_needs, fieldNames(missing)))
+                        marks.values.any { it == Mark.Low } ->
+                            AddStatusLine(AddStatus.Bad, stringResource(R.string.add_review_mark_low))
                         estimated > 0 ->
                             AddStatusLine(AddStatus.Warn, stringResource(R.string.add_review_estimated, estimated))
                         else -> AddStatusLine(AddStatus.Ok, stringResource(R.string.add_review_ready))
@@ -369,6 +378,8 @@ private fun Supporting(error: String?, hint: String?, mark: Mark?): (@Composable
             when (mark) {
                 Mark.Estimated -> AddStatusLine(AddStatus.Warn, stringResource(R.string.add_review_mark_estimated))
                 Mark.NotOnLabel -> AddStatusLine(AddStatus.Muted, stringResource(R.string.add_review_mark_not_on_label))
+                Mark.Medium -> AddStatusLine(AddStatus.Warn, stringResource(R.string.add_review_mark_medium))
+                Mark.Low -> AddStatusLine(AddStatus.Bad, stringResource(R.string.add_review_mark_low))
                 null -> Unit
             }
         }
@@ -379,6 +390,8 @@ private fun Supporting(error: String?, hint: String?, mark: Mark?): (@Composable
 private fun markWord(mark: Mark?): String? = when (mark) {
     Mark.Estimated -> stringResource(R.string.add_review_mark_estimated)
     Mark.NotOnLabel -> stringResource(R.string.add_review_mark_not_on_label)
+    Mark.Medium -> stringResource(R.string.add_review_mark_medium)
+    Mark.Low -> stringResource(R.string.add_review_mark_low)
     null -> null
 }
 

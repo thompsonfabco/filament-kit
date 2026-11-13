@@ -15,7 +15,6 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.OnBackPressedDispatcher
 import androidx.compose.ui.test.onAllNodesWithText
 import com.thompsonfabco.filamentkit.nav.AddProfileTitle
-import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.FilamentChoice
@@ -536,7 +535,7 @@ class ScreenSemanticsTest {
         addStep = AddStep.Photos
         host(RuntimeEnvironment.getApplication().getString(R.string.home_add_title)) {
             AddSpoolsScreen(
-                vm, addStep, onStep = { addStep = it }, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
+                vm, addStep, onStep = { addStep = it }, onPop = {}, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
                 onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {}, camera = camera,
             )
         }
@@ -564,7 +563,7 @@ class ScreenSemanticsTest {
         addStep = AddStep.Photos
         host(RuntimeEnvironment.getApplication().getString(R.string.home_add_title)) {
             AddSpoolsScreen(
-                vm, addStep, onStep = { addStep = it }, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
+                vm, addStep, onStep = { addStep = it }, onPop = {}, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
                 onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {},
             )
         }

@@ -32,13 +32,15 @@ internal fun AddStepRoute(
         return
     }
     val vm = remember(draftId) { flows.get(draftId) }
-    TagTaps(vm::onTag)
+    // a tap is the draft's tag on Photos and Check; on Preview and Done the shell opens the tag instead (2.6)
+    if (step == AddStep.Photos || step == AddStep.Check) TagTaps(vm::onTag)
     if (BuildConfig.DEBUG && step == AddStep.Photos) LaunchedEffect(vm) { DebugPhotos.photos.collect(vm::addPhoto) }
     fun first(manual: Boolean, id: String): Any = if (manual) AddReviewRoute(id) else AddPhotosRoute(id)
     AddSpoolsScreen(
         vm = vm,
         step = step,
         onStep = { desired -> nav.followStep(draftId, step, desired) },
+        onPop = { nav.popBackStack() },
         onClose = {
             nav.closeAdd()
             flows.leave(draftId)

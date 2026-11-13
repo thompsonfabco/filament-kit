@@ -55,7 +55,7 @@ class DraftStoreTest {
         val d = DraftStore(dir).create()
         assertEquals("", d.hint)
         assertNull(d.tag); assertNull(d.weightGrams); assertNull(d.readResult); assertNull(d.editedItems)
-        assertFalse(d.sealed)
+        assertTrue("Still sealed starts on (05 6.2)", d.sealed)
         assertTrue(d.photos.isEmpty())
     }
 
@@ -100,13 +100,14 @@ class DraftStoreTest {
         }
         val fresh = draft(ageDays = 2, photos = 1)
         val old = draft(ageDays = 31, photos = 2)
-        val noPhotos = draft(ageDays = 1, photos = 0)
+        val noPhotos = draft(ageDays = 2, photos = 0)
+        val justNow = draft(ageDays = 0, photos = 0) // created a moment ago: its screen is about to open
         val warned = draft(ageDays = 60, photos = 0, addedBefore = listOf(7L))
         val unreadable = draft(ageDays = 1, photos = 1)
         File(dir, "$unreadable/draft.json").writeText("{not json")
 
         assertEquals(3, store.purge(30 * day, now))
-        assertEquals(setOf(fresh, warned), dir.list()!!.toSet())
+        assertEquals(setOf(fresh, warned, justNow), dir.list()!!.toSet())
         assertFalse(File(dir, old).exists())
         assertFalse(File(dir, noPhotos).exists())
         assertFalse(File(dir, unreadable).exists())
@@ -138,7 +139,20 @@ class DraftStoreTest {
         assertTrue(store.get(typed.id)!!.manual)
         assertTrue(store.get(typed.id)!!.hasContent)
         assertFalse(store.get(empty.id)!!.hasContent)
-        assertEquals(1, store.purge(30 * day))
+        // a day later nothing of the empty one is worth keeping
+        assertEquals(1, store.purge(30 * day, now = System.currentTimeMillis() + 2 * day))
         assertEquals(setOf(typed.id), dir.list()!!.toSet())
+    }
+
+    @Test fun anOpenDraftIsNeverPurgedAndAFreshOneSurvivesStartUp() {
+        val store = DraftStore(dir)
+        val open = store.create()
+        val fresh = store.create(manual = true)
+        store.update(store.get(open.id)!!.copy(created = 0))
+        // open: kept whatever its age; fresh: kept because it is new
+        assertEquals(0, store.purge(30 * day, now = 90 * day, open = setOf(open.id)))
+        assertEquals(setOf(open.id, fresh.id), dir.list()!!.toSet())
+        assertEquals("without being open it goes", 1, store.purge(30 * day, now = 90 * day))
+        assertTrue(store.create().sealed)
     }
 }

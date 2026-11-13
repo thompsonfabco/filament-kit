@@ -80,6 +80,7 @@ import com.thompsonfabco.filamentkit.nav.AddProfileTitle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.SnackbarResult
 import com.thompsonfabco.filamentkit.nav.AddDoneRoute
+import com.thompsonfabco.filamentkit.nav.AddOpened
 import com.thompsonfabco.filamentkit.nav.AddPhotosRoute
 import com.thompsonfabco.filamentkit.nav.AddPreviewRoute
 import com.thompsonfabco.filamentkit.nav.AddReviewRoute
@@ -87,6 +88,7 @@ import com.thompsonfabco.filamentkit.nav.addDraftId
 import com.thompsonfabco.filamentkit.nav.addRoute
 import com.thompsonfabco.filamentkit.nav.closeAdd
 import com.thompsonfabco.filamentkit.nav.inAdd
+import com.thompsonfabco.filamentkit.nav.takesTagTaps
 import com.thompsonfabco.filamentkit.nav.HomeGraph
 import com.thompsonfabco.filamentkit.nav.HomeRoute
 import com.thompsonfabco.filamentkit.nav.LicencesRoute
@@ -154,6 +156,7 @@ import com.thompsonfabco.filamentkit.tags.enableTagReader
 import com.thompsonfabco.filamentkit.ui.rememberLocalNetworkAccess
 import com.thompsonfabco.filamentkit.ui.add.AddStep
 import com.thompsonfabco.filamentkit.ui.add.AddStepRoute
+import com.thompsonfabco.filamentkit.ui.add.text
 import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
 import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.ui.add.TagTaps
@@ -403,10 +406,9 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         )
     }
 
-    // A tag tap opens tag/{uid} on the stack of the selected tab (05 2.6), anywhere except pairing and the add flow (which
-    // takes taps itself). While a load is being written it waits: the toast says so and the tag opens when the write ends.
-    val adding = destination.inAdd()
-    val tapsOn = destination != null && !inPairing && !adding
+    // A tag tap opens tag/{uid} on the stack of the selected tab (05 2.6), anywhere except pairing and the add steps that
+    // take taps themselves (photos, check). While a load is being written it waits: the toast says so and the tag opens when the write ends.
+    val tapsOn = destination != null && !inPairing && !destination.takesTagTaps()
     val loadWriting by app.loadGate.writing.collectAsStateWithLifecycle()
     var queuedTag by rememberSaveable { mutableStateOf<String?>(null) }
     val tagWaits = stringResource(R.string.tag_read_wait)
@@ -607,13 +609,18 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     nav.popBackStack<TagRoute>(inclusive = true)
                     // without label reading on the Hub the new spool is added by hand
                     // an add already open follows the Back rules before a new one replaces it
-                    nav.openAdd(
+                    val opened = nav.openAdd(
                         first = {
                             val id = app.addFlows.start(manual = !labelPhotos, tag = uid)
                             if (labelPhotos) AddPhotosRoute(id) else AddReviewRoute(id)
                         },
                         decide = app.addFlows::replaceRule,
                     )
+                    // an add that is writing stays, and the person is told why nothing new opened
+                    if (opened == AddOpened.KeptWriting) {
+                        val reason = nav.currentBackStackEntry?.addDraftId()?.let(app.addFlows::writingReason)
+                        if (reason != null) pairScope.launch { toast.show(context.getString(reason)) }
+                    }
                 },
                 onPairAgain = app.router::pairAgain,
                 online = online,
@@ -695,7 +702,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         val readDoneText = stringResource(R.string.add_photos_read_done)
         val readDoneAction = stringResource(R.string.add_photos_read_done_action)
         val addedText = stringResource(R.string.add_done_title)
-        val context = LocalContext.current
         LaunchedEffect(app) {
             launch {
                 app.addFlows.readFinished.collect { id ->
@@ -715,7 +721,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             app.addFlows.release(id)
                         } else {
                             val flow = app.addFlows.get(id)
-                            val why = flow.state.value.error?.message?.resolve(context) ?: return@launch
+                            // whatever did not end cleanly says so: the error, spools that may exist, or the Hub's refusal
+                            val st = flow.state.value
+                            val why = st.error?.message?.resolve(context) ?: st.addedBefore?.text(context) ?: st.parentError
+                                ?: context.getString(R.string.common_hub_answer_unknown)
                             val result = toast.show(why, readDoneAction)
                             if (result == SnackbarResult.ActionPerformed) {
                                 nav.openAdd(first = { addRoute(AddStep.Preview, id) })

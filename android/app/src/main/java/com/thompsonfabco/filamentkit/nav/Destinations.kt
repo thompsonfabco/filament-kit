@@ -146,6 +146,9 @@ fun NavDestination?.inAdd(): Boolean = this != null && (
         hasRoute(AddPreviewRoute::class) || hasRoute(AddDoneRoute::class)
     )
 
+/** Photos and Check the spools take an NFC tap as the draft's tag; anywhere else (Preview, Done too) it opens the tag (05-android-app 2.6). */
+fun NavDestination?.takesTagTaps(): Boolean = this != null && (hasRoute(AddPhotosRoute::class) || hasRoute(AddReviewRoute::class))
+
 /** The draft an Add spools entry belongs to; null for any other entry. */
 fun NavBackStackEntry.addDraftId(): String? = when {
     destination.hasRoute(AddPhotosRoute::class) -> toRoute<AddPhotosRoute>().draftId
@@ -191,6 +194,8 @@ fun NavController.closeAdd() {
  */
 internal fun NavController.followStep(draftId: String, mine: AddStep, desired: AddStep) {
     if (desired == mine) return
+    // only the step that is showing moves the stack (one that was just popped by Back must not pop again)
+    if (currentBackStackEntry?.destination?.hasRoute(addRoute(mine, draftId)::class) != true) return
     if (desired.ordinal > mine.ordinal) {
         navigate(addRoute(desired, draftId))
         return

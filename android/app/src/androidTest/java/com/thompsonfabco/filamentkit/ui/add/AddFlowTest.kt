@@ -68,7 +68,7 @@ class AddFlowTest {
             // the destination follows the draft, as the app's stack does
             var step by mutableStateOf(AddStep.Photos)
             AddSpoolsScreen(
-                vm, step, onStep = { step = it }, onClose = {}, onDone = { done = true }, onAddMore = {},
+                vm, step, onStep = { step = it }, onPop = {}, onClose = {}, onDone = { done = true }, onAddMore = {},
                 onPairAgain = {}, onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {},
             )
         }

@@ -26,6 +26,8 @@ fun AddSpoolsScreen(
     vm: AddViewModel,
     step: AddStep,
     onStep: (desired: AddStep) -> Unit,
+    /** Takes this step off the stack at once: the system Back (and the Home tab pressed again) goes one step at a time. */
+    onPop: () -> Unit,
     onClose: () -> Unit,
     onDone: () -> Unit,
     onAddMore: () -> Unit,
@@ -59,9 +61,9 @@ fun AddSpoolsScreen(
     LaunchedEffect(where) { onStep(where) }
     when (step) {
         AddStep.Photos -> BackHandler(onBack = onClose)
-        AddStep.Check -> BackHandler(onBack = if (state.manual) onClose else vm::backToPhotos)
+        AddStep.Check -> BackHandler(onBack = if (state.manual) onClose else ({ vm.backToPhotos(); onPop() }))
         // an add that is under way goes on when the person leaves; its result arrives as a snackbar
-        AddStep.Preview -> BackHandler(onBack = if (state.stage == Stage.Adding) onClose else vm::backToCheck)
+        AddStep.Preview -> BackHandler(onBack = if (state.stage == Stage.Adding) onClose else ({ vm.backToCheck(); onPop() }))
         AddStep.Done -> BackHandler(onBack = onDone)
     }
     when (step) {

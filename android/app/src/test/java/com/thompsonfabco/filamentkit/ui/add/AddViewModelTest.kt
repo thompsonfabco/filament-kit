@@ -1012,4 +1012,12 @@ internal class FakeIntakeApi : IntakeApi {
     }
 
     override suspend fun vendors(): List<VendorChoice> = vendorList
+
+    /** The total the Hub reports for the picker (null: as many as the list holds). */
+    var filamentTotal: Int? = null
+
+    override suspend fun filamentPage(q: String, limit: Int): com.thompsonfabco.filamentkit.net.FilamentPage {
+        val rows = filaments(q)
+        return com.thompsonfabco.filamentkit.net.FilamentPage(rows.take(limit), filamentTotal ?: rows.size)
+    }
 }

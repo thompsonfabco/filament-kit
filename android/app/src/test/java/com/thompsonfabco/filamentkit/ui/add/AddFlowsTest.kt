@@ -170,4 +170,11 @@ class AddFlowsTest {
         val id = flows.start(manual = false)
         assertEquals(AddReplace.Replace, flows.replaceRule(id))
     }
+
+    @Test fun aWritingAddGivesTheReasonAndOpenAddsAreListed() = runTest(dispatcher) {
+        val flows = flows()
+        val id = flows.start(manual = true)
+        assertEquals(setOf(id), flows.openIds())
+        assertEquals(com.thompsonfabco.filamentkit.R.string.add_preview_checking, flows.writingReason(id))
+    }
 }

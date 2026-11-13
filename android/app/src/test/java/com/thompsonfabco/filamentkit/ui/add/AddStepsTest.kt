@@ -4,6 +4,7 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.FilamentChoice
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.ReadResult
 import java.io.File
@@ -271,5 +272,72 @@ class AddStepsTest {
         val s = AddUiState(stage = Stage.Review, items = listOf(JsonObject(mapOf("vendor" to JsonPrimitive("A"), "name" to JsonPrimitive("n"), "material" to JsonNull))))
         assertEquals(listOf(listOf("material", "net", "tare", "count")), s.missing)
         assertFalse(s.complete)
+    }
+
+    @Test fun aBareErrorPageIsNotTheHubSpeakingWhateverItsStatus() {
+        assertEquals(R.string.common_hub_answer_unknown, describe(ApiError(404, "not_found", "The server returned an error (404)")).message.res)
+        assertEquals(R.string.common_hub_answer_unknown, describe(ApiError(404, "not_found", "Not Found", noHubMessage = true)).message.res)
+        assertEquals("the Hub's own not_found is the photos", R.string.add_read_photos_gone, describe(ApiError(404, "not_found", "no such read")).message.res)
+    }
+
+    @Test fun theHubsLevelsMarkMediumAndLowFields() = runTest(dispatcher) {
+        val vm = vm()
+        val levels = buildJsonObject { put("tare", "low"); put("net", "medium"); put("name", "high"); put("line", "not_on_label") }
+        readOne(vm, JsonObject(item(estimates = emptyList()) + ("confidence_levels" to levels)))
+        val marks = marksOf(vm.state.value.items[0], manual = false)
+        assertEquals(Mark.Low, marks["tare"])
+        assertEquals(Mark.Medium, marks["net"])
+        assertEquals(Mark.NotOnLabel, marks["line"])
+        assertNull(marks["name"])
+        vm.setNumber(0, "tare", 200.0)
+        assertNull("editing removes the mark", marksOf(vm.state.value.items[0], manual = false)["tare"])
+    }
+
+    @Test fun theHubsPerItemAnswerReachesThePreview() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item())
+        val answer = buildJsonObject { put("index", 0); put("filament", "existing"); put("filament_id", 41); put("spools", 2) }
+        api.addResults += AddResult(emptyList(), listOf("line"), true, items = JsonArray(listOf(answer)))
+        vm.preview()
+        advanceUntilIdle()
+        assertEquals(41, (vm.state.value.previewItems.single()["filament_id"] as JsonPrimitive).content.toInt())
+        vm.backToCheck()
+        assertTrue(vm.state.value.previewItems.isEmpty())
+    }
+
+    @Test fun theOpenPanelsSurviveAVisitToThePreview() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item(), item(name = "B"))
+        vm.setOpenPanels(setOf(1))
+        vm.preview()
+        advanceUntilIdle()
+        vm.backToCheck()
+        assertEquals(setOf(1), vm.state.value.openPanels)
+    }
+
+    @Test fun aPartialAddAndARefusedParentLeaveSomethingToSay() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item())
+        vm.preview()
+        advanceUntilIdle()
+        api.addFailures += ApiError(400, "unknown_parent", "Bambu Studio has no preset named Foo")
+        vm.confirm()
+        advanceUntilIdle()
+        assertEquals("Bambu Studio has no preset named Foo", vm.state.value.parentError)
+        vm.preview()
+        advanceUntilIdle()
+        api.addFailures += ApiError(502, "spoolman_error", "failed part-way", buildJsonObject { put("partial_spool_ids", JsonArray(listOf(JsonPrimitive(5)))) })
+        vm.confirm()
+        advanceUntilIdle()
+        assertEquals(listOf(5L), vm.state.value.addedBefore!!.spoolIds)
+    }
+
+    @Test fun thePickerSaysHowManyMoreThereAre() = runTest(dispatcher) {
+        api.filamentList = { List(25) { FilamentChoice(it, "V", "N$it", "PLA", spools = 1) } }
+        api.filamentTotal = 40
+        val vm = AddViewModel(api, store, taps = MutableSharedFlow(), prepare = { it }, io = dispatcher, manual = true)
+        advanceUntilIdle()
+        assertEquals(40, vm.state.value.filamentsTotal)
+        assertEquals(AddViewModel.FILAMENTS_SHOWN, vm.state.value.filaments.size)
     }
 }

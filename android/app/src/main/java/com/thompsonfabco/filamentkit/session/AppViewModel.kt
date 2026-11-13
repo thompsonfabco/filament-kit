@@ -93,7 +93,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** At start: delete expired, photo-less and unreadable drafts ([DraftStore.purge]), then show what is left. */
     private fun purgeDrafts() {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { drafts.purge(DraftStore.MAX_AGE_MS) }
+            runCatching { drafts.purge(DraftStore.MAX_AGE_MS, open = addFlows.openIds()) }
             refreshDrafts()
         }
     }

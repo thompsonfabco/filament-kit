@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.add
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.imaging.prepareJpeg
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +45,14 @@ class AddFlows(
         open(id, manual, tag)
         return id
     }
+
+    /** The drafts whose flows are open now. */
+    fun openIds(): Set<String> = synchronized(open) { open.keys.toSet() }
+
+    /** The words for why an add that is open cannot be replaced right now ("Adding to Spoolman…"). */
+    fun writingReason(id: String): Int =
+        if (synchronized(open) { open[id]?.vm }?.state?.value?.stage == Stage.Adding) R.string.add_preview_adding
+        else R.string.add_preview_checking
 
     /** The draft is on the phone (or its flow is open). */
     fun exists(id: String): Boolean = synchronized(open) { id in open } || store.get(id) != null
