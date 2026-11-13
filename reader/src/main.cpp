@@ -136,9 +136,11 @@ static const uint32_t RESULT_HOLD_MS   = 4000;
 // "Load filament" (queued) prompt stays up longer — you're walking to the AMS.
 static const uint32_t QUEUED_HOLD_MS   = 15000;
 // Printer + slot lists: refreshed at boot, every LIST_REFRESH_MS while the screen
-// is lit, and LIST_AFTER_SET_MS after a set (to show the new contents).
+// is lit (every LIST_RETRY_MS while the server is down), and LIST_AFTER_SET_MS after a set (to show the new contents).
 static const uint32_t LIST_REFRESH_MS   = 60000;
 static const uint32_t LIST_AFTER_SET_MS = 5000;
+// While the server is down the lists are retried this often (screen on or off).
+static const uint32_t LIST_RETRY_MS     = 10000;
 // Long labels/names scroll one column per MARQUEE_STEP_MS.
 static const uint32_t MARQUEE_STEP_MS  = 350;
 // =============================================================================
@@ -454,6 +456,11 @@ void sendScan(const String& uid) {
   const PrinterEntry* p = curPrinter();
   const SlotEntry* s = curSlot();
   if (WiFi.status() != WL_CONNECTED) { showResult("Scan", "No WiFi", true); buzzError(); return; }
+  if (!p || !s) {
+    // no usable slot (server was down at the last refresh): one refresh before refusing
+    refreshLists();
+    p = curPrinter(); s = curSlot();
+  }
   if (!p || !s) { showResult("Scan", "No slot", true); buzzError(); return; }
   // copy: a refresh after this call must not pull the strings out from under us
   PrinterEntry printer = *p;
@@ -900,7 +907,9 @@ void loop() {
 
   // background refreshes (skipped while a result or the printer list is showing)
   if (!resultUntil && menu.mode == MODE_SLOTS && !settleAt) {
-    if (scr != SCR_OFF && millis() - listsAt > LIST_REFRESH_MS) { refreshLists(); redraw(); }
+    if (listsDue(millis(), listsAt, serverOk, scr != SCR_OFF, LIST_REFRESH_MS, LIST_RETRY_MS)) {
+      refreshLists(); if (scr != SCR_OFF) redraw();
+    }
     if (millis() - updCheckAt > UPD_CHECK_MS) { checkForUpdate(); if (scr != SCR_OFF) redraw(); }
   }
   // scroll long names/labels

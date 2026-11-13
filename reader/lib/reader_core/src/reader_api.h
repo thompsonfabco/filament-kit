@@ -63,6 +63,12 @@ struct SlotCache {
 // then shows the first slot and goes back to the saved slot when it returns.
 std::string wantedLabel(const std::string& saved, const std::string& current, bool turnedUnsaved);
 
+// Whether the background list refresh is due. While the server is down it is
+// retried every retryMs, screen on or off, so the lists are back by the next tap;
+// otherwise every refreshMs and only with the screen lit. Wrap-safe (uint32 ms).
+bool listsDue(uint32_t now, uint32_t lastAt, bool serverOk, bool screenOn,
+              uint32_t refreshMs, uint32_t retryMs);
+
 // One line describing what is in a slot ("PLA Polymaker Grey", "empty", "?").
 std::string slotContents(const SlotEntry& s);
 

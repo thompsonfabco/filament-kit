@@ -116,6 +116,13 @@ std::string wantedLabel(const std::string& saved, const std::string& current, bo
   return saved.empty() ? current : saved;
 }
 
+bool listsDue(uint32_t now, uint32_t lastAt, bool serverOk, bool screenOn,
+              uint32_t refreshMs, uint32_t retryMs) {
+  uint32_t age = now - lastAt;
+  if (!serverOk) return age > retryMs;
+  return screenOn && age > refreshMs;
+}
+
 std::string slotContents(const SlotEntry& s) {
   if (s.present == PRESENT_NO) return "empty";
   if (!s.spool.empty()) return s.type.empty() ? s.spool : s.type + " " + s.spool;

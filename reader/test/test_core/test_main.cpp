@@ -522,6 +522,25 @@ void test_unit_dropping_out_briefly_keeps_selection() {
   TEST_ASSERT_EQUAL(5, i);                      // ...and back on HT-B when it returns
 }
 
+// ---- list refresh timing ---------------------------------------------------------
+
+void test_lists_due_retries_fast_while_server_down() {
+  TEST_ASSERT_FALSE(listsDue(10000, 0, false, true, 60000, 10000));    // not yet
+  TEST_ASSERT_TRUE(listsDue(10001, 0, false, true, 60000, 10000));     // ~10 s, not 60 s
+  TEST_ASSERT_TRUE(listsDue(10001, 0, false, false, 60000, 10000));    // screen off too
+}
+
+void test_lists_due_normal_refresh_needs_screen() {
+  TEST_ASSERT_FALSE(listsDue(30000, 0, true, true, 60000, 10000));
+  TEST_ASSERT_TRUE(listsDue(60001, 0, true, true, 60000, 10000));
+  TEST_ASSERT_FALSE(listsDue(60001, 0, true, false, 60000, 10000));
+}
+
+void test_lists_due_survives_millis_wrap() {
+  TEST_ASSERT_TRUE(listsDue(5000, 0xFFFFFFFFu - 9000, false, true, 60000, 10000));   // 14 s apart
+  TEST_ASSERT_FALSE(listsDue(5000, 0xFFFFFFFFu - 4000, false, true, 60000, 10000));  // 9 s apart
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_parse_printers_basic);
@@ -565,6 +584,9 @@ int main(int, char**) {
   RUN_TEST(test_slot_cache_keeps_list_on_same_printer_failure);
   RUN_TEST(test_slot_cache_clears_on_other_printer_failure);
   RUN_TEST(test_slot_cache_empty_list_not_usable);
+  RUN_TEST(test_lists_due_retries_fast_while_server_down);
+  RUN_TEST(test_lists_due_normal_refresh_needs_screen);
+  RUN_TEST(test_lists_due_survives_millis_wrap);
   RUN_TEST(test_wanted_label_prefers_saved);
   RUN_TEST(test_unit_dropping_out_briefly_keeps_selection);
   return UNITY_END();
