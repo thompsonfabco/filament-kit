@@ -67,16 +67,15 @@ def orca_system(orca, max_bytes: int | None = None) -> tuple[bytes, str]:
     files = [(f"BBL/filament/{rel}", p) for rel, p in preset_files(orca.system_bbl)
              if rel.casefold().endswith(".json")]
     extra = {LIBRARY_INDEX: library_index(orca.library_opc)} if orca.library_opc is not None else {}
-    data = _pack("Orca Slicer's system presets", files, extra, max_bytes)
-    h = hashlib.sha256()
-    with zipfile.ZipFile(io.BytesIO(data)) as zf:   # hash exactly what was sent
-        for name in zf.namelist():
-            h.update(name.encode("utf-8") + b"\0" + hashlib.sha256(zf.read(name)).digest())
+    h = hashlib.sha256()    # of exactly the bytes that go into the zip, in the zip's order
+    data = _pack("Orca Slicer's system presets", files, extra, max_bytes, h)
     return data, h.hexdigest()
 
 
-def _pack(label: str, files: list[tuple[str, Path]], extra: dict[str, bytes], max_bytes: int | None) -> bytes:
-    """Zip `files` [(rel, path)] and `extra` {rel: bytes}, sorted by name, after checking the upload limits."""
+def _pack(label: str, files: list[tuple[str, Path]], extra: dict[str, bytes], max_bytes: int | None,
+          tree=None) -> bytes:
+    """Zip `files` [(rel, path)] and `extra` {rel: bytes}, sorted by name, after checking the upload limits.
+    `tree`: a hash object that takes each entry as the tree hash does (name, NUL, SHA-256 of the content)."""
     if len(files) + len(extra) > MAX_ENTRIES:
         raise TooLarge(f"{label} is too large to upload: {len(files) + len(extra)} files "
                        f"(the server takes at most {MAX_ENTRIES})")
@@ -102,6 +101,8 @@ def _pack(label: str, files: list[tuple[str, Path]], extra: dict[str, bytes], ma
             if len(data) > MAX_FILE:  # grew since the stat
                 raise TooLarge(f"{label} is too large to upload: {rel} is over {_mib(MAX_FILE)}")
             zf.writestr(info, data)
+            if tree is not None:
+                tree.update(rel.encode("utf-8") + b"\0" + hashlib.sha256(data).digest())
     data = buf.getvalue()
     if max_bytes is not None and len(data) > max_bytes:
         raise TooLarge(f"{label} is too large to upload: the zip is {_mib(len(data))} "
