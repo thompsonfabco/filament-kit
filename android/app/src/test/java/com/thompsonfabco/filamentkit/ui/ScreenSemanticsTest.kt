@@ -1,5 +1,12 @@
 package com.thompsonfabco.filamentkit.ui
 
+import com.thompsonfabco.filamentkit.ui.components.SwToastState
+import com.thompsonfabco.filamentkit.ui.components.SwToastHost
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.runtime.key
 import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -243,32 +250,60 @@ class ScreenSemanticsTest {
     @Test fun catalogLineWhileSavingBlocksBack() {
         val gate = CompletableDeferred<Unit>()
         val vm = AddProfileViewModel(FakeCatalog(refuse = false, gate = gate))
+        val toast = SwToastState()
         var left = 0
         var saved = 0
         var dispatcher: OnBackPressedDispatcher? = null
         host(catalogTitle()) {
             dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-            AddProfileScreen(vm, onBack = { left++ }, onSaved = { saved++ }, onPairAgain = {})
+            CompositionLocalProvider(LocalToast provides toast) {
+                Box {
+                    AddProfileScreen(vm, onBack = { left++ }, onSaved = { saved++ }, onPairAgain = {})
+                    SwToastHost(toast, Modifier.align(Alignment.BottomCenter))
+                }
+            }
         }
         fillCatalog(vm)
+        vm.save() // the Hub does not answer until the gate opens
         rule.waitForIdle()
-        // typing asks first
         rule.runOnUiThread { dispatcher!!.onBackPressed() }
         rule.waitForIdle()
-        rule.onNodeWithText("Leave without saving").assertIsEnabled()
-        // a save starts while the question is open: the leaving button goes off and Back changes nothing
-        vm.save()
-        rule.waitForIdle()
-        rule.onNodeWithText("Leave without saving").assertIsNotEnabled()
-        rule.onNodeWithText("Leave without saving").performClick()
-        assertEquals(0, left)
-        rule.runOnUiThread { dispatcher!!.onBackPressed() }
-        rule.waitForIdle()
+        rule.onNodeWithText("Leave without saving?").assertDoesNotExist()
+        rule.onNodeWithText("Saving to the catalog… wait for the Hub's answer.").assertExists()
         assertEquals("Back does not leave while saving", 0, left)
         assertEquals(0, saved)
         gate.complete(Unit)
         rule.waitForIdle()
         assertEquals(1, saved)
+    }
+
+    @Test fun catalogLineKeepsItsFailureWhenTheScreenComesBackUnchanged() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false, failure = FingerprintMismatch("aa", "bb")))
+        var round by mutableStateOf(0)
+        host(catalogTitle()) {
+            // a new composition of the screen over the same view model, as after "Review the certificate"
+            key(round) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}, paired = true) }
+        }
+        fillCatalog(vm)
+        vm.save()
+        rule.waitForIdle()
+        rule.onNodeWithText("certificate has changed", substring = true).assertExists()
+        round++
+        rule.waitForIdle()
+        rule.onNodeWithText("certificate has changed", substring = true).assertExists()
+    }
+
+    @Test fun catalogLineClearsAFailureWhenThePhoneBecomesPaired() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false, failure = ApiError(401, "unauthorized", "x")))
+        var paired by mutableStateOf(false)
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}, paired = paired) }
+        fillCatalog(vm)
+        vm.save()
+        rule.waitForIdle()
+        rule.onAllNodesWithText("This phone is no longer paired with the Hub.").assertCountEquals(2)
+        paired = true
+        rule.waitForIdle()
+        rule.onNodeWithText("This phone is no longer paired with the Hub.").assertDoesNotExist()
     }
 
     @Test fun catalogLineWithoutAPairingKeepsTheFormAndShowsTheHubNotice() {
@@ -523,7 +558,11 @@ class ScreenSemanticsTest {
         override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult = error("not used")
     }
 
-    private class FakeCatalog(private val refuse: Boolean, private val gate: CompletableDeferred<Unit>? = null) : ProfileApi {
+    private class FakeCatalog(
+        private val refuse: Boolean,
+        private val gate: CompletableDeferred<Unit>? = null,
+        private val failure: Exception? = null,
+    ) : ProfileApi {
         override suspend fun parents(material: String) = ParentList(listOf("Generic PLA", "Example PLA Basic"), synced = true)
         override suspend fun profileLines() = listOf(
             ProfileLine(lineId = "example--polyterra", vendor = "Example Filaments", product = "PolyTerra", material = "PLA", presets = 4, bambuParent = "Generic PLA"),
@@ -532,6 +571,7 @@ class ScreenSemanticsTest {
         override suspend fun setLineParent(lineId: String, parent: String) = profileLines().first { it.lineId == lineId }
         override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {
             gate?.await()
+            failure?.let { throw it }
             if (refuse) {
                 throw ApiError(
                     400, "invalid_entry", "not valid",

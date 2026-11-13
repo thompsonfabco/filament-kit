@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,7 +91,12 @@ fun AddProfileScreen(
     val savedNow by rememberUpdatedState(onSaved)
     LaunchedEffect(s.saved) { if (s.saved) savedNow() }
 
-    LaunchedEffect(paired) { if (paired) vm.onPaired() }
+    // only the phone becoming paired clears an old failure; coming back to the screen does not
+    var wasPaired by rememberSaveable { mutableStateOf(paired) }
+    LaunchedEffect(paired) {
+        if (paired && !wasPaired) vm.onPaired()
+        wasPaired = paired
+    }
 
     Column(modifier.fillMaxSize()) {
         Column(
