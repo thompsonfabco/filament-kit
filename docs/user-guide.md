@@ -940,9 +940,25 @@ yourself (on this computer or another one, for example one with a GPU); the kit 
 It needs the `server` module, and the Anthropic key is not needed for it. Turn it on with
 `sudo filament-kit modules enable local_intake`. You can have it on beside `ai_intake`, and the two work together.
 
+**Install the reader on this computer.** The reader itself is the `filament-kit-vision` module, downloaded from its
+own public release. Run `sudo filament-kit local-intake install`: it shows the latest signed release with its
+download size, disk space and time for each tier, asks, installs it (the service `filament-kit-vision`, in
+`/opt/filament-kit-vision`, its own settings in `/etc/filament-kit-vision/`), switches `local_intake` on and points
+the kit at it. `--tier auto|cpu|gpu` picks the tier (the default is the **Local reader tier** setting),
+`--version X.Y.Z` names a version (the only way back to an older one) and `--yes` skips the question.
+`filament-kit local-intake plan` only shows what the latest release needs. On the setup page, **Settings**, **Local
+label reader**: **Check what an install needs**, then **Install <version> (<tier> tier)**; once it is installed the
+same place offers **Check for an upgrade** and **Remove**. `sudo filament-kit local-intake remove` runs the reader's
+own uninstaller and switches `local_intake` off; its settings are kept.
+
+**A reader on another computer.** It needs no install here: switch `local_intake` on under **Modules** and set the
+**Local reader address** (see below).
+
 **What the reader gets.** The photos, and a trimmed list of your filaments (names, materials and colours, no
-comments, prices, spool data or order history). If the reader asks for a token, put it in
-`/etc/filament-kit/local_intake_token`; the kit sends it only with a read or a revision.
+comments, prices, spool data or order history). If the reader asks for a token, set it on the setup
+page under **Settings**, **Local label reader**, or run `sudo filament-kit local-intake token` (it asks with nothing
+shown; `--remove` clears it). The token is kept in `/etc/filament-kit/local_intake_token`, and the kit sends it only
+with a read or a revision.
 
 **Which reader reads first.** The setting **Label reader** has four choices:
 
