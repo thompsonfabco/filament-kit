@@ -8,6 +8,7 @@ import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.LocalEntryResult
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.ProfileLine
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -26,11 +27,15 @@ import kotlinx.serialization.json.contentOrNull
 interface ProfileApi {
     suspend fun parents(material: String): ParentList
     suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult
+    suspend fun profileLines(): List<ProfileLine>
+    suspend fun setLineParent(lineId: String, parent: String): ProfileLine
 
     companion object {
         fun of(api: Api): ProfileApi = object : ProfileApi {
             override suspend fun parents(material: String) = api.parents(material)
             override suspend fun addLocalProfile(entry: JsonObject) = api.addLocalProfile(entry)
+            override suspend fun profileLines() = api.profileLines()
+            override suspend fun setLineParent(lineId: String, parent: String) = api.setLineParent(lineId, parent)
         }
     }
 }
@@ -61,6 +66,9 @@ data class AddProfileUiState(
     val problems: List<String> = emptyList(),
     val error: String? = null,
     val pairAgain: Boolean = false,
+    val lines: List<ProfileLine> = emptyList(),
+    val editing: LineParentEdit? = null,
+    val lineError: String? = null,
 ) {
     /** The required fields are filled. */
     val filled: Boolean
@@ -70,11 +78,74 @@ data class AddProfileUiState(
     val canSave: Boolean get() = !saving && saved == null && filled
 }
 
+/** The parent choice open for [lineId]: the Bambu Studio parents for its material (null while loading). */
+data class LineParentEdit(val lineId: String, val parents: ParentList? = null)
+
 /** "Add profile": the owner's own library entry for a product line, posted to `/api/library/local`. */
 class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
     private val _state = MutableStateFlow(AddProfileUiState())
     val state: StateFlow<AddProfileUiState> = _state.asStateFlow()
     private var parentsJob: Job? = null
+
+    init {
+        loadLines()
+    }
+
+    /** The product lines already on the server. A failure just leaves the list empty (the form still works). */
+    private fun loadLines() {
+        viewModelScope.launch {
+            try {
+                val lines = api.profileLines()
+                _state.update { it.copy(lines = lines) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /** Opens the parent choice for [line], with the parents for its material. */
+    fun editParent(line: ProfileLine) {
+        _state.update { it.copy(editing = LineParentEdit(line.lineId), lineError = null) }
+        viewModelScope.launch {
+            try {
+                val list = api.parents(line.material)
+                _state.update { s -> s.copy(editing = s.editing?.takeIf { it.lineId == line.lineId }?.copy(parents = list)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(editing = null, lineError = lineFailure(e)) }
+            }
+        }
+    }
+
+    fun cancelEditParent() = _state.update { it.copy(editing = null) }
+
+    /** Sets [parent] on the line being edited (the server refuses a blank one, so nothing is sent for it). */
+    fun setLineParent(parent: String) {
+        val lineId = _state.value.editing?.lineId ?: return
+        if (parent.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val updated = api.setLineParent(lineId, parent)
+                _state.update { s ->
+                    s.copy(lines = s.lines.map { if (it.lineId == lineId) updated else it }, editing = null, lineError = null)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(editing = null, lineError = lineFailure(e)) }
+            }
+        }
+    }
+
+    private fun lineFailure(e: Exception): String = when {
+        e is FingerprintMismatch -> CERT_CHANGED
+        e is ApiError && e.code == "offline" -> OFFLINE
+        e is ApiError && e.code == "local_network" -> LOCAL_NETWORK_MESSAGE
+        e is ApiError -> e.message
+        else -> "Unexpected response from the server"
+    }
 
     fun set(field: ProfileField, value: String) {
         _state.update { it.copy(values = it.values + (field to value), problems = emptyList(), error = null, saved = null) }
@@ -93,6 +164,7 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
             try {
                 api.addLocalProfile(entry)
                 _state.update { it.copy(saving = false, saved = SAVED) }
+                loadLines() // the new line shows up in "Existing lines"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

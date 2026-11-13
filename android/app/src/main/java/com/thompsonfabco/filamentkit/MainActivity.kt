@@ -81,6 +81,7 @@ import com.thompsonfabco.filamentkit.ui.pair.NetPairingBackend
 import com.thompsonfabco.filamentkit.ui.pair.PairScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairViewModel
 import com.thompsonfabco.filamentkit.ui.printers.PrintersEntry
+import com.thompsonfabco.filamentkit.ui.printers.TrustAction
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
@@ -441,7 +442,9 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 NotPaired { nav.navigateClearing(Routes.PAIR) }
                 return@composable
             }
-            PrintersEntry(a, onPairAgain = app.router::pairAgain)
+            val trustFailed by app.trustFailed.collectAsStateWithLifecycle()
+            val trust = TrustAction({ config.canTrust(it) }, { e, a -> app.trustCertificate(e, a) }, trustFailed, app::clearTrustFailed)
+            PrintersEntry(a, onPairAgain = app.router::pairAgain, trust = trust)
         }
     }
 

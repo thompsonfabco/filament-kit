@@ -143,8 +143,9 @@ class ServerSession(
 
     /**
      * The user trusts the certificate they were shown: pin exactly [actual] in place of [expected] and keep the token
-     * and addresses. False (nothing saved) when [expected] is no longer what this pairing pins, or when the stored
-     * config does not show the new pin within [trustWaitMs]. If the server no longer knows the token, its next 401
+     * and addresses. False when [expected] is no longer what this pairing pins (nothing saved), or when the stored
+     * config does not show the new pin within [trustWaitMs] (the new pin was already saved and may yet take effect).
+     * If the server no longer knows the token, its next 401
      * goes to Pair as usual. Returns once the new pin is in use.
      */
     suspend fun trustCertificate(expected: String, actual: String): Boolean {

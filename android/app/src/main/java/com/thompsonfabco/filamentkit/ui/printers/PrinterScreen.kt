@@ -79,6 +79,7 @@ fun PrinterScreen(
     /** Rename, address, code or key, certificate, remove; null: no such section (previews, tests). */
     edit: PrinterEditViewModel? = null,
     onRemoved: () -> Unit = onBack,
+    trust: TrustAction? = null,
 ) {
     val state by viewModel.state.collectAsState()
     val toolsState by tools.state.collectAsState()
@@ -117,7 +118,7 @@ fun PrinterScreen(
     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         (state.mismatch ?: toolsState.mismatch ?: editState?.mismatch)?.let { (expected, actual) ->
-            MismatchNotice(expected, actual, onPairAgain)
+            MismatchNotice(expected, actual, onPairAgain, trust)
             return@Column
         }
         if (state.unauthorized || toolsState.unauthorized || editState?.unauthorized == true) {

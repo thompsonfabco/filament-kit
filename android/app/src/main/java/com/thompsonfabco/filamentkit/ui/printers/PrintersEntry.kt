@@ -14,7 +14,7 @@ import com.thompsonfabco.filamentkit.net.Api
 
 /** The Printers section: the list, and one printer's screen when opened (Back returns to the list). */
 @Composable
-fun PrintersEntry(api: Api, onPairAgain: () -> Unit) {
+fun PrintersEntry(api: Api, onPairAgain: () -> Unit, trust: TrustAction? = null) {
     val backend = remember(api) { ApiPrinterBackend(api) }
     val apiKey = System.identityHashCode(api)
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -24,7 +24,7 @@ fun PrintersEntry(api: Api, onPairAgain: () -> Unit) {
     var manualVisit by rememberSaveable { mutableIntStateOf(0) }
     if (id == null) {
         val vm = viewModel(key = "printers-$apiKey") { PrintersViewModel(backend) }
-        PrintersScreen(vm, onOpen = { openId = it }, onPairAgain = onPairAgain)
+        PrintersScreen(vm, onOpen = { openId = it }, onPairAgain = onPairAgain, trust = trust)
     } else if (manualFor == id) {
         val vm = viewModel(key = "manual-$apiKey-$id-$manualVisit") { ManualMapViewModel(ApiManualMapBackend(api), id) }
         val name = viewModel(key = "printer-$apiKey-$id") { PrinterViewModel(backend, id) }.state.collectAsState()
@@ -48,6 +48,7 @@ fun PrintersEntry(api: Api, onPairAgain: () -> Unit) {
             },
             edit = edit,
             onRemoved = { openId = null },
+            trust = trust,
         )
     }
 }

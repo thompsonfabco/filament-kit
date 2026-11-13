@@ -9,6 +9,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.fail
 import org.junit.Test
+import java.net.InetAddress
+import java.net.ServerSocket
 
 /** All hosts share one port (as with the real server), so each test server binds its own loopback address. */
 class EndpointsTest {
@@ -70,5 +72,24 @@ class EndpointsTest {
         }
         assertEquals(pinned.fingerprint(), e.expected)
         assertEquals(other.fingerprint(), e.actual)
+    }
+
+    @Test
+    fun aReachableSecondHostIsNotDelayedByAnUnreachableFirstOne() = runBlocking {
+        val good = server(pinned, "127.0.0.3")
+        // Accepts the connection and never answers: the old one-at-a-time probe waited out its timeout here.
+        val silent = ServerSocket(good.port, 1, InetAddress.getByName("127.0.0.5"))
+        try {
+            val endpoints = Endpoints(listOf("127.0.0.5", "127.0.0.3"), good.port)
+
+            val start = System.nanoTime()
+            val found = endpoints.firstReachable(client) { fail("discovery not needed"); emptyList() }
+            val tookMs = (System.nanoTime() - start) / 1_000_000
+
+            assertEquals("127.0.0.3", found)
+            assertEquals(true, tookMs < 2_000)
+        } finally {
+            silent.close()
+        }
     }
 }

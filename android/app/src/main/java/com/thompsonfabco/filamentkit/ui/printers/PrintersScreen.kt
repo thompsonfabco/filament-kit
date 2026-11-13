@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import com.thompsonfabco.filamentkit.net.Printer
@@ -44,7 +46,12 @@ import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
 
 /** The printers the server knows; tapping a set-up printer opens it, an unset one asks for its Access Code. */
 @Composable
-fun PrintersScreen(viewModel: PrintersViewModel, onOpen: (id: String) -> Unit, onPairAgain: () -> Unit) {
+fun PrintersScreen(
+    viewModel: PrintersViewModel,
+    onOpen: (id: String) -> Unit,
+    onPairAgain: () -> Unit,
+    trust: TrustAction? = null,
+) {
     val state by viewModel.state.collectAsState()
     LifecycleStartEffect(viewModel) {
         viewModel.refresh()
@@ -56,7 +63,7 @@ fun PrintersScreen(viewModel: PrintersViewModel, onOpen: (id: String) -> Unit, o
             OutlinedButton(onClick = viewModel::refresh, enabled = !state.loading) { Text("Refresh") }
         }
         state.mismatch?.let { (expected, actual) ->
-            MismatchNotice(expected, actual, onPairAgain)
+            MismatchNotice(expected, actual, onPairAgain, trust)
             return@Column
         }
         if (state.unauthorized) {
@@ -178,17 +185,43 @@ private fun AddKlipperDialog(d: KlipperDialog, viewModel: PrintersViewModel) {
     )
 }
 
+/** "Trust the new certificate" on the changed-certificate notice: the Pair screen's path, offered when [canTrust]. */
+class TrustAction(
+    val canTrust: (expected: String) -> Boolean,
+    val trust: (expected: String, actual: String) -> Unit,
+    val failed: Boolean = false,
+    val reset: () -> Unit = {},
+)
+
+internal const val TRUST_FAILED = "The new certificate could not be trusted yet. Check that the server is reachable and " +
+    "try again, or pair again."
+
 @Composable
-internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () -> Unit) {
+internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () -> Unit, trust: TrustAction? = null) {
     // the Pair screen's words and grouped fingerprint, for a saved pairing whose certificate changed
     val text = PairTexts.mismatch(Mismatch(expected, actual), host = "")
+    // a failure belongs to the notice it was shown under: gone when it leaves or shows another certificate
+    DisposableEffect(expected, actual) { onDispose { trust?.reset?.invoke() } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
         Text(text.body)
         Text(text.actualLabel)
         Text(groupFingerprint(actual), fontFamily = FontFamily.Monospace)
         text.whereToCheck?.let { Text(it) }
-        Button(onClick = onPairAgain) { Text(text.button) }
+        val trustLabel = text.trustButton?.takeIf { trust?.canTrust(expected) == true }
+        if (trustLabel == null) {
+            Button(onClick = onPairAgain) { Text(text.button) }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { trust?.trust?.invoke(expected, actual) }, modifier = Modifier.weight(1f)) {
+                    Text(trustLabel, textAlign = TextAlign.Center)
+                }
+                OutlinedButton(onClick = onPairAgain, modifier = Modifier.weight(1f)) {
+                    Text(text.button, textAlign = TextAlign.Center)
+                }
+            }
+            if (trust?.failed == true) Text(TRUST_FAILED, color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 
