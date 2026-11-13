@@ -16,6 +16,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +69,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
+import com.thompsonfabco.filamentkit.ui.history.PhotoViewerDialog
 import com.thompsonfabco.filamentkit.ui.openAppSettings
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -249,10 +252,21 @@ private fun WeightField(state: AddUiState, vm: AddViewModel) {
 private fun PhotoStrip(photos: List<File>, onRemove: (Int) -> Unit) {
     if (photos.isEmpty()) return
     val side = SpoolwardenTheme.sizes.thumb
+    // the viewer (10.5) is a full-screen layer over this screen: Back closes it and the draft stays as it was
+    var viewing by rememberSaveable { mutableStateOf<Int?>(null) }
+    viewing?.let { v ->
+        if (v < photos.size) {
+            PhotoViewerDialog(photos.size, v + 1, { viewing = null }) { n ->
+                withContext(Dispatchers.IO) { runCatching { photos[n - 1].readBytes() }.getOrNull() }
+            }
+        }
+    }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2)) {
         itemsIndexed(photos, key = { _, f -> f.path }) { i, file ->
             Box(Modifier.size(side)) {
-                Thumbnail(file, Modifier.size(side), stringResource(R.string.a11y_photo_draft, i + 1))
+                Thumbnail(
+                    file, Modifier.size(side).clickable { viewing = i }, stringResource(R.string.a11y_photo_draft, i + 1),
+                )
                 SwIconButton(
                     R.drawable.sw_ic_close, stringResource(R.string.add_photo_remove, (i + 1).toString(), photos.size), { onRemove(i) },
                     Modifier.align(Alignment.TopEnd),

@@ -77,8 +77,16 @@ fun HistoryPhotoEntry(
 internal fun PhotoViewer(list: HistoryListViewModel, record: RecordViewModel, id: String, start: Int, onClose: () -> Unit) {
     val s by record.state.collectAsState()
     LaunchedEffect(record) { record.ensureLoaded() }
+    PhotoViewerDialog(s.record?.photos ?: 0, start, onClose) { n -> list.photo(id, n) }
+}
+
+/**
+ * The viewer's own part, shared by the Hub photos and the Add spools draft photos: [total] photos, opening on photo
+ * [start] (1-based), each fetched by [load] (photo number from 1; null when it could not be had).
+ */
+@Composable
+internal fun PhotoViewerDialog(total: Int, start: Int, onClose: () -> Unit, load: suspend (Int) -> ByteArray?) {
     val colors = SpoolwardenTheme.colors
-    val total = s.record?.photos ?: 0
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -93,7 +101,7 @@ internal fun PhotoViewer(list: HistoryListViewModel, record: RecordViewModel, id
                     zoomed = false
                 }
                 HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !zoomed) { p ->
-                    PhotoPage(list, id, p + 1, total, onZoom = { zoomed = it })
+                    PhotoPage(p + 1, total, load, onZoom = { zoomed = it })
                 }
             }
             Row(
@@ -121,17 +129,17 @@ private sealed interface PhotoLoad {
 
 /** One photo, large: "Loading photo…", or "The photo could not be loaded." with "Try again". */
 @Composable
-private fun PhotoPage(list: HistoryListViewModel, id: String, n: Int, total: Int, onZoom: (Boolean) -> Unit) {
+private fun PhotoPage(n: Int, total: Int, load: suspend (Int) -> ByteArray?, onZoom: (Boolean) -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
-    var load by remember { mutableStateOf<PhotoLoad>(PhotoLoad.Loading) }
-    LaunchedEffect(id, n, attempt) {
-        load = PhotoLoad.Loading
-        val bytes = list.photo(id, n)
+    var state by remember { mutableStateOf<PhotoLoad>(PhotoLoad.Loading) }
+    LaunchedEffect(n, attempt) {
+        state = PhotoLoad.Loading
+        val bytes = load(n)
         val bitmap = bytes?.let { withContext(Dispatchers.Default) { decode(it, FULL_PX) } }
-        load = if (bitmap == null) PhotoLoad.Failed else PhotoLoad.Loaded(bitmap)
+        state = if (bitmap == null) PhotoLoad.Failed else PhotoLoad.Loaded(bitmap)
     }
     val colors = SpoolwardenTheme.colors
-    when (val l = load) {
+    when (val l = state) {
         PhotoLoad.Loading -> Centered {
             Text(stringResource(R.string.recent_photo_loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = colors.muted)
         }
