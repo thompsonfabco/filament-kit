@@ -17,7 +17,6 @@ import uvicorn
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from conftest import free_port
 from filament_kit import config, pairing
 from filament_kit.api import create_app
 from filament_kit.bridge import camera, models
@@ -808,7 +807,10 @@ def test_mjpeg_source_with_unusable_code_stops_without_retrying(tmp_path, jpeg_p
 
 def test_mjpeg_without_a_first_frame_is_503(printers, tmp_path, monkeypatch):
     monkeypatch.setattr(camera, "HLS_START_WAIT", 0.5)
-    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=0.1, jpeg_port=free_port())
+    from fakes import serving
+    refusing = serving.bind()          # bound and never listening: the port is ours and every connection is refused
+    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=0.1,
+                     jpeg_port=refusing.getsockname()[1])
     try:
         c = TestClient(Starlette(routes=camera.routes(hub, passthrough)))
         r = c.get("/api/printers/P1/camera.mjpeg")
@@ -817,6 +819,7 @@ def test_mjpeg_without_a_first_frame_is_503(printers, tmp_path, monkeypatch):
         assert wait_until(lambda: not hub.running("P1"), 3)
     finally:
         hub.shutdown()
+        refusing.close()
 
 
 def test_acquire_restarts_the_source_when_ip_or_code_changes(fake_hub, printers):
