@@ -83,6 +83,14 @@ class PageError(ValueError):
         self.field = field
 
 
+class SpoolEditError(ValueError):
+    """A spool change is refused; `field` names the body key it is about (`gross`, `remaining`, `empty`, `location`)."""
+
+    def __init__(self, message: str, field: str):
+        super().__init__(message)
+        self.field = field
+
+
 class TagConflict(Exception):
     """reason "tag_on_other_spool": `other` is the spool holding the tag.
     reason "spool_has_other_tag": the target spool has a different tag; `other` is None."""
@@ -572,30 +580,95 @@ def tag_neighbours(sm: Spoolman, nfc_id: str) -> list[int]:
     return sorted(out)
 
 
+def known_locations(sm: Spoolman, configured: list[str]) -> list[str]:
+    """The configured storage locations, then any other location a spool is at (the order GET locations gives)."""
+    out = list(configured)
+    for loc in sorted({s["location"] for s in sm.get("spool") if s.get("location")}):
+        if loc not in out:
+            out.append(loc)
+    return out
+
+
+def state_of(s: dict) -> str:
+    """"empty" (archived, or no filament left), "sealed" (the sealed note is still on it) or "opened"."""
+    left = s.get("remaining_weight")
+    if s.get("archived") or (isinstance(left, (int, float)) and left <= 0):
+        return "empty"
+    return "sealed" if SEALED_COMMENT in (s.get("comment") or "") else "opened"
+
+
+def spool_view(s: dict) -> dict:
+    """One spool as the phones read it (GET spools/{id}, and `view` / `before` of an edit): location, remaining, net and
+    empty spool weight, tag, state, filament (number, brand, name, material, colour) and lot. Weights are grams."""
+    f = s.get("filament") or {}
+    tare = s.get("spool_weight")
+    if tare is None:
+        tare = f.get("spool_weight")
+    return {"id": s.get("id"), "location": s.get("location"), "remaining_g": s.get("remaining_weight"),
+            "net_g": f.get("weight"), "tare_g": tare, "tag": tags.stored(s) or None, "state": state_of(s),
+            "filament_id": f.get("id"), "vendor": (f.get("vendor") or {}).get("name"), "name": f.get("name"),
+            "material": f.get("material"), "color_hex": f.get("color_hex"), "lot": s.get("lot_nr")}
+
+
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
-                 location: str | None = None, empty: bool = False, dry: bool) -> dict:
+                 location: str | None = None, empty: bool = False, dry: bool,
+                 locations: list[str] | None = None) -> dict:
+    """Set a spool's weight (`gross` with the spool, or `remaining` filament), move it, or mark it empty. With
+    `locations` (the web app's list), a location outside it is refused; the app's route passes none and takes any."""
     spool = sm.get(f"spool/{spool_id}")
     if sum(x is not None for x in (gross, remaining)) + bool(empty) > 1:
-        raise ValueError("give only one of gross, remaining or empty")
+        raise SpoolEditError("give only one of gross, remaining or empty", "empty" if empty else "remaining")
+    for key, value in (("gross", gross), ("remaining", remaining)):
+        if value is not None and not _is_num(value):
+            raise SpoolEditError(f"{key} must be a number of grams", key)
     patch: dict = {}
     if gross is not None:
         tare = spool.get("spool_weight") or (spool.get("filament") or {}).get("spool_weight") or 0
         if gross < tare:
-            raise ValueError(f"gross {gross} g is below the spool tare {tare} g - check the weight")
+            raise SpoolEditError(f"gross {gross} g is below the spool tare {tare} g - check the weight", "gross")
         patch["remaining_weight"] = round(gross - tare, 1)
     elif remaining is not None:
         if remaining < 0:
-            raise ValueError("remaining cannot be negative")
+            raise SpoolEditError("remaining cannot be negative", "remaining")
         patch["remaining_weight"] = remaining
     if empty:
         patch.update(remaining_weight=0, archived=True)
     if location is not None:
+        if locations is not None and location not in locations:
+            raise SpoolEditError(f"{location!r} is not one of the Hub's storage locations", "location")
         patch["location"] = location
     if not patch:
         return spool
     if dry:
         return {**spool, **patch}
     return sm.patch(f"spool/{spool_id}", patch)
+
+
+def edit_spool(sm: Spoolman, spool_id: int, **kw) -> dict:
+    """`update_spool`, answered with what the phones show: `spool` (Spoolman's spool after the change, or as it would be
+    after it when `dry`), `view` (the same in spool_view's shape), `before` (spool_view of it as it was) and `dry`."""
+    before = sm.get(f"spool/{spool_id}")
+    spool = update_spool(sm, spool_id, **kw)
+    return {"spool": spool, "view": spool_view(spool), "before": spool_view(before), "dry": kw["dry"]}
+
+
+def with_spools(entries: list[dict], sm: Spoolman) -> list[dict]:
+    """Each usage entry with `spool`: the spool it was taken from (id, brand, name, material, colour, state), or None
+    when it names none or Spoolman no longer has it (a spool id can be reused: `spool_id` stays the entry's own record).
+    A Spoolman that cannot be read leaves `spool` None, so the log still lists."""
+    found: dict = {}
+    down = False
+    for sid in {e.get("spool_id") for e in entries if _is_int(e.get("spool_id"))}:
+        try:
+            found[sid] = None if down else spool_view(sm.get(f"spool/{sid}"))
+        except SpoolmanError as e:
+            if e.status != 404:
+                log.warning("usage: cannot name spool %s: %s", sid, e)
+                down = True
+            found[sid] = None
+    keys = ("id", "vendor", "name", "material", "color_hex", "state")
+    return [{**e, "spool": {k: found[e["spool_id"]][k] for k in keys} if found.get(e.get("spool_id")) else None}
+            for e in entries]
 
 
 def find(sm: Spoolman, q: str, sealed_only: bool) -> list[dict]:

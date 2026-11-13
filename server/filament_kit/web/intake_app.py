@@ -34,6 +34,7 @@ from starlette.routing import Route
 
 from .. import __version__, intake, inventory, lan, modules, shared_files, tagsources
 from ..intake import CapReached, ReadError
+from ..spoolman import SpoolmanError
 from ..station_client import StationClient
 from . import mcp_tools, pages, printers_app
 from .errors import Problem
@@ -245,6 +246,8 @@ class IntakeApp:
             ("/intake/api/filaments", self.api(self.filaments), ["GET"]),
             ("/intake/api/vendors", self.api(self.vendors), ["GET"]),
             ("/intake/api/open", self.api(self.open), ["POST"]),
+            ("/intake/api/spools/{id:int}", self.api(self.spool_get), ["GET"]),
+            ("/intake/api/spools/{id:int}", self.api(self.spool_edit), ["POST"]),
             ("/intake/api/presets", self.api(self.presets), ["GET"]),
             ("/intake/api/parents", self.api(self.parents), ["GET"]),
             ("/intake/api/line_add", self.api(self.line_add), ["POST"]),
@@ -390,7 +393,7 @@ class IntakeApp:
                 "history": "1" if self.history else "0",
                 "hub": cfg.get("server_name") or "", "hub-page": self._hub_page(request),
                 "presets": "1" if "presets" in modules.enabled(cfg) else "0",
-                "spool-edit": "0"}   # the web app has no spool-editing endpoints yet, so it is not offered
+                "spool-edit": "1"}   # the spool read and edit routes below (S3.9)
         if not data["hub-page"]:
             del data["hub-page"]
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
@@ -615,6 +618,42 @@ class IntakeApp:
         kw = dict(spool=b["spool"], location=loc if isinstance(loc, str) and loc.strip() else None,
                   gross=_num(b, "gross"), humidity=_num(b, "humidity"), dry_run=bool(b.get("dry_run", True)))
         return await anyio.to_thread.run_sync(lambda: self.tools.open_spool(**kw))
+
+    @staticmethod
+    def _no_spool(request: Request) -> JSONResponse:
+        return JSONResponse({"error": f"spool {request.path_params['id']} was not found"}, 404)
+
+    async def spool_get(self, request: Request):
+        try:
+            spool = await anyio.to_thread.run_sync(self.tools.sm.get, f"spool/{request.path_params['id']}")
+        except SpoolmanError as e:
+            if e.status == 404:
+                return self._no_spool(request)
+            raise
+        return {"spool": spool, "view": inventory.spool_view(spool)}
+
+    async def spool_edit(self, request: Request):
+        """Preview (dry_run, the default) or save a new weight, a move, or mark empty: the app's PATCH api/spools/{id}
+        with the same body and reply, through the same checks, and a location must be one the Hub lists."""
+        b = await self._body(request)
+        loc = b.get("location")
+        if loc is not None and (not isinstance(loc, str) or not loc.strip()):
+            raise Problem("location must be text", "location")
+        for key in ("empty", "dry_run"):
+            if b.get(key) is not None and not isinstance(b[key], bool):
+                raise Problem(f"{key} must be true or false", key)
+
+        def run() -> dict:
+            return inventory.edit_spool(
+                self.tools.sm, request.path_params["id"], gross=_num(b, "gross"), remaining=_num(b, "remaining"),
+                location=loc, empty=bool(b.get("empty")), dry=b.get("dry_run") is not False,
+                locations=inventory.known_locations(self.tools.sm, self.tools.cfg()["locations"]))
+        try:
+            return await anyio.to_thread.run_sync(run)
+        except SpoolmanError as e:
+            if e.status == 404:
+                return self._no_spool(request)
+            raise
 
     async def presets(self, request: Request):
         return await anyio.to_thread.run_sync(self.tools.preset_status)

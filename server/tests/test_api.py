@@ -571,3 +571,48 @@ def test_a_non_text_line_is_reported_once(sm):
     ok, _ = _two_items(sm)
     body = _refused(client(sm), sm, [{**ok, "line": 5}])
     assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "line")]
+
+
+def test_get_spool_gives_what_the_spool_screen_shows(sm, spoolman_fake_store):
+    c = client(sm)
+    tok = token()
+    sid = sealed_spool(sm, color_hex="8A8C8E")
+    spoolman_fake_store["spools"][sid]["lot_nr"] = "L-42"       # the fake does not keep a lot from an add
+    r = c.get(f"/api/spools/{sid}", headers=auth(tok))
+    assert r.status_code == 200, r.text
+    assert r.json()["spool"]["id"] == sid and r.json()["spool"]["remaining_weight"] == 1000      # Spoolman's own spool
+    v = r.json()["view"]
+    assert v == {"id": sid, "location": "Sealed stock", "remaining_g": 1000, "net_g": 1000, "tare_g": 213, "tag": None,
+                 "state": "sealed", "filament_id": v["filament_id"], "vendor": "SUNLU", "name": "PETG Grey",
+                 "material": "PETG", "color_hex": "8A8C8E", "lot": "L-42"}
+    c.post(f"/api/spools/{sid}/link", headers=auth(tok), json={"tag": UID, "dry_run": False})
+    v = c.get(f"/api/spools/{sid}", headers=auth(tok)).json()["view"]
+    assert v["tag"] == UID and v["state"] == "opened"
+    c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"empty": True, "dry_run": False})
+    assert c.get(f"/api/spools/{sid}", headers=auth(tok)).json()["view"]["state"] == "empty"
+
+
+def test_get_spool_unknown_is_404_and_needs_the_token(sm):
+    c = client(sm)
+    r = c.get("/api/spools/99999", headers=auth(token()))
+    assert r.status_code == 404 and r.json()["error"] == "not_found"
+    assert c.get("/api/spools/1").status_code == 401
+
+
+def test_patch_reply_adds_view_before_and_dry_and_refusals_name_their_field(sm):
+    c = client(sm)
+    tok = token()
+    sid = sealed_spool(sm)
+    body = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"gross": 713}).json()
+    assert body["dry"] is True and body["spool"]["remaining_weight"] == 500
+    assert body["before"]["remaining_g"] == 1000 and body["view"]["remaining_g"] == 500
+    assert sm.get(f"spool/{sid}")["remaining_weight"] == 1000                  # a preview writes nothing
+    body = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"gross": 713, "dry_run": False}).json()
+    assert body["dry"] is False and sm.get(f"spool/{sid}")["remaining_weight"] == 500
+    for sent, field in (({"gross": 10}, "gross"), ({"remaining": -1}, "remaining"), ({"remaining": "lots"}, "remaining"),
+                        ({"gross": 5, "remaining": 5}, "remaining"), ({"gross": 5, "empty": True}, "empty")):
+        r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={**sent, "dry_run": False})
+        assert r.status_code == 400 and r.json()["field"] == field, (sent, r.text)
+    assert sm.get(f"spool/{sid}")["remaining_weight"] == 500
+    r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"location": "Nowhere Shelf", "dry_run": False})
+    assert r.status_code == 200 and sm.get(f"spool/{sid}")["location"] == "Nowhere Shelf"   # the app's route is unchanged
