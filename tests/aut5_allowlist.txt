@@ -1,25 +1,27 @@
 # AUT-5 findings on the web app that a later step removes (tests/aut5_run.mjs --allow). One line each:
-#   <check> | <where, as the audit prints it> | <reason: the step that rebuilds that markup>
-# A line that matches nothing in a run fails it, so a rebuilt screen has to drop its lines (09 S3.4, open point 4).
-# The audit also reads the fields of hidden screens, so a field shows up in every view of the page.
-field attribute differs from 07 9.1 | div.card > div.grid > label.wide > input | Add spools spool card, type=number fields; rebuilt by S3.8
-field without a label | main#main > section.page > section > textarea | Add spools label-reader note; rebuilt by S3.8
-field without a label | main#main > section.page > section.hidden > textarea | Add spools label-reader note (hidden); rebuilt by S3.8
-field without a label | section > div.card > div.row > input | Add spools filament search; rebuilt by S3.8
-field without a label | section.hidden > div.card > div.row > input | Add spools filament search (hidden); rebuilt by S3.8
-field without a label | section.page > section > label.filebtn > input | Add spools photo picker; rebuilt by S3.8
-field without a label | section.page > section.hidden > label.filebtn > input | Add spools photo picker (hidden); rebuilt by S3.8
-focusable element without a name | section.page > section > label.filebtn > input | Add spools photo picker; rebuilt by S3.8
-heading level skipped | section.page > section > div.card > h3 | Add spools and Spools card headings under the page h1; rebuilt by S3.8 and S3.10
-hit area under 44 x 44 | section > div.card > div.row > button.fit | Add spools Search button at desktop width (40 px controls); rebuilt by S3.8
-hit area under 44 x 44 | section > div.card > div.row > input | Add spools search field at desktop width; rebuilt by S3.8
-hit area under 44 x 44 | section > div.card > p > button.secondary | Add spools New filament button at desktop width; rebuilt by S3.8
-hit area under 44 x 44 | section.page > section > label.filebtn > input | Add spools photo picker at desktop width; rebuilt by S3.8
-field without a label | section.page > section > div.row > input | Spools search field; rebuilt by S3.10
-field without a label | section.page > section.hidden > div.row > input | Spools search field (hidden); rebuilt by S3.10
-hit area under 44 x 44 | section.page > section > div.row > button.fit | Spools Search button at desktop width; rebuilt by S3.10
-hit area under 44 x 44 | section.page > section > div.row > input | Spools search field at desktop width; rebuilt by S3.10
-hit area under 44 x 44 | div > div.card > details > summary | Slicer presets "New line" disclosure; rebuilt by S3.13
-hit area under 44 x 44 | div.card > details > p > button.btn--primary | Slicer presets line buttons at desktop width; rebuilt by S3.13
-hit area under 44 x 44 | section > div > p > button.secondary | Slicer presets Restore button at desktop width; rebuilt by S3.13
-hit area under 44 x 44 | section.page > section > p > button.btn--primary | Slicer presets Build button at desktop width; rebuilt by S3.13
+#   <check> | <where, as the audit prints it> | <count> | <reason: the step that rebuilds that markup>
+# <count> is how often the finding appears in the test's whole run (6 views x 1280/320 x light/dark = 24 passes): a run
+# that finds it more often fails, and one that finds it less often fails as stale, so a rebuilt screen has to lower
+# or drop its lines (09 S3.4, open point 4). The audit also reads the fields of hidden screens, so a field of one
+# screen shows up in every view.
+field attribute differs from 07 9.1 | div.card > div.grid > label.wide > input | 48 | Add spools spool card, type=number fields; rebuilt by S3.8
+field without a label | main#main > section.page > section > textarea | 4 | Add spools label-reader note; rebuilt by S3.8
+field without a label | main#main > section.page > section.hidden > textarea | 20 | Add spools label-reader note (hidden); rebuilt by S3.8
+field without a label | section > div.card > div.row > input | 4 | Add spools filament search; rebuilt by S3.8
+field without a label | section.hidden > div.card > div.row > input | 20 | Add spools filament search (hidden); rebuilt by S3.8
+field without a label | section.page > section > label.filebtn > input | 4 | Add spools photo picker; rebuilt by S3.8
+field without a label | section.page > section.hidden > label.filebtn > input | 20 | Add spools photo picker (hidden); rebuilt by S3.8
+focusable element without a name | section.page > section > label.filebtn > input | 4 | Add spools photo picker; rebuilt by S3.8
+heading level skipped | section.page > section > div.card > h3 | 8 | Add spools and Spools card headings under the page h1; rebuilt by S3.8 and S3.10
+hit area under 44 x 44 | section > div.card > div.row > button.fit | 2 | Add spools Search button at 1280 px (40 px controls); rebuilt by S3.8
+hit area under 44 x 44 | section > div.card > div.row > input | 2 | Add spools search field at 1280 px; rebuilt by S3.8
+hit area under 44 x 44 | section > div.card > p > button.secondary | 2 | Add spools New filament button at 1280 px; rebuilt by S3.8
+hit area under 44 x 44 | section.page > section > label.filebtn > input | 2 | Add spools photo picker at 1280 px; rebuilt by S3.8
+field without a label | section.page > section > div.row > input | 4 | Spools search field; rebuilt by S3.10
+field without a label | section.page > section.hidden > div.row > input | 20 | Spools search field (hidden); rebuilt by S3.10
+hit area under 44 x 44 | section.page > section > div.row > button.fit | 2 | Spools Search button at 1280 px; rebuilt by S3.10
+hit area under 44 x 44 | section.page > section > div.row > input | 2 | Spools search field at 1280 px; rebuilt by S3.10
+hit area under 44 x 44 | div > div.card > details > summary | 24 | Slicer presets "New line" disclosure (also under the Settings sheet); rebuilt by S3.13
+hit area under 44 x 44 | div.card > details > p > button.btn--primary | 8 | Slicer presets line buttons at 1280 px; rebuilt by S3.13
+hit area under 44 x 44 | section > div > p > button.secondary | 2 | Slicer presets Restore button at 1280 px; rebuilt by S3.13
+hit area under 44 x 44 | section.page > section > p > button.btn--primary | 2 | Slicer presets Build button at 1280 px; rebuilt by S3.13
