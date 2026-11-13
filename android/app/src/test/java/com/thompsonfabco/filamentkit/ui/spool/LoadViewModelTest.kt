@@ -264,14 +264,23 @@ class LoadViewModelTest {
         assertFalse(gate.writing.value)
     }
 
-    @Test fun aRefusedLoadIsMarkedAsAWriteFailureAndNothingResendsIt() = runTest(dispatcher) {
+    // 05 7.6 withholds "Try again" after a refusal (failedWrite), not Load: a refusal changed nothing, so Load sends again
+    @Test fun aRefusedLoadIsMarkedAsAWriteFailureAndLoadSendsItAgainOnlyWhenPressed() = runTest(dispatcher) {
         val vm = LoadPreviewViewModel(spool, "X1A", "A2", backend)
         advanceUntilIdle()
         backend.failure = "load" to ApiError(409, "printer_busy", "The printer is printing.")
         vm.load()
         advanceUntilIdle()
         assertTrue(vm.state.value.failedWrite)
-        assertEquals(1, backend.calls.count { it.endsWith("dry=false") })
+        assertEquals("nothing resends by itself", 1, backend.calls.count { it.endsWith("dry=false") })
+        vm.check()
+        advanceUntilIdle()
+        assertEquals("Try again asks for the preview, not the write", 1, backend.calls.count { it.endsWith("dry=false") })
+        vm.load()
+        advanceUntilIdle()
+        assertEquals(2, backend.calls.count { it.endsWith("dry=false") })
+        assertFalse(vm.state.value.failedWrite)
+        assertTrue(vm.state.value.finished != null)
     }
 
     @Test fun anAnswerTheAppCannotReadIsAnUnknownOutcomeNotARefusal() = runTest(dispatcher) {

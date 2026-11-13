@@ -143,7 +143,11 @@ import com.thompsonfabco.filamentkit.nav.settingsOverPairing
 import com.thompsonfabco.filamentkit.nav.showsBackArrow
 import com.thompsonfabco.filamentkit.nav.tab
 import com.thompsonfabco.filamentkit.nav.tabTap
-import com.thompsonfabco.filamentkit.nav.tapIsForTheOpenTag
+import com.thompsonfabco.filamentkit.nav.TagTapped
+import com.thompsonfabco.filamentkit.nav.openAddOnce
+import com.thompsonfabco.filamentkit.nav.openTag
+import com.thompsonfabco.filamentkit.nav.routeTagTap
+import com.thompsonfabco.filamentkit.nav.tagUidOf
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.ProfileStatus
@@ -364,7 +368,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     // the Hub that was paired when pairing was opened over the main graph
     var hubBefore by rememberSaveable { mutableStateOf<String?>(null) }
     // screens ask for the client at each call, so a trusted certificate or a re-pair reaches them with their state intact
-    fun currentApi(): Api = app.session.api.value ?: throw ApiError(0, "offline", "No Hub is paired.")
+    fun currentApi(): Api = app.session.api.value ?: throw ApiError.noHubPaired()
     fun pushPairing() {
         if (nav.leaveSettingsForPairing()) return
         hubBefore = hubIdentity(config)
@@ -426,24 +430,11 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     var queuedTag by rememberSaveable { mutableStateOf<String?>(null) }
     val tagWaits = stringResource(R.string.tag_read_wait)
     val tagWaitsLink = stringResource(R.string.tag_read_wait_link)
-    fun openTag(uid: String) {
-        val here = nav.currentBackStackEntry
-        val tagScreen = here?.let(::tagUidOf)
-        // the tag whose spool screen is open: a tap of it does nothing (05 2.6)
-        val spoolsTag = here?.takeIf { it.destination.hasRoute(SpoolRoute::class) }?.let {
-            val route = it.toRoute<SpoolRoute>()
-            route.tag ?: SpoolCache.get(route.id)?.tag
-        }
-        if (tapIsForTheOpenTag(uid, tagScreen, spoolsTag)) return
-        // a different tag replaces the tag screen (and the link steps on it)
-        if (tagScreen != null) nav.popBackStack<TagRoute>(inclusive = true)
-        nav.navigate(TagRoute(uid))
-    }
     // the tag that waited for a write to end opens now; once
     fun openQueued() {
         val uid = queuedTag ?: return
         queuedTag = null
-        openTag(uid)
+        nav.openTag(uid)
     }
     // a load or a link is being written, or its screen is still showing its answer
     val onWriteStep = destination?.hasRoute(SpoolLoadPreviewRoute::class) == true || destination?.hasRoute(TagLinkPreviewRoute::class) == true
@@ -451,11 +442,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         if (!tapsOn) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             TagEvents.taps.collect { uid ->
-                if (app.loadGate.writing.value) {
-                    queuedTag = uid
+                val routed = nav.routeTagTap(uid, app.loadGate.writing.value, queuedTag)
+                queuedTag = routed.queued
+                if (routed.what == TagTapped.Waits) {
                     pairScope.launch { toast.show(if (app.loadGate.forLink) tagWaitsLink else tagWaits) }
-                } else {
-                    openTag(uid)
                 }
             }
         }
@@ -742,6 +732,9 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             val result = toast.show(why, readDoneAction)
                             if (result == SnackbarResult.ActionPerformed) {
                                 nav.openAdd(first = { addRoute(AddStep.Preview, id) })
+                            } else if (nav.currentBackStackEntry?.addDraftId() != id) {
+                                // told and left: the flow is not kept open until a restart (the draft stays)
+                                app.addFlows.dropAfterFailure(id)
                             }
                         }
                     }
@@ -888,8 +881,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             update = update,
                             printers = homePrinters,
                             showPrinters = showPrinters,
-                            onAddSpools = { nav.navigate(AddPhotosRoute(app.addFlows.start(manual = false))) },
-                            onAddByHand = { nav.navigate(AddReviewRoute(app.addFlows.start(manual = true))) },
+                            onAddSpools = { nav.openAddOnce { AddPhotosRoute(app.addFlows.start(manual = false)) } },
+                            onAddByHand = { nav.openAddOnce { AddReviewRoute(app.addFlows.start(manual = true)) } },
                             labelReaderOff = labelReaderOff(info),
                             onResumeDraft = { id -> nav.navigate(addRoute(app.addFlows.stepOf(id), id)) },
                             onDiscardDraft = app::discardDraft,
@@ -1245,8 +1238,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
  */
 internal fun NavController.leaveSettingsForPairing(): Boolean {
     if (currentDestination.inPairing() || runCatching { getBackStackEntry<PairGraph>() }.isFailure) return false
-    popBackStack<SettingsGraph>(inclusive = true)
-    return true
+    return popBackStack<SettingsGraph>(inclusive = true)
 }
 
 /** The place the top bar names (05-android-app 2.2): the screen, not the product. */
@@ -1278,17 +1270,6 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
         else -> (destination.tab() ?: Tab.Home).label
     },
     )
-}
-
-/** The tag a tag screen (the lookup or a link step) is about; null on any other screen. */
-private fun tagUidOf(entry: NavBackStackEntry): String? {
-    val d = entry.destination
-    return when {
-        d.hasRoute(TagRoute::class) -> entry.toRoute<TagRoute>().uid
-        d.hasRoute(TagLinkRoute::class) -> entry.toRoute<TagLinkRoute>().uid
-        d.hasRoute(TagLinkPreviewRoute::class) -> entry.toRoute<TagLinkPreviewRoute>().uid
-        else -> null
-    }
 }
 
 /**
