@@ -44,7 +44,7 @@
 #include "pn532.h"
 #include "panel_core.h"
 
-static const char *VERSION = "12";
+static const char *VERSION = "13";
 static const uint8_t PIN_SDA = 5;            // I2C SDA (air sensor, OLED)
 static const uint8_t PIN_SCL = 6;            // I2C SCL
 static const uint8_t PIN_BUZZER = 0;         // buzzer module signal
@@ -332,6 +332,11 @@ struct Display {
     }
     if (air.shownAt != airSeen) { airSeen = air.shownAt; dirty = true; }
     if (!dirty || now - drawn < 100) return;  // at most 10 redraws a second
+    Wire.beginTransmission(0x3C);
+    if (Wire.endTransmission() != 0) {  // unplugged or reset: probe again (and u8g2.begin()) as at boot
+      present = false; retry = now;
+      return;
+    }
     dirty = false; drawn = now;
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_helvB10_tf);
