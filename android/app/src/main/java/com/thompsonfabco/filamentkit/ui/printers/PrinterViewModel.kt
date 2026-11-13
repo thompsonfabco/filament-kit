@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.ui.printers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.Api
@@ -227,55 +228,49 @@ object PrinterHelp {
         "Moved back: ${name?.ifBlank { null } ?: "#${id ?: "?"}"} → ${location.ifBlank { "its previous place" }}"
 }
 
-/** The "Unload?" question for one slot, asked after its dry run said where the spool goes; [slot] names the slot. */
-data class UnloadAsk(
-    val label: String,
-    val spool: String,
-    val location: String,
-    val slot: String = PrinterHelp.slotName(label),
-) {
-    val question: String get() = "Unload $spool from $slot? It goes back to $location."
-}
+/**
+ * The question before an unload, asked after its dry run said where the spool goes: [label] is the slot's label
+ * ("A1"), [spool] the spool as the dialog names it, [location] where it goes back to.
+ */
+data class UnloadAsk(val label: String, val spool: String, val spoolId: Int?, val location: String)
 
-enum class StopStep { None, First, Second }
+/** A result line: what it says and whether it is good news. */
+data class Note(val say: Say, val ok: Boolean = true)
 
 data class PrinterUiState(
     val printer: Printer? = null,
     val status: PrinterStatus? = null,
     /** A problem fetching the status (polling continues). */
-    val message: String? = null,
+    val problem: Problem? = null,
     val commandBusy: Boolean = false,
     /** The printer's reply to the last command, or why it failed. */
-    val commandMessage: String? = null,
-    val stopStep: StopStep = StopStep.None,
+    val commandNote: Note? = null,
+    /** The "Stop the print?" question is open. */
+    val confirmStop: Boolean = false,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
-    /** The slot whose unload is being checked or sent (one at a time). */
+    /** The slot whose unload is being checked (the dry run). */
     val slotBusy: String? = null,
     val unloadAsk: UnloadAsk? = null,
+    /** The unload itself is being written: the question stays open and cannot be left. */
+    val unloading: Boolean = false,
     /** The last unload's result, or why it failed. */
-    val slotMessage: List<String> = emptyList(),
+    val slotNote: Note? = null,
 ) {
+    val loaded: Boolean get() = printer != null
     val paused: Boolean get() = status?.gcodeState == "PAUSE"
     val printing: Boolean get() = status?.let { PrinterHelp.isPrinting(it.gcodeState) } == true
     val lightOn: Boolean get() = status?.light == "on"
 
     /** Commands are offered only to a connected printer, one at a time. */
     val controlsEnabled: Boolean get() = printer?.state == "connected" && !commandBusy
-
-    /** The second Stop question, naming the printer and the job. */
-    val stopQuestion: String?
-        get() = if (stopStep != StopStep.Second) null else {
-            val name = printer?.name ?: "this printer"
-            val job = status?.job?.ifBlank { null }
-            if (job != null) "Really stop \"$job\" on $name? The print cannot be resumed."
-            else "Really stop the print on $name? It cannot be resumed."
-        }
 }
 
 /**
  * One printer's live status and controls. Polls every [pollMs] between [start] and [stop] (the screen calls them
- * when it becomes visible / leaves), so nothing runs in the background.
+ * when it becomes visible / leaves), so nothing runs in the background. Every request goes to the session's client of
+ * that moment through [backend]; a Hub notice is cleared by the next request that succeeds ([onHubOk] tells the
+ * screen's other view models).
  */
 class PrinterViewModel(
     private val backend: PrinterBackend,
@@ -284,6 +279,12 @@ class PrinterViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(PrinterUiState())
     val state: StateFlow<PrinterUiState> = _state.asStateFlow()
+
+    /** Runs after any request succeeded, so the screen's other view models drop their Hub notice too. */
+    var onHubOk: () -> Unit = {}
+
+    /** The printer this screen is about. */
+    val printerId: String get() = id
 
     private var poll: Job? = null
 
@@ -302,101 +303,98 @@ class PrinterViewModel(
         poll = null
     }
 
+    /** One more fetch now ("Try again", "Refresh"); polling is not started by it. */
+    fun retry() {
+        viewModelScope.launch { refresh() }
+    }
+
     /** One fetch; false when polling must stop (unpaired or certificate changed). */
-    private suspend fun refresh(): Boolean = guard(onError = { msg -> _state.update { it.copy(message = msg) } }) {
+    private suspend fun refresh(): Boolean = guard(onError = { p -> _state.update { it.copy(problem = p) } }) {
         val d = backend.printer(id)
-        _state.update { it.copy(printer = d.printer, status = d.status, message = null) }
+        _state.update { it.copy(printer = d.printer, status = d.status, problem = null) }
     }
 
     /** The printer as an edit's reply gave it, shown until the next poll. */
     fun showPrinter(p: Printer) = _state.update { it.copy(printer = p) }
 
+    /** The Hub notice goes away; the next request puts it back if the problem is still there. */
+    fun clearHubNotice() = _state.update { it.copy(unauthorized = false, mismatch = null) }
+
     fun pauseOrResume() = send(if (_state.value.paused) "resume" else "pause")
 
     fun toggleLight() = send(if (_state.value.lightOn) "light_off" else "light_on")
 
-    fun askStop() = _state.update { it.copy(stopStep = StopStep.First) }
+    fun askStop() = _state.update { it.copy(confirmStop = true) }
 
-    fun cancelStop() = _state.update { it.copy(stopStep = StopStep.None) }
+    fun cancelStop() = _state.update { it.copy(confirmStop = false) }
 
-    /** First confirm asks again (naming printer and job); the second sends `stop`. */
+    /** The one question before Stop print (05-android-app 9.4); confirming sends `stop`. */
     fun confirmStop() {
-        when (_state.value.stopStep) {
-            StopStep.None -> Unit
-            StopStep.First -> _state.update { it.copy(stopStep = StopStep.Second) }
-            StopStep.Second -> {
-                _state.update { it.copy(stopStep = StopStep.None) }
-                send("stop")
-            }
-        }
+        if (!_state.value.confirmStop) return
+        _state.update { it.copy(confirmStop = false) }
+        send("stop")
     }
 
-    fun dismissCommandMessage() = _state.update { it.copy(commandMessage = null) }
+    fun dismissCommandMessage() = _state.update { it.copy(commandNote = null) }
 
     // --- unload (Spoolman only: the printer's slot setting is left as it is) ---
 
-    /** Asks where [slot]'s spool would go (dry run), then opens the confirm question. */
+    /** Asks where [slot]'s spool would go (dry run), then opens the question. */
     fun askUnload(slot: AmsSlot) {
         val spool = slot.spool ?: return
-        if (_state.value.slotBusy != null) return
-        _state.update { it.copy(slotBusy = slot.label, slotMessage = emptyList(), unloadAsk = null) }
+        if (_state.value.slotBusy != null || _state.value.unloading) return
+        _state.update { it.copy(slotBusy = slot.label, slotNote = null, unloadAsk = null) }
         viewModelScope.launch {
-            guard(onError = ::slotError, describe = PrinterHelp::actionMessage) {
+            guard(onError = { p -> _state.update { it.copy(slotNote = Note(p.say(), ok = false)) } }) {
                 val r = backend.unload(id, slot.label, dryRun = true)
                 val where = r.location.ifBlank { r.movedBack.firstOrNull()?.location.orEmpty() }
-                val ask = UnloadAsk(
-                    slot.label, PrinterHelp.spoolName(spool), where.ifBlank { "its previous place" },
-                    PrinterHelp.slotName(slot.label, _state.value.status?.ams.orEmpty()),
-                )
-                _state.update { it.copy(unloadAsk = ask) }
+                _state.update {
+                    it.copy(unloadAsk = UnloadAsk(slot.label, PrinterHelp.spoolName(spool), spool.id, where))
+                }
             }
             _state.update { it.copy(slotBusy = null) }
         }
     }
 
-    fun cancelUnload() = _state.update { it.copy(unloadAsk = null) }
+    /** Leaving the question is refused while the unload is being written. */
+    fun cancelUnload() = _state.update { if (it.unloading) it else it.copy(unloadAsk = null) }
 
     fun confirmUnload() {
         val ask = _state.value.unloadAsk ?: return
-        if (_state.value.slotBusy != null) return
-        _state.update { it.copy(unloadAsk = null, slotBusy = ask.label) }
+        if (_state.value.unloading) return
+        _state.update { it.copy(unloading = true) }
         viewModelScope.launch {
             var done = false
-            guard(onError = ::slotError, describe = PrinterHelp::actionMessage) {
+            guard(onError = { p -> _state.update { it.copy(slotNote = Note(p.say(), ok = false)) } }) {
                 val r = backend.unload(id, ask.label, dryRun = false)
-                _state.update { it.copy(slotMessage = unloadLines(ask, r, names())) }
+                val where = r.location.ifBlank { r.movedBack.firstOrNull()?.location.orEmpty() }.ifBlank { ask.location }
+                _state.update {
+                    it.copy(slotNote = Note(Say.Words(R.string.printer_unload_done, listOf(ask.label, ask.spoolId ?: "?", where))))
+                }
                 done = true
             }
+            _state.update { it.copy(unloading = false, unloadAsk = null) }
             if (done) refresh() // the slot now shows no spool
-            _state.update { it.copy(slotBusy = null) }
         }
     }
 
-    private fun slotError(msg: String) = _state.update { it.copy(slotMessage = listOf(msg)) }
-
-    /** Spool names by id, from the slots the status shows. */
-    private fun names(): Map<Int, String> = _state.value.status?.ams.orEmpty().flatMap { it.slots }
-        .mapNotNull { s -> s.spool?.let { sp -> sp.id?.let { id -> id to PrinterHelp.spoolName(sp) } } }.toMap()
-
     private fun send(action: String) {
         if (_state.value.commandBusy) return
-        _state.update { it.copy(commandBusy = true, commandMessage = null) }
+        _state.update { it.copy(commandBusy = true, commandNote = null) }
         viewModelScope.launch {
-            guard(onError = { msg -> _state.update { it.copy(commandMessage = msg) } }) {
+            guard(onError = { p -> _state.update { it.copy(commandNote = Note(p.say(), ok = false)) } }) {
                 val r = backend.command(id, action)
-                _state.update { it.copy(commandMessage = describe(action, r)) }
+                _state.update { it.copy(commandNote = describe(action, r)) }
             }
             _state.update { it.copy(commandBusy = false) }
         }
     }
 
-    private suspend fun guard(
-        onError: (String) -> Unit,
-        describe: (ApiError) -> String = PrinterHelp::message,
-        block: suspend () -> Unit,
-    ): Boolean {
+    private suspend fun guard(onError: (Problem) -> Unit, block: suspend () -> Unit): Boolean {
         try {
             block()
+            if (_state.value.unauthorized || _state.value.mismatch != null) clearHubNotice()
+            onHubOk()
         } catch (e: CancellationException) {
             throw e
         } catch (e: FingerprintMismatch) {
@@ -409,38 +407,41 @@ class PrinterViewModel(
                 stop()
                 return false
             }
-            onError(describe(e))
+            onError(printerProblem(e))
         } catch (e: Exception) {
-            onError(PrinterHelp.UNEXPECTED)
+            onError(UNREADABLE)
         }
         return true
     }
 
     companion object {
-        /** "Unloaded Acme Basic Black from slot A1." then where each spool went. */
-        fun unloadLines(ask: UnloadAsk, r: UnloadResult, names: Map<Int, String>): List<String> = buildList {
-            add("Unloaded ${ask.spool} from ${ask.slot}.")
-            if (r.movedBack.isEmpty()) add(PrinterHelp.movedBackLine(ask.spool, null, r.location))
-            r.movedBack.forEach { m -> add(PrinterHelp.movedBackLine(m.id?.let(names::get), m.id, m.location)) }
-        }
-
-        private val DONE = mapOf(
-            "pause" to "Pause", "resume" to "Resume", "stop" to "Stop", "light_on" to "Light on", "light_off" to "Light off",
-        )
-
         /**
-         * The server's command reply is `{ok, reply: {ok, reply: <printer's answer>}}`; the printer's answer carries
-         * `result` (e.g. `success`) and, when refused, `reason`.
+         * The server's command reply is `{ok, reply: {ok, reply: <printer's answer>}}`. A good one says what was done;
+         * a refusal says what the Hub's `message` says, as sent, and until the Hub sends one "The printer said no:
+         * <error>." (05-android-app 9.4); never the raw reply.
          */
-        fun describe(action: String, r: CommandResult): String {
+        fun describe(action: String, r: CommandResult): Note {
             val outer = r.reply as? JsonObject
             val ok = (outer?.get("ok") as? JsonPrimitive)?.booleanOrNull ?: r.ok
             val answer = outer?.get("reply") as? JsonObject ?: outer
-            fun text(key: String) = (answer?.get(key) as? JsonPrimitive)?.contentOrNull?.ifBlank { null }
-            val result = text("result")
-            val label = DONE[action] ?: action
-            return if (ok) "$label: the printer replied \"${result ?: "ok"}\"."
-            else "$label: the printer refused (${text("reason") ?: result ?: "no reason given"})."
+            fun text(key: String) = ((answer?.get(key) ?: outer?.get(key)) as? JsonPrimitive)?.contentOrNull?.ifBlank { null }
+            if (ok) {
+                val done = when (action) {
+                    "pause" -> R.string.printer_result_paused
+                    "resume" -> R.string.printer_result_resumed
+                    "stop" -> R.string.printer_result_stopped
+                    "light_on" -> R.string.printer_result_light_on
+                    "light_off" -> R.string.printer_result_light_off
+                    else -> R.string.common_ok
+                }
+                return Note(Say.Words(done))
+            }
+            text("message")?.let { return Note(Say.FromHub(it), ok = false) }
+            val why = text("error") ?: text("reason") ?: text("result")
+            return Note(
+                if (why != null) Say.Words(R.string.printer_error_said_no, listOf(why)) else Say.Words(R.string.common_hub_answer_unknown),
+                ok = false,
+            )
         }
     }
 }

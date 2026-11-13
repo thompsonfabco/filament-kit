@@ -101,7 +101,9 @@ import com.thompsonfabco.filamentkit.nav.PairNetworkAccessRoute
 import com.thompsonfabco.filamentkit.nav.PairRoute
 import com.thompsonfabco.filamentkit.nav.PairScanRoute
 import com.thompsonfabco.filamentkit.nav.PrinterMapRoute
+import com.thompsonfabco.filamentkit.nav.PrinterPickRoute
 import com.thompsonfabco.filamentkit.nav.PrinterRoute
+import com.thompsonfabco.filamentkit.nav.PrinterSettingsRoute
 import com.thompsonfabco.filamentkit.nav.PrintersGraph
 import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.RecentGraph
@@ -164,6 +166,7 @@ import com.thompsonfabco.filamentkit.ui.components.AppearanceMenu
 import com.thompsonfabco.filamentkit.ui.components.HubFacts
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.HubSheet
 import com.thompsonfabco.filamentkit.ui.components.HubSheetActions
 import com.thompsonfabco.filamentkit.ui.components.LocalNetworkNotice
@@ -195,15 +198,19 @@ import com.thompsonfabco.filamentkit.ui.pair.PairCertificateScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairCodeScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairFingerprintScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairNetworkAccessScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairTopBarOverflow
 import com.thompsonfabco.filamentkit.ui.pair.PairRouteSync
 import com.thompsonfabco.filamentkit.ui.pair.PairStartScreen
 import com.thompsonfabco.filamentkit.ui.pair.QrScanner
 import com.thompsonfabco.filamentkit.ui.pair.pairViewModel
 import com.thompsonfabco.filamentkit.ui.pair.routeSource
 import com.thompsonfabco.filamentkit.ui.printers.ManualMapEntry
+import com.thompsonfabco.filamentkit.ui.printers.PickSpoolEntry
 import com.thompsonfabco.filamentkit.ui.printers.PrinterEntry
+import com.thompsonfabco.filamentkit.ui.printers.PrinterSettingsEntry
+import com.thompsonfabco.filamentkit.ui.printers.printerPlaceTitle
+import com.thompsonfabco.filamentkit.ui.printers.slotSpoolJson
 import com.thompsonfabco.filamentkit.ui.printers.PrintersListEntry
-import com.thompsonfabco.filamentkit.ui.printers.TrustAction
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
@@ -461,12 +468,16 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
 
     val phone = SpoolwardenTheme.window == WindowClass.Phone
     val imeVisible = WindowInsets.isImeVisible
-    val navVisible = !inPairing && destination != null && !(phone && imeVisible)
+    // Settings opened from the pairing graph's overflow: no bottom bar, and Back returns to the pairing step (05 4)
+    val settingsOverPairing = !inPairing && destination.tab() == Tab.Settings &&
+        runCatching { nav.getBackStackEntry<PairGraph>() }.isSuccess
+    val openSettingsOverPairing: () -> Unit = { nav.navigate(SettingsGraph) { launchSingleTop = true } }
+    val navVisible = !inPairing && !settingsOverPairing && destination != null && !(phone && imeVisible)
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val pairingOverMain = remember(entry) { nav.previousBackStackEntry != null }
     val atPairStart = destination?.hasRoute(PairRoute::class) == true || destination?.hasRoute(PairNetworkAccessRoute::class) == true
-    val showBack = showsBackArrow(destination.isTabRoot(), inPairing, pairingOverMain, atPairStart)
+    val showBack = showsBackArrow(destination.isTabRoot(), inPairing, pairingOverMain, atPairStart) || settingsOverPairing
     val scanning = destination?.hasRoute(PairScanRoute::class) == true
     val storedCertificate = destination?.hasRoute(PairCertificateRoute::class) == true &&
         entry?.toRoute<PairCertificateRoute>()?.source == MismatchSource.STORED.routeSource()
@@ -739,7 +750,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
             topBar = {
                 if (!scanning) SwTopBar(
-                    title = placeTitle(destination, entry, storedCertificate),
+                    title = printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
                     subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
                     onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                     scrollBehavior = scroll,
@@ -761,6 +772,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             NavHost(nav, startDestination = if (paired) HomeGraph else PairGraph, modifier = Modifier.padding(padding)) {
                 navigation<PairGraph>(startDestination = PairRoute) {
                     composable<PairRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         // no NSD browse until the local network permission is granted
@@ -777,7 +789,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             access = localNetwork,
                         )
                     }
-                    composable<PairNetworkAccessRoute> { PairNetworkAccessScreen(localNetwork, BuildConfig.VERSION_NAME) }
+                    composable<PairNetworkAccessRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
+                        PairNetworkAccessScreen(localNetwork, BuildConfig.VERSION_NAME)
+                    }
                     composable<PairScanRoute> {
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         // closing, a result and "enter the address" may arrive twice; only the entry on screen is popped
@@ -789,21 +804,25 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         )
                     }
                     composable<PairAddressRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         PairAddressScreen(ui, pairVm::submitAddress, pairVm::back, localNetwork)
                     }
                     composable<PairFingerprintRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         PairFingerprintScreen(ui, pairVm::confirmFingerprint, pairVm::rejectFingerprint, pairVm::back)
                     }
                     composable<PairCodeRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         PairCodeScreen(ui, pairVm::submitCode, pairVm::back, localNetwork)
                     }
                     composable<PairCertificateRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         // gone while the screen leaves: nothing is asked then
@@ -996,24 +1015,57 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             return@composable
                         }
                         val id = e.toRoute<PrinterRoute>().id
-                        val trustFailed by app.trustFailed.collectAsStateWithLifecycle()
-                        val trust = TrustAction({ config.canTrust(it) }, { x, y -> app.trustCertificate(x, y) }, trustFailed, app::clearTrustFailed)
                         PrinterEntry(
-                            a, id,
-                            onBack = { nav.popBackStack() },
-                            onManualMap = { nav.navigate(PrinterMapRoute(id)) },
+                            a, ::currentApi, id,
                             onPairAgain = app.router::pairAgain,
-                            trust = trust,
+                            onOpenSettings = { nav.navigate(PrinterSettingsRoute(id)) },
+                            onMapByLoading = { nav.navigate(PrinterMapRoute(id)) },
+                            onPickSlot = { nav.navigate(PrinterPickRoute(id, it)) },
+                            // the spool card opens over the printer until the spool has a screen of its own (7.2)
+                            onOpenSpool = { sp -> spoolVm?.open(slotSpoolJson(sp)) },
+                        )
+                    }
+
+                    composable<PrinterSettingsRoute> { e ->
+                        if (api == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        PrinterSettingsEntry(
+                            ::currentApi, e.toRoute<PrinterSettingsRoute>().id, onPairAgain = app.router::pairAgain,
+                            onForgotten = { name ->
+                                nav.popBackStack<PrintersRoute>(inclusive = false)
+                                // the toast outlives this screen, so it runs in the shell's scope
+                                val said = context.getString(R.string.printer_forget_done, name)
+                                pairScope.launch { toast.show(said) }
+                            },
+                        )
+                    }
+
+                    composable<PrinterPickRoute> { e ->
+                        if (api == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        val route = e.toRoute<PrinterPickRoute>()
+                        PickSpoolEntry(
+                            ::currentApi, route.id, route.slot,
+                            onLoaded = { name, confirmed ->
+                                nav.popBackStack()
+                                val said = if (confirmed) context.getString(R.string.spool_result_loaded, name, route.slot)
+                                else context.getString(R.string.spool_load_unconfirmed)
+                                pairScope.launch { toast.show(said, kind = if (confirmed) null else NoticeKind.Warn) }
+                            },
+                            onPairAgain = app.router::pairAgain,
                         )
                     }
 
                     composable<PrinterMapRoute> { e ->
-                        val a = api
-                        if (a == null) {
+                        if (api == null) {
                             HubNoticePage(::pushPairing)
                             return@composable
                         }
-                        ManualMapEntry(a, e.toRoute<PrinterMapRoute>().id, onBack = { nav.popBackStack() }, onPairAgain = app.router::pairAgain)
+                        ManualMapEntry(::currentApi, e.toRoute<PrinterMapRoute>().id, onBack = { nav.popBackStack() }, onPairAgain = app.router::pairAgain)
                     }
                     sharedRoutes()
                 }

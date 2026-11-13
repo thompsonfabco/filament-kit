@@ -174,7 +174,7 @@ private fun ColumnScope.PrinterLists(
         Panel {
             configured.forEachIndexed { i, p ->
                 if (i > 0) Divider()
-                PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onAdd(p) else onOpen(p.id) }
+                PrinterRow(p, state.swatches[p.id].orEmpty()) { onOpen(p.id) }
             }
         }
     }
@@ -339,10 +339,7 @@ private fun FoundRow(p: Printer, enabled: Boolean, reason: Boolean, onAdd: () ->
     }
 }
 
-/**
- * 9.2: asks for the Access Code of a printer the Hub found. For a printer that is set up and was refused its code
- * (9.9, "Replace Access Code") it asks again, with no name field. The code lives only in this form's memory.
- */
+/** 9.2: asks for the Access Code of a printer the Hub found, and a name if the person wants one. The code lives only in this form's memory. */
 @Composable
 private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
     var code by remember(d.serial) { mutableStateOf("") }
@@ -352,7 +349,6 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
     } else {
         stringResource(R.string.printer_list_model_bambu, d.model)
     }
-    val busyWords = if (d.rekey) R.string.printer_set_connecting else R.string.printer_add_connecting
     SwDialog(
         title = if (d.rekey) {
             stringResource(R.string.printers_access_code_title, d.printerName)
@@ -376,10 +372,8 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelAdd),
         cancelEnabled = !d.busy,
     ) {
-        if (!d.rekey) {
-            val facts = stringResource(R.string.printer_add_facts, model, d.serial)
-            Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
-        }
+        val facts = stringResource(R.string.printer_add_facts, model, d.serial)
+        Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
         FormField(
             code, { code = it }, stringResource(R.string.common_field_access_code), secret = true, enabled = !d.busy,
             hint = stringResource(R.string.common_hint_access_code),
@@ -392,7 +386,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             )
         }
         d.problem?.let { ProblemNotice(it, onPairAgain) }
-        if (d.busy) BusyReason(if (d.rekey) R.string.printers_set_code_wait else R.string.printers_add_wait)
+        if (d.busy) BusyReason(R.string.printers_add_wait)
     }
 }
 

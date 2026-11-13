@@ -105,3 +105,4 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolModel.kt |
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | color | 3 | wire identifier (the item key `color_hex`), never shown (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | color | 1 | wire identifier (the item key `color_hex`), never shown (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/SpoolPanel.kt | color | 6 | wire identifier (the item key `color_hex`), never shown (S4.7)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | color | Hub identifier (field name), not text

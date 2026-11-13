@@ -61,6 +61,8 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 @Serializable data object PrintersRoute
 @Serializable data class PrinterRoute(val id: String)
 @Serializable data class PrinterMapRoute(val id: String)
+@Serializable data class PrinterSettingsRoute(val id: String)
+@Serializable data class PrinterPickRoute(val id: String, val slot: String)
 
 @Serializable data object RecentGraph
 @Serializable data object RecentRoute

@@ -3,35 +3,47 @@ package com.thompsonfabco.filamentkit.ui.printers
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LifecycleStartEffect
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.net.ManualPosition
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwDialog
+import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
+import com.thompsonfabco.filamentkit.ui.components.SwProgress
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /**
- * "Map by loading filament": one named position at a time. The server says what to load; once the printer shows a
- * settled load it asks whether that is the one, answered with Yes, "No, I loaded …" or Skip. A dual-nozzle printer
- * that does not say the nozzle gets the question first. A printer that reports no loads gets the by-hand list.
- * Leaving while the session is open asks first, as an open session holds off automatic mapping.
+ * "Map by loading filament" (05-android-app 9.8): one named position at a time. The Hub says what to load; once the
+ * printer shows a settled load it asks whether that is the one, answered with Yes, "No, I loaded another one" or Skip.
+ * A dual-nozzle printer that does not say the nozzle gets the question first. A printer that reports no loads gets the
+ * by-hand list. Leaving while the session is open asks first, as an open session holds off automatic mapping.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack: () -> Unit, onPairAgain: () -> Unit) {
     val s by viewModel.state.collectAsState()
@@ -41,27 +53,27 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
     }
     val leave = { if (s.open) viewModel.askStop() else onBack() }
     BackHandler(onBack = leave)
+    val space = SpoolwardenTheme.space
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column {
-            Text(ManualMapHelp.TITLE, style = MaterialTheme.typography.headlineSmall)
-            printerName?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+        verticalArrangement = Arrangement.spacedBy(space.s3),
+    ) {
+        printerName?.let {
+            Text(it, Modifier.semantics { heading() }, color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyLarge)
         }
-        s.mismatch?.let { (expected, actual) ->
-            MismatchNotice(expected, actual, onPairAgain)
-            return@Column
-        }
-        if (s.unauthorized) {
-            UnpairedNotice(onPairAgain)
-            return@Column
-        }
+        HubNotices(unauthorized = s.unauthorized, mismatch = s.mismatch != null, onPairAgain = onPairAgain)
         val m = s.map
         if (m == null) {
-            if (s.busy) Text(ManualMapHelp.STARTING)
-            s.message?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = viewModel::retry, enabled = !s.busy) { Text("Try again") }
+            if (s.busy) {
+                SwProgress(null)
+                Text(stringResource(R.string.printer_mbl_starting), style = MaterialTheme.typography.bodyMedium)
+            }
+            s.problem?.let {
+                NoticeCard(
+                    NoticeKind.Bad, problemText(it),
+                    actions = listOf(SwAction(stringResource(R.string.common_try_again), viewModel::retry)),
+                )
             }
             return@Column
         }
@@ -71,85 +83,129 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
             val seen = step.seen
             when {
                 s.byHand -> {
-                    Text(ManualMapHelp.BY_HAND)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.printer_mbl_which_slot), style = MaterialTheme.typography.bodyMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
                         m.choices.forEachIndexed { i, c ->
-                            OutlinedButton(onClick = { viewModel.pickByHand(i) }, enabled = !s.busy) { Text(c.label) }
+                            SwButton(c.label, { viewModel.pickByHand(i) }, enabled = !s.busy)
                         }
                     }
-                    Text(ManualMapHelp.BY_HAND_NOTE, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        stringResource(R.string.printer_mbl_by_hand_note), color = SpoolwardenTheme.colors.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 seen != null && seen.settled && step.ask != null -> {
-                    Text(step.ask)
+                    Text(step.ask, style = MaterialTheme.typography.bodyLarge)
                     if (m.dualNozzle && !seen.nozzleReported) {
-                        Text(ManualMapHelp.WHICH_NOZZLE)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("left", "right").forEach { n ->
-                                FilterChip(selected = s.nozzle == n, onClick = { viewModel.chooseNozzle(n) },
-                                    label = { Text(ManualMapHelp.nozzleLabel(n)) })
-                            }
+                        Text(stringResource(R.string.printer_mbl_which_nozzle), style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                            listOf("left" to R.string.printer_mbl_left_nozzle, "right" to R.string.printer_mbl_right_nozzle)
+                                .forEach { (n, label) ->
+                                    FilterChip(
+                                        selected = s.nozzle == n, onClick = { viewModel.chooseNozzle(n) },
+                                        label = { Text(stringResource(label)) }, shape = SpoolwardenTheme.shapes.rS,
+                                    )
+                                }
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = viewModel::yes, enabled = s.canAnswer) { Text("Yes") }
-                        OutlinedButton(onClick = viewModel::openOther, enabled = s.canAnswer) { Text("No, I loaded…") }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
+                        SwButton(stringResource(R.string.common_yes), viewModel::yes, kind = SwButtonKind.Main, enabled = s.canAnswer)
+                        SwButton(stringResource(R.string.printer_mbl_no_other), viewModel::openOther, enabled = s.canAnswer)
                     }
                 }
                 seen != null -> {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
-                    Text(ManualMapHelp.SETTLING, style = MaterialTheme.typography.bodySmall)
+                    SwProgress(null)
+                    Text(stringResource(R.string.printer_mbl_settling), style = MaterialTheme.typography.bodyMedium)
                 }
                 else -> {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
-                    Text(ManualMapHelp.WAITING, style = MaterialTheme.typography.bodySmall)
+                    SwProgress(null)
+                    Text(stringResource(R.string.printer_mbl_waiting), style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = viewModel::skip, enabled = !s.busy) { Text("Skip ${step.position.label}") }
-                TextButton(onClick = viewModel::askStop, enabled = !s.busy) { Text("Stop") }
+            Row(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                SwButton(
+                    stringResource(R.string.printer_mbl_skip, step.position.label), viewModel::skip,
+                    kind = SwButtonKind.Quiet, enabled = !s.busy,
+                )
+                SwButton(stringResource(R.string.printer_mbl_stop), viewModel::askStop, kind = SwButtonKind.Quiet, enabled = !s.busy)
             }
         }
-        s.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Text(m.summary, style = if (m.open) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyLarge)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            m.positions.forEach { Text(ManualMapHelp.line(it, m.open), style = MaterialTheme.typography.bodySmall) }
-        }
+        if (s.lost) NoticeCard(NoticeKind.Info, stringResource(R.string.printer_mbl_lost))
+        s.problem?.let { NoticeCard(NoticeKind.Bad, problemText(it)) }
         if (!m.open) {
+            Text(m.summary, style = MaterialTheme.typography.bodyLarge)
             if (m.offerReport) {
-                Text(ManualMapHelp.OFFER_QUESTION)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { viewModel.offer(true) }, enabled = !s.busy) { Text("Yes, how do I share it?") }
-                    TextButton(onClick = { viewModel.offer(false) }, enabled = !s.busy) { Text("No thanks") }
+                Text(stringResource(R.string.printer_mbl_share), style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                    SwButton(stringResource(R.string.printer_mbl_share_yes), { viewModel.offer(true) }, enabled = !s.busy)
+                    SwButton(stringResource(R.string.printer_mbl_share_no), { viewModel.offer(false) }, kind = SwButtonKind.Quiet, enabled = !s.busy)
                 }
             }
-            s.note?.let { Text(it) }
-            Button(onClick = onBack) { Text("Done") }
+            s.note?.let { NoticeCard(NoticeKind.Info, it) }
         }
+        PositionsPanel(m.positions, m.open)
+        if (!m.open) SwButton(stringResource(R.string.common_done), onBack, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
     }
 
     if (s.pickingOther) {
         val current = s.map?.step?.position?.id
-        AlertDialog(
-            onDismissRequest = viewModel::closeOther,
-            title = { Text(ManualMapHelp.PICK_OTHER) },
-            text = {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    s.map?.positions.orEmpty().filter { it.id != current }.forEach { p ->
-                        OutlinedButton(onClick = { viewModel.loadedOther(p.id) }) { Text(p.label) }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = viewModel::closeOther) { Text("Cancel") } },
-        )
+        SwDialog(
+            title = stringResource(R.string.printer_mbl_which_one),
+            onClose = viewModel::closeOther,
+            // the dialog is the list of positions and Cancel: the only button of the footer is Cancel
+            confirm = SwDialogButton(stringResource(R.string.common_cancel), viewModel::closeOther, kind = SwButtonKind.Plain),
+        ) {
+            s.map?.positions.orEmpty().filter { it.id != current }.forEach { p ->
+                SwButton(p.label, { viewModel.loadedOther(p.id) }, Modifier.fillMaxWidth())
+            }
+        }
     }
     if (s.confirmStop) {
-        AlertDialog(
-            onDismissRequest = viewModel::cancelStop,
-            title = { Text(ManualMapHelp.STOP_TITLE) },
-            text = { Text(ManualMapHelp.STOP_TEXT) },
-            confirmButton = { Button(onClick = viewModel::confirmStop) { Text("Stop mapping") } },
-            dismissButton = { TextButton(onClick = viewModel::cancelStop) { Text("Keep going") } },
-        )
+        SwDialog(
+            title = stringResource(R.string.printer_mbl_stop_title, printerName.orEmpty()),
+            onClose = viewModel::cancelStop,
+            confirm = SwDialogButton(
+                stringResource(R.string.printer_mbl_stop_confirm), viewModel::confirmStop, kind = SwButtonKind.DestructiveFilled,
+            ),
+            cancel = SwAction(stringResource(R.string.printer_mbl_stop_keep), viewModel::cancelStop),
+        ) {
+            Text(stringResource(R.string.printer_mbl_stop_body), style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
+
+/** The panel "Slots": one row per position with its status ("A1: confirmed (A1, left nozzle)"). */
+@Composable
+private fun PositionsPanel(positions: List<ManualPosition>, open: Boolean) {
+    val space = SpoolwardenTheme.space
+    PrinterPanel(title = stringResource(R.string.printer_slots_title), padded = false) {
+        positions.forEachIndexed { i, p ->
+            if (i > 0) PanelDivider()
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).padding(horizontal = space.s4, vertical = space.s2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(positionLine(p, open), style = SpoolwardenTheme.type.data)
+            }
+        }
+    }
+}
+
+/** "A1: confirmed (A1, left nozzle)", "A2: entered by hand (A2)", "A3: skipped", "A4: not answered yet" / "not mapped". */
+@Composable
+private fun positionLine(p: ManualPosition, open: Boolean): String {
+    if (p.status == "confirmed") {
+        val where = listOfNotNull(
+            p.reportedLabel, p.nozzle?.let { stringResource(R.string.printer_mbl_nozzle_where, it) },
+        ).joinToString(WHERE_SEPARATOR)
+        return stringResource(R.string.printer_mbl_row_confirmed, p.label, where)
+    }
+    val status = when (p.status) {
+        "by_hand" -> stringResource(R.string.printer_mbl_row_by_hand, p.reportedLabel ?: "?")
+        "skipped" -> stringResource(R.string.printer_mbl_row_skipped)
+        else -> stringResource(if (open) R.string.printer_mbl_row_unanswered else R.string.printer_mbl_row_unmapped)
+    }
+    return stringResource(R.string.printer_mbl_row_other, p.label, status)
+}
+
+private const val WHERE_SEPARATOR = ", "

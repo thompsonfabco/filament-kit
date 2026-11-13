@@ -2614,6 +2614,37 @@
     <string name="printer_list_model_bambu">Bambu Lab %1$s</string>
     <!-- 1=model -->
     <string name="printer_list_model_klipper">%1$s (Klipper)</string>
+    <string name="printer_result_resumed">Resumed.</string>
+    <string name="printer_result_stopped">Stopped.</string>
+    <string name="printer_result_light_on">Light on.</string>
+    <!-- 1=layer 2=layers -->
+    <string name="printer_progress_layer">layer %1$s of %2$s</string>
+    <!-- 1=time -->
+    <string name="printer_progress_left">%1$s left</string>
+    <!-- 1=clock -->
+    <string name="printer_progress_done">done about %1$s</string>
+    <!-- 1=percent -->
+    <string name="printer_percent">%1$s %%</string>
+    <string name="printer_stop_this_print">the print</string>
+    <string name="printer_unload_previous_place">its previous place</string>
+    <string name="printer_report_no_app">No app on this phone can share or save the file.</string>
+    <string name="printer_field_name">Name</string>
+    <string name="printer_error_name">Enter a name.</string>
+    <string name="printer_set_saved">Saved.</string>
+    <!-- 1=slot 2=status -->
+    <string name="printer_mbl_row_other">%1$s: %2$s</string>
+    <!-- 1=nozzle -->
+    <string name="printer_mbl_nozzle_where">%1$s nozzle</string>
+    <!-- 1=name -->
+    <string name="printer_load_preset">Preset: %1$s</string>
+    <string name="printer_load_no_preset">Preset: none</string>
+    <!-- 1=mm -->
+    <string name="printer_load_nozzle">Nozzle: %1$s mm</string>
+    <!-- 1=mm -->
+    <string name="printer_load_nozzle_assumed">Nozzle size not reported by the printer; assuming %1$s mm</string>
+    <!-- 1=id 2=slot 3=location -->
+    <string name="printer_load_moved_back">Spool %1$s now in %2$s goes back to %3$s</string>
+    <string name="printers_add_klipper">Add a Klipper printer</string>
     <string name="printers_empty_text">The Hub finds Bambu printers on its network by itself. Turn the printer on, then refresh. Klipper printers are added by address.</string>
     <string name="printers_fix_cert_changed">The printer\'s certificate changed. Forget its old certificate in Printer settings.</string>
     <string name="printers_fix_developer_mode">The printer refuses remote control. Turn on LAN mode and Developer Mode on the printer.</string>

@@ -3,14 +3,8 @@ package com.thompsonfabco.filamentkit.ui.printers
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,11 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
-import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
+import androidx.compose.ui.res.stringResource
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.LocalNetwork
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
@@ -136,10 +129,18 @@ class MjpegParser(boundary: String, private val maxFrameBytes: Int = 8 * 1024 * 
 
 /**
  * Shows the printer's MJPEG stream from [url], fetched with the app's pinned [client] and [headers] (the Bearer
- * header). The connection is closed when this leaves composition; a failure is shown over the view in plain words.
+ * header). The connection is closed when this leaves composition; a failure is shown in place of the picture
+ * (05-android-app 9.4).
  */
 @Composable
-fun MjpegView(client: OkHttpClient, url: String, headers: Map<String, String>, modifier: Modifier = Modifier) {
+fun MjpegView(
+    client: OkHttpClient,
+    url: String,
+    headers: Map<String, String>,
+    printerName: String,
+    modifier: Modifier = Modifier,
+    onPairAgain: () -> Unit = {},
+) {
     var frame by remember(url) { mutableStateOf<Bitmap?>(null) }
     var error by remember(url) { mutableStateOf<String?>(null) }
     var attempt by remember(url) { mutableIntStateOf(0) }
@@ -149,30 +150,27 @@ fun MjpegView(client: OkHttpClient, url: String, headers: Map<String, String>, m
             streamMjpeg(client, url, headers) { jpeg ->
                 BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)?.let { bmp -> withContext(Dispatchers.Main) { frame = bmp } }
             }
-            "The camera stream ended."
+            CAMERA_INTERRUPTED
         } catch (e: CancellationException) {
             throw e
         } catch (e: CameraHttpError) {
-            PrinterHelp.cameraFix(e.code)
+            if (e.status == UNAUTHORIZED_STATUS) CAMERA_UNAUTHORIZED else e.code
         } catch (e: Exception) {
-            if (LocalNetwork.missing()) LOCAL_NETWORK_MESSAGE else "The camera stream was interrupted. Tap Try again."
+            if (LocalNetwork.missing()) CAMERA_LOCAL_NETWORK else CAMERA_INTERRUPTED
         }
     }
+    val live = stringResource(R.string.a11y_camera, printerName)
     Box(modifier, contentAlignment = Alignment.Center) {
         frame?.let {
-            Image(it.asImageBitmap(), contentDescription = "Printer camera", modifier = Modifier.fillMaxWidth(),
+            Image(it.asImageBitmap(), contentDescription = live, modifier = Modifier.fillMaxWidth(),
                 contentScale = ContentScale.FillWidth)
         }
-        if (frame == null && error == null) Text(PrinterHelp.CAMERA_WAITING, color = Color.White)
-        error?.let { msg ->
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(msg, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = { attempt++ }) { Text("Try again") }
-            }
-        }
+        if (frame == null && error == null) CameraWaiting()
+        error?.let { code -> CameraFailure(code, onTryAgain = { attempt++ }, onPairAgain = onPairAgain) }
     }
 }
+
+private const val UNAUTHORIZED_STATUS = 401
 
 /** A non-2xx camera response; [code] is the server's error code (`camera_unavailable`, `not_configured`, ...). */
 class CameraHttpError(val status: Int, val code: String) : IOException("camera HTTP $status $code")

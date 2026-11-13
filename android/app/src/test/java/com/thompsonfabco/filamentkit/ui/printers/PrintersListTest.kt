@@ -210,12 +210,10 @@ class PrintersListTest {
         assertFalse(vm.state.value.loading)
     }
 
-    @Test fun aSetUpPrinterOpensTheReKeyFormAndAFoundOneTheAddForm() = runTest(dispatcher) {
+    @Test fun aFoundPrinterOpensTheAddFormAndReplacingTheCodeLivesInPrinterSettings() = runTest(dispatcher) {
         val vm = PrintersViewModel(backend)
-        vm.openAdd(printer("A", state = "wrong_code"))
-        assertTrue(vm.state.value.dialog!!.rekey)
         vm.openAdd(printer("B", state = "not_configured", configured = false))
-        assertFalse(vm.state.value.dialog!!.rekey)
+        assertEquals("B", vm.state.value.dialog!!.serial)
     }
 
     // --- Add a Klipper printer ---
@@ -396,20 +394,6 @@ class PrintersListTest {
         assertEquals("offline", vm.state.value.printers.single().state)
         advanceTimeBy(2); runCurrent()
         assertEquals("connected", vm.state.value.printers.single().state)
-    }
-
-    @Test fun replacingTheCodeSaysSoOnceAndSkipsTheAddedMessage() = runTest(dispatcher) {
-        val p = printer("A", state = "wrong_code")
-        backend.addResult = printer("A")
-        val vm = PrintersViewModel(backend)
-        vm.openAdd(p)
-        vm.submitAdd("12345678", "")
-        runCurrent()
-        assertNull(vm.state.value.dialog)
-        assertEquals("Workshop X1", vm.state.value.replaced)
-        assertNull(vm.state.value.added)
-        vm.addedShown()
-        assertNull(vm.state.value.replaced)
     }
 
     @Test fun theKlipperFeatureBeingOffIsNamedByItsModule() = runTest(dispatcher) {

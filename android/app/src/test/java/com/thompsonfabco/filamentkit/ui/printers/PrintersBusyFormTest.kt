@@ -94,16 +94,4 @@ class PrintersBusyFormTest {
         rule.waitForIdle()
         assertTrue("the later refusal is shown", rule.onNodeWithText("Refused by the Hub").isDisplayed())
     }
-
-    @Test fun theReKeyHasItsOwnWaitText() {
-        val vm = PrintersViewModel(Backend())
-        shown(vm)
-        rule.waitForIdle()
-        vm.openAdd(wrongCode)
-        rule.waitForIdle()
-        vm.submitAdd("12345678", "")
-        rule.waitForIdle()
-        rule.onNodeWithText("Cancel").assertIsNotEnabled()
-        rule.onNodeWithText("The Hub is saving the Access Code. Wait for its answer.").assertExists()
-    }
 }
