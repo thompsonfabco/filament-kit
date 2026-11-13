@@ -24,7 +24,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -113,7 +112,7 @@ internal fun EditScreen(
                 if (e != null) EditFields(vm, s, e)
             }
             // the form cannot be opened (it was just saved, or the item is gone): say so, with a way back
-            if (e == null && s.record != null && !s.loading) Closed(s.saved, onClose)
+            if (e == null && s.editUnavailable) Closed(onClose)
         }
         if (e != null) {
             ActionBar(
@@ -141,15 +140,10 @@ internal fun EditScreen(
 }
 
 @Composable
-private fun Closed(saved: SavedEdit?, onClose: () -> Unit) {
+private fun Closed(onClose: () -> Unit) {
     val space = SpoolwardenTheme.space
     Column(verticalArrangement = Arrangement.spacedBy(space.s3)) {
-        if (saved != null) {
-            val names = saved.fields.map { stringResource(it.label) }.joinToString(", ")
-            NoticeCard(NoticeKind.Ok, pluralStringResource(R.plurals.recent_edit_saved, saved.fields.size, saved.fields.size, names))
-        } else {
-            NoticeCard(NoticeKind.Info, stringResource(R.string.recent_edit_gone))
-        }
+        NoticeCard(NoticeKind.Info, stringResource(R.string.recent_edit_gone))
         SwButton(stringResource(R.string.common_back), onClose)
     }
 }

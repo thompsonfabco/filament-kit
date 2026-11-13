@@ -687,6 +687,21 @@ class HistoryTest {
         assertNull(vm.state.value.mismatch)
     }
 
+    @Test fun theFormIsUnavailableOnlyOnceTheRecordIsThereWithoutTheItem() = runTest(dispatcher) {
+        val vm = RecordViewModel(fake, "a1")
+        vm.startEdit(0)
+        assertFalse(vm.state.value.editUnavailable)
+        vm.load(); runCurrent()
+        vm.startEdit(0)
+        assertFalse(vm.state.value.editUnavailable)
+        vm.closeEdit()
+        assertFalse(vm.state.value.editUnavailable)
+        vm.startEdit(9)
+        assertTrue(vm.state.value.editUnavailable)
+        vm.beginEdit(0)
+        assertFalse(vm.state.value.editUnavailable)
+    }
+
     @Test fun identicalChangesAcrossSpoolsAreOneLine() {
         val c = { id: Int -> HistoryChange(id, "name", JsonPrimitive("A"), JsonPrimitive("B")) }
         val m = mergedChanges(listOf(c(41), c(42), HistoryChange(41, "tare", JsonPrimitive(150), JsonPrimitive(140))))

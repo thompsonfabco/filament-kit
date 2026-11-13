@@ -50,6 +50,31 @@ class RecentScreensTest {
         }
     }
 
+    private fun edit(fake: Fake, onClose: () -> Unit = {}) {
+        val vm = RecordViewModel(fake, "a1")
+        rule.setContent { SpoolwardenTheme(Look.Console, Appearance.Light) { EditScreen(vm, 0, onClose, {}) } }
+    }
+
+    @Test fun theEditScreenShowsNoClosedNoticeWhileOpeningOrAfterCancel() {
+        var closed = 0
+        edit(Fake { error("no photo") }) { closed++ }
+        rule.onNodeWithText("This record has no spools to edit now.").assertDoesNotExist()
+        rule.waitForIdle()
+        rule.onNodeWithText("Save changes").assertExists()
+        rule.onNodeWithText("This record has no spools to edit now.").assertDoesNotExist()
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitForIdle()
+        assertEquals(1, closed)
+        rule.onNodeWithText("This record has no spools to edit now.").assertDoesNotExist()
+    }
+
+    @Test fun theEditScreenSaysSoWhenTheItemIsGone() {
+        val vm = RecordViewModel(Fake { error("no photo") }, "a1")
+        rule.setContent { SpoolwardenTheme(Look.Console, Appearance.Light) { EditScreen(vm, 7, {}, {}) } }
+        rule.waitForIdle()
+        rule.onNodeWithText("This record has no spools to edit now.").assertExists()
+    }
+
     @Test fun theViewerNamesThePhotoAndClosesIt() {
         var closed = 0
         viewer(Fake { error("no photo") }, start = 2) { closed++ }

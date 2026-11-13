@@ -459,6 +459,8 @@ data class RecordState(
     val noteMissing: Boolean = false,
     val applyBusy: Boolean = false,
     val edit: EditUi? = null,
+    /** The form was asked for and the record has no such item: the screen says so (never while it opens or closes). */
+    val editUnavailable: Boolean = false,
     /** What the last hand edit sent, for the result line of its Fields panel. */
     val saved: SavedEdit? = null,
     val undoAsk: Boolean = false,
@@ -594,13 +596,19 @@ class RecordViewModel(
     /** The person asked for the form: it may open on [item] again. */
     fun beginEdit(item: Int) {
         if (sealed == item) sealed = null
+        _state.update { it.copy(editUnavailable = false) }
     }
 
     /** Opens the form on saved item [item] once the record is there; a form already open on it stays as typed. */
     fun startEdit(item: Int) {
         val s = _state.value
         if (s.edit?.item == item || sealed == item) return
-        val saved = s.record?.saved?.firstOrNull { it.item == item } ?: return
+        val record = s.record ?: return
+        val saved = record.saved.firstOrNull { it.item == item }
+        if (saved == null) {
+            _state.update { it.copy(editUnavailable = true) }
+            return
+        }
         val texts = RecentField.entries.associateWith { RecentValues.formText(saved.values[it.wire]) }
         _state.update { it.copy(edit = EditUi(item, texts, texts), saved = null, undone = null) }
     }
