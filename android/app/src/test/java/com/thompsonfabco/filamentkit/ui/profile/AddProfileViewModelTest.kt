@@ -218,6 +218,21 @@ class AddProfileViewModelTest {
     }
 
     @Test
+    fun aSavedProfileAppearsInTheExistingLines() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        assertEquals(1, vm.state.value.lines.size)
+        api.lines = api.lines + ProfileLine(lineId = "sunlu--pla-plus-2-0", vendor = "SUNLU", product = "PLA+ 2.0", material = "PLA")
+        filled(vm)
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertEquals(2, api.lineCalls)
+        assertEquals(listOf("sunlu--pla", "sunlu--pla-plus-2-0"), vm.state.value.lines.map { it.lineId })
+    }
+
+    @Test
     fun aBlankParentIsNeverSentToTheServer() = runTest(dispatcher) {
         val vm = AddProfileViewModel(api)
         advanceUntilIdle()
@@ -257,10 +272,14 @@ private class FakeProfileApi : ProfileApi {
         return parentLists[material] ?: ParentList(emptyList(), synced = false)
     }
 
+    var lineCalls = 0
     var lines = listOf(ProfileLine(lineId = "sunlu--pla", vendor = "SUNLU", product = "PLA", material = "PLA"))
     val reparented = mutableListOf<Pair<String, String>>()
 
-    override suspend fun profileLines(): List<ProfileLine> = lines
+    override suspend fun profileLines(): List<ProfileLine> {
+        lineCalls++
+        return lines
+    }
 
     override suspend fun setLineParent(lineId: String, parent: String): ProfileLine {
         reparented += lineId to parent

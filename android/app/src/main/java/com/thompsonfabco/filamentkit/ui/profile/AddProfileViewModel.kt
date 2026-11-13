@@ -164,6 +164,7 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
             try {
                 api.addLocalProfile(entry)
                 _state.update { it.copy(saving = false, saved = SAVED) }
+                loadLines() // the new line shows up in "Existing lines"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
