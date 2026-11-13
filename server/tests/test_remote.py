@@ -343,6 +343,20 @@ def test_remote_off_removes_the_kits_router_conf_and_deploy_hook(tmp_path, capsy
     assert "router" in capsys.readouterr().out
 
 
+def test_remote_off_reloads_systemd_after_removing_the_start_check(tmp_path):
+    """The drop-in is gone from disk but systemd reads it until daemon-reload; uninstall.sh removes it too."""
+    root = tmp_path / "root"
+    drop = root / remote.NGINX_DROPIN.lstrip("/")
+    drop.parent.mkdir(parents=True)
+    drop.write_text(remote.NGINX_DROPIN_TEXT)
+    run = Rec()
+    apply.execute([Action("remote_off", "filament")], run=run, resources=INSTALL, root=root)
+    assert not drop.exists()
+    assert "systemctl daemon-reload" in run.texts()
+    sh = (Path(__file__).resolve().parents[2] / "install" / "uninstall.sh").read_text(encoding="utf-8")
+    assert remote.NGINX_DROPIN in sh
+
+
 def test_remote_off_with_nothing_installed_is_quiet(tmp_path):
     run = Rec()
     apply.execute([Action("remote_off", "filament")], run=run, resources=INSTALL, root=tmp_path / "root")

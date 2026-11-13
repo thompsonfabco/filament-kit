@@ -731,6 +731,8 @@ def _remote_off(ex: _Exec, name: str) -> None:
             gone.append(what)
     if not gone:
         return
+    if "the kit's nginx start check" in gone:
+        ex.ok(["systemctl", "daemon-reload"])    # systemd keeps reading the drop-in until told it is gone
     print(f"Remote is off: removed {', '.join(gone)} (nginx, certbot, the certificate and other routes were left).")
     if ex.ok(["nginx", "-t"]):
         ex.ok(["systemctl", "reload", "nginx"])  # a stopped nginx needs nothing
