@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.data
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,5 +77,16 @@ class SettingsTest {
         assertEquals(changed, s.server.first())
         s.clear()
         assertNull(s.server.first())
+    }
+
+    @Test fun appearanceIsSystemUntilChosenAndKeepsTheChoice() = runBlocking {
+        val s = settings()
+        assertEquals(Appearance.System, s.appearance.first())
+        s.setAppearance(Appearance.Dark)
+        assertEquals(Appearance.Dark, s.appearance.first())
+        s.setAppearance(Appearance.Light)
+        assertEquals(Appearance.Light, s.appearance.first())
+        s.setAppearance(Appearance.System)
+        assertEquals(Appearance.System, s.appearance.first())
     }
 }

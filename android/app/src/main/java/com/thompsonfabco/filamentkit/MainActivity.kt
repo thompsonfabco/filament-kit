@@ -1,13 +1,14 @@
 package com.thompsonfabco.filamentkit
 
+import android.app.UiModeManager
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,8 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -90,6 +89,9 @@ import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
 import com.thompsonfabco.filamentkit.ui.settings.LicencesScreen
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
 import com.thompsonfabco.filamentkit.ui.settings.SetupPageTexts
+import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
 import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
 import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
@@ -103,7 +105,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         appEdgeToEdge()
-        setContent { AppFrame { FilamentKitApp() } }
+        setContent {
+            val app: AppViewModel = viewModel()
+            val appearance by app.settings.appearance.collectAsStateWithLifecycle(initialValue = Appearance.System)
+            // The bars and the next launch follow the app's appearance, not only the phone's.
+            LaunchedEffect(appearance) {
+                appEdgeToEdge(appearance)
+                applyNightMode(appearance)
+            }
+            AppFrame(appearance) { FilamentKitApp(app) }
+        }
     }
 
     override fun onResume() {
@@ -480,21 +491,41 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
 
 /**
  * Android draws apps edge to edge (target SDK 35+). The status and navigation bars stay transparent over the app's own
- * background, with icons that follow the phone's light or dark setting as the app does.
+ * background, with icons that follow the app's appearance (System follows the phone).
  */
-internal fun ComponentActivity.appEdgeToEdge() = enableEdgeToEdge(
-    statusBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
-    navigationBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
-)
+internal fun ComponentActivity.appEdgeToEdge(appearance: Appearance = Appearance.System) {
+    val transparent = AndroidColor.TRANSPARENT
+    val style = when (appearance) {
+        Appearance.Light -> SystemBarStyle.light(transparent, transparent)
+        Appearance.Dark -> SystemBarStyle.dark(transparent)
+        Appearance.System -> SystemBarStyle.auto(transparent, transparent)
+    }
+    enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+}
 
 /**
- * The app's root: light or dark as the phone is set, the background fills the whole window, behind the bars too, and
- * every screen is kept clear of the status bar, navigation bar, cutouts and keyboard, here once.
+ * Tells the system the app's night mode, so the next launch's splash and window background use it (Android 12+; older
+ * versions have no such call). The activity handles the resulting `uiMode` change itself and is not recreated.
+ */
+internal fun ComponentActivity.applyNightMode(appearance: Appearance) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+    getSystemService(UiModeManager::class.java).setApplicationNightMode(
+        when (appearance) {
+            Appearance.Light -> UiModeManager.MODE_NIGHT_NO
+            Appearance.Dark -> UiModeManager.MODE_NIGHT_YES
+            Appearance.System -> UiModeManager.MODE_NIGHT_AUTO
+        },
+    )
+}
+
+/**
+ * The app's root: the Console theme in the chosen appearance, the background fills the whole window, behind the bars
+ * too, and every screen is kept clear of the status bar, navigation bar, cutouts and keyboard, here once.
  */
 @Composable
-internal fun AppFrame(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
-        Surface(Modifier.fillMaxSize()) {
+internal fun AppFrame(appearance: Appearance = Appearance.System, content: @Composable () -> Unit) {
+    SpoolwardenTheme(Look.Console, appearance) {
+        Surface(Modifier.fillMaxSize(), color = SpoolwardenTheme.colors.bg) {
             Box(Modifier.fillMaxSize().safeDrawingPadding()) { content() }
         }
     }

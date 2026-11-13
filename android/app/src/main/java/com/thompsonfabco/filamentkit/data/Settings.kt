@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -64,8 +65,22 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
         store.edit { it[SKIP_FINGERPRINT] = skip }
     }
 
+    /** Light, dark or follow the phone; System when nothing (or something unknown) is stored. */
+    val appearance: Flow<Appearance> = store.data.map { prefs ->
+        when (prefs[APPEARANCE]) {
+            "light" -> Appearance.Light
+            "dark" -> Appearance.Dark
+            else -> Appearance.System
+        }
+    }
+
+    suspend fun setAppearance(appearance: Appearance) {
+        store.edit { it[APPEARANCE] = appearance.name.lowercase() }
+    }
+
     companion object {
         private val KEY = stringPreferencesKey("server")
+        private val APPEARANCE = stringPreferencesKey("appearance")
         private val SKIP_FINGERPRINT = booleanPreferencesKey("skip_fingerprint_check")
 
         private val Context.dataStore by preferencesDataStore("settings")
