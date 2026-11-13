@@ -40,7 +40,7 @@ internal fun AddStepRoute(
         vm = vm,
         step = step,
         onStep = { desired -> nav.followStep(draftId, step, desired) },
-        onPop = { nav.popBackStack() },
+        onPop = { target -> nav.followStep(draftId, step, target) },
         onClose = {
             nav.closeAdd()
             flows.leave(draftId)

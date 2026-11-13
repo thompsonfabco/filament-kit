@@ -250,4 +250,29 @@ class DestinationsTest {
         assertTrue(nav.currentDestination?.hasRoute(AddPhotosRoute::class) == true)
         assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
     }
+
+    @Test fun backFromCheckOrPreviewOpenedOnTopOfHomeGoesToTheStepTheTableNames() {
+        // a resumed draft, the "Check" snackbar and the failed-add snackbar open a step straight on Home
+        val nav = controller()
+        nav.navigate(AddReviewRoute("d1"))
+        nav.followStep("d1", AddStep.Check, AddStep.Photos)
+        assertTrue("Check goes to Photos on the photo path", nav.currentDestination?.hasRoute(AddPhotosRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
+        nav.closeAdd()
+        assertTrue("and Back from Photos is Home", nav.currentDestination.isTabRoot())
+
+        nav.navigate(AddPreviewRoute("d1"))
+        nav.followStep("d1", AddStep.Preview, AddStep.Check)
+        assertTrue("Preview goes to Check", nav.currentDestination?.hasRoute(AddReviewRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
+    }
+
+    @Test fun backFromAFullStackStillPopsToTheStepBelow() {
+        val nav = controller()
+        nav.navigate(AddPhotosRoute("d1"))
+        nav.navigate(AddReviewRoute("d1"))
+        nav.followStep("d1", AddStep.Check, AddStep.Photos)
+        assertTrue(nav.currentDestination?.hasRoute(AddPhotosRoute::class) == true)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.inAdd() })
+    }
 }

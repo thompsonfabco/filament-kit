@@ -535,7 +535,7 @@ class ScreenSemanticsTest {
         addStep = AddStep.Photos
         host(RuntimeEnvironment.getApplication().getString(R.string.home_add_title)) {
             AddSpoolsScreen(
-                vm, addStep, onStep = { addStep = it }, onPop = {}, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
+                vm, addStep, onStep = { addStep = it }, onPop = { }, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
                 onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {}, camera = camera,
             )
         }
@@ -563,7 +563,7 @@ class ScreenSemanticsTest {
         addStep = AddStep.Photos
         host(RuntimeEnvironment.getApplication().getString(R.string.home_add_title)) {
             AddSpoolsScreen(
-                vm, addStep, onStep = { addStep = it }, onPop = {}, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
+                vm, addStep, onStep = { addStep = it }, onPop = { }, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
                 onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {},
             )
         }
