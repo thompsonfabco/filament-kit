@@ -137,8 +137,8 @@ def _validate(items: list[dict]) -> None:
         if hx and not _HEX.fullmatch(hx):       # Spoolman refuses the filament after the vendor was made: a part-way add
             raise ValueError(f"{label}: color_hex must be 6 or 8 hex digits, like 8A8C8E")
         for k, (lo, hi) in _TEMP_RANGE.items():
-            if it.get(k) is not None and not lo <= it[k] <= hi:
-                raise ValueError(f"{label}: {k} must be between {lo} and {hi} degrees")
+            if it.get(k) and not (float(it[k]).is_integer() and lo <= it[k] <= hi):     # 0 is left out, as before
+                raise ValueError(f"{label}: {k} must be a whole number between {lo} and {hi} degrees")
         if it.get("sealed") is not None and not isinstance(it["sealed"], bool):
             raise ValueError(f"{label}: sealed must be true or false")
         if it.get("gross") is not None and (it["count"] != 1 or it["gross"] <= it["tare"]):

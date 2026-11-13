@@ -107,7 +107,7 @@ SCHEMA_ORDERS = {**SCHEMA, "properties": {
                                          "required": list(ORDER_PROPS), "properties": ORDER_PROPS}}}}
 
 # an order line that stays listed even when its ASIN is already in the catalog: more colours/spools may follow
-MULTI = re.compile(r"bundle|\d+\s*-?\s*(pack|pcs|rolls|spools|colou?rs)\b|(?<![\d.])([2-9]|\d{2})(\.\d+)?\s*kg", re.I)
+MULTI = re.compile(r"bundle|\d+\s*-?\s*(pack|pcs|rolls|spools|colou?rs)\b|(?<![\d.,])([2-9]|\d{2})([.,]\d+)?\s*kg", re.I)
 
 
 class PhotoError(ValueError):

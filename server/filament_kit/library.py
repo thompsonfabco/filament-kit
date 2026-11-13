@@ -729,8 +729,9 @@ class _Fetcher:
                     raise _Abort(f"{name}: HTTP {status}", status)
                 want = min(limit, budget) + 1
                 chunks = []
+                read = getattr(r, "read1", r.read)      # read1 returns what has arrived; read(n) waits for all n bytes
                 while want > 0:         # the deadline holds during the read too: a trickling server can't stall the lock
-                    chunk = r.read(min(want, 65536))
+                    chunk = read(min(want, 65536))
                     if not chunk:
                         break
                     chunks.append(chunk)
