@@ -111,7 +111,7 @@ def served(request, tmp_path, monkeypatch, spoolman_url):
         # on the public address a record address shows the same notice as the list, so its page title is the list's: the
         # audit asks for #recent a second time there, to keep every state at the same number of passes
         views = [v.replace("{id}", hid) if "{id}" in v and path == "/intake" else "#recent" if "{id}" in v else v for v in PAGES]
-        yield SimpleNamespace(url=running.url + path, views=",".join(views))
+        yield SimpleNamespace(url=running.url + path, views=",".join(views), hid=hid)
     finally:
         running.stop()
 
@@ -149,6 +149,20 @@ def test_the_page_audit_passes_on_every_view(served):
     out = json.loads(run.stdout)
     assert out["views"] == len(PAGES) * 2 * 2 and out["failing"] == 0      # seven views, two widths, light and dark
 
+
+
+@pytest.mark.parametrize("look", ("console", "palette", "workbench", "panes"))
+def test_a_record_opens_with_its_fields_in_every_theme(served, request, look):
+    """R298: Palette (a sheet), Workbench (a card) and Panes show the record in a dialog or a pane; it must open there with
+    the 13 fields of its one saved item, as in Console where it opens in place, and without a page error."""
+    if request.node.callspec.params["served"] != "waiting":
+        pytest.skip("one data state is enough: the themes differ in markup, not in data")
+    view = "#recent/" + served.hid
+    run = _run("--url", served.url, "--views", view, "--widths", "375,1280", "--schemes", "light", "--look", look,
+               "--count", f"{view}|.kv__row|13", "--allow", str(ALLOW))
+    out = json.loads(run.stdout) if run.stdout.strip() else {}
+    bad = [f for r in out.get("report", []) for f in r["findings"] if f["check"] in ("view did not show its content", "page error")]
+    assert not bad, bad
 
 
 def test_the_allow_list_names_a_later_step_and_a_count_on_every_line():

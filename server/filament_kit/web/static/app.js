@@ -300,6 +300,7 @@ function historyTab() {
     const reg = detail(r, name);
     const it = h("div", { class: "coll__item", role: "rowgroup", "data-id": id }, main,
       h("div", { class: "coll__row coll__row--detail", role: "row", hidden: true }, h("div", { class: "coll__cell", role: "cell", "aria-colspan": "5" }, reg)));
+    it._reg = reg;                                            // a dialog profile moves the region out of the row: keep the way back to it
     main.addEventListener("click", (e) => { if (!e.target.closest("a, button")) location.hash = "#recent/" + id; });   // the whole card opens it
     return it;
   }
@@ -307,13 +308,13 @@ function historyTab() {
   function setState(id, state) {
     const it = item(id), r = records.find((x) => x.id === id);
     if (r) r.state = state;
-    if (it) for (const c of it.querySelectorAll('[data-col="status"], .recent__state')) c.replaceChildren(histMark(state));
+    if (it) for (const c of [...it.querySelectorAll('[data-col="status"]'), ...it._reg.querySelectorAll(".recent__state")]) c.replaceChildren(histMark(state));
   }
   function retitle(id, spools) {
     const it = item(id), r = records.find((x) => x.id === id), name = recNames(spools);
     if (r) r.spools = spools;
     if (!it) return;
-    it.querySelector(".coll__title").textContent = it.querySelector(".detail__title").textContent = name;
+    it.querySelector(".coll__title").textContent = it._reg.querySelector(".detail__title").textContent = name;
     it.querySelector(".coll__expand").setAttribute("aria-label", SW.t("detail_for", { name }));
     it.querySelector('[data-col="spool"] .mono').textContent = recSpools(spools.map((s) => s.spool_id));
   }
@@ -338,12 +339,19 @@ function historyTab() {
     reg.append(reg._body);
     return reg;
   }
+  // the edit forms of the list with unsaved values; reloading the list drops them, so it asks first (the shell's guard, 6.1)
+  const dirtySlots = () => [...list.querySelectorAll(".coll__item")].flatMap((it) => (it._reg && it._reg._ctx ? it._reg._ctx.slots.filter((s) => s.dirty()) : []));
+  async function leaveOk() {
+    const ds = dirtySlots();
+    return !ds.length || SW.leaveAsk(ds.map((s, i) => SW.t(i ? "form_leave_next" : "form_leave_first",
+      { count: s.g.changed().length, group: recSpools(s.s.spool_ids) })).join(", "));
+  }
   const ensure = (it) => {                                    // read the record the first time it opens
-    const reg = it.querySelector(".detail");
+    const reg = it._reg;
     if (!reg._loaded) { reg._loaded = true; loadRecord(it.dataset.id, reg); }
   };
   const goneNote = () => h("div", {}, note("warn", SW.t("recent_not_found", { keep })),
-    h("p", {}, SW.btn(SW.t("recent_back_to_list"), { action: "back", run: () => { location.hash = "#recent"; ready = load(); } })));
+    h("p", {}, SW.btn(SW.t("recent_back_to_list"), { action: "back", run: async () => { if (!(await leaveOk())) return; location.hash = "#recent"; ready = load(); } })));
   async function loadRecord(id, reg) {
     await fill(reg._body, SW.t("nav_recently_added"), async () => {
       let rec;
@@ -366,6 +374,7 @@ function historyTab() {
         }))
         : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr", textContent: SW.t("photo_none") }))));
     c.slots = rec.saved.map((s) => slotFor(c, s));
+    c.reg._ctx = c;
     revisions(c);
     return [h("div", { class: "detail__body" },
       h("div", { class: "detail__section" }, photos, ...c.slots.map((s) => s.group)),
@@ -421,7 +430,7 @@ function historyTab() {
     const s = slot.s, res = resultLine(), fields = {}, title = recSpools(s.spool_ids);
     const field = (f) => fields[f.key] = SW.field({ label: SW.t(f.label), name: f.key, value: recInput(f, s.values[f.key]), mono: f.kind !== "text",
       unit: f.unit ? SW.t(f.unit) : undefined, type: f.kind === "number" || f.kind === "whole" ? "number" : "text", decimal: f.kind === "number",
-      placeholder: f.kind === "range" ? f.example : undefined, check: (text) => { const p = recParse(f, text); return p[0] ? "" : p[1]; } });
+      placeholder: f.kind === "range" ? f.example : undefined, check: (text) => { if (text === recInput(f, s.values[f.key])) return ""; const p = recParse(f, text); return p[0] ? "" : p[1]; } });
     const cancel = SW.btn(SW.t("common_cancel"), { action: "cancel", run: async () => {
       if (slot.g.dirty() && !(await SW.leaveAsk(SW.t("form_leave_first", { count: slot.g.changed().length, group: title })))) return;
       slot.show();
@@ -439,21 +448,28 @@ function historyTab() {
     async function store() {
       const values = {}, bad = [];
       for (const f of REC_FIELDS) {
-        const [ok, v] = recParse(f, fields[f.key]._control.value);
+        const text = fields[f.key]._control.value;
+        if (text === recInput(f, s.values[f.key])) { SW.fieldError(fields[f.key], null); continue; }   // untouched: a value the Hub kept stays as it is
+        const [ok, v] = recParse(f, text);
         SW.fieldError(fields[f.key], ok ? null : v);
         if (!ok) bad.push(fields[f.key]);
         else if (!recSame(f, s.values[f.key], v)) values[f.key] = v;
       }
       if (bad.length) { bad[0]._control.focus(); return; }
       if (!Object.keys(values).length) { SW.result(res, "neutral", SW.t("common_nothing_changed")); return; }
+      const controls = REC_FIELDS.map((f) => fields[f.key]._control);
+      for (const e of controls) e.readOnly = true;            // what is typed while the save runs would be lost
       await act(res, SW.t("common_saving"), async () => {
+        try { return await send(); } finally { for (const e of controls) e.readOnly = false; }
+      }, { button: save });
+      async function send() {
         const r = await api(hp(c.id, "apply"), { body: { item: s.item, values } });
         const rev = r.revisions[r.revisions.length - 1] || {}, names = recChanges(rev).map((x) => recLabel(x.field));
         slot.g = null;
         applied(c, r, slot);
         slot.say("ok", [SW.t("recent_saved", { count: names.length, fields: names.join(", ") }), ...recFilaments("apply", rev)].filter(Boolean).join(" "));
         return null;
-      }, { button: save });
+      }
     }
     return form;
   }
@@ -577,7 +593,7 @@ function historyTab() {
   async function open(id) {
     const it = item(id);
     if (!it) { missing.replaceChildren(goneNote()); return; }
-    const reg = it.querySelector(".detail");
+    const reg = it._reg;
     if (reg.hidden) SW.openDetail(reg, { opener: it.querySelector(".coll__expand"), focusTitle: false });
     ensure(it);
     it.scrollIntoView({ block: "start" });
@@ -589,19 +605,23 @@ function historyTab() {
     if (!rest) {                                              // back to the list: the record the address named closes
       const was = addr && item(addr);
       addr = "";
-      if (was && !was.querySelector(".detail").hidden) await SW.closeDetail(was.querySelector(".detail"));
+      if (was && !was._reg.hidden) await SW.closeDetail(was._reg);
       return;
     }
+    const was = addr && addr !== rest && item(addr);          // Newer and Older: the record before closes
     addr = rest;
+    if (was && !was._reg.hidden) await SW.closeDetail(was._reg);
     await ready;
     await open(rest);
   }
   // the page title of the record the address names ("Spool 214 · Workshop"), once the list is known
   const title = () => {
-    const r = records.find((x) => x.id === decodeURIComponent(location.hash.split("/")[1] || ""));
+    let id = "";
+    try { id = decodeURIComponent(location.hash.split("/")[1] || ""); } catch {}   // a malformed address names no record
+    const r = records.find((x) => x.id === id);
     return r && r.spools.length ? recSpools(r.spools.map((x) => x.spool_id)) : "";
   };
-  return { el, go, title, enter(rest) { ready = load(); return go(rest); }, leave() { addr = ""; } };
+  return { el, go, title, enter(rest) { if (!dirtySlots().length) ready = load(); return go(rest); }, leave() { addr = ""; } };
 }
 
 // ---------- the shell (04 2 and 9): top bar, bottom bar (a rail on tablets), More, Settings; the places and their addresses ----------
