@@ -402,6 +402,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     val loadWriting by app.loadGate.writing.collectAsStateWithLifecycle()
     var queuedTag by rememberSaveable { mutableStateOf<String?>(null) }
     val tagWaits = stringResource(R.string.tag_read_wait)
+    val tagWaitsLink = stringResource(R.string.tag_read_wait_link)
     fun openTag(uid: String) {
         val here = nav.currentBackStackEntry
         val tagScreen = here?.let(::tagUidOf)
@@ -429,7 +430,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             TagEvents.taps.collect { uid ->
                 if (app.loadGate.writing.value) {
                     queuedTag = uid
-                    pairScope.launch { toast.show(tagWaits) }
+                    pairScope.launch { toast.show(if (app.loadGate.forLink) tagWaitsLink else tagWaits) }
                 } else {
                     openTag(uid)
                 }

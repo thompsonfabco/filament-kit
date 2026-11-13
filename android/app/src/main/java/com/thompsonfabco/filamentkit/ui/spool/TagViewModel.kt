@@ -180,7 +180,7 @@ class LinkPreviewViewModel(
         if (s.linking || s.finished != null) return
         _state.update { it.copy(linking = true, failure = null, failedWrite = false, lastForce = force) }
         // a tag tapped meanwhile waits: the write is not cut short by another screen
-        gate.set(true)
+        gate.set(true, link = true)
         viewModelScope.launch {
             try {
                 val spool = backend.link(spoolId, uid, force = force, dryRun = false, gross = gross).toSpoolSummary().copy(id = spoolId)

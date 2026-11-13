@@ -225,7 +225,5 @@ fun LinkPreviewScreen(
                 )
             }
         }
-        // Back stays available while an error card is up
-        if (ui.checking.not() && ui.failure != null) SwButton(stringResource(R.string.common_back), onBack)
     }
 }

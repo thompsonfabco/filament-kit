@@ -731,4 +731,33 @@ class SpoolScreenSemanticsTest {
         sheetBack()
         assertEquals(null, vm.state.value.move)
     }
+
+    @Test fun aRefusedLoadShowsTheHubsWordsWithNoTryAgain() {
+        val load = FakeLoad(listOf(x1), PrinterDetail(x1, status), plan)
+        load.failure = ApiError(409, "printer_busy", "The printer is printing; try again when it is idle.")
+        val vm = previewScreen(load)
+        rule.waitForIdle()
+        vm.load()
+        auditAllFour(listOf("The printer is printing; try again when it is idle.", "Load"))
+        assertTrue(rule.onAllNodesWithText("Try again").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun anUnreadableAnswerToTheLoadSaysToCheckThePrinter() {
+        val load = FakeLoad(listOf(x1), PrinterDetail(x1, status), plan)
+        load.failure = ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
+        val vm = previewScreen(load)
+        rule.waitForIdle()
+        vm.load()
+        auditAllFour(listOf("The connection dropped while loading, so the app can't tell if it worked.", "Open the printer"))
+        assertTrue(rule.onAllNodesWithText("Try again").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun theLinkPreviewAfterAFailedDryRunHasOneBack() {
+        SpoolCache.clear()
+        backend.failure = "link" to ApiError(0, "offline", "gone")
+        val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
+        host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}) }
+        auditAllFour(listOf("Cannot reach the Hub", "Try again"))
+        assertEquals(1, rule.onAllNodesWithText("Back").fetchSemanticsNodes().size)
+    }
 }

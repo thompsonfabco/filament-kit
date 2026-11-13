@@ -310,8 +310,9 @@ fun LoadPreviewScreen(
         ScreenState(
             loaded = ui.plan != null,
             loading = ui.checking,
-            error = ui.failure?.let { hubFailureText(it) },
-            onTryAgain = if (ui.plan == null) vm::check else vm::load,
+            // a refused or unknown write is never offered again as Try again (05 7.6)
+            error = ui.failure?.takeIf { !ui.failedWrite }?.let { hubFailureText(it) },
+            onTryAgain = vm::check,
             offline = !online,
         ) {
             ui.plan?.let { plan ->
@@ -319,6 +320,7 @@ fun LoadPreviewScreen(
                 Text(stringResource(R.string.spool_load_confirm_text), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             }
         }
+        if (ui.failedWrite) ui.failure?.let { f -> hubFailureText(f)?.let { NoticeCard(NoticeKind.Bad, it) } }
         if (ui.pairingRefused) NoticeCard(NoticeKind.Bad, stringResource(R.string.spool_load_pairing_refused))
         if (ui.dropped) {
             NoticeCard(

@@ -3268,6 +3268,7 @@
     <string name="tag_move_here">Move the tag to this spool</string>
     <string name="tag_move_replace">Move the tag here and replace this spool\'s tag</string>
     <string name="tag_read_wait">Tag read. It opens when loading has finished.</string>
+    <string name="tag_read_wait_link">Tag read. It opens when linking has finished.</string>
     <string name="tag_unlinked_text">Link it to a sealed spool you are opening, or add the spool as new.</string>
     <string name="tag_unlinked_title">This tag is not linked to a spool yet</string>
     <!-- 1=name -->

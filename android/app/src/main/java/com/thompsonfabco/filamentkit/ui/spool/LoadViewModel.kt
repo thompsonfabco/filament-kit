@@ -41,7 +41,12 @@ class LoadGate {
     private val _writing = MutableStateFlow(false)
     val writing: StateFlow<Boolean> = _writing.asStateFlow()
 
-    internal fun set(on: Boolean) {
+    /** True while the write is a tag link, not a load: the wait text of a tapped tag says which. */
+    var forLink: Boolean = false
+        private set
+
+    internal fun set(on: Boolean, link: Boolean = false) {
+        forLink = on && link
         _writing.value = on
     }
 }
@@ -131,6 +136,8 @@ data class LoadPreviewUi(
     val failure: HubFailure? = null,
     val pairingRefused: Boolean = false,
     val dropped: Boolean = false,
+    /** [failure] came from the write: the Hub refused it, so it is shown with no Try again (05 7.6). */
+    val failedWrite: Boolean = false,
     val finished: SpoolResult? = null,
 )
 
@@ -178,7 +185,7 @@ class LoadPreviewViewModel(
         val printer = s.printer ?: return
         if (s.writing || s.checking || s.plan == null) return
         gate.set(true)
-        _state.update { it.copy(writing = true, failure = null, pairingRefused = false, dropped = false) }
+        _state.update { it.copy(writing = true, failure = null, failedWrite = false, pairingRefused = false, dropped = false) }
         viewModelScope.launch {
             try {
                 val r = backend.load(printerId, label, spool.id, dryRun = false)
@@ -197,7 +204,11 @@ class LoadPreviewViewModel(
                         e.code == UNAUTHORIZED -> it.copy(writing = false, pairingRefused = true)
                         // no route: the request may or may not have reached the printer
                         e.status == 0 -> it.copy(writing = false, dropped = true)
-                        else -> it.copy(writing = false, failure = hubFailure(e))
+                        else -> hubFailure(e).let { f ->
+                            // an answer the app cannot read: nobody knows if it worked, so the load is not offered again
+                            if (f == HubFailure.Unexpected) it.copy(writing = false, dropped = true)
+                            else it.copy(writing = false, failure = f, failedWrite = true)
+                        }
                     }
                 }
             } catch (e: Exception) {

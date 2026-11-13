@@ -263,4 +263,39 @@ class LoadViewModelTest {
         clear.invoke(vm)
         assertFalse(gate.writing.value)
     }
+
+    @Test fun aRefusedLoadIsMarkedAsAWriteFailureAndNothingResendsIt() = runTest(dispatcher) {
+        val vm = LoadPreviewViewModel(spool, "X1A", "A2", backend)
+        advanceUntilIdle()
+        backend.failure = "load" to ApiError(409, "printer_busy", "The printer is printing.")
+        vm.load()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.failedWrite)
+        assertEquals(1, backend.calls.count { it.endsWith("dry=false") })
+    }
+
+    @Test fun anAnswerTheAppCannotReadIsAnUnknownOutcomeNotARefusal() = runTest(dispatcher) {
+        val vm = LoadPreviewViewModel(spool, "X1A", "A2", backend)
+        advanceUntilIdle()
+        backend.failure = "load" to ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
+        vm.load()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.dropped)
+        assertNull(vm.state.value.failure)
+        assertFalse(vm.state.value.failedWrite)
+    }
+
+    @Test fun theGateSaysWhetherALoadOrALinkIsWritten() = runTest(dispatcher) {
+        val gate = LoadGate()
+        val hold = CompletableDeferred<Unit>()
+        backend.gate = hold
+        val vm = LoadPreviewViewModel(spool, "X1A", "A2", backend, gate)
+        advanceUntilIdle()
+        vm.load()
+        runCurrent()
+        assertTrue(gate.writing.value)
+        assertFalse(gate.forLink)
+        hold.complete(Unit)
+        advanceUntilIdle()
+    }
 }
