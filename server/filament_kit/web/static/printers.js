@@ -34,6 +34,15 @@ function printersTab() {
     return api(path ? "printers/" + path : "printers", body === undefined ? {} : { method: "POST", body });
   }
   function say(text, ok) { msg.replaceChildren(h("pre", { class: ok ? "ok" : "err", textContent: text })); }
+  // A confirmation or a question is a sheet (04 12), never window.confirm / window.prompt. openHere (app.js) gives it the
+  // same-address history entry, so the phone's Back closes it. A refusal from run() shows inside the sheet (SW.ask asks err.text()).
+  function sheetAsk(o) {
+    const run = o.run;
+    return SW.ask({ open: openHere, ...o, run: run && (async (v, c) => { try { return await run(v, c); } catch (e) { throw Object.assign(e, { text: () => e.message }); } }) });
+  }
+  const needs = (key) => (v) => (v.trim() ? null : SW.t(key));
+  const codeField = (hint) => SW.field({ type: "secret", label: SW.t("common_access_code"), hint, check: needs("printers_error_access_code") });
+  const printerName = () => { const p = printers.find((x) => x.id === current); return (p && p.name) || current; };
 
   async function load() {
     try {
@@ -116,8 +125,12 @@ function printersTab() {
       else say("Done.", true);
     } catch (e) { say(e.message, false); }
   }
-  function stop() {
-    if (window.confirm("Stop this print? It cannot be resumed.")) cmd("stop", true);
+  async function stop() {
+    const job = ((lastStatus || {}).status || {}).job, printer = printerName();
+    const go = await sheetAsk({ kind: "destructive", title: SW.t("web_stop_title"),
+      text: job ? SW.t("web_stop_body", { job, printer }) : SW.t("web_stop_body_nojob", { printer }),
+      cancel: SW.t("web_stop_keep"), confirm: SW.t("web_printer_stop") });
+    if (go) cmd("stop", true);
   }
 
   // ----- camera -----
@@ -271,8 +284,10 @@ function printersTab() {
       const where = plan.location || ((plan.moved_back || [])[0] || {}).location || "its previous place";
       const name = sp.name || `spool #${sp.id}`;
       slotMsg.replaceChildren();
-      if (!window.confirm(`Unload ${name} from ${sl.label}? It goes back to ${where}.`)) return;
-      const r = await pj(`${slotPath(sl.label)}/unload`, { dry_run: false });
+      const r = await sheetAsk({ kind: "confirm", title: SW.t("web_unload_title", { slot: sl.label }),
+        text: SW.t("web_unload_body", { spool: name, slot: sl.label, location: where }), confirm: SW.t("common_unload"),
+        run: () => pj(`${slotPath(sl.label)}/unload`, { dry_run: false }) });
+      if (!r) return;
       slotSay([`Unloaded ${name} from ${sl.label}.`,
         ...(r.moved_back || []).map((m) => `Moved back: #${m.id ?? "?"} → ${m.location || "its previous place"}`)], true);
     } catch (e) { slotSay(e.message, false); } finally { slotDone(); }
@@ -291,8 +306,12 @@ function printersTab() {
     } catch (e) { usageBox.replaceChildren(fail(e)); }
   }
   async function undo(e) {
-    if (!window.confirm(`Put ${e.grams ?? "?"} g back on the spool?`)) return;
-    try { await pj(`${encodeURIComponent(current)}/usage/${encodeURIComponent(e.id)}/undo`, {}); say("Undone.", true); } catch (x) { say(x.message, false); }
+    const when = (e.at || "").replace("T", " ").slice(0, 16);
+    const back = await sheetAsk({ kind: "confirm", title: SW.t("web_putback_title"), cancel: SW.t("common_keep"), confirm: SW.t("web_putback_confirm"),
+      text: SW.t("web_putback_body", { grams: e.grams ?? "?", job: e.job || "?", slot: e.slot || "?", time: when }),
+      run: () => pj(`${encodeURIComponent(current)}/usage/${encodeURIComponent(e.id)}/undo`, {}) });
+    if (!back) return;
+    say("Undone.", true);
     loadUsage();
   }
   let mapTimer = null;
@@ -431,74 +450,73 @@ function printersTab() {
   function manageClosed() {
     if (!manageBox.firstChild) manageBox.replaceChildren(h("button", { class: "secondary", textContent: "Add or change printers", on: { click: () => manage() } }));
   }
-  async function manageDo(path, body, done) {
-    try {
-      const r = await pj(path, body);
-      closeForm();
-      await manage(`${done}${r.note ? " " + r.note : ""}`, true);
-      const was = current;
-      await load();
-      if (printers.some((p) => p.id === was)) choose(was);
-    } catch (e) { manageNote.replaceChildren(h("pre", { class: "err", textContent: e.message })); }
+  // After a change the sheet has closed: the list and the page are read again.
+  async function manageAfter(done, r) {
+    await manage(`${done}${r && r.note ? " " + r.note : ""}`, true);
+    const was = current;
+    await load();
+    if (printers.some((p) => p.id === was)) choose(was);
   }
-  // An inline form in the page (not window.prompt): secrets are password fields, and a wrong value is named before anything is sent.
-  // fields: [{key, label, secret, optional, value}]; submit(values) returns an error text, or sends the change.
-  const formBox = h("div");
-  function closeForm() { formBox.replaceChildren(); }
-  function openForm(title, intro, fields, label, submit) {
-    const inputs = fields.map((f) => h("input", { type: f.secret ? "password" : "text", value: f.value || "", ariaLabel: f.label,
-      autocomplete: f.secret ? "new-password" : "off", autocapitalize: "off", spellcheck: false,
-      on: { keydown: (e) => { if (e.key === "Enter") go(); } } }));
-    const err = h("div");
-    function go() {
-      const v = {};
-      fields.forEach((f, i) => { v[f.key] = inputs[i].value.trim(); });
-      const miss = fields.find((f) => !f.optional && !v[f.key]);
-      const bad = miss ? `${miss.label} is needed.` : submit(v);
-      err.replaceChildren(...(bad ? [h("pre", { class: "err", textContent: bad })] : []));
-    }
-    formBox.replaceChildren(h("div", { class: "card" }, h("h3", { textContent: title }),
-      intro ? h("p", { class: "muted", textContent: intro }) : null,
-      ...fields.map((f, i) => h("label", {}, f.label, inputs[i])), err,
-      h("div", { class: "row" }, h("button", { textContent: label, on: { click: go } }),
-        h("button", { class: "secondary", textContent: "Cancel", on: { click: closeForm } }))));
-    inputs[0].focus();
-    formBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  // A change asked for in a sheet (04 12): send(values) gives [path, body, done text]; it is sent from the sheet, so a
+  // refusal shows inside it with the typed values kept; the lists are read again once it has closed.
+  async function change(o, send) {
+    let r = null, done = "";
+    const ok = await sheetAsk({ kind: "entry", busy: SW.t("common_saving"), ...o, run: async (v) => {
+      const [path, body, text] = send(v.map((x) => x.trim()));
+      r = await pj(path, body); done = text;
+    } });
+    if (ok) await manageAfter(done, r);
   }
   // a whole number from 1 to 65535, or null
   function parsePort(t) { const n = /^\d{1,5}$/.test(t) ? Number(t) : 0; return n >= 1 && n <= 65535 ? n : null; }
+  const addressField = (label, hint, value) => SW.field({ label, hint, value, mono: true, check: needs("printers_error_address"), attrs: { autocapitalize: "off", spellcheck: "false" } });
+  const portField = (value) => SW.field({ type: "number", label: SW.t("printer_field_port"), value, check: (v) => (parsePort(v.trim()) === null ? SW.t("common_error_port") : null) });
+  const keyField = (o) => SW.field({ type: "secret", label: SW.t("common_moonraker_key"), ...o });
   function manageRow(p, changes) {
     const bambu = p.family !== "klipper", id = encodeURIComponent(p.id), name = p.name || p.id;
     const where = bambu ? p.ip : p.host;
-    const edit = (body, done) => manageDo(`${id}/edit`, body, done);
-    const CODE_AT = "on the printer: Settings > Network/LAN";
+    const edit = (body, done) => [`${id}/edit`, body, done];
     const buttons = !changes ? [] : p.configured ? [
       h("button", { class: "secondary", textContent: "Rename", on: { click: () =>
-        openForm(`Rename ${name}`, "", [{ key: "name", label: "New name", value: name }], "Rename", (v) => { edit({ name: v.name }, "Renamed."); }) } }),
+        change({ title: SW.t("web_rename_title"), confirm: SW.t("web_rename_confirm"),
+          fields: [SW.field({ label: SW.t("common_name"), value: name, check: needs("web_rename_error") })] },
+        ([n]) => edit({ name: n }, "Renamed.")) } }),
       h("button", { class: "secondary", textContent: "Address", on: { click: () => {
-        // the kit never sends a stored secret to a new host it can't vouch for: it asks for it again (review R103)
-        const fields = [{ key: "address", label: "IP address or host name", value: where || "" }];
-        let intro = "";
-        if (bambu && !p.pinned) { fields.push({ key: "code", label: "Access Code", secret: true }); intro = `${name} has no certificate pinned yet: its Access Code is sent with the new address (${CODE_AT}).`; }
-        if (!bambu) { fields.push({ key: "key", label: "Moonraker API key (optional)", secret: true, optional: true }); intro = "The API key is sent only to the new address; empty means none (a stored key is cleared)."; }
-        openForm(`Address of ${name}`, intro, fields, "Save", (v) => {
-          edit({ address: v.address, ...(bambu && !p.pinned ? { access_code: v.code } : {}), ...(!bambu ? { api_key: v.key } : {}) }, "Address saved.");
-        });
+        // an address change asks for the Access Code again, pinned or not (staging 2026-11-12); a Klipper printer's stored key
+        // goes only to the new address, so it is asked for too (review R103; empty means none)
+        const addr = bambu ? addressField(SW.t("web_address_bambu_label"), SW.t("web_address_bambu_help"), where || "")
+          : addressField(SW.t("common_address"), SW.t("web_address_klipper_help"), where || "");
+        const code = bambu ? codeField(SW.t("web_address_code_help")) : null;
+        const key = bambu ? null : keyField({ optional: true, hint: SW.t("web_address_key_help") });
+        change({ title: SW.t("web_address_title", { printer: name }), confirm: SW.t("web_address_confirm"), fields: [addr, code, key].filter(Boolean) },
+          ([a, c]) => edit({ address: a, ...(bambu ? { access_code: c } : { api_key: c }) }, "Address saved."));
       } } }),
       bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () =>
-        openForm(`Access Code of ${name}`, `Find it ${CODE_AT}.`, [{ key: "code", label: "Access Code", secret: true }], "Save", (v) => { edit({ access_code: v.code }, "Access Code saved."); }) } }) : null,
+        change({ title: SW.t("web_code_title", { printer: name }), confirm: SW.t("web_code_confirm"), fields: [codeField(SW.t("common_access_code_help"))] },
+          ([c]) => edit({ access_code: c }, "Access Code saved.")) } }) : null,
       bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () =>
-        openForm(`Forget the certificate of ${name}`, `The next connection trusts whatever answers at its address, so give its Access Code (${CODE_AT}).`,
-          [{ key: "code", label: "Access Code", secret: true }], "Forget certificate", (v) => { edit({ unpin: true, access_code: v.code }, "Certificate forgotten; the Access Code is saved."); }) } }) : null,
+        change({ kind: "destructive", title: SW.t("web_cert_title", { printer: name }), text: SW.t("web_cert_body", { printer: name }),
+          confirm: SW.t("web_cert_confirm"), fields: [codeField(SW.t("common_access_code_help"))] },
+          ([c]) => edit({ unpin: true, access_code: c }, "Certificate forgotten; the Access Code is saved.")) } }) : null,
       bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () =>
-        openForm(`Moonraker API key of ${name}`, "Empty clears it.", [{ key: "key", label: "API key", secret: true, optional: true }], "Save",
-          (v) => { edit({ api_key: v.key }, v.key ? "API key saved." : "API key cleared."); }) } }),
-      h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${name}? ${bambu ? "Its Access Code is deleted." : "Its API key is deleted."}`)) manageDo(`${id}/forget`, {}, `${name} forgotten.`); } } }),
+        change({ title: SW.t("web_key_title", { printer: name }), confirm: SW.t("web_key_confirm"),
+          fields: [keyField({ check: needs("web_key_error") })] },
+          ([k]) => edit({ api_key: k }, "API key saved.")) } }),
+      h("button", { class: "secondary", textContent: "Forget", on: { click: async () => {
+        let r = null;
+        const ok = await sheetAsk({ kind: "destructive", title: SW.t("web_forget_title", { printer: name }),
+          text: SW.t(bambu ? "web_forget_body_bambu" : "web_forget_body_klipper", { product: SW.t("app_name") }), confirm: SW.t("printers_forget"),
+          busy: SW.t("common_working"), run: async () => { r = await pj(`${id}/forget`, {}); } });
+        if (ok) await manageAfter(`${name} forgotten.`, r);
+      } } }),
     ] : bambu && p.ip ? [
-      h("button", { textContent: "Add", on: { click: () =>
-        openForm(`Add ${name}`, `Find the Access Code ${CODE_AT}.`,
-          [{ key: "code", label: "Access Code", secret: true }, { key: "name", label: "A name for it (optional)", value: name, optional: true }], "Add",
-          (v) => { manageDo("add", { serial: p.id, access_code: v.code, ...(v.name ? { name: v.name } : {}) }, `${v.name || name} added.`); }) } }),
+      h("button", { textContent: "Add", on: { click: () => {
+        const model = p.model_name || name;
+        change({ title: SW.t("web_add_model_title", { model }), text: SW.t("web_add_model_found", { address: p.ip }), confirm: SW.t("common_add_printer"),
+          busy: SW.t("web_printers_connecting"),
+          fields: [codeField(SW.t("common_access_code_help")), SW.field({ label: SW.t("common_name_optional"), placeholder: model })] },
+          ([c, n]) => ["add", { serial: p.id, access_code: c, name: n || name }, `${n || name} added.`]);
+      } } }),
     ] : [];
     return h("div", { class: "card" },
       h("p", {}, h("b", { textContent: name }), ` · ${p.model_name || p.model || (bambu ? "Bambu" : "Klipper")} · ${where || "no address yet"} · ${p.configured ? String(p.state).replace(/_/g, " ") : "seen on the network, not added"}`),
@@ -508,23 +526,20 @@ function printersTab() {
     let list, changes;
     try { ({ printers: list, changes } = await pj("manage")); } catch (e) { manageBox.replaceChildren(fail(e)); return; }
     const klipperAdd = h("button", { class: "secondary", textContent: "Add a Klipper printer", on: { click: () =>
-      openForm("Add a Klipper printer", "", [{ key: "host", label: "Moonraker's IP address or host name" }, { key: "port", label: "Moonraker's port", value: "7125" },
-        { key: "name", label: "A name for it (optional)", optional: true }], "Add", (v) => {
-        const port = parsePort(v.port);
-        if (port === null) return "The port must be a whole number from 1 to 65535.";
-        manageDo("add", { family: "klipper", host: v.host, port, ...(v.name ? { name: v.name } : {}) }, "Klipper printer added.");
-      }) } });
+      change({ title: SW.t("common_add_klipper_printer"), confirm: SW.t("common_add_printer"), busy: SW.t("web_printers_connecting"),
+        fields: [addressField(SW.t("common_address"), SW.t("web_address_klipper_help"), ""), portField("7125"), SW.field({ label: SW.t("common_name_optional") })] },
+        ([host, port, n]) => ["add", { family: "klipper", host, port: parsePort(port), ...(n ? { name: n } : {}) }, "Klipper printer added."]) } });
     manageNote.replaceChildren(...(note ? [h("pre", { class: ok ? "ok" : "err", textContent: note })] : []));
     manageBox.replaceChildren(
       h("p", { class: "muted", textContent: changes
         ? "A Bambu printer on the network shows up here by itself; add it with its Access Code. Anyone on the home network can use this page."
         : "Read-only here: printer changes from the public address are off. Open this page on the home network to add, change or forget a printer, or turn them on in the setup page's Settings." }),
-      ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []), formBox, manageNote);
+      ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []), manageNote);
   }
   async function remap() {
-    if (!window.confirm("Re-map the slots? The printer loads each slot briefly; do it when it is idle.")) return;
-    try { await pj(`${encodeURIComponent(current)}/map`, {}); } catch (e) { say(e.message, false); }
-    loadMap();
+    const go = await sheetAsk({ kind: "confirm", title: SW.t("web_map_title", { printer: printerName() }), text: SW.t("web_map_body"),
+      confirm: SW.t("web_map_slots"), run: () => pj(`${encodeURIComponent(current)}/map`, {}) });
+    if (go) loadMap();
   }
 
   document.addEventListener("visibilitychange", () => {

@@ -7,4 +7,3 @@ server/filament_kit/setup_static/setup_printers.js | prompt | native prompt (fou
 server/filament_kit/setup_static/setup_tabs.js | confirm | native confirm (foundations 12.4); replaced by the confirm dialog component
 server/filament_kit/setup_static/setup_trust.js | confirm | native confirm (foundations 12.4); replaced by the confirm dialog component
 server/filament_kit/setup_static/setup_trust.js | prompt | native prompt (foundations 12.4); replaced by the confirm dialog component
-server/filament_kit/web/static/printers.js | confirm | native confirm (foundations 12.4); replaced by the confirm dialog component

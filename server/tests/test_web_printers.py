@@ -888,7 +888,7 @@ def test_tagged_names_the_last_tapped_spool(slotapp, monkeypatch):
 
 def test_script_has_the_load_and_unload_flows():
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
-    for needle in ("/slots/", "/load", "/unload", "dry_run: false", "window.confirm", "find?q=", "pj(\"tagged\")"):
+    for needle in ("/slots/", "/load", "/unload", "dry_run: false", "web_unload_title", "find?q=", "pj(\"tagged\")"):
         assert needle in src, needle
 
 
@@ -1078,12 +1078,13 @@ def test_forget_from_away_needs_the_session(env):
 def test_the_printers_tab_has_manage_printers():
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     for words in ('"Add or change printers"', '"Rename"', '"Address"', '"Access Code"', '"Forget certificate"',
-                  '"API key"', '"Forget"', '"Add a Klipper printer"', '`${id}/edit`', '`${id}/forget`', 'manageDo("add"'):
+                  '"API key"', '"Forget"', '"Add a Klipper printer"', '`${id}/edit`', '`${id}/forget`', '["add", {'):
         assert words in text, words
     # review R103's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
     # address with its code, a Klipper move with its key
-    assert "edit({ unpin: true, access_code: v.code }" in text
-    assert "...(bambu && !p.pinned ? { access_code: v.code } : {})" in text and "...(!bambu ? { api_key: v.key } : {})" in text
+    # (S3.5: the address change asks for the Access Code pinned or not, the user's staging decision of 2026-11-12)
+    assert "edit({ unpin: true, access_code: c }" in text
+    assert "...(bambu ? { access_code: c } : { api_key: c })" in text
 
 
 # ---------- a Klipper printer's id is a slug (user report: SV08 MAX "no such printer", "Reconnecting...") ----------
@@ -1125,14 +1126,14 @@ def test_every_printer_route_takes_the_id_shape_the_kit_makes():
 
 
 def test_manage_printers_uses_inline_fields_not_prompts():
-    """FB-044: no window.prompt (it cannot mask a secret); the Access Code and API key fields are password inputs; the Klipper
-    add is one form, and its port must be 1-65535 instead of silently becoming 7125 (FB-045a)."""
+    """FB-044: no window.prompt (it cannot mask a secret); the Access Code and API key fields are secret fields of the shared
+    field component (S3.5: in sheets); the Klipper add is one form, and its port must be 1-65535 instead of silently becoming
+    7125 (FB-045a)."""
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     code = " ".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
     assert "window.prompt" not in code and "prompt(" not in code
-    assert 'type: f.secret ? "password" : "text"' in text
-    assert text.count("secret: true") >= 6
-    assert "|| 7125" not in text and "parsePort(v.port)" in text and "The port must be a whole number from 1 to 65535." in text
+    assert text.count('type: "secret"') == 2 and 'type: "password"' not in text
+    assert "|| 7125" not in text and "parsePort(port)" in text and 'SW.t("common_error_port")' in text
     assert "n >= 1 && n <= 65535" in text
 
 
@@ -1161,3 +1162,23 @@ def test_a_failed_manual_map_poll_backs_off_and_keeps_polling():
     """FB-045b"""
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     assert "if (++m.fails >= 8)" in text and "Math.min(2000 * 2 ** m.fails, 20000)" in text
+
+
+def test_confirmations_and_questions_are_sheets_not_native_dialogs():
+    """S3.5: the five confirmations and the seven questions of 04 12 are SW.ask sheets, opened through app.js's
+    openHere (Back closes them); a secret is a secret field and the stored text comes from the catalogue."""
+    src = (STATIC / "printers.js").read_text(encoding="utf-8")
+    code = " ".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("//"))
+    assert not re.search(r"(?:window\.)?(?:confirm|prompt|alert)\(", code)
+    assert "SW.ask({ open: openHere" in src
+    for key in ("web_stop_title", "web_unload_title", "web_putback_title", "web_map_title", "web_forget_title",
+                "web_rename_title", "web_address_title", "web_code_title", "web_cert_title", "web_key_title",
+                "web_add_model_title", "common_add_klipper_printer"):
+        assert f'SW.t("{key}"' in src, key
+    assert 'kind: "destructive", title: SW.t("web_stop_title")' in src
+    assert 'kind: "destructive", title: SW.t("web_cert_title"' in src and 'kind: "destructive", title: SW.t("web_forget_title"' in src
+    # secrets never go in a plain input: Access Code and Moonraker API key are SW.field secrets
+    assert src.count('type: "secret"') == 2 and 'type: "password"' not in src
+    # the address change of a Bambu printer and the certificate forget both ask for the Access Code (staging 2026-11-12)
+    assert "...(bambu ? { access_code: c } : { api_key: c })" in src
+    assert "edit({ unpin: true, access_code: c }" in src
