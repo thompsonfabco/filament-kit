@@ -1,0 +1,8 @@
+# AUT-5 findings for the run with Printers on (server/tests/test_web_app_audit.py: #printers and #printers/<id>, 2 views x 1280/320 x
+# light/dark = 8 passes). Same format and rules as aut5_allowlist.txt. The Printers views themselves have no finding: what is listed
+# is the other screens' fields, which the audit also reads while they are hidden.
+field attribute differs from 07 9.1 | div.card > div.grid > label.wide > input | 16 | Add spools spool card, type=number fields; rebuilt by S3.8
+field without a label | main#main > section.page > section.hidden > textarea | 8 | Add spools label-reader note (hidden); rebuilt by S3.8
+field without a label | section.hidden > div.card > div.row > input | 8 | Add spools filament search (hidden); rebuilt by S3.8
+field without a label | section.page > section.hidden > div.row > input | 8 | Spools search field (hidden); rebuilt by S3.10
+field without a label | section.page > section.hidden > label.filebtn > input | 8 | Add spools photo picker (hidden); rebuilt by S3.8

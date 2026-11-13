@@ -671,7 +671,7 @@ function show(key) {
   } else tabs[key].go?.(rest);
   place = key;
   page.dataset.section = key;
-  pageTitle.textContent = SW.t(TITLES[key]);
+  pageTitle.textContent = (tabs[key].heading && tabs[key].heading()) || SW.t(TITLES[key]);   // one printer fills the page: its name (04 6.2)
   if (key !== "settings") { try { localStorage.setItem(PLACE_KEY, key); } catch {} }   // #settings is never the stored place (04 2.4)
   paintMore();
 }
@@ -858,7 +858,7 @@ function navigation() {
   app.replaceWith(skip, h("div", { class: "shell" }, topBar(), nav, main),
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   route(true);
-  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => ((ALIAS[s] || s) === "recent" && tabs.recent.title && tabs.recent.title()) || SW.t(TITLES[ALIAS[s] || s] || TITLES[place]), onSection: () => route() });
+  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => { const k = ALIAS[s] || s; return (tabs[k] && tabs[k].title && tabs[k].title()) || SW.t(TITLES[k] || TITLES[place]); }, onSection: () => route() });
   nav.append(moreBtn);                                       // after SW.shell: this More has its own sheet
   paintMore();
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page

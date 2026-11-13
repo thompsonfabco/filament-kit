@@ -24,18 +24,50 @@ from filament_kit.profiles import lines
 from filament_kit.spoolman import Spoolman
 from filament_kit.web import mcp_tools
 from filament_kit.web.intake_app import IntakeApp
+from test_web_printers import SERIAL, FakeKit
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
 ALLOW = ROOT / "tests" / "allowlists" / "aut5"      # a folder, one file per screen
 VIEWS = "#add,#spools,#printers,#recent,#recent,#presets,#settings"     # the Hub tests drive these: PAGES, with the record page as a second #recent (they know no record id; the allow-list counts are for seven views)
 PAGES = ("#add", "#spools", "#printers", "#recent", "#recent/{id}", "#presets", "#settings")     # {id}: the seeded record
+ALLOW_PRINTERS = ROOT / "tests" / "aut5_allowlist_printers.txt"      # the same list for the run with Printers on (S3.11)
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2, "overflow": "Overflow",
          "sealed_location": "Sealed stock"}
 FILAMENTS = [("Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "2B2B2E"),
              ("Bambu Lab", "PETG HF Orange", "PETG", "F2762E"),
              ("eSUN", "ABS+ White", "ABS", "F4F4F2"),
              ("Prusament", "PLA Galaxy Silver", "PLA", "8D9199")]
+
+
+class PrintersKit(FakeKit):
+    """The fake kit of test_web_printers with a fuller printers page: four slots (one empty, one in use), a Klipper printer, a
+    found Bambu Lab printer, and filament used with the spool it was taken from (example data only)."""
+
+    def __init__(self):
+        super().__init__()
+        slots = [{"slot": i, "label": f"A{i + 1}", "say": [], "type": "PLA", "color_hex": hx, "active": i == 0, "present": True, "reading": False,
+                  "spool": {"id": 7 + i, "name": name, "material": "PLA", "color_hex": hx, "remaining_weight": 612.0 - 100 * i}}
+                 for i, (hx, name) in enumerate([("2B2B2E", "Polymaker PolyTerra PLA Charcoal Black"), ("F2762E", "Bambu Lab PETG HF Orange"),
+                                                  ("8D9199", "Prusament PLA Galaxy Silver")])]
+        slots.append({"slot": 3, "label": "A4", "say": [], "type": "", "color_hex": "", "active": False, "present": False, "reading": False, "spool": None})
+        self.status["ams"][0]["slots"] = slots
+        self.status["hms"] = [{"code": "0300_0100", "text": "The chamber door is open."}]
+
+    def get(self, path):
+        if path == "/api/printers":
+            self.calls.append(("GET", path))
+            return {"printers": [
+                {"id": SERIAL, "name": "Workshop X1", "model": "BL-P001", "model_name": "X1 Carbon", "family": "bambu", "ip": "192.0.2.40", "configured": True,
+                 "state": "connected", "camera": {"kind": "mjpeg"}, "pinned": True},
+                {"id": "garage-voron", "name": "Garage Voron", "family": "klipper", "host": "192.0.2.57", "configured": True, "state": "connected"},
+                {"id": "03W00X123456789", "name": "Study A1", "model_name": "A1 mini", "family": "bambu", "ip": "192.0.2.58", "configured": True, "state": "offline"},
+                {"id": "0948ZZ0A0000099", "name": "P1S", "model_name": "P1S", "family": "bambu", "ip": "192.0.2.42", "configured": False, "state": "not_configured"}]}
+        if path.startswith(f"/api/printers/{SERIAL}/usage"):
+            return {"entries": [{"id": "u1", "at": "2026-11-12T14:05:00", "job": "Benchy", "slot": "A1", "grams": 12.4, "undone": False,
+                                 "spool": {"id": 7, "vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black", "material": "PLA", "colour": "2B2B2E", "state": "opened"}},
+                                {"id": "u0", "at": "2026-11-10T09:30:00", "job": "Test cube", "slot": "A2", "grams": 5.0, "undone": True, "spool": None}]}
+        return super().get(path)
 
 
 # The Slicer presets screen in the states 04 8 draws: filaments waiting for a line (nothing in lines.json), waiting with a
@@ -129,6 +161,36 @@ def served_web(request, tmp_path, monkeypatch, spoolman_url):
     yield from _serving(request.param, tmp_path, monkeypatch, spoolman_url, True)
 
 
+@pytest.fixture
+def served_printers(tmp_path, monkeypatch, spoolman_url):
+    """The same state with the Printers module on, over a fake kit (no printer, no kit server)."""
+    for name in ("etc", "state", "opt"):
+        (tmp_path / name).mkdir()
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+    mods = {n: False for n in modules.MODES["server"]}
+    mods.update(web=True, ai_intake=True, presets=True, printers=True)
+    config.save({"placement": RULES, "modules": mods, "server_name": "Workshop hub", "web": {"lan": ["127.0.0.0/8"]}})
+    api = spoolman_url + "/api/v1"
+    with httpx.Client() as c:
+        vendors = {}
+        for i, (vendor, name, material, colour) in enumerate(FILAMENTS):
+            if vendor not in vendors:
+                vendors[vendor] = c.post(api + "/vendor", json={"name": vendor}).json()["id"]
+            f = c.post(api + "/filament", json={"vendor_id": vendors[vendor], "name": name, "material": material,
+                                                "color_hex": colour, "density": 1.24, "diameter": 1.75, "weight": 1000,
+                                                "spool_weight": 200}).json()
+            c.post(api + "/spool", json={"filament_id": f["id"], "location": "Rack 1" if i % 2 else "Sealed stock",
+                                         "remaining_weight": 1000 - 150 * i})
+    sm = Spoolman(spoolman_url)
+    sm.ensure_fields()
+    running = serving.start(Starlette(routes=IntakeApp(mcp_tools.Tools(sm), public_url=None, lan_cidrs=["127.0.0.0/8"], push=False,
+                                                       kit_api=PrintersKit()).routes()))
+    try:
+        yield running.url + "/intake"
+    finally:
+        running.stop()
+
+
 def _node() -> str | None:
     node = shutil.which("node")
     if not node:
@@ -178,8 +240,18 @@ def test_a_record_opens_with_its_fields_in_every_theme(served_web, request, look
     assert not bad, bad
 
 
-def test_the_allow_list_names_a_later_step_and_a_count_on_every_line():
-    for line in "".join(p.read_text(encoding="utf-8") for p in sorted(ALLOW.glob("*.txt"))).splitlines():
+def test_the_page_audit_passes_on_the_printers_list_and_one_printer(served_printers):
+    """S3.11: `#printers` (cards, the found printer) and `#printers/<id>` (status, slots, filament used, mapping, settings), live over the fake kit."""
+    run = _run("--url", served_printers, "--views", f"#printers,#printers/{SERIAL}", "--allow", str(ALLOW_PRINTERS), "--settle", "1500")
+    assert run.returncode == 0, run.stdout + run.stderr
+    out = json.loads(run.stdout)
+    assert out["views"] == 2 * 2 * 2 and out["failing"] == 0      # two views, two widths, light and dark
+
+
+@pytest.mark.parametrize("allow", [ALLOW, ALLOW_PRINTERS], ids=lambda p: p.name)
+def test_the_allow_list_names_a_later_step_and_a_count_on_every_line(allow):
+    text = "".join(f.read_text(encoding="utf-8") for f in sorted(allow.glob("*.txt"))) if allow.is_dir() else allow.read_text(encoding="utf-8")
+    for line in text.splitlines():
         if line.strip() and not line.startswith("#"):
             check, where, count, reason = (x.strip() for x in line.split("|"))
             assert check and where and count.isdigit() and int(count) > 0 and "rebuilt by S3." in reason, line

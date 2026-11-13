@@ -739,7 +739,7 @@ def test_the_print_alert_controls_moved_to_settings():
     for call in ('"push/key"', '"push/subscribe"', '"push/unsubscribe"', '"push/test"'):
         assert call in panel, call                                                     # what a subscription does is unchanged
     assert "SW.toggle(" in panel and "alertsPanel(" in _app_js() and "PUSH &&" in _app_js()   # only when alerts are offered
-    assert 'localStorage.getItem("spoolwarden.printer")' in printers
+    assert 'const KEY = "spoolwarden.printer"' in printers and "localStorage.getItem(KEY)" in printers
 
 
 # ---------- S3.7: the add preview per item, colour in find, search paging ----------

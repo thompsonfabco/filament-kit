@@ -2192,6 +2192,18 @@
     <string name="printers_slot_sr">%1$s %2$s %3$s, %4$s %% left</string>
     <!-- 1=slot -->
     <string name="printers_slot_sr_empty">%1$s empty</string>
+    <!-- 1=slot 2=name 3=hex 4=grams -->
+    <string name="printers_slot_sr_grams">%1$s %2$s %3$s, %4$s g left</string>
+    <string name="printers_fix_klippy_not_ready">Klipper is not ready on the printer. Check it in Mainsail or Fluidd.</string>
+    <string name="printers_fix_not_configured_klipper">Use this printer to add it.</string>
+    <string name="printers_fix_unauthorized">Moonraker refused the API key. Replace it in Printer settings.</string>
+    <!-- 1=slot -->
+    <string name="printers_map_confirmed">Confirmed (%1$s)</string>
+    <string name="printers_map_loading_intro">Load filament into one slot at a time; the Hub notes where it went.</string>
+    <!-- 1=position 2=status -->
+    <string name="printers_map_position_row">%1$s: %2$s</string>
+    <string name="printers_map_report_wanted">A printer report would help.</string>
+    <string name="printers_note_unknown_model">Model not known; slots are read as a generic Klipper printer.</string>
     <!-- 1=loaded 2=count -->
     <plurals name="printers_slots_loaded_of">
         <item quantity="one">%1$s of %2$d slot loaded</item>
@@ -2770,6 +2782,19 @@
     <string name="printer_slot_unlinked">This slot holds %1$s that is not linked to a spool.</string>
     <!-- 1=state 2=job -->
     <string name="printer_state_job">%1$s · %2$s</string>
+    <!-- 1=layer 2=total -->
+    <string name="printer_layer">Layer %1$s of %2$s</string>
+    <string name="printer_progress_name">Print progress</string>
+    <!-- 1=action 2=setting -->
+    <string name="printer_set_button_name">%1$s: %2$s</string>
+    <string name="printer_slot_unknown">Filament not identified</string>
+    <string name="printer_unknown_text">This printer is not set up on this Hub. It may have been forgotten.</string>
+    <string name="printer_unknown_title">No such printer</string>
+    <!-- 1=id 2=name -->
+    <string name="printer_used_from_spool">Taken from spool %1$s, %2$s</string>
+    <string name="printer_used_spool_gone">That spool no longer exists.</string>
+    <!-- 1=grams 2=job -->
+    <string name="printer_used_undo_name">Undo %1$s g from %2$s</string>
     <string name="printer_stop">Stop print</string>
     <!-- 1=job 2=printer -->
     <string name="printer_stop_dialog_body">Stop %1$s on %2$s? It cannot be resumed.</string>
