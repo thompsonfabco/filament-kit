@@ -28,6 +28,7 @@ printer-pack/** text eol=lf
 tokens/** text eol=lf
 icons/** text eol=lf
 strings/** text eol=lf
+web-shared/** text eol=lf
 android/app/src/main/java/**/ui/theme/SpoolwardenTokens.kt text eol=lf
 android/app/src/main/res/values/strings.xml text eol=lf
 android/app/src/main/res/values*/sw_window.xml text eol=lf
