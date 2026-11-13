@@ -23,7 +23,7 @@ function route(path, body) {
   if (path === "printers/p3/pause") return answer(409, { error: "refused", message: "Study A1 mini did not accept Pause. Try again." });
   return answer(200, { ok: true });
 }
-SW.configure({ base: "api/", hub: "Workshop hub", version: "0.5.2", fetch: async (url, init) => {
+SW.configure({ base: "api/", hub: "Workshop hub", fetch: async (url, init) => {
   await wait(700);
   return route(url.replace(/^api\//, ""), init.body && typeof init.body === "string" ? JSON.parse(init.body) : {});
 } });
@@ -48,8 +48,10 @@ const ic = (name, cls) => SW.icon(name, cls);
 
 // ----- top bar tools: job chip, lock chip, appearance (2.2, 3.1, 3.3) -----
 const tools = document.getElementById("tools");
+// the chip's name starts with its visible title (SR-7); topbar_job_name puts "Background job" first, so it is not used here
+const jobName = (state) => `${t("job_title_backup")}, ${state}. ${t("job_label")}. Show the job panel.`;
 const jobChip = h("button", { class: "chip chip--job", type: "button", "aria-controls": "job", "aria-expanded": "false",
-  "aria-label": t("topbar_job_name", { title: t("job_title_backup"), state: t("status_running") }) },
+  "aria-label": jobName(t("status_running")) },
 SW.spinner(), E("span", "chip__word", t("job_title_backup")));
 const appearanceValue = document.documentElement.getAttribute("data-theme") || "system";
 const appearanceOptions = [["light", "sun", "appearance_light"], ["dark", "moon", "appearance_dark"], ["system", "half-circle", "appearance_system"]]
@@ -74,7 +76,7 @@ section("2 App shell",
   row(state("More sheet (phones; opened here from any width)", SW.btn(t("nav_more_sections"), { run: () => document.querySelector(".nav__more").click() })),
     state("Top bar: Hub not reachable", E("span", "topbar__hub", h("span", { "data-state": "error", class: "status status--bad" }, SW.shape("s-octagon"), t("topbar_hub_unreachable")))),
     state("Top bar: Hub name loading", E("span", "skeleton__line")),
-    state("Background job chip", h("button", { class: "chip", type: "button", "aria-label": t("topbar_job_name", { title: t("job_title_backup"), state: t("status_done") }) },
+    state("Background job chip", h("button", { class: "chip", type: "button", "aria-label": jobName(t("status_done")) },
       SW.shape("s-filled"), E("span", "chip__word", t("job_title_backup"))))));
 
 // ----- 3 Lock and appearance -----

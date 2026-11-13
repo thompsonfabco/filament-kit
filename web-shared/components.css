@@ -136,8 +136,8 @@ textarea.field__control{min-height:calc(var(--s7) + var(--s6) + var(--s1));max-h
 .field__drop{padding:var(--s4);border:1px dashed var(--border-strong)}
 .field__drop[data-state="drag"]{border-color:var(--accent-text);background:var(--accent-soft)}
 .field--row,.group__foot,.detail__remove,.kv__row,.slot-strip__row,.code__bar,.revisions__item,.job__log,.job__foot,.dialog__foot,.sheet__foot,.skeleton__item,.nav__group+.nav__heading+.nav__group,.coll__item+.coll__item{border-top:1px solid var(--border)}
-.field--row{grid-template-columns:calc(var(--s7) * 4 + var(--s2)) minmax(0,1fr);gap:var(--s1) var(--s4);padding:var(--s3) 0}
-.field--row>:not(.field__label){grid-column:2}
+.field--row{grid-template:minmax(calc(var(--s7) - var(--s1)),auto)/calc(var(--s7) * 4 + var(--s2)) minmax(0,1fr);gap:var(--s1) var(--s4);padding:var(--s3) 0}
+.field--row>:not(.field__label){grid-column:2;align-self:start}
 .check{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:var(--s2);min-height:calc(var(--s7) - var(--s1));cursor:pointer}
 .check__input{width:calc(var(--s4) + var(--s1) / 2);height:calc(var(--s4) + var(--s1) / 2);margin:0;accent-color:var(--accent-text)}
 .check__desc{grid-column:2}
@@ -386,7 +386,7 @@ dialog .detail__close{display:inline-flex;margin-left:auto}
   .page-head__actions>.btn--primary{flex:1 1 100%}
   .field__control,.field__control.mono{font-size:var(--fs-l)}
   .field__box,.field__control,.field--secret .field__box{width:100%}
-  .field--row{grid-template-columns:minmax(0,1fr)}
+  .field--row{grid-template:none/minmax(0,1fr)}
   .field--row>:not(.field__label){grid-column:1}
   .kv__row{grid-template-columns:calc(var(--s7) * 2 + var(--s3)) minmax(0,1fr)}
   .changes__item{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
