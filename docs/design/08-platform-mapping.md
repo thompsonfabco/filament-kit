@@ -39,6 +39,10 @@ in section 3.4).
 | `tokens/theme-init.js` | Generated (it lists the theme keys) | Proposed | `build_tokens.py`, extended | Hub page and web app (first script in `<head>`) |
 | `icons/sprite.svg` | Generated | Proposed | `build_tokens.py`, extended | The Hub, which places it inline at the top of each page's `<body>` |
 | `strings/strings.js` | Generated | Proposed | `build_tokens.py`, extended | Hub page and web app |
+| `web-shared/components.css` | Hand-written, the shared component stylesheet, core (`02-components.md` section 1, "Files") | Exists | A person | Hub page and web app (after `tokens.css`) |
+| `web-shared/components.js` | Hand-written, the shared component script, core (`02-components.md` 1.4) | Exists | A person | Hub page and web app (after `strings.js`) |
+| `web-shared/components-jobs.css`, `components-jobs.js` | Hand-written, the job strip and the Hub-restarting state | To write | A person | Hub page |
+| `web-shared/components-media.css`, `components-media.js` | Hand-written, photos, the photo viewer and the QR block | To write | A person | Pages that show photos or a pairing code |
 | `android/app/src/main/java/<app package>/ui/theme/SpoolwardenTokens.kt` | Generated | Proposed | `build_tokens.py`, extended | `SpoolwardenTheme` |
 | `android/app/src/main/java/<app package>/ui/theme/SpoolwardenTheme.kt` | Hand-written | To write | A person | Every screen |
 | `android/app/src/main/res/drawable/sw_ic_<name>.xml` | Generated, one per icon | Proposed | `build_tokens.py`, extended | `SwIcon` |
