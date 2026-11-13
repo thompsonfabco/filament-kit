@@ -115,7 +115,7 @@ function topBar() {
   const hub = h("span", { class: "topbar__hub" }, h("span", { "aria-hidden": "true" }, "/"), " ", hubName);
   return h("header", { class: "topbar" },
     h("a", { class: "topbar__brand", href: "#overview" }, SW.h("svg", { class: "topbar__mark", "aria-hidden": "true", focusable: "false" }, SW.h("use", { href: "#i-spoolwarden" })),
-      h("span", { class: "topbar__name" }, SW.t("app_name")), hub),
+      h("span", { class: "topbar__name" }, SW.t("app_name")), " ", hub),
     hubVersion,
     h("div", { class: "topbar__tools" }, appearanceControl(), appearanceButton()));
 }

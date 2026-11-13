@@ -9,6 +9,20 @@
   .topbar__mark { grid-row: 1 / span 2; }
   .topbar__name { line-height: var(--lh-title); }
   .topbar__hub > [aria-hidden="true"] { display: none; }
+  /* the More sheet (02 2.5): its list is also a .nav, so the bottom-bar rules of components.css (fixed, one row, only
+     the data-tab items) are undone here; components.css has no room left for them (F12 rule 7) */
+  .nav.nav--sheet { position: static; z-index: auto; display: grid; flex-direction: column; gap: var(--s2); height: auto;
+                    padding: var(--s2) var(--s4) var(--s4); overflow-y: auto; border: 0; background: none; }
+  .nav.nav--sheet .nav__group, .nav.nav--sheet .nav__group + .nav__heading + .nav__group { display: grid; gap: var(--s1); }
+  .nav.nav--sheet .nav__group > li { display: block; }
+  .nav.nav--sheet .nav__item { align-content: center; min-height: calc(var(--s7) + var(--s1)); padding: 0 var(--s3);
+                               color: var(--text); text-align: start; }
+  .nav.nav--sheet .nav__item[aria-current="page"] { background: var(--accent-soft); color: var(--accent-text); }
+  .nav.nav--sheet .nav__item::before { display: none; }
+  .nav.nav--sheet .nav__icon { padding: 0; background: none; }
+  .nav.nav--sheet .nav__label { font-size: var(--fs-b); }
+  .nav.nav--sheet .nav__label-full { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .nav.nav--sheet .nav__label-short { display: none; }
 }
 :where(.page) h2 { font-size: var(--fs-l); line-height: var(--lh-title); margin: 0 0 var(--s2); display: flex; gap: var(--s2); align-items: center; }
 :where(.page) p { margin: var(--s1) 0; }
