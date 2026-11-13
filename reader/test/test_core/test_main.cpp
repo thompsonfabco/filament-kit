@@ -594,6 +594,7 @@ void test_tag_gate_held_tag_does_not_post_after_refused_tap() {
   TEST_ASSERT_FALSE(g.accept("b", 60001, 2500));     // a different tag needs a lift too
   g.noTag();                                         // lifted
   TEST_ASSERT_TRUE(g.accept("a", 60100, 2500));      // presented again: counts
+}
 
 // ---- settings over USB (settings.h) -----------------------------------------------
 
