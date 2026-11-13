@@ -821,6 +821,7 @@ void confirmOtaImage() {
   Serial.printf("running %s, OTA state %d\n", run->label, (int)st);
   if (st != ESP_OTA_IMG_PENDING_VERIFY) return;
   bool ok = false;
+  showProgress("Firmware update", "checking update...", -1);   // this can wait up to CONFIRM_WINDOW_MS
   // A slow router or a server restarting right now must not roll back a healthy build:
   // keep trying for CONFIRM_WINDOW_MS (the bootloader's rollback is the fallback after that).
 #ifndef OTA_TEST_FAIL_HEALTH  // rollback drill: PLATFORMIO_BUILD_FLAGS=-DOTA_TEST_FAIL_HEALTH
