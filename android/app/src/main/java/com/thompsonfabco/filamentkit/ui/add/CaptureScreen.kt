@@ -87,7 +87,6 @@ fun CaptureScreen(
 ) {
     val reading = state.stage == Stage.Reading
     Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Add spools", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Photograph each label (several photos of one spool are fine). Nothing is saved until you check and add.",
             style = MaterialTheme.typography.bodyMedium,

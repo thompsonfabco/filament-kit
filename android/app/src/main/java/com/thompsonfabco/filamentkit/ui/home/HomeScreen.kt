@@ -90,7 +90,6 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column {
-            Text("filament-kit", style = MaterialTheme.typography.headlineSmall)
             VersionLine(version)
         }
         ConnectionRow(serverName, connection, onRetryConnection, onReviewCertificate)

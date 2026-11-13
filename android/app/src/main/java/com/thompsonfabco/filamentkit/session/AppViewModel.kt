@@ -9,6 +9,7 @@ import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.Discovery
 import com.thompsonfabco.filamentkit.net.LocalNetwork
+import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.spool.ApiLoadBackend
 import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
 import com.thompsonfabco.filamentkit.ui.spool.LoadViewModel
@@ -23,6 +24,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+/** The two things read from the settings store before the first screen: the appearance and whether a Hub is paired. */
+data class Startup(val appearance: Appearance, val paired: Boolean)
 
 /** Activity-wide state: settings, the one [ServerSession], the pairing router and the drafts on disk. */
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -63,11 +67,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         purgeDrafts()
     }
 
-    /** The last [PairRouter.requests] value the navigation host acted on (survives rotation). */
+    /** The last [PairRouter.pairAgainRequests] value the navigation host acted on (survives rotation). */
     var handledPairRequests = 0
 
-    /** True when a server is stored with a usable token (start on Home); false (none, or revoked) starts on Pair. */
-    suspend fun isPaired(): Boolean = settings.server.first().isPaired()
+    /** What the splash screen waits for: the stored pairing and appearance (null until both are read). */
+    private val _startup = MutableStateFlow<Startup?>(null)
+    val startup: StateFlow<Startup?> = _startup.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            // a server is stored with a usable token: start on Home; none, or a revoked token: start on Pair
+            _startup.value = Startup(settings.appearance.first(), settings.server.first().isPaired())
+        }
+    }
+
+    /** The user's choice from the top bar's appearance menu; applies at once. */
+    fun setAppearance(appearance: Appearance) {
+        viewModelScope.launch { settings.setAppearance(appearance) }
+    }
 
     /** At start: delete expired, photo-less and unreadable drafts ([DraftStore.purge]), then show what is left. */
     private fun purgeDrafts() {

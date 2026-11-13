@@ -33,6 +33,19 @@ class PairRouterTest {
         assertEquals(1, router.requests.value)
     }
 
+    /** 05-android-app 2.7: a 401 or a changed certificate never opens the pairing graph by itself; only the user's ask does. */
+    @Test fun onlyTheUsersAskOpensPairing() {
+        val router = PairRouter()
+        router.report(ApiError(401, "unauthorized", "nope"))
+        router.report(FingerprintMismatch("old", "new"))
+        router.unauthorized("tok")
+        assertEquals(0, router.pairAgainRequests.value)
+        router.pairAgain()
+        assertEquals(1, router.pairAgainRequests.value)
+        router.pairAgain()
+        assertEquals(2, router.pairAgainRequests.value)
+    }
+
     @Test fun mismatchRoutesToPairWithBothFingerprints() {
         val router = PairRouter()
         router.report(FingerprintMismatch("old", "new"))

@@ -96,7 +96,6 @@ fun LicencesScreen(modifier: Modifier = Modifier) {
         contentPadding = PaddingValues(24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item { Text("Licences", style = MaterialTheme.typography.headlineSmall) }
         item { Text("filament-kit is free software under GPL-3.0-or-later. It comes with no warranty.") }
         item {
             OutlinedButton(onClick = { showGpl = !showGpl }, modifier = Modifier.fillMaxWidth()) {
