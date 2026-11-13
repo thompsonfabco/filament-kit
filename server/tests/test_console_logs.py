@@ -118,7 +118,7 @@ def test_with_no_systemd_there_is_nothing_to_read(app):
 
 
 def test_the_page_has_the_tab():
-    assert 'logs: ["Logs", () => logsTab()]' in (STATIC / "setup.js").read_text(encoding="utf-8")
+    assert 'logs: ["nav_logs", "logs", () => logsTab()]' in (STATIC / "setup.js").read_text(encoding="utf-8")
     src = (STATIC / "setup_logs.js").read_text(encoding="utf-8")
     assert 'api("logs/units")' in src and "code: codeIn.value" in src and "innerHTML" not in src
     assert CODE

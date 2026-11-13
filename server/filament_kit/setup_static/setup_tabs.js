@@ -325,7 +325,7 @@ function updatesTab() {
         u.checked_at ? h("p", { class: "muted", textContent: `Last checked ${fmtDate(u.checked_at)}.` }) : null,
         u.held && u.held === u.latest ? h("p", { class: "muted", textContent: `${u.held} was rolled back: the timer skips it, Update here installs it.` }) : null,
         u.failed && u.failed === u.latest ? h("p", { class: "muted", textContent: `Installing ${u.failed} failed before: the timer waits for a newer release, Update here tries it again.` }) : null,
-        h("p", { class: "muted" }, u.module_on ? `Checked by itself ${u.schedule || ""} (the updates module).` : "Not checked by itself: the updates module is off. ", u.module_on ? null : link("modules", "Modules")),
+        h("p", { class: "muted" }, u.module_on ? `Checked by itself ${u.schedule || ""} (the updates module).` : "Not checked by itself: the updates module is off. ", u.module_on ? null : link("features", "Modules")),
         h("div", { class: "row" },
           h("button", { class: "secondary", textContent: "Check now", on: { click: () => startJob(box, "check") } }),
           u.newer ? h("button", { textContent: `Update to ${u.latest}`, disabled: !!u.update_refused, on: { click: () => startJob(box, "update", `Update to ${u.latest}? The kit stops while it installs and starts again by itself.`) } }) : null),

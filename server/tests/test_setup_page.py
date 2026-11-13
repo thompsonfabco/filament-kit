@@ -147,7 +147,7 @@ def test_page_is_served_with_a_strict_csp_and_no_external_assets(app):
 def test_shared_files_are_served_and_the_sprite_comes_first(app):
     c = client(app)
     r = c.get("/setup")
-    check_sprite_first(r.text)
+    check_sprite_first(r.text, "<div id=app>")                                 # S1.3: the shell replaces it
     assert r.headers["content-security-policy"] == SETUP_CSP
     check_files(c.get, "/setup")
     assert client(app, AWAY).get("/setup/shared/tokens.css").status_code == 403
@@ -155,9 +155,14 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
     links = ["/setup/shared/theme-init.js", "/setup/shared/tokens.css", "/setup/shared/components.css", "/setup/setup.css"]
     assert [head.index(x) for x in links] == sorted(head.index(x) for x in links)
     assert head.index("/setup/shared/theme-init.js") < head.index("/setup/shared/strings.js") < head.index("/setup/shared/tokens.css")
-    assert "/setup/shared/components.js" not in r.text                         # S1.3 and later
-    js = c.get("/setup/setup.js").text                                         # S1.2: the appearance control, texts from the catalogue
-    assert "spoolwarden.appearance" in js and "segmented__input" in js and "Light" not in js and "Dark" not in js
+    assert head.index("/setup/shared/strings.js") < head.index("/setup/shared/components.js")   # S1.3: the shared shell
+    assert re.search(r"<script defer src='/setup/shared/components\.js'>", head)
+    assert re.search(r"<title>[^<]+</title>", head) and "filament-kit setup" not in head   # the Hub name; the script adds the page
+    js = c.get("/setup/setup.js").text                                         # S1.2/S1.3: the shared appearance control in the top bar
+    assert "spoolwarden.appearance" in js and "SW.segmented" in js and "appearance--menu" in js
+    assert "Light" not in js and "Dark" not in js
+    for key in ("app_name", "nav_label", "nav_more", "shell_skip", "topbar_version_prefix", "nav_everyday", "nav_system"):
+        assert f'"{key}"' in js, key                                           # the shell's texts come from the catalogue
 
 
 def test_page_and_api_answer_only_the_home_network(app):

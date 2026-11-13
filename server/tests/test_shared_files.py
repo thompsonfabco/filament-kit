@@ -45,14 +45,14 @@ def check_files(get, prefix):
     assert get(f"{prefix}/shared/nothing.js").status_code == 404
 
 
-def check_sprite_first(page_text):
+def check_sprite_first(page_text, then="<main id=app>"):
     """The sprite is the first child of <body>, hidden, and the generated header comment is left out."""
     m = re.search(r"<body[^>]*>", page_text)
     assert m, "no <body>"
     after = page_text[m.end():]
     assert after.startswith('<svg class="sprite" aria-hidden="true" width="0" height="0">')
     assert "GENERATED" not in page_text and "<!--" not in page_text
-    assert "</svg><main id=app>" in after
+    assert "</svg>" + then in after
 
 
 def test_the_copies_the_hub_serves_equal_the_repository_sources():
