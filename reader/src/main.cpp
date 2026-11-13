@@ -881,7 +881,7 @@ void handleAction(Action a) {
       buzzTick(); settleAt = 0; scrollStep = 0;
       if (curPrinter()) savePrinter(curPrinter()->id);
       showProgress(curPrinter() ? curPrinter()->name.c_str() : "Printer", "loading slots...", -1);
-      serverOk = fetchSlots(savedLabel);   // fails -> no slots, no scans (never the old printer's)
+      serverOk = fetchSlots(savedLabel, false);   // fails -> no slots, no scans (never the old printer's)
       listsAt = millis();
       redraw();
       break;
