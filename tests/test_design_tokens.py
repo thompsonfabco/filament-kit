@@ -4,6 +4,7 @@ tokens.css must equal what tokens.json generates, and every required contrast pa
 """
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,16 @@ WINDOW_NIGHT = Path("android/app/src/main/res/values-night/sw_window.xml")
 STRINGS_XML = Path("android/app/src/main/res/values/strings.xml")
 STRINGS = (Path("strings/en.json"), Path("strings/strings.js"))
 ANDROID_OUTPUTS = (KT, WINDOW, WINDOW_NIGHT)
+DRAWABLES = Path("android/app/src/main/res/drawable")
+ICON_SPRITE = Path("icons/sprite.svg")
+
+
+def _copy_icons(tmp_path):
+    """icons/ and the generated drawables, laid out as in the repository."""
+    shutil.copytree(ROOT / "icons", tmp_path / "icons", dirs_exist_ok=True)
+    (tmp_path / DRAWABLES).mkdir(parents=True, exist_ok=True)
+    for f in (ROOT / DRAWABLES).glob("sw_*.xml"):
+        shutil.copy(f, tmp_path / DRAWABLES / f.name)
 
 
 def _run(*args):
@@ -53,6 +64,8 @@ def _flat(tmp_path):
     (tmp_path / "tokens").mkdir()
     (tmp_path / "strings").mkdir()
     (tmp_path / "strings" / "en.json").write_bytes((ROOT / "strings" / "en.json").read_bytes())
+    shutil.copytree(ROOT / "icons" / "src", tmp_path / "icons" / "src")
+    shutil.copytree(ROOT / "icons" / "status", tmp_path / "icons" / "status")
     return tmp_path / "tokens"
 
 
@@ -153,6 +166,7 @@ def _mirror(tmp_path):
     for rel in (*STRINGS, STRINGS_XML):
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / rel).write_bytes((ROOT / rel).read_bytes())
+    _copy_icons(tmp_path)
     return tmp_path / "tokens" / "build_tokens.py"
 
 
@@ -185,6 +199,39 @@ def test_check_fails_on_a_hand_edited_strings_file(tmp_path):
         f.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
         r = _check(script)
         assert r.returncode == 1 and "FAIL" in r.stderr, (rel, r.stdout + r.stderr)
+
+
+def test_check_fails_on_a_hand_edited_icon_output(tmp_path):
+    for rel, old, new in ((ICON_SPRITE, 'd="M12 7v5l3 2"', 'd="M12 7v6l3 2"'),
+                          (DRAWABLES / "sw_ic_clock.xml", "M12 7v5l3 2", "M12 7v6l3 2"),
+                          (DRAWABLES / "sw_st_half.xml", "#FF000000", "#FF111111")):
+        script = _mirror(tmp_path)
+        f = tmp_path / rel
+        text = f.read_text(encoding="utf-8")
+        assert old in text, rel
+        f.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
+        r = _check(script)
+        assert r.returncode == 1 and "FAIL" in r.stderr, (rel, r.stdout + r.stderr)
+
+
+def test_check_fails_on_a_missing_or_stray_icon_output(tmp_path):
+    script = _mirror(tmp_path)
+    (tmp_path / DRAWABLES / "sw_ic_clock.xml").unlink()
+    r = _check(script)
+    assert r.returncode == 1 and "sw_ic_clock.xml does not exist" in r.stderr, r.stdout + r.stderr
+    script = _mirror(tmp_path)
+    (tmp_path / DRAWABLES / "sw_ic_clock.xml").write_bytes((ROOT / DRAWABLES / "sw_ic_clock.xml").read_bytes())
+    (tmp_path / DRAWABLES / "sw_ic_stray.xml").write_text("<vector/>\n", encoding="utf-8", newline="\n")
+    r = _check(script)
+    assert r.returncode == 1 and "sw_ic_stray.xml has no source" in r.stderr, r.stdout + r.stderr
+
+
+def test_check_fails_on_a_source_with_a_circle(tmp_path):
+    script = _mirror(tmp_path)
+    f = tmp_path / "icons" / "src" / "plus.svg"
+    f.write_text(f.read_text(encoding="utf-8").replace("<path", '<circle r="1"/><path', 1), encoding="utf-8", newline="\n")
+    r = _check(script)
+    assert r.returncode != 0 and "icons/src/plus.svg: only <path> elements are allowed" in r.stderr, r.stdout + r.stderr
 
 
 def test_check_fails_on_a_missing_android_file(tmp_path):

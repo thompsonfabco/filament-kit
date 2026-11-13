@@ -1,10 +1,12 @@
 """Design source tests of docs/design/08-platform-mapping.md 3.4 ("Proposed tests"), one test function per check.
 
-Test 2 here: tokens.json is complete and well-formed. Test 4: every token a component uses is a token. Later steps add
-the others to this file.
+Test 2 here: tokens.json is complete and well-formed. Test 4: every token a component uses is a token. Test 6: the icon
+sources, the sprite and the drawables. Later steps add the others to this file.
 """
 import json
 import re
+import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -315,3 +317,91 @@ def test_checks_fail_on_plants():
     assert profile_group_errors(f"/* profile: nav=rail */\n{sel} {{ a: b }}") == []
     assert profile_group_errors('/* profile: nav=rail */\n:root[data-look="nonesuch"] .nav { a: b }')
     assert profile_group_errors("/* profile: nav=bogus */\n.nav { a: b }")
+
+
+# Test 6 (08 section 11): the names of the two lists, checked in the sources, the sprite and the drawables.
+ICON_NAMES = {
+    "overview", "printer", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs",
+    "lock", "lock-open", "shield", "sun", "moon", "half-circle",
+    "plus", "pencil", "trash", "refresh", "more", "close", "check", "copy", "download", "upload", "undo", "search",
+    "chevron", "warning", "info", "error", "camera", "tag", "scale", "spool", "plug", "wifi-off", "clock", "spoolwarden",
+}
+STATUS_NAMES = {"filled", "hollow", "triangle", "octagon", "half", "diamond"}
+SVG = "{http://www.w3.org/2000/svg}"
+DRAWABLES = Path("android/app/src/main/res/drawable")
+
+
+def icon_errors(root):
+    """Every way the icon folders under root break test 6; an empty list passes."""
+    errors = []
+    sprite = ET.parse(root / "icons" / "sprite.svg").getroot()
+    for folder, names, icon in (("src", ICON_NAMES, True), ("status", STATUS_NAMES, False)):
+        files = {f.stem: f for f in (root / "icons" / folder).glob("*.svg")}
+        for name in sorted(names - set(files)):
+            errors.append(f"icons/{folder}/{name}.svg is missing")
+        for name in sorted(set(files) - names):
+            errors.append(f"icons/{folder}/{name}.svg is not in the list")
+        for name, f in sorted(files.items()):
+            where, svg = f"icons/{folder}/{f.name}", ET.parse(f).getroot()
+            if svg.get("viewBox") != "0 0 24 24":
+                errors.append(f"{where}: viewBox")
+            for el in svg:
+                if el.tag != SVG + "path":
+                    errors.append(f"{where}: <{el.tag.rpartition('}')[2]}> is not a path")
+            if icon:
+                rules = {"fill": "none", "stroke-width": "1.75", "stroke-linecap": "round", "stroke-linejoin": "round"}
+                if name == "spoolwarden":
+                    del rules["fill"]                    # the product mark may use fills
+                for key, value in rules.items():
+                    if svg.get(key) != value:
+                        errors.append(f'{where}: {key} is not "{value}"')
+        mark = "i-" if icon else "s-"
+        want_ids = {mark + n for n in names}
+        have_ids = {el.get("id") for el in sprite if el.get("id", "").startswith(mark)}
+        if have_ids != want_ids:
+            errors.append(f"sprite symbols differ for {folder}: {sorted(have_ids ^ want_ids)}")
+        prefix = "sw_ic_" if icon else "sw_st_"
+        want_files = {prefix + n.replace("-", "_") + ".xml" for n in names}
+        have_files = {f.name for f in (root / DRAWABLES).glob(prefix + "*.xml")}
+        if have_files != want_files:
+            errors.append(f"drawables differ for {folder}: {sorted(have_files ^ want_files)}")
+    return errors
+
+
+def _icon_copy(tmp_path, name):
+    root = tmp_path / name
+    shutil.copytree(ROOT / "icons", root / "icons")
+    (root / DRAWABLES).mkdir(parents=True)
+    for f in (ROOT / DRAWABLES).glob("sw_*.xml"):
+        shutil.copy(f, root / DRAWABLES / f.name)
+    return root
+
+
+def _plant(root, rel, old, new):
+    f = root / rel
+    text = f.read_text(encoding="utf-8")
+    assert old in text, rel
+    f.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
+
+
+def test_icon_sources_sprite_and_drawables():
+    assert icon_errors(ROOT) == []
+    assert len(ICON_NAMES) == 40 and len(STATUS_NAMES) == 6
+
+
+def test_icon_check_fails_on_plants(tmp_path):
+    r = _icon_copy(tmp_path, "missing")
+    (r / "icons" / "src" / "plus.svg").unlink()
+    assert any("plus.svg is missing" in e for e in icon_errors(r))
+    r = _icon_copy(tmp_path, "extra")
+    shutil.copy(r / "icons" / "src" / "plus.svg", r / "icons" / "src" / "extra.svg")
+    assert any("extra.svg is not in the list" in e for e in icon_errors(r))
+    r = _icon_copy(tmp_path, "width")
+    _plant(r, "icons/src/plus.svg", 'stroke-width="1.75"', 'stroke-width="2"')
+    assert any("plus.svg: stroke-width" in e for e in icon_errors(r))
+    r = _icon_copy(tmp_path, "circle")
+    _plant(r, "icons/src/plus.svg", "<path", '<circle cx="12" cy="12" r="3"/>\n  <path')
+    assert any("plus.svg: <circle> is not a path" in e for e in icon_errors(r))
+    r = _icon_copy(tmp_path, "drawable")
+    (r / DRAWABLES / "sw_ic_plus.xml").unlink()
+    assert any("drawables differ" in e for e in icon_errors(r))
