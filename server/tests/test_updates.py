@@ -719,5 +719,7 @@ def test_a_rollback_writes_its_two_steps(env, srv, monkeypatch, capsys):
     assert updates.update(cfg, fetcher=srv.fetcher(), run=Runner()) == 0
     monkeypatch.setattr(updates, "current_version", lambda: "1.1.0")
     capsys.readouterr()
+    from filament_kit import steps
+    monkeypatch.setattr(steps, "_made_here", False)     # the rollback is a job of its own (a new process on a Hub)
     assert updates.rollback(cfg, run=Runner()) == 0
     assert sentences(capsys.readouterr().out, 2) == ["Finding the kept version", "Installing 1.0.0"]
