@@ -86,7 +86,6 @@ fun AddProfileScreen(vm: AddProfileViewModel, onBack: () -> Unit, onPairAgain: (
                             if (parents == null) {
                                 DropdownMenuItem(text = { Text("Loading…") }, onClick = {}, enabled = false)
                             } else {
-                                DropdownMenuItem(text = { Text("Automatic") }, onClick = { vm.setLineParent("") })
                                 if (!parents.synced) {
                                     DropdownMenuItem(text = { Text("Presets not synced yet") }, onClick = {}, enabled = false)
                                 }

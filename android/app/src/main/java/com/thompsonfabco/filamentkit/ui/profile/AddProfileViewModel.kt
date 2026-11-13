@@ -121,9 +121,10 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
 
     fun cancelEditParent() = _state.update { it.copy(editing = null) }
 
-    /** Sets [parent] (blank = automatic) on the line being edited. */
+    /** Sets [parent] on the line being edited (the server refuses a blank one, so nothing is sent for it). */
     fun setLineParent(parent: String) {
         val lineId = _state.value.editing?.lineId ?: return
+        if (parent.isBlank()) return
         viewModelScope.launch {
             try {
                 val updated = api.setLineParent(lineId, parent)

@@ -218,6 +218,19 @@ class AddProfileViewModelTest {
     }
 
     @Test
+    fun aBlankParentIsNeverSentToTheServer() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        vm.editParent(vm.state.value.lines.single())
+        advanceUntilIdle()
+
+        vm.setLineParent(" ")
+        advanceUntilIdle()
+
+        assertTrue(api.reparented.isEmpty())
+    }
+
+    @Test
     fun aRefusedParentShowsTheServersMessageAndKeepsTheLine() = runTest(dispatcher) {
         val vm = AddProfileViewModel(api)
         advanceUntilIdle()
@@ -252,7 +265,7 @@ private class FakeProfileApi : ProfileApi {
     override suspend fun setLineParent(lineId: String, parent: String): ProfileLine {
         reparented += lineId to parent
         failure?.let { throw it }
-        return lines.first { it.lineId == lineId }.copy(bambuParent = parent.ifEmpty { null }, parentSource = "user")
+        return lines.first { it.lineId == lineId }.copy(bambuParent = parent, parentSource = "user")
     }
 
     override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {
