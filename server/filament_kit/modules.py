@@ -40,37 +40,37 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     _m("spoolman", "Spoolman", "Spoolman filament database, run on this machine",
        units=("spoolman.service",), apt=("unzip",)),
     # Spoolman need is checked by validate(): local module or a remote spoolman_url.
-    _m("server", "Server", "App server: pairing, inventory, API, avahi announcement",
+    _m("server", "Hub service", "App server: pairing, inventory, API, avahi announcement",
        units=("filament-kit.service", "filament-kit-setup.socket"), apt=("avahi-daemon", "libnss-mdns", "qrencode"),
        needs_text="Spoolman (this machine or a remote one)"),
-    _m("ai_intake", "AI intake", "Claude reads spool labels from photos (needs an Anthropic API key)",
+    _m("ai_intake", "Label Reader: Cloud (Claude)", "Claude reads spool labels from photos (needs an Anthropic API key)",
        depends=("server",), needs_text="an Anthropic API key", optional_ai=True),
-    _m("printers", "Printers", "Bambu bridge: discovery, usage, slot mapping, camera",
+    _m("printers", "Bambu Lab printers", "Bambu bridge: discovery, usage, slot mapping, camera",
        depends=("server",), apt=("ffmpeg",)),
-    _m("presets", "Presets", "Bambu Studio preset builds and PC sync",
+    _m("presets", "Slicer presets", "Bambu Studio preset builds and PC sync",
        units=("filament-kit-build.path",), depends=("server",)),
-    _m("library", "Library", "Filament spec library: downloaded on request, then a daily update",
+    _m("library", "Filament Catalog", "Filament spec library: downloaded on request, then a daily update",
        units=("filament-kit-library.timer",)),
-    _m("backup", "Backup", "Nightly backup of Spoolman db, settings and state",
+    _m("backup", "Nightly backup", "Nightly backup of Spoolman db, settings and state",
        units=("filament-kit-backup.timer",)),
-    _m("station", "Station", "USB scale and PN532 reader, read-only HTTP",
+    _m("station", "Weigh Station", "USB scale and PN532 reader, read-only HTTP",
        units=("filament-kit-station.service", "filament-kit-station-pair.path"), apt=("alsa-utils", "libnss-mdns"), apt_lean=("espeak-ng", "ffmpeg")),
-    _m("web", "Web", "Browser UI and the MCP endpoint, on top of the server",
+    _m("web", "Web access", "Browser UI and the MCP endpoint, on top of the server",
        units=("filament-kit-web.service",), depends=("server",)),
     _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",
        depends=("web",), apt=("nginx", "certbot")),
     # orders needs Claude (ai_intake) even when the local reader is on: the order history goes only into Claude's
     # prompt; the local reader never gets it (reader contract v1). The decision of 2026-11-12, after review R127.
-    _m("orders", "Orders", "Order history file for the shop tools",
+    _m("orders", "Order history", "Order history file for the shop tools",
        depends=("ai_intake",), needs_text="order matching needs the Claude reader"),
-    _m("updates", "Auto-update", "Daily check for a new signed release; installs it and keeps the one before",
+    _m("updates", "Automatic updates", "Daily check for a new signed release; installs it and keeps the one before",
        units=("filament-kit-update.timer",)),
     _m("klipper", "Klipper printers", "Moonraker bridge: discovery, spool loads, usage log, camera",
        depends=("server",)),
     # The reader itself is a separate program (its own repository and release, installed on request, or already
     # running on another machine); the kit only talks to it over HTTP (local_reader.py). Appended last: numbers
     # 1-13 keep their meaning in the checklist.
-    _m("local_intake", "Local AI intake", "A label reader on your own network reads spool photos, no cloud",
+    _m("local_intake", "Label Reader: On this Hub", "A label reader on your own network reads spool photos, no cloud",
        depends=("server",), needs_text="the local reader service (local_intake.url)", optional_ai=True),
 )}
 
@@ -85,6 +85,16 @@ MODES: dict[str, frozenset[str]] = {
     "station": frozenset({"station"}),
     "all-in-one": frozenset(MODULES) - OPT_IN,
 }
+
+# The setup names of the Hub page and the command line (design 06 section 9.6, N27) beside the old words; the old
+# word stays the canonical one (what the code and every stored value use).
+MODE_ALIASES = {"hub": "server", "weigh-station": "station", "hub-with-weigh-station": "all-in-one"}
+
+
+def canonical_mode(mode):
+    """The old word for a setup given by either name; anything else comes back unchanged."""
+    return MODE_ALIASES.get(mode, mode) if isinstance(mode, str) else mode
+
 
 # A config without `modules` is an install from before modules: the server mode as it was then, AI intake and the library timer on.
 LEGACY = MODES["server"] | {"ai_intake", "library"}
@@ -138,6 +148,7 @@ def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) ->
     """Copy of cfg with `mode`'s module set (and the station link for all-in-one). Opt-in modules switched on by
     hand stay on (C-I3: a mode never turns them on or off), except those whose dependencies the new mode removes;
     those are named through `say`."""
+    mode = canonical_mode(mode)
     if mode not in MODES:
         raise ModuleError(f"unknown mode {mode!r}")
     out = copy.deepcopy(cfg)
@@ -289,6 +300,7 @@ def toggle(on, name: str) -> tuple[frozenset[str], list[str]]:
 
 def preset(on, mode: str) -> tuple[frozenset[str], list[str]]:
     """The module set of install mode `mode`, keeping opt-ins already on (as set_mode does)."""
+    mode = canonical_mode(mode)
     notes: list[str] = []
     cfg = set_mode({"modules": {n: True for n in on}}, mode, say=notes.append)
     result = enabled(cfg)

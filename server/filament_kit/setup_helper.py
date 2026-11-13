@@ -20,6 +20,8 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     setting {key, value}                       web.public_url or station.url, checked, saved, then an apply
     general {key, value}                       one key of GENERAL, the only other list of what the page may write into
                                                config.json, each with its own check
+    general_group {values}                     several keys of GENERAL: all checked first, then all saved or none; one
+                                               restart / apply for the group; a refusal names each bad key in `errors`
     spoolman_url {url}                         an external Spoolman's address (the server has reached it), saved, then an apply
     mode {mode[, settings]}                    a mode preset (modules.set_mode, as `modules set`), saved, then an apply;
                                                never a mode without the server, which this page is part of
@@ -33,7 +35,8 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     restore_forget                             drop the pinned upload
     backup_keep {days}                         how many days of backups the nightly backup keeps (1-365)
     backup_list                                the backups in the root-only folder: names, sizes, dates
-    backup_open {name}                         one of them, handed to the server as an open file (SCM_RIGHTS) beside the
+    backup_last                                the time of the newest backup, no code and nothing else about it
+    backup_open {name}                       one of them, handed to the server as an open file (SCM_RIGHTS) beside the
                                                reply, for one download: the folder and the files stay root only
     journal {unit, lines}                      the last lines (at most 200) of a service of a module that is on, by an
                                                argument list; read only, at most JOURNAL_MAX bytes back
@@ -632,6 +635,47 @@ def _general(req: dict) -> dict:
     return {"key": key, "restarts": then == "restart", "applies": then == "apply"}
 
 
+def _general_group(req: dict) -> dict:
+    """Several keys of GENERAL at once: every key is checked first, then all are saved or none, with one restart and one
+    apply for the whole group. A refusal names each bad key in `errors` (key -> text)."""
+    values = req.get("values")
+    if not isinstance(values, dict) or not values:
+        raise Refused(400, "values must hold at least one setting", field="values")
+    errors, checked = {}, {}
+    for key, raw in values.items():
+        if not isinstance(key, str) or key not in GENERAL:
+            errors[str(key)[:100]] = "not a setting this page may change"
+            continue
+        try:
+            checked[key] = GENERAL[key][0](raw)
+        except ValueError as e:
+            errors[key] = f"{key} {e}"
+    if errors:
+        raise Refused(400, "nothing was changed: " + "; ".join(errors.values()), errors=errors)
+    _not_applying()
+    cfg = config.load()
+    for key, value in checked.items():
+        parts = key.split(".")
+        cur = cfg
+        for part in parts[:-1]:
+            if not isinstance(cur.get(part), dict):
+                cur[part] = {}
+            cur = cur[part]
+        cur[parts[-1]] = value
+    applies = any(GENERAL[k][1] == "apply" for k in checked)
+    restarts = any(GENERAL[k][1] == "restart" for k in checked)
+    if applies:
+        err = _plan_error(cfg)
+        if err:
+            raise Refused(400, f"nothing was changed: {err}")
+    config.save(cfg)
+    if applies:
+        _start_apply(checked=True)
+    if restarts:
+        _restart_kit()
+    return {"keys": list(checked), "restarts": restarts, "applies": applies}
+
+
 def _spoolman_url(req: dict) -> dict:
     url = _text(req, "url", 300, word=True).rstrip("/")
     cfg = config.load()
@@ -657,7 +701,7 @@ def _spoolman_url(req: dict) -> dict:
 
 def _mode(req: dict) -> dict:
     """A mode preset, as `modules set` does it (a module switched on by hand stays on, see modules.set_mode)."""
-    mode = req.get("mode")
+    mode = modules.canonical_mode(req.get("mode"))
     if mode not in modules.MODES:
         raise Refused(400, "mode must be one of: " + ", ".join(modules.MODES))
     if "server" not in modules.MODES[mode]:
@@ -733,6 +777,14 @@ def _backup_list(req: dict) -> dict:
     rows = [{"name": e.name, "download": e.download, "size": e.size, "kind": e.kind,
              "at": time.strftime("%Y-%m-%d %H:%M", time.localtime(e.at))} for e in backup.listing()]
     return {"backups": rows, "keep_days": backup.keep_days(config.load()), "folder": str(backup.backups_dir())}
+
+
+def _backup_last() -> dict:
+    """When the newest backup was made, and nothing else about it: no code (the folder is root only, and a backup
+    holds the secrets, but a time is not one)."""
+    from . import backup
+    found = backup.listing()
+    return {"last": time.strftime("%Y-%m-%d %H:%M", time.localtime(found[0].at)) if found else None}
 
 
 def _restore_pin(req: dict) -> dict:
@@ -910,7 +962,7 @@ def _apply(req: dict) -> dict:
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
        "local_intake_token_set": _local_intake_token_set, "local_intake_token_remove": _local_intake_token_remove,
-       "module": _module, "setting": _setting, "general": _general, "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
+       "module": _module, "setting": _setting, "general": _general, "general_group": _general_group, "backup_last": lambda req: _backup_last(), "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
        "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open, "restore_pin": _restore_pin,
        "restore_forget": _restore_forget, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
@@ -918,8 +970,9 @@ OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphr
 
 
 # what may save a setting and start a job: these run under _job_lock, whole
-LOCKED_OPS = ("module", "setting", "general", "spoolman_url", "mode", "backup_keep", "apply", "job", "reader_usb")
-NO_CODE_OPS = ("trust_status",)     # it answers only about the token it was given
+LOCKED_OPS = ("module", "setting", "general", "general_group", "spoolman_url", "mode", "backup_keep", "apply", "job", "reader_usb")
+NO_CODE_OPS = ("trust_status",      # it answers only about the token it was given
+               "backup_last")       # the time of the newest backup, and nothing else (N12)
 
 
 def handle(req) -> dict:

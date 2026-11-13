@@ -174,7 +174,7 @@ and opens this page:
   Slicer presets
   ------------------------------------------------------------
   ( )  Slicer presets are switched off
-       Turn on Slicer presets in Features to build filament
+       Switch on Slicer presets in Features to build filament
        presets for Bambu Studio and Orca Slicer.
        [ Go to Features ]
 ```
@@ -260,6 +260,15 @@ two groups separated by a hairline.
 | Flash a device | `#flash` | Flash a device | More | "Tag Reader · Weigh Station display" (devices this Hub has firmware for) |
 | Updates | `#updates` | Updates | More | "<installed> · up to date" or "<latest> is available" |
 | Logs | `#logs` | Logs | More | "<n> services" |
+
+Where a summary comes from: the Hub gives one line per section with its state reply. Two are completed by the page:
+Overview shows "<n> to do" when the page's Still to do list (4.2) has entries, else the Hub's "<n> need a look" or
+"All checks OK"; Settings shows "<group> unsaved" while a group holds unsaved edits, else the Hub's "<n> groups".
+The Hub runs its checks only when Overview is read, so the Overview summary is empty until then: the page reads
+Overview once in the background after it has loaded, and a section whose summary is empty shows no second line.
+Summaries are refreshed with every state read, so relative times in them stay current. Flash a device names the
+devices by their design names ("Tag Reader", "Weigh Station display"), whatever the Hub's firmware ids are; a
+firmware id the page does not know is shown as the Hub names it.
 
 - **Desktop and tablet:** the navigation rail, `--rail` wide, icon above a `--fs-xs` label; labels that do not fit
   in two lines ("Recently added", "Slicer presets", "Flash a device") break into two lines, never truncate. The
@@ -486,7 +495,7 @@ families: Bambu Lab (feature "Bambu Lab printers", code name `printers`) and Kli
 
 **Data.** `G state` (`printers: {on, bambu, klipper, list}`); the per-printer calls listed with each control.
 
-**Switched off** (neither feature on): section 2.5 with title "Printers are switched off" and sentence "Turn on Bambu
+**Switched off** (neither feature on): section 2.5 with title "Printers are switched off" and sentence "Switch on Bambu
 Lab printers or Klipper printers in Features to connect printers." The button opens `#features`.
 
 ### 5.1 Layout
@@ -728,7 +737,7 @@ in the drawer foot.
 |---|---|
 | Loading | Three skeleton rows |
 | Empty (no printers, nothing found) | Empty state with the printer icon: title "No printers yet"; sentence "Bambu Lab printers on the network appear here once they announce themselves. Klipper printers are found by a scan." (only the sentences for families that are on); primary **Add a printer**; default **Find Klipper printers** (Klipper on) |
-| Only one family on | The other family's tool card, tag and type choice are absent; one quiet line at the page foot: "Klipper printers are switched off. Turn them on in Features." (or "Bambu Lab printers are switched off. …"), with Features as a link |
+| Only one family on | The other family's tool card, tag and type choice are absent; one quiet line at the page foot: "Klipper printers are switched off. Switch them on in Features." (or "Bambu Lab printers are switched off. …"), with Features as a link |
 | Locked | Addresses and serials read "Hidden while locked"; every change asks for the code in place |
 | Row busy | The busy button shows an inline spinner and its working label ("Testing…", "Mapping…"); the row's other buttons stay usable |
 
@@ -818,6 +827,7 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 | Ask the Label Reader to correct it | Text area "What is wrong?", placeholder "e.g. brand is Polymaker", hint "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept." Default button **Ask the Label Reader** → `P intake/history/<id>/revise` (code) `{item, note}` |
 | Suggestion | Change list (before → after per field), title "The Label Reader (<engine>) suggests <n> changes" or "The Label Reader changed nothing."; when no photo was kept: "No photo was kept for this record: the Label Reader worked from the saved values and your note." Primary **Accept** → `P intake/history/<id>/apply` (code) `{proposal}`; default **Discard** (nothing is sent) |
 | Revisions | Revision list, newest first: "Revision <n>, <time>, by hand / by the Label Reader: <field old → new; …>", the note when there was one, "Filament <ids> has no spools left (not deleted)" when it applies; an undone revision is struck through and ends with "(undone)" (no badge). The newest live revision has default **Undo revision <n>** → `P intake/history/<id>/undo` (code) `{revision}`. Empty: "No revisions. Corrections by hand or by the Label Reader appear here." |
+| Read facts | The lines of `02-components.md` 7.2 ("Read facts"): when read, read again, weighed and tag read, under the fields; a revision's note and device in the revision list; the filament lines in results |
 | Record | Key-value list: Added, Source, State, Spool(s), Photos |
 
 ### 6.4 Results and states
@@ -1004,7 +1014,7 @@ state of Slicer Sync on the PC, and updates waiting to be accepted. Address `#pr
 **Data.** `G presets` (view) → `{on, lines, lines_error, build, presets, orca_presets, last_attempt, installed, pc,
 waiting_text, updates, stale, orca_stale, problems}`.
 
-**Switched off:** section 2.5, title "Slicer presets are switched off", sentence "Turn on Slicer presets in Features
+**Switched off:** section 2.5, title "Slicer presets are switched off", sentence "Switch on Slicer presets in Features
 to build filament presets for Bambu Studio and Orca Slicer."
 
 ### 8.1 Layout
@@ -1306,7 +1316,7 @@ only Records kept stays editable.
 | Claude model | Text, `--mono`, placeholder "Default model" | `model` | Cloud on | Hint "Leave empty for the default model." Restarts the Hub. |
 | Reads per day | Number with unit "reads" | `reads_per_day` | Cloud on | Hint "Cloud reads allowed per day; reads On this Hub do not count." Restarts the Hub. Field error "Enter a whole number from 1." |
 | Address | Text, `--mono`, default `http://127.0.0.1:7915` | `local_intake.url` (unreleased) | On this Hub on | Hint "Where the reader answers: this Hub, or another computer at home." |
-| **Test** | Default button beside Address | `G settings/local-intake` (view, unreleased): the reader's health at the saved address | On this Hub on | Inline spinner "Asking the reader…"; OK "Answers: version <v>, API <n>, tiers <list>, corrections <supported / not supported>."; warn "Answers, but degraded: <reason>."; error "No answer at <address>. Check that the reader is running and the address." The Hub tests the saved address, so while the Address field holds an unsaved change, Test is disabled with the reason "Save the address first, then test it." A 409 (On this Hub switched off) shows "Label Reader: On this Hub is switched off. Turn it on in Features." |
+| **Test** | Default button beside Address | The saved address: `G settings/local-intake` (view, unreleased). An address that is typed but not saved: the Hub's test of a given address, a change-like request that passes the lock (the Hub contacts a host the person typed, so it asks for the setup code like any change; it sends no token there and follows no redirect) | On this Hub on | Inline spinner "Asking the reader…"; OK "Answers: version <v>, API <n>, tiers <list>, corrections <supported / not supported>."; warn "Answers, but degraded: <reason>."; error "No answer at <address>. Check that the reader is running and the address." Test works on what the field shows: the saved address without the lock, a changed address after unlocking in place, without saving it. Until the Hub offers the test of a given address, Test is disabled while the field holds an unsaved change, with the reason "Save the address first, then test it." A 409 (On this Hub switched off) shows "Label Reader: On this Hub is switched off. Switch it on in Features." |
 | Tier | Segmented choice "Automatic" / "Processor (CPU)" / "Graphics card (GPU)" | `local_intake.tier` (unreleased; `auto` / `cpu` / `gpu`) | On this Hub on | Hint "Automatic uses the graphics card when the reader has one." |
 | Records kept | Number | `intake.history_keep` | Always | Hint "How many of the newest additions Recently added keeps with their photos (0 keeps none). Now <count> records, <size> of photos; a record with photos takes about 0.5 to 2 MB." Field error "Enter a whole number from 0 to 500." |
 
@@ -1911,10 +1921,10 @@ column says.
 | A stored default theme for new devices (a general setting `appearance.theme`, the key the command line uses, readable in `G state` and writable through `P settings/general`) | Settings > Appearance, Theme for new devices (10.2) | The field is hidden and no default can be set (the command line's `config theme` needs the same stored setting); devices that have not chosen use Console |
 | Saving several general settings in one request, all or nothing | Every Settings group's Save (2.2) | One request per field, in order, stopping at the first refusal |
 | A way to check the setup code without side effects | Unlock dialog (2.1) | `P overview` with the code |
-| A test of an On this Hub address before it is saved (today `G settings/local-intake` checks only the saved address) | Label Reader Test button (10.5) | Test is disabled while the Address field holds an unsaved change |
+| A test of an On this Hub address before it is saved, gated like a change (today `G settings/local-intake` checks only the saved address) | Label Reader Test button (10.5) | Test is disabled while the Address field holds an unsaved change |
 | A release of the unreleased endpoints and settings: `G firmware`, `G firmware/<id>.bin`, `P flash/provision`, `P flash/server`, job `reader_setup`; `G settings/local-intake`, `intake.reader`, `local_intake.url`, `local_intake.tier`, the 409 `no_photo` answer | Flash a device (11); Settings > Label Reader (10.5); Recently added (6.4) | Flash a device shows its "No firmware to write" empty state; the Label Reader group shows only the Cloud fields and Records kept |
 | Per-field confidence and the engine that read it, stored with each Recently added record | Confidence column, To check filter, field flags (6.2, 6.3) | The column, filter and flags are hidden |
-| Last backup time readable without the setup code | Settings list of groups on phone (10.1) | Shown only when Unlocked or Trusted |
+| Last backup time readable without the setup code (the time only: no file name, folder or size) | Settings list of groups (10.1) and the Backups group's first line, for a locked visitor too | Until the Hub gives it: shown only when Unlocked or Trusted. A backup's result and the list of backups are never shown to a locked page. |
 | A progress fraction for jobs | Job strip determinate bar (3.5) | Indeterminate bar and the last log line |
 | One rule for Bambu Lab address and certificate changes: whether changing the address (`P printers/<serial>/address`) and forgetting the certificate (`P printers/<serial>/unpin`) take the Access Code (`access_code`) and use it, as the web app and the app ask for it | Change address and Forget certificate dialogs (5.5) | Both dialogs ask for the Access Code, so every interface behaves the same; the page sends it with the request as `access_code` |
 | Printer states for the whole list in one light read, or a change stream | Printers refresh every 10 s (2.7) | `G state` every 10 s |

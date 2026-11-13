@@ -115,6 +115,8 @@ Turning a module off **never deletes its data**. Spoolman's spools, settings and
 are and come back when you turn the module on again. Only `sudo filament-kit uninstall --purge` deletes data. While a
 module is off, the app gets the message that it is turned off for anything that needs it.
 
+The newer names work wherever a mode name is asked for: `hub` for `server`, `weigh-station` for `station` and `hub-with-weigh-station` for `all-in-one` (`install.sh --mode`, `filament-kit modules`). `filament-kit modules set` and `modules enable` take `--hub` beside `--server`. Nothing stored changes: the older names stay the ones the kit keeps.
+
 ## Install the app and pair your phone
 
 Step by step: [Install the Android app](install-android-app.md). In short: install `filament-kit.apk` from the

@@ -1494,7 +1494,7 @@ gap `var(--s2) var(--s3)`, bottom corners `--r`. Groups on a page are separated 
   focus moves to the group's title (`tabindex="-1"`).
 - Pressed: not applicable.
 - Disabled: when the feature behind the group is switched off, the fields are disabled and a banner in the group says
-  so with a button to Features ("Label Reader is switched off. Turn it on in Features."). While the Hub restarts (8.5)
+  so with a button to Features ("The Label Reader is switched off. Switch it on in Features."). While the Hub restarts (8.5)
   Save is disabled with the reason "Wait for the Hub to come back."
 - Loading: until the group's data arrives, each field shows a skeleton and the form has `aria-busy="true"`; Save is
   disabled with the reason "Loading the current settings…". While saving: Save shows "Saving…", the fields become
@@ -2065,7 +2065,7 @@ the app's theme. Not Material 3 `Badge` (that is a count on an icon).
 **Purpose.** Show how sure the Label Reader was of each value it read from a label, so a person checks exactly the
 fields that need it.
 
-**Anatomy.** Four levels, each a shape and words:
+**Anatomy.** Four levels, each a shape and words, and a fifth case with no mark:
 
 | Level | Shape | Colour | Words |
 |---|---|---|---|
@@ -2073,18 +2073,46 @@ fields that need it.
 | Medium | triangle | `--warn` | "Medium" |
 | Low | octagon | `--bad` | "Low: check this" |
 | Not on the label | hollow circle | `--muted` | "Not on the label" |
+| Not rated | none | `--muted` | "Not rated" (in summaries only; the field shows no mark) |
+
+Where the levels come from. A reader that gives a number per field (the On this Hub engine): High at 0.8 or more,
+Medium at 0.5 or more, Low below; a field without its own number takes the number of the whole reading. A reader
+that gives no number per field (Cloud) is **Not rated**: its fields are never shown or counted as High, because a
+person trusts a High mark. A field the reader left empty is Not on the label; a value the Hub filled in itself
+(from the material or the Filament Catalog) is Medium with the words "Medium: filled in by the Hub". The product
+line is worked out by the Hub and has no level.
 
 Three uses:
 1. **Per field**: the mark after the value (key-value list, 6.3) or after the label (in an editable form).
-2. **Field group note**: "Read confidence is high unless marked." in the head of the fields.
+2. **Field group note** in the head of the fields: "Read confidence is high unless marked." when the reader rates
+   its fields; "This reader does not say how sure it is. Check the values against the label." when it does not.
 3. **Record summary** (in a collection cell "Read confidence"): "High" when every field is high; otherwise the
    lowest level with the fields at that level, then the others: "Low: check Material, Net weight", "Medium: Colour ·
-   Not on the label: Price per kg". A record added by hand has no reading: the cell says "Not read (typed by hand)"
-   in `--muted`, no mark.
+   Not on the label: Price per kg". A reading that is not rated: "Not rated" in `--muted`, no mark, followed by any
+   Medium and Not on the label fields. A record added by hand has no reading: the cell says "Not read (typed by
+   hand)" in `--muted`, no mark.
 
 **Sizes and tokens.** As the status badge, small size (`status--s`) for per-field marks. A summary is one line
 of `--fs-m` text: the badge with the level's words ("Low: check", "Medium:"), then the field names in `--text`; the
 line wraps after the badge when it is narrow, and the next level follows after " · ".
+
+**Read facts.** Besides the per-field marks, a record of Recently added (and the check step of Add spools) shows what
+the Hub knows about the reading, as plain lines in `--muted`, the same in every interface. A line is left out when the
+Hub does not give its value.
+
+| Line | Text | When |
+|---|---|---|
+| When read | "When read: <details>", the details joined by " · ": "Colour: <name>" or "Colour: <name> (<family>)" or "Colour: no name found"; "<n> % sure"; "Least sure: <field>, <field>" | The Hub kept what the reader reported |
+| Read again | "Read again by the Label Reader (<engine>)." or "Read again by the Label Reader (<engine>), <n> % sure." | A correction was asked for |
+| Weighed | "Weighed <n> g" and, joined by " · ", "Tag read" | The Weigh Station gave a weight; a tag was read |
+| A revision's note | "Note: <note>" | The person wrote one when asking |
+| A revision's device | "From <device>" | The Hub knows which device asked |
+| Filament changed by a correction or an undo | "The spools now use filament <id> (new)." · "The spools now use filament <id>." · "Filament <id> has no spools left; it was not deleted." | As the Hub's answer says |
+| Nothing kept | "The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page." (on the Hub page: with a link to Settings > Label Reader) | Records kept is 0 |
+
+Field errors when a record is edited by hand, beyond those of Add spools: colour "Enter 6 hex digits, like 2B2B2E.";
+a temperature above the limit "Enter degrees below 500."; price "Enter a price above 0."; a range "Enter a range like
+190-230."; asking for a correction with an empty note "Say what is wrong first, for example: brand is Polymaker."
 
 **States.**
 - Default: as above.
@@ -2973,7 +3001,7 @@ that each screen draws today.
 ```html
 <div class="banner banner--warn" role="status">
   <svg class="icon" aria-hidden="true"><use href="#i-warning"/></svg>
-  <p class="banner__text"><b>Slicer presets is switched off.</b> Turn it on in Features to build presets for Bambu
+  <p class="banner__text"><b>Slicer presets are switched off.</b> Switch it on in Features to build presets for Bambu
     Studio and Orca Slicer.</p>
   <div class="actions"><a class="btn btn--primary" href="#features">Open Features</a></div>
 </div>
@@ -3107,7 +3135,7 @@ form containers on phones, and on wider screens is drawn as the side sheet of 6.
 | Kind | Example title | Sentence | Actions |
 |---|---|---|---|
 | First use | "No printers yet" | "Printers on the network appear here once they announce themselves." | **Add a printer**, Find Klipper printers |
-| Feature off | "Slicer presets is switched off" | "Turn it on in Features to build presets for Bambu Studio and Orca Slicer." | **Open Features** |
+| Feature off | "Slicer presets are switched off" | "Switch it on in Features to build presets for Bambu Studio and Orca Slicer." | **Open Features** |
 | Nothing matches | "No spools match "galaxy"" | "Check the spelling, or search by brand, material or colour." | Clear search |
 | All done | "Nothing to check" | "Every record was read with high confidence." | Show all |
 | Nothing chosen (`pane`) | "Choose a printer" | "Its slots, facts and actions appear here." | none |

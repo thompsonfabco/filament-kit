@@ -2,9 +2,14 @@
 
     GET  settings/general                the values of the helper's whitelist (GENERAL), and Spoolman's address redacted
     POST settings/general {code, key, value}   one of them; the helper checks it against its table and saves it
-    POST settings/spoolman {code, url}   an external Spoolman: only after this server has reached it and it answered as one
+    POST settings/general {code, values: {key: value, ...}}   several of one group: every key checked first, then all
+                                         saved or none; one restarts / applies answer; a refusal's `errors` names each bad key
+    POST settings/spoolman {code, url}  an external Spoolman: only after this server has reached it and it answered as one
     POST remote/firewall {code}          the rules the owner sets up by hand: printed only, and it names their networks
     GET  settings/local-intake           the local label reader's health (local_reader.health): a read, no code
+    POST settings/local-intake/test {code, url, tier}   the same health for an address not saved yet (S2.18): the
+                                         Hub contacts a host the user names, so it takes the code; nothing is stored,
+                                         no token is sent, no redirect is followed
     GET  settings/local-intake/plan      what the last plan job (local_intake_plan) saved: no network here, the server's
                                          unit does not reach GitHub (install / removal: jobs local_intake_install, _remove)
 The certificate itself is the job `remote_issue`.
@@ -46,6 +51,10 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(_view)
 
     async def write(request, body):
+        if "values" in body:
+            r = await page._helper({"op": "general_group", "code": body["code"], "values": body["values"]})
+            page.audit(request, f"settings {', '.join(r['keys'])} changed")
+            return {"ok": True, "keys": r["keys"], "restarts": r["restarts"], "applies": r["applies"]}
         key = body.get("key")
         r = await page._helper({"op": "general", "code": body["code"], "key": key, "value": body.get("value")})
         page.audit(request, f"setting {r['key']} changed")
@@ -95,11 +104,32 @@ def routes(page) -> list[tuple]:
             return local_reader.health(cfg)
         return await anyio.to_thread.run_sync(check)
 
+    async def reader_test(request, body):
+        url = body.get("url")
+        tier = body.get("tier", "auto")
+        if not isinstance(url, str) or not isinstance(tier, str):
+            raise Refused(400, "give the address and the tier as text", field="url")
+        url = url.strip().rstrip("/")
+        err = local_reader.check_url(url)
+        if err:
+            raise Refused(400, err, field="url")
+        if tier not in local_reader.TIERS:
+            raise Refused(400, "the tier is auto, cpu or gpu", field="tier")
+
+        def check() -> dict:
+            cfg = config.load()
+            if "local_intake" not in modules.enabled(cfg):
+                raise Refused(409, "the local_intake module is off: turn it on in Modules")
+            raw = cfg.get("local_intake") if isinstance(cfg.get("local_intake"), dict) else {}
+            return local_reader.health({**cfg, "local_intake": {**raw, "url": url, "tier": tier}})
+        return await anyio.to_thread.run_sync(check)
+
     async def reader_plan(request, body):
         return {"saved": await anyio.to_thread.run_sync(local_intake_install.saved_plan)}
 
     return [("/settings/general", page.guard(read), "GET"),
             ("/settings/local-intake", page.guard(reader_health), "GET"),
+            ("/settings/local-intake/test", page.guard(reader_test, write=True), "POST"),
             ("/settings/local-intake/plan", page.guard(reader_plan), "GET"),
             ("/settings/general", page.guard(write, write="helper"), "POST"),
             ("/settings/spoolman", page.guard(spoolman, write=True), "POST"),

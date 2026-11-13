@@ -10,6 +10,7 @@ from .. import config, modules
 
 def preview(mode: str) -> dict:
     from ..setup_page import Refused
+    mode = modules.canonical_mode(mode)
     if mode not in modules.MODES:
         raise Refused(400, "no such mode")
     cfg = config.load()

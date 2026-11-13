@@ -33,7 +33,7 @@ import logging
 import time
 from pathlib import Path
 
-from . import config, library, local_reader, locks, modules, tagsources
+from . import config, library, local_reader, locks, modules, read_confidence, tagsources
 from .profiles import builds, lines
 from .spoolman import Spoolman
 
@@ -562,6 +562,11 @@ def _result(raw: dict, fils, vendors, tag, station_state, notes: list[str]) -> d
     out = _finish(raw, fils, vendors, tag, station_state)
     out.update(reader=raw["reader"], confidence=raw.get("confidence"), unsure=bool(raw.get("unsure")),
                tier=raw.get("tier"), escalated=bool(raw.get("escalated")))
+    # per-field confidence (read_confidence): on each item, its summary, and the engine that read it
+    for it in out["items"]:
+        it["confidence_levels"] = read_confidence.levels(it)
+    out["confidence_summary"] = read_confidence.summary([it["confidence_levels"] for it in out["items"]])
+    out["engine"] = read_confidence.engine(raw)
     if notes:
         out["note"] = "; ".join(notes)
     return out
