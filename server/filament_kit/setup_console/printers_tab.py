@@ -49,6 +49,30 @@ BAD_API_KEY = "a Moonraker API key has no spaces and at most 64 characters"
 OFFLINE = "the printer is offline; check that it is on and on the network"
 
 
+def printer_states(page) -> list[dict]:
+    """One entry per listed printer: `serial`, `family`, `state` (as `G state` gives it), `job` (None while the Hub has
+    no status: the printer's `gcode_state`, `name`, `percent`, `remaining_min`, `eta`, `layer`, `total_layers`) and
+    `slots` (the units of the printer's status, None while there is none). Read from the managers' held reports and
+    cached spool lists; no address or key, only the serial the list already shows."""
+    out = []
+    for row in page._printer_rows():
+        serial = row["serial"]
+        st = None
+        if row["configured"] and page.printers is not None:
+            try:
+                st = page.printers.status(serial)
+            except Exception:  # noqa: BLE001 - one odd report must not fail the whole list
+                st = None
+        job = None
+        if st is not None:
+            job = {"gcode_state": st["gcode_state"], "name": st["job"] or None, "percent": st["percent"],
+                   "remaining_min": st["remaining_min"], "eta": st["eta"], "layer": st["layer"],
+                   "total_layers": st["total_layers"]}
+        out.append({"serial": serial, "family": row["family"], "state": row["state"], "job": job,
+                    "slots": st["ams"] if st is not None else None})
+    return out
+
+
 def routes(page) -> list[tuple]:
     from .. import klipper_cli
     from ..setup_page import Refused
@@ -383,8 +407,12 @@ def routes(page) -> list[tuple]:
         page.audit(request, f"printer {serial} slot mapping stopped")
         return {"ok": True}
 
+    async def states(request, body):
+        """Every printer's state, job and slots in one read (03 2.7): what the Hub already holds, no new connection."""
+        return {"printers": await anyio.to_thread.run_sync(lambda: printer_states(page))}
+
     one = "/printers/{serial}"
-    return [("/printers/klipper", w(klipper_add), "POST"), ("/printers/scan", w(scan), "POST"),
+    return [("/printers/states", g(states), "GET"), ("/printers/klipper", w(klipper_add), "POST"), ("/printers/scan", w(scan), "POST"),
             ("/printers/pack", g(pack), "POST"),
             (one + "/rename", w(rename), "POST"), (one + "/address", w(change_address), "POST"),
             (one + "/unpin", w(unpin), "POST"), (one + "/connect", w(connect), "POST"),
