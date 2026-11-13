@@ -579,9 +579,15 @@ def test_manual_map_needs_the_pairing(mgr, sm, mapper):
 def test_map_stop_needs_a_token_and_stops_the_job(mgr, sm, mapper, monkeypatch):
     """`filament-kit printer map` stops the server's job on Ctrl-C through this route."""
     stopped = []
-    monkeypatch.setattr(mapper, "abort", lambda serial: stopped.append(serial))
+    monkeypatch.setattr(mapper, "abort", lambda serial, pending=True: stopped.append((serial, pending)))
     c = TestClient(create_app(sm, printers=mgr, mapper=mapper))
     err(c.post(f"/api/printers/{SERIAL}/map/stop"), 401, "unauthorized")
     c.headers["Authorization"] = "Bearer " + pairing.redeem_code(pairing.issue().code)
     r = c.post(f"/api/printers/{SERIAL}/map/stop")
-    assert r.status_code == 200 and stopped == [SERIAL]
+    assert r.status_code == 200 and stopped == [(SERIAL, False)]
+
+
+def test_map_stop_with_no_job_leaves_nothing_pending(client, mapper):
+    """A Stop with nothing running must not abort the next mapping."""
+    assert client.post(f"/api/printers/{SERIAL}/map/stop").status_code == 200
+    assert SERIAL not in mapper._abort_pending

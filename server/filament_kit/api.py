@@ -764,7 +764,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         """Stop a running slot mapping (the slots are put back first); `filament-kit printer map` on Ctrl-C."""
         serial = request.path_params["id"]
         await run_in_threadpool(bambu_only, serial)
-        await run_in_threadpool(audited, "slot mapping stopped", request.state.device, lambda: mapper.abort(serial),
+        await run_in_threadpool(audited, "slot mapping stopped", request.state.device, lambda: mapper.abort(serial, pending=False),
                                 serial=serial)
         return JSONResponse({"ok": True})
 

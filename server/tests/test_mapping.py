@@ -693,3 +693,53 @@ def test_a_map_without_owner_entries_keeps_map_the_slots():
     ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}))
     v = mapping.Mapper(AmsManager()).view(SERIAL)
     assert v["outcome"] == "not_confirmed" and v["next_step"] == "Map the slots."
+
+
+# ---------------------------------------------------------------- a stop with nothing to stop
+
+def test_a_stop_with_nothing_running_does_not_abort_the_next_mapping(stubs):
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}, calibrated=True, observe=False))
+    m = mapping.Mapper(FakeManager())
+    m.abort(SERIAL, pending=False)              # a Stop button with no job
+    v = m.run(SERIAL)
+    assert v["state"] == "done" and ams.load_map(SERIAL).calibrated
+
+
+def test_a_stale_pending_stop_is_ignored(stubs, monkeypatch):
+    m = mapping.Mapper(FakeManager())
+    m.abort(SERIAL)                             # a signal that found no job yet
+    m._abort_pending[SERIAL] -= mapping.ABORT_PENDING_TTL + 1
+    assert m.run(SERIAL)["state"] == "done"
+
+
+def test_a_fresh_pending_stop_still_aborts_a_job_about_to_start(stubs, calls):
+    m = mapping.Mapper(FakeManager())
+    m.abort(SERIAL)
+    v = m.run(SERIAL)
+    assert v["state"] == "failed" and v["reason"] == "interrupted" and calls["slottest"] == 0
+
+
+def test_an_early_abort_leaves_the_calibrated_map_trusted(stubs):
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}, calibrated=True, observe=False))
+    m = mapping.Mapper(FakeManager())
+    m.abort(SERIAL)
+    assert m.run(SERIAL)["state"] == "failed"
+    assert ams.load_map(SERIAL).calibrated
+
+
+def test_a_stop_during_a_job_still_aborts_it(stubs, monkeypatch):
+    gate = threading.Event()
+    seen = {}
+
+    def st_run(manager, serial, on_step, should_stop=None):
+        gate.wait(5)
+        seen["stop"] = should_stop()
+        return SlotTestResult(problems=[mapping.STOPPED], reason="interrupted", restored=True)
+    monkeypatch.setattr(slottest, "run", st_run)
+    m = mapping.Mapper(FakeManager())
+    m.start(SERIAL)
+    m.abort(SERIAL, pending=False)
+    gate.set()
+    v = wait_done(m)
+    assert seen["stop"] is True and v["state"] == "failed"
+    assert SERIAL not in m._abort_pending
