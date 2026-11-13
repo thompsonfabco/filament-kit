@@ -166,4 +166,12 @@ class DestinationsTest {
         assertTrue(nav.currentDestination.isTabRoot())
         assertEquals(Tab.Printers, nav.currentDestination.tab())
     }
+
+    @Test fun anAddAlreadyOpenIsKeptNotCoveredByASecondOne() {
+        val nav = controller()
+        assertFalse(nav.openAdd(AddRoute(draft = "d1")))
+        nav.selectTab(Tab.Printers)
+        assertTrue("the open add is reused", nav.openAdd(AddRoute(tag = "04:aa")))
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.hasRoute(AddRoute::class) })
+    }
 }

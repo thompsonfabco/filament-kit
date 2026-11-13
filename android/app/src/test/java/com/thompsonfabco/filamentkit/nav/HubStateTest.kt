@@ -63,4 +63,18 @@ class HubStateTest {
         assertEquals("[2001:db8::1]:8710", hubAddress(Connection.Online("2001:db8::1"), paired))
         assertEquals("", hubAddress(Connection.Offline, null))
     }
+
+    @Test fun aHubIsKnownByItsAddressesAndCertificateNotByItsName() {
+        val same = paired.copy(endpoints = listOf("192.0.2.10", "hub.example"))
+        assertEquals(
+            "address order does not matter",
+            hubIdentity(same),
+            hubIdentity(same.copy(endpoints = listOf("hub.example", "192.0.2.10"), name = "Renamed", token = "new token")),
+        )
+        assertEquals("upper case fingerprint is the same", hubIdentity(paired), hubIdentity(paired.copy(fingerprint = "AB")))
+        assert(hubIdentity(paired) != hubIdentity(paired.copy(name = "Workshop hub", endpoints = listOf("192.0.2.99"))))
+        assert(hubIdentity(paired) != hubIdentity(paired.copy(port = 8711)))
+        assert(hubIdentity(paired) != hubIdentity(paired.copy(fingerprint = "cd")))
+        assertNull(hubIdentity(null))
+    }
 }

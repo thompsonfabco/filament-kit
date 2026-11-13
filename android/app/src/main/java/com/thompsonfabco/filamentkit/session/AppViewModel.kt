@@ -81,6 +81,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** A tag from the spool card for an add flow that is already open; it takes it when its screen shows. */
+    val addTag = MutableStateFlow<String?>(null)
+
     /** The user's choice from the top bar's appearance menu; applies at once. */
     fun setAppearance(appearance: Appearance) {
         viewModelScope.launch { settings.setAppearance(appearance) }

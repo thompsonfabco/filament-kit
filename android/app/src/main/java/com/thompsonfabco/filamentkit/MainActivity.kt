@@ -90,6 +90,7 @@ import com.thompsonfabco.filamentkit.nav.Tab
 import com.thompsonfabco.filamentkit.nav.TabTap
 import com.thompsonfabco.filamentkit.nav.clearSavedStacks
 import com.thompsonfabco.filamentkit.nav.hubAddress
+import com.thompsonfabco.filamentkit.nav.hubIdentity
 import com.thompsonfabco.filamentkit.nav.hubState
 import com.thompsonfabco.filamentkit.nav.inPairing
 import com.thompsonfabco.filamentkit.nav.isTabRoot
@@ -100,6 +101,7 @@ import com.thompsonfabco.filamentkit.nav.selectTab
 import com.thompsonfabco.filamentkit.nav.showsBackArrow
 import com.thompsonfabco.filamentkit.nav.tab
 import com.thompsonfabco.filamentkit.nav.tabTap
+import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
@@ -119,6 +121,7 @@ import com.thompsonfabco.filamentkit.ui.add.AddSpoolsScreen
 import com.thompsonfabco.filamentkit.ui.add.AddViewModel
 import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
 import com.thompsonfabco.filamentkit.ui.add.IntakeApi
+import com.thompsonfabco.filamentkit.ui.add.TagTaps
 import com.thompsonfabco.filamentkit.ui.components.AppearanceMenu
 import com.thompsonfabco.filamentkit.ui.components.HubFacts
 import com.thompsonfabco.filamentkit.ui.components.HubSheet
@@ -157,6 +160,7 @@ import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 import com.thompsonfabco.filamentkit.ui.theme.resolveDark
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -255,9 +259,11 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     }
 
     // the Hub that was paired when pairing was opened over the main graph
-    val hubBefore = remember { arrayOfNulls<String>(1) }
+    var hubBefore by rememberSaveable { mutableStateOf<String?>(null) }
+    // screens ask for the client at each call, so a trusted certificate or a re-pair reaches them with their state intact
+    fun currentApi(): Api = app.session.api.value ?: throw ApiError(0, "offline", "No Hub is paired.")
     fun pushPairing() {
-        hubBefore[0] = config?.name
+        hubBefore = hubIdentity(config)
         nav.navigate(PairGraph) { launchSingleTop = true }
     }
     val pairScope = rememberCoroutineScope()
@@ -275,11 +281,11 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     }
 
     // Pairing or trusting worked: back to the screen pairing was opened over, else (first start) to Home.
-    val finishPairing: () -> Unit = {
+    fun finishPairing(sameHub: Boolean) {
         app.router.clear()
         pairScope.launch {
-            val hubNow = app.settings.server.first()?.name
-            if (nav.previousBackStackEntry == null || hubNow != hubBefore[0]) {
+            val hubNow = hubIdentity(app.settings.server.first())
+            if (nav.previousBackStackEntry == null || (!sameHub && hubNow != hubBefore)) {
                 // first start, or another Hub: nothing of the old one stays (stacks, saved stacks, their view models)
                 nav.clearSavedStacks()
                 nav.navigate(HomeGraph) {
@@ -290,7 +296,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 nav.popBackStack<PairGraph>(inclusive = true)
             }
         }
-        Unit
     }
 
     // Tag taps open the spool card anywhere except pairing and the add flow (AddViewModel takes taps itself).
@@ -393,12 +398,12 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                                 PairScreen(
                                     viewModel = pairVm,
                                     discovered = discovered,
-                                    onPaired = finishPairing,
+                                    onPaired = { finishPairing(sameHub = false) },
                                     modifier = Modifier.weight(1f),
                                     skipCheck = skipFingerprintCheck,
                                     onSkipCheck = app::setSkipFingerprintCheck,
                                     canTrust = { config.canTrust(it.expected) },
-                                    onTrust = { m -> app.trustCertificate(m.expected, m.actual, finishPairing) },
+                                    onTrust = { m -> app.trustCertificate(m.expected, m.actual) { finishPairing(sameHub = true) } },
                                     version = version,
                                 )
                             }
@@ -494,11 +499,23 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             return@composable
                         }
                         val route = e.toRoute<AddRoute>()
-                        val addVm: AddViewModel = viewModel(key = System.identityHashCode(a).toString(), factory = viewModelFactory {
+                        val addVm: AddViewModel = viewModel(factory = viewModelFactory {
                             initializer {
-                                AddViewModel(IntakeApi.of(a), app.drafts, draftId = route.draft, initialTag = route.tag, manual = route.manual)
+                                AddViewModel(
+                                    IntakeApi.of(::currentApi), app.drafts, taps = emptyFlow(),
+                                    draftId = route.draft, initialTag = route.tag, manual = route.manual,
+                                )
                             }
                         })
+                        TagTaps(addVm::onTag)
+                        // a tag from the spool card for this add, already open: it takes the tag once it shows
+                        val waiting by app.addTag.collectAsStateWithLifecycle()
+                        LaunchedEffect(waiting) {
+                            waiting?.let {
+                                addVm.onTag(it)
+                                app.addTag.value = null
+                            }
+                        }
                         if (BuildConfig.DEBUG && !route.manual) LaunchedEffect(addVm) { DebugPhotos.photos.collect(addVm::addPhoto) }
                         AddSpoolsScreen(
                             vm = addVm,
@@ -514,8 +531,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             NotPaired(::pushPairing)
                             return@composable
                         }
-                        val profileVm: AddProfileViewModel = viewModel(key = System.identityHashCode(a).toString(), factory = viewModelFactory {
-                            initializer { AddProfileViewModel(ProfileApi.of(a)) }
+                        val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
+                            initializer { AddProfileViewModel(ProfileApi.of(::currentApi)) }
                         })
                         AddProfileScreen(
                             vm = profileVm,
@@ -532,8 +549,12 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             NotPaired(::pushPairing)
                             return@composable
                         }
-                        val searchVm: SearchViewModel = viewModel(key = System.identityHashCode(a).toString(), factory = viewModelFactory {
-                            initializer { SearchViewModel { q, sealedOnly -> a.search(q, sealedOnly) } }
+                        val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
+                            initializer {
+                                SearchViewModel { q, sealedOnly ->
+                                    currentApi().search(q, sealedOnly)
+                                }
+                            }
                         })
                         SearchScreen(
                             vm = searchVm,
@@ -680,7 +701,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onStartAdd = { tag ->
                                 close()
                                 // without label reading on the server the new spool is added by hand
-                                nav.openAdd(AddRoute(tag = tag, manual = !labelPhotos))
+                                if (nav.openAdd(AddRoute(tag = tag, manual = !labelPhotos))) app.addTag.value = tag
                             },
                             onPairAgain = {
                                 close()

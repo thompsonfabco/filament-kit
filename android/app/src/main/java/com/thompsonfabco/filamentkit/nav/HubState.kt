@@ -48,3 +48,10 @@ fun hubAddress(connection: Connection, config: ServerConfig?): String {
     val host = (connection as? Connection.Online)?.host ?: cfg.endpoints.firstOrNull().orEmpty()
     return "${if (':' in host) "[$host]" else host}:${cfg.port}"
 }
+
+/**
+ * Which Hub a pairing is: its stored addresses (in any order) and port, with the certificate it is paired with. The same
+ * Hub keeps this when pairing again; another Hub, or a Hub with another certificate, does not. Null when none is stored.
+ */
+fun hubIdentity(config: ServerConfig?): String? =
+    config?.let { "${it.endpoints.sorted().joinToString(",")}:${it.port}|${it.fingerprint.lowercase()}" }
