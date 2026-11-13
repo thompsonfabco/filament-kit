@@ -753,6 +753,13 @@ def test_service_worker_shell_follows_its_scope_under_the_public_path(app):
     assert f"{BASE}/app.js" in page and f"{BASE}/shared/tokens.css" in page      # the page links what the scope lists
 
 
+def test_service_worker_may_claim_the_page_at_the_app_path(app):
+    """The page is <base> (no slash); a worker at <base>/sw.js may claim only <base>/ unless the header allows <base>."""
+    page = signed(app).get("/intake").text
+    assert f"data-base='{BASE}'" in page
+    assert signed(app).get("/intake/sw.js").headers["service-worker-allowed"] == BASE
+
+
 def test_service_worker_caches_the_shell_and_never_the_api():
     src = (Path(web_app.__file__).parent / "static" / "sw.js").read_text(encoding="utf-8")
     listed = re.search(r"const SHELL = \[(.*?)\];", src, re.S).group(1)

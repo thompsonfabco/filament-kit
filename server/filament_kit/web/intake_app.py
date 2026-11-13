@@ -407,10 +407,13 @@ class IntakeApp:
                         headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
 
     async def service_worker(self, request: Request):
-        """sw.js with the Hub version in its cache name (print alerts and the Printers tab are not needed to serve it)."""
+        """sw.js with the Hub version in its cache name (print alerts and the Printers tab are not needed to serve it).
+        Service-Worker-Allowed lets the page register it for the app's own path, so the page at <base> (no slash) is
+        in its scope as well as <base>/..."""
         body = (STATIC / "sw.js").read_bytes().replace(b"__VERSION__", __version__.encode())
         return Response(body, media_type="text/javascript",
-                        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+                        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff",
+                                 "Service-Worker-Allowed": self.base})
 
     async def shared_asset(self, request: Request):
         return shared_files.response(self.shared, request.path_params["name"])
