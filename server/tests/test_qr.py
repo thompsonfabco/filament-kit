@@ -145,9 +145,13 @@ def test_text_and_svg_stand_for_their_link(link):
 
 
 def test_a_link_with_non_ascii_characters_is_encoded_as_utf_8():
-    link = "https://kit.local:8710/intake?name=Kühl-Ärger-日本"
-    assert decode(from_text(qr.text(link))) == link
+    link = "https://kit.local:8710/intake?name=Kühl-Ärger"      # Latin-1 only: segno alone would pick ISO-8859-1
+    assert decode(from_text(qr.text(link))) == link              # the decoder reads the bytes as UTF-8
     assert decode(from_svg(qr.svg(link))) == link
+    utf8 = [[bool(m & 1) for m in r] for r in segno.make(link, error="L", encoding="utf-8").matrix_iter(border=0)]
+    default = [[bool(m & 1) for m in r] for r in segno.make(link, error="L").matrix_iter(border=0)]
+    assert utf8 != default
+    assert from_text(qr.text(link)) == utf8
 
 
 def test_the_reader_is_not_a_rubber_stamp():
