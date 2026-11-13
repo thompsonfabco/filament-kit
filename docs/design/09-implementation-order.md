@@ -76,11 +76,13 @@ step is checked from its first line.
 
 ### S0.1 Token folder in the code
 Tooling · S · Depends on: none · Beside: none (first step)
-- **Files today:** none in the code. The token set lives in the design folder (`design/tokens/`). The pages carry
+- **Files today:** none in the code. The token set is delivered with the design (`design/tokens/`). The pages carry
   their own identical `:root` blocks (`setup_static/setup.css`, `web/static/app.css`).
 - **Change:** add `tokens/tokens.json`, `tokens/build_tokens.py`, `tokens/tokens.css` and
   `tokens/check_contrast.py` to the repository as they are in the design folder (08 1, 3.1 to 3.3); run
-  `build_tokens.py --check` and `check_contrast.py` in the project's normal test run.
+  `build_tokens.py --check` and `check_contrast.py` in the project's normal test run. From this step the
+  repository's `tokens/` folder is the only place the token files exist: the copy that came with the design is
+  removed, and its `README.md` and `ADJUSTMENTS.md` move to `tokens/` (08 1).
 - **Keep:** every served file; nobody installing Spoolwarden runs the generator (F12 rule 2).
 - **Check:** `python tokens/build_tokens.py --check` prints `OK: tokens.css matches tokens.json`;
   `python tokens/check_contrast.py` ends with `RESULT: PASS`.
@@ -285,7 +287,8 @@ Hub page · M · Depends on: S1.6 · Beside: S1.8
 ### S1.8 Hub: job progress
 Hub · S · Depends on: none · Beside: any step that does not edit `setup_console/jobs.py`
 - **Files today:** `setup_console/jobs.py`.
-- **Change:** jobs report a progress fraction (N13).
+- **Change:** jobs report a progress fraction (N13), read from the newest `==> step K of N` line of the job's
+  log; null when the job writes none. Which jobs write step lines, and the final form of the fraction, is S1.12.
 - **Keep:** job names, states and log redaction.
 - **Check:** a test of the job reply with and without a fraction.
 
@@ -317,6 +320,20 @@ Hub page · M · Depends on: S1.10 · Beside: none
   1280 px and 320 px. From this step on, every Hub page step runs it on its views.
 - **Keep:** no shipped file changes.
 - **Check:** the audit passes on the shell; a planted unlabelled button fails it.
+
+### S1.12 Hub: jobs write their steps
+Hub · M · Depends on: S1.8 · Beside: any step that does not edit the job commands or `setup_console/jobs.py`
+- **Files today:** the commands the jobs run (`backup.py`, `updates.py`, `apply.py`, `library.py`,
+  `reader_setup.py`, the Weigh Station pairing in `cli.py`); `setup_console/jobs.py`.
+- **Change:** each counted job of 02 8.4 "Steps" writes `==> step K of N <sentence>` when a step starts, with the
+  sentences given there; the job reply gains `step` (`index`, `count`, `text`) and `progress` becomes
+  `(K - 1) / N` while step K runs and 1 at exit 0 (N13). Jobs that are not counted are unchanged.
+- **Keep:** what each job does, its other log lines, its exit codes, redaction.
+- **Other interfaces:** the command line shows the same step sentences as its progress lines (S5.1). The web app
+  and the app start no Hub jobs.
+- **Check:** for each counted job, a test that its command writes step lines 1 to N in order with N constant; a
+  test of the reply at step 2 of 4 (`progress` 0.25, `step.index` 2) and at the end (1); a step sentence
+  containing an address fails a test.
 
 ---
 
@@ -737,7 +754,7 @@ app · L · Depends on: S4.1 · Beside: Stage 3 steps
 - **Change:** 05 2: `NavigationSuiteScaffold` with the destinations of 05 2.3; the top app bar (place title,
   connection chip with the Hub connection sheet, appearance menu); type-safe routes, every screen a destination
   (the Printers local state becomes routes); Back as 08 14; gating with the Hub notice; the splash screen. Recent
-  is a destination from this step: today's Recently added screens move onto the routes of 05 2.4 (`recent`,
+  is a destination from this step: today's Recently added screens move onto the routes of 05 2.5 (`recent`,
   `recent/{hid}` and those of its sub-screens that exist today) with their behaviour unchanged; S4.12 rebuilds
   them. An NFC tap keeps opening today's spool card until S4.8.
 - **Keep:** what each screen shows inside.
@@ -1125,7 +1142,7 @@ they come with that idea.
 | N10 | Test an On this Hub address before it is saved | S2.18 | S2.19 |
 | N11 | Release of firmware and flash endpoints, and of the On this Hub engine settings | S2.15 (firmware, flash); S2.18 (On this Hub) | S2.16; S2.19 and S5.8 |
 | N12 | Last backup time readable without the setup code | S2.17 | S2.19 |
-| N13 | A progress fraction for jobs | S1.8 | S1.9 |
+| N13 | A progress fraction for jobs, and the step being run (`step`: `index`, `count`, `text`) | S1.8, S1.12 | S1.9 |
 | N14 | Printer states for the whole list in one read or a stream | S2.3 | S2.4 |
 | N15 | The Hub's own texts in the new names | S2.11 (feature titles); S3.16 (refusal and sign-in pages); S7.1 (the rest) | S2.12; S3.16; S7.1 |
 | N16 | Cloud reads used today and the daily limit in `G state` | S2.1 | S2.2 |
