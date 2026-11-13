@@ -290,7 +290,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     fun finishPairing(sameHub: Boolean) {
         app.router.clear()
         pairScope.launch {
-            val hubNow = hubIdentity(app.settings.server.first())
+            // a read error keeps the stacks: it says nothing about which Hub is stored
+            val hubNow = try { hubIdentity(app.settings.server.first()) } catch (e: java.io.IOException) { hubBefore }
             if (nav.previousBackStackEntry == null || (!sameHub && hubNow != hubBefore)) {
                 // first start, or another Hub: nothing of the old one stays (stacks, saved stacks, their view models)
                 nav.clearSavedStacks()

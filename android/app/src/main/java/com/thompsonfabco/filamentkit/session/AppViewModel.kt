@@ -77,7 +77,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             // a server is stored with a usable token: start on Home; none, or a revoked token: start on Pair
-            _startup.value = Startup(settings.appearance.first(), settings.server.first().isPaired())
+            _startup.value = Startup(settings.appearance.first(), settings.serverOrNull().isPaired())
         }
     }
 

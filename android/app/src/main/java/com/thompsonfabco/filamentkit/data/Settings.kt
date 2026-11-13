@@ -5,15 +5,15 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -46,14 +46,16 @@ interface SettingsStore {
 class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** What is stored; an unreadable store reads as empty (System appearance, unpaired) so the splash is always released. */
-    private val data: Flow<Preferences> = store.data.catch { e ->
-        if (e is IOException) emit(emptyPreferences()) else throw e
+    /** The paired server, or null when unpaired (or the stored value is unreadable). */
+    val server: Flow<ServerConfig?> = store.data.map { prefs ->
+        prefs[KEY]?.let { text -> runCatching { json.decodeFromString<ServerConfig>(text) }.getOrNull() }
     }
 
-    /** The paired server, or null when unpaired (or the stored value is unreadable). */
-    val server: Flow<ServerConfig?> = data.map { prefs ->
-        prefs[KEY]?.let { text -> runCatching { json.decodeFromString<ServerConfig>(text) }.getOrNull() }
+    /** One read for the startup: the paired server, or null when unpaired or the store cannot be read. */
+    suspend fun serverOrNull(): ServerConfig? = try {
+        server.first()
+    } catch (e: IOException) {
+        null
     }
 
     override suspend fun save(config: ServerConfig) {
@@ -65,7 +67,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     /** Off unless the user turned it on. It belongs to the phone, so forgetting a server leaves it as it is. */
-    val skipFingerprintCheck: Flow<Boolean> = data.map { it[SKIP_FINGERPRINT] ?: false }
+    val skipFingerprintCheck: Flow<Boolean> = store.data.map { it[SKIP_FINGERPRINT] ?: false }
 
     override suspend fun skipsFingerprintCheck(): Boolean = skipFingerprintCheck.first()
 
@@ -74,11 +76,20 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     /** Light, dark or follow the phone; System when nothing (or something unknown) is stored. */
-    val appearance: Flow<Appearance> = data.map { prefs ->
+    val appearance: Flow<Appearance> = store.data.map { prefs ->
         when (prefs[APPEARANCE]) {
             "light" -> Appearance.Light
             "dark" -> Appearance.Dark
             else -> Appearance.System
+        }
+    }.retryWhen { e, _ ->
+        // a read error shows System for now and tries again, so a later choice still arrives
+        if (e is IOException) {
+            emit(Appearance.System)
+            delay(RETRY_MS)
+            true
+        } else {
+            false
         }
     }
 
@@ -87,6 +98,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     companion object {
+        private const val RETRY_MS = 1000L
         private val KEY = stringPreferencesKey("server")
         private val APPEARANCE = stringPreferencesKey("appearance")
         private val SKIP_FINGERPRINT = booleanPreferencesKey("skip_fingerprint_check")

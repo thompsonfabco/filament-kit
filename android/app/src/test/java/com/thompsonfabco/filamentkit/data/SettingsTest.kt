@@ -13,8 +13,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -95,14 +98,41 @@ class SettingsTest {
         }
     }
 
-    @Test fun anUnreadableStoreGivesSystemAndUnpaired() = runBlocking {
-        val broken = object : DataStore<Preferences> {
-            override val data: Flow<Preferences> = flow { throw IOException("unreadable") }
-            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences = throw IOException("unreadable")
+    /** A store whose first collection fails with an IOException; later ones read [real]. */
+    private fun failingOnce(real: DataStore<Preferences>) = object : DataStore<Preferences> {
+        var failed = false
+        override val data: Flow<Preferences> = flow {
+            if (!failed) {
+                failed = true
+                throw IOException("unreadable")
+            }
+            emitAll(real.data)
         }
-        val s = Settings(broken)
-        assertEquals(Appearance.System, s.appearance.first())
-        assertNull(s.server.first())
+        override suspend fun updateData(transform: suspend (Preferences) -> Preferences) = real.updateData(transform)
+    }
+
+    private fun realStore() = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "s.preferences_pb") }
+
+    @Test fun theAppearanceKeepsEmittingAfterAReadError() = runBlocking {
+        val real = realStore()
+        real.edit { it[stringPreferencesKey("appearance")] = "dark" }
+        val s = Settings(failingOnce(real))
+        assertEquals(listOf(Appearance.System, Appearance.Dark), s.appearance.take(2).toList())
+    }
+
+    @Test fun thePairingFlowIsNotCaught() = runBlocking {
+        val s = Settings(failingOnce(realStore()))
+        try {
+            s.server.first()
+            throw AssertionError("a read error must reach the collector")
+        } catch (e: IOException) {
+            // the session's collector sees the error; only the one-shot startup read maps it to unpaired
+        }
+        assertNull(s.serverOrNull())
+    }
+
+    @Test fun theStartupReadOfAnUnreadableStoreIsUnpaired() = runBlocking {
+        assertNull(Settings(failingOnce(realStore())).serverOrNull())
     }
 
     @Test fun appearanceIsSystemUntilChosenAndKeepsTheChoice() = runBlocking {
