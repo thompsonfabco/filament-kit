@@ -23,6 +23,7 @@ def _ensure_saved(vendor, product, material, *, bambu_parent, library, store):
         return lines_mod.ensure(ls, vendor, product, material, bambu_parent=bambu_parent, library=library,
                                 store=store, used_fids=set())
 
+
 BBL = Path(__file__).parent / "data" / "bbl"
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2,
          "overflow": "Overflow", "sealed_location": "Sealed stock"}
