@@ -100,7 +100,6 @@ DEFAULTS: dict = {
     "spoolman": {"allow": None},
     "orders": {"file": None},
     "tag_sources": [],          # [{"name": str, "url": str}]: extra readers speaking the lasttag shape
-    "slot_service": None,       # {"state_url", "set_url", "token_file"}
     "slicer_printers": [],
     "presets_orca": False,
     "intake": {"tare_hints": {}, "model": None},
@@ -145,9 +144,6 @@ def save(cfg: dict) -> None:
         os.chmod(tmp, 0o640)
         grant_web_read(tmp)
         os.replace(tmp, f)
-        token = (cfg.get("slot_service") or {}).get("token_file") if isinstance(cfg.get("slot_service"), dict) else None
-        if token and Path(token).is_file() and not Path(token).is_symlink():
-            grant_web_read(token)       # the owner's H2D slot token: the web unit's printer_set_slot reads it
     except BaseException:
         if tmp.exists():
             tmp.unlink()

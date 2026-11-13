@@ -13,8 +13,8 @@ and a check here), every one with the reader token in `X-Auth-Token`:
                                           cut at the end with a {"note"} entry (no label: the firmware skips it)
     POST /reader/scan {uid, printer, slot, dry_run}
                                           {status, message, filament}; status one of set | queued | unknown_tag |
-                                          unknown_spool | archived_spool | no_preset | offline | error (the
-                                          scanner's /set-slot statuses; set and queued always with 200)
+                                          unknown_spool | archived_spool | no_preset | offline | error (set
+                                          and queued always with 200)
 
 A scan loads the tag's spool into the slot through the kit server's own load route (KitApi, as the MCP printer
 tools do): the user's exact preset or `no_preset`, never Generic (bridge/loading.py); mid-print only the slot that

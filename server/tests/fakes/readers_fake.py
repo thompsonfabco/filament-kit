@@ -3,9 +3,6 @@
 One Starlette app, state in a dict the test mutates:
   GET  /last-tag      a lasttag reader (SV08 lasttag service or the station's /last-tag): `data["tag"]`
   GET  /state         the intake station's state: `data["state"]`
-  GET  /api/state     the H2D slot service (h2d-remote): `data["slots"]`
-  POST /set-slot      the H2D scanner orchestrator: records the body and header in `data["set_calls"]`,
-                      answers `data["set_reply"]` with `data["set_status"]`
 """
 from __future__ import annotations
 
@@ -20,9 +17,7 @@ from starlette.routing import Route
 
 
 def new_data() -> dict:
-    return {"tag": {"status": "none"}, "state": {"tag": None, "scale": None, "last_weight": None},
-            "slots": {"online": True, "state": "IDLE", "name": "", "ams": []},
-            "set_calls": [], "set_reply": {"ok": True, "status": "set"}, "set_status": 200}
+    return {"tag": {"status": "none"}, "state": {"tag": None, "scale": None, "last_weight": None}}
 
 
 def app(data: dict) -> Starlette:
@@ -32,15 +27,7 @@ def app(data: dict) -> Starlette:
     async def state(request: Request):
         return JSONResponse(data["state"])
 
-    async def slots(request: Request):
-        return JSONResponse(data["slots"])
-
-    async def set_slot(request: Request):
-        data["set_calls"].append({"body": await request.json(), "token": request.headers.get("x-auth-token")})
-        return JSONResponse(data["set_reply"], status_code=data["set_status"])
-
-    return Starlette(routes=[Route("/last-tag", last_tag), Route("/state", state), Route("/api/state", slots),
-                             Route("/set-slot", set_slot, methods=["POST"])])
+    return Starlette(routes=[Route("/last-tag", last_tag), Route("/state", state)])
 
 
 class Served:

@@ -9,8 +9,8 @@ its reach. It gets exactly what it uses, as POSIX ACLs (acl.py) on named files a
                   (kit_token), the Web Push keys and subscriptions, its failed label reads kept for retry
                   (failed/, FK_FAILED_DIR in its unit); copied here once from /var/lib/filament-kit/web/
                   (migrate; the originals stay there, as they were, for `update --rollback` to 0.3.0)
-  settings        /etc/filament-kit: pass (x); config.json, web_passphrase, anthropic_key and the owner's H2D slot
-                  token (slot_service.token_file): read (r); every root writer of these keeps the grant
+  settings        /etc/filament-kit: pass (x); config.json, web_passphrase and anthropic_key: read (r); every
+                  root writer of these keeps the grant
                   (config.save, cli.write_passphrase, cli.write_key)
   kit state       /var/lib/filament-kit: pass (x); web/ (reader_tokens, 644): read; profiles/, library/,
                   library-local/, reader-fw/: read, also what is made there later (default ACLs);
@@ -289,7 +289,7 @@ def mark_web_device() -> int:
     return pairing.set_role_by_name(slots.DEVICE_NAME, WEB_ROLE)
 
 
-def grant(web_uid: int, kit_uid: int, cfg: dict | None = None) -> list[str]:
+def grant(web_uid: int, kit_uid: int, cfg: dict | None = None) -> list[str]:  # cfg: unused since slot_service went
     """The web user's ACLs (module docstring). Returns the paths granted. Never through a link: each file is
     opened without following one, below a folder opened the same way (acl.grant_at)."""
     if not acl.supported():
@@ -323,10 +323,4 @@ def grant(web_uid: int, kit_uid: int, cfg: dict | None = None) -> list[str]:
         one(p.state, name, R | W | X, {web_uid: R | W | X, kit_uid: R | W | X}, tree=True)
     for name in RO_TREES:
         one(p.state, name, R | X, {web_uid: R | X}, tree=True)
-    cfg = cfg if cfg is not None else config.load()
-    svc = cfg.get("slot_service")
-    token = svc.get("token_file") if isinstance(svc, dict) else None
-    if token:                                  # the owner's H2D slot token (printer_set_slot), re-granted on save
-        t = Path(token)
-        one(t.parent, t.name, R)
     return done

@@ -234,18 +234,13 @@ def test_no_kit_folder_is_writable_by_the_web_user(kit, tmp_path):
     st = kit / "state"
     for d in ("profiles", "failed", "library", "web"):
         (st / d).mkdir()
-    token = kit / "etc" / "h2d_token"
-    token.write_text("t\n", encoding="utf-8")
     cfg = config.load()
-    cfg["slot_service"] = {"state_url": "http://h2d.example.com/state", "set_url": "http://h2d.example.com/set",
-                           "token_file": str(token)}
     web_access.shared_files(os.getuid(), os.getgid(), chown=lambda *a: None)
     web_access.grant(54321, os.getuid(), cfg)
     for d in ("profiles", "library", "web"):
         assert acl.users_of(st / d)[54321] & acl.W == 0, d
     assert 54321 not in acl.users_of(st / "failed")
     assert acl.users_of(st / "profiles", acl.DEFAULT)[54321] & acl.W == 0
-    assert acl.users_of(token) == {54321: acl.R}                     # the H2D slot token
     assert not (st / "reads.json").exists() or 54321 not in acl.users_of(st / "reads.json")
     assert acl.users_of(st / "inventory.lock") == {54321: acl.R}       # a lock is taken on a read-only fd
 
@@ -300,27 +295,6 @@ def test_open_lock_says_what_is_wrong_when_a_read_only_lock_is_missing(kit, monk
     assert "gone.lock" in str(e.value) and "modules apply" in str(e.value)
     assert isinstance(e.value, OSError)
 
-
-def test_web_grant_includes_the_slot_token_whenever_config_is_saved(kit, monkeypatch):
-    seen = []
-    monkeypatch.setattr(config, "grant_web_read", lambda p: seen.append(Path(p).name))
-    token = kit / "etc" / "h2d_token"
-    token.write_text("t\n", encoding="utf-8")
-    cfg = config.load()
-    cfg["slot_service"] = {"state_url": "x", "set_url": "y", "token_file": str(token)}
-    config.save(cfg)
-    assert "h2d_token" in seen
-
-
-def test_unreadable_slot_token_says_how_to_fix(tmp_path):
-    from filament_kit.web import slots
-    with pytest.raises(slots.SlotError) as e:
-        slots.service_set_slot({"set_url": "http://h2d.example.com/set", "token_file": str(tmp_path / "none")},
-                               1, "1", True)
-    assert "sudo filament-kit modules apply" in str(e.value)
-
-
-# ---------- the writers never follow a planted link ----------
 
 @LINUX
 def test_open_lock_does_not_follow_a_link(kit, tmp_path):

@@ -31,8 +31,7 @@ PASS = "correct horse battery"
 UID = "a:b:c:d:e:f:1"
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
 TOOLS = {"find_spools", "add_spools", "tag_state", "open_spool", "preset_status", "list_lines", "find_parents",
-         "add_filaments_to_line", "add_line", "generate", "printer_slots", "printer_set_slot", "h2d_slots",
-         "h2d_set_slot"}
+         "add_filaments_to_line", "add_line", "generate", "printer_slots", "printer_set_slot"}
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2,
          "overflow": "Overflow", "sealed_location": "Sealed stock"}
 READ = {"questions": ["which grey?"], "items": [{
@@ -168,7 +167,7 @@ def test_mcp_handshake_and_tools_list(app, store):
     assert tools["add_spools"].annotations.read_only_hint is False
     props = tools["open_spool"].input_schema["properties"]
     assert set(props) == {"spool", "filament", "location", "gross", "remaining", "humidity", "force", "dry_run"}
-    assert set(tools["h2d_set_slot"].input_schema["properties"]) == {"spool", "slot", "dry_run"}
+    assert set(tools["printer_set_slot"].input_schema["properties"]) == {"spool", "slot", "dry_run", "printer"}
     assert set(tools["add_line"].input_schema["properties"]) == {"name", "vendor", "filament_ids", "orca_parent",
                                                                  "bs_template"}
 
@@ -326,7 +325,7 @@ def test_bad_inputs_are_400(app):
         assert r.status_code == 400 and "a.heic" in r.json()["error"]
 
 
-def test_start_pairs_for_the_bridge_and_skips_it_with_a_slot_service(env, monkeypatch):
+def test_start_pairs_for_the_bridge_and_ignores_an_old_slot_service(env, monkeypatch):
     from filament_kit import pairing
     from filament_kit.web import slots
     pairing.make_cert("fkhost", [], config.paths().etc)
@@ -335,9 +334,9 @@ def test_start_pairs_for_the_bridge_and_skips_it_with_a_slot_service(env, monkey
     assert isinstance(kit, slots.KitApi)
     assert [d["name"] for d in pairing.devices()] == ["web (MCP)"]
     assert (config.paths().web / "kit_token").is_file()
+    # a slot_service left from the old standalone scanner is ignored: the printer tools are the kit's bridge
     cfg["slot_service"] = {"state_url": "http://x/api/state", "set_url": "http://x/set", "token_file": "/x"}
-    assert web_main.kit_api_at_start(cfg) is None
-    cfg["slot_service"] = None
+    assert isinstance(web_main.kit_api_at_start(cfg), slots.KitApi)
     cfg["modules"]["printers"] = False
     assert web_main.kit_api_at_start(cfg) is None
 

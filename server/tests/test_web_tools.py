@@ -249,52 +249,6 @@ def test_preset_tools_need_the_presets_module(tools):
 
 # ---------- printer slots ----------
 
-def _slot_service(env, tmp_path):
-    _, data, url = env
-    tok = tmp_path / "h2d_token"
-    tok.write_text("sekrit\n", encoding="utf-8")
-    cfg = config.load()
-    cfg["slot_service"] = {"state_url": url + "/api/state", "set_url": url + "/set-slot", "token_file": str(tok)}
-    config.save(cfg)
-    return data
-
-
-def test_printer_slots_via_slot_service(tools, sm, env, tmp_path, spoolman_fake_store):
-    data = _slot_service(env, tmp_path)
-    (a,) = add(sm, item())
-    spoolman_fake_store["fields"]["spool"].append({"key": "active_tray", "name": "active_tray",
-                                                   "field_type": "text", "entity_type": "spool", "order": 0})
-    sm.patch(f"spool/{a}", {"extra": {"active_tray": json.dumps("H2D:ams0:tray1")}})
-    data["slots"] = {"online": True, "state": "IDLE", "name": "job", "ams": [
-        {"id": 0, "humidity": 20, "trays": [{"id": 1, "empty": False, "type": "PLA", "color": "FF0000FF",
-                                              "preset_id": "GFA00", "active": True}]},
-        {"id": 128, "trays": [{"id": 0, "empty": True}]},
-        {"id": 254, "trays": [{"id": 0, "empty": False, "type": "TPU", "preset_id": ""}]}]}
-    out = tools.printer_slots()
-    assert out["printer_online"] is True and out["job"] == "job"
-    by = {s["slot"]: s for s in out["slots"]}
-    assert set(by) == {"AMS slot 2", "AMS HT 1", "External left"}
-    assert by["AMS slot 2"]["preset"] == "Generic PLA" and by["AMS slot 2"]["feeding_now"] is True
-    assert by["AMS HT 1"]["loaded"] is False and by["AMS HT 1"]["spool"] is None
-    assert by["AMS slot 2"]["spool"]["spool_id"] == a and by["AMS slot 2"]["spool"]["name"] == "SUNLU PLA+ Grey"
-
-
-def test_printer_set_slot_via_slot_service(tools, env, tmp_path):
-    data = _slot_service(env, tmp_path)
-    out = tools.printer_set_slot(5, "HT2", dry_run=True)
-    assert data["set_calls"] == [{"body": {"spool_id": 5, "ams_id": 129, "tray_id": 0, "dry_run": True},
-                                  "token": "sekrit"}]
-    assert out["slot"] == "AMS HT 2" and "dry run" in out["note"]
-    tools.printer_set_slot(5, "EXT-R", dry_run=False)
-    assert data["set_calls"][-1]["body"] == {"spool_id": 5, "ams_id": 255, "tray_id": 0, "dry_run": False}
-    tools.printer_set_slot(5, "3", dry_run=False)
-    assert data["set_calls"][-1]["body"]["ams_id"] == 0 and data["set_calls"][-1]["body"]["tray_id"] == 2
-    data["set_status"], data["set_reply"] = 409, {"ok": False, "status": "no_preset"}
-    assert tools.printer_set_slot(5, "1", dry_run=False)["status"] == "no_preset"   # passed through
-    with pytest.raises(Problem, match="unknown slot"):
-        tools.printer_set_slot(5, "Z9")
-
-
 @pytest.mark.parametrize("label, ams", [("1", (0, 0)), ("AMS slot 4", (0, 3)), ("ht3", (130, 0)),
                                         ("AMS HT 1", (128, 0)), ("EXT-L", (254, 0)),
                                         ("external right", (255, 0))])
@@ -302,13 +256,13 @@ def test_parse_slot(label, ams):
     assert slots.parse_slot(label) == ams
 
 
-def test_printer_slots_neither_configured(tools):
+def test_printer_slots_need_the_printers_module(tools):
     cfg = config.load()
     cfg["modules"]["printers"] = False
     config.save(cfg)
-    with pytest.raises(Problem, match="slot_service"):
+    with pytest.raises(Problem, match="the printers module is off"):
         tools.printer_slots()
-    with pytest.raises(Problem, match="slot_service"):
+    with pytest.raises(Problem, match="the printers module is off"):
         tools.printer_set_slot(1, "1")
 
 
@@ -525,9 +479,10 @@ def test_tool_texts_round_1():
     tools = {t.name: t for t in anyio.run(m.list_tools)}
     d = tools["add_filaments_to_line"].description
     assert "Refuses duplicates" not in d and "moves" in d and "extra.line" in d
-    # P4: the old H2D names (EXT-L ...) work with both backends now, so the description no longer limits them
-    assert "EXT-L" in json.dumps(tools["h2d_set_slot"].input_schema) and "Ext-L" in mcp_tools.SLOT_ARG
-    assert "slot_service" not in tools["h2d_set_slot"].description
+    # P4: the old H2D names (EXT-L ...) are still understood by the slot argument
+    assert "EXT-L" in json.dumps(tools["printer_set_slot"].input_schema) and "Ext-L" in mcp_tools.SLOT_ARG
+    assert "slot_service" not in tools["printer_set_slot"].description
+    assert "h2d_slots" not in tools and "h2d_set_slot" not in tools          # the old scanner's names are gone
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
@@ -547,17 +502,16 @@ def test_error_text_only_for_deliberate_refusals():
     assert mcp_tools.error_text(RuntimeError("boom")) is None
 
 
-def test_half_configured_slot_service_refuses(tools, caplog):
-    import logging
+def test_an_old_slot_service_setting_is_ignored(tools):
+    """The old standalone scanner's slot_service, left in config.json, no longer picks a backend: with the printers
+    module off the tools say so, and nothing is sent to the old addresses."""
     cfg = config.load()
-    cfg["slot_service"] = {"state_url": "http://x/api/state"}          # no set_url
+    cfg["slot_service"] = {"state_url": "http://192.0.2.1/api/state", "set_url": "http://192.0.2.1/set-slot",
+                           "token_file": "/x"}
+    cfg["modules"]["printers"] = False
     config.save(cfg)
-    with caplog.at_level(logging.ERROR, logger="filament_kit"):
-        with pytest.raises(Problem, match="slot_service"):
-            tools.printer_slots()
-    assert any("slot_service" in r.getMessage() for r in caplog.records)
-    with pytest.raises(Problem, match="slot_service"):
-        tools.printer_set_slot(1, "1")
+    with pytest.raises(Problem, match="the printers module is off"):
+        tools.printer_slots()
 
 
 def test_bridge_set_slot_quotes_a_hash_label():

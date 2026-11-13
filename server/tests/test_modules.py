@@ -177,7 +177,7 @@ def test_new_config_defaults():
     assert d["web"]["lan"] == ["192.168.0.0/16", "10.0.0.0/8"]   # A-M6: no 172.16/12 (Docker bridges)
     assert d["remote"] == {"hostname": None, "acme_window": None, "email": None}
     assert d["orders"] == {"file": None}
-    assert d["tag_sources"] == [] and d["slot_service"] is None and d["slicer_printers"] == []
+    assert d["tag_sources"] == [] and "slot_service" not in d and d["slicer_printers"] == []
     assert d["presets_orca"] is False and d["web_instructions"] is None
     assert d["intake"] == {"tare_hints": {}, "model": None}
 

@@ -297,9 +297,7 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
         yield Row(DETAIL, "connectors: cannot read (run as root)")
     except (OSError, ValueError, AttributeError) as e:
         yield Row(DETAIL, f"connectors: cannot read the OAuth state ({type(e).__name__})")
-    svc = cfg.get("slot_service")
-    slots = ("slot_service" if isinstance(svc, dict) and svc.get("state_url") else
-             "the kit's printer bridge" if "printers" in on else "none")
+    slots = "the kit's printer bridge" if "printers" in on else "none"
     yield Row(DETAIL, f"printer slots: {slots}; tag readers: {len(cfg.get('tag_sources') or [])} "
                       f"+ {'station' if (cfg.get('station') or {}).get('url') else 'no station'}")
 

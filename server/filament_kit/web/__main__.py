@@ -37,10 +37,9 @@ def uvicorn_options(cfg: dict) -> dict:
 
 
 def kit_api_at_start(cfg: dict):
-    """With no slot_service and the printers module on, the printer tools use the kit server's API: pair with it
-    now (or reuse the saved token), so an earlier unpair is healed by this start and a failure shows in the log."""
-    svc = cfg.get("slot_service")
-    if (isinstance(svc, dict) and svc.get("state_url")) or "printers" not in modules.enabled(cfg):
+    """With the printers module on, the printer tools use the kit server's API: pair with it now (or reuse the
+    saved token), so an earlier unpair is healed by this start and a failure shows in the log."""
+    if "printers" not in modules.enabled(cfg):
         return None
     kit = slots.KitApi()
     try:

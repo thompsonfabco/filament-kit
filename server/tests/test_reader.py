@@ -606,18 +606,6 @@ def test_reader_cli_without_web_packages(env, monkeypatch, capsys):
     assert "filament-kit[web]" in capsys.readouterr().err
 
 
-def test_slot_service_printer_slots_says_it_ignores_printer(env, monkeypatch):
-    """M11"""
-    from filament_kit.web import mcp_tools
-    monkeypatch.setattr(slots, "service_slots", lambda svc, sm: {"slots": []})
-    cfg = config.load()
-    cfg["slot_service"] = {"state_url": "http://x/api/state", "set_url": "http://x/set-slot", "token_file": "t"}
-    config.save(cfg)
-    t = mcp_tools.Tools(None)
-    assert "ignored" in t.printer_slots("H2D")["printer_note"]
-    assert "printer_note" not in t.printer_slots()
-
-
 # ---------- final review M4, M5 ----------
 
 def test_a_hash_label_is_quoted_in_the_load_url(app, token, kit, queue):
