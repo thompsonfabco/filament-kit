@@ -12,7 +12,7 @@ the type's prefix (AMS HT: "HT-A" ...). A unit with one slot has the unit label 
 slot number ("A1" ... "A4"). An unknown module is labelled as its id range's type would be (its Spoolman locations
 stay put). Externals take the model's labels ("Ext" for single-holder printers, "Ext-L" / "Ext-R"); a holder the
 model does not list is "Ext" when it is the only one and the model has one, else Ext-L / Ext-R for 254 / 255, else
-"Ext-<id>". Labels are unique per printer (a clash gets "#<id>" appended). `say` = the reader's speech tokens.
+"Ext-<id>". Labels are unique per printer (a clash gets "-<id>" appended). `say` = the reader's speech tokens.
 
 Presence (`SlotInfo.present` / `reading`): from the model's presence layout (`hardware.Presence`) and the report's
 bit fields (hex). When the model has no layout, the report has no bits, or the layout does not describe this
@@ -266,13 +266,13 @@ def build(report: dict, model=None, hw: hardware.Hardware | None = None) -> Layo
 
 
 def _unique(units: list[UnitInfo]) -> list[UnitInfo]:
-    """Make every slot label unique: a unit whose labels clash with an earlier one gets "#<id>" appended."""
+    """Make every slot label unique: a unit whose labels clash with an earlier one gets "-<id>" appended."""
     taken: set[str] = set()
     out = []
     for u in units:
         mine = [s.label for s in u.slots] + [u.label]
         if any(lab in taken for lab in mine):
-            suffix = f"#{u.ams_id}"
+            suffix = f"-{u.ams_id}"   # fits the load/unload routes' label pattern (api.LABEL)
             u = UnitInfo(u.ams_id, u.kind, u.type_name, u.label + suffix, u.say, u.known, u.module,
                          tuple(SlotInfo(s.tray_id, s.label + suffix, s.say, s.present, s.reading, s.raw, s.alias)
                                for s in u.slots), u.typed)

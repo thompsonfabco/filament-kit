@@ -278,6 +278,15 @@ def test_announce_same_ip_or_unconfigured_printer_does_not_warn(tmp_path, monkey
     assert registry.load()["N1"].ip == "10.0.0.8"
 
 
+def test_announce_with_a_serial_that_could_not_be_removed_again_is_dropped(tmp_path, monkeypatch):
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+    cb = m.discovery_callback(StateMgr({}))
+    for bad in ("a b", "x/y", "S" * 65):
+        cb({"serial": bad, "ip": "10.0.0.7"})
+    cb({"serial": "GOOD1", "ip": "10.0.0.7"})
+    assert list(registry.load()) == ["GOOD1"]
+
+
 def test_corrupt_registry_logged_at_most_once_a_minute(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("FK_STATE", str(tmp_path))
     (tmp_path / "printers.json").write_text("{broken")

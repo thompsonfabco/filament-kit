@@ -26,6 +26,7 @@ from . import ams, layout, loading, mapping, status
 
 SETTLE = 3.0            # seconds a new load must hold before the session asks about it
 NO_REPORT_AFTER = 60.0  # seconds without any load field in the report: the printer reports no loads
+IDLE_CLOSE = 900.0      # seconds nobody polls or answers before the session closes (an owner who left it open)
 # H2D: extruder 0 is the right (main) nozzle, 1 the left. From the H2D's reports as the kit reads them; not checked
 # against every dual-nozzle model.
 NOZZLES = {0: "right", 1: "left"}
@@ -45,6 +46,7 @@ class _Session:
     positions: list[dict]                 # [{id, label, ams_id, tray_id}] in the order the owner loads them
     dual: bool
     started: float = field(default_factory=lambda: time.time())
+    touched: float = field(default_factory=lambda: time.time())    # the last poll or answer from any device
     open: bool = True
     answers: dict = field(default_factory=dict)      # label -> {status, reported_label, nozzle, at}
     step_since: float = field(default_factory=lambda: time.time())
@@ -87,8 +89,10 @@ class ManualMaps:
         if status._s(report.get("gcode_state")).upper() in status.ACTIVE:
             raise ManualError(409, "printer_busy", "The printer is busy: start again when it is idle.")
         with self._lock:
+            self._expire(serial)
             s = self._sessions.get(serial)
             if s is not None and s.open:
+                s.touched = time.time()
                 return self._state(s, report)       # a second device joins the session that is open
             if not mapping.manual_begin(serial):
                 raise ManualError(409, "map_running", mapping.AlreadyRunning.message)
@@ -102,20 +106,35 @@ class ManualMaps:
             self._sessions[serial] = s
             return self._state(s, report)
 
+    def expire(self, serial: str) -> None:
+        """Close the printer's session when nobody has polled or answered it for IDLE_CLOSE seconds, so the automatic
+        mapping is not refused for good by a page that was left (mapping._begin calls this before it checks)."""
+        with self._lock:
+            self._expire(serial)
+
+    def _expire(self, serial: str) -> None:
+        s = self._sessions.get(serial)
+        if s is not None and s.open and time.time() - s.touched >= IDLE_CLOSE:
+            self._close(s)
+
     def view(self, serial: str) -> dict:
         with self._lock:
+            self._expire(serial)
             s = self._sessions.get(serial)
             if s is None:
                 raise ManualError(404, "none", "No manual mapping was started for this printer.")
+            s.touched = time.time()
             report = self._m.wait_report(serial, lambda r: True, 0) if s.open else None
             return self._state(s, report)
 
     def _session(self, serial: str, sid) -> _Session:
+        self._expire(serial)
         s = self._sessions.get(serial)
         if s is None or not s.open:
             raise ManualError(404, "none", "No manual mapping is open for this printer.")
         if sid != s.id:
             raise ManualError(409, "stale", "This manual mapping moved on or was restarted: show it again.")
+        s.touched = time.time()
         return s
 
     def confirm(self, serial: str, sid, position, reported, nozzle=None, by_hand: bool = False) -> dict:

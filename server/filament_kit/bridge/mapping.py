@@ -506,6 +506,7 @@ class Mapper:
     def _begin(self, serial: str, auto: bool = False) -> tuple[_Job, _ProcessLock]:
         if registry.load().get(serial) is None:
             raise UnknownPrinter(serial)
+        self.manual.expire(serial)      # a manual session nobody has touched for a while no longer blocks this
         with self._lock:
             j = self._jobs.get(serial)
             if j is not None and (j.state == "running" or not j.released.wait(5)):

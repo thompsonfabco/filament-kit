@@ -57,6 +57,18 @@ def test_sixteen_units_mixed_with_ht_and_two_externals_get_unique_labels():
     assert all(s.reading is None for u in lay.units for s in u.slots)
 
 
+def test_clash_suffix_fits_the_load_route_label_pattern():
+    """FA-013: a clashing unit's labels must still pass api.LABEL, or the slot could never be loaded."""
+    from filament_kit import api
+
+    def u(label):
+        return layout.UnitInfo(3, "ams", "AMS", label, (), True, None,
+                               (layout.SlotInfo(0, label + "1", (), True, None, None, None),), True)
+    first, second = layout._unique([u("A"), u("A")])
+    assert first.slots[0].label == "A1" and second.slots[0].label == "A1-3" and second.label == "A-3"
+    assert all(api.LABEL.fullmatch(x) for x in (second.label, second.slots[0].label))
+
+
 def test_more_than_26_units_labels_keep_going():
     rep = {"ams": {"ams": [unit(i) for i in range(30)]}}
     lay = layout.build(rep, None)
