@@ -105,8 +105,10 @@ function printersTab() {
     { label: t("printers_menu_klipper"), run: () => addKlipperSheet(addBtn) }], { label: t("printers_add") });
   const foundBambu = () => manageList.filter((p) => !p.configured && p.family !== "klipper" && p.ip);
 
-  const title = () => (current && !autoOpened ? nameOf(current) : null);               // the document's title while a printer is open (app.js asks)
-  const heading = () => (current && !autoOpened && SW.phone() ? nameOf(current) : null);   // the page's h1 while one printer fills the page; on tablets it stays "Printers"
+  // the open printer's name; an address for none this Hub has says so, and never shows the id from the address; null until the lists are read
+  const shown = () => (!current || autoOpened || !listAt ? null : known(current) || meta(current).id ? nameOf(current) : t("printer_unknown_title"));
+  const title = () => shown();                                                         // the document's title while a printer is open (app.js asks)
+  const heading = () => (SW.phone() ? shown() : null);                                 // the page's h1 while one printer fills the page; on tablets it stays "Printers"
   function retitle() {
     const h1 = document.querySelector(".page-head__title");
     if (h1 && active) { h1.textContent = heading() || t("nav_printers"); document.title = t("shell_title", { page: title() || t("nav_printers"), hub: HUB || PRODUCT }); }
@@ -187,7 +189,14 @@ function printersTab() {
     noteBox.replaceChildren(...(changes ? [] : [SW.banner({ kind: "info", text: t("printer_set_readonly"), inline: true })]));
     // a card that holds focus is left as it is; the others are drawn again from the newest data
     const have = new Map([...cards.children].map((c) => [c.dataset.id, c]));
-    cards.replaceChildren(...printers.map((p) => { const old = have.get(p.id); return old && old.contains(document.activeElement) ? old : cardNode(p); }));
+    // (the open printer's page sits inside its item on tablets: that item stays and only its card is drawn again)
+    cards.replaceChildren(...printers.map((p) => {
+      const old = have.get(p.id);
+      if (!old) return cardNode(p);
+      if (old.contains(document.activeElement)) return old;
+      if (old.contains(pageView)) { old.firstElementChild.replaceWith(cardNode(p).firstElementChild); return old; }
+      return cardNode(p);
+    }));
     const found = foundBambu();
     foundBox.replaceChildren(...(found.length ? [h("h2", { class: "printers__heading" }, t("printers_found_group")),
       h("ul", { class: "pfound" }, found.map((p) => h("li", { class: "pfound__row" },
@@ -212,6 +221,7 @@ function printersTab() {
   async function added(r) {                              // the new printer opens, and its status line says so
     addedId = (r.printer && r.printer.id) || null;
     try { await loadAll(); drawList(); } catch (e) { /* the list reads again by itself */ }
+    await backSettled();                                  // the add sheet's own Back must land first, or it would take the page off the new printer again
     if (addedId) location.hash = "#printers/" + enc(addedId);
   }
   function addBambuSheet(p, opener) {
@@ -269,6 +279,7 @@ function printersTab() {
     g.statusNodes = [g.job, g.progRow, g.detail, g.temps, g.alerts, g.notes];
     g.camKind = () => { const k = (known(id) || {}).camera; return k && (k.kind === "mjpeg" || k.kind === "hls") ? k.kind : null; };
     g.isKlipper = () => (known(id) || meta(id)).family === "klipper";
+    g.camBtn.hidden = !g.camKind();                     // no camera: no button
     return g;
   }
   function openPrinter(id) {
@@ -354,6 +365,7 @@ function printersTab() {
       ...(addedId === g.id && !isUp(p) ? [sentence("ok", t("printers_added_connecting"))] : []));
     if (addedId === g.id && isUp(p)) addedId = null;
     g.up = isUp(p);
+    if (!g.camOn) g.camBtn.hidden = !g.camKind();       // the list may learn of a camera later
   }
   function paintStatus(p, s) {
     const g = page, up = isUp(p), live = up && isLive(s);
@@ -506,18 +518,21 @@ function printersTab() {
       body: h("div", { class: "pload" }, tap, h("p", { class: "muted pload__or" }, t("spool_load_or")), search_, picked, plan) });
     openHere(dlg, opener);
     function row(s) {
-      const b = h("button", { class: "pick", type: "button", on: { click: () => pick(s) } }, h("strong", {}, `S${s.id} `), spoolTitle(s),
-        h("div", { class: "muted" }, `${s.location || "?"} · ${s.remaining_g ?? "?"} g`));
+      const b = h("button", { class: "pick", type: "button", on: { click: () => pick(s) } }, h("strong", {}, t("printer_load_row_id", { id: s.id }) + " "), spoolTitle(s),
+        h("div", { class: "muted" }, t("printer_load_row_where", { location: s.location || "?", grams: s.remaining_g ?? "?" })));
       return b;
     }
+    let asked = 0;                                      // the newest search: an older answer arriving later is dropped
     async function search(text) {
+      const mine = ++asked;
       if (find._busy) find._busy(true);
       try {
         const res = await api(`find?q=${enc(text)}&sealed=0`);
+        if (mine !== asked) return;
         const rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ id: s.spool_id, vendor: f.vendor, name: f.name, location: s.location, remaining_g: s.remaining_g })));
         clear(line);
         results.replaceChildren(...(rows.length ? rows.slice(0, 60).map(row) : [h("p", { class: "muted" }, t("spools_empty_filtered"))]));
-      } catch (e) { failed(line, e, () => search(text)); } finally { if (find._busy) find._busy(false); }
+      } catch (e) { if (mine === asked) failed(line, e, () => search(text)); } finally { if (mine === asked && find._busy) find._busy(false); }
     }
     async function lastTap() {
       await act(line, t("common_working"), async () => {
@@ -573,8 +588,8 @@ function printersTab() {
     g.slotBusy = true;
     try {
       let plan = null;
-      await act(line, t("common_checking"), async () => { plan = await pj(`${slotPath(g, label)}/unload`, { dry_run: true }); return null; }, { button });
-      if (!plan) return;                                // the line says why
+      await act(line, t("common_checking"), async () => { plan = await pj(`${slotPath(g, label)}/unload`, { dry_run: true }); return null; }, { button, again: () => unloadSlot(sl, sp, button) });
+      if (!plan) return;                                // the line says why; its Try again runs the whole unload, the sheet included
       const where = plan.location || ((plan.moved_back || [])[0] || {}).location || t("spool_load_previous_place");
       const name = sp.name || t("spool_title", { id: sp.id });
       const r = await sheetAsk({ kind: "confirm", title: t("printer_unload_title", { slot: label }), opener: button,
@@ -843,7 +858,9 @@ function printersTab() {
         run: async () => { await pj(`${id}/forget`, {}); } });
       if (!ok) return;
       SW.toast(t("printers_forgotten", { name }));
-      location.hash = "#printers";
+      closePrinter();                                   // on a tablet the address may already be #printers: no hashchange would close it
+      await backSettled();
+      if (location.hash !== "#printers") location.hash = "#printers";
       try { await loadAll(); drawList(); } catch (e) { /* the list reads again by itself */ }
     } }) : null;
     g.setBox.replaceChildren(

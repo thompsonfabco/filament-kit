@@ -1384,7 +1384,7 @@
     <string name="printers_error">Could not read the printers. %1$s</string>
     <string name="printers_fix_klippy">Klipper is not ready on the printer. Check it in Mainsail or Fluidd.</string>
     <string name="printers_fix_not_configured_klipper">Use this printer to add it.</string>
-    <string name="printers_fix_unauthorized">Moonraker refused the API key. Replace it in this printer\'s details.</string>
+    <string name="printers_fix_unauthorized">Moonraker refused the API key. Replace it in Printer settings.</string>
     <!-- 1=label -->
     <string name="printers_load_confirmed_plain">Confirmed (%1$s)</string>
     <string name="printers_load_idle">No mapping by loading filament is running for this printer.</string>
@@ -2195,15 +2195,12 @@
     <!-- 1=slot 2=name 3=hex 4=grams -->
     <string name="printers_slot_sr_grams">%1$s %2$s %3$s, %4$s g left</string>
     <string name="printers_fix_klippy_not_ready">Klipper is not ready on the printer. Check it in Mainsail or Fluidd.</string>
-    <string name="printers_fix_not_configured_klipper">Use this printer to add it.</string>
-    <string name="printers_fix_unauthorized">Moonraker refused the API key. Replace it in Printer settings.</string>
     <!-- 1=slot -->
     <string name="printers_map_confirmed">Confirmed (%1$s)</string>
     <string name="printers_map_loading_intro">Load filament into one slot at a time; the Hub notes where it went.</string>
     <!-- 1=position 2=status -->
     <string name="printers_map_position_row">%1$s: %2$s</string>
     <string name="printers_map_report_wanted">A printer report would help.</string>
-    <string name="printers_note_unknown_model">Model not known; slots are read as a generic Klipper printer.</string>
     <!-- 1=loaded 2=count -->
     <plurals name="printers_slots_loaded_of">
         <item quantity="one">%1$s of %2$d slot loaded</item>
@@ -2877,6 +2874,10 @@
     <string name="printer_load_moved_back">Spool %1$s now in %2$s goes back to %3$s</string>
     <!-- 1=id 2=slot -->
     <string name="printer_load_moved_back_noplace">Spool %1$s now in %2$s goes back to its previous place</string>
+    <!-- 1=id -->
+    <string name="printer_load_row_id">S%1$s</string>
+    <!-- 1=location 2=grams -->
+    <string name="printer_load_row_where">%1$s · %2$s g</string>
     <string name="printers_add_klipper">Add a Klipper printer</string>
     <string name="printers_empty_text">The Hub finds Bambu printers on its network by itself. Turn the printer on, then refresh. Klipper printers are added by address.</string>
     <string name="printers_fix_cert_changed">The printer\'s certificate changed. Forget its old certificate in Printer settings.</string>

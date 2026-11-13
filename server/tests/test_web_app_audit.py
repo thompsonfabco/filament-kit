@@ -70,6 +70,40 @@ class PrintersKit(FakeKit):
         return super().get(path)
 
 
+class ChangingKit(PrintersKit):
+    """PrintersKit that keeps its printer list: an add makes a printer (still connecting, so its page says Added.), a forget removes it."""
+
+    def __init__(self):
+        super().__init__()
+        self.listed = None
+
+    def get(self, path):
+        out = super().get(path)
+        if path == "/api/printers":
+            if self.listed is None:
+                self.listed = out["printers"]
+            return {"printers": [dict(p) for p in self.listed]}
+        return out
+
+    def post(self, path, body):
+        if path == "/api/printers":
+            self.get(path)
+            if body.get("family") == "klipper":
+                new = {"id": "bench-voron", "name": body.get("name") or "Bench Voron", "family": "klipper", "host": body["host"], "configured": True, "state": "connecting"}
+                self.listed.append(new)
+            else:
+                new = next(p for p in self.listed if p["id"] == body["serial"])
+                new.update(configured=True, state="connecting", name=body.get("name") or new["name"])
+            return {"printer": dict(new)}
+        return super().post(path, body)
+
+    def delete(self, path):
+        self.get("/api/printers")
+        gone = path.rsplit("/", 1)[-1]
+        self.listed = [p for p in self.listed if p["id"] != gone]
+        return {"ok": True, "id": gone}
+
+
 # The Slicer presets screen in the states 04 8 draws: filaments waiting for a line (nothing in lines.json), waiting with a
 # line of their brand to join (the "Add to the line" select), every filament covered (the empty state), and switched off.
 STATES = ("waiting", "waiting-with-a-line", "all-covered", "presets-off", "public-address")
@@ -161,9 +195,7 @@ def served_web(request, tmp_path, monkeypatch, spoolman_url):
     yield from _serving(request.param, tmp_path, monkeypatch, spoolman_url, True)
 
 
-@pytest.fixture
-def served_printers(tmp_path, monkeypatch, spoolman_url):
-    """The same state with the Printers module on, over a fake kit (no printer, no kit server)."""
+def _serve_printers(tmp_path, monkeypatch, spoolman_url, kit):
     for name in ("etc", "state", "opt"):
         (tmp_path / name).mkdir()
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
@@ -183,8 +215,24 @@ def served_printers(tmp_path, monkeypatch, spoolman_url):
                                          "remaining_weight": 1000 - 150 * i})
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
-    running = serving.start(Starlette(routes=IntakeApp(mcp_tools.Tools(sm), public_url=None, lan_cidrs=["127.0.0.0/8"], push=False,
-                                                       kit_api=PrintersKit()).routes()))
+    return serving.start(Starlette(routes=IntakeApp(mcp_tools.Tools(sm), public_url=None, lan_cidrs=["127.0.0.0/8"], push=False,
+                                                    kit_api=kit()).routes()))
+
+
+@pytest.fixture
+def served_printers(tmp_path, monkeypatch, spoolman_url):
+    """The same state with the Printers module on, over a fake kit (no printer, no kit server)."""
+    running = _serve_printers(tmp_path, monkeypatch, spoolman_url, PrintersKit)
+    try:
+        yield running.url + "/intake"
+    finally:
+        running.stop()
+
+
+@pytest.fixture
+def served_changing(tmp_path, monkeypatch, spoolman_url):
+    """The Printers module over a kit that keeps what is added and forgotten."""
+    running = _serve_printers(tmp_path, monkeypatch, spoolman_url, ChangingKit)
     try:
         yield running.url + "/intake"
     finally:
@@ -246,6 +294,49 @@ def test_the_page_audit_passes_on_the_printers_list_and_one_printer(served_print
     assert run.returncode == 0, run.stdout + run.stderr
     out = json.loads(run.stdout)
     assert out["views"] == 2 * 2 * 2 and out["failing"] == 0      # two views, two widths, light and dark
+
+
+FLOWS = ROOT / "tests" / "printers_flow_run.mjs"
+
+
+def _flow(url: str, flow: str, width: int) -> dict:
+    """One flow of the Printers screen in the browser (tests/printers_flow_run.mjs): the address it ends on, what it shows, the page's errors."""
+    node = _node()
+    if not node:
+        _missing("the flow needs Node 22 or later")
+    run = subprocess.run([node, str(FLOWS), "--url", url, "--flow", flow, "--width", str(width)], capture_output=True, text=True, timeout=300)
+    if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
+        _missing("the flow needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
+    if run.returncode == 3:
+        _missing("flow: " + run.stderr.strip().replace("AUT-5: ", "", 1))
+    assert run.returncode == 0, run.stdout + run.stderr
+    out = json.loads(run.stdout)
+    assert out["errors"] == [] and not out["sideways"], json.dumps(out)
+    return out
+
+
+@pytest.mark.parametrize("flow, width", [("add-found", 375), ("add-klipper", 375), ("add-found", 768), ("add-klipper", 768)])
+def test_a_printer_just_added_opens_with_added(served_changing, flow, width):
+    """R304 MED 1: the add sheet's own Back lands before the address changes, so the page ends on the new printer (not back on #printers)."""
+    out = _flow(served_changing, flow, width)
+    assert out["opened"] and out["cardsAfter"] == out["cardsBefore"] + 1, json.dumps(out)
+    assert out["hash"].startswith("#printers/") and out["events"][-1] == "hashchange:" + out["hash"], json.dumps(out)
+    assert out["added"] and out["title"].startswith(out["h1"] if width <= 600 else "P1S" if flow == "add-found" else "Bench Voron"), json.dumps(out)
+
+
+@pytest.mark.parametrize("width", [375, 768])
+def test_forgetting_a_printer_closes_its_page(served_changing, width):
+    """R304 MED 2: at tablet width the open printer can sit at #printers with no id, so no hashchange closes it after Forget."""
+    out = _flow(served_changing, "forget", width)
+    assert out["openBefore"] and not out["openAfter"] and not out["has404"], json.dumps(out)
+    assert out["hash"] == "#printers" and "Workshop X1" not in out["cardsAfter"] and len(out["cardsAfter"]) == 2, json.dumps(out)
+    if width > 600:
+        assert out["hashBefore"] == "#printers", out        # the case that has no hashchange to rely on
+
+
+def test_an_address_for_no_printer_does_not_put_its_id_in_the_heading_or_title(served_printers):
+    out = _flow(served_printers, "unknown", 375)
+    assert "NOPE123" not in out["h1"] + out["title"] and "No such printer" in out["h1"], json.dumps(out)
 
 
 @pytest.mark.parametrize("allow", [ALLOW, ALLOW_PRINTERS], ids=lambda p: p.name)

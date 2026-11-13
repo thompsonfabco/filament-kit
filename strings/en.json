@@ -2119,6 +2119,8 @@
   "printer_load_nozzle_assumed": "Nozzle size not reported by the printer; assuming {mm} mm",
   "printer_load_moved_back": "Spool {id} now in {slot} goes back to {location}",
   "printer_load_moved_back_noplace": "Spool {id} now in {slot} goes back to its previous place",
+  "printer_load_row_id": "S{id}",
+  "printer_load_row_where": "{location} · {grams} g",
   "printers_add_klipper": "Add a Klipper printer",
   "printers_empty_text": "The Hub finds Bambu printers on its network by itself. Turn the printer on, then refresh. Klipper printers are added by address.",
   "printers_fix_cert_changed": "The printer's certificate changed. Forget its old certificate in Printer settings.",

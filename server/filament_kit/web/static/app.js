@@ -129,7 +129,7 @@ async function act(box, label, fn, o = {}) {
       SW.result(line, d.kind || "ok", d.text, d.action ? { action: d.action } : {});
       if (d.code && box.code) box.code.replaceChildren(codeBlock(d.code));
     }
-  } catch (e) { failed(line, e, () => act(box, label, fn, o), o); }
+  } catch (e) { failed(line, e, o.again || (() => act(box, label, fn, o)), o); }   // o.again: Try again starts something larger than fn
   finally { if (b) SW.idle(b); }
 }
 // Data that loads for a block (04 3.5): a skeleton until the first data (none when `quiet`: the old data stays until the new
@@ -716,6 +716,14 @@ function openHere(dlg, opener, reuse) {                      // reuse: the entry
   const rec = track(dlg, "same");
   SW.openModal(dlg, opener);
   return rec;
+}
+// resolves once the Back a closed sheet asked for has landed: an address set before that would be taken back with it
+function backSettled() {
+  return new Promise((resolve) => {
+    let waited = 0;
+    const look = () => { if (settling > 0 && waited++ < 100) setTimeout(look, 20); else resolve(); };
+    setTimeout(look, 0);                                     // the sheet's close event may not have run yet
+  });
 }
 window.addEventListener("popstate", () => {
   if (settling) { settling--; return; }

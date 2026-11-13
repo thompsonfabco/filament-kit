@@ -1240,9 +1240,26 @@ def test_the_list_carries_the_printer_family(app):
 def test_klipper_printers_get_no_remap_or_report_buttons():
     """FB-025: the kit refuses the map and report routes for a Klipper printer, so the page shows only Map by loading filament."""
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
-    klip = text.index("if (g.isKlipper()) {")
-    assert klip < text.index('mapPath(g, "map")', klip) and text.index("return;", klip) < text.index('mapPath(g, "map")', klip)
+    load = text.index("async function loadMap(")
+    klip = text.index("if (g.isKlipper()) {", load)
+    ret = text.index("return;", klip)
+    # the Klipper branch comes first in loadMap, offers only Map by loading filament, and leaves before the map route is read
+    assert load < klip < ret < text.index('mapPath(g, "map")', load)
+    assert 'mapPath(g, "map")' not in text[klip:ret] and "printers_map_slots" not in text[klip:ret] and "printers_collect_report" not in text[klip:ret]
+    assert "printers_map_loading" in text[klip:ret]
     assert 'g.isKlipper = () => (known(id) || meta(id)).family === "klipper"' in text
+
+
+def test_review_r304_small_fixes_are_in_the_page():
+    """R304 LOW 1, 2, 4, 5, 6 and the two MED fixes: what the browser flows in test_web_app_audit.py do not reach."""
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    assert "again: () => unloadSlot(sl, sp, button)" in text                   # 1: Try again runs the whole unload, sheet included
+    assert text.count("g.camBtn.hidden = !g.camKind()") == 2                   # 2: no camera, no button, from the first paint
+    assert 'known(current) || meta(current).id ? nameOf(current) : t("printer_unknown_title")' in text   # 4: never the raw address
+    assert '`S${s.id}' not in text and '} g`' not in text.split("function row(s)")[1].split("async function search")[0]   # 5: through t()
+    assert "if (mine !== asked) return;" in text                               # 6: an older search answer is dropped
+    assert text.count("await backSettled();") == 2                             # MED 1 and 2: the sheet's Back lands before the address changes
+    assert "backSettled" in (STATIC / "app.js").read_text(encoding="utf-8")
 
 
 def test_the_report_link_is_replaced_and_its_url_freed_and_usage_refreshes_at_job_end():
