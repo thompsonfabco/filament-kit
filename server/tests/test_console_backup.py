@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from test_setup_page import BASE, CODE, H, HOME, Helper, client, env, make, post  # noqa: F401
+from test_setup_page import CODE, H, Helper, client, env, make, post  # noqa: F401
 
 from filament_kit import backup, cli, config
 
@@ -171,7 +171,6 @@ def test_the_settings_tab_has_the_card_and_the_page_its_script(app):
     assert "innerHTML" not in src and 'confirm: word.value.trim()' in src
     assert "The zip is not encrypted and holds the setup secrets" in src
     assert "/setup/setup_backup.js" in client(app).get("/setup").text
-    assert BASE and HOME
 
 
 @pytest.mark.skipif(sys.platform == "win32" or not hasattr(socket, "send_fds"), reason="unix sockets")

@@ -433,8 +433,7 @@ def test_usage_days_filter_and_default(client, monkeypatch):
     monkeypatch.setattr(usage, "_now", lambda: now)
     new = entry(job="new")
     assert [e["id"] for e in client.get(f"/api/printers/{SERIAL}/usage?days=1").json()["entries"]] == [new["id"]]
-    assert len(client.get(f"/api/printers/{SERIAL}/usage").json()["entries"]) == 2
-    assert old
+    assert [e["id"] for e in client.get(f"/api/printers/{SERIAL}/usage").json()["entries"]] == [new["id"], old["id"]]
 
 
 @pytest.mark.parametrize("q", ["days=x", "days=-1", "days=nan", "days=inf", "days=100000"])
@@ -554,7 +553,6 @@ def test_cert_changed_message_says_what_to_do():
 # ---------------------------------------------------------------- map by loading filament (bridge/manual.py)
 
 def test_manual_map_through_the_kit_api(client, mgr):
-    from filament_kit.bridge import manual
     mgr.report.setdefault("ams", {})["tray_now"] = "255"
     r = client.post(f"/api/printers/{SERIAL}/manual-map/start", json={})
     assert r.status_code == 200, r.text
@@ -568,7 +566,6 @@ def test_manual_map_through_the_kit_api(client, mgr):
     r = client.post(f"/api/printers/{SERIAL}/manual-map/stop", json={"session": s["session"]})
     assert r.status_code == 200 and r.json()["open"] is False
     assert client.get(f"/api/printers/{SERIAL}/manual-map").json()["open"] is False
-    assert manual.ManualMaps is not None
 
 
 def test_manual_map_needs_the_pairing(mgr, sm, mapper):

@@ -153,7 +153,7 @@ def test_owner_note_lines_on_a_kept_preset_stay_theirs(env):
                         device_id="a", user_id="1")
     b3 = _rebuild(env, 1.31, TG.NOW + 2)
     out = json.loads((TB.profiles_dir() / "builds" / b3 / "base" / f"{N04}.json").read_text(encoding="utf-8"))
-    assert out["filament_notes"].splitlines()[-2:] == ["dry 8 h first", out["filament_notes"].splitlines()[-1]]
+    assert out["filament_notes"].splitlines()[-2] == "dry 8 h first"
     assert inapp.MARK in out["filament_notes"]
 
 
@@ -184,14 +184,13 @@ def test_a_preset_the_owner_made_before_is_an_update_never_new(env):
 
 
 def test_older_pc_report_without_written_keeps_the_build_as_snapshot(env):
-    b1 = _first_install(env)
+    _first_install(env)
     b2 = _rebuild(env, 1.31, TG.NOW + 1)
     builds.record_installed(b2, "a")                                # an older PC sync wrote every preset
     assert "written" not in builds._read_obj(TB.profiles_dir() / "installed.json")
     folder = TB.profiles_dir() / "builds" / b2
     assert updates.view(folder, "base", builds._written(builds._installed(), "written"), folder / "x") == folder
     assert builds.updates_view()["count"] == len(_slicer(b2))       # nothing reported written: still listed
-    assert b1
 
 
 def test_bad_written_is_400(env):

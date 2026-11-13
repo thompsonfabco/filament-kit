@@ -2,7 +2,6 @@
 log; the setup-code path the same without a cookie; only the root helper checks it; the second question stays in the page."""
 from __future__ import annotations
 
-import json
 import logging
 import stat
 import sys
@@ -10,7 +9,6 @@ import sys
 import pytest
 
 from filament_kit import config, setup_helper, trusted
-from filament_kit.bridge import registry
 from test_setup_page import BASE, CODE, H, HOME, STATIC, client, env, helper, make, manager, post  # noqa: F401
 
 SET_COOKIE = "set-cookie"

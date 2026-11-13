@@ -38,7 +38,8 @@ def _stdin(monkeypatch, text, tty=False):
 def test_modules_list_shows_mode(capsys):
     assert cli.main(["modules", "list"]) == 0
     out = capsys.readouterr().out
-    assert "spoolman" in out and "on" in out and "station" in out and "off" in out
+    rows = {line.split()[0]: line.split()[1] for line in out.strip().splitlines()[:-1]}
+    assert rows["spoolman"] == "on" and rows["station"] == "off"
     assert out.strip().splitlines()[-1] == "mode: server"
 
 

@@ -83,6 +83,7 @@ def test_record_same_job_once():
 
 
 def test_cap_2000(monkeypatch):
+    assert kusage.KEEP == 2000     # the shortened cap below is only a stand-in for this one
     monkeypatch.setattr(kusage, "KEEP", 5)
     for i in range(8):
         kusage.record("p", history_job(job_id=f"{i:06d}"), 1)

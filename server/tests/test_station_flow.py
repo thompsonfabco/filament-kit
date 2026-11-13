@@ -307,7 +307,6 @@ def test_sealed_by_weight_counts_a_bagged_spool_as_sealed():
     it = {"net": 1000, "tare": 155}
     assert station_flow.sealed_by_weight(it, 1300) and station_flow.sealed_by_weight(it, 1135)
     assert not station_flow.sealed_by_weight(it, 1134)
-    assert "bag" in station_flow.sealed_by_weight.__doc__
 
 
 # ---------- final fix wave: the retry after tag_not_linked links that spool, never a second one ----------

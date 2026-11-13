@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from test_setup_page import (CODE, H, HOME, SERIAL, STATIC, Helper, client, env, make, post)  # noqa: F401
+from test_setup_page import (CODE, SERIAL, STATIC, Helper, client, env, make, post)  # noqa: F401
 
 from filament_kit import config, modules, redact, release, setup_helper, status, updates
 from filament_kit.bridge import registry
@@ -942,4 +942,3 @@ def test_helper_ops_are_the_closed_list():
                                       "library_rollback", "remote_issue",
                                       "backup", "restore", "local_intake_plan", "local_intake_install", "local_intake_remove"}
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)
-    assert HOME and H     # the shared fixtures' constants are the ones in use

@@ -87,7 +87,7 @@ def test_hardened_rules():
     apply(cfg, entry(ranges={"_hardened_nozzle_required": "Hard steel nozzle required"}), template={})
     assert cfg["required_nozzle_HRC"] == ["40"]
     assert V.hardened(entry(), "PLA-GF")
-    assert V.hardened(None, "PA6-CF20") or V.hardened(None, "PA CF15")
+    assert V.hardened(None, "PA6-CF20") and V.hardened(None, "PA CF15")
     assert not V.hardened(entry(), "PLA")
 
 

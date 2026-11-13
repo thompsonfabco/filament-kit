@@ -329,11 +329,12 @@ def test_inapp_edit_survives_a_second_rebuild(tmp_path, server, monkeypatch):
     build(sm)
     assert pc.run() == "installed"
     assert pc.preset(edited)["filament_flow_ratio"] == flow                  # first rebuild: kept
+    density = pc.preset(edited)["filament_density"]
     _density(sm, 1.30)                                                       # any later reason to rebuild
     builds.request_rebuild("spoolman changed")
     b3 = build(sm)
     assert pc.run() == "installed"                                           # nothing over the existing ones
-    assert pc.preset(edited)["filament_density"] != ["1.3"]
+    assert pc.preset(edited)["filament_density"] == density and density != ["1.3"]
     assert accept_all()
     assert pc.run() == "installed"                                           # the accepted updates
     assert pc.client.state()["installed"]["stamp"] == b3["stamp"]
@@ -571,7 +572,7 @@ def test_unparsable_system_preset_is_a_problem_not_a_refusal(tmp_path, server, m
 def test_existing_presets_stay_until_their_update_is_accepted(tmp_path, server, monkeypatch, capsys):
     from filament_kit import cli
     _, sm = server
-    pc, b1 = installed_first_build(tmp_path, server, monkeypatch)
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
     assert pc.run() == "up_to_date"
     before = {p.name: p.read_bytes() for p in pc.base.iterdir()}
     _density(sm, 1.31)
@@ -606,7 +607,6 @@ def test_existing_presets_stay_until_their_update_is_accepted(tmp_path, server, 
     for name in names:
         assert pc.preset(name)["filament_density"] == ["1.31"], name
     assert builds.updates_view()["count"] == 0
-    assert b1
 
 
 def test_owner_preset_present_before_the_first_install_is_kept(tmp_path, server, monkeypatch):

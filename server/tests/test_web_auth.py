@@ -686,7 +686,7 @@ def test_parallel_wrong_passphrases_get_at_most_lock_max_checks(store, passfile,
             t.start()
         for t in ts:
             t.join()
-    assert len(checks) <= auth.LOCK_MAX
+    assert len(checks) == auth.LOCK_MAX
     assert sorted(codes) == [401] * len(checks) + [429] * (12 - len(checks))
 
 
