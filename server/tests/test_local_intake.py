@@ -574,3 +574,131 @@ def test_the_cli_token_needs_root(monkeypatch, capsys):
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli, "_is_root", lambda: False)
     assert cli.main(["local-intake", "token"]) == 1 and "run as root" in capsys.readouterr().err
+
+
+# ---------- testing an address before it is saved (S2.18) ----------
+
+TEST = "settings/local-intake/test"
+
+
+def _ask(c, body, **kw):
+    from test_setup_page import post
+    return post(c, TEST, body, **kw)
+
+
+def _page(env):
+    from test_setup_page import Helper, client, make
+    return client(make(env, Helper()))
+
+
+def test_a_saved_and_an_unsaved_address_answer_the_same(fake_reader, env):
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    c = _page(env)
+    saved = c.get("/setup/api/settings/local-intake").json()
+    assert saved["ok"]
+    assert _ask(c, {"url": url, "tier": "auto"}).json() == saved
+    other = lrf.new_data()
+    other["health"] = {**other["health"], "module_version": "9.9.9"}
+    from conftest import _serve
+    for url2 in _serve(lrf.app(other)):
+        got = _ask(c, {"url": url2 + "/", "tier": "cpu"}).json()
+        assert got["ok"] and got["version"] == "9.9.9" and got["url"] == url2
+    assert c.get("/setup/api/settings/local-intake").json()["url"] == url
+
+
+def test_an_unsaved_address_that_does_not_answer_or_answers_wrongly(fake_reader, dead_url, env):
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    c = _page(env)
+    r = _ask(c, {"url": dead_url}).json()
+    assert not r["ok"] and "does not answer" in r["error"] and r["url"] == dead_url
+    data["health"] = {**data["health"], "api_version": "2.0"}
+    assert "API version" in _ask(c, {"url": url}).json()["error"]
+    data["health"] = {**data["health"], "api_version": "1.0", "status": "degraded"}
+    r = _ask(c, {"url": url}).json()
+    assert r["ok"] and r["degraded"] and "gpu: no CUDA device" in r["error"]
+    data["health_status"] = 500
+    assert not _ask(c, {"url": url}).json()["ok"]
+
+
+def test_a_bad_address_tier_or_a_module_that_is_off_is_refused(fake_reader, env):
+    url, _ = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    c = _page(env)
+    for bad in ("", "gpu-box:7915", "ftp://h:1", "http://h:1/v1", "http://"):
+        assert _ask(c, {"url": bad}).status_code == 400, bad
+    assert _ask(c, {"url": url, "tier": "tpu"}).status_code == 400
+    setup(url, {"spoolman": True, "server": True, "ai_intake": True})
+    assert _ask(_page(env), {"url": url}).status_code == 409
+
+
+def test_testing_an_address_stores_nothing(fake_reader, env, tmp_path):
+    url, _ = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    before = config.load()
+    files = sorted(p.name for p in (tmp_path / "etc").iterdir())
+    from conftest import _serve
+    for url2 in _serve(lrf.app(lrf.new_data())):
+        assert _ask(_page(env), {"url": url2, "tier": "gpu"}).json()["ok"]
+    assert config.load() == before and config.load()["local_intake"] == {"url": url, "tier": "auto"}
+    # the code check keeps its own lockout bookkeeping; nothing else is written (no token, no reader file)
+    assert all(n.startswith("setup_lockout") for n in {p.name for p in (tmp_path / "etc").iterdir()} - set(files))
+
+
+def _spy():
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse, RedirectResponse
+    from starlette.routing import Route
+    seen = []
+
+    async def health(request):
+        seen.append(request.headers.get("authorization"))
+        return JSONResponse(lrf.new_data()["health"])
+
+    async def moved(request):
+        seen.append("redirected")
+        return RedirectResponse("/v1/health")
+
+    return seen, Starlette(routes=[Route("/v1/health", health), Route("/other/v1/health", moved)])
+
+
+def test_the_saved_token_is_not_sent_to_an_unsaved_address(fake_reader, env):
+    url, _ = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    local_reader.write_token("s3cret-token")
+    seen, spy = _spy()
+    from conftest import _serve
+    for url2 in _serve(spy):
+        assert _ask(_page(env), {"url": url2}).json()["ok"]
+    assert seen == [None]
+
+
+def test_a_redirect_is_not_followed(env):
+    from starlette.applications import Starlette
+    from starlette.responses import RedirectResponse
+    from starlette.routing import Route
+    from conftest import _serve
+    seen, spy = _spy()
+
+    async def moved(request):
+        seen.append("redirected")
+        return RedirectResponse("/elsewhere/v1/health")
+    spy.router.routes.insert(0, Route("/v1/health", moved))
+    for url2 in _serve(spy):
+        setup(url2, {"spoolman": True, "server": True, "local_intake": True})
+        r = _ask(_page(env), {"url": url2}).json()
+    assert not r["ok"] and "HTTP 307" in r["error"] and seen == ["redirected"]
+
+
+def test_the_address_test_needs_the_setup_code_and_the_origin(fake_reader, env):
+    from test_setup_page import H
+    url, _ = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    c = _page(env)
+    r = _ask(c, {"url": url}, code=None)
+    assert r.status_code == 403 and "needs the setup code" in r.json()["error"]   # the guard gives no field here
+    assert _ask(c, {"url": url}, code="0000-0000").status_code == 403
+    r = _ask(c, {"url": url}, headers={**H, "Origin": "https://evil.example"})
+    assert r.status_code == 403 and r.json()["error"] == "bad origin"
+    assert c.get("/setup/api/" + TEST).status_code in (404, 405)
