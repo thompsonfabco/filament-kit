@@ -25,6 +25,7 @@ setup code, which the helper checks again.
 
 Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the setup code):
     GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup_printers.js  /setup/setup_trust.js  /setup/setup.css
+         /setup/setup_flash.js  /setup/esptool.bundle.js (the Flash a device tab; setup_console/flash_tab.py)
     GET  state                          everything the page shows
     GET  modules/preview?name=N         what switching N would do (the checklist's notes and needed settings)
     GET  apply?from=N                   the job `apply`'s old name: as GET job
@@ -293,7 +294,10 @@ class SetupPage:
         self.static = {n: (STATIC / n).read_bytes()
                        for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
                                  "setup_backup.js",
-                                 "setup_logs.js", "setup_intake.js",
+                                 "setup_logs.js", "setup_intake.js", "setup_flash.js",
+                                 # esptool-js 0.7.0 as published (THIRD-PARTY.md): only the Flash a device tab
+                                 # loads it, when the owner writes a board from the browser
+                                 "esptool.bundle.js",
                                  "setup.css")}
 
     # ---------- routes ----------
@@ -328,6 +332,8 @@ class SetupPage:
                  Route("/setup/setup_backup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_logs.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_intake.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_flash.js", self.asset, methods=["GET"]),
+                 Route("/setup/esptool.bundle.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
 
@@ -490,7 +496,7 @@ class SetupPage:
             f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
             "<body><main id=app></main><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
-            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script></body></html>",
+            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",
             headers=HEADERS)
 
     async def asset(self, request: Request):

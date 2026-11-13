@@ -22,3 +22,6 @@ server/tests/data/golden/** -text
 # Test fixtures are read byte for byte (golden builds are made from them): no CRLF on Windows checkouts.
 server/tests/data/** -text
 printer-pack/** text eol=lf
+
+# esptool-js, vendored as published (THIRD-PARTY.md has its SHA-256): byte for byte.
+server/filament_kit/setup_static/esptool.bundle.js -text

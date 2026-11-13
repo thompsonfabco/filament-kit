@@ -70,6 +70,7 @@ const TABS = {
   presets: ["Presets", () => presetsTab()],
   intake: ["Intake", () => intakeTab()],
   settings: ["Settings", () => [generalCard(), readerCard(), backupCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
+  flash: ["Flash a device", () => flashTab()],
   updates: ["Updates", () => updatesTab()],
   logs: ["Logs", () => logsTab()],
 };

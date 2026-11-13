@@ -29,25 +29,32 @@
 #include <mbedtls/sha256.h>
 #include <mbedtls/base64.h>
 #include <Preferences.h>
-#include "secrets.h"         // WIFI_SSID, WIFI_PASS, READER_BASE, READER_TOKEN, OTA_PUBKEY[, READER_BUZZER_ACTIVE_LOW]
+#if __has_include("secrets.h")
+#include "secrets.h"         // optional: a build with settings compiled in (copied into flash; see loadSettings)
+#define HAVE_SECRETS 1
+#endif
 #include "fw_build.h"        // FW_BUILD, generated per build by fw_build.py
 #include "reader_api.h"
 #include "menu.h"
+#include "settings.h"
 
 using namespace reader;
 
 // ======================= CONFIG (edit me) ====================================
-// Wi-Fi, the server's base URL, the reader token and the OTA public key live in
-// secrets.h (not in this file). Everything the reader calls hangs off READER_BASE:
+// Wi-Fi, the server's base URL, the reader token, the OTA public key and the
+// buzzer's trigger are written into the reader over USB by `filament-kit reader
+// setup` or the setup page (settings.h: the FK-SET line) and kept in flash. A
+// build with secrets.h copies its values in (again whenever they change). Everything the reader calls
+// hangs off the base URL:
 //   GET  printers                 GET  printers/<id>/slots      POST scan
 //   GET  healthz (OTA rollback)   GET  fw/manifest.json + fw/firmware.bin (OTA)
 
 // Root CA to validate the server cert. Default: ISRG Root X1 (Let's Encrypt
-// chain); define READER_ROOT_CA in secrets.h for a server with another CA.
+// chain); the settings' root_ca (or READER_ROOT_CA in secrets.h) for a server with another CA.
 #ifdef READER_ROOT_CA
-static const char* ROOT_CA = READER_ROOT_CA;
+static const char* DEFAULT_ROOT_CA = READER_ROOT_CA;
 #else
-static const char* ROOT_CA = R"CERT(-----BEGIN CERTIFICATE-----
+static const char* DEFAULT_ROOT_CA = R"CERT(-----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
 TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
 cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
@@ -117,14 +124,16 @@ static const bool ENC_SW_TO_VCC = true;
 //     High-triggered (the default): a magnetic buzzer switched by an N-channel
 //     MOSFET such as a BS170, pin HIGH = on, so the pin idles LOW. A reader built
 //     with the older 3-pin module (GND, I/O, VCC, PNP driver) is low-triggered:
-//     `filament-kit reader setup --buzzer low` writes READER_BUZZER_ACTIVE_LOW 1
-//     into secrets.h. A secrets.h written before the setting existed has no line,
-//     and those readers were all built with that module, so no line means low.
+//     the settings' buzzer_low (`reader setup --buzzer low`). A build from a
+//     secrets.h without READER_BUZZER_ACTIVE_LOW predates the setting, and those
+//     readers were all built with that module, so it means low.
 static const int  PIN_BUZZER        = 0;
-#ifdef READER_BUZZER_ACTIVE_LOW
-static const bool BUZZER_ACTIVE_LOW = READER_BUZZER_ACTIVE_LOW;
+#if defined(READER_BUZZER_ACTIVE_LOW)
+static const bool COMPILED_BUZZER_LOW = READER_BUZZER_ACTIVE_LOW;
+#elif defined(HAVE_SECRETS)
+static const bool COMPILED_BUZZER_LOW = true;
 #else
-static const bool BUZZER_ACTIVE_LOW = true;
+static const bool COMPILED_BUZZER_LOW = false;
 #endif
 
 static const uint32_t SETTLE_MS = 600;   // knob idle time before the slot choice is saved
@@ -150,7 +159,7 @@ static const uint32_t MARQUEE_STEP_MS  = 350;
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 Adafruit_SSD1306 display(OLED_W, OLED_H, &Wire, -1);
 
-// URLs, built from READER_BASE in setup()
+// URLs, built from the settings' base in setup()
 String urlPrinters, urlScan, urlHealthz, urlManifest, urlBin;
 
 std::vector<PrinterEntry> printers;   // from GET printers
@@ -182,7 +191,93 @@ const SlotEntry* curSlot() {
 // Park the pin at its "off" level (LOW for a high-triggered buzzer, HIGH for the
 // low-triggered module). Beeps drive LEDC directly rather than tone(): tone()'s
 // async task ends each note at duty 0 and can detach the pin after we've parked it.
-void buzzIdle() { pinMode(PIN_BUZZER, OUTPUT); digitalWrite(PIN_BUZZER, BUZZER_ACTIVE_LOW ? HIGH : LOW); }
+// ---- settings (written over USB, kept in flash) ---------------------------------
+Settings cfg;              // what the reader runs with
+bool     configured = false;
+const char* wifiState = "-";     // how the last start went, for FK? (ok / fail / -)
+const char* serverState = "-";   // ok / fail / unauth / -
+
+const char* rootCa() { return cfg.rootCa.empty() ? DEFAULT_ROOT_CA : cfg.rootCa.c_str(); }
+
+bool saveSettings(const Settings& s);
+
+void loadSettings() {
+  Preferences p;
+  p.begin("fk-cfg", true);
+  cfg.ssid = p.getString("ssid", "").c_str();
+  cfg.pass = p.getString("pass", "").c_str();
+  cfg.base = p.getString("base", "").c_str();
+  cfg.token = p.getString("token", "").c_str();
+  cfg.otaKey = p.getString("ota_key", "").c_str();
+  cfg.rootCa = p.getString("root_ca", "").c_str();
+  cfg.buzzerLow = p.getBool("buzzer_low", COMPILED_BUZZER_LOW);
+  std::string savedStamp = p.getString("src_stamp", "").c_str();
+  p.end();
+#ifdef HAVE_SECRETS
+  // The compiled-in settings go into flash (so a later image built without them still runs) when flash holds none,
+  // or when this build's differ from the ones last copied (a rebuilt secrets.h: new token, password, server, key).
+  // Settings written over USB afterwards keep the stamp, so they win until a build with other compiled ones.
+  Settings compiled;
+  compiled.ssid = WIFI_SSID; compiled.pass = WIFI_PASS; compiled.base = READER_BASE; compiled.token = READER_TOKEN;
+  compiled.otaKey = OTA_PUBKEY;
+  if (compiled.otaKey.find("REPLACE-WITH") != std::string::npos) compiled.otaKey.clear();
+#ifdef READER_ROOT_CA
+  compiled.rootCa = READER_ROOT_CA;
+#endif
+  compiled.buzzerLow = COMPILED_BUZZER_LOW;
+  std::string stamp = settingsStamp(compiled);
+  if (adoptCompiled(cfg, savedStamp, stamp)) {
+    cfg = compiled;
+    if (saveSettings(cfg)) {
+      Preferences w;
+      if (w.begin("fk-cfg", false)) { w.putString("src_stamp", stamp.c_str()); w.end(); }
+    }
+  }
+#endif
+  configured = !cfg.base.empty() && !cfg.token.empty() && !cfg.ssid.empty();
+}
+
+bool saveSettings(const Settings& s) {
+  Preferences p;
+  if (!p.begin("fk-cfg", false)) return false;
+  bool ok = p.putString("ssid", s.ssid.c_str()) == s.ssid.size() &&
+            p.putString("pass", s.pass.c_str()) == s.pass.size() &&
+            p.putString("base", s.base.c_str()) == s.base.size() &&
+            p.putString("token", s.token.c_str()) == s.token.size() &&
+            p.putString("ota_key", s.otaKey.c_str()) == s.otaKey.size() &&
+            p.putString("root_ca", s.rootCa.c_str()) == s.rootCa.size() &&
+            p.putBool("buzzer_low", s.buzzerLow) == 1;
+  p.end();
+  return ok;
+}
+
+// FK? and FK-SET over USB (settings.h). Never echoes a setting.
+LineReader serialLines;
+void serialPoll() {
+  std::string line, arg;
+  while (Serial.available() > 0) {
+    if (!serialLines.push((char)Serial.read(), line)) continue;
+    switch (command(line, arg)) {
+      case CMD_HELLO:
+        Serial.println(helloLine((long)FW_BUILD, configured, wifiState, serverState).c_str());
+        break;
+      case CMD_SET: {
+        Settings s; std::string why;
+        if (!parseSettings(arg.c_str(), s, why)) { Serial.printf("FK-ERR %s\n", why.c_str()); break; }
+        if (!saveSettings(s)) { Serial.println("FK-ERR could not save the settings"); break; }
+        Serial.println("FK-OK");
+        Serial.flush();
+        delay(300);
+        ESP.restart();
+        break;
+      }
+      default:
+        break;
+    }
+  }
+}
+
+void buzzIdle() { pinMode(PIN_BUZZER, OUTPUT); digitalWrite(PIN_BUZZER, cfg.buzzerLow ? HIGH : LOW); }
 void beep(int freq, int ms) {
   if (!ledcAttach(PIN_BUZZER, freq, 10))  // 10-bit keeps the divider legal down to ~300 Hz
     Serial.printf("beep: ledcAttach(%d Hz) failed\n", freq);
@@ -362,7 +457,7 @@ int apiRequest(const String& url, const char* body, String& resp, bool quick = f
     apiHttp.setTimeout(quick ? LIST_QUICK_TIMEOUT_MS : 6000);
     apiHttp.setConnectTimeout(quick ? LIST_QUICK_TIMEOUT_MS : 5000);
     if (!apiHttp.begin(apiTls, url)) { apiTls.stop(); continue; }
-    apiHttp.addHeader("X-Auth-Token", READER_TOKEN);
+    apiHttp.addHeader("X-Auth-Token", cfg.token.c_str());
     if (body) { apiHttp.addHeader("Content-Type", "application/json"); code = apiHttp.POST(body); }
     else      code = apiHttp.GET();
     if (code > 0) {
@@ -416,7 +511,7 @@ bool fetchSlots(const std::string& label, bool quick) {
   const PrinterEntry* p = curPrinter();
   if (!p) { slotCache.apply("", false, {}); menu.slot = 0; return false; }
   String resp;
-  String url = joinUrl(READER_BASE, "printers/" + urlEncode(p->id) + "/slots").c_str();
+  String url = joinUrl(cfg.base.c_str(), "printers/" + urlEncode(p->id) + "/slots").c_str();
   int code = apiRequest(url, nullptr, resp, quick);
   std::vector<SlotEntry> fresh;
   bool ok = code == 200 && parseSlots(resp.c_str(), fresh);
@@ -443,6 +538,7 @@ bool refreshListsNow(bool quick) {
                                       settleAt != 0 && menu.mode == MODE_SLOTS);
   String resp;
   int code = apiRequest(urlPrinters, nullptr, resp, quick);
+  serverState = code == 200 ? "ok" : (code == 401 || code == 403) ? "unauth" : "fail";
   bool ok = code == 200 && parsePrinters(resp.c_str(), printers);
   resp = "";
   if (!ok) {
@@ -591,10 +687,10 @@ void showProgress(const char* title, const char* line, int pct) {
 }
 
 bool httpsGet(HTTPClient& http, WiFiClientSecure& tls, const String& url) {
-  tls.setCACert(ROOT_CA);
+  tls.setCACert(rootCa());
   http.setTimeout(15000);
   if (!http.begin(tls, url)) return false;
-  http.addHeader("X-Auth-Token", READER_TOKEN);
+  http.addHeader("X-Auth-Token", cfg.token.c_str());
   return http.GET() == 200;
 }
 
@@ -613,8 +709,9 @@ bool verifySig(const uint8_t imgHash[32], long build, const char* sigB64) {
   uint8_t sig[80]; size_t sigLen = 0;
   if (mbedtls_base64_decode(sig, sizeof(sig), &sigLen, (const uint8_t*)sigB64, strlen(sigB64)) != 0)
     return false;
+  if (cfg.otaKey.empty()) return false;          // no key was set up: every update is refused
   mbedtls_pk_context pk; mbedtls_pk_init(&pk);
-  bool ok = mbedtls_pk_parse_public_key(&pk, (const uint8_t*)OTA_PUBKEY, strlen(OTA_PUBKEY) + 1) == 0 &&
+  bool ok = mbedtls_pk_parse_public_key(&pk, (const uint8_t*)cfg.otaKey.c_str(), cfg.otaKey.size() + 1) == 0 &&
             mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, hash, 32, sig, sigLen) == 0;
   mbedtls_pk_free(&pk);
   return ok;
@@ -781,7 +878,11 @@ void i2cScan() {
 }
 
 void setup() {
+  // An FK-SET line can be MAX_LINE bytes (a root CA and an OTA key) and arrives while the loop is busy elsewhere:
+  // the USB serial's default receive buffer is a few hundred bytes. Before begin(), or it keeps the default.
+  Serial.setRxBufferSize(MAX_LINE + 64);
   Serial.begin(115200);
+  loadSettings();
   pinMode(PIN_ENC_CLK, INPUT_PULLUP);
   pinMode(PIN_ENC_DT,  INPUT_PULLUP);
   pinMode(PIN_ENC_SW,  ENC_SW_TO_VCC ? INPUT_PULLDOWN : INPUT_PULLUP);
@@ -791,11 +892,11 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_DT),  encISR, CHANGE);
 
-  urlPrinters = joinUrl(READER_BASE, "printers").c_str();
-  urlScan     = joinUrl(READER_BASE, "scan").c_str();
-  urlHealthz  = joinUrl(READER_BASE, "healthz").c_str();
-  urlManifest = joinUrl(READER_BASE, "fw/manifest.json").c_str();
-  urlBin      = joinUrl(READER_BASE, "fw/firmware.bin").c_str();
+  urlPrinters = joinUrl(cfg.base.c_str(), "printers").c_str();
+  urlScan     = joinUrl(cfg.base.c_str(), "scan").c_str();
+  urlHealthz  = joinUrl(cfg.base.c_str(), "healthz").c_str();
+  urlManifest = joinUrl(cfg.base.c_str(), "fw/manifest.json").c_str();
+  urlBin      = joinUrl(cfg.base.c_str(), "fw/firmware.bin").c_str();
 
   // Idle I2C lines must read HIGH (pulled up). LOW with no internal pull-up means
   // no pull-up resistors; LOW even with the pull-up means something holds it down.
@@ -834,13 +935,24 @@ void setup() {
     nfc.SAMConfig();
   }
 
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  uint32_t t0 = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) { delay(250); }
-
   Serial.printf("firmware build %ld\n", (long)FW_BUILD);
-  apiTls.setCACert(ROOT_CA);
+  if (!configured) {
+    // A new board from the kit's image: nothing to join yet. Wait for the kit to write the settings over USB.
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("Not set up yet.\nPlug me into the kit\nserver and run:\nreader setup\n(or the setup page)");
+    display.display();
+    Serial.println(helloLine((long)FW_BUILD, false, "-", "-").c_str());
+    for (;;) { serialPoll(); delay(10); }
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(cfg.ssid.c_str(), cfg.pass.c_str());
+  uint32_t t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) { serialPoll(); delay(250); }
+  wifiState = WiFi.status() == WL_CONNECTED ? "ok" : "fail";
+
+  apiTls.setCACert(rootCa());
   confirmOtaImage();
   prefs.begin("reader", false);
   savedPrinter = prefs.getString("printer", "").c_str();
@@ -852,6 +964,7 @@ void setup() {
   redraw();
   if (WiFi.status() != WL_CONNECTED || !serverOk) buzzError();
   else                                            buzzOk();
+  Serial.println(helloLine((long)FW_BUILD, true, wifiState, serverState).c_str());
 }
 
 bool swallowPress = false;  // this press woke a dark screen: ignore the rest of it
@@ -900,6 +1013,7 @@ void handleAction(Action a) {
 }
 
 void loop() {
+  serialPoll();
   uint32_t now = millis();
   int np = (int)printers.size(), ns = slotsUsable() ? (int)slots.size() : 0;
 

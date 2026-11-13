@@ -918,7 +918,7 @@ def test_every_tab_the_shell_lists_has_its_view():
     every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("*.js"))
     block = src[src.index("const TABS = {"):src.index("const tabNow")]
     assert re.findall(r"^  (\w+): \[", block, re.M) == ["overview", "modules", "printers", "devices", "presets", "intake",
-                                                               "settings", "updates", "logs"]
+                                                               "settings", "flash", "updates", "logs"]
     for fn in re.findall(r"(\w+(?:Card|Tab))\(\)", block):
         assert f"function {fn}(" in every, fn
 
@@ -937,8 +937,8 @@ def test_helper_ops_are_the_closed_list():
     assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set", "library_token_set",
                                      "library_token_remove", "local_intake_token_set", "local_intake_token_remove", "module", "setting", "general", "spoolman_url", "apply", "mode", "job", "journal", "backup_keep", "backup_list", "backup_open", "restore_pin", "restore_forget", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
-                                     "trust_revoke_all", "trust_enabled"}
+                                     "trust_revoke_all", "trust_enabled", "reader_usb"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
                                       "library_rollback", "remote_issue",
-                                      "backup", "restore", "local_intake_plan", "local_intake_install", "local_intake_remove"}
+                                      "backup", "restore", "local_intake_plan", "local_intake_install", "local_intake_remove", "reader_setup"}
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)

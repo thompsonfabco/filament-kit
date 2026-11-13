@@ -94,14 +94,38 @@ pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). This contract is fixe
 answers; otherwise the reader rolls back to the previous firmware on the next reset.
 
 `GET <READER_BASE>/fw/manifest.json` and `GET <READER_BASE>/fw/firmware.bin`: the OTA files written by
-`tools/ota_publish.py`, served behind the same token (the image contains the Wi-Fi password and the token).
+`tools/ota_publish.py`, served behind the same token (an image built with a `secrets.h` contains its Wi-Fi password
+and token; one built without holds no settings, and the reader keeps the ones it has in flash).
 
-## Build
+## Set it up (no toolchain)
+
+Plug the Printer Station into the kit server's USB port with a data cable and run:
+
+    sudo filament-kit reader setup
+
+Or open the kit's setup page, tab **Flash a device**: it does the same with the board plugged into the server,
+or writes it from the computer you sit at (Chrome or Edge, over Web Serial).
+
+It finds the board, asks the Wi-Fi name and password and the buzzer's trigger (high for a buzzer behind a MOSFET, as
+in the parts list; low for the older 3-pin module), makes the reader's token, writes the kit's own firmware
+(`firmware/printer-station.bin`, which holds no settings) unless the board already runs that build, sends the
+settings over USB, and waits for the reader to report that it joined the Wi-Fi and reached the kit. It ends with
+"Done." or a plain reason. Then unplug it and power it where it lives: it keeps its settings. `--ssid` and
+`--buzzer high|low` skip those questions, `--port` names the board when more than one is plugged in, `--reflash`
+writes the firmware even when it is current, and `--ota-pubkey <key.pem>` adds the key OTA images must be signed
+with. The settings protocol is in `lib/reader_core/src/settings.h`. Nothing secret is printed.
+
+## Build it yourself
 
 Needs [PlatformIO](https://platformio.org/) (`pip install platformio`). `platformio.ini` pins the pioarduino
 platform (Arduino core 3.1.3) and exact library versions. The platform zip,
 `https://github.com/pioarduino/platform-espressif32/releases/download/53.03.13/platform-espressif32.zip`, has
 SHA-256 `e42240daaba9d4dfb9cec7ec702b6c84a0605d34c7f03e1ad342bbee74fc1db8` (1,472,729 bytes, checked 2026-11-03).
+
+`sh build.sh` (with no `src/secrets.h`) rebuilds `firmware/printer-station.bin` and `firmware/VERSION`, the image the
+kit ships; commit both. To build one with the settings compiled in instead (the reader copies them into its flash on
+start whenever they differ from the ones it copied last, so a rebuilt `secrets.h` with a new token or password
+takes over; settings the kit writes over USB later win until a build with other compiled ones):
 
 1. `cp src/secrets.example.h src/secrets.h` and fill in Wi-Fi, `READER_BASE`, `READER_TOKEN` and `OTA_PUBKEY`
    (see below), and `READER_BUZZER_ACTIVE_LOW`: 0 for a buzzer behind a MOSFET (high-triggered), 1 for the older
@@ -110,7 +134,7 @@ SHA-256 `e42240daaba9d4dfb9cec7ec702b6c84a0605d34c7f03e1ad342bbee74fc1db8` (1,47
 2. `pio run -e esp32-c3-supermini` builds; `pio run -e esp32-c3-supermini -t upload` flashes over USB (the first
    time only; updates go over Wi-Fi).
 
-**Or let the kit do both steps:** on the kit server, with the reader plugged in by USB and PlatformIO installed,
+**Or let the kit build and flash it:** on the kit server, with the reader plugged in by USB and PlatformIO installed,
 `sudo filament-kit reader setup --name printer-station --source <checkout>/reader --ota-pubkey <key.pem>` makes the token,
 works out `READER_BASE` from `web.public_url`, asks you to confirm the USB board to flash (`[y/N]`; pass `--port` to skip the question, and a script that pipes the Wi-Fi name in must do that or answer it first), asks the Wi-Fi name and password, and builds and flashes a private copy
 of this folder (the checkout never holds `secrets.h`). Install PlatformIO as yourself, not with sudo
@@ -126,6 +150,12 @@ knob and menu, saved choice, scrolling). Needs a host C++ compiler (on Windows, 
 firmware with the example secrets.
 
 ## Updates over Wi-Fi (OTA)
+
+A reader set up with `sudo filament-kit reader setup` and no `--ota-pubkey` refuses every update over Wi-Fi: to update
+it, run `reader setup` again with it plugged into the server (it keeps its settings and writes the kit's newer
+firmware). A reader built with a `secrets.h` copies those settings into its flash on its first start with this
+firmware (and again after a build whose compiled settings changed), so a later image without them keeps working; one still on firmware from before that needs `reader setup`
+once before it takes such an image, or it starts as "Not set up yet".
 
 1. Once: `py tools/ota_publish.py --init-key` creates the signing key (`~/.filament-kit/reader-ota-key.pem`,
    keep it on that PC) and prints the public key. Paste it into `src/secrets.h` as `OTA_PUBKEY` and flash once

@@ -43,6 +43,10 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     trust_add {name}                           trust a computer, only with the typed code; the one reply holding a secret,
                                                which goes to the browser's cookie and nowhere else
     trust_list  trust_rename {id, name}  trust_revoke {id}  trust_revoke_all  trust_enabled {enabled}
+    reader_usb {ssid, pass, buzzer[, port][, name]}   the Printer Station plugged into this server: the answers checked,
+                                               left root-only in /etc/filament-kit/reader-setup.json for the job
+                                               `reader_setup` (`reader setup --pending`), which deletes the file as it
+                                               reads it; a job that does not start deletes it here
 
 Every request carries the setup code and the page's client address, and this process is the only place a code is
 checked (setup_code.check on the root-only hash, against the per-client and global lockout in
@@ -99,7 +103,9 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "roll
         # the local label reader: the page showed the release's sizes and the owner confirmed (tier: local_intake.tier)
         "local_intake_plan": ("local-intake", "plan"),         # the server cannot reach GitHub: a job, as `check`
         "local_intake_install": ("local-intake", "install", "--yes", "--planned"),
-        "local_intake_remove": ("local-intake", "remove", "--yes")}
+        "local_intake_remove": ("local-intake", "remove", "--yes"),
+        # the "Flash a device" tab, Printer Station plugged into the server: the answers wait in reader_flash.PENDING
+        "reader_setup": ("reader", "setup", "--pending")}
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
@@ -123,7 +129,8 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "restore": "a restore is running; wait until it has finished",
         "local_intake_plan": "the reader's release is being checked; try again in a moment",
         "local_intake_install": "the local label reader is being installed; wait until it has finished",
-        "local_intake_remove": "the local label reader is being removed; wait until it has finished"}
+        "local_intake_remove": "the local label reader is being removed; wait until it has finished",
+        "reader_setup": "a Printer Station is being set up; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}
 
@@ -762,6 +769,8 @@ def _job(req: dict) -> dict:
     name = req.get("name")
     if not isinstance(name, str) or name not in JOBS:
         raise Refused(400, "job must be one of: " + ", ".join(JOBS))
+    if name == "reader_setup":
+        raise Refused(400, "the Printer Station is set up from the Flash a device tab (op reader_usb)")
     _not_applying()
     if name in ("update", "rollback"):
         from . import updates
@@ -781,6 +790,42 @@ def _job(req: dict) -> dict:
     else:
         _start_job(name, checked=True)
     return {"name": name}
+
+
+def _reader_usb(req: dict) -> dict:
+    from . import reader_flash, reader_setup
+    ssid, password = req.get("ssid"), req.get("pass")
+    if not isinstance(ssid, str) or not isinstance(password, str):
+        raise Refused(400, "the Wi-Fi name and password are needed")
+    buzzer = req.get("buzzer", "high")
+    if buzzer not in ("high", "low"):
+        raise Refused(400, "buzzer must be high or low")
+    name = req.get("name") or "printer-station"
+    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9 _.-]{1,64}", name):
+        raise Refused(400, "the name may hold letters, digits, space . _ - (at most 64)")
+    try:
+        reader_setup.secrets_h(ssid, password, "https://x/reader", "x" * 43, reader_setup.PLACEHOLDER_KEY)
+    except reader_setup.SetupError as e:
+        raise Refused(400, str(e)) from None
+    if reader_flash.bundled_image() is None:
+        raise Refused(409, "this kit has no Printer Station firmware bundled; update the kit")
+    ports = [r.port for r in reader_setup.find_readers()]
+    port = req.get("port")
+    if port is not None and port not in ports:
+        raise Refused(409, "that board is no longer plugged in; look again")
+    if port is None and not ports:
+        raise Refused(409, "no ESP32 board on this server's USB: plug the Printer Station in with a data cable")
+    if port is None and len(ports) > 1:
+        raise Refused(409, "there are several ESP32 boards on this server's USB: pick one")
+    _not_applying()
+    reader_flash.write_pending({"ssid": ssid, "pass": password, "buzzer": buzzer, "port": port or ports[0],
+                                "name": name})
+    try:
+        _start_job("reader_setup")
+    except Refused:
+        reader_flash.pending_path().unlink(missing_ok=True)
+        raise
+    return {"name": "reader_setup"}
 
 
 def _station_pairing(req: dict) -> dict:
@@ -865,11 +910,11 @@ OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphr
        "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open, "restore_pin": _restore_pin,
        "restore_forget": _restore_forget, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
-       "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled}
+       "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled, "reader_usb": _reader_usb}
 
 
 # what may save a setting and start a job: these run under _job_lock, whole
-LOCKED_OPS = ("module", "setting", "general", "spoolman_url", "mode", "backup_keep", "apply", "job")
+LOCKED_OPS = ("module", "setting", "general", "spoolman_url", "mode", "backup_keep", "apply", "job", "reader_usb")
 NO_CODE_OPS = ("trust_status",)     # it answers only about the token it was given
 
 

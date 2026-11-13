@@ -10,7 +10,8 @@ const jobState = h("p", { class: "muted" });
 const jobOut = h("pre");
 const jobNote = h("div");
 const jobPanel = h("section", { class: "card job hidden" }, h("h2", { textContent: "Background job" }), jobState, jobOut, jobNote);
-const JOB_TITLE = { apply: "Applying the changes", update: "Updating", rollback: "Rolling back", check: "Checking for updates" };
+const JOB_TITLE = { apply: "Applying the changes", update: "Updating", rollback: "Rolling back", check: "Checking for updates",
+                    reader_setup: "Setting up the Printer Station" };
 let jobFrom = 0, jobName = null, jobLive = false;     // jobLive: one poll loop at a time, or lines would come twice
 
 function followApply(fresh) {
