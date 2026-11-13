@@ -188,6 +188,7 @@ private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Bo
                     HistoryTexts.FIELDS.filter { it in item.values }.forEach { f ->
                         Text("${HistoryTexts.label(f)}: ${HistoryTexts.value(item.values[f])}")
                     }
+                    HistoryTexts.readLine(r, item.item)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     OutlinedButton(onClick = { vm.openEdit(item.item) }) { Text(HistoryTexts.EDIT) }
                 }
             }
@@ -233,6 +234,9 @@ private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Bo
             title = { Text("The AI proposes") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    com.thompsonfabco.filamentkit.ui.add.ReaderTexts.revisedBy(p)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
                     if (p.noPhoto) Text(HistoryTexts.NO_PHOTO, style = MaterialTheme.typography.bodySmall)
                     if (p.changes.isEmpty()) Text(HistoryTexts.NO_CHANGE)
                     p.changes.forEach { f ->

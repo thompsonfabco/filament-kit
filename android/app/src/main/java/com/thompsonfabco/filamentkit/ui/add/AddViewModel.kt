@@ -125,6 +125,8 @@ data class AddUiState(
     val weight: Double? = null,
     val sealed: Boolean = false,
     val questions: List<String> = emptyList(),
+    /** Which reader answered the read and how sure it was (null: no read, or a manual add). */
+    val readInfo: ReaderTexts.Info? = null,
     /** The read's items as the server sent them, plus the user's edits; sent back to `add` as-is. */
     val items: List<JsonObject> = emptyList(),
     val notices: List<String> = emptyList(),
@@ -447,6 +449,7 @@ class AddViewModel(
         _state.update {
             it.copy(
                 stage = Stage.Review, items = items, questions = res.questions, notices = notices,
+                readInfo = ReaderTexts.info(res),
                 previewLines = emptyList(), error = null, generation = it.generation + 1,
             )
         }
@@ -805,6 +808,7 @@ class AddViewModel(
                 stage = if (items != null) Stage.Review else Stage.Capture,
                 draftId = d.id, photos = d.photos, hint = d.hint, tag = d.tag ?: it.tag, weight = d.weightGrams,
                 sealed = d.sealed, questions = res?.questions.orEmpty(), items = items.orEmpty(),
+                readInfo = res?.let(ReaderTexts::info),
                 addedBefore = d.addedBefore?.let(::AddedBefore),
                 generation = it.generation + 1,
             )
@@ -948,6 +952,7 @@ internal fun describe(e: Exception): AddError = when (e) {
 
 private fun describeApi(e: ApiError): AddError {
     val claude = { text: String -> AddError(text, detail = e.message, canRetry = true) }
+    ReaderTexts.localError(e.code)?.let { return claude(it) }
     return when (e.code) {
         "offline" -> AddError(
             "Can't reach the server. Check that this phone is on the same network as the server, then try again.",

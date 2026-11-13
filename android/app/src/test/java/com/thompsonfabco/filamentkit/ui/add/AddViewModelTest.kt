@@ -548,6 +548,34 @@ class AddViewModelTest {
         assertNotNull(store.get(s.draftId!!))
     }
 
+    @Test fun theReviewSaysWhichReaderAnsweredAlsoAfterReopening() = runTest(dispatcher) {
+        val vm = vm()
+        api.readResults += ReadResult(JsonArray(listOf(item())), emptyList(), null, null, "r1", reader = "local",
+            confidence = 0.7, unsure = true, tier = "cpu", note = "today's cloud reads are used up")
+        vm.addPhoto(byteArrayOf(1))
+        advanceUntilIdle()
+        vm.read()
+        advanceUntilIdle()
+        val info = vm.state.value.readInfo!!
+        assertEquals("The local reader", info.name)
+        assertEquals("Read by the local reader (cpu tier), 70 % sure (unsure: check the fields)", info.line)
+        assertEquals("today's cloud reads are used up", info.note)
+        val reopened = vm(draftId = vm.state.value.draftId)
+        advanceUntilIdle()
+        assertEquals(info, reopened.state.value.readInfo)
+    }
+
+    @Test fun aLocalReaderFailureIsSaidPlainly() = runTest(dispatcher) {
+        val vm = vm()
+        api.readFailures += ApiError(502, "local_unreachable", "the local reader at x does not answer")
+        vm.addPhoto(byteArrayOf(1))
+        advanceUntilIdle()
+        vm.read()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.error!!.message.startsWith("The server can't reach its local label reader"))
+        assertTrue(vm.state.value.error!!.canRetry)
+    }
+
     @Test fun claudeErrorRetriesWithTheReadId() = runTest(dispatcher) {
         val vm = vm()
         api.readFailures += ApiError(502, "rate_limited", "Anthropic rate limit",

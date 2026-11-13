@@ -228,6 +228,16 @@ class HistoryTest {
         assertEquals(false, list.state.value.aiAvailable)
     }
 
+    @Test fun aSavedItemShowsWhatTheLocalReaderSaid() {
+        val read = com.thompsonfabco.filamentkit.net.HistoryRead(listOf(buildJsonObject {
+            put("color_name", "Charcoal"); put("color_family", "grey"); put("confidence", 0.86)
+        }))
+        val r = record.copy(read = read)
+        assertEquals("When read: Colour: Charcoal (grey) · 86 % sure", HistoryTexts.readLine(r, 0))
+        assertNull(HistoryTexts.readLine(r, 1))
+        assertNull(HistoryTexts.readLine(record, 0))
+    }
+
     @Test fun valuesReadPlainly() {
         assertEquals("210", HistoryTexts.value(JsonPrimitive(210.0)))
         assertEquals("1.24", HistoryTexts.value(JsonPrimitive(1.24)))

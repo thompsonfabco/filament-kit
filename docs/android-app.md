@@ -214,11 +214,14 @@ says how). If **Add from label photos** isn't on the home screen, it's off, and 
    screen then shows `Tag …`; **Remove tag** undoes it. For one opened spool, also type its weight in **Weight on the
    scale, with spool (g)**; tick **Sealed** for a spool still in its bag.
 3. Tap **Take photo** (allow the camera) for each label. Several photos of one spool are fine, up to 8.
-   **Remove** under a photo deletes it. Type a hint in **Note for Claude (optional)** if it helps, for example
+   **Remove** under a photo deletes it. Type a hint in **Note for the label reader (optional)** if it helps, for example
    `3 of the grey ones`.
-4. Tap **Read labels**. Claude reads the photos; it can take up to a minute.
+4. Tap **Read labels**. The server's label reader reads the photos: Claude, or the local reader when the server
+   has the Local AI intake module. It can take up to a minute.
 5. **Check the spools** shows what was read, one card per spool, with a badge saying whether the filament is
-   already in Spoolman. If Claude was unsure it lists **Claude asks** questions at the top. **Correct anything
+   already in Spoolman. A line under the title says which reader answered; for the local reader also its tier,
+   how sure it was, and on each card the colour name and family and the least sure fields. If the reader was
+   unsure it lists **Claude asks** (or **The local reader asks**) questions at the top. **Correct anything
    that's wrong**: the card's fields are the same as in the table above, and **Remove** drops a spool. Photos and
    edits are kept if something fails.
 6. Tap **Preview** (nothing is saved), then **Add n spools**, and check **Spools added**.
@@ -232,11 +235,13 @@ duplicates: check Spoolman first.
 
 **Intake history** on the home screen lists the last spools added (from the app, the phone web app, the intake station
 or the command line), newest first, with the label photo when there was one. Tap a record to see its photos (tap one
-to enlarge it), the values saved and every change since.
+to enlarge it), the values saved and every change since. A spool read by the local reader also shows what the reader
+said then (colour name and family, how sure, least sure fields).
 
 - **Revise with AI** (needs AI label reading): write what is wrong, for example `brand is Polymaker`, and tap **Ask the
   AI**. It looks at the photos again with your note and shows the values it would change, old and new. Nothing changes
-  until you tap **Accept**; **Discard** leaves the record as it was.
+  until you tap **Accept**; **Discard** leaves the record as it was. The proposal says who read again (Claude or the
+  local reader, and how sure it was).
 - **Edit by hand** changes any saved value directly, with no AI.
 - **Undo last change** takes back the newest change, one at a time.
 

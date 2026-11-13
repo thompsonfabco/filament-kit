@@ -179,6 +179,11 @@ object HistoryTexts {
     fun numeric(field: String) = field in setOf("net", "tare", "density", "nozzle", "bed", "price_per_kg")
 
     fun ranged(field: String) = field.endsWith("_range")
+
+    /** What the label reader said about saved item [item] when it read the photos (local reader: colour, how sure,
+     *  least sure fields); null when the read had none or the item came from a later split. */
+    fun readLine(r: HistoryRecord, item: Int): String? =
+        r.read?.items?.getOrNull(item)?.let(com.thompsonfabco.filamentkit.ui.add.ReaderTexts::item)?.let { "When read: $it" }
 }
 
 data class HistoryListState(
@@ -367,7 +372,7 @@ private suspend fun <S> guard(
     }
 }
 
-internal fun errorText(e: ApiError): String = when (e.code) {
+internal fun errorText(e: ApiError): String = com.thompsonfabco.filamentkit.ui.add.ReaderTexts.localError(e.code) ?: when (e.code) {
     "ai_off" -> HistoryTexts.AI_OFF
     "stale" -> HistoryTexts.STALE
     "daily_cap" -> "Today's label reading limit is used up (revisions count too). Try again tomorrow, or edit by hand."
