@@ -641,7 +641,7 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
             if (answered is None and fi + 1 < len(files) and _file_refused(r) and r.restored and not r.tripped
                     and not r.other_job and not r.cert_changed and not stop
                     and jobs_by_file.get(files[fi + 1], 0) < MAX_JOBS_PER_FILE):
-                log.info("printer %s: the %s job file got no answer (%s); trying the %s file", serial, file,
+                log.info("%s: the %s job file got no answer (%s); trying the %s file", registry.log_label(serial), file,
                          r.report_wanted or "no mapping", files[fi + 1])
                 fi += 1
                 continue
@@ -669,7 +669,7 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     res.tried, res.attempts, res.trail = sent_keys, attempts, trail
     res.answered_file = answered
     if attempts:
-        log.info("printer %s: calibration sent %d jobs (%s)", serial, len(sent_keys), "; ".join(attempts))
+        log.info("%s: calibration sent %d jobs (%s)", registry.log_label(serial), len(sent_keys), "; ".join(attempts))
     return res
 
 
@@ -776,7 +776,7 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
                                               for label, slot in slotmap.slots.items()
                                               if _key(slot) is not None and _loaded(trays0.get(_key(slot)))])
     except Exception as e:      # no snapshot on disk: do not start the job
-        log.exception("printer %s: cannot save the slot snapshot", serial)
+        log.exception("%s: cannot save the slot snapshot", registry.log_label(serial))
         res.problems.append(f"cannot save the slot snapshot ({type(e).__name__}: {e}); the job was not started")
         _delete(printer, path, res)
         return res
@@ -785,11 +785,11 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
         _job(manager, serial, res, labels, sent, snap, should_stop,
              numbering=(hw, mi, candidates, addrs, mapping2, last_print.get("mapping")))
     except Exception as e:      # e.g. the MQTT connection was lost while watching the job
-        log.warning("printer %s: calibration job interrupted (%s)", serial, type(e).__name__)
+        log.warning("%s: calibration job interrupted (%s)", registry.log_label(serial), type(e).__name__)
         res.consistent = res.retry = False
         res.problems.append(f"the calibration job was interrupted: connection lost ({type(e).__name__})")
     except BaseException:       # Ctrl-C with no handler installed: stop our job (only ours), then restore
-        log.warning("printer %s: calibration job interrupted; stopping it if it is ours", serial)
+        log.warning("%s: calibration job interrupted; stopping it if it is ours", registry.log_label(serial))
         res.consistent = False
         _stop_ours(manager, serial, res.job)
         raise
@@ -800,10 +800,10 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
             try:
                 snapshot.clear(serial)
             except OSError:
-                log.exception("printer %s: cannot delete the slot snapshot", serial)
+                log.exception("%s: cannot delete the slot snapshot", registry.log_label(serial))
         if not res.other_job:   # another print's filament load is not ours to report
             _left_loaded(manager, serial, snap, res)
-    log.info("printer %s: calibration %s; decoding %s; problems %s", serial,
+    log.info("%s: calibration %s; decoding %s; problems %s", registry.log_label(serial),
              "consistent" if res.consistent else "not consistent", res.decoding, res.problems)
     return res
 
@@ -942,8 +942,8 @@ def _stop_ours(manager, serial: str, name: str) -> bool | None:
     except Exception:
         return None
     if not _ours(latest, name):
-        log.info("printer %s: no stop sent: the printer shows %r, not our job", serial,
-                 _s((latest or {}).get('subtask_name')))
+        # the job's name stays out of the log: an owner's file name, or an earlier kit job named after the serial
+        log.info("%s: no stop sent: the printer shows another job, not ours", registry.log_label(serial))
         return None
     return _stop(manager, serial)
 
@@ -1001,10 +1001,10 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         res.problems.append(f"cannot send the calibration job ({type(e).__name__})")
         return
     t0 = time.monotonic()
-    log.info("printer %s: calibration trace +0.0s sent %s %s, reply %s", serial, res.sent_scheme, list(sent),
+    log.info("%s: calibration trace +0.0s sent %s %s, reply %s", registry.log_label(serial), res.sent_scheme, list(sent),
              json.dumps(_reply_trace(reply), sort_keys=True))
     if reply is not None and not _ok(reply):
-        log.warning("printer %s: calibration job refused (%s)", serial, _s(reply.get('reason')) or reply.get('result'))
+        log.warning("%s: calibration job refused (%s)", registry.log_label(serial), _s(reply.get('reason')) or reply.get('result'))
         res.problems.append(REFUSED)
         res.report_wanted = "job_refused"
         res.refused_reason = (_s(reply.get('reason')) or _s(reply.get('result')))[:80]
@@ -1021,7 +1021,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         t = trace(r, name)
         if t != last_trace[0]:          # each change, once
             last_trace[0] = t
-            log.info("printer %s: calibration trace +%.1fs %s", serial, time.monotonic() - t0,
+            log.info("%s: calibration trace +%.1fs %s", registry.log_label(serial), time.monotonic() - t0,
                      json.dumps(t, sort_keys=True))
         gs, sub = _s(r.get('gcode_state')).upper(), _s(r.get('subtask_name'))
         # another print started (not ours, not the one the printer showed before): never touch it
@@ -1073,14 +1073,13 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
 
     _wait(manager, serial, watch, JOB_TIMEOUT, should_stop)
     if st['other'] is not None:
-        log.warning("printer %s: another job (%s) started; calibration abandoned, that job left alone", serial,
-                    st['other'])
+        log.warning("%s: another job started; calibration abandoned, that job left alone", registry.log_label(serial))
         res.other_job, res.consistent = True, False
         res.problems.append(f"{OTHER_JOB} (the printer is running {st['other']!r}; it was not stopped)")
         return
     if st['trip'] is not None:
         res.tripped = True
-        log.warning("printer %s: calibration job tripped: %s", serial, st['trip'])
+        log.warning("%s: calibration job tripped: %s", registry.log_label(serial), st['trip'])
         res.problems.append(st['trip'] + _stopped_text(_stop_ours(manager, serial, name)))
         res.consistent = False
         return
@@ -1106,7 +1105,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     clean = st['final'] == 'FINISH' or not code     # the H2D ends a gcode-only job FAILED with no error: finished
     res.failed_as_finish = st['final'] != 'FINISH' and clean
     if st['final'] != 'FINISH':
-        log.info("printer %s: %s", serial, ended)
+        log.info("%s: %s", registry.log_label(serial), ended)
 
     if res.mapping is None:
         # a printer that reports no mapping will not for other numbers either: no second job, observe mode
@@ -1159,14 +1158,14 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
                             f"the printer's numbers {list(res.mapping)} aren't one for each of the {len(labels)} filaments, so "
                             "they prove no numbering")
     elif res.scheme is None:
-        log.info("printer %s: the reported numbers %s fit no scheme (%s); keeping them as they are", serial, vals,
+        log.info("%s: the reported numbers %s fit no scheme (%s); keeping them as they are", registry.log_label(serial), vals,
                  ", ".join(candidates))
         res.scheme_unsettled = True
         res.notes.append("the printer's slot numbers fit no numbering this kit knows: each loaded slot keeps the "
                          "number the printer gave, and a slot that is empty now gets one when it is loaded and mapped")
     elif len(proved) > 1:
         res.scheme_unsettled = True
-        log.info("printer %s: the loaded slots number alike under %s; taking %s (the model's first)", serial,
+        log.info("%s: the loaded slots number alike under %s; taking %s (the model's first)", registry.log_label(serial),
                  ", ".join(proved), res.scheme)
         res.notes.append(f"the loaded slots are numbered alike under {', '.join(proved)}: the numbering of further "
                          f"AMS units is not settled yet, so map again after loading a second unit")
@@ -1176,7 +1175,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
             # an echo, or the last print's numbers: nothing shows the printer read this job
             res.scheme_unsettled = True
             res.report_wanted = "job_failed"
-            log.warning("printer %s: the job failed and its numbers prove little (sent %s, reported %s)", serial, sent,
+            log.warning("%s: the job failed and its numbers prove little (sent %s, reported %s)", registry.log_label(serial), sent,
                         vals)
     res.consistent = res.scheme is not None or (numbers_ok and clean and not stale)
     # another job only after a clean end with no scheme (never after a real failure or a stop)
@@ -1249,6 +1248,6 @@ def _check_slots(manager, serial: str, slotmap: SlotMap, trays0: dict, res: Cali
         key = _key(slot)
         t0 = trays0.get(key) if key else None
         if _loaded(t0) and not _same(t0, now.get(key)):
-            log.info("printer %s: slot %s changed during the calibration (not by us); left as is", serial, label)
+            log.info("%s: slot %s changed during the calibration (not by us); left as is", registry.log_label(serial), label)
             res.problems.append(f"{label}: its setting changed on the printer during the calibration (not by "
                                 f"filament-kit); left as is")

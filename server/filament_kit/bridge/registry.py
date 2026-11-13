@@ -96,6 +96,34 @@ def display_name(p: Printer) -> str:
     return p.name or p.serial
 
 
+_LABELS: dict[str, tuple[float, str]] = {}
+LABEL_TTL = 60.0
+
+
+def log_label(serial: str) -> str:
+    """How a log line names a printer: "printer N (model code)", N its place in the registry sorted by serial. Never
+    the serial and never the owner's name for it: logs get attached to public issues, and the release notes promise
+    the calibration log holds no names or serial numbers. N changes when a printer is added or removed; the model
+    code in brackets helps across days. Cached for LABEL_TTL seconds: a calibration logs many lines."""
+    import time
+    now = time.monotonic()
+    hit = _LABELS.get(serial)
+    if hit is not None and now - hit[0] < LABEL_TTL:
+        return hit[1]
+    try:
+        printers = load()
+    except Exception:  # noqa: BLE001 - a log line must never fail on the registry
+        printers = {}
+    p = printers.get(serial)
+    if p is not None:
+        n = sorted(printers).index(serial) + 1
+        label = f"printer {n}" + (f" ({p.model})" if (p.model or "").strip() else "")
+    else:
+        label = "a printer no longer in the list"
+    _LABELS[serial] = (now, label)
+    return label
+
+
 class RegistryError(Exception):
     pass
 

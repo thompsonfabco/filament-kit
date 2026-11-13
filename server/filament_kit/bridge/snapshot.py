@@ -167,7 +167,7 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
         if same(s["setting"], now.get(key)):
             continue
         if _norm((now.get(key) or {}).get('tray_color')) not in tests:
-            log.info("printer %s: slot %s changed since the %s snapshot, left as is", serial, s["label"],
+            log.info("%s: slot %s changed since the %s snapshot, left as is", registry.log_label(serial), s["label"],
                      snap["kind"])
             continue
         try:
@@ -199,8 +199,8 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
             if _norm(t.get('tray_color')) in tests:
                 problems.append(f"{s['label']}: test colour {t.get('tray_color')} still in the slot")
     if problems:
-        log.warning("printer %s: restore from the saved slot snapshot not confirmed: %s", serial, problems)
+        log.warning("%s: restore from the saved slot snapshot not confirmed: %s", registry.log_label(serial), problems)
         return problems
     clear(serial)
-    log.info("printer %s: slots restored from the saved slot snapshot (%s)", serial, snap["kind"])
+    log.info("%s: slots restored from the saved slot snapshot (%s)", registry.log_label(serial), snap["kind"])
     return []
