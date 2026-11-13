@@ -3,10 +3,12 @@ package com.thompsonfabco.filamentkit.nav
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.navigation.NavController
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.add.AddReplace
 import kotlinx.serialization.Serializable
 
 // The app's routes (05-android-app 2.5), one type per screen. A *Graph is a group: the pairing graph, or one tab's
@@ -91,12 +93,39 @@ fun NavController.selectTab(tab: Tab) = navigate(tab.graph) {
     restoreState = true
 }
 
+/** What [openAdd] did. */
+enum class AddOpened {
+    /** The new add is open. */
+    Opened,
+
+    /** The add that was open is writing: it is showing and the request is dropped. */
+    KeptWriting,
+
+    /** The add that was open holds typed fields that are not saved: it is showing; the caller asks, then [replaceAdd]. */
+    NeedsLeave,
+}
+
 /**
  * Opens a NEW add flow on the Home stack, whichever tab is showing, so the bar and the stacks stay right. An add already
- * open on that stack is replaced, not covered; its draft stays saved and is listed under Drafts on Home.
+ * open on that stack is replaced as leaving it would be ([decide] gives the Back rule); a saved draft stays in the store
+ * and is listed under Drafts on Home.
  */
-fun NavController.openAdd(route: AddRoute) {
+fun NavController.openAdd(route: AddRoute, decide: (NavBackStackEntry) -> AddReplace = { AddReplace.Replace }): AddOpened {
     if (currentDestination.tab() != Tab.Home) selectTab(Tab.Home)
+    val open = currentBackStackEntry
+    if (open != null && currentDestination?.hasRoute(AddRoute::class) == true) {
+        when (decide(open)) {
+            AddReplace.KeepWriting -> return AddOpened.KeptWriting
+            AddReplace.AskLeave -> return AddOpened.NeedsLeave
+            AddReplace.Replace -> popBackStack()
+        }
+    }
+    navigate(route)
+    return AddOpened.Opened
+}
+
+/** The person chose to leave the add that holds typed fields: a new one takes its place. */
+fun NavController.replaceAdd(route: AddRoute) {
     if (currentDestination?.hasRoute(AddRoute::class) == true) popBackStack()
     navigate(route)
 }

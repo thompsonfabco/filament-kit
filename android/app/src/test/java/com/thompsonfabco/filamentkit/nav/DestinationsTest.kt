@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.createGraph
 import androidx.navigation.toRoute
+import com.thompsonfabco.filamentkit.ui.add.AddReplace
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -172,11 +173,32 @@ class DestinationsTest {
         val nav = controller()
         nav.openAdd(AddRoute(draft = "d1"))
         nav.selectTab(Tab.Printers)
-        nav.openAdd(AddRoute(tag = "04:aa"))
+        assertEquals(AddOpened.Opened, nav.openAdd(AddRoute(tag = "04:aa")))
         assertEquals(Tab.Home, nav.currentDestination.tab())
         assertEquals("one add, not two", 1, nav.currentBackStack.value.count { it.destination.hasRoute(AddRoute::class) })
         val top = nav.currentBackStackEntry!!.toRoute<AddRoute>()
         assertEquals("04:aa", top.tag)
         assertNull("the older draft is not reused", top.draft)
+    }
+
+    @Test fun anAddThatIsWritingStaysAndTheRequestIsDropped() {
+        val nav = controller()
+        nav.openAdd(AddRoute(draft = "d1"))
+        nav.selectTab(Tab.Printers)
+        assertEquals(AddOpened.KeptWriting, nav.openAdd(AddRoute(tag = "04:aa")) { AddReplace.KeepWriting })
+        assertEquals("the Home tab shows the add that was open", Tab.Home, nav.currentDestination.tab())
+        assertEquals("d1", nav.currentBackStackEntry!!.toRoute<AddRoute>().draft)
+    }
+
+    @Test fun anAddWithTypedFieldsAsksAndIsReplacedOnlyOnLeave() {
+        val nav = controller()
+        nav.openAdd(AddRoute(manual = true))
+        nav.selectTab(Tab.Printers)
+        assertEquals(AddOpened.NeedsLeave, nav.openAdd(AddRoute(tag = "04:aa")) { AddReplace.AskLeave })
+        assertTrue("stay: the open add is showing", nav.currentBackStackEntry!!.toRoute<AddRoute>().manual)
+
+        nav.replaceAdd(AddRoute(tag = "04:aa"))
+        assertEquals("04:aa", nav.currentBackStackEntry!!.toRoute<AddRoute>().tag)
+        assertEquals(1, nav.currentBackStack.value.count { it.destination.hasRoute(AddRoute::class) })
     }
 }

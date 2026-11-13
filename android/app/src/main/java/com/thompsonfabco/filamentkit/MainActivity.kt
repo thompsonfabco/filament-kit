@@ -27,7 +27,10 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -69,6 +72,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.thompsonfabco.filamentkit.nav.AddProfileRoute
+import com.thompsonfabco.filamentkit.nav.AddOpened
 import com.thompsonfabco.filamentkit.nav.AddRoute
 import com.thompsonfabco.filamentkit.nav.HomeGraph
 import com.thompsonfabco.filamentkit.nav.HomeRoute
@@ -96,6 +100,7 @@ import com.thompsonfabco.filamentkit.nav.inPairing
 import com.thompsonfabco.filamentkit.nav.isTabRoot
 import com.thompsonfabco.filamentkit.nav.keepLastKnown
 import com.thompsonfabco.filamentkit.nav.openAdd
+import com.thompsonfabco.filamentkit.nav.replaceAdd
 import com.thompsonfabco.filamentkit.nav.popToRootThrough
 import com.thompsonfabco.filamentkit.nav.selectTab
 import com.thompsonfabco.filamentkit.nav.showsBackArrow
@@ -119,6 +124,7 @@ import com.thompsonfabco.filamentkit.ui.LocalNetworkPanel
 import com.thompsonfabco.filamentkit.ui.rememberLocalNetworkAccess
 import com.thompsonfabco.filamentkit.ui.add.AddSpoolsScreen
 import com.thompsonfabco.filamentkit.ui.add.AddViewModel
+import com.thompsonfabco.filamentkit.ui.add.addReplaceOf
 import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
 import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.ui.add.TagTaps
@@ -315,6 +321,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     var shown by remember(config?.name, config?.token, config?.fingerprint) { mutableStateOf(live) }
     LaunchedEffect(live) { shown = keepLastKnown(shown, live) }
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
+    var leaveAddFor by remember { mutableStateOf<AddRoute?>(null) }
 
     val phone = SpoolwardenTheme.window == WindowClass.Phone
     val imeVisible = WindowInsets.isImeVisible
@@ -679,6 +686,24 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         )
     }
 
+    leaveAddFor?.let { request ->
+        AlertDialog(
+            onDismissRequest = { leaveAddFor = null },
+            title = { Text(stringResource(R.string.common_leave_title)) },
+            text = { Text(stringResource(R.string.common_leave_body, stringResource(R.string.web_card_new_spool))) },
+            dismissButton = { TextButton(onClick = { leaveAddFor = null }) { Text(stringResource(R.string.common_stay)) } },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        leaveAddFor = null
+                        nav.replaceAdd(request)
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = SpoolwardenTheme.colors.bad),
+                ) { Text(stringResource(R.string.common_leave_without_saving)) }
+            },
+        )
+    }
+
     // The spool card, over whatever screen is open (not over pairing or the add flow).
     spoolVm?.let { vm ->
         val spoolState by vm.state.collectAsStateWithLifecycle()
@@ -693,7 +718,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onStartAdd = { tag ->
                                 close()
                                 // without label reading on the server the new spool is added by hand
-                                nav.openAdd(AddRoute(tag = tag, manual = !labelPhotos))
+                                val request = AddRoute(tag = tag, manual = !labelPhotos)
+                                // an add already open follows the Back rules before a new one replaces it
+                                val opened = nav.openAdd(request, ::addReplaceOf)
+                                if (opened == AddOpened.NeedsLeave) leaveAddFor = request
                             },
                             onPairAgain = {
                                 close()
