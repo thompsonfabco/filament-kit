@@ -3,5 +3,5 @@
 <resources>
     <color name="sw_window_bg">#0B0F12</color>
     <color name="sw_launcher_bg">#00788A</color>
-    <color name="sw_launcher_bg_nightly">#8A5700</color>
+    <color name="sw_launcher_mark">#FFFFFF</color>
 </resources>

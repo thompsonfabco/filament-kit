@@ -14,7 +14,7 @@
     token: { type: "password", autocomplete: "off", autocapitalize: "off", spellcheck: "false" },
     passphrase: { type: "password", autocomplete: "new-password", minlength: "12" },
     passphrase_again: { type: "password", autocomplete: "new-password", minlength: "12" },
-    address: { type: "text", inputmode: "url", autocomplete: "off", autocapitalize: "off", spellcheck: "false" },
+    address: { type: "text", inputmode: "url", autocomplete: "off", autocapitalize: "off", autocorrect: "off", spellcheck: "false" },
     public_address: { type: "url", inputmode: "url", autocomplete: "off", spellcheck: "false" },
     port: { type: "text", inputmode: "numeric", autocomplete: "off", pattern: "[0-9]*" },
     subnet: { type: "text", autocomplete: "off", autocapitalize: "off", spellcheck: "false" },
@@ -81,7 +81,8 @@
     // KEY-2 tabindex, SR-6 names, SR-7 names start with the visible text, TGT-1 hit areas
     for (const el of doc.querySelectorAll("[tabindex]")) if (Number(el.getAttribute("tabindex")) > 0) add("tabindex above 0", el);
     for (const el of doc.querySelectorAll(FOCUSABLE)) {
-      if (el.matches("[tabindex='-1']:not(a, button, input, select, textarea)") || el.disabled || !shown(el) || closedLayer(el)) continue;
+      // a natively disabled control still needs its name; only its hit area is not checked
+      if (el.matches("[tabindex='-1']:not(a, button, input, select, textarea)") || !shown(el) || closedLayer(el)) continue;
       if (el.matches("input[type=hidden]")) continue;
       const name = accName(el);
       if (!name) add("focusable element without a name", el);
@@ -89,7 +90,7 @@
         const vis = visibleText(el);
         if (vis && name && !words(name).startsWith(words(vis))) add("name does not start with the visible text", el, `"${name}" / "${vis}"`);
       }
-      if (!el.matches(CONTROL) || (el.getAttribute("tabindex") === "-1" && !el.matches("[role^=menuitem]"))) continue;
+      if (!el.matches(CONTROL) || el.disabled || (el.getAttribute("tabindex") === "-1" && !el.matches("[role^=menuitem]"))) continue;
       const box = hitBox(el);
       if (box && (box.w < 43.5 || box.h < 43.5) && !inlineLink(el)) add("hit area under 44 x 44", el, `${Math.round(box.w)} x ${Math.round(box.h)}`);
     }
@@ -124,7 +125,7 @@
     // SR-9 disclosures, SR-18 busy regions, SR-12 result slots
     for (const b of doc.querySelectorAll("button[aria-controls], [role=button][aria-controls]")) {
       const t = doc.getElementById(b.getAttribute("aria-controls"));
-      if (t && (t.hidden || !shown(t)) && !b.hasAttribute("aria-expanded") && !b.hasAttribute("aria-pressed")) add("disclosure button without aria-expanded", b);
+      if (t && shown(b) && (t.hidden || !shown(t)) && !b.hasAttribute("aria-expanded")) add("disclosure button without aria-expanded", b);
     }
     for (const r of doc.querySelectorAll('[aria-busy="true"]')) if (!r.matches("button")) add("region still aria-busy after load", r);
     for (const r of doc.querySelectorAll(".result")) {

@@ -104,7 +104,7 @@ section("3 Lock and appearance",
     h("button", { class: "chip chip--connection", type: "button", "data-state": "offline", "aria-label": t("connection_name_offline") }, ic("wifi-off", "icon--s"), E("span", "chip__word", t("status_offline"))),
     h("button", { class: "chip chip--connection", type: "button", "data-state": "connecting", "aria-disabled": "true", "aria-label": t("connection_name_connecting") }, SW.spinner(), E("span", "chip__word", t("common_connecting")))))),
   state("Unlock dialog with a pending change (try 00000000 for the refusal)", SW.btn(t("printers_forget"), { cls: "btn--danger", run: (e) => SW.guard("forget Workshop X1", async () => SW.toast("Workshop X1 forgotten.")) })),
-  state("Locked placeholder and hidden-values note (1.4)", E("div", "banner banner--info banner--inline", ic("lock"), E("p", "banner__text", t("lock_hidden_note")), E("div", "actions", SW.btn(t("lock_unlock_to_show"))))),
+  state("Locked placeholder and hidden-values note (1.4)", E("div", "banner banner--info banner--inline", ic("lock"), E("p", "banner__text", t("lock_hidden_note")), E("div", "actions", SW.btn(t("common_unlock_to_show"))))),
   E("div", "group", E("div", "group__head", ic("sun", "icon--s"), E("div", null, E("h3", "group__title", t("appearance_title")), E("p", "group__desc", t("appearance_note")))),
     E("div", "group__body",
       E("div", null, SW.segmented({ legend: t("appearance_title"), cls: "appearance", value: appearanceValue, options: appearanceOptions }), appearanceResult),
@@ -151,10 +151,10 @@ const address = SW.field({ label: "IP address or name", name: "address", mono: t
   check: (v) => (v.trim() ? "" : t("common_error_address")) });
 const addressError = SW.field({ label: "IP address or name", name: "address", mono: true, value: "192.0.2", attrs: { inputmode: "url", autocapitalize: "off", autocorrect: "off", spellcheck: "false" } });
 SW.fieldError(addressError, "Enter the printer's whole address, e.g. 192.0.2.42.");
-const nameField = SW.field({ label: t("common_name"), name: "name", optional: true, hint: "Shown in lists. Empty uses the printer's own name." });
+const nameField = SW.field({ label: t("common_field_name"), name: "name", optional: true, hint: "Shown in lists. Empty uses the printer's own name." });
 const disabledField = SW.field({ label: "Subnet", name: "subnet", value: "192.0.2.0/24", disabled: true, hint: "Label Reader is switched off. Turn it on in Features.",
   attrs: { autocapitalize: "off", spellcheck: "false" } });
-const secret = SW.field({ type: "secret", label: t("common_access_code"), name: "access_code", mono: true, hint: t("common_hint_access_code"),
+const secret = SW.field({ type: "secret", label: t("common_field_access_code"), name: "access_code", mono: true, hint: t("common_hint_access_code"),
   attrs: { autocapitalize: "off", spellcheck: "false" } });
 const keyRow = E("div", "key-row actions", SW.status("set"), E("span", "muted", t("common_saved_hidden")),
   SW.btn(t("common_check")), SW.btn(t("common_replace")), SW.btn(t("common_remove"), { cls: "btn--danger" }));
@@ -183,7 +183,7 @@ const security = SW.toggle({ heading: "Security", security: true, checked: false
 const laneResult = resultSlot();
 const kind = SW.segmented({ legend: "Printer type", name: "kind", wide: true, value: "bambu", options: [{ value: "bambu", label: t("common_bambu_lab") }, { value: "klipper", label: t("common_klipper") }] });
 const lane = SW.segmented({ legend: "Lane data", value: "auto", write: true, result: laneResult,
-  options: [{ value: "auto", label: "Auto", icon: "refresh" }, { value: "on", label: t("common_on"), icon: "check" }, { value: "off", label: t("common_off"), icon: "close" }],
+  options: [{ value: "auto", label: "Auto", icon: "refresh" }, { value: "on", label: t("status_on"), icon: "check" }, { value: "off", label: t("status_off"), icon: "close" }],
   apply: async (v) => { await wait(700); if (v === "off") throw new SW.HubError({ message: "Garage Voron did not accept the change. Try again." }); } });
 const filter = SW.segmented({ legend: "Show", legendSr: true, value: "all", options: [{ value: "all", label: "All", count: 5 }, { value: "check", label: "To check", count: 2 }, { value: "none", label: "Hidden", disabled: true }] });
 section("5 Fields and forms",
@@ -239,7 +239,7 @@ subnav.addEventListener("click", (e) => {   // moving between groups keeps the p
 });
 storage.form.addEventListener("sw:dirty", (e) => {
   const link = subnav.querySelector('[href="#settings/storage"]'), mark = link.querySelector(".subnav__dirty");
-  if (e.detail && !mark) link.append(SW.status("needs_look", { small: true, cls: "subnav__dirty", text: t("subnav_dirty") }));
+  if (e.detail && !mark) link.append(SW.status("needs_look", { small: true, cls: "subnav__dirty", text: t("common_unsaved") }));
   if (!e.detail && mark) mark.remove();
 });
 
@@ -260,7 +260,7 @@ function compact(slots) {
 function full(slots, printer, actions) {
   return h("ul", { class: "slot-strip", "aria-label": t("slot_list_label", { name: printer }) }, slots.map((s) => h("li", { class: "slot-strip__row", "data-state": s.active ? "active" : null },
     E("span", "slot-strip__label mono", s.label), SW.swatch(s.hex, { empty: s.empty }),
-    E("span", "slot-strip__name", s.empty ? E("span", "muted", t("common_empty")) : s.reading ? [SW.spinner(), t("slot_reading")] : [s.name, " ", E("span", "muted", s.colour)]),
+    E("span", "slot-strip__name", s.empty ? E("span", "muted", t("common_empty")) : s.reading ? [SW.spinner(), t("common_reading")] : [s.name, " ", E("span", "muted", s.colour)]),
     E("span", "slot-strip__level", s.empty || s.reading ? null : [SW.progress({ value: s.level, decorative: true }), E("span", "mono", pct(s.level))]),
     E("span", "slot-strip__use", s.active ? t("slot_in_use") : ""), actions ? E("span", "slot-strip__actions actions", actions(s)) : null)));
 }
@@ -276,7 +276,7 @@ function detail(id, name) {
     E("div", "detail__body",
       E("div", "detail__section", E("h3", "detail__heading", "AMS slots"), full(slotsX1, name),
         kvRows([[t("common_address"), "192.0.2.40", { mono: true, copy: "192.0.2.40" }], ["Serial", "00M00A000000001", { mono: true, copy: "00M00A000000001" }],
-          [t("common_access_code"), t("common_saved_hidden")], ["Price per kg", null, { badge: SW.status("not_on_label", { small: true, cls: "confidence" }) }]])),
+          [t("common_field_access_code"), t("common_saved_hidden")], ["Price per kg", null, { badge: SW.status("not_on_label", { small: true, cls: "confidence" }) }]])),
       E("div", "detail__section", E("h3", "detail__heading", t("common_actions")), E("div", "actions", SW.btn(t("printers_map_slots"), { cls: "btn--primary", run: (e) => mapDialog(e.currentTarget) })),
         E("h3", "detail__heading", t("common_change")), h("div", { class: "actions actions--list" }, ["Rename", "Change address", "Replace Access Code", "Lane data"].map((l) => SW.btn(l, { cls: "btn--ghost" }))),
         E("div", "detail__remove", E("h3", "detail__heading", t("common_remove")), E("div", "actions", SW.btn(t("printers_forget"), { cls: "btn--danger", run: (e) => forgetDialog(e.currentTarget) }))))));
@@ -315,15 +315,16 @@ const coll = h("div", { class: "coll coll--printers", role: "table", "aria-label
   item({ id: "p4", name: "mainsailos", kind: "Found on the network, not added", address: "192.0.2.57:7125", status: "not_configured", connection: "", state: "off",
     actions: [SW.btn(t("printers_use"), { cls: "btn--primary", name: "Use this printer: mainsailos" }), SW.btn(t("common_dismiss"), { name: "Dismiss mainsailos" })] }));
 const collResult = resultSlot();
-SW.collection(coll, { name: "sample-printers", result: collResult });
+// page 2 of the pager below: 214 printers in all, 50 before this page (aria-rowcount, aria-rowindex)
+SW.collection(coll, { name: "sample-printers", result: collResult, total: 214, first: 50 });
 const addRegion = h("section", { class: "detail", id: "add-printer", "aria-labelledby": "add-printer-title", hidden: true },
-  h("header", { class: "detail__head" }, h("h2", { class: "detail__title", id: "add-printer-title", tabindex: "-1", text: t("printers_add_title") }),
-    SW.iconBtn("close", t("detail_close", { name: t("printers_add_title") }), { cls: "detail__close" })),
+  h("header", { class: "detail__head" }, h("h2", { class: "detail__title", id: "add-printer-title", tabindex: "-1", text: t("printers_add") }),
+    SW.iconBtn("close", t("detail_close", { name: t("printers_add") }), { cls: "detail__close" })),
   h("form", { class: "detail__body", novalidate: true },
     SW.segmented({ legend: "Printer type", wide: true, value: "bambu", options: [{ value: "bambu", label: t("common_bambu_lab") }, { value: "klipper", label: t("common_klipper") }] }),
     SW.field({ label: "IP address or name", name: "address", mono: true, placeholder: "e.g. 192.0.2.42 or printer.local", attrs: { inputmode: "url", autocapitalize: "off", autocorrect: "off", spellcheck: "false" } }),
-    SW.field({ type: "secret", label: t("common_access_code"), name: "access_code", mono: true, hint: t("common_hint_access_code"), attrs: { autocapitalize: "off", spellcheck: "false" } }),
-    SW.field({ label: t("common_name"), name: "name", optional: true }),
+    SW.field({ type: "secret", label: t("common_field_access_code"), name: "access_code", mono: true, hint: t("common_hint_access_code"), attrs: { autocapitalize: "off", spellcheck: "false" } }),
+    SW.field({ label: t("common_field_name"), name: "name", optional: true }),
     SW.field({ label: "Serial number", name: "serial", optional: true, mono: true, attrs: { autocapitalize: "characters", spellcheck: "false" } }),
     E("div", "detail__foot", resultSlot(), SW.btn(t("common_cancel"), { cls: "btn--ghost", run: () => SW.closeDetail(addRegion) }), SW.btn(t("common_add_printer"), { cls: "btn--primary", type: "submit" }))));
 addPrinter.addEventListener("click", () => SW.openDetail(addRegion, { opener: addPrinter }));
@@ -358,7 +359,7 @@ const revisions = h("section", { class: "revisions", "aria-labelledby": "rev-tit
     E("li", "revisions__item", E("p", null, E("b", null, t("revision_title", { number: 2 })), ", ", E("span", "mono", "2026-11-12 14:09"), ", ", t("revision_by_reader")),
       changes([["Nozzle range", "190-230 °C", "190-220 °C"]], true), E("p", "muted", "note: brand is Polymaker"),
       SW.btn(t("revision_undo", { number: 2 }), { icon: "undo", action: "undo", run: () => SW.result(revRes, "ok", t("revision_undone_result", { number: 2, field: "Nozzle range", value: "190-230 °C" })) })),
-    h("li", { class: "revisions__item", "data-state": "undone" }, E("p", null, E("b", null, t("revision_title", { number: 1 })), ", ", E("span", "mono", "2026-11-12 14:06"), ", ", t("revision_by_hand"), " ", t("revision_undone")),
+    h("li", { class: "revisions__item", "data-state": "undone" }, E("p", null, E("b", null, t("revision_title", { number: 1 })), ", ", E("span", "mono", "2026-11-12 14:06"), ", ", t("revision_by_hand"), " ", t("recent_revision_undone")),
       changes([["Empty spool weight", "150 g", "140 g"]], true))), revRes);
 const code = (text, caption, copyName, log, cap = SW.uid("cap")) => h("figure", { class: "code" },
   h("pre", { class: "code__text" + (log ? " code__text--log" : ""), tabindex: "0", "aria-labelledby": caption ? cap : null, "aria-label": caption ? null : t("job_log_label") }, h("code", { text })),
@@ -386,7 +387,7 @@ section("7 Showing data and status",
     state("Log output", code("2026-11-12 14:05 backup started\n2026-11-12 14:05 copying the Spoolman database\n2026-11-12 14:06 backup written: 14.2 MB", null, "log", true)),
     state("Copy disabled until there is text; loading", h("figure", { class: "code" }, h("p", { class: "result code__wait", role: "status" }, SW.spinner(), t("code_checking_release")),
       E("figcaption", "code__bar", h("span", { class: "code__caption mono", text: "token" }), h("span", { class: "result", role: "status" }), emptyCopy)))),
-  grid(state("QR block", E("div", "qr", SW.qrImage(svgQr, t("qr_alt_pair")), E("div", "qr__text", E("p", null, t("qr_scan_or_type")),
+  grid(state("QR block", E("div", "qr", SW_MEDIA.qrImage(svgQr, t("qr_alt_pair")), E("div", "qr__text", E("p", null, t("qr_scan_or_type")),
     E("p", "qr__code mono", E("span", "sr", t("qr_code_prefix")), "123 456"), E("p", "qr__fingerprint mono", "1111 2222 3333 4444 5555 6666 7777 8888"),
     E("p", null, t("qr_check_groups")), E("p", "qr__expiry", t("qr_expires", { minutes: 9 }))))),
     state("QR block: the Hub draws no QR", E("div", "qr", E("div", "qr__text", E("p", "qr__none", t("qr_unavailable")), E("p", "qr__code mono", "123 456")))),
@@ -451,7 +452,7 @@ function mapDialog(opener) {
     text: "The printer changes its slot colours briefly and runs a job with no motion; the colours are put back." });
 }
 function renameDialog(opener) {
-  return SW.ask({ kind: "entry", title: t("printers_rename_title"), opener, confirm: "Rename", fields: [SW.field({ label: t("common_name"), name: "name", value: "Workshop X1", check: (v) => (v.trim() ? "" : t("common_error_name")) })] });
+  return SW.ask({ kind: "entry", title: t("printers_rename_title"), opener, confirm: "Rename", fields: [SW.field({ label: t("common_field_name"), name: "name", value: "Workshop X1", check: (v) => (v.trim() ? "" : t("common_error_name")) })] });
 }
 const dialogs = E("div", "actions",
   SW.btn("Confirm", { run: (e) => mapDialog(e.currentTarget) }),
@@ -459,7 +460,7 @@ const dialogs = E("div", "actions",
   SW.btn("Typed word", { run: (e) => SW.ask({ kind: "typed", title: t("settings_restore_title"), word: "restore", opener: e.currentTarget, confirm: "Restore",
     text: "Backup of workshop-hub made 2026-11-12 03:00. This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first." }) }),
   SW.btn("Text entry", { run: (e) => renameDialog(e.currentTarget) }),
-  SW.btn("Text entry, two fields (asks before losing edits)", { run: (e) => SW.ask({ kind: "entry", title: "Change address: Garage Voron", opener: e.currentTarget, confirm: "Change address",
+  SW.btn("Text entry, two fields", { run: (e) => SW.ask({ kind: "entry", title: "Change address: Garage Voron", opener: e.currentTarget, confirm: "Change address",
     fields: [SW.field({ label: "IP address or name", name: "address", value: "voron.example", attrs: { inputmode: "url", autocapitalize: "off", autocorrect: "off", spellcheck: "false" } }),
       SW.field({ label: "Port", name: "port", value: "7125", attrs: { inputmode: "numeric", pattern: "[0-9]*" } })] }) }),
   SW.btn("Information", { run: (e) => SW.ask({ kind: "info", title: t("printers_reports_title", { name: "Study A1 mini" }), opener: e.currentTarget, confirm: t("common_close"), body: E("p", "mono", "report-2026-11-12-0915.zip · 212 KiB") }) }),

@@ -80,7 +80,7 @@ private val SettingsGroup.icon: Int
 internal val SettingsGroup.title: Int
     get() = when (this) {
         SettingsGroup.Appearance -> R.string.appearance_title
-        SettingsGroup.Hub -> R.string.settings_hub_title
+        SettingsGroup.Hub -> R.string.hub_sheet_title
         SettingsGroup.Updates -> R.string.settings_updates_title
         SettingsGroup.Licences -> R.string.settings_licences_title
         SettingsGroup.Developer -> R.string.settings_developer_title

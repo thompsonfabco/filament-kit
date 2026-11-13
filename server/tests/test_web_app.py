@@ -711,9 +711,9 @@ def test_the_shell_is_built_from_the_catalogue_and_the_page_attributes():
     src = _app_js()
     assert "SW.shell(" in src and "SW.segmented(" in src and "SW.sheet(" in src
     for key in ("app_name", "nav_label", "nav_more", "nav_add", "nav_spools", "nav_printers", "nav_recent", "nav_recently_added",
-                "nav_slicer_presets", "nav_settings", "shell_skip", "web_add_title", "nav_printers_off", "nav_recent_public",
-                "web_recent_public_title", "presets_off_title", "web_more_home_screen", "common_open_hub_page",
-                "web_settings_this_hub", "web_settings_saved", "appearance_theme_title"):
+                "nav_slicer_presets", "nav_settings", "common_skip_to_content", "home_add_title", "nav_printers_off", "nav_recent_public",
+                "recent_public_title", "presets_off_title", "nav_more_home_screen", "common_open_hub_page",
+                "settings_this_hub", "settings_saved_on_phone", "appearance_theme_title"):
         assert f'"{key}"' in src, key
     for attr in ("hubPage", "hub", "presets", "push", "printers", "history"):
         assert f"document.body.dataset.{attr}" in src, attr

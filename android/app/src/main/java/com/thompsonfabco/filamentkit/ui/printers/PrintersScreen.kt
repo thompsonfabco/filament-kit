@@ -93,7 +93,7 @@ fun PrintersScreen(
     }
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
-    val addedText = state.added?.let { stringResource(R.string.printer_add_done, it) }
+    val addedText = state.added?.let { stringResource(R.string.printers_added, it) }
         ?: state.replaced?.let { stringResource(R.string.printer_set_code_done, it) }
     LaunchedEffect(state.added, state.replaced) {
         if (addedText != null) {
@@ -122,7 +122,7 @@ fun PrintersScreen(
                         title = stringResource(R.string.printers_empty_title),
                         text = stringResource(R.string.printer_list_empty_text),
                         primary = SwAction(stringResource(R.string.common_refresh), viewModel::refresh),
-                        secondary = if (offline) null else SwAction(stringResource(R.string.printers_add_klipper)) { viewModel.openAddKlipper() },
+                        secondary = if (offline) null else SwAction(stringResource(R.string.common_add_klipper_printer)) { viewModel.openAddKlipper() },
                     )
                 },
                 error = state.problem?.takeUnless { offline }?.let { problemText(it) },
@@ -149,11 +149,11 @@ private fun Overflow(online: Boolean, onRefresh: () -> Unit, onFind: () -> Unit,
         SwMenu(open, { open = false }) {
             SwMenuItem(stringResource(R.string.common_refresh), { open = false; onRefresh() }, icon = R.drawable.sw_ic_refresh)
             SwMenuItem(
-                stringResource(R.string.printers_find_klipper), { open = false; onFind() }, icon = R.drawable.sw_ic_search,
+                stringResource(R.string.printers_find), { open = false; onFind() }, icon = R.drawable.sw_ic_search,
                 enabled = online,
             )
             SwMenuItem(
-                stringResource(R.string.printers_add_klipper), { open = false; onAddKlipper() }, icon = R.drawable.sw_ic_plus,
+                stringResource(R.string.common_add_klipper_printer), { open = false; onAddKlipper() }, icon = R.drawable.sw_ic_plus,
                 enabled = online,
             )
         }
@@ -201,7 +201,7 @@ private fun ColumnScope.PrinterLists(
     }
     Column {
         SwButton(
-            stringResource(R.string.printers_add_klipper), { onAddKlipper("", PrintersViewModel.DEFAULT_KLIPPER_PORT) },
+            stringResource(R.string.common_add_klipper_printer), { onAddKlipper("", PrintersViewModel.DEFAULT_KLIPPER_PORT) },
             kind = SwButtonKind.Plain, enabled = !offline,
         )
         if (offline && found.isEmpty()) NeedsHubReason()
@@ -355,7 +355,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
     val busyWords = if (d.rekey) R.string.printer_set_connecting else R.string.printer_add_connecting
     SwDialog(
         title = if (d.rekey) {
-            stringResource(R.string.printer_set_code_title, d.printerName)
+            stringResource(R.string.printers_access_code_title, d.printerName)
         } else {
             stringResource(R.string.printer_add_title, model)
         },
@@ -364,8 +364,8 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             label = stringResource(
                 when {
                     d.busy -> busyWords
-                    d.rekey -> R.string.printer_set_code_button
-                    else -> R.string.printer_add_button
+                    d.rekey -> R.string.printers_replace_access_code
+                    else -> R.string.common_add_printer
                 },
             ),
             onClick = { viewModel.submitAdd(code, name) },
@@ -381,13 +381,13 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
         }
         FormField(
-            code, { code = it }, stringResource(R.string.common_access_code), secret = true, enabled = !d.busy,
-            hint = stringResource(R.string.common_access_code_help),
-            error = if (d.codeMissing) stringResource(R.string.printer_error_access_code) else null,
+            code, { code = it }, stringResource(R.string.common_field_access_code), secret = true, enabled = !d.busy,
+            hint = stringResource(R.string.common_hint_access_code),
+            error = if (d.codeMissing) stringResource(R.string.common_error_access_code) else null,
         )
         if (!d.rekey) {
             FormField(
-                name, { name = it }, stringResource(R.string.common_name_optional), enabled = !d.busy,
+                name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !d.busy,
                 placeholder = stringResource(R.string.printer_add_name_placeholder),
             )
         }
@@ -406,10 +406,10 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
     // once the printer is added only the key is left to set
     val fixed = d.busy || d.createdId != null
     SwDialog(
-        title = stringResource(R.string.printers_add_klipper),
+        title = stringResource(R.string.common_add_klipper_printer),
         onClose = { if (!d.busy) viewModel.cancelAddKlipper() },
         confirm = SwDialogButton(
-            label = stringResource(if (d.busy) R.string.printer_klipper_connecting else R.string.printer_add_button),
+            label = stringResource(if (d.busy) R.string.printer_klipper_connecting else R.string.common_add_printer),
             onClick = { viewModel.submitAddKlipper(host, port, name, key) },
             kind = SwButtonKind.Main,
             busy = d.busy,
@@ -418,18 +418,18 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
         cancelEnabled = !d.busy,
     ) {
         FormField(
-            host, { host = it }, stringResource(R.string.printer_field_address), enabled = !fixed, mono = true,
+            host, { host = it }, stringResource(R.string.common_address), enabled = !fixed, mono = true,
             placeholder = stringResource(R.string.printer_klipper_address_placeholder), keyboard = KeyboardType.Uri,
-            error = if (d.addressMissing) stringResource(R.string.printer_error_address) else null,
+            error = if (d.addressMissing) stringResource(R.string.common_error_address) else null,
         )
         FormField(
             port, { port = it }, stringResource(R.string.printer_field_port), enabled = !fixed, mono = true,
             keyboard = KeyboardType.Number,
-            error = if (d.portInvalid) stringResource(R.string.printer_error_port) else null,
+            error = if (d.portInvalid) stringResource(R.string.common_error_port) else null,
         )
-        FormField(name, { name = it }, stringResource(R.string.common_name_optional), enabled = !fixed)
+        FormField(name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !fixed)
         FormField(
-            key, { key = it }, stringResource(R.string.printer_field_moonraker_key_optional), secret = true,
+            key, { key = it }, stringResource(R.string.printers_key_optional), secret = true,
             enabled = !d.busy, hint = stringResource(R.string.printer_moonraker_key_hint),
             error = d.keyProblem?.let { problemText(it) },
         )
@@ -459,7 +459,7 @@ private fun FindSheetContent(f: FindSheet, onPairAgain: () -> Unit, viewModel: P
             verticalArrangement = Arrangement.spacedBy(space.s3),
         ) {
             Text(
-                stringResource(R.string.printers_find_klipper), Modifier.semantics { heading() },
+                stringResource(R.string.printers_find), Modifier.semantics { heading() },
                 style = MaterialTheme.typography.titleMedium,
             )
             FormField(
@@ -468,7 +468,7 @@ private fun FindSheetContent(f: FindSheet, onPairAgain: () -> Unit, viewModel: P
                 hint = stringResource(R.string.printer_find_hint), keyboard = KeyboardType.Uri,
             )
             SwButton(
-                stringResource(if (f.searching) R.string.printer_find_searching else R.string.printer_find_search),
+                stringResource(if (f.searching) R.string.common_searching else R.string.common_search),
                 { viewModel.search(network) }, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = f.searching,
             )
             f.problem?.let { FindProblem(it, onPairAgain) }

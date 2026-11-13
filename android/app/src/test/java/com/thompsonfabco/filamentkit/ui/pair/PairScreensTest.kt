@@ -83,14 +83,14 @@ class PairScreensTest {
             )
         }
         rule.onNodeWithText(text(R.string.pair_address_error_empty)).assertExists()
-        rule.onNodeWithText(text(R.string.pair_address_connect)).assertIsEnabled()
+        rule.onNodeWithText(text(R.string.common_connect)).assertIsEnabled()
     }
 
     @Test fun theAddressFormSubmitsWhatWasTypedWithThePrefilledPort() {
         val sent = mutableListOf<Pair<String, String>>()
         show { PairAddressScreen(PairUi(step = Step.Address), { h, p -> sent += h to p }, {}) }
         rule.onNodeWithText(text(R.string.pair_address_label)).performTextInput("hub.example")
-        rule.onNodeWithText(text(R.string.pair_address_connect)).performClick()
+        rule.onNodeWithText(text(R.string.common_connect)).performClick()
         assertEquals(listOf("hub.example" to "8710"), sent)
     }
 

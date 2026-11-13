@@ -46,7 +46,7 @@ function printersTab() {
   }
   const lineNodes = (lines) => [lines].flat().flatMap((t, i) => (i ? [h("br"), t] : [t]));   // a result of several lines
   const needs = (key) => (v) => (v.trim() ? null : SW.t(key));
-  const codeField = (hint) => SW.field({ type: "secret", label: SW.t("common_access_code"), hint, check: needs("printers_error_access_code") });
+  const codeField = (hint) => SW.field({ type: "secret", label: SW.t("common_field_access_code"), hint, check: needs("common_error_access_code") });
   const printerName = () => { const p = printers.find((x) => x.id === current); return (p && p.name) || current; };
 
   async function load() {
@@ -93,7 +93,7 @@ function printersTab() {
       if (was && !isLive(d.status)) loadUsage();      // a job ended: its usage entry is new
     };
     es.onopen = () => { clear(conn); };
-    es.onerror = () => { put(conn, "run", SW.t("web_printer_reconnecting")); };
+    es.onerror = () => { put(conn, "run", SW.t("printer_reconnecting")); };
   }
   function stopStream() { if (es) { es.close(); es = null; } }
 
@@ -109,7 +109,7 @@ function printersTab() {
       live ? h("p", { class: "muted", textContent: [`${s.percent || 0}%`, s.stage, s.total_layers ? `layer ${s.layer ?? "?"}/${s.total_layers}` : "", fmtMin(s.remaining_min)].filter(Boolean).join(" · ") }) : null,
       h("p", { class: "muted", textContent: (s.temps || []).map((t) => `${t.name} ${t.cur ?? "-"}${t.tgt ? "/" + t.tgt : ""}°`).join(" · ") }));
     const a = [];
-    for (const x of s.hms || []) a.push(note("bad", x.text || SW.t("web_printer_alert", { code: x.code })));
+    for (const x of s.hms || []) a.push(note("bad", x.text || SW.t("printer_alert_code", { code: x.code })));
     for (const n of s.notes || []) a.push(h("p", { class: "muted", textContent: n }));
     alerts.replaceChildren(...a);
     drawControls(s, live);
@@ -125,16 +125,16 @@ function printersTab() {
     controls.replaceChildren(...b);
   }
   // what each command is called, and the sentence that says it was done (04 3.2)
-  const COMMANDS = { pause: ["web_printer_pause", "web_printer_paused_line"], resume: ["web_printer_resume", "web_printer_resumed_line"],
-    stop: ["web_printer_stop", "web_printer_stopped_line"], light_on: ["web_printer_light_on", "web_printer_light_on_line"],
-    light_off: ["web_printer_light_off", "web_printer_light_off_line"] };
+  const COMMANDS = { pause: ["printer_pause", "printer_result_paused"], resume: ["printer_resume", "printer_resumed_line"],
+    stop: ["printer_stop", "printer_stopped_line"], light_on: ["printer_light_on", "printer_light_on_line"],
+    light_off: ["printer_light_off", "printer_result_light_off"] };
   async function cmd(action, confirm) {
     const [name, done] = COMMANDS[action];
     await act(msg, SW.t("common_working"), async () => {
       const r = await pj(`${encodeURIComponent(current)}/command`, confirm ? { action, confirm: true } : { action });
       const inner = r.reply || {}, why = (inner.reply || {}).reason;
       if (inner.ok === false) {                                  // the printer refused: its reason as sent, else our own sentence
-        return { kind: "bad", text: typeof why === "string" && why ? SW.t("web_printer_said_no", { error: why }) : SW.t("common_result_refused", { name: printerName(), action: SW.t(name) }) };
+        return { kind: "bad", text: typeof why === "string" && why ? SW.t("printer_said_no", { error: why }) : SW.t("common_result_refused", { name: printerName(), action: SW.t(name) }) };
       }
       SW.toast(SW.t(done));
       return SW.t(done);
@@ -142,9 +142,9 @@ function printersTab() {
   }
   async function stop() {
     const job = ((lastStatus || {}).status || {}).job, printer = printerName();
-    const go = await sheetAsk({ kind: "destructive", title: SW.t("web_stop_title"),
-      text: job ? SW.t("web_stop_body", { job, printer }) : SW.t("web_stop_body_nojob", { printer }),
-      cancel: SW.t("web_stop_keep"), confirm: SW.t("web_printer_stop") });
+    const go = await sheetAsk({ kind: "destructive", title: SW.t("printer_stop_dialog_title"),
+      text: job ? SW.t("printer_stop_dialog_body", { job, printer }) : SW.t("printer_stop_dialog_body_nojob", { printer }),
+      cancel: SW.t("printer_stop_keep"), confirm: SW.t("printer_stop") });
     if (go) cmd("stop", true);
   }
 
@@ -166,7 +166,7 @@ function printersTab() {
     const v = h("video", { class: "cam", playsInline: true, muted: true, autoplay: true, controls: true });
     v.muted = true;
     if (!v.canPlayType("application/vnd.apple.mpegurl")) {
-      camBox.append(note("bad", SW.t("web_camera_no_hls")));
+      camBox.append(note("bad", SW.t("printer_camera_no_hls")));
       return;
     }
     v.addEventListener("error", () => camFail());
@@ -176,7 +176,7 @@ function printersTab() {
   }
   function camFail() {
     if (!camOn) return;
-    camBox.replaceChildren(note("bad", SW.t("web_camera_failed")));
+    camBox.replaceChildren(note("bad", SW.t("printer_camera_failed")));
   }
 
   // ----- filament per unit -----
@@ -220,7 +220,7 @@ function printersTab() {
     const picked = h("p", { class: "muted", textContent: "Pick a spool: tap its tag on a reader, or search." });
     function pick(s, btn) {
       for (const b of results.querySelectorAll(".pick")) b.classList.toggle("on", b === btn);
-      loadSpool = s; clear(plan); disabled(go, SW.t("web_load_working_out"));
+      loadSpool = s; clear(plan); disabled(go, SW.t("spool_load_working_out"));
       picked.textContent = `S${s.id} ${spoolTitle(s)} (${s.location || "?"}${s.remaining_g != null ? ", " + Math.round(s.remaining_g) + " g" : ""})`;
       doLoad(true, plan, go);           // the dry run first: the user sees the plan before anything is sent
     }
@@ -242,7 +242,7 @@ function printersTab() {
       }, { button });
     }
     async function search(button) {
-      await act(line, SW.t("web_add_search_working"), async () => {
+      await act(line, SW.t("common_searching"), async () => {
         const res = await api(`find?q=${encodeURIComponent(q.value)}&sealed=0`);
         const rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ id: s.spool_id, vendor: f.vendor, name: f.name, location: s.location, remaining_g: s.remaining_g })));
         results.replaceChildren(...(rows.length ? rows.slice(0, 60).map(row) : [h("p", { class: "muted", textContent: "No spools match." })]));
@@ -255,7 +255,7 @@ function printersTab() {
       h("div", { class: "row" }, q, h("button", { class: "fit", textContent: "Search", on: { click: (e) => search(e.currentTarget) } })),
       line, results, picked, plan,
       h("div", { class: "row" }, go, h("button", { class: "secondary", textContent: "Cancel", on: { click: closeLoad } })));
-    disabled(go, SW.t("web_load_pick_first"), () => q);          // until a spool is picked and its plan is shown
+    disabled(go, SW.t("spool_load_pick_first"), () => q);          // until a spool is picked and its plan is shown
     loadBox.classList.remove("hidden");
     loadBox.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -271,28 +271,28 @@ function printersTab() {
     if (!loadSpool || !loadSlot) return;
     if (slotBusy) { if (dry) dryAgain = { plan, go }; return; }   // not dropped: runs for the latest pick after
     const s = loadSpool, label = loadSlot;
-    slotBusy = true; disabled(go, SW.t(dry ? "web_load_working_out" : "common_load_wait"));
-    SW.result(plan, "run", SW.t(dry ? "web_load_working_out" : "common_load_wait"));
+    slotBusy = true; disabled(go, SW.t(dry ? "spool_load_working_out" : "common_load_wait"));
+    SW.result(plan, "run", SW.t(dry ? "spool_load_working_out" : "common_load_wait"));
     try {
       const r = await pj(`${slotPath(label)}/load`, dry ? { spool_id: s.id, dry_run: true } : { spool_id: s.id, dry_run: false });
       if (loadSpool !== s) return;      // another spool was picked meanwhile
       const moved = (r.moved_back || []).filter((m) => m.id !== s.id)
-        .map((m) => SW.t("web_load_plan_goes_back", { id: m.id ?? "?", slot: label, location: m.location || SW.t("web_load_previous_place") }));
+        .map((m) => SW.t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: label, location: m.location || SW.t("spool_load_previous_place") }));
       if (dry) {
-        const nozzle = r.nozzle_assumed ? SW.t("web_load_plan_nozzle_assumed", { mm: r.nozzle_mm ?? 0.4 })
-          : (r.nozzle_mm ? SW.t("web_load_plan_nozzle", { mm: r.nozzle_mm }) : "");
-        SW.result(plan, (r.problems || []).length ? "warn" : "ok", lineNodes([SW.t("web_load_plan", { spool: spoolTitle(s), slot: label }),
-          SW.t("web_load_plan_preset", { preset: (r.preset && r.preset.name) || SW.t("web_load_plan_preset_none") }), nozzle, ...moved, ...(r.problems || [])].filter(Boolean)));
+        const nozzle = r.nozzle_assumed ? SW.t("spool_load_plan_nozzle_assumed", { mm: r.nozzle_mm ?? 0.4 })
+          : (r.nozzle_mm ? SW.t("spool_load_plan_nozzle", { mm: r.nozzle_mm }) : "");
+        SW.result(plan, (r.problems || []).length ? "warn" : "ok", lineNodes([SW.t("spool_load_plan", { spool: spoolTitle(s), slot: label }),
+          SW.t("spool_load_plan_preset", { preset: (r.preset && r.preset.name) || SW.t("common_value_none") }), nozzle, ...moved, ...(r.problems || [])].filter(Boolean)));
         disabled(go, null);
       } else {
         closeLoad();
-        SW.toast(SW.t(r.confirmed ? "web_load_loaded_toast" : "web_load_sent_toast", { slot: label }));
-        slotSay([SW.t(r.confirmed ? "web_load_loaded_toast" : "web_load_sent_line", { slot: label }), ...moved, ...(r.problems || [])], "ok");
+        SW.toast(SW.t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_toast", { slot: label }));
+        slotSay([SW.t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_line", { slot: label }), ...moved, ...(r.problems || [])], "ok");
       }
     } catch (e) {
       if (loadSpool === s) {
         failed(plan, e, () => doLoad(dry, plan, go));
-        disabled(go, dry ? SW.t("web_load_see_above") : null);   // a refused Load can be pressed again; a failed plan has to be picked again
+        disabled(go, dry ? SW.t("spool_load_see_above") : null);   // a refused Load can be pressed again; a failed plan has to be picked again
       }
     } finally { slotDone(); }
   }
@@ -303,23 +303,23 @@ function printersTab() {
     slotBusy = true; SW.result(slotMsg, "run", SW.t("common_checking"));
     try {
       const plan = await pj(`${slotPath(sl.label)}/unload`, { dry_run: true });
-      const where = plan.location || ((plan.moved_back || [])[0] || {}).location || SW.t("web_load_previous_place");
+      const where = plan.location || ((plan.moved_back || [])[0] || {}).location || SW.t("spool_load_previous_place");
       const name = sp.name || `spool #${sp.id}`;
       clear(slotMsg);
-      const r = await sheetAsk({ kind: "confirm", title: SW.t("web_unload_title", { slot: sl.label }),
-        text: SW.t("web_unload_body", { spool: name, slot: sl.label, location: where }), confirm: SW.t("common_unload"),
+      const r = await sheetAsk({ kind: "confirm", title: SW.t("printer_unload_title", { slot: sl.label }),
+        text: SW.t("printer_unload_body", { name, slot: sl.label, location: where }), confirm: SW.t("common_unload"),
         run: () => pj(`${slotPath(sl.label)}/unload`, { dry_run: false }) });
       if (!r) return;
-      SW.toast(SW.t("web_unload_line", { name, slot: sl.label }));
-      slotSay([SW.t("web_unload_line", { name, slot: sl.label }),
-        ...(r.moved_back || []).map((m) => SW.t("web_unload_moved_back", { id: m.id ?? "?", location: m.location || SW.t("web_load_previous_place") }))], "ok");
+      SW.toast(SW.t("printer_unload_line", { name, slot: sl.label }));
+      slotSay([SW.t("printer_unload_line", { name, slot: sl.label }),
+        ...(r.moved_back || []).map((m) => SW.t("printer_unload_moved_back", { id: m.id ?? "?", location: m.location || SW.t("spool_load_previous_place") }))], "ok");
     } catch (e) { failed(slotMsg, e, () => unload(sl, sp)); } finally { slotDone(); }
   }
 
   // ----- usage + re-map -----
   async function loadUsage() {
     const id = current;
-    await fill(usageBox, SW.t("web_printer_group_used"), async () => {
+    await fill(usageBox, SW.t("printer_group_used"), async () => {
       const r = await pj(`${encodeURIComponent(id)}/usage`);
       if (id !== current) return null;
       const rows = (r.entries || []).slice(0, 20).map((e) => h("div", { class: "row" },
@@ -330,12 +330,12 @@ function printersTab() {
   }
   async function undo(e) {
     const when = (e.at || "").replace("T", " ").slice(0, 16);
-    const back = await sheetAsk({ kind: "confirm", title: SW.t("web_putback_title"), cancel: SW.t("common_keep"), confirm: SW.t("web_putback_confirm"),
-      text: SW.t("web_putback_body", { grams: e.grams ?? "?", job: e.job || "?", slot: e.slot || "?", time: when }),
+    const back = await sheetAsk({ kind: "confirm", title: SW.t("printer_usage_undo_title"), cancel: SW.t("common_keep"), confirm: SW.t("printer_usage_undo_confirm"),
+      text: SW.t("printer_usage_undo_body", { grams: e.grams ?? "?", job: e.job || "?", slot: e.slot || "?", time: when }),
       run: () => pj(`${encodeURIComponent(current)}/usage/${encodeURIComponent(e.id)}/undo`, {}) });
     if (!back) return;
-    SW.toast(SW.t("web_used_put_back", { grams: e.grams ?? "?" }));
-    SW.result(msg, "ok", SW.t("web_used_put_back", { grams: e.grams ?? "?" }));
+    SW.toast(SW.t("printer_used_put_back", { grams: e.grams ?? "?" }));
+    SW.result(msg, "ok", SW.t("printer_used_put_back", { grams: e.grams ?? "?" }));
     loadUsage();
   }
   let mapTimer = null, mapAt = null;      // mapAt: when the map last arrived
@@ -346,8 +346,8 @@ function printersTab() {
     const remapBtn = h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", on: { click: remap } });
     const byLoad = h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: (e) => manualMap(e.currentTarget) } });
     const buttons = h("div", { class: "row" }, collect, remapBtn, byLoad);
-    disabled(remapBtn, running ? SW.t("web_map_running_reason") : null);
-    disabled(byLoad, running ? SW.t("web_map_running_reason") : null);
+    disabled(remapBtn, running ? SW.t("printers_map_running_reason") : null);
+    disabled(byLoad, running ? SW.t("printers_map_running_reason") : null);
     return [
       h("p", { class: "muted", textContent: m.outcome_text ? `${m.outcome_text}${running && m.step ? " " + m.step : ""}`
         : `${m.calibrated ? "Mapped" : "Not mapped yet"} · ${m.state}${m.step ? " · " + m.step : ""}${m.stale ? " · layout changed" : ""}` }),
@@ -375,7 +375,7 @@ function printersTab() {
       if (m.state === "running") again();
       return mapNodes(m);
     };
-    if (!poll) { mapAt = null; await fill(mapBox, SW.t("web_printer_group_mapping"), draw); return; }
+    if (!poll) { mapAt = null; await fill(mapBox, SW.t("printer_map_title_bambu"), draw); return; }
     try { const kids = await draw(); if (kids && id === current) mapBox.replaceChildren(...kids); }
     catch (e) { if (id === current) { stale(mapLine, mapAt ?? Date.now()); again(); } }
   }
@@ -511,7 +511,7 @@ function printersTab() {
   }
   // a whole number from 1 to 65535, or null
   function parsePort(t) { const n = /^\d{1,5}$/.test(t) ? Number(t) : 0; return n >= 1 && n <= 65535 ? n : null; }
-  const addressField = (label, hint, value) => SW.field({ label, hint, value, mono: true, check: needs("printers_error_address"), attrs: { autocapitalize: "off", spellcheck: "false" } });
+  const addressField = (label, hint, value) => SW.field({ label, hint, value, mono: true, check: needs("common_error_address"), attrs: { autocapitalize: "off", spellcheck: "false" } });
   const portField = (value) => SW.field({ type: "number", label: SW.t("printer_field_port"), value, check: (v) => (parsePort(v.trim()) === null ? SW.t("common_error_port") : null) });
   const keyField = (o) => SW.field({ type: "secret", label: SW.t("common_moonraker_key"), ...o });
   function manageRow(p, changes) {
@@ -520,44 +520,44 @@ function printersTab() {
     const edit = (body, done) => [`${id}/edit`, body, done];
     const buttons = !changes ? [] : p.configured ? [
       h("button", { class: "secondary", textContent: "Rename", on: { click: () =>
-        change({ title: SW.t("web_rename_title"), confirm: SW.t("web_rename_confirm"),
-          fields: [SW.field({ label: SW.t("common_name"), value: name, check: needs("web_rename_error") })] },
-        ([n]) => edit({ name: n }, SW.t("web_set_renamed", { name: n }))) } }),
+        change({ title: SW.t("printers_rename_title"), confirm: SW.t("common_rename"),
+          fields: [SW.field({ label: SW.t("common_field_name"), value: name, check: needs("common_error_name") })] },
+        ([n]) => edit({ name: n }, SW.t("printer_set_renamed", { name: n }))) } }),
       h("button", { class: "secondary", textContent: "Address", on: { click: () => {
         // an address change asks for the Access Code again, pinned or not (staging 2026-11-12); a Klipper printer's stored key
         // goes only to the new address, so it is asked for too (review R103; empty means none)
-        const addr = bambu ? addressField(SW.t("web_address_bambu_label"), SW.t("web_address_bambu_help"), where || "")
-          : addressField(SW.t("common_address"), SW.t("web_address_klipper_help"), where || "");
-        const code = bambu ? codeField(SW.t("web_address_code_help")) : null;
-        const key = bambu ? null : keyField({ optional: true, hint: SW.t("web_address_key_help") });
-        change({ title: SW.t("web_address_title", { printer: name }), confirm: SW.t("web_address_confirm"), fields: [addr, code, key].filter(Boolean) },
-          ([a, c]) => edit({ address: a, ...(bambu ? { access_code: c } : { api_key: c }) }, SW.t("web_set_address_changed", { address: a })));
+        const addr = bambu ? addressField(SW.t("printer_address_bambu_label"), SW.t("printer_address_bambu_help"), where || "")
+          : addressField(SW.t("common_address"), SW.t("printer_address_klipper_help"), where || "");
+        const code = bambu ? codeField(SW.t("printer_address_code_help")) : null;
+        const key = bambu ? null : keyField({ optional: true, hint: SW.t("printer_address_key_help") });
+        change({ title: SW.t("printers_change_address_title", { name }), confirm: SW.t("printers_change_address"), fields: [addr, code, key].filter(Boolean) },
+          ([a, c]) => edit({ address: a, ...(bambu ? { access_code: c } : { api_key: c }) }, SW.t("printer_set_address_changed", { address: a })));
       } } }),
       bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () =>
-        change({ title: SW.t("web_code_title", { printer: name }), confirm: SW.t("web_code_confirm"), fields: [codeField(SW.t("common_access_code_help"))] },
-          ([c]) => edit({ access_code: c }, SW.t("web_set_code_replaced"))) } }) : null,
+        change({ title: SW.t("printers_access_code_title", { name }), confirm: SW.t("printers_replace_access_code"), fields: [codeField(SW.t("common_hint_access_code"))] },
+          ([c]) => edit({ access_code: c }, SW.t("printer_set_code_replaced"))) } }) : null,
       bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () =>
-        change({ kind: "destructive", title: SW.t("web_cert_title", { printer: name }), text: SW.t("web_cert_body", { printer: name }),
-          confirm: SW.t("web_cert_confirm"), fields: [codeField(SW.t("common_access_code_help"))] },
-          ([c]) => edit({ unpin: true, access_code: c }, SW.t("web_set_cert_forgotten"))) } }) : null,
+        change({ kind: "destructive", title: SW.t("printers_forget_cert_title", { name }), text: SW.t("printer_set_cert_text", { name }),
+          confirm: SW.t("printers_forget_cert"), fields: [codeField(SW.t("common_hint_access_code"))] },
+          ([c]) => edit({ unpin: true, access_code: c }, SW.t("printer_set_cert_forgotten"))) } }) : null,
       bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () =>
-        change({ title: SW.t("web_key_title", { printer: name }), confirm: SW.t("web_key_confirm"),
-          fields: [keyField({ check: needs("web_key_error") })] },
-          ([k]) => edit({ api_key: k }, SW.t("web_set_key_saved"))) } }),
+        change({ title: SW.t("printers_key_title", { name }), confirm: SW.t("common_save_key"),
+          fields: [keyField({ check: needs("printers_error_key") })] },
+          ([k]) => edit({ api_key: k }, SW.t("printer_set_key_saved"))) } }),
       h("button", { class: "secondary", textContent: "Forget", on: { click: async () => {
         let r = null;
-        const ok = await sheetAsk({ kind: "destructive", title: SW.t("web_forget_title", { printer: name }),
-          text: SW.t(bambu ? "web_forget_body_bambu" : "web_forget_body_klipper", { product: SW.t("app_name") }), confirm: SW.t("printers_forget"),
+        const ok = await sheetAsk({ kind: "destructive", title: SW.t("printers_forget_title", { name }),
+          text: SW.t(bambu ? "printers_forget_body_bambu" : "printers_forget_body_klipper", { product: SW.t("app_name") }), confirm: SW.t("printers_forget"),
           busy: SW.t("common_working"), run: async () => { r = await pj(`${id}/forget`, {}); } });
-        if (ok) await manageAfter(SW.t("web_set_forgotten", { printer: name }), r);
+        if (ok) await manageAfter(SW.t("printers_forgotten", { name }), r);
       } } }),
     ] : bambu && p.ip ? [
       h("button", { textContent: "Add", on: { click: () => {
         const model = p.model_name || name;
-        change({ title: SW.t("web_add_model_title", { model }), text: SW.t("web_add_model_found", { address: p.ip }), confirm: SW.t("common_add_printer"),
-          busy: SW.t("web_printers_connecting"),
-          fields: [codeField(SW.t("common_access_code_help")), SW.field({ label: SW.t("common_name_optional"), placeholder: model })] },
-          ([c, n]) => ["add", { serial: p.id, access_code: c, name: n || name }, SW.t("web_printers_added")]);
+        change({ title: SW.t("printer_add_title", { model }), text: SW.t("add_model_found", { address: p.ip }), confirm: SW.t("common_add_printer"),
+          busy: SW.t("printer_add_connecting"),
+          fields: [codeField(SW.t("common_hint_access_code")), SW.field({ label: SW.t("common_field_name_optional"), placeholder: model })] },
+          ([c, n]) => ["add", { serial: p.id, access_code: c, name: n || name }, SW.t("printers_added_connecting")]);
       } } }),
     ] : [];
     return h("div", { class: "card" },
@@ -570,9 +570,9 @@ function printersTab() {
     try { ({ printers: list, changes } = await pj("manage")); loading.done(); }
     catch (e) { const line = resultLine(); loading.done(line); failed(line, e, () => manage(note, ok)); return; }
     const klipperAdd = h("button", { class: "secondary", textContent: "Add a Klipper printer", on: { click: () =>
-      change({ title: SW.t("common_add_klipper_printer"), confirm: SW.t("common_add_printer"), busy: SW.t("web_printers_connecting"),
-        fields: [addressField(SW.t("common_address"), SW.t("web_address_klipper_help"), ""), portField("7125"), SW.field({ label: SW.t("common_name_optional") })] },
-        ([host, port, n]) => ["add", { family: "klipper", host, port: parsePort(port), ...(n ? { name: n } : {}) }, SW.t("web_printers_added")]) } });
+      change({ title: SW.t("common_add_klipper_printer"), confirm: SW.t("common_add_printer"), busy: SW.t("printer_add_connecting"),
+        fields: [addressField(SW.t("common_address"), SW.t("printer_address_klipper_help"), ""), portField("7125"), SW.field({ label: SW.t("common_field_name_optional") })] },
+        ([host, port, n]) => ["add", { family: "klipper", host, port: parsePort(port), ...(n ? { name: n } : {}) }, SW.t("printers_added_connecting")]) } });
     if (note) SW.result(manageNote, ok ? "ok" : "bad", note); else clear(manageNote);
     manageBox.replaceChildren(
       h("p", { class: "muted", textContent: changes
@@ -581,8 +581,8 @@ function printersTab() {
       ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []));
   }
   async function remap() {
-    const go = await sheetAsk({ kind: "confirm", title: SW.t("web_map_title", { printer: printerName() }), text: SW.t("web_map_body"),
-      confirm: SW.t("web_map_slots"), run: () => pj(`${encodeURIComponent(current)}/map`, {}) });
+    const go = await sheetAsk({ kind: "confirm", title: SW.t("printers_map_title", { name: printerName() }), text: SW.t("printers_map_body"),
+      confirm: SW.t("printers_map_slots"), run: () => pj(`${encodeURIComponent(current)}/map`, {}) });
     if (go) loadMap();
   }
 
@@ -613,7 +613,7 @@ function alertsPanel(addToHome) {
     return Uint8Array.from(raw, (c) => c.charCodeAt(0));
   };
   async function subscribe() {
-    if ((await Notification.requestPermission()) !== "granted") { paint(false); throw said(new Error(SW.t("web_settings_alerts_blocked"))); }
+    if ((await Notification.requestPermission()) !== "granted") { paint(false); throw said(new Error(SW.t("settings_alerts_blocked"))); }
     const reg = await navigator.serviceWorker.register(BASE + "/sw.js");
     await navigator.serviceWorker.ready;
     const key = (await pj("push/key")).key;
@@ -626,28 +626,28 @@ function alertsPanel(addToHome) {
     if (sub) { await pj("push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
   }
   function paint(on) {
-    if (!ok) setState("note", SW.t("web_settings_alerts_unsupported", { product: SW.t("app_name") }));
-    else if (window.Notification && Notification.permission === "denied") setState("needs_look", SW.t("web_settings_alerts_blocked"));
-    else if (on) setState("on", SW.t("web_settings_alerts_on"));
+    if (!ok) setState("note", SW.t("settings_alerts_unsupported", { product: SW.t("app_name") }));
+    else if (window.Notification && Notification.permission === "denied") setState("needs_look", SW.t("settings_alerts_blocked"));
+    else if (on) setState("on", SW.t("settings_alerts_on"));
     else setState("off");
   }
   paint(false);
   if (!ok) {                                                  // an iPhone in the browser: the way to a Home Screen app (04 10.1)
-    return h("div", { class: "alerts" }, line, addToHome ? SW.btn(SW.t("web_more_home_screen"), { run: addToHome, action: "home" }) : null);
+    return h("div", { class: "alerts" }, line, addToHome ? SW.btn(SW.t("nav_more_home_screen"), { run: addToHome, action: "home" }) : null);
   }
-  const makeToggle = (checked) => SW.toggle({ label: SW.t("web_settings_alerts_toggle"), checked,
+  const makeToggle = (checked) => SW.toggle({ label: SW.t("settings_alerts_toggle"), checked,
     apply: async (on) => {
       try { if (on) await subscribe(); else await unsubscribe(); } catch (e) { paint(!on); throw said(e); }
       paint(on);
-      return on ? SW.t("web_settings_alerts_on") : SW.t("status_off");
+      return on ? SW.t("settings_alerts_on") : SW.t("status_off");
     } });
   const slot = h("div", {}, makeToggle(false));
   navigator.serviceWorker.getRegistration(BASE + "/").then((reg) => reg && reg.pushManager.getSubscription()).then((sub) => {
     if (sub) { slot.replaceChildren(makeToggle(true)); paint(true); }     // this phone is already subscribed
   }).catch(() => {});
-  const test = SW.btn(SW.t("web_settings_alerts_test"), { action: "test", run: async () => {
+  const test = SW.btn(SW.t("settings_alerts_test"), { action: "test", run: async () => {
     SW.busy(test, SW.t("common_working"));
-    try { await pj("push/test", {}); SW.result(testBox, "ok", SW.t("web_settings_alerts_sent")); }
+    try { await pj("push/test", {}); SW.result(testBox, "ok", SW.t("settings_alerts_sent")); }
     catch (e) { SW.result(testBox, "bad", says(e)); }
     finally { SW.idle(test); }
   } });

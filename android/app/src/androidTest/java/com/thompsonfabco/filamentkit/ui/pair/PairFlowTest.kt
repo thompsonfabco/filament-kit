@@ -114,7 +114,7 @@ class PairFlowTest {
 
         rule.onNodeWithText(text(R.string.pair_start_enter_address)).performClick()
         rule.onNodeWithText(text(R.string.pair_address_label)).performTextInput("10.0.0.2")
-        rule.onNodeWithText(text(R.string.pair_address_connect)).performClick()
+        rule.onNodeWithText(text(R.string.common_connect)).performClick()
 
         // The fingerprint is on screen, four groups to a line, and no code has been sent.
         rule.waitUntil(5_000) { vm.state.value.step == Step.Confirm }
@@ -140,7 +140,7 @@ class PairFlowTest {
 
         rule.onNodeWithText(text(R.string.pair_start_enter_address)).performClick()
         rule.onNodeWithText(text(R.string.pair_address_label)).performTextInput("10.0.0.2")
-        rule.onNodeWithText(text(R.string.pair_address_connect)).performClick()
+        rule.onNodeWithText(text(R.string.common_connect)).performClick()
 
         rule.waitUntil(5_000) { vm.state.value.step == Step.Code }
         rule.onNodeWithText(text(R.string.pair_fingerprint_matches)).assertDoesNotExist()

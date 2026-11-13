@@ -61,11 +61,11 @@ def refusal(files: dict[str, bytes], prefix: str, client: str, *, reason: str | 
     over IPv6. With `reason` (the Hub's refusal of the address the page was opened at): "Not at this address"."""
     cat = catalogue(files)
     if reason is None:
-        heading, paras = text(cat, "web_refusal_title"), [text(cat, "web_refusal_text")]
+        heading, paras = text(cat, "shell_refusal_title"), [text(cat, "shell_refusal_text")]
         if lan.over_ipv6(client):
             paras.append(lan.IPV6_HINT)
     else:
-        heading, paras = text(cat, "web_refusal_title_address"), [reason]
+        heading, paras = text(cat, "shell_refusal_title_address"), [reason]
     body = "".join(f"<p>{html.escape(t)}</p>" for t in paras)
     return (head(prefix, cat.get("app_name", "")) + "<body><main class=standalone>" + brand(files, cat)
             + f"<h1>{html.escape(heading)}</h1>{body}"

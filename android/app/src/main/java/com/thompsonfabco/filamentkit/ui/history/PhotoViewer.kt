@@ -104,7 +104,7 @@ internal fun PhotoViewer(list: HistoryListViewModel, record: RecordViewModel, id
                 SwIconButton(R.drawable.sw_ic_close, stringResource(R.string.recent_photo_close), onClose)
                 if (total > 0) {
                     Text(
-                        stringResource(R.string.recent_photo_position, page + 1, total),
+                        stringResource(R.string.photo_position, page + 1, total),
                         style = SpoolwardenTheme.type.data, color = colors.text,
                     )
                 }

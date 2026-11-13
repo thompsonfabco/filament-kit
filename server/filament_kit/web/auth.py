@@ -308,7 +308,7 @@ def _prefix(path: str) -> str:
 
 
 def _home_only(client: str) -> list[str]:
-    return [_say("web_signin_outside")] + ([IPV6_HINT] if over_ipv6(client) else [])
+    return [_say("signin_outside")] + ([IPV6_HINT] if over_ipv6(client) else [])
 
 
 def _say(key: str, **values: str) -> str:
@@ -333,7 +333,7 @@ def _page(paras: list[str] | str, status: int = 200, *, path: str = "/login", he
     paras = [paras] if isinstance(paras, str) else paras
     body = (f"<h1>{html.escape(heading)}</h1>" if heading else "") + "".join(f"<p>{html.escape(t)}</p>" for t in paras)
     return HTMLResponse(
-        pages.head(_prefix(path), pages.text(cat, "web_signin_title")) + "<body><main class=standalone>"
+        pages.head(_prefix(path), pages.text(cat, "signin_title")) + "<body><main class=standalone>"
         + pages.brand(files, cat) + body + form + "</main>"
         + (f"<script src='{_prefix(path)}/signin.js'></script>" if form else "") + "</body></html>",
         status_code=status, headers=PAGE_HEADERS)
@@ -341,7 +341,7 @@ def _page(paras: list[str] | str, status: int = 200, *, path: str = "/login", he
 
 def _form(rid: str, error: str | None = None) -> str:
     """The passphrase form (04 11.2): the field with its Show button (signin.js wires it) and the Allow button."""
-    label, e = _say("web_signin_passphrase"), html.escape
+    label, e = _say("signin_passphrase"), html.escape
     err = f"<p class=field__error id=pass-error>{e(error)}</p>" if error else ""
     return (f"<form method=post class=standalone__form><input type=hidden name=req value='{e(rid)}'>"
             f"<div class='field field--secret'><label class=field__label for=pass>{e(label)}</label>"
@@ -349,7 +349,7 @@ def _form(rid: str, error: str | None = None) -> str:
             f"autocomplete=current-password autocapitalize=off spellcheck=false{' aria-describedby=pass-error aria-invalid=true' if error else ''}>"
             "<button class='btn btn--ghost field__action' type=button aria-controls=pass aria-pressed=false hidden "
             f"data-show='{e(_say('common_show'))}' data-hide='{e(_say('common_hide'))}' "
-            f"data-show-name='{e(_say('web_signin_show'))}' data-hide-name='{e(_say('web_signin_hide'))}'>"
+            f"data-show-name='{e(_say('signin_show'))}' data-hide-name='{e(_say('signin_hide'))}'>"
             f"{e(_say('common_show'))}</button></div>{err}</div>"
             f"<button class='btn btn--primary standalone__wide' type=submit>{e(_say('common_allow'))}</button></form>")
 
@@ -393,24 +393,24 @@ def login_routes(store: Store, public_url: str, passphrase_file: Path | str, *, 
         if not is_lan(request.client.host if request.client else "", nets):
             return _page(_home_only(request.client.host if request.client else ""), 403)
         if request.method == "POST" and request.headers.get("origin") != origin:  # another site posting via a browser
-            return _page(_say("web_signin_elsewhere"), 403)
+            return _page(_say("signin_elsewhere"), 403)
         form = await request.form() if request.method == "POST" else {}
         rid = str(form.get("req") or request.query_params.get("req", ""))
         pend = store.pending.get(rid)
         if not pend or pend["t"] < time.time() - PENDING_TTL:
-            return _page(_say("web_signin_expired"), 400)
-        ask = {"heading": _say("web_signin_heading", name=pend["client_name"])}
+            return _page(_say("signin_expired"), 400)
+        ask = {"heading": _say("signin_heading", name=pend["client_name"])}
         if request.method == "GET":
-            return _page(_say("web_signin_text"), **ask, form=_form(rid))
+            return _page(_say("signin_text"), **ask, form=_form(rid))
         attempt = lockout.attempt()             # counted before the check (A-M1)
         if attempt is None:
-            return _page(_say("web_signin_too_many"), 429)
+            return _page(_say("signin_too_many"), 429)
         ok = await anyio.to_thread.run_sync(check_passphrase, str(form.get("passphrase", "")), passphrase_file)
         if ok is None:
             lockout.release(attempt)
-            return _page(_say("web_signin_not_set"), 503)
+            return _page(_say("signin_not_set"), 503)
         if not ok:
-            return _page(_say("web_signin_text"), 401, **ask, form=_form(rid, _say("web_signin_wrong")))
+            return _page(_say("signin_text"), 401, **ask, form=_form(rid, _say("signin_wrong")))
         lockout.release(attempt)
         store.pending.pop(rid, None)
         p, now = pend["params"], time.time()

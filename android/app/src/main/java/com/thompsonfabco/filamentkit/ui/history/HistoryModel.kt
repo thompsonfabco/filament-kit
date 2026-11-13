@@ -61,10 +61,10 @@ interface HistoryBackend {
 
 /** The four groups of a record's fields (05-android-app 10.2). */
 enum class RecentGroup(@StringRes val title: Int) {
-    Identity(R.string.recent_group_identity),
+    Identity(R.string.common_group_identity),
     Weights(R.string.recent_group_weights),
-    Temperatures(R.string.recent_group_temperatures),
-    Other(R.string.recent_group_other),
+    Temperatures(R.string.common_group_temperatures),
+    Other(R.string.common_group_other),
 }
 
 /**
@@ -81,19 +81,19 @@ enum class RecentField(
     @StringRes val unit: Int? = null,
     val kind: FieldKind = FieldKind.Text,
 ) {
-    Vendor("vendor", R.string.recent_field_brand, RecentGroup.Identity),
-    Name("name", R.string.recent_field_name, RecentGroup.Identity),
-    Material("material", R.string.recent_field_material, RecentGroup.Identity),
-    Colour("color_hex", R.string.recent_field_colour, RecentGroup.Identity, kind = FieldKind.Colour),
-    Net("net", R.string.recent_field_net_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Positive),
-    Tare("tare", R.string.recent_field_empty_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Positive),
-    Density("density", R.string.recent_field_density, RecentGroup.Weights, R.string.unit_g_cm3, FieldKind.Positive),
-    Nozzle("nozzle", R.string.recent_field_nozzle, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Degrees),
-    Bed("bed", R.string.recent_field_bed, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Degrees),
-    NozzleRange("nozzle_range", R.string.recent_field_nozzle_range, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Range),
-    BedRange("bed_range", R.string.recent_field_bed_range, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Range),
-    Price("price_per_kg", R.string.recent_field_price, RecentGroup.Other, kind = FieldKind.Positive),
-    Line("line", R.string.recent_field_line, RecentGroup.Other);
+    Vendor("vendor", R.string.common_field_brand, RecentGroup.Identity),
+    Name("name", R.string.common_field_name, RecentGroup.Identity),
+    Material("material", R.string.common_field_material, RecentGroup.Identity),
+    Colour("color_hex", R.string.common_field_colour, RecentGroup.Identity, kind = FieldKind.Colour),
+    Net("net", R.string.common_field_net_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Positive),
+    Tare("tare", R.string.common_field_empty_spool_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Positive),
+    Density("density", R.string.common_field_density, RecentGroup.Weights, R.string.unit_g_cm3, FieldKind.Positive),
+    Nozzle("nozzle", R.string.common_field_nozzle, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Degrees),
+    Bed("bed", R.string.common_field_bed, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Degrees),
+    NozzleRange("nozzle_range", R.string.common_field_nozzle_range, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Range),
+    BedRange("bed_range", R.string.common_field_bed_range, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Range),
+    Price("price_per_kg", R.string.common_field_price_per_kg, RecentGroup.Other, kind = FieldKind.Positive),
+    Line("line", R.string.common_field_line, RecentGroup.Other);
 
     /** Brand, name and material can't be cleared (the Hub refuses an empty one). */
     val required: Boolean get() = this == Vendor || this == Name || this == Material

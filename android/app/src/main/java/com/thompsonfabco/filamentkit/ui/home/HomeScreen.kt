@@ -376,7 +376,7 @@ private fun DraftRow(draft: Draft, now: Long, startOfToday: Long, onClick: () ->
             }
             Row {
                 SwIconButton(
-                    R.drawable.sw_ic_more, stringResource(R.string.a11y_more_for, age), { menuOpen = true },
+                    R.drawable.sw_ic_more, stringResource(R.string.common_more_actions_for, age), { menuOpen = true },
                     Modifier.focusRequester(opener),
                 )
                 SwMenu(menuOpen, { menuOpen = false }) {
@@ -411,7 +411,7 @@ private fun PrintersPanel(
     val list = state.printers?.filter { it.configured }
     val offline = connection == Connection.Offline
     HomePanel(
-        stringResource(R.string.home_printers_title),
+        stringResource(R.string.nav_printers),
         count = list?.size,
         action = { SwButton(stringResource(R.string.home_printers_all), onOpenAll, kind = SwButtonKind.Quiet) },
     ) {
@@ -439,7 +439,7 @@ private fun PrintersPanel(
                 }
                 if (list.isEmpty()) {
                     Text(stringResource(R.string.home_printers_empty), style = MaterialTheme.typography.bodyMedium)
-                    SwButton(stringResource(R.string.home_printers_add), onOpenAll, kind = SwButtonKind.Quiet)
+                    SwButton(stringResource(R.string.printers_add), onOpenAll, kind = SwButtonKind.Quiet)
                 } else {
                     val rows = printerRows(list)
                     rows.shown.forEachIndexed { i, p ->

@@ -72,7 +72,7 @@ const ago = (s) => s < 60 ? `${s} s ago` : s < 3600 ? `${Math.floor(s / 60)} min
 const resultLine = () => h("p", { class: "result result--block", role: "status" });
 // The Hub's own text under the line that sums it up (04 3.2): a code block that wraps and scrolls inside itself (02 7.7).
 const codeBlock = (text) => h("figure", { class: "code" },
-  h("pre", { class: "code__text code__text--log", tabindex: "0", "aria-label": SW.t("web_result_hub_text"), textContent: text }));
+  h("pre", { class: "code__text code__text--log", tabindex: "0", "aria-label": SW.t("common_result_hub_text"), textContent: text }));
 function answer() {                                          // the line, and room for the Hub's text under it
   const line = resultLine(), code = h("div");
   return { el: h("div", {}, line, code), line, code };
@@ -83,10 +83,10 @@ function says(e, o = {}) {
   let text;
   if (!(e instanceof SW.HubError)) text = (e && e.message) || String(e);
   else if (e.unreachable) text = SW.t("common_hub_unreachable");
-  else if (e.status === 403 && e.error === "bad origin") text = SW.t("web_error_bad_origin");
-  else if (e.status === 500) text = SW.t("web_error_internal");
-  else text = e.text("") || SW.t("web_error_status", { status: e.status });
-  return o.kept && e instanceof SW.HubError && e.status === 502 ? `${text} ${SW.t("web_error_kept")}` : text;
+  else if (e.status === 403 && e.error === "bad origin") text = SW.t("shell_error_bad_origin");
+  else if (e.status === 500) text = SW.t("shell_error_internal");
+  else text = e.text("") || SW.t("shell_error_status", { status: e.status });
+  return o.kept && e instanceof SW.HubError && e.status === 502 ? `${text} ${SW.t("add_read_kept")}` : text;
 }
 // what to offer beside it: Try again when trying again can help, Reload for a page opened from another address
 function offer(e, again) {
@@ -229,9 +229,9 @@ function historyTab() {
   function changeText(what, r) {
     const v = r.revisions[r.revisions.length - 1] || {}, fl = v.filaments || {};
     const fields = [...new Set((v.changes || []).map((c) => c.field))];
-    return [what === "undo" ? SW.t("web_recent_revision_undone", { number: v.n }) : SW.t("web_recent_saved", { count: fields.length, fields: fields.join(", ") }),
-      fl.to !== fl.from ? SW.t("web_recent_now_use", { id: fl.to }) + (fl.created ? " " + SW.t("web_recent_new") : "") : "",
-      fl.orphaned && fl.orphaned.length ? SW.t("web_recent_no_spools_left", { ids: fl.orphaned.join(", ") }) : ""].filter(Boolean).join(" ");
+    return [what === "undo" ? SW.t("recent_result_undone", { number: v.n }) : SW.t("recent_saved", { count: fields.length, fields: fields.join(", ") }),
+      fl.to !== fl.from ? SW.t("recent_now_use", { id: fl.to }) + (fl.created ? " " + SW.t("recent_new") : "") : "",
+      fl.orphaned && fl.orphaned.length ? SW.t("recent_result_filament_empty", { ids: fl.orphaned.join(", ") }) : ""].filter(Boolean).join(" ");
   }
   // sends a change, then draws the record again with the sentence under its buttons
   async function apply({ id, ai, det }, what, body) {
@@ -245,21 +245,21 @@ function historyTab() {
       const was = s.values[k] == null ? "" : String(s.values[k]), now = ins[k].value.trim();
       if (now !== was) values[k] = now === "" ? null : (HIST_NUM.has(k) ? Number(now) : now);
     }
-    if (!Object.keys(values).length) { SW.result(ctx.msg, "neutral", SW.t("web_recent_nothing_changed")); return; }
+    if (!Object.keys(values).length) { SW.result(ctx.msg, "neutral", SW.t("common_nothing_changed")); return; }
     act(ctx.msg, SW.t("common_saving"), () => apply(ctx, "apply", { item: s.item, values }), { button });
   }
   async function revise(ctx, s, note, button) {
-    await act(ctx.msg, SW.t("web_recent_asking"), async () => {
+    await act(ctx.msg, SW.t("changes_asking"), async () => {
       const p = await api(hp(ctx.id, "revise"), { body: { item: s.item, note: note.value } });
       ctx.prop.replaceChildren();
-      if (!p.changes.length) return { kind: "neutral", text: SW.t("web_recent_proposal_none") };
+      if (!p.changes.length) return { kind: "neutral", text: SW.t("changes_none") };
       ctx.prop.replaceChildren(h("p", { textContent: "The AI suggests:" }),
         ...p.changes.map((k) => h("p", { textContent: `${k}: ${p.before[k]} → ${p.after[k]}` })),
         p.no_photo ? h("p", { class: "muted", textContent: "No photo was kept: it worked from the saved values and your note." }) : null,
         p.reader ? h("p", { class: "muted", textContent: `Read again by ${p.reader === "local" ? "the local reader" : "Claude"}${p.confidence != null ? ", " + Math.round(p.confidence * 100) + " % sure" : ""}${p.note ? " (" + p.note + ")" : ""}.` }) : null,
         h("div", { class: "row" },
           h("button", { textContent: "Accept", on: { click: (e) => act(ctx.msg, SW.t("common_saving"), () => apply(ctx, "apply", { proposal: p.proposal }), { button: e.currentTarget }) } }),
-          h("button", { class: "secondary", textContent: "Discard", on: { click: () => { ctx.prop.replaceChildren(); SW.result(ctx.msg, "neutral", SW.t("web_recent_proposal_discarded")); } } })));
+          h("button", { class: "secondary", textContent: "Discard", on: { click: () => { ctx.prop.replaceChildren(); SW.result(ctx.msg, "neutral", SW.t("changes_discarded")); } } })));
       return null;
     }, { button });
   }
@@ -284,12 +284,12 @@ const tabs = {
   add: addTab(),
   spools: openTab(),
   printers: PRINTERS ? printersTab() : notice("printer", SW.t("common_feature_off_title", { feature: SW.t("nav_printers") }), SW.t("common_feature_off_hint"), true),
-  recent: HISTORY ? historyTab() : notice("recent", SW.t("web_recent_public_title"), SW.t("web_recent_public_text", { product: PRODUCT })),
+  recent: HISTORY ? historyTab() : notice("recent", SW.t("recent_public_title"), SW.t("recent_public_text", { product: PRODUCT })),
   presets: PRESETS ? presetsTab() : notice("presets", SW.t("presets_off_title"), SW.t("presets_off_text"), true),
   settings: { el: settingsPage, enter: () => settingsPage.replaceChildren(...settingsBody(true)), leave: () => settingsPage.replaceChildren() },
 };
 const PLACES = ["add", "spools", "printers", "recent", "presets"];    // what `spoolwarden.place` can hold
-const TITLES = { add: "web_add_title", spools: "nav_spools", printers: "nav_printers", recent: "nav_recently_added", presets: "nav_slicer_presets", settings: "nav_settings" };
+const TITLES = { add: "home_add_title", spools: "nav_spools", printers: "nav_printers", recent: "nav_recently_added", presets: "nav_slicer_presets", settings: "nav_settings" };
 const ALIAS = { open: "spools", history: "recent" };                  // the old addresses, and the old `tab` values
 const PLACE_KEY = "spoolwarden.place";
 
@@ -425,22 +425,22 @@ function settingsBody(wide) {
   const live = () => h("p", { class: "result", role: "status" });   // the choice's own sentence goes here (shared script)
   const hubPageLink = () => HUB_PAGE ? h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")) : null;
   return [h("div", { class: "settings" },
-    group(SW.t("appearance_title"), appearanceControl({ wide: true, name: null }), h("p", { class: "muted" }, SW.t("web_settings_saved")), live()),
-    group(SW.t("appearance_theme_title"), themePicker(), h("p", { class: "muted" }, SW.t("web_settings_theme_help")), live()),
-    PUSH && typeof alertsPanel === "function" ? group(SW.t("web_settings_alerts_title"), alertsPanel(() => installSheet())) : null,
-    group(SW.t("web_settings_this_hub"), HUB ? h("p", { class: "settings__hub" }, HUB) : null,
+    group(SW.t("appearance_title"), appearanceControl({ wide: true, name: null }), h("p", { class: "muted" }, SW.t("settings_saved_on_phone")), live()),
+    group(SW.t("appearance_theme_title"), themePicker(), h("p", { class: "muted" }, SW.t("settings_theme_help")), live()),
+    PUSH && typeof alertsPanel === "function" ? group(SW.t("settings_alerts_title"), alertsPanel(() => installSheet())) : null,
+    group(SW.t("settings_this_hub"), HUB ? h("p", { class: "settings__hub" }, HUB) : null,
       h("p", { class: "settings__address" }, location.origin + location.pathname), hubPageLink()),
-    wide && !installed() ? group(SW.t("web_more_home_screen"), h("p", { class: "muted" }, SW.t("web_more_home_screen_summary", { product: PRODUCT })),
-      h("p", {}, h("button", { class: "btn", type: "button", on: { click: (e) => addToHome(e.currentTarget) } }, installPrompt ? SW.t("web_more_install") : SW.t("web_more_home_screen")))) : null)];
+    wide && !installed() ? group(SW.t("nav_more_home_screen"), h("p", { class: "muted" }, SW.t("nav_more_home_screen_summary", { product: PRODUCT })),
+      h("p", {}, h("button", { class: "btn", type: "button", on: { click: (e) => addToHome(e.currentTarget) } }, installPrompt ? SW.t("nav_more_install") : SW.t("nav_more_home_screen")))) : null)];
 }
 function addToHome(opener) {
   if (installPrompt) { installPrompt.prompt(); installPrompt = null; } else installSheet(opener);
 }
 function installSheet(opener, reuse) {                       // the steps for an iPhone (04 10.1)
-  const dlg = SW.sheet({ title: SW.t("web_install_title", { product: PRODUCT }),
+  const dlg = SW.sheet({ title: SW.t("install_title", { product: PRODUCT }),
     body: [h("ol", { class: "install" }, [1, 2, 3].map((n) => h("li", {}, SW.t("web_install_step_" + n)))),
-      SW.banner({ kind: "info", text: SW.t("web_install_note"), inline: true })],
-    foot: SW.btn(SW.t("common_done"), { cls: "btn--primary", action: "done", run: () => dlg.close() }) });
+      SW.banner({ kind: "info", text: SW.t("install_note"), inline: true })],
+    foot: SW.btn(SW.t("status_done"), { cls: "btn--primary", action: "done", run: () => dlg.close() }) });
   openHere(dlg, opener, reuse);
 }
 
@@ -460,10 +460,10 @@ moreBtn.addEventListener("click", () => {
   const rows = [
     moreRow("presets", SW.t("nav_slicer_presets"), "", { href: "#presets", "aria-current": cur("presets"),
       ...(PRESETS ? {} : { "data-state": "off", "aria-label": SW.t("nav_slicer_presets") + SW.t("nav_off_suffix") }) }, to("#presets")),
-    moreRow("settings", SW.t("nav_settings"), SW.t("web_more_settings_summary"), { href: "#settings" }, to("#settings")),
-    standalone ? null : moreRow("plus", SW.t(installPrompt ? "web_more_install" : "web_more_home_screen"), SW.t("web_more_home_screen_summary", { product: PRODUCT }), {},
+    moreRow("settings", SW.t("nav_settings"), SW.t("nav_more_settings_summary"), { href: "#settings" }, to("#settings")),
+    standalone ? null : moreRow("plus", SW.t(installPrompt ? "nav_more_install" : "nav_more_home_screen"), SW.t("nav_more_home_screen_summary", { product: PRODUCT }), {},
       () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); if (installPrompt) { installPrompt.prompt(); installPrompt = null; settling++; history.back(); } else installSheet(moreBtn, true); }),
-    HUB_PAGE ? moreRow("overview", SW.t("common_open_hub_page"), SW.t("web_more_hub_page_summary"),
+    HUB_PAGE ? moreRow("overview", SW.t("common_open_hub_page"), SW.t("nav_more_hub_page_summary"),
       { href: HUB_PAGE, ...(standalone ? { target: "_blank", rel: "noopener" } : {}) }) : null,
   ];
   const dlg = SW.sheet({ title: SW.t("nav_more"), bodyTag: "nav", bodyLabel: SW.t("nav_more_sections"), body: h("div", { class: "more" }, rows),
@@ -507,7 +507,7 @@ function navigation() {
     h("h2", { class: "nav__heading", id: "nav-rest" }, SW.t("nav_more")), h("ul", { class: "nav__group", "aria-labelledby": "nav-rest" }, rest.map((i) => navItem(i, false))));
 }
 {
-  const skip = h("a", { class: "skip", href: "#main" }, SW.t("shell_skip"));
+  const skip = h("a", { class: "skip", href: "#main" }, SW.t("common_skip_to_content"));
   const main = h("main", { class: "shell__main", id: "main", tabindex: "-1" }, page);
   skip.addEventListener("click", (e) => { e.preventDefault(); main.focus(); });   // the address keeps the place
   const nav = navigation();
@@ -571,7 +571,7 @@ function addTab() {
     itemsBox.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   async function findFilaments(button) {
-    await act(filLine, SW.t("web_add_search_working"), async () => {
+    await act(filLine, SW.t("common_searching"), async () => {
       const res = await api(`filaments?q=${encodeURIComponent(fq.value)}`);
       if (!res.filaments.length) { filBox.replaceChildren(h("p", { class: "muted", textContent: "No filament matches: use New filament." })); return null; }
       filBox.replaceChildren(...[...res.filaments.slice(0, 60).map((f) => h("button", {
@@ -599,9 +599,9 @@ function addTab() {
   async function addFiles() {
     const files = [...picker.files]; picker.value = "";
     for (const f of files) {
-      if (photos.length >= 8) { SW.result(readBox.line, "warn", SW.t("web_add_photo_limit", { max: 8 })); break; }
+      if (photos.length >= 8) { SW.result(readBox.line, "warn", SW.t("add_photo_limit", { count: 8 })); break; }
       try { const blob = await shrink(f); photos.push({ blob, url: URL.createObjectURL(blob) }); }
-      catch (e) { SW.result(readBox.line, "warn", SW.t("web_add_photo_unreadable", { name: f.name })); }
+      catch (e) { SW.result(readBox.line, "warn", SW.t("add_photo_unreadable", { name: f.name })); }
     }
     drawThumbs();
   }
@@ -611,13 +611,13 @@ function addTab() {
       h("button", { textContent: "✕", "aria-label": "remove photo", on: { click: () => { URL.revokeObjectURL(p.url); photos.splice(i, 1); drawThumbs(); } } }))));
     readable();
   }
-  function readable() { disabled(readBtn, photos.length ? null : SW.t("web_reason_add_photo_first"), () => picker); }
+  function readable() { disabled(readBtn, photos.length ? null : SW.t("add_reason_photo_first"), () => picker); }
   async function read() {
     const fd = new FormData();
     photos.forEach((p, i) => fd.append("photos", p.blob, `photo${i}.jpg`));
     fd.append("hint", hint.value);
     actBox.replaceChildren(); readOut.replaceChildren();
-    await act(readBox, SW.t("web_add_reading", { count: photos.length }), async () => {
+    await act(readBox, SW.t("add_reading", { count: photos.length }), async () => {
       const res = await api("read", { form: fd });
       tag = res.tag;
       readId = res.read_id || null;                      // the intake history keeps this read's photos with the save
@@ -631,7 +631,7 @@ function addTab() {
         ...res.questions.map((q) => h("p", { textContent: "• " + q }))) : null,
         res.note ? h("p", { class: "muted", textContent: "Note: " + res.note }) : null,
         h("p", { class: "muted", textContent: readerText(res) })].filter(Boolean));
-      return got.length ? SW.t("web_found_result", { count: got.length, photos: photos.length }) : { kind: "warn", text: SW.t("web_found_none") };
+      return got.length ? SW.t("add_found_result", { count: got.length, photos: photos.length }) : { kind: "warn", text: SW.t("add_found_none") };
     }, { button: readBtn, kept: true });
     readable();
   }
@@ -715,25 +715,25 @@ function addTab() {
     const check = h("button", { class: checked ? "secondary" : "", textContent: "Check (dry run)", on: { click: (e) => submit(true, e.currentTarget) } });
     const add = h("button", { textContent: `Add ${total()} spool${total() === 1 ? "" : "s"}`, on: { click: (e) => submit(false, e.currentTarget) } });
     actBox.replaceChildren(h("div", { class: "row" }, check, add), ans.el);
-    disabled(add, checked ? null : SW.t("web_reason_check_first"), () => check);   // pressing it goes to Check
+    disabled(add, checked ? null : SW.t("add_reason_check_first"), () => check);   // pressing it goes to Check
   }
   async function submit(dry, button) {
     if (sending) return;
     sending = true;
     try {
-      await act(ans, dry ? SW.t("common_checking") : SW.t("web_bar_adding"), async () => {
+      await act(ans, dry ? SW.t("common_checking") : SW.t("add_preview_adding"), async () => {
         const n = total();
         const res = await api("add", { body: { items, dry_run: dry, link_tag: tag ? tag.nfc_id : null, read_id: readId } });
         checked = dry && !res.exit_code;
-        if (res.exit_code) { drawActions(); return { kind: "bad", text: SW.t(dry ? "web_summary_error_preview" : "web_summary_error_change"), code: res.output }; }
-        if (dry) { drawActions(); return { text: SW.t("web_summary_preview_ok"), code: res.output }; }
+        if (res.exit_code) { drawActions(); return { kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output }; }
+        if (dry) { drawActions(); return { text: SW.t("add_summary_preview_ok"), code: res.output }; }
         const ids = res.spool_ids || [];
         items = []; tag = null; readId = null; itemsBox.replaceChildren(); filBox.replaceChildren(); photos.splice(0).forEach((p) => URL.revokeObjectURL(p.url)); drawThumbs();
         drawActions();
-        SW.toast(SW.t("web_added_toast", { count: ids.length || n }));
-        return { text: ids.length ? SW.t("web_summary_added", { count: ids.length, ids: ids.join(", ") }) : SW.t("add_done_none"), code: res.output,
-          action: { label: SW.t("web_added_set_up_presets"), run: () => { location.hash = "#presets"; } } };
-      }, { button, busy: dry ? null : SW.t("web_bar_adding_button") });
+        SW.toast(SW.t("add_added_toast", { count: ids.length || n }));
+        return { text: ids.length ? SW.t("add_summary_added", { count: ids.length, ids: ids.join(", ") }) : SW.t("add_done_none"), code: res.output,
+          action: { label: SW.t("add_added_set_up_presets"), run: () => { location.hash = "#presets"; } } };
+      }, { button, busy: dry ? null : SW.t("common_adding") });
     } finally { sending = false; }
   }
   return { el };
@@ -745,7 +745,7 @@ function openTab() {
   const tagFirst = resultLine();    // the tag card's first line, until the first answer: reading, or why not
   const tagBox = h("div", { class: "card" }, tagFirst);
   const tagLine = resultLine();     // under the card: a poll that fails keeps the card and says how old it is (04 3.5)
-  SW.result(tagFirst, "run", SW.t("web_spools_last_tag_loading"));
+  SW.result(tagFirst, "run", SW.t("spools_last_tag_loading"));
   const q = h("input", { type: "search", placeholder: "Search: brand, colour, material", "aria-label": "Search spools", enterKeyHint: "search",
                          on: { keydown: (e) => { if (e.key === "Enter") find(); } } });
   const sealed = h("input", { type: "checkbox", checked: true });
@@ -763,7 +763,7 @@ function openTab() {
     h("div", { class: "row spaced" }, checkBtn, linkBtn),
     ans.el);
   // Link waits for a Check of what is on the form; an edit makes the last Check stale (04 3.4)
-  const blockLink = (on) => disabled(linkBtn, on ? SW.t("web_reason_check_first_link") : null, () => checkBtn);
+  const blockLink = (on) => disabled(linkBtn, on ? SW.t("add_reason_check_first_link") : null, () => checkBtn);
   blockLink(true);
   for (const inp of [gross, loc, hum]) inp.addEventListener("input", () => blockLink(true));
   const el = h("section", { class: "hidden" },
@@ -794,7 +794,7 @@ function openTab() {
     }
   }
   async function find(button) {
-    await act(findLine, SW.t("web_add_search_working"), async () => {
+    await act(findLine, SW.t("common_searching"), async () => {
       const res = await api(`find?q=${encodeURIComponent(q.value)}&sealed=${sealed.checked ? 1 : 0}`);
       const rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ f, s })));
       if (!rows.length) { results.replaceChildren(h("p", { class: "muted", textContent: "No spools match." })); return null; }
@@ -818,11 +818,11 @@ function openTab() {
     await act(ans, dry ? SW.t("common_checking") : SW.t("common_working"), async () => {
       const res = await api("open", { body: { spool: id, gross: gross.value, location: loc.value, humidity: hum.value, dry_run: dry } });
       blockLink(!(dry && !res.exit_code));
-      if (res.exit_code) return { kind: "bad", text: SW.t(dry ? "web_summary_error_preview" : "web_summary_error_change"), code: res.output };
-      if (dry) return { text: SW.t("web_summary_preview_ok"), code: res.output };
+      if (res.exit_code) return { kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output };
+      if (dry) return { text: SW.t("add_summary_preview_ok"), code: res.output };
       picked = null; gross.value = hum.value = loc.value = ""; lastKey = null;
-      SW.toast(SW.t("web_sheet_opened_toast", { id }));
-      return { text: SW.t("web_sheet_opened", { id }), code: res.output };
+      SW.toast(SW.t("spool_sheet_opened_toast", { id }));
+      return { text: SW.t("spool_sheet_opened", { id }), code: res.output };
     }, { button });
   }
   return { el, enter() { poll(); timer = setInterval(() => { if (!document.hidden) poll(); }, 3000); },   // not while the page is hidden or the phone locked
@@ -854,9 +854,9 @@ function presetsTab() {
     if (f.lines_for_vendor.length) {
       const sel = h("select", {}, ...f.lines_for_vendor.map((l) => h("option", { value: l, textContent: l })));
       card.append(h("label", {}, "Add to the line", sel), h("p", {}, h("button", { textContent: "Add to line", on: { click: (e) =>
-        act(res, SW.t("web_presets_adding"), async () => {
+        act(res, SW.t("common_adding"), async () => {
           await api("line_add", { body: { line: sel.value, ids: [f.id] } });
-          SW.toast(SW.t("web_presets_added", { line: sel.value })); load(true);      // the card goes: the list is read again
+          SW.toast(SW.t("presets_added", { line: sel.value })); load(true);      // the card goes: the list is read again
           return null;
         }, { button: e.currentTarget }) } })));
     }
@@ -876,9 +876,9 @@ function presetsTab() {
         h("label", { class: "wide" }, "Search parents", q), h("label", { class: "wide" }, "Orca parent", orca),
         h("label", { class: "wide" }, "Bambu Studio template", bs)),
       h("p", {}, h("button", { textContent: "Create line", on: { click: (e) =>
-        act(res, SW.t("web_presets_creating"), async () => {
+        act(res, SW.t("presets_creating"), async () => {
           await api("line_new", { body: { name: nm.value, vendor: f.vendor, ids: [f.id], orca_parent: orca.value, bs_template: bs.value } });
-          SW.toast(SW.t("web_presets_created", { name: nm.value })); load(true);
+          SW.toast(SW.t("presets_created", { name: nm.value })); load(true);
           return null;
         }, { button: e.currentTarget }) } })));
     q.addEventListener("change", parents);
@@ -887,10 +887,10 @@ function presetsTab() {
     return card;
   }
   async function build(button) {
-    await act(gen, SW.t("web_presets_building"), async () => {
+    await act(gen, SW.t("presets_building"), async () => {
       const r = await api("generate", { body: {} });
       load(true);
-      return r.exit_code ? { kind: "bad", text: SW.t("web_summary_error_change"), code: r.output } : { text: SW.t("web_result_build_requested"), code: r.output };
+      return r.exit_code ? { kind: "bad", text: SW.t("add_summary_error_change"), code: r.output } : { text: SW.t("presets_result_build_requested"), code: r.output };
     }, { button });
   }
   // Updates: the list names each preset and what changes; Accept takes exactly that list (the server refuses it once a

@@ -162,7 +162,7 @@ private const val SKELETON_ROWS = 3
 /** "PETG · Bambu Lab PETG HF Orange · in use": the parts the printer or the inventory gave. */
 @Composable
 private fun slotLine(s: AmsSlot): String = listOfNotNull(
-    if (PrinterHelp.slotEmpty(s)) stringResource(R.string.printers_slot_empty) else s.type.ifBlank { null },
+    if (PrinterHelp.slotEmpty(s)) stringResource(R.string.common_empty) else s.type.ifBlank { null },
     s.spool?.name?.ifBlank { null }?.takeUnless { PrinterHelp.slotEmpty(s) },
     stringResource(R.string.spool_load_in_use).takeIf { s.active },
 ).joinToString(DOT)
@@ -246,19 +246,19 @@ private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, onCli
 /** The rows of the Hub's preview: the preset, the nozzle, where the spool now in the slot goes back to, and its problems. */
 @Composable
 private fun PlanRows(plan: LoadResult) {
-    val none = stringResource(R.string.web_load_plan_preset_none)
+    val none = stringResource(R.string.common_value_none)
     val lines = buildList {
-        add(stringResource(R.string.web_load_plan_preset, plan.preset?.name?.ifBlank { null } ?: none))
+        add(stringResource(R.string.spool_load_plan_preset, plan.preset?.name?.ifBlank { null } ?: none))
         val mm = plan.nozzleMm?.let { java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString() }
         when {
-            plan.nozzleAssumed -> add(stringResource(R.string.web_load_plan_nozzle_assumed, mm ?: DEFAULT_NOZZLE_MM))
-            mm != null -> add(stringResource(R.string.web_load_plan_nozzle, mm))
+            plan.nozzleAssumed -> add(stringResource(R.string.spool_load_plan_nozzle_assumed, mm ?: DEFAULT_NOZZLE_MM))
+            mm != null -> add(stringResource(R.string.spool_load_plan_nozzle, mm))
         }
         plan.movedBack.forEach { m ->
             add(
                 stringResource(
-                    R.string.web_load_plan_goes_back, m.id?.toString() ?: stringResource(R.string.common_unknown), plan.slot.label,
-                    m.location.ifBlank { stringResource(R.string.web_load_previous_place) },
+                    R.string.spool_load_plan_goes_back, m.id?.toString() ?: stringResource(R.string.common_unknown), plan.slot.label,
+                    m.location.ifBlank { stringResource(R.string.spool_load_previous_place) },
                 ),
             )
         }
@@ -327,14 +327,14 @@ fun LoadPreviewScreen(
                 NoticeKind.Bad, stringResource(R.string.spool_load_dropped),
                 actions = listOf(
                     SwAction(stringResource(R.string.spool_load_open_printer), onOpenPrinter),
-                    SwAction(stringResource(R.string.common_done), onDone),
+                    SwAction(stringResource(R.string.status_done), onDone),
                 ),
             )
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
             SwButton(stringResource(R.string.common_back), onBack, enabled = !ui.writing)
             SwButton(
-                stringResource(if (ui.writing) R.string.spool_load_loading else R.string.spool_load_button), vm::load,
+                stringResource(if (ui.writing) R.string.spool_load_loading else R.string.common_load), vm::load,
                 kind = SwButtonKind.Main, enabled = ui.plan != null && !ui.checking && !ui.dropped, busy = ui.writing,
             )
         }

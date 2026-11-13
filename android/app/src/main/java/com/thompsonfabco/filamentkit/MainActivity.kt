@@ -1134,7 +1134,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             ),
             cancel = SwAction(stringResource(R.string.common_stay)) { leaveAddFor = null },
         ) {
-            Text(stringResource(R.string.common_leave_body, stringResource(R.string.web_card_new_spool)))
+            Text(stringResource(R.string.common_leave_body, stringResource(R.string.add_card_new_spool)))
         }
     }
 }
@@ -1146,7 +1146,7 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
     when {
         destination?.hasRoute(SpoolRoute::class) == true -> {
             val id = entry!!.toRoute<SpoolRoute>().id
-            return SpoolCache.title(id) ?: stringResource(R.string.web_spool_title, id.toString())
+            return SpoolCache.title(id) ?: stringResource(R.string.spool_title, id.toString())
         }
         entry != null && tagUidOf(entry) != null -> return stringResource(R.string.common_tag, tagUidOf(entry).orEmpty())
     }
@@ -1161,7 +1161,7 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
         destination.hasRoute(AddProfileRoute::class) -> AddProfileTitle
         destination.hasRoute(LicencesRoute::class) -> R.string.settings_licences_title
         destination.hasRoute(SettingsAppearanceRoute::class) -> R.string.appearance_title
-        destination.hasRoute(SettingsHubRoute::class) -> R.string.settings_hub_title
+        destination.hasRoute(SettingsHubRoute::class) -> R.string.hub_sheet_title
         destination.hasRoute(SettingsUpdatesRoute::class) -> R.string.settings_updates_title
         destination.hasRoute(SettingsDeveloperRoute::class) -> R.string.settings_developer_title
         destination.tab() == Tab.Recent -> R.string.nav_recently_added

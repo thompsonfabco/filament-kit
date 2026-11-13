@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -62,6 +63,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * The spool screen (05 7.2): who it is, what is left, the last change, the actions and the details. Update weight and
@@ -162,7 +164,7 @@ private fun Header(spool: SpoolSummary, tag: String?) {
             if (spool.brand.isNotBlank()) Text(spool.brand, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             Text(spool.name.ifBlank { spool.title }, style = MaterialTheme.typography.titleLarge)
             val line = listOfNotNull(
-                stringResource(R.string.web_spool_title, spool.id.toString()),
+                stringResource(R.string.spool_title, spool.id.toString()),
                 spool.material.ifBlank { null },
                 spool.colorHex?.removePrefix("#")?.uppercase()?.let { "#" + it },
             ).joinToString(DOT)
@@ -182,10 +184,10 @@ private fun Remaining(spool: SpoolSummary) {
     when (spool.state) {
         SpoolState.Empty -> Row(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically) {
             SwIcon(R.drawable.sw_st_hollow, null, tint = colors.muted)
-            Text(stringResource(R.string.spool_state_empty), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.common_empty), style = MaterialTheme.typography.titleMedium)
         }
         SpoolState.Sealed -> Text(
-            spool.total?.let { stringResource(R.string.spool_sealed_total, formatGrams(it)) } ?: stringResource(R.string.spool_state_sealed),
+            spool.total?.let { stringResource(R.string.spool_sealed_total, formatGrams(it)) } ?: stringResource(R.string.common_sealed),
             style = SpoolwardenTheme.type.number,
         )
         SpoolState.Opened -> {
@@ -193,16 +195,16 @@ private fun Remaining(spool: SpoolSummary) {
             val total = spool.total
             val percent = spool.percent
             val said = if (total != null && percent != null) {
-                stringResource(R.string.a11y_level_bar, formatGrams(left), formatGrams(total), percent.toString())
+                pluralStringResource(R.plurals.a11y_level_bar, left.roundToInt(), left.roundToInt(), formatGrams(total), percent.toString())
             } else {
-                stringResource(R.string.spool_left, formatGrams(left))
+                stringResource(R.string.spool_left_grams, formatGrams(left))
             }
             Column(
                 Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = said },
                 verticalArrangement = Arrangement.spacedBy(space.s2),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.Bottom) {
-                    Text(stringResource(R.string.spool_left, formatGrams(left)), style = SpoolwardenTheme.type.number)
+                    Text(stringResource(R.string.spool_left_grams, formatGrams(left)), style = SpoolwardenTheme.type.number)
                     if (total != null) {
                         Text(
                             stringResource(R.string.spool_of_total, formatGrams(total)), style = SpoolwardenTheme.type.data,
@@ -262,23 +264,23 @@ private fun Details(spool: SpoolSummary) {
     val space = SpoolwardenTheme.space
     val rows = buildList {
         spool.location?.let { add(stringResource(R.string.common_field_location) to it) }
-        add(stringResource(R.string.spool_field_tag) to (spool.tag ?: stringResource(R.string.spool_none)))
+        add(stringResource(R.string.spool_field_tag) to (spool.tag ?: stringResource(R.string.common_none)))
         add(
-            stringResource(R.string.spool_field_state) to stringResource(
+            stringResource(R.string.common_field_state) to stringResource(
                 when (spool.state) {
-                    SpoolState.Sealed -> R.string.spool_state_sealed
+                    SpoolState.Sealed -> R.string.common_sealed
                     SpoolState.Opened -> R.string.spool_state_opened
-                    SpoolState.Empty -> R.string.spool_state_empty
+                    SpoolState.Empty -> R.string.common_empty
                 },
             ),
         )
-        spool.filamentId?.let { add(stringResource(R.string.spool_field_filament) to it.toString()) }
-        spool.emptyWeight?.let { add(stringResource(R.string.spool_field_empty_weight) to stringResource(R.string.common_grams, formatGrams(it))) }
-        spool.lot?.let { add(stringResource(R.string.spool_field_lot) to it) }
+        spool.filamentId?.let { add(stringResource(R.string.recent_col_filament) to it.toString()) }
+        spool.emptyWeight?.let { add(stringResource(R.string.common_field_empty_spool_weight) to stringResource(R.string.common_grams, formatGrams(it))) }
+        spool.lot?.let { add(stringResource(R.string.common_field_lot) to it) }
     }
     Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
         Text(
-            stringResource(R.string.spool_details_title), Modifier.semantics { heading() },
+            stringResource(R.string.common_details), Modifier.semantics { heading() },
             style = MaterialTheme.typography.titleSmall, color = colors.muted,
         )
         SpoolPanel {
@@ -314,7 +316,7 @@ private fun WeightSheet(vm: SpoolViewModel, w: WeightUi, now: Double?, onPairAga
                 value = w.text,
                 onValueChange = vm::setWeight,
                 enabled = !w.saving,
-                label = { Text(stringResource(R.string.common_weight_with_spool)) },
+                label = { Text(stringResource(R.string.common_field_weight_with_spool)) },
                 isError = w.invalid,
                 supportingText = {
                     Text(stringResource(if (w.invalid) R.string.common_error_grams else R.string.spool_weight_hint))

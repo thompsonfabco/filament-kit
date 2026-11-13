@@ -101,7 +101,7 @@ internal fun EditScreen(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(space.s4),
             verticalArrangement = Arrangement.spacedBy(space.s3),
         ) {
-            Text(stringResource(R.string.recent_edit_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.recent_edit), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
             ScreenState(
                 loaded = e != null,
                 loading = s.loading,
@@ -243,13 +243,13 @@ private fun ActionBar(
         ) {
             if (e.nothingChanged) {
                 Text(
-                    stringResource(R.string.recent_edit_nothing), Modifier.weight(1f),
+                    stringResource(R.string.common_nothing_changed), Modifier.weight(1f),
                     color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium,
                 )
             }
             SwButton(stringResource(R.string.common_cancel), onCancel, kind = SwButtonKind.Quiet, enabled = !e.busy)
             SwButton(
-                stringResource(if (e.busy) R.string.common_saving else R.string.recent_edit_save), { vm.saveEdit(onClose) },
+                stringResource(if (e.busy) R.string.common_saving else R.string.common_save_changes), { vm.saveEdit(onClose) },
                 kind = SwButtonKind.Main, busy = e.busy, enabled = !s.offline,
             )
         }

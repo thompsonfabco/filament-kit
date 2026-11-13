@@ -383,7 +383,7 @@ function applyCard() {
 
 document.addEventListener("DOMContentLoaded", () => {
   settleAddress();
-  const skip = h("a", { class: "skip", href: "#main" }, SW.t("shell_skip"));
+  const skip = h("a", { class: "skip", href: "#main" }, SW.t("common_skip_to_content"));
   const main = h("main", { class: "shell__main", id: "main", tabindex: "-1" }, page);
   skip.addEventListener("click", (e) => { e.preventDefault(); main.focus(); });   // the address keeps the section
   // the setup-code card stays the first card, and the line that says how to get the code stays above it (until S1.5)

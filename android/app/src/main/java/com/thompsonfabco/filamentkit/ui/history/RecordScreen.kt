@@ -196,8 +196,8 @@ private fun RecordHeader(r: HistoryRecord, newer: String?, older: String?, onOpe
                 Text(it.joinToString(" · "), color = colors.muted, style = MaterialTheme.typography.bodySmall)
             }
         }
-        StepButton(R.string.a11y_record_newer, flip = true, enabled = newer != null) { newer?.let(onOpenRecord) }
-        StepButton(R.string.a11y_record_older, flip = false, enabled = older != null) { older?.let(onOpenRecord) }
+        StepButton(R.string.detail_newer, flip = true, enabled = newer != null) { newer?.let(onOpenRecord) }
+        StepButton(R.string.detail_older, flip = false, enabled = older != null) { older?.let(onOpenRecord) }
         if (ids.isNotEmpty()) {
             Box {
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { menu = true })
@@ -260,7 +260,7 @@ private fun FieldsPanel(r: HistoryRecord, item: HistorySaved, saved: SavedEdit?,
     }
     RecentPanel(
         title,
-        actions = { IconTextButton(R.drawable.sw_ic_pencil, stringResource(R.string.recent_edit_title), onEdit) },
+        actions = { IconTextButton(R.drawable.sw_ic_pencil, stringResource(R.string.recent_edit), onEdit) },
     ) {
         if (ids.size > 1) {
             val filament = r.spools.firstOrNull { it.spoolId in ids }?.filamentId
@@ -307,7 +307,7 @@ private fun FieldRow(field: RecentField, value: kotlinx.serialization.json.JsonE
             Row(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically) {
                 if (field.kind == FieldKind.Colour && shown != null) ColorSwatch(shown)
                 when {
-                    shown == null -> Text(stringResource(R.string.recent_value_empty), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
+                    shown == null -> Text(stringResource(R.string.common_field_empty_value), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
                     field.kind == FieldKind.Text -> Text(shown, style = MaterialTheme.typography.bodyMedium)
                     else -> Text(shown, style = SpoolwardenTheme.type.data)
                 }
@@ -381,17 +381,17 @@ private fun AskPanel(vm: RecordViewModel, s: RecordState, ai: Boolean?, note: St
             Ask.Waiting -> Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
                 SwProgress(null)
                 Text(
-                    stringResource(R.string.recent_ask_waiting), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
+                    stringResource(R.string.changes_asking), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
             is Ask.Proposal -> ProposalBox(vm, s, ask.proposal, needsHub)
-            Ask.NoChange -> Text(stringResource(R.string.recent_ask_no_change), style = MaterialTheme.typography.bodyMedium)
+            Ask.NoChange -> Text(stringResource(R.string.changes_none), style = MaterialTheme.typography.bodyMedium)
             is Ask.Accepted -> NoticeCard(
                 NoticeKind.Ok,
-                pluralStringResource(R.plurals.recent_ask_accepted, ask.count, ask.count, ask.revision),
+                pluralStringResource(R.plurals.changes_accepted, ask.count, ask.count, ask.revision),
             )
-            Ask.Discarded -> RecentStatusLine(R.drawable.sw_st_hollow, stringResource(R.string.recent_ask_discarded), colors.muted)
+            Ask.Discarded -> RecentStatusLine(R.drawable.sw_st_hollow, stringResource(R.string.changes_discarded), colors.muted)
             is Ask.Failed -> {
                 // a failed accept keeps its proposal on screen; "Try again" accepts it again
                 ask.proposal?.let { ProposalBox(vm, s, it, needsHub, decided = true) }
@@ -418,7 +418,7 @@ private fun ProposalBox(vm: RecordViewModel, s: RecordState, p: RevisionProposal
         verticalArrangement = Arrangement.spacedBy(space.s2),
     ) {
         Text(
-            pluralStringResource(R.plurals.recent_ask_proposal, p.changes.size, p.changes.size),
+            pluralStringResource(R.plurals.changes_title, p.changes.size, p.changes.size),
             Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall,
         )
         rereadText(p.reader, p.confidence)?.let { Text(it, color = colors.muted, style = MaterialTheme.typography.bodySmall) }
@@ -427,7 +427,7 @@ private fun ProposalBox(vm: RecordViewModel, s: RecordState, p: RevisionProposal
         p.changes.forEach { wire ->
             val field = RecentField.of(wire)
             val name = fieldName(wire)
-            val empty = stringResource(R.string.recent_value_empty)
+            val empty = stringResource(R.string.common_field_empty_value)
             val old = fieldValue(field, p.before[wire]) ?: empty
             val new = fieldValue(field, p.after[wire]) ?: empty
             val said = stringResource(R.string.a11y_proposal_change, name, old, new)
@@ -442,7 +442,7 @@ private fun ProposalBox(vm: RecordViewModel, s: RecordState, p: RevisionProposal
         }
         if (!decided) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
-                SwButton(stringResource(R.string.recent_ask_accept), vm::accept, kind = SwButtonKind.Main, busy = s.applyBusy, enabled = !needsHub)
+                SwButton(stringResource(R.string.common_accept), vm::accept, kind = SwButtonKind.Main, busy = s.applyBusy, enabled = !needsHub)
                 SwButton(stringResource(R.string.common_discard), vm::discard, enabled = !s.applyBusy)
             }
         }
@@ -457,11 +457,11 @@ private fun RevisionsPanel(vm: RecordViewModel, s: RecordState, r: HistoryRecord
     val space = SpoolwardenTheme.space
     RecentPanel(stringResource(R.string.recent_revisions_title, r.revisions.size)) {
         if (r.revisions.isEmpty()) {
-            Text(stringResource(R.string.recent_revisions_none), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.revision_empty), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
         }
         r.revisions.asReversed().forEach { rev -> RevisionLine(rev) }
         s.undoTarget?.let { t ->
-            IconTextButton(R.drawable.sw_ic_undo, stringResource(R.string.recent_undo, t.n), vm::askUndo, enabled = !s.undoBusy && !s.offline)
+            IconTextButton(R.drawable.sw_ic_undo, stringResource(R.string.revision_undo, t.n), vm::askUndo, enabled = !s.undoBusy && !s.offline)
             if (s.offline && !s.undoBusy) NeedsHubReason()
         }
         s.undone?.let { UndoneLines(it) }
@@ -478,7 +478,7 @@ private fun RevisionLine(rev: HistoryRevision) {
     val merged = mergedChanges(rev.changes)
     val changes = merged.map { mergedChangeText(it, needsSpoolNames(merged, it)) }.joinToString("; ")
     val time = RecentValues.time(rev.at)
-    val line = stringResource(if (rev.by == READER) R.string.recent_revision_reader else R.string.recent_revision_by_hand, rev.n, time, changes)
+    val line = stringResource(if (rev.by == READER) R.string.recent_revision_reader else R.string.recent_revision_hand, rev.n, time, changes)
     Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s1)) {
         Row(horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2)) {
             Text(
@@ -499,12 +499,12 @@ private fun RevisionLine(rev: HistoryRevision) {
             val to = f.to
             if (to != null && to != f.from) {
                 Text(
-                    stringResource(if (f.created) R.string.recent_undo_filament_new else R.string.recent_relink_other, to),
+                    stringResource(if (f.created) R.string.recent_result_filament_new else R.string.recent_relink_other, to),
                     color = colors.muted, style = MaterialTheme.typography.bodySmall,
                 )
             }
             f.orphaned.forEach {
-                Text(stringResource(R.string.recent_undo_filament_empty, it), color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.recent_result_filament_empty, it), color = colors.muted, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -516,14 +516,14 @@ private const val READER = "ai"
 @Composable
 private fun UndoneLines(rev: HistoryRevision) {
     val space = SpoolwardenTheme.space
-    val empty = stringResource(R.string.recent_value_empty)
+    val empty = stringResource(R.string.common_field_empty_value)
     val merged = mergedChanges(rev.changes)
     val first = merged.firstOrNull()
     Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
         if (first == null) {
             NoticeCard(NoticeKind.Ok, stringResource(R.string.recent_result_undone, rev.n))
         } else {
-            val line = stringResource(R.string.recent_undo_done, rev.n, fieldName(first.field), fieldValue(RecentField.of(first.field), first.old) ?: empty)
+            val line = stringResource(R.string.revision_undone_result, rev.n, fieldName(first.field), fieldValue(RecentField.of(first.field), first.old) ?: empty)
             val more = merged.drop(1).map {
                 stringResource(R.string.recent_undo_again, fieldName(it.field), fieldValue(RecentField.of(it.field), it.old) ?: empty)
             }
@@ -533,8 +533,8 @@ private fun UndoneLines(rev: HistoryRevision) {
         // what the undo itself did (undo_to, orphaned_by_undo), not what the revision did before
         val f = rev.filaments
         if (f != null) {
-            f.undoTo?.let { NoticeCard(NoticeKind.Info, stringResource(R.string.recent_undo_filament_new, it)) }
-            f.orphanedByUndo.forEach { NoticeCard(NoticeKind.Info, stringResource(R.string.recent_undo_filament_empty, it)) }
+            f.undoTo?.let { NoticeCard(NoticeKind.Info, stringResource(R.string.recent_result_filament_new, it)) }
+            f.orphanedByUndo.forEach { NoticeCard(NoticeKind.Info, stringResource(R.string.recent_result_filament_empty, it)) }
         }
     }
 }
@@ -542,7 +542,7 @@ private fun UndoneLines(rev: HistoryRevision) {
 @Composable
 private fun UndoDialog(vm: RecordViewModel, s: RecordState) {
     val t = s.undoTarget ?: return
-    val empty = stringResource(R.string.recent_value_empty)
+    val empty = stringResource(R.string.common_field_empty_value)
     SwDialog(
         title = stringResource(R.string.recent_undo_title, t.n),
         onClose = vm::cancelUndo,

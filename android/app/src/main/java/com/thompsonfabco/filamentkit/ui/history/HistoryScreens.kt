@@ -122,7 +122,7 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (
                 if (h != null) {
                     if (h.keep > 0) {
                         Text(
-                            stringResource(R.string.recent_facts, h.keep, RecentValues.megabytes(h.photoBytes ?: 0L)),
+                            pluralStringResource(R.plurals.recent_facts, h.keep, h.keep, RecentValues.megabytes(h.photoBytes ?: 0L)),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -212,7 +212,7 @@ private fun Thumb(vm: HistoryListViewModel, r: HistorySummary) {
     val colors = SpoolwardenTheme.colors
     val shape = SpoolwardenTheme.shapes.rS
     if (r.photos == 0) {
-        val none = stringResource(R.string.recent_no_photo)
+        val none = stringResource(R.string.photo_none)
         Box(
             Modifier.size(side).dashedOutline(colors.borderStrong, shape, SpoolwardenTheme.space.s1, SpoolwardenTheme.sizes.hairline)
                 .semantics { contentDescription = none },

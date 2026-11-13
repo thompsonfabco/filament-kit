@@ -942,7 +942,7 @@ def test_tagged_names_the_last_tapped_spool(slotapp, monkeypatch):
 
 def test_script_has_the_load_and_unload_flows():
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
-    for needle in ("/slots/", "/load", "/unload", "dry_run: false", "web_unload_title", "find?q=", "pj(\"tagged\")"):
+    for needle in ("/slots/", "/load", "/unload", "dry_run: false", "printer_unload_title", "find?q=", "pj(\"tagged\")"):
         assert needle in src, needle
 
 
@@ -991,7 +991,7 @@ def test_the_printers_tab_offers_map_by_loading_filament():
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     # S3.6: while a mapping runs the button is aria-disabled with its reason beside it, not natively disabled
     assert 'textContent: "Map by loading filament", on: { click: (e) => manualMap(e.currentTarget) }' in text
-    assert 'disabled(byLoad, running ? SW.t("web_map_running_reason") : null);' in text
+    assert 'disabled(byLoad, running ? SW.t("printers_map_running_reason") : null);' in text
     for step in ("start", "confirm", "skip", "stop", "offer"):
         assert f'"{step}"' in text
 
@@ -1227,12 +1227,12 @@ def test_confirmations_and_questions_are_sheets_not_native_dialogs():
     code = " ".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("//"))
     assert not re.search(r"(?:window\.)?(?:confirm|prompt|alert)\(", code)
     assert "SW.ask({ open: openHere" in src
-    for key in ("web_stop_title", "web_unload_title", "web_putback_title", "web_map_title", "web_forget_title",
-                "web_rename_title", "web_address_title", "web_code_title", "web_cert_title", "web_key_title",
-                "web_add_model_title", "common_add_klipper_printer"):
+    for key in ("printer_stop_dialog_title", "printer_unload_title", "printer_usage_undo_title", "printers_map_title", "printers_forget_title",
+                "printers_rename_title", "printers_change_address_title", "printers_access_code_title", "printers_forget_cert_title", "printers_key_title",
+                "printer_add_title", "common_add_klipper_printer"):
         assert f'SW.t("{key}"' in src, key
-    assert 'kind: "destructive", title: SW.t("web_stop_title")' in src
-    assert 'kind: "destructive", title: SW.t("web_cert_title"' in src and 'kind: "destructive", title: SW.t("web_forget_title"' in src
+    assert 'kind: "destructive", title: SW.t("printer_stop_dialog_title")' in src
+    assert 'kind: "destructive", title: SW.t("printers_forget_cert_title"' in src and 'kind: "destructive", title: SW.t("printers_forget_title"' in src
     # secrets never go in a plain input: Access Code and Moonraker API key are SW.field secrets
     assert src.count('type: "secret"') == 2 and 'type: "password"' not in src
     # the address change of a Bambu printer and the certificate forget both ask for the Access Code (staging 2026-11-12)

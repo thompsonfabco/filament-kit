@@ -127,10 +127,10 @@ fun LinkFindScreen(
         OutlinedTextField(
             value = ui.weight,
             onValueChange = vm::setWeight,
-            label = { Text(stringResource(R.string.common_weight_with_spool_optional)) },
+            label = { Text(stringResource(R.string.common_field_weight_with_spool_optional)) },
             isError = ui.weightInvalid,
             supportingText = if (ui.weightInvalid) {
-                { Text(stringResource(R.string.tag_find_weight_error)) }
+                { Text(stringResource(R.string.field_error_grams)) }
             } else {
                 null
             },
@@ -150,7 +150,7 @@ fun LinkFindScreen(
             offline = !online,
         ) {
             // the rows are off while the weight is wrong; the reason is above them
-            if (ui.weightInvalid) Text(stringResource(R.string.tag_find_weight_error), style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            if (ui.weightInvalid) Text(stringResource(R.string.field_error_grams), style = MaterialTheme.typography.bodySmall, color = colors.muted)
             SpoolPanel {
                 ui.results.forEachIndexed { i, spool ->
                     if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)

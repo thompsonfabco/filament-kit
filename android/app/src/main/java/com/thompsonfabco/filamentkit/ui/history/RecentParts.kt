@@ -151,7 +151,7 @@ internal fun needsSpoolNames(all: List<MergedChange>, c: MergedChange): Boolean 
 @Composable
 internal fun changeText(wire: String, old: JsonElement?, new: JsonElement?): String {
     val field = RecentField.of(wire)
-    val empty = stringResource(R.string.recent_value_empty)
+    val empty = stringResource(R.string.common_field_empty_value)
     val from = RecentValues.text(old) ?: empty
     val to = RecentValues.text(new) ?: empty
     val unit = field?.unit
@@ -201,7 +201,7 @@ internal fun readDetailsText(d: ReadDetails): String {
 @Composable
 internal fun rereadText(reader: String?, confidence: Double?): String? {
     val engine = when (reader) {
-        READER_LOCAL -> stringResource(R.string.settings_reader_engine_local)
+        READER_LOCAL -> stringResource(R.string.settings_reader_badge_local)
         READER_CLOUD -> stringResource(R.string.settings_reader_engine_cloud)
         else -> return null
     }

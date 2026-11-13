@@ -161,7 +161,7 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
     js = c.get("/setup/setup.js").text                                         # S1.2/S1.3: the shared appearance control in the top bar
     assert "spoolwarden.appearance" in js and "SW.segmented" in js and "appearance--menu" in js
     assert "Light" not in js and "Dark" not in js
-    for key in ("app_name", "nav_label", "nav_more", "shell_skip", "topbar_version_prefix", "nav_everyday", "nav_system"):
+    for key in ("app_name", "nav_label", "nav_more", "common_skip_to_content", "topbar_version_prefix", "nav_everyday", "nav_system"):
         assert f'"{key}"' in js, key                                           # the shell's texts come from the catalogue
 
 

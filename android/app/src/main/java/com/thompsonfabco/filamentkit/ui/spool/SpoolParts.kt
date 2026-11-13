@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -36,6 +37,7 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import kotlin.math.roundToInt
 
 /** The dot between the parts of a line. */
 internal const val DOT = " · "
@@ -76,10 +78,10 @@ internal fun monoNumbers(text: String): AnnotatedString {
 /** "Spool 214 · PLA · Workshop X1 A1 · 620 g left", sealed and tagged added when true; a part the Hub did not send is left out. */
 @Composable
 internal fun spoolLine(s: SpoolSummary): String = listOfNotNull(
-    stringResource(R.string.web_spool_title, s.id.toString()),
+    stringResource(R.string.spool_title, s.id.toString()),
     s.material.ifBlank { null },
     s.location,
-    s.remaining?.let { stringResource(R.string.spool_left, formatGrams(it)) },
+    s.remaining?.let { stringResource(R.string.spool_left_grams, formatGrams(it)) },
     stringResource(R.string.spools_result_sealed).takeIf { s.state == SpoolState.Sealed },
     stringResource(R.string.spools_result_tagged).takeIf { s.tag != null },
 ).joinToString(DOT)
@@ -89,10 +91,12 @@ internal fun spoolLine(s: SpoolSummary): String = listOfNotNull(
 internal fun SpoolRow(spool: SpoolSummary, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, enabled: Boolean = true) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
-    val said = stringResource(
-        R.string.a11y_spool_result, spool.title, spool.id.toString(), spool.material, spool.location.orEmpty(),
-        spool.remaining?.let { formatGrams(it) }.orEmpty(),
-    ).split(", ").filter { it.isNotBlank() && !it.startsWith(" ") }.joinToString(", ")
+    val said = pluralStringResource(
+        R.plurals.a11y_spool_result, spool.remaining?.roundToInt() ?: 0,
+        spool.title, spool.id.toString(), spool.material, spool.location.orEmpty(),
+        spool.remaining?.roundToInt() ?: 0,
+    ).split(", ").let { if (spool.remaining == null) it.dropLast(1) else it } // no grams part for an unknown weight
+        .filter { it.isNotBlank() && !it.startsWith(" ") }.joinToString(", ")
     val click = if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier
     Row(
         modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).semantics(mergeDescendants = true) {

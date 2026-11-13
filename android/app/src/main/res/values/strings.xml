@@ -70,7 +70,6 @@
     </plurals>
     <string name="nav_settings_update">Settings, update available</string>
     <string name="nav_printers_off">Printers, switched off on this Hub</string>
-    <string name="nav_recent_public">Recent, on the home address only</string>
     <string name="hub_chip_checking">Hub connection: checking</string>
     <!-- 1=hub 2=address -->
     <string name="hub_state_connected">Connected to %1$s at %2$s.</string>
@@ -78,7 +77,6 @@
     <!-- 1=hub -->
     <string name="hub_state_offline">Cannot reach %1$s. Check that this phone is on the home network.</string>
     <string name="hub_state_certificate">The Hub\'s certificate is not the one this phone paired with.</string>
-    <string name="hub_state_unpaired">This phone is no longer paired with the Hub.</string>
     <string name="hub_state_network">Android needs your permission before filament-kit can reach the Hub on your network.</string>
     <string name="hub_sheet_title">Hub connection</string>
     <!-- 1=app_version 2=hub_version -->
@@ -102,7 +100,7 @@
     <string name="pair_address_label">IP address or name</string>
     <string name="pair_address_placeholder">192.0.2.10 or hub.local</string>
     <string name="pair_address_port_label">Port</string>
-    <string name="pair_address_connect">Connect</string>
+    <string name="common_connect">Connect</string>
     <string name="pair_address_error_empty">Enter the Hub\'s address.</string>
     <string name="pair_address_error_port">The port must be a number from 1 to 65535.</string>
     <string name="pair_fingerprint_heading">Check the Hub\'s fingerprint</string>
@@ -138,7 +136,6 @@
     <string name="pair_error_expired">This pairing code has expired or was already used. Show a new one on the Hub page.</string>
     <string name="pair_error_not_code">That is not a filament-kit pairing code.</string>
     <string name="pair_error_refused">The Hub did not accept this code. Check it and try again.</string>
-    <string name="home_title">Home</string>
     <!-- 1=version -->
     <string name="home_update_ready">Update ready: filament-kit %1$s.</string>
     <string name="home_update_hub_newer">Update the app: the Hub is newer, so some things may not work.</string>
@@ -160,34 +157,25 @@
     <string name="home_draft_discard_title">Discard this add?</string>
     <string name="home_draft_discard_body">Its photos and edits are removed from this phone.</string>
     <string name="home_draft_discarded">Add discarded.</string>
-    <string name="home_printers_title">Printers</string>
+    <string name="home_draft_yesterday">Yesterday</string>
     <string name="home_printers_all">All printers</string>
     <!-- 1=count -->
     <string name="home_printers_more">and %1$d more</string>
     <string name="home_printers_empty">No printers yet.</string>
-    <string name="home_printers_add">Add a printer</string>
+    <!-- 1=state 2=percent -->
+    <string name="home_printer_job">%1$s · %2$s %%</string>
     <!-- 1=hours 2=minutes -->
     <string name="home_printer_left_hours">%1$s h %2$s min</string>
     <!-- 1=minutes -->
     <string name="home_printer_left_minutes">%1$s min</string>
-    <!-- 1=state 2=percent -->
-    <string name="home_printer_job">%1$s · %2$s %%</string>
-    <string name="home_draft_yesterday">Yesterday</string>
-    <string name="settings_title">Settings</string>
-    <string name="settings_hub_title">Hub connection</string>
+    <string name="printers_add">Add a printer</string>
     <string name="settings_updates_title">App updates</string>
     <string name="settings_licences_title">Licences</string>
     <string name="settings_developer_title">Developer</string>
     <string name="settings_licences_summary">Free software under GPL-3.0-or-later</string>
     <string name="settings_developer_summary">Debug build tools</string>
-    <!-- 1=appearance 2=theme -->
-    <string name="settings_summary_appearance">%1$s · %2$s</string>
-    <!-- 1=hub 2=state -->
-    <string name="settings_summary_hub">%1$s · %2$s</string>
     <!-- 1=app_version -->
     <string name="settings_updates_current">App %1$s · up to date</string>
-    <!-- 1=app_version -->
-    <string name="settings_updates_unchecked">App %1$s</string>
     <!-- 1=version -->
     <string name="settings_updates_ready">Update ready: %1$s</string>
     <string name="settings_hub_none">No Hub is paired.</string>
@@ -201,9 +189,9 @@
     <string name="settings_hub_page_error_address">The Hub\'s address isn\'t known yet.</string>
     <string name="settings_hub_security_title">Security</string>
     <string name="settings_hub_check_title">Check the fingerprint when pairing by address</string>
-    <string name="settings_hub_check_on">On</string>
-    <string name="settings_hub_check_off">Off</string>
     <string name="settings_hub_check_help">When this is off, the app trusts the certificate a Hub presents when you pair by typing its address. A scanned QR code is always checked.</string>
+    <string name="settings_hub_check_off">Off</string>
+    <string name="settings_hub_check_on">On</string>
     <string name="settings_hub_skip_title">Skip the fingerprint check?</string>
     <string name="settings_hub_skip_body">Only do this on a network you trust.</string>
     <string name="settings_hub_skip_confirm">Skip the check</string>
@@ -214,16 +202,18 @@
     <string name="settings_updates_this_app">This app</string>
     <string name="settings_updates_on_hub">On the Hub</string>
     <string name="settings_updates_check">Check for updates</string>
-    <string name="settings_updates_check_unpaired">Pair with a Hub first: updates come from the Hub.</string>
     <string name="settings_updates_up_to_date">This app is up to date.</string>
+    <string name="settings_updates_check_unpaired">Pair with a Hub first: updates come from the Hub.</string>
+    <!-- 1=app_version -->
+    <string name="settings_updates_unchecked">App %1$s</string>
     <string name="settings_licences_line">filament-kit is free software under GPL-3.0-or-later. It comes with no warranty.</string>
     <string name="settings_licences_show">Show the GPL-3.0 text</string>
     <string name="settings_licences_hide">Hide the GPL-3.0 text</string>
     <!-- 1=name -->
     <string name="settings_licences_missing">%1$s is missing from this build.</string>
     <string name="settings_developer_tag_id">Tag ID</string>
-    <string name="settings_developer_simulate">Simulate a tag tap</string>
     <string name="settings_developer_tag_example">4:77:90:e</string>
+    <string name="settings_developer_simulate">Simulate a tag tap</string>
     <!-- 1=choice -->
     <string name="appearance_name">Appearance: %1$s</string>
     <!-- 1=choice -->
@@ -292,7 +282,7 @@
     <string name="common_loading_settings">Loading the current settings…</string>
     <!-- 1=thing -->
     <string name="common_loading_thing">Loading %1$s…</string>
-    <string name="common_more">More</string>
+    <string name="nav_more">More</string>
     <!-- 1=name -->
     <string name="common_more_actions_for">More actions for %1$s</string>
     <string name="common_next">Next</string>
@@ -312,6 +302,7 @@
     <string name="common_restore_them">Restore them</string>
     <!-- 1=name 2=action -->
     <string name="common_result_refused">%1$s did not accept %2$s. Try again.</string>
+    <string name="common_result_hub_text">The Hub\'s answer</string>
     <!-- 1=group -->
     <string name="common_save_group">Save %1$s</string>
     <string name="common_save_key">Save key</string>
@@ -321,7 +312,6 @@
     <string name="common_select_item">Select %1$s</string>
     <!-- 1=count -->
     <string name="common_selected_count">%1$d selected</string>
-    <string name="common_set">Set</string>
     <string name="common_show">Show</string>
     <!-- 1=name -->
     <string name="common_show_named">Show %1$s</string>
@@ -388,7 +378,10 @@
     <string name="field_file_error_image">%1$s: this image cannot be read.</string>
     <string name="field_file_error_not_zip">This is not a zip file. Choose the backup zip.</string>
     <!-- 1=count -->
-    <string name="field_file_error_photo_limit">%1$d photos at a time.</string>
+    <plurals name="field_file_error_photo_limit">
+        <item quantity="one">%1$d photo at a time.</item>
+        <item quantity="other">%1$d photos at a time.</item>
+    </plurals>
     <!-- 1=file -->
     <string name="field_file_error_too_large">The file is larger than the Hub takes. Copy it to the Hub and run: `sudo filament-kit restore %1$s`.</string>
     <!-- 1=count 2=max -->
@@ -408,7 +401,6 @@
     </plurals>
     <!-- 1=count 2=group -->
     <string name="form_leave_next">%1$d in %2$s</string>
-    <string name="form_saved_applies">Saved; applying… Follow it in the job panel.</string>
     <!-- 1=fields -->
     <string name="form_saved_fields">Saved: %1$s.</string>
     <!-- 1=saved 2=not_saved -->
@@ -444,8 +436,6 @@
     <string name="job_stopped">It stopped without finishing.</string>
     <string name="job_title_apply">Applying the changes</string>
     <string name="job_title_backup">Backup</string>
-    <string name="job_title_channel_nightly">Switching to nightly builds</string>
-    <string name="job_title_channel_stable">Switching to signed releases</string>
     <string name="job_title_check">Checking for updates</string>
     <string name="job_title_library_rollback">Going back to the previous Filament Catalog</string>
     <string name="job_title_library_update">Updating the Filament Catalog</string>
@@ -474,16 +464,13 @@
     <string name="lock_trusted_body">No code is needed in this browser until %1$s.</string>
     <string name="lock_trusted_link">Trusted computers</string>
     <string name="lock_trusted_stop">Stop trusting this computer</string>
-    <string name="lock_unlock_to_show">Unlock to show</string>
     <string name="lock_unlocked">Unlocked</string>
     <string name="lock_unlocked_body">Changes are allowed in this browser until you lock it or close the tab.</string>
     <string name="nav_devices">Devices</string>
     <string name="nav_everyday">Everyday</string>
-    <string name="nav_features">Features</string>
     <string name="nav_flash_device">Flash a device</string>
     <string name="nav_label">Sections</string>
     <string name="nav_logs">Logs</string>
-    <string name="nav_more">More</string>
     <!-- 1=section -->
     <string name="nav_more_current">More, current: %1$s</string>
     <string name="nav_more_sections">More sections</string>
@@ -539,12 +526,8 @@
     <!-- 1=number -->
     <string name="revision_undo">Undo revision %1$s</string>
     <string name="revision_undoing">Undoing…</string>
-    <string name="revision_undone">(undone)</string>
     <!-- 1=number 2=field 3=value -->
     <string name="revision_undone_result">Revision %1$s undone. %2$s is %3$s again.</string>
-    <string name="shell_skip">Skip to content</string>
-    <!-- 1=page 2=hub -->
-    <string name="shell_title">%1$s · %2$s</string>
     <!-- 1=loaded 2=total -->
     <string name="slot_count">%1$s of %2$s loaded</string>
     <string name="slot_in_use">In use</string>
@@ -553,7 +536,6 @@
     <string name="slot_load_disabled">Available when the printer is connected.</string>
     <string name="slot_none_offline">No slot data: the printer is offline.</string>
     <string name="slot_none_yet">No slots read yet. Test the connection, then map the slots.</string>
-    <string name="slot_reading">Reading…</string>
     <!-- 1=grams -->
     <string name="spool_left_grams">%1$s g left</string>
     <!-- 1=percent -->
@@ -580,7 +562,6 @@
     <!-- 1=number -->
     <string name="steps_do_first">Do step %1$s first.</string>
     <string name="steps_done">done</string>
-    <string name="subnav_dirty">Unsaved</string>
     <string name="subnav_label">Settings groups</string>
     <!-- 1=name -->
     <string name="subnav_phone">Group: %1$s</string>
@@ -609,24 +590,17 @@
     <string name="common_count_connected">%1$d connected</string>
     <!-- 1=count -->
     <string name="common_count_offline">%1$d offline</string>
-    <string name="common_features">Features</string>
+    <string name="nav_features">Features</string>
     <string name="common_go_to_features">Go to Features</string>
     <string name="common_hidden_locked">Hidden while locked</string>
-    <string name="common_hub_not_answering">Cannot reach the Hub. Check that it is on; this page tries again every 10 s.</string>
     <!-- 1=job_title -->
     <string name="common_job_running">%1$s… Follow it in the job panel.</string>
     <string name="common_klipper">Klipper</string>
     <string name="common_label_reader">Label Reader</string>
     <!-- 1=title -->
     <string name="common_loading">Loading %1$s.</string>
-    <string name="common_not_configured">Not configured</string>
-    <string name="common_not_set">Not set</string>
-    <string name="common_note">Note</string>
-    <string name="common_off">Off</string>
-    <string name="common_ok">OK</string>
-    <string name="common_on">On</string>
     <!-- 1=page 2=hub -->
-    <string name="common_page_title">%1$s · %2$s</string>
+    <string name="shell_title">%1$s · %2$s</string>
     <!-- 1=what 2=reason -->
     <string name="common_read_error">Could not read %1$s. %2$s</string>
     <string name="common_saved_applying">Saved; applying… Follow it in the job panel.</string>
@@ -662,31 +636,23 @@
         <item quantity="one">%1$d trusted computer</item>
         <item quantity="other">%1$d trusted computers</item>
     </plurals>
-    <string name="devices_never">Never</string>
+    <string name="common_never">Never</string>
     <string name="devices_off_body">Every trusted computer is forgotten, and each change needs the setup code. You can turn it on again here.</string>
-    <string name="devices_off_confirm">Turn off</string>
+    <string name="common_turn_off">Turn off</string>
     <string name="devices_off_title">Turn trusted computers off?</string>
     <string name="devices_pair_code">Pairing code</string>
-    <!-- 1=name -->
-    <string name="devices_pair_done">Paired: %1$s.</string>
     <string name="devices_pair_done_button">Done</string>
-    <string name="devices_pair_expired">The pairing code expired. Make a new one.</string>
-    <!-- 1=minutes -->
-    <string name="devices_pair_expires">Expires in %1$s min</string>
     <string name="devices_pair_fingerprint_other">Certificate fingerprint: check it matches.</string>
     <string name="devices_pair_fingerprint_phone">Certificate fingerprint: the phone asks for two groups of it.</string>
     <string name="devices_pair_instruction_phone">Open the filament-kit app or the web app and scan this code, or type the pairing code.</string>
     <string name="devices_pair_instruction_station">On the Weigh Station computer, run `sudo filament-kit weigh-station pair`, then paste this link.</string>
     <string name="devices_pair_instruction_sync">Paste this link into Slicer Sync when it asks for it.</string>
-    <string name="devices_pair_new_code">Make a new code</string>
     <string name="devices_pair_phone">Pair a phone</string>
-    <string name="devices_pair_qr_alt">QR code for pairing a phone</string>
     <string name="devices_pair_station_here">Pair the Weigh Station on this Hub</string>
     <string name="devices_pair_waiting">Waiting for the device…</string>
     <string name="devices_paired_title">Paired devices</string>
-    <string name="devices_readers_col_id">ID</string>
-    <string name="devices_readers_col_made">Made</string>
-    <string name="devices_readers_col_name">Name</string>
+    <string name="common_col_id">ID</string>
+    <string name="common_col_made">Made</string>
     <string name="devices_readers_empty">No Tag Reader tokens yet. Set up a Tag Reader in Flash a device, and it gets one by itself.</string>
     <string name="devices_readers_make">Make a token</string>
     <string name="devices_readers_name_placeholder">e.g. printer bench</string>
@@ -696,14 +662,12 @@
     <string name="devices_readers_pointer">Setting up a Tag Reader over USB is easier:</string>
     <string name="devices_readers_revoke">Revoke</string>
     <string name="devices_readers_title">Tag Readers</string>
-    <string name="devices_rename_confirm">Rename</string>
-    <string name="devices_rename_label">Name</string>
+    <string name="common_rename">Rename</string>
     <!-- 1=name -->
     <string name="devices_rename_title">Rename %1$s</string>
     <string name="devices_request_hint">Pair only if the Weigh Station shows the same six digits. If not, refuse it: someone else asked.</string>
     <!-- 1=name 2=address 3=code -->
     <string name="devices_request_line">%1$s at %2$s asks to pair. Its screen shows %3$s.</string>
-    <string name="devices_request_pair">Pair</string>
     <!-- 1=name -->
     <string name="devices_request_paired">Paired %1$s. It picks up its pairing within a few seconds.</string>
     <string name="devices_request_refuse">Refuse</string>
@@ -724,25 +688,16 @@
     <string name="devices_stop_trusting_body">This browser then needs the setup code for every change.</string>
     <string name="devices_stop_trusting_confirm">Stop trusting</string>
     <string name="devices_stop_trusting_title">Stop trusting this computer?</string>
-    <string name="devices_title">Devices</string>
     <string name="devices_trusted_col_expires">Runs out</string>
-    <string name="devices_trusted_col_last_seen">Last seen</string>
-    <string name="devices_trusted_col_made">Made</string>
-    <string name="devices_trusted_col_name">Name</string>
     <string name="devices_trusted_empty">No computer is trusted.</string>
     <string name="devices_trusted_explain">A trusted browser needs no setup code for 90 days after its last use. It never skips a question such as Roll back. A new setup code keeps trusted computers trusted; revoke them here.</string>
     <string name="devices_trusted_hub_itself">the Hub itself</string>
-    <string name="devices_trusted_locked">The list is shown once the page is unlocked.</string>
+    <string name="common_list_locked">The list is shown once the page is unlocked.</string>
     <string name="devices_trusted_off">Trusted computers are off: every change needs the setup code.</string>
-    <string name="devices_trusted_rename">Rename</string>
-    <string name="devices_trusted_revoke">Revoke</string>
     <string name="devices_trusted_revoke_all">Revoke all</string>
-    <string name="devices_trusted_stop">Stop trusting this computer</string>
     <!-- 1=name -->
     <string name="devices_trusted_this">This computer is trusted (%1$s).</string>
     <string name="devices_trusted_this_tag">(this computer)</string>
-    <string name="devices_trusted_title">Trusted computers</string>
-    <string name="devices_unknown">Unknown</string>
     <string name="devices_unpair">Unpair</string>
     <string name="devices_unpair_body">It can no longer reach the Hub until it is paired again.</string>
     <!-- 1=name -->
@@ -762,7 +717,7 @@
     <string name="features_applying_again">Applying the features again…</string>
     <string name="features_col_feature">Feature</string>
     <string name="features_col_needs">Needs</string>
-    <string name="features_col_state">State</string>
+    <string name="common_field_state">State</string>
     <string name="features_col_what">What it does</string>
     <string name="features_drawer_afterwards">On afterwards:</string>
     <string name="features_drawer_apply">Apply</string>
@@ -778,7 +733,6 @@
     <!-- 1=setup -->
     <string name="features_drawer_setup">Change the setup to %1$s?</string>
     <string name="features_drawer_unchanged">Nothing to change.</string>
-    <string name="features_features_title">Features</string>
     <string name="features_filter_all">All</string>
     <!-- 1=count -->
     <string name="features_filter_off">Off %1$d</string>
@@ -813,7 +767,6 @@
     <string name="features_name_remote">Remote access</string>
     <string name="features_name_server">Hub service</string>
     <string name="features_name_spoolman">Spoolman</string>
-    <string name="features_name_station">Weigh Station</string>
     <string name="features_name_updates">Automatic updates</string>
     <string name="features_name_web">Web access</string>
     <!-- 1=list -->
@@ -823,7 +776,6 @@
     <string name="features_setup_custom">Custom</string>
     <string name="features_setup_custom_line">Features chosen one by one.</string>
     <string name="features_setup_disabled">A machine with this setup has no Hub page.</string>
-    <string name="features_setup_server">Hub</string>
     <string name="features_setup_server_line">The Hub: inventory, printers, Slicer presets and this page.</string>
     <string name="features_setup_station">Weigh Station only</string>
     <!-- 1=hub_address -->
@@ -831,8 +783,6 @@
     <string name="features_setup_station_line">Only the scale and tag reader; the Hub runs on another machine.</string>
     <string name="features_setup_station_note">A Weigh Station only machine has no Hub page. To make one, on that machine run</string>
     <string name="features_setup_title">Setup</string>
-    <string name="features_title">Features</string>
-    <string name="features_turn_off">Turn off</string>
     <string name="features_turn_on">Turn on</string>
     <string name="features_uses_ai">Uses AI</string>
     <string name="flash_board">Board</string>
@@ -844,7 +794,6 @@
     <string name="flash_connect_hint">then pick the board in the browser\'s list.</string>
     <string name="flash_connect_write">Connect and write</string>
     <string name="flash_device_display">Weigh Station display</string>
-    <string name="flash_device_reader">Tag Reader</string>
     <string name="flash_display_hub">Plug the display into the Weigh Station computer. The Weigh Station writes its own firmware to it by itself.</string>
     <!-- 1=version -->
     <string name="flash_done_display">Done. The Weigh Station display firmware %1$s is written. Plug it into the Weigh Station computer.</string>
@@ -867,7 +816,6 @@
     <!-- 1=version -->
     <string name="flash_firmware">Firmware %1$s</string>
     <string name="flash_intro">Writes filament-kit\'s firmware over USB. Nothing is downloaded: the firmware comes with the Hub.</string>
-    <string name="flash_name_optional">Name (optional)</string>
     <string name="flash_no_board">No board was chosen. Press Connect and write again and pick the board.</string>
     <string name="flash_no_boards">No board is plugged into the Hub. Plug it in with a data cable; this list updates by itself.</string>
     <string name="flash_no_public">A Tag Reader needs the Hub\'s public address. Set it in Settings > Network and addresses.</string>
@@ -885,8 +833,7 @@
     <string name="flash_step_settings">Settings</string>
     <string name="flash_step_write">Write</string>
     <string name="flash_step_writing">Writing the firmware</string>
-    <string name="flash_stop">Stop</string>
-    <string name="flash_title">Flash a device</string>
+    <string name="common_stop">Stop</string>
     <string name="flash_wifi_again">Password again</string>
     <string name="flash_wifi_mismatch">The two passwords do not match.</string>
     <string name="flash_wifi_name">Wi-Fi name</string>
@@ -899,14 +846,7 @@
     <string name="hub_forbidden_name">Open the Hub page by the Hub\'s own name or address, for example %1$s. Other names can be added in Settings > Network and addresses.</string>
     <string name="hub_forbidden_network">This Hub page only opens from the home network.</string>
     <string name="hub_nav_switched_off">switched off</string>
-    <string name="hub_restart_wait">Wait for the Hub to come back.</string>
-    <string name="hub_try_now">Try now</string>
     <string name="job_title_unknown">Working</string>
-    <string name="lock_dialog_lock_now">Lock now</string>
-    <!-- 1=date -->
-    <string name="lock_dialog_trusted_body">No code is needed in this browser until %1$s.</string>
-    <string name="lock_dialog_trusted_stop">Stop trusting this computer</string>
-    <string name="lock_dialog_unlocked_body">Changes are allowed in this browser until you lock it or close the tab.</string>
     <string name="lock_no_code">This Hub has no setup code yet. At the Hub, run the command below, then type the code it shows.</string>
     <string name="lock_trust_gone">This computer is no longer trusted. Enter the setup code to go on.</string>
     <!-- 1=action -->
@@ -918,14 +858,10 @@
     <string name="logs_lines">Lines</string>
     <string name="logs_locked">Logs hold addresses and serial numbers, so reading them needs the setup code.</string>
     <string name="logs_none">No services are switched on.</string>
-    <string name="logs_reading">Reading…</string>
     <string name="logs_service">Service</string>
-    <string name="logs_show">Show</string>
     <string name="logs_show_again">Show again</string>
-    <string name="logs_title">Logs</string>
     <string name="logs_truncated">Only the end is shown: the rest is too long for this page.</string>
     <string name="logs_unlock_show">Unlock and show</string>
-    <string name="nav_flash">Flash a device</string>
     <string name="nav_summary_all_ok">All checks OK</string>
     <!-- 1=paired 2=count -->
     <plurals name="nav_summary_devices">
@@ -965,22 +901,16 @@
     <string name="nav_summary_updates_current">%1$s · up to date</string>
     <string name="overview_all_ok">Everything checked out.</string>
     <!-- 1=count -->
-    <plurals name="overview_badge_need_look">
-        <item quantity="one">%1$d needs a look</item>
-        <item quantity="other">%1$d need a look</item>
-    </plurals>
-    <!-- 1=count -->
     <string name="overview_badge_ok">%1$d OK</string>
     <string name="overview_checks_title">Checks</string>
     <string name="overview_col_check">Check</string>
-    <string name="overview_col_fix">Fix</string>
-    <string name="overview_col_status">Status</string>
+    <string name="common_fix">Fix</string>
+    <string name="common_field_status">Status</string>
     <!-- 1=reason -->
     <string name="overview_error">Could not check the Hub. %1$s</string>
     <string name="overview_fields_present">The fields were already there.</string>
     <string name="overview_half_body">To repair it, run this on the Hub:</string>
     <string name="overview_half_title">The last install or update stopped halfway</string>
-    <string name="overview_hidden_addresses">Addresses and serial numbers are hidden while the page is locked.</string>
     <!-- 1=job_title -->
     <string name="overview_job_running">%1$s is running</string>
     <string name="overview_loading">Checking the Hub.</string>
@@ -989,21 +919,16 @@
     <string name="overview_make_fields">Make the fields</string>
     <!-- 1=time -->
     <string name="overview_meta_checked">Checked %1$s</string>
-    <!-- 1=latest -->
-    <string name="overview_meta_update">%1$s is available</string>
     <!-- 1=version -->
     <string name="overview_meta_version">filament-kit %1$s</string>
-    <string name="overview_open_settings">Open settings</string>
     <string name="overview_run_checks">Run the checks again</string>
     <!-- 1=count -->
-    <string name="overview_show_ok">Show %1$d checks that are OK</string>
+    <plurals name="overview_show_ok">
+        <item quantity="one">Show %1$d check that is OK</item>
+        <item quantity="other">Show %1$d checks that are OK</item>
+    </plurals>
     <!-- 1=count -->
     <string name="overview_tile_devices_paired">%1$d paired</string>
-    <!-- 1=count -->
-    <plurals name="overview_tile_devices_readers">
-        <item quantity="one">%1$d Tag Reader</item>
-        <item quantity="other">%1$d Tag Readers</item>
-    </plurals>
     <!-- 1=count -->
     <string name="overview_tile_printers_not_configured">%1$d not configured</string>
     <!-- 1=limit -->
@@ -1012,8 +937,7 @@
     <!-- 1=used 2=limit -->
     <string name="overview_tile_reader_value">%1$s of %2$s</string>
     <!-- 1=id -->
-    <string name="overview_tile_recent_value">Spool %1$s</string>
-    <string name="overview_title">Overview</string>
+    <string name="spool_title">Spool %1$s</string>
     <string name="overview_todo_key">Set the Anthropic API key, so the Label Reader can use Cloud.</string>
     <string name="overview_todo_passphrase">Set the web passphrase, so Claude\'s connector can sign in.</string>
     <string name="overview_todo_phone">Pair a phone to add spools from it.</string>
@@ -1029,12 +953,12 @@
     <string name="presets_build_failed">The last preset build failed: %1$s</string>
     <string name="presets_build_none">No build yet.</string>
     <string name="presets_build_now">Build now</string>
-    <!-- 1=stamp 2=presets 3=orca 4=problems -->
-    <string name="presets_build_summary">Last build %1$s: %2$s presets, %3$s for Orca Slicer, %4$s problems.</string>
+    <!-- 1=stamp 2=presets 3=orca 4=count -->
+    <plurals name="presets_build_summary">
+        <item quantity="one">Last build %1$s: %2$s presets, %3$s for Orca Slicer, %4$d problem.</item>
+        <item quantity="other">Last build %1$s: %2$s presets, %3$s for Orca Slicer, %4$d problems.</item>
+    </plurals>
     <string name="presets_build_title">Build</string>
-    <string name="presets_col_bambu_parent">Bambu Studio parent</string>
-    <string name="presets_col_line">Line</string>
-    <string name="presets_col_material">Material</string>
     <string name="presets_col_orca_parent">Orca Slicer parent</string>
     <string name="presets_col_presets">Presets</string>
     <!-- 1=reason -->
@@ -1043,14 +967,17 @@
     <string name="presets_lines_error">Could not read the product lines. %1$s</string>
     <string name="presets_lines_none">No product lines yet. They are made from the filaments in Spoolman at the next build or when spools are added.</string>
     <string name="presets_lines_title">Product lines</string>
-    <!-- 1=stamp 2=presets 3=orca -->
-    <string name="presets_meta_build">Last build %1$s · %2$s presets, %3$s for Orca Slicer</string>
+    <!-- 1=stamp 2=count 3=orca -->
+    <plurals name="presets_meta_build">
+        <item quantity="one">Last build %1$s · %2$d preset, %3$s for Orca Slicer</item>
+        <item quantity="other">Last build %1$s · %2$d presets, %3$s for Orca Slicer</item>
+    </plurals>
     <string name="presets_meta_sync">Slicer Sync reported in</string>
     <string name="presets_off_text">Turn on Slicer presets in Features to build filament presets for Bambu Studio and Orca Slicer.</string>
     <string name="presets_off_title">Slicer presets are switched off</string>
     <string name="presets_parent_empty">Slicer Sync has not reported any parent presets yet. It reports them each time it runs.</string>
     <string name="presets_parent_label">Parent preset</string>
-    <string name="presets_parent_none">None</string>
+    <string name="common_none">None</string>
     <string name="presets_parent_save">Save parent</string>
     <string name="presets_parent_saved">Saved. A build was asked for.</string>
     <!-- 1=target 2=material -->
@@ -1076,7 +1003,10 @@
     <!-- 1=count -->
     <string name="presets_updates_accepted">, %1$d accepted: Slicer Sync writes them next</string>
     <!-- 1=count -->
-    <string name="presets_updates_accepted_result">%1$d updates accepted. Slicer Sync writes them at its next run, after its backup.</string>
+    <plurals name="presets_updates_accepted_result">
+        <item quantity="one">%1$d update accepted. Slicer Sync writes it at its next run, after its backup.</item>
+        <item quantity="other">%1$d updates accepted. Slicer Sync writes them at its next run, after its backup.</item>
+    </plurals>
     <!-- 1=target 2=name 3=file 4=keys -->
     <string name="presets_updates_line">%1$s: %2$s (in your file %3$s): %4$s</string>
     <string name="presets_updates_none">No updates. Presets already in your slicers are never replaced on their own.</string>
@@ -1084,28 +1014,30 @@
     <string name="presets_updates_show">Show what would change</string>
     <string name="presets_updates_stale">The updates changed since this list was shown. Show them again.</string>
     <!-- 1=count 2=lines 3=accepted -->
-    <string name="presets_updates_summary">%1$d updates on %2$s lines%3$s. Presets already in your slicers are never replaced unless you accept here.</string>
-    <string name="presets_updates_title">Updates</string>
+    <plurals name="presets_updates_summary">
+        <item quantity="one">%1$d update on %2$s line%3$s. Presets already in your slicers are never replaced unless you accept here.</item>
+        <item quantity="other">%1$d updates on %2$s lines%3$s. Presets already in your slicers are never replaced unless you accept here.</item>
+    </plurals>
     <!-- 1=count -->
-    <string name="presets_updates_would">%1$d updates would be accepted; nothing was changed yet.</string>
+    <plurals name="presets_updates_would">
+        <item quantity="one">%1$d update would be accepted; nothing was changed yet.</item>
+        <item quantity="other">%1$d updates would be accepted; nothing was changed yet.</item>
+    </plurals>
     <!-- 1=count -->
-    <string name="presets_updates_yours">%1$d generated presets have the same name as one of your own in Bambu Studio. Yours stay: rename or delete yours to get the generated one.</string>
+    <plurals name="presets_updates_yours">
+        <item quantity="one">%1$d generated preset has the same name as one of your own in Bambu Studio. Yours stays: rename or delete yours to get the generated one.</item>
+        <item quantity="other">%1$d generated presets have the same name as one of your own in Bambu Studio. Yours stay: rename or delete yours to get the generated one.</item>
+    </plurals>
     <string name="printers_access_code_hint">On the printer: Settings > Network/LAN.</string>
-    <string name="printers_access_code_label">Access Code</string>
-    <string name="printers_access_code_saved">Saved (hidden)</string>
     <!-- 1=name -->
     <string name="printers_access_code_title">Replace Access Code: %1$s</string>
-    <string name="printers_add">Add a printer</string>
     <string name="printers_add_address_placeholder">192.0.2.40 or printer.local</string>
     <!-- 1=address 2=reported 3=expected -->
     <string name="printers_add_error_itself">The printer at %1$s calls itself %2$s, not %3$s. Check the address.</string>
     <string name="printers_add_error_serial">filament-kit could not read the serial. Type it in: on the printer, Settings > Device.</string>
     <string name="printers_add_klipper_placeholder">voron.example</string>
-    <string name="printers_add_name_optional">Name (optional)</string>
     <string name="printers_add_serial_hint">Read from the printer when left empty.</string>
     <string name="printers_add_serial_optional">Serial (optional)</string>
-    <string name="printers_add_submit">Add printer</string>
-    <string name="printers_add_title">Add a printer</string>
     <string name="printers_add_type">Printer type</string>
     <string name="printers_add_wait">The Hub is adding the printer. Wait for its answer.</string>
     <!-- 1=name -->
@@ -1113,14 +1045,11 @@
     <string name="printers_added_next">Added. Test the connection next.</string>
     <!-- 1=version -->
     <string name="printers_addon_caption">Run these on the printer. Klipper add-on %1$s.</string>
-    <string name="printers_addon_checking">Checking the signed release…</string>
     <string name="printers_addon_show">Show the commands</string>
     <string name="printers_addon_text">Installs the spool macros and filament-kit\'s Moonraker settings on a Klipper printer.</string>
     <string name="printers_addon_title">Klipper add-on</string>
     <!-- 1=address 2=note -->
     <string name="printers_address_changed">Address changed to %1$s. %2$s Test the connection to check it.</string>
-    <string name="printers_address_label">Address</string>
-    <string name="printers_api_key">Moonraker API key</string>
     <string name="printers_bambu_off">Bambu Lab printers are switched off. Turn them on in Features.</string>
     <string name="printers_cert_not_pinned">Certificate not pinned yet</string>
     <string name="printers_cert_not_pinned_short">Not pinned yet</string>
@@ -1138,16 +1067,10 @@
     <string name="printers_clear_key_confirm">Clear key</string>
     <!-- 1=name -->
     <string name="printers_clear_key_title">Clear the Moonraker API key of %1$s?</string>
-    <string name="printers_col_address">Address</string>
     <string name="printers_col_connection">Connection</string>
     <string name="printers_col_printer">Printer</string>
     <string name="printers_col_slots">Slots</string>
-    <string name="printers_col_state">State</string>
     <string name="printers_collect_report">Collect a report</string>
-    <string name="printers_connect">Connect</string>
-    <string name="printers_details">Details</string>
-    <!-- 1=name -->
-    <string name="printers_details_for">Details for %1$s</string>
     <string name="printers_detect">Detect model and slots</string>
     <!-- 1=model 2=slots -->
     <string name="printers_detected">Detected %1$s with slots %2$s.</string>
@@ -1155,19 +1078,13 @@
     <string name="printers_detected_unconfirmed">Detected %1$s (not confirmed by the printer) with slots %2$s.</string>
     <!-- 1=name -->
     <string name="printers_detecting">Asking %1$s…</string>
-    <string name="printers_dismiss">Dismiss</string>
     <string name="printers_dismiss_body">It leaves this list. A new scan may find it again.</string>
     <!-- 1=name -->
     <string name="printers_dismiss_title">Dismiss %1$s?</string>
     <string name="printers_empty_bambu">Bambu Lab printers on the network appear here once they announce themselves.</string>
     <string name="printers_empty_klipper">Klipper printers are found by a scan.</string>
     <string name="printers_empty_title">No printers yet</string>
-    <string name="printers_error_access_code">Enter the Access Code shown on the printer.</string>
-    <string name="printers_error_address">Enter the printer\'s address.</string>
     <string name="printers_error_key">Enter the API key.</string>
-    <string name="printers_error_name">Enter a name.</string>
-    <string name="printers_fact_access_code">Access Code</string>
-    <string name="printers_fact_address">Address</string>
     <string name="printers_fact_certificate">Certificate</string>
     <string name="printers_fact_lane_data">Lane data</string>
     <string name="printers_fact_serial">Serial</string>
@@ -1192,7 +1109,6 @@
     <string name="printers_group_remove">Remove</string>
     <string name="printers_key_hint">Moonraker shows it in its settings.</string>
     <string name="printers_key_optional">Moonraker API key (optional)</string>
-    <string name="printers_key_save">Save key</string>
     <!-- 1=name -->
     <string name="printers_key_title">Moonraker API key: %1$s</string>
     <string name="printers_klipper_off">Klipper printers are switched off. Turn them on in Features.</string>
@@ -1206,12 +1122,10 @@
     <!-- 1=label -->
     <string name="printers_load_by_hand">Entered by hand (%1$s)</string>
     <string name="printers_load_col_position">Position</string>
-    <string name="printers_load_col_status">Status</string>
     <!-- 1=label 2=nozzle -->
     <string name="printers_load_confirmed">Confirmed (%1$s, %2$s nozzle)</string>
     <string name="printers_load_keep">Keep mapping</string>
     <string name="printers_load_no">No, I loaded</string>
-    <string name="printers_load_nozzle">Nozzle</string>
     <string name="printers_load_nozzle_left">Left nozzle</string>
     <string name="printers_load_nozzle_right">Right nozzle</string>
     <string name="printers_load_offer">Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you choose to.</string>
@@ -1230,7 +1144,6 @@
     <!-- 1=name -->
     <string name="printers_load_title">Map %1$s by loading filament</string>
     <string name="printers_load_waiting">Waiting</string>
-    <string name="printers_load_yes">Yes</string>
     <string name="printers_map_body">The printer changes its slot colours briefly and runs a short job with no motion. The colours are put back afterwards.</string>
     <string name="printers_map_failed">Mapping failed.</string>
     <string name="printers_map_failed_hint">If mapping keeps failing, map it by loading each slot instead.</string>
@@ -1251,15 +1164,11 @@
         <item quantity="other">%1$d printers</item>
     </plurals>
     <string name="printers_moonraker">Moonraker</string>
-    <!-- 1=name -->
-    <string name="printers_more_actions_for">More actions for %1$s</string>
-    <string name="printers_name_label">Name</string>
     <!-- 1=reason -->
     <string name="printers_needs_look">Needs a look: %1$s</string>
     <string name="printers_no_address">No address yet</string>
     <string name="printers_off_text">Turn on Bambu Lab printers or Klipper printers in Features to connect printers.</string>
     <string name="printers_off_title">Printers are switched off</string>
-    <string name="printers_rename">Rename</string>
     <string name="printers_rename_title">Rename printer</string>
     <string name="printers_replace_access_code">Replace Access Code</string>
     <string name="printers_replace_key">Replace Moonraker API key</string>
@@ -1267,9 +1176,8 @@
     <string name="printers_report_saved">Report saved: %1$s. %2$s</string>
     <!-- 1=name -->
     <string name="printers_reporting">Collecting a report from %1$s…</string>
-    <string name="printers_reports_col_made">Made</string>
     <string name="printers_reports_col_report">Report</string>
-    <string name="printers_reports_col_size">Size</string>
+    <string name="common_col_size">Size</string>
     <string name="printers_reports_empty">No report kept for this printer yet. Collect one when something goes wrong.</string>
     <!-- 1=size -->
     <string name="printers_reports_size">%1$s KiB</string>
@@ -1299,17 +1207,19 @@
     <string name="printers_result_scan_none">No Moonraker found on %1$s.</string>
     <string name="printers_result_scan_refused">Use a private network of at most 256 addresses, for example 192.0.2.0/24.</string>
     <string name="printers_result_scan_running">A scan is already running. Wait for it to finish.</string>
-    <!-- 1=seconds -->
-    <string name="printers_result_scan_soon">Wait %1$s seconds between scans.</string>
+    <!-- 1=count -->
+    <plurals name="printers_result_scan_soon">
+        <item quantity="one">Wait %1$d second between scans.</item>
+        <item quantity="other">Wait %1$d seconds between scans.</item>
+    </plurals>
     <string name="printers_saved_reports">Saved reports</string>
     <string name="printers_scan">Scan</string>
     <!-- 1=subnet -->
     <string name="printers_scanning">Scanning %1$s for Klipper printers…</string>
     <!-- 1=serial -->
     <string name="printers_serial_line">SN %1$s</string>
-    <string name="printers_set_code_wait">The Hub is saving the Access Code. Wait for its answer.</string>
     <string name="printers_set_key">Set Moonraker API key</string>
-    <string name="printers_slot_empty">Empty</string>
+    <string name="printers_set_code_wait">The Hub is saving the Access Code. Wait for its answer.</string>
     <string name="printers_slots_ams">AMS slots</string>
     <!-- 1=loaded 2=total -->
     <string name="printers_slots_loaded">%1$s/%2$s loaded</string>
@@ -1317,23 +1227,19 @@
     <string name="printers_slots_none">No slots read yet</string>
     <string name="printers_slots_offline">No slot data while offline</string>
     <string name="printers_slots_tool">Tool slots</string>
-    <string name="printers_stop">Stop</string>
     <string name="printers_subnet_hint">Leave it empty to scan the Hub\'s own network. At most 256 addresses (a /24).</string>
     <string name="printers_subnet_label">Subnet (optional)</string>
     <string name="printers_subnet_placeholder">192.0.2.0/24</string>
     <string name="printers_test">Test connection</string>
     <string name="printers_test_short">Test</string>
     <string name="printers_test_wait">Wait 3 seconds between tests.</string>
-    <string name="printers_testing">Testing…</string>
     <!-- 1=address -->
     <string name="printers_testing_address">Testing the connection to %1$s…</string>
-    <string name="printers_title">Printers</string>
     <string name="printers_use">Use this printer</string>
     <!-- 1=host 2=port -->
     <string name="printers_use_body">Found at %1$s:%2$s.</string>
     <!-- 1=name -->
     <string name="printers_use_title">Use %1$s</string>
-    <string name="recent_accept">Accept</string>
     <string name="recent_ask_button">Ask the Label Reader</string>
     <string name="recent_ask_hint">The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept.</string>
     <string name="recent_ask_label">What is wrong?</string>
@@ -1345,12 +1251,8 @@
     <string name="recent_col_filament">Filament</string>
     <string name="recent_col_photo">Photo</string>
     <string name="recent_col_spool">Spool</string>
-    <string name="recent_col_state">State</string>
-    <string name="recent_confidence_high">High</string>
     <string name="recent_confidence_low">Low: check these</string>
     <string name="recent_confidence_mostly_high">Mostly high</string>
-    <string name="recent_confidence_not_read">Not read</string>
-    <string name="recent_discard">Discard</string>
     <string name="recent_edit">Edit by hand</string>
     <string name="recent_empty_text">No spool has been added since the history started. Spools added from the web app, the app or the Weigh Station appear here.</string>
     <string name="recent_empty_title">Nothing added yet</string>
@@ -1358,69 +1260,43 @@
     <string name="recent_error">Could not read the additions. %1$s</string>
     <string name="recent_error_no_photo">No photo was kept for this record, and the On this Hub engine needs one. Switch on Cloud in Features, or correct the fields by hand.</string>
     <string name="recent_error_note">Say what is wrong first, for example: brand is Polymaker.</string>
-    <string name="recent_field_bed">Bed</string>
-    <string name="recent_field_bed_range">Bed range</string>
-    <string name="recent_field_brand">Brand</string>
-    <string name="recent_field_colour">Colour</string>
-    <string name="recent_field_density">Density</string>
-    <string name="recent_field_empty">(empty)</string>
-    <string name="recent_field_empty_weight">Empty spool weight</string>
-    <string name="recent_field_line">Line</string>
-    <string name="recent_field_material">Material</string>
-    <string name="recent_field_name">Name</string>
-    <string name="recent_field_net_weight">Net weight</string>
-    <string name="recent_field_nozzle">Nozzle</string>
-    <string name="recent_field_nozzle_range">Nozzle range</string>
-    <string name="recent_field_price">Price per kg</string>
     <string name="recent_fields_title">Fields</string>
     <!-- 1=count -->
     <string name="recent_filter_all">All %1$d</string>
     <!-- 1=count -->
     <string name="recent_filter_check">To check %1$d</string>
-    <string name="recent_group_identity">Identity</string>
-    <string name="recent_group_other">Other</string>
-    <string name="recent_group_temperatures">Temperatures</string>
     <string name="recent_group_weights">Weights</string>
     <!-- 1=number -->
     <string name="recent_item">Item %1$s</string>
     <!-- 1=ids 2=filament -->
     <string name="recent_item_line">Spools %1$s (filament %2$s). Changes apply to all of them.</string>
     <string name="recent_meta_change">Change</string>
-    <!-- 1=keep 2=size -->
-    <string name="recent_meta_kept">The newest %1$s additions are kept with their photos (%2$s now).</string>
+    <!-- 1=count 2=size -->
+    <plurals name="recent_meta_kept">
+        <item quantity="one">The newest %1$d addition is kept with its photos (%2$s now).</item>
+        <item quantity="other">The newest %1$d additions are kept with their photos (%2$s now).</item>
+    </plurals>
     <string name="recent_newer">Newer</string>
-    <string name="recent_newer_record">Newer record</string>
-    <string name="recent_no_photo">No photo</string>
     <string name="recent_no_spools">No spools</string>
     <!-- 1=keep -->
     <string name="recent_not_found">This record is no longer kept. Only the newest %1$s are.</string>
     <string name="recent_older">Older</string>
-    <string name="recent_older_record">Older record</string>
-    <!-- 1=number 2=total -->
-    <string name="recent_photo_of">Photo %1$s of %2$s</string>
     <string name="recent_photos_none">No photo was taken for this addition.</string>
     <!-- 1=count -->
     <string name="recent_photos_title">Photos (%1$d)</string>
     <string name="recent_reader_off">The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page.</string>
-    <string name="recent_record_added">Added</string>
     <string name="recent_record_photos">Photos</string>
     <string name="recent_record_source">Source</string>
     <plurals name="recent_record_spools">
         <item quantity="one">Spool</item>
         <item quantity="other">Spools</item>
     </plurals>
-    <string name="recent_record_state">State</string>
     <string name="recent_record_title">Record</string>
-    <!-- 1=count 2=revision -->
-    <string name="recent_result_accepted">Accepted. %1$d fields changed; revision %2$s keeps the old values.</string>
-    <string name="recent_result_asking">Asking the Label Reader… (up to a minute)</string>
     <string name="recent_result_discarded">Suggestion discarded. Nothing changed.</string>
     <!-- 1=ids -->
     <string name="recent_result_filament_empty">Filament %1$s has no spools left; it was not deleted.</string>
     <!-- 1=filament -->
     <string name="recent_result_filament_new">The spools now use filament %1$s (new).</string>
-    <!-- 1=count 2=fields -->
-    <string name="recent_result_saved">Saved %1$d changes: %2$s.</string>
     <!-- 1=number -->
     <string name="recent_result_undone">Revision %1$s undone.</string>
     <!-- 1=number 2=time 3=changes -->
@@ -1429,58 +1305,41 @@
     <string name="recent_revision_no_spools">Filament %1$s has no spools left (not deleted)</string>
     <!-- 1=number 2=time 3=changes -->
     <string name="recent_revision_reader">Revision %1$s, %2$s, by the Label Reader: %3$s</string>
-    <string name="recent_revision_undone">(undone)</string>
-    <string name="recent_revisions_empty">No revisions. Corrections by hand or by the Label Reader appear here.</string>
     <!-- 1=count -->
     <string name="recent_revisions_title">Revisions (%1$d)</string>
-    <string name="recent_save">Save changes</string>
     <string name="recent_source_hand">Added by hand</string>
     <string name="recent_source_phone">From a phone photo</string>
     <string name="recent_source_station">From the Weigh Station</string>
     <!-- 1=ids -->
     <string name="recent_spool_many">Spools %1$s</string>
-    <string name="recent_spool_none">None</string>
-    <!-- 1=id -->
-    <string name="recent_spool_one">Spool %1$s</string>
-    <string name="recent_state_detected">As detected</string>
-    <string name="recent_state_edited">Edited by hand</string>
-    <string name="recent_state_revised_ai">Revised by AI</string>
-    <string name="recent_suggest_no_photo">No photo was kept for this record: it worked from the saved values and your note.</string>
-    <string name="recent_suggest_nothing">The Label Reader changed nothing.</string>
     <!-- 1=engine 2=count -->
     <plurals name="recent_suggest_title">
         <item quantity="one">The Label Reader (%1$s) suggests %2$d change</item>
         <item quantity="other">The Label Reader (%1$s) suggests %2$d changes</item>
     </plurals>
-    <!-- 1=number -->
-    <string name="recent_undo">Undo revision %1$s</string>
     <string name="settings_appearance_desc">How this page looks on this device.</string>
     <string name="settings_appearance_mode">Light, dark or system</string>
     <string name="settings_appearance_mode_hint">System follows this device\'s light or dark setting.</string>
-    <string name="settings_appearance_new_devices">Theme for new devices</string>
     <string name="settings_appearance_new_devices_hint">Used by browsers and phones that have not chosen a theme.</string>
     <string name="settings_appearance_save">Save theme for new devices</string>
-    <string name="settings_appearance_theme">Theme</string>
     <!-- 1=name -->
     <string name="settings_appearance_theme_announce">Theme: %1$s.</string>
-    <string name="settings_back">Settings</string>
     <string name="settings_backups_col_kind">Kind</string>
-    <string name="settings_backups_col_made">Made</string>
-    <string name="settings_backups_col_size">Size</string>
     <string name="settings_backups_desc">One zip with everything filament-kit keeps.</string>
     <string name="settings_backups_done">Backup: done. It is at the top of the list.</string>
     <!-- 1=folder -->
     <string name="settings_backups_empty">No backups in %1$s yet.</string>
     <string name="settings_backups_keep">Keep nightly backups for</string>
     <string name="settings_backups_keep_hint">Backups made here are kept until you delete them.</string>
-    <!-- 1=days -->
-    <string name="settings_backups_keep_saved">Nightly backups are kept for %1$s days.</string>
-    <string name="settings_backups_keep_unit">days</string>
+    <!-- 1=count -->
+    <plurals name="settings_backups_keep_saved">
+        <item quantity="one">Nightly backups are kept for %1$d day.</item>
+        <item quantity="other">Nightly backups are kept for %1$d days.</item>
+    </plurals>
     <string name="settings_backups_kind_before">Before a restore</string>
     <string name="settings_backups_kind_here">Made here</string>
     <string name="settings_backups_kind_nightly">Nightly</string>
     <string name="settings_backups_list">Backups on the Hub</string>
-    <string name="settings_backups_locked">The list is shown once the page is unlocked.</string>
     <string name="settings_backups_nightly">Nightly backup</string>
     <string name="settings_backups_now">Back up now</string>
     <string name="settings_backups_preparing">Preparing the zip…</string>
@@ -1510,7 +1369,10 @@
     <string name="settings_catalog_off">The Filament Catalog is switched off.</string>
     <string name="settings_catalog_save">Save Catalog token</string>
     <!-- 1=version 2=source 3=count -->
-    <string name="settings_catalog_state">Version %1$s (%2$s), %3$d entries of your own.</string>
+    <plurals name="settings_catalog_state">
+        <item quantity="one">Version %1$s (%2$s), %3$d entry of your own.</item>
+        <item quantity="other">Version %1$s (%2$s), %3$d entries of your own.</item>
+    </plurals>
     <string name="settings_catalog_token">Catalog token (optional)</string>
     <string name="settings_catalog_token_hint">Lets the Filament Catalog download from a private repository, for example a GitHub token.</string>
     <string name="settings_catalog_token_remove">Remove token</string>
@@ -1536,7 +1398,6 @@
     <string name="settings_group_passphrase">Web passphrase</string>
     <string name="settings_group_storage">Storage locations</string>
     <string name="settings_group_voice">Weigh Station voice</string>
-    <string name="settings_hub_page_title">Settings</string>
     <string name="settings_intro">One Save per group. Appearance and Weigh Station voice apply as you choose.</string>
     <string name="settings_key_remove_body">Label Reader: Cloud (Claude) stops reading labels until a new key is set.</string>
     <string name="settings_key_remove_confirm">Remove key</string>
@@ -1552,7 +1413,6 @@
     <string name="settings_network_public">Public address</string>
     <string name="settings_network_public_hint">The https address of the web app and Claude\'s connector.</string>
     <string name="settings_network_public_hint_off">Used when Web access is on.</string>
-    <string name="settings_network_public_placeholder">https://hub.example/filament</string>
     <string name="settings_network_remote_off">Turn on Remote access in Features to get a certificate for the public address.</string>
     <string name="settings_network_remote_text">filament-kit never changes your firewall or router. Getting the certificate needs port 80 on your router to reach this Hub while it runs.</string>
     <string name="settings_network_save">Save network settings</string>
@@ -1562,7 +1422,6 @@
     <string name="settings_passphrase_again">New passphrase again</string>
     <string name="settings_passphrase_desc">Approves Claude\'s connector on the web access sign-in page.</string>
     <string name="settings_passphrase_done">Passphrase set.</string>
-    <string name="settings_passphrase_mismatch">The two passphrases do not match.</string>
     <string name="settings_passphrase_new">New passphrase</string>
     <!-- 1=count -->
     <string name="settings_passphrase_new_error">Use at least 12 characters. This one has %1$d.</string>
@@ -1580,22 +1439,21 @@
     <string name="settings_reader_corrections_yes">supported</string>
     <string name="settings_reader_desc">Reads a spool\'s label from a photo.</string>
     <string name="settings_reader_engine_cloud">Cloud</string>
-    <string name="settings_reader_engine_local">On this Hub</string>
     <string name="settings_reader_group_cloud">Cloud (Claude)</string>
     <string name="settings_reader_group_local">On this Hub</string>
     <string name="settings_reader_group_recent">Recently added</string>
     <string name="settings_reader_keep">Records kept</string>
     <string name="settings_reader_keep_error">Enter a whole number from 0 to 500.</string>
     <!-- 1=count 2=size -->
-    <string name="settings_reader_keep_hint">How many of the newest additions Recently added keeps with their photos (0 keeps none). Now %1$d records, %2$s of photos; a record with photos takes about 0.5 to 2 MB.</string>
+    <plurals name="settings_reader_keep_hint">
+        <item quantity="one">How many of the newest additions Recently added keeps with their photos (0 keeps none). Now %1$d record, %2$s of photos; a record with photos takes about 0.5 to 2 MB.</item>
+        <item quantity="other">How many of the newest additions Recently added keeps with their photos (0 keeps none). Now %1$d records, %2$s of photos; a record with photos takes about 0.5 to 2 MB.</item>
+    </plurals>
     <string name="settings_reader_key">Anthropic API key</string>
-    <string name="settings_reader_key_check">Check</string>
     <string name="settings_reader_key_checking">Checking the key…</string>
     <string name="settings_reader_key_cloud_off">Only used by Label Reader: Cloud (Claude), which is switched off.</string>
     <string name="settings_reader_key_new">New Anthropic API key</string>
     <string name="settings_reader_key_placeholder">sk-ant-…</string>
-    <string name="settings_reader_key_remove">Remove</string>
-    <string name="settings_reader_key_replace">Replace</string>
     <string name="settings_reader_key_saved">Key saved. Check it to be sure it works.</string>
     <string name="settings_reader_key_set">Set a key</string>
     <string name="settings_reader_key_wait">Wait 3 seconds between checks.</string>
@@ -1619,7 +1477,6 @@
     <string name="settings_reader_reads_unit">reads</string>
     <string name="settings_reader_restart_warn">Saving a new model or reads per day restarts the Hub. This page comes back by itself.</string>
     <string name="settings_reader_save">Save Label Reader</string>
-    <string name="settings_reader_test">Test</string>
     <!-- 1=reason -->
     <string name="settings_reader_test_degraded">Answers, but degraded: %1$s.</string>
     <!-- 1=address -->
@@ -1630,7 +1487,6 @@
     <string name="settings_reader_test_save_first">Save the address first, then test it.</string>
     <string name="settings_reader_testing">Asking the reader…</string>
     <string name="settings_reader_tier">Tier</string>
-    <string name="settings_reader_tier_auto">Automatic</string>
     <string name="settings_reader_tier_cpu">Processor (CPU)</string>
     <string name="settings_reader_tier_gpu">Graphics card (GPU)</string>
     <string name="settings_reader_tier_hint">Automatic uses the graphics card when the reader has one.</string>
@@ -1650,17 +1506,22 @@
     <string name="settings_restore_short">Backup of %1$s made %2$s</string>
     <string name="settings_restore_step1">Choose a backup zip</string>
     <string name="settings_restore_step2">Upload and check</string>
-    <string name="settings_restore_step3">Restore</string>
     <!-- 1=host 2=created 3=version -->
     <string name="settings_restore_summary_backup">Backup of %1$s made %2$s by filament-kit %3$s</string>
     <string name="settings_restore_summary_code">Afterwards the setup code is the one from the backup.</string>
     <!-- 1=list -->
     <string name="settings_restore_summary_features">Features: %1$s</string>
     <!-- 1=count -->
-    <string name="settings_restore_summary_files">Contains %1$d files</string>
+    <plurals name="settings_restore_summary_files">
+        <item quantity="one">Contains %1$d file</item>
+        <item quantity="other">Contains %1$d files</item>
+    </plurals>
     <!-- 1=count -->
-    <string name="settings_restore_summary_files_db">Contains %1$d files, and the Spoolman database</string>
-    <string name="settings_restore_summary_none">none</string>
+    <plurals name="settings_restore_summary_files_db">
+        <item quantity="one">Contains %1$d file, and the Spoolman database</item>
+        <item quantity="other">Contains %1$d files, and the Spoolman database</item>
+    </plurals>
+    <string name="common_value_none">none</string>
     <string name="settings_restore_summary_other_hub">another Hub</string>
     <string name="settings_restore_summary_replaces">This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first.</string>
     <!-- 1=hash -->
@@ -1669,11 +1530,8 @@
     <string name="settings_restore_uploading">Uploading and checking…</string>
     <string name="settings_restore_word">Type restore to go on</string>
     <string name="settings_restore_word_placeholder">restore</string>
-    <!-- 1=names -->
-    <string name="settings_saved">Saved: %1$s.</string>
     <!-- 1=done 2=total 3=names 4=field -->
     <string name="settings_saved_partial">Saved %1$s of %2$s: %3$s. %4$s was not saved: see the field.</string>
-    <string name="settings_saving">Saving…</string>
     <!-- 1=mode 2=theme -->
     <string name="settings_state_appearance">%1$s · %2$s</string>
     <!-- 1=time -->
@@ -1681,8 +1539,10 @@
     <string name="settings_state_catalog_none">Not downloaded</string>
     <string name="settings_state_no_public">No public address</string>
     <!-- 1=count -->
-    <string name="settings_state_storage">%1$d locations</string>
-    <string name="settings_state_voice_off">Switched off</string>
+    <plurals name="settings_state_storage">
+        <item quantity="one">%1$d location</item>
+        <item quantity="other">%1$d locations</item>
+    </plurals>
     <string name="settings_storage_boxes">Number of storage boxes</string>
     <string name="settings_storage_boxes_error">Enter a whole number, e.g. 2.</string>
     <string name="settings_storage_desc">Where spools are put away. Used when a spool is added.</string>
@@ -1706,16 +1566,13 @@
     <string name="settings_voice_saved_espeak">Saved: espeak-ng.</string>
     <string name="settings_voice_saved_piper">Saved: Piper. The Weigh Station downloads it next time it is idle.</string>
     <string name="updates_check">Check now</string>
-    <string name="updates_dialog_nightly_body">Nightly builds are untested and unsigned: filament-kit checks a download only against the nightly\'s own checksum list, which proves nothing about who built it. The newest nightly build is installed now, and each new one after it. Turn this off to go back to signed releases.</string>
-    <string name="updates_dialog_nightly_title">Follow nightly builds?</string>
     <string name="updates_dialog_rollback_body">filament-kit stops while it installs and starts again by itself. Settings and data stay.</string>
-    <string name="updates_dialog_rollback_confirm">Roll back</string>
+    <string name="updates_roll_back">Roll back</string>
     <!-- 1=version -->
     <string name="updates_dialog_rollback_title">Roll back to %1$s?</string>
-    <string name="updates_dialog_stop_body">The latest signed release replaces the nightly build now.</string>
-    <string name="updates_dialog_stop_confirm">Use signed releases</string>
-    <string name="updates_dialog_stop_title">Go back to signed releases?</string>
     <string name="updates_dialog_update_body">filament-kit stops while it installs and starts again by itself. Settings and data stay. The version before is kept, so you can roll back.</string>
+    <!-- 1=latest -->
+    <string name="updates_dialog_update_from_nightly">This replaces the nightly build with the signed release %1$s.</string>
     <!-- 1=version -->
     <string name="updates_dialog_update_title">Update to %1$s?</string>
     <!-- 1=reason -->
@@ -1729,11 +1586,6 @@
     <string name="updates_latest">Latest release</string>
     <!-- 1=latest -->
     <string name="updates_latest_available">%1$s is available.</string>
-    <string name="updates_nightly_off">Off: only signed releases are installed. Nightly builds are untested and unsigned.</string>
-    <!-- 1=installed -->
-    <string name="updates_nightly_on">On: %1$s is installed, and each new nightly build after it. Nightly builds are untested and unsigned.</string>
-    <string name="updates_nightly_title">Nightly builds</string>
-    <string name="updates_nightly_toggle">Follow nightly builds</string>
     <string name="updates_not_checked">Not checked yet.</string>
     <!-- 1=version -->
     <string name="updates_notes_current">Release notes of %1$s</string>
@@ -1746,16 +1598,12 @@
     <string name="updates_rollback_none">No earlier version is kept, so there is nothing to roll back to.</string>
     <!-- 1=previous -->
     <string name="updates_rollback_text">Goes back to %1$s, the version this one replaced. Settings and data stay.</string>
-    <string name="updates_rollback_title">Roll back</string>
     <!-- 1=schedule -->
     <string name="updates_schedule">Checked by itself %1$s (Automatic updates).</string>
     <string name="updates_schedule_off">Not checked by itself: Automatic updates are switched off.</string>
-    <string name="updates_title">Updates</string>
     <!-- 1=version -->
     <string name="updates_update">Update to %1$s</string>
     <string name="updates_version_title">Version</string>
-    <string name="common_access_code">Access Code</string>
-    <string name="common_access_code_help">On the printer: Settings > Network/LAN > Access Code.</string>
     <string name="common_add_klipper_printer">Add a Klipper printer</string>
     <string name="common_add_printer">Add printer</string>
     <string name="common_address">Address</string>
@@ -1765,7 +1613,6 @@
     <string name="common_age_minutes">%1$d min ago</string>
     <!-- 1=count -->
     <string name="common_age_seconds">%1$d s ago</string>
-    <string name="common_done">Done</string>
     <string name="common_edit">Edit</string>
     <string name="common_error_access_code">Enter the Access Code shown on the printer.</string>
     <string name="common_error_address">Enter the printer\'s address.</string>
@@ -1797,11 +1644,7 @@
     <string name="common_group_other">Other</string>
     <!-- 1=age -->
     <string name="common_last_update">Last update %1$s: the Hub did not answer.</string>
-    <string name="common_leave_empty_auto">Leave empty to choose automatically.</string>
-    <string name="common_leave_empty_full">Leave empty for a full spool.</string>
     <string name="common_moonraker_key">Moonraker API key</string>
-    <string name="common_name">Name</string>
-    <string name="common_name_optional">Name (optional)</string>
     <string name="common_no_tag_yet">No tag read yet: tap one on a reader.</string>
     <string name="common_preview">Preview</string>
     <string name="common_reader_tag_reader">Tag Reader</string>
@@ -1814,719 +1657,484 @@
     <string name="common_sealed">Sealed</string>
     <string name="common_search">Search</string>
     <string name="common_search_placeholder">Brand, colour, material</string>
-    <string name="common_status_as_detected">As detected</string>
-    <string name="common_status_done">Done</string>
-    <string name="common_status_edited_by_hand">Edited by hand</string>
-    <string name="common_status_failed">Failed</string>
-    <string name="common_status_not_configured">Not configured</string>
-    <string name="common_status_not_set">Not set</string>
-    <string name="common_status_off">Off</string>
-    <string name="common_status_on">On</string>
-    <string name="common_status_revised_by_ai">Revised by AI</string>
-    <string name="common_status_running">Running</string>
-    <string name="common_status_set">Set</string>
     <string name="common_undo">Undo</string>
-    <string name="common_undone">(undone)</string>
-    <string name="common_unit_celsius">°C</string>
-    <string name="common_unit_density">g/cm³</string>
-    <string name="common_unit_grams">g</string>
+    <string name="recent_revision_undone">(undone)</string>
     <string name="common_unit_percent" formatted="false">%</string>
-    <string name="common_weight_with_spool">Weight with spool</string>
-    <string name="common_weight_with_spool_optional">Weight with spool (optional)</string>
     <string name="nav_add">Add</string>
-    <string name="web_add_choose_photos">Choose photos</string>
-    <string name="web_add_daily_limit">Add by hand, or try again tomorrow.</string>
-    <string name="web_add_empty">No spools yet. Photograph the labels, or find a filament you already have.</string>
-    <string name="web_add_group_hand">By hand</string>
-    <string name="web_add_group_list">Spools to add</string>
-    <string name="web_add_group_photos">From label photos</string>
-    <string name="web_add_intro">Nothing is saved until you preview and press Add.</string>
+    <string name="add_choose_photos">Choose photos</string>
+    <string name="add_daily_limit">Add by hand, or try again tomorrow.</string>
+    <string name="add_empty">No spools yet. Photograph the labels, or find a filament you already have.</string>
+    <string name="add_group_hand">By hand</string>
+    <string name="add_group_list">Spools to add</string>
+    <string name="add_group_photos">From label photos</string>
+    <string name="add_intro">Nothing is saved until you preview and press Add.</string>
     <!-- 1=address -->
-    <string name="web_add_model_found">Found on the network at %1$s.</string>
-    <!-- 1=model -->
-    <string name="web_add_model_title">Add %1$s</string>
-    <string name="web_add_new_filament">New filament</string>
-    <string name="web_add_no_match">No filament matches. Use New filament.</string>
-    <string name="web_add_note_label">Note for the Label Reader (optional)</string>
-    <string name="web_add_note_placeholder">e.g. 3 of the grey ones, or all the PETG is white</string>
+    <string name="add_model_found">Found on the network at %1$s.</string>
+    <string name="add_note_placeholder">e.g. 3 of the grey ones, or all the PETG is white</string>
     <!-- 1=count 2=max -->
-    <string name="web_add_photo_count">%1$d of %2$s photos</string>
+    <string name="add_photo_count">%1$d of %2$s photos</string>
     <!-- 1=number 2=count -->
-    <string name="web_add_photo_enlarge">Photo %1$s of %2$d, enlarge</string>
-    <!-- 1=max -->
-    <string name="web_add_photo_limit">%1$s photos at a time. Remove one to add another.</string>
-    <!-- 1=number 2=count -->
-    <string name="web_add_photo_remove">Remove photo %1$s of %2$d</string>
-    <string name="web_add_photo_remove_this">Remove this photo</string>
-    <!-- 1=name -->
-    <string name="web_add_photo_unreadable">%1$s: this image cannot be read. Try another photo.</string>
-    <string name="web_add_read_labels">Read labels</string>
+    <string name="add_photo_enlarge">Photo %1$s of %2$d, enlarge</string>
     <!-- 1=count -->
-    <plurals name="web_add_reading">
+    <plurals name="add_photo_limit">
+        <item quantity="one">%1$d photo at a time. Remove one to add another.</item>
+        <item quantity="other">%1$d photos at a time. Remove one to add another.</item>
+    </plurals>
+    <!-- 1=number 2=count -->
+    <string name="add_photo_remove">Remove photo %1$s of %2$d</string>
+    <string name="add_photo_remove_this">Remove this photo</string>
+    <!-- 1=name -->
+    <string name="add_photo_unreadable">%1$s: this image cannot be read. Try another photo.</string>
+    <string name="add_read_labels">Read labels</string>
+    <!-- 1=count -->
+    <plurals name="add_reading">
         <item quantity="one">The Label Reader is reading %1$d photo… (up to a minute)</item>
         <item quantity="other">The Label Reader is reading %1$d photos… (up to a minute)</item>
     </plurals>
     <!-- 1=count -->
-    <plurals name="web_add_replace_body">
+    <plurals name="add_replace_body">
         <item quantity="one">You changed %1$d spool from the last read. Reading again replaces it; spools you added by hand stay.</item>
         <item quantity="other">You changed %1$d spools from the last read. Reading again replaces them; spools you added by hand stay.</item>
     </plurals>
-    <string name="web_add_replace_confirm">Read and replace</string>
-    <string name="web_add_replace_keep">Keep them</string>
-    <string name="web_add_replace_title">Replace the spools from the last read?</string>
+    <string name="add_replace_confirm">Read and replace</string>
+    <string name="add_replace_keep">Keep them</string>
+    <string name="add_replace_title">Replace the spools from the last read?</string>
     <!-- 1=count -->
-    <string name="web_add_results_cut">Showing the first %1$d. Type more of the name to narrow it down.</string>
+    <string name="add_results_cut">Showing the first %1$d. Type more of the name to narrow it down.</string>
     <!-- 1=material 2=net 3=count -->
-    <plurals name="web_add_row_detail">
+    <plurals name="add_row_detail">
         <item quantity="one">%1$s · %2$s g · %3$d spool</item>
         <item quantity="other">%1$s · %2$s g · %3$d spools</item>
     </plurals>
-    <string name="web_add_search_label">Find a filament you already have</string>
-    <string name="web_add_search_working">Searching…</string>
-    <string name="web_add_tag_conflict">Nothing was added.</string>
-    <string name="web_add_take_photo">Take photo</string>
-    <string name="web_add_title">Add spools</string>
-    <string name="web_add_wait_reader">Wait for the Label Reader.</string>
-    <string name="web_added_check_recent">Check them in Recently added</string>
+    <string name="add_search_label">Find a filament you already have</string>
+    <string name="add_tag_conflict">Nothing was added.</string>
+    <string name="add_wait_reader">Wait for the Label Reader.</string>
+    <string name="add_added_check_recent">Check them in Recently added</string>
     <!-- 1=count -->
-    <plurals name="web_added_new_filaments">
+    <plurals name="add_added_new_filaments">
         <item quantity="one">%1$d new filament needs a preset line.</item>
         <item quantity="other">%1$d new filaments need a preset line.</item>
     </plurals>
-    <string name="web_added_set_up_presets">Set up Slicer presets</string>
+    <string name="add_added_set_up_presets">Set up Slicer presets</string>
     <!-- 1=count -->
-    <plurals name="web_added_toast">
+    <plurals name="add_added_toast">
         <item quantity="one">Added %1$d spool.</item>
         <item quantity="other">Added %1$d spools.</item>
     </plurals>
-    <string name="web_address_bambu_label">IP address or name</string>
-    <string name="web_address_bambu_help">e.g. 192.0.2.40 or printer.local</string>
-    <string name="web_address_code_help">The Hub needs it again when the address changes. On the printer: Settings > Network/LAN > Access Code.</string>
-    <string name="web_address_confirm">Change address</string>
-    <string name="web_address_klipper_help">e.g. voron.example or 192.0.2.57</string>
-    <string name="web_address_key_help">Sent only to the new address. Leave it empty for none: a saved key is cleared.</string>
-    <!-- 1=printer -->
-    <string name="web_address_title">Change address: %1$s</string>
-    <string name="web_banner_back_online">Connected to the Hub again.</string>
-    <string name="web_banner_no_network">This phone has no network. Your draft is kept on this phone.</string>
-    <string name="web_banner_offline">Cannot reach the Hub.</string>
-    <string name="web_banner_retrying">Retrying every 10 s.</string>
-    <string name="web_banner_try_now">Try now</string>
-    <!-- 1=count -->
-    <plurals name="web_bar_add">
-        <item quantity="one">Add %1$d spool</item>
-        <item quantity="other">Add %1$d spools</item>
-    </plurals>
-    <string name="web_bar_adding">Adding to Spoolman…</string>
-    <string name="web_bar_adding_button">Adding…</string>
+    <string name="printer_address_bambu_help">e.g. 192.0.2.40 or printer.local</string>
+    <string name="printer_address_bambu_label">IP address or name</string>
+    <string name="printer_address_code_help">The Hub needs it again when the address changes. On the printer: Settings > Network/LAN > Access Code.</string>
+    <string name="printer_address_klipper_help">e.g. voron.example or 192.0.2.57</string>
+    <string name="printer_address_key_help">Sent only to the new address. Leave it empty for none: a saved key is cleared.</string>
+    <string name="shell_banner_back_online">Connected to the Hub again.</string>
+    <string name="shell_banner_no_network">This phone has no network. Your draft is kept on this phone.</string>
+    <string name="shell_banner_offline">Cannot reach the Hub.</string>
+    <string name="shell_banner_retrying">Retrying every 10 s.</string>
+    <string name="common_adding">Adding…</string>
     <!-- 1=number -->
-    <string name="web_bar_changed">You changed spool %1$s. Preview again.</string>
-    <string name="web_bar_empty">Add a spool first: photograph a label or find a filament.</string>
+    <string name="add_bar_changed">You changed spool %1$s. Preview again.</string>
+    <string name="add_bar_empty">Add a spool first: photograph a label or find a filament.</string>
     <!-- 1=number 2=field -->
-    <string name="web_bar_invalid">Spool %1$s: enter grams above 0 for %2$s.</string>
+    <string name="add_bar_invalid">Spool %1$s: enter grams above 0 for %2$s.</string>
     <!-- 1=number 2=fields -->
-    <string name="web_bar_missing">Spool %1$s needs: %2$s.</string>
+    <string name="add_bar_missing">Spool %1$s needs: %2$s.</string>
     <!-- 1=count 2=number -->
-    <string name="web_bar_missing_many">%1$d spools need fields. Spool %2$s is first.</string>
-    <string name="web_bar_offline">The Hub cannot be reached. Your spools are kept on this phone.</string>
+    <plurals name="add_bar_missing_many">
+        <item quantity="one">%1$d spool needs fields. Spool %2$s is first.</item>
+        <item quantity="other">%1$d spools need fields. Spool %2$s is first.</item>
+    </plurals>
+    <string name="add_bar_offline">The Hub cannot be reached. Your spools are kept on this phone.</string>
     <!-- 1=count -->
-    <plurals name="web_bar_previewed">
+    <plurals name="add_bar_previewed">
         <item quantity="one">Preview ready: %1$d spool.</item>
         <item quantity="other">Preview ready: %1$d spools.</item>
     </plurals>
-    <string name="web_bar_previewing">Checking with the Hub…</string>
-    <string name="web_bar_problems">The Hub found problems. Fix them and preview again.</string>
+    <string name="add_bar_problems">The Hub found problems. Fix them and preview again.</string>
     <!-- 1=count -->
-    <plurals name="web_bar_ready">
+    <plurals name="add_bar_ready">
         <item quantity="one">%1$d spool · not previewed</item>
         <item quantity="other">%1$d spools · not previewed</item>
     </plurals>
     <!-- 1=count -->
-    <plurals name="web_bar_to_check">
+    <plurals name="add_bar_to_check">
         <item quantity="one">%1$d field to check</item>
         <item quantity="other">%1$d fields to check</item>
     </plurals>
     <!-- 1=printer -->
-    <string name="web_camera_alt">Camera of %1$s</string>
-    <string name="web_camera_failed">The camera did not start. Check that the printer is on, LAN mode live view is on, and not too many views are open.</string>
-    <string name="web_camera_no_hls">This browser cannot play this printer\'s camera. Use Safari on iPhone or Mac.</string>
-    <string name="web_camera_starting">Starting the camera…</string>
-    <string name="web_camera_too_many">Too many camera views are open (4 at most). Close one on another phone or tab.</string>
-    <string name="web_card_bed_optional">Bed (°C, optional)</string>
+    <string name="printer_camera_alt">Camera of %1$s</string>
+    <string name="printer_camera_failed">The camera did not start. Check that the printer is on, LAN mode live view is on, and not too many views are open.</string>
+    <string name="printer_camera_no_hls">This browser cannot play this printer\'s camera. Use Safari on iPhone or Mac.</string>
+    <string name="printer_camera_starting">Starting the camera…</string>
+    <string name="printer_camera_too_many">Too many camera views are open (4 at most). Close one on another phone or tab.</string>
     <!-- 1=count -->
-    <string name="web_card_chip_count">x%1$d</string>
-    <!-- 1=filament -->
-    <string name="web_card_chip_existing">Existing filament %1$s</string>
-    <string name="web_card_chip_new">New filament</string>
-    <string name="web_card_colour_error">Enter a colour as 6 hex digits, e.g. #2B2B2E.</string>
-    <string name="web_card_colour_optional">Colour (optional)</string>
-    <string name="web_card_colour_placeholder">#2B2B2E</string>
-    <string name="web_card_degrees_error">Enter degrees above 0.</string>
-    <string name="web_card_density_error">Enter a density above 0.</string>
-    <string name="web_card_density_optional">Density (optional)</string>
+    <string name="add_card_chip_count">x%1$d</string>
+    <string name="add_card_colour_error">Enter a colour as 6 hex digits, e.g. #2B2B2E.</string>
+    <string name="add_card_colour_optional">Colour (optional)</string>
+    <string name="add_card_colour_placeholder">#2B2B2E</string>
+    <string name="add_card_density_optional">Density (optional)</string>
     <!-- 1=title -->
-    <string name="web_card_expand">Edit %1$s</string>
-    <string name="web_card_grams_error">Enter grams above 0.</string>
-    <string name="web_card_gross_single">Only used for one opened spool.</string>
-    <string name="web_card_group_amount">Amount</string>
-    <string name="web_card_group_print">Print settings</string>
-    <string name="web_card_group_state">State</string>
-    <string name="web_card_group_storage">Storage</string>
-    <string name="web_card_line_help">The product line, e.g. PolyTerra PLA. Slicer presets are built per line.</string>
-    <string name="web_card_line_optional">Line (optional)</string>
-    <string name="web_card_location_automatic">Automatic</string>
+    <string name="add_card_expand">Edit %1$s</string>
+    <string name="add_card_gross_single">Only used for one opened spool.</string>
+    <string name="add_card_line_help">The product line, e.g. PolyTerra PLA. Slicer presets are built per line.</string>
+    <string name="add_card_line_optional">Line (optional)</string>
     <!-- 1=rule -->
-    <string name="web_card_location_automatic_rule">Automatic (%1$s)</string>
-    <string name="web_card_lot_optional">Lot (optional)</string>
-    <string name="web_card_name_help">With the colour, e.g. PolyTerra PLA Charcoal Black</string>
-    <string name="web_card_new_spool">New spool</string>
-    <string name="web_card_no_colour">No colour</string>
-    <string name="web_card_note_help">Saved on the spool.</string>
-    <string name="web_card_note_optional">Note (optional)</string>
-    <string name="web_card_nozzle_optional">Nozzle (°C, optional)</string>
+    <string name="add_card_location_automatic_rule">Automatic (%1$s)</string>
+    <string name="add_card_lot_optional">Lot (optional)</string>
+    <string name="add_card_name_help">With the colour, e.g. PolyTerra PLA Charcoal Black</string>
+    <string name="add_card_new_spool">New spool</string>
+    <string name="add_card_note_help">Saved on the spool.</string>
+    <string name="add_card_note_optional">Note (optional)</string>
     <!-- 1=grams -->
-    <string name="web_card_opened">Opened, %1$s g on the scale</string>
+    <string name="add_card_opened">Opened, %1$s g on the scale</string>
     <!-- 1=price_line -->
-    <string name="web_card_price_help">From the label: %1$s</string>
-    <string name="web_card_price_optional">Price per kg (optional)</string>
-    <string name="web_card_sealed">Still sealed (in its bag or box)</string>
-    <!-- 1=reason -->
-    <string name="web_card_sealed_reason">Label Reader: %1$s</string>
-    <string name="web_card_spools_error">Enter a whole number, 1 or more.</string>
-    <string name="web_card_tare_optional">Empty spool weight (optional)</string>
-    <!-- 1=printer -->
-    <string name="web_cert_body">The next connection pins the certificate %1$s shows then. Enter its Access Code to go on.</string>
-    <string name="web_cert_confirm">Forget certificate</string>
-    <!-- 1=printer -->
-    <string name="web_cert_title">Forget the certificate of %1$s?</string>
-    <string name="web_code_confirm">Replace Access Code</string>
-    <!-- 1=printer -->
-    <string name="web_code_title">Replace Access Code: %1$s</string>
+    <string name="add_card_price_help">From the label: %1$s</string>
+    <string name="add_card_price_optional">Price per kg (optional)</string>
+    <string name="add_card_spools_error">Enter a whole number, 1 or more.</string>
+    <string name="add_card_tare_optional">Empty spool weight (optional)</string>
     <!-- 1=fields -->
-    <string name="web_confidence_estimated">Estimated: %1$s</string>
-    <string name="web_confidence_high">High</string>
-    <string name="web_confidence_hint">The Label Reader was not sure: check this.</string>
-    <!-- 1=fields -->
-    <string name="web_confidence_low">Low: check %1$s</string>
-    <string name="web_confidence_mark_low">Low: check this</string>
-    <string name="web_confidence_mark_medium">Medium</string>
-    <string name="web_confidence_mark_not_on_label">Not on the label</string>
-    <!-- 1=fields -->
-    <string name="web_confidence_medium">Medium: %1$s</string>
-    <!-- 1=fields -->
-    <string name="web_confidence_needs">Needs: %1$s</string>
-    <!-- 1=fields -->
-    <string name="web_confidence_not_on_label">Not on the label: %1$s</string>
+    <string name="confidence_estimated">Estimated: %1$s</string>
     <!-- 1=age 2=count -->
-    <plurals name="web_draft_banner">
+    <plurals name="add_draft_banner">
         <item quantity="one">You have a draft from %1$s: %2$d spool.</item>
         <item quantity="other">You have a draft from %1$s: %2$d spools.</item>
     </plurals>
     <!-- 1=count -->
-    <plurals name="web_draft_discard_body">
+    <plurals name="add_draft_discard_body">
         <item quantity="one">The %1$d spool on this phone is deleted. Nothing was added to the inventory.</item>
         <item quantity="other">The %1$d spools on this phone are deleted. Nothing was added to the inventory.</item>
     </plurals>
-    <string name="web_draft_discarded">Discarded.</string>
-    <string name="web_draft_no_storage">This browser cannot keep a draft. Finish before leaving the page.</string>
-    <string name="web_draft_other_tab">This add is also open in another tab, which now keeps it. Reload this tab to continue here.</string>
-    <string name="web_draft_photos_not_kept">The photos are not kept; take them again to read the labels again.</string>
-    <string name="web_draft_restore">Restore them</string>
-    <string name="web_error_bad_origin">The Hub refused this because the page was opened from another address. Reload the page and try again.</string>
-    <string name="web_error_internal">The Hub hit an error it did not expect. The details are on the Hub page under Logs.</string>
-    <string name="web_error_kept">Your photos and edits are kept.</string>
+    <string name="add_draft_discarded">Discarded.</string>
+    <string name="add_draft_no_storage">This browser cannot keep a draft. Finish before leaving the page.</string>
+    <string name="add_draft_other_tab">This add is also open in another tab, which now keeps it. Reload this tab to continue here.</string>
+    <string name="add_draft_photos_not_kept">The photos are not kept; take them again to read the labels again.</string>
+    <string name="shell_error_bad_origin">The Hub refused this because the page was opened from another address. Reload the page and try again.</string>
+    <string name="shell_error_internal">The Hub hit an error it did not expect. The details are on the Hub page under Logs.</string>
     <!-- 1=status -->
-    <string name="web_error_status">The Hub answered with an error (HTTP %1$s). Try again; if it keeps happening, look on the Hub page under Logs.</string>
-    <string name="web_forget_body_bambu">filament-kit stops connecting to it and deletes its Access Code. To use it again, add it again.</string>
-    <string name="web_forget_body_klipper">filament-kit stops connecting to it and deletes its Moonraker API key, if one is saved.</string>
-    <!-- 1=printer -->
-    <string name="web_forget_title">Forget %1$s?</string>
-    <string name="web_found_details">Details</string>
-    <string name="web_found_engine_cloud">Cloud (Claude)</string>
-    <string name="web_found_engine_hub">On this Hub</string>
-    <string name="web_found_none">Found no spools. Try clearer photos of the labels, or add by hand.</string>
-    <string name="web_found_questions">The Label Reader asks</string>
+    <string name="shell_error_status">The Hub answered with an error (HTTP %1$s). Try again; if it keeps happening, look on the Hub page under Logs.</string>
+    <string name="add_found_engine_cloud">Cloud (Claude)</string>
+    <string name="add_found_none">Found no spools. Try clearer photos of the labels, or add by hand.</string>
+    <string name="add_found_questions">The Label Reader asks</string>
     <!-- 1=engine 2=model -->
-    <string name="web_found_reader">Label Reader: %1$s · %2$s</string>
+    <string name="add_found_reader">Label Reader: %1$s · %2$s</string>
     <!-- 1=count 2=photos -->
-    <plurals name="web_found_result">
+    <plurals name="add_found_result">
         <item quantity="one">Found %1$d spool in %2$s photos.</item>
         <item quantity="other">Found %1$d spools in %2$s photos.</item>
     </plurals>
     <!-- 1=grams 2=seconds -->
-    <string name="web_found_scale_unused">Weigh Station scale: %1$s g, %2$s s ago (not used: only for one opened spool).</string>
+    <string name="add_found_scale_unused">Weigh Station scale: %1$s g, %2$s s ago (not used: only for one opened spool).</string>
     <!-- 1=grams 2=seconds -->
-    <string name="web_found_scale_used">Weigh Station scale: %1$s g, %2$s s ago (filled in as Weight with spool).</string>
+    <string name="add_found_scale_used">Weigh Station scale: %1$s g, %2$s s ago (filled in as Weight with spool).</string>
     <!-- 1=tag 2=seconds 3=reader -->
-    <string name="web_found_tag_notice">Tag %1$s was tapped %2$s s before the photos on %3$s, so this spool counts as opened. Adding links the tag to it (one opened spool only).</string>
-    <string name="web_found_tier_cpu">CPU</string>
-    <string name="web_found_tier_gpu">GPU</string>
-    <string name="web_found_title">What the Label Reader found</string>
+    <string name="add_found_tag_notice">Tag %1$s was tapped %2$s s before the photos on %3$s, so this spool counts as opened. Adding links the tag to it (one opened spool only).</string>
+    <string name="add_found_tier_cpu">CPU</string>
+    <string name="add_found_tier_gpu">GPU</string>
+    <string name="add_found_title">What the Label Reader found</string>
     <!-- 1=tokens_in 2=tokens_cached 3=tokens_out -->
-    <string name="web_found_usage">%1$s tokens in (%2$s cached), %3$s out</string>
-    <string name="web_hide_access_code">Hide Access Code</string>
-    <string name="web_hide_api_key">Hide API key</string>
-    <string name="web_hint_estimated">Estimated by the Label Reader: not printed on the label.</string>
-    <string name="web_hint_from_brand_list">Filled in from the brand list</string>
+    <string name="add_found_usage">%1$s tokens in (%2$s cached), %3$s out</string>
+    <string name="printer_api_key_hide">Hide API key</string>
+    <string name="add_hint_estimated">Estimated by the Label Reader: not printed on the label.</string>
+    <string name="add_hint_from_brand_list">Filled in from the brand list</string>
     <!-- 1=material -->
-    <string name="web_hint_typical_for">Typical for %1$s</string>
-    <string name="web_hub_cannot_be_reached">The Hub cannot be reached.</string>
-    <string name="web_install_note">Print alerts on iPhone work only from the Home Screen.</string>
-    <string name="web_install_step_1">Tap Share in Safari\'s toolbar (the square with an arrow).</string>
-    <string name="web_install_step_2">Choose Add to Home Screen.</string>
-    <string name="web_install_step_3">Tap Add.</string>
-    <string name="web_install_title">Add filament-kit to the Home Screen</string>
-    <string name="web_key_confirm">Save key</string>
-    <string name="web_key_error">Enter the API key.</string>
-    <!-- 1=printer -->
-    <string name="web_key_title">Moonraker API key: %1$s</string>
-    <string name="web_load_change">Change</string>
-    <string name="web_load_last_tag">Use the last tapped tag</string>
+    <string name="add_hint_typical_for">Typical for %1$s</string>
+    <string name="shell_hub_cannot_be_reached">The Hub cannot be reached.</string>
+    <string name="install_note">Print alerts on iPhone work only from the Home Screen.</string>
+    <string name="install_step_1">Tap Share in Safari\'s toolbar (the square with an arrow).</string>
+    <string name="install_step_2">Choose Add to Home Screen.</string>
+    <string name="install_step_3">Tap Add.</string>
+    <string name="install_title">Add filament-kit to the Home Screen</string>
+    <string name="spool_load_last_tag">Use the last tapped tag</string>
     <!-- 1=slot -->
-    <string name="web_load_loaded_toast">Loaded into %1$s.</string>
-    <string name="web_load_no_tag">No tag read yet: tap one.</string>
-    <string name="web_load_or">or</string>
-    <string name="web_load_pick_first">Pick a spool first.</string>
-    <string name="web_load_pick_hint">Pick a spool: tap its tag on a reader, or search.</string>
+    <string name="spool_load_loaded_toast">Loaded into %1$s.</string>
+    <string name="spool_load_no_tag">No tag read yet: tap one.</string>
+    <string name="spool_load_or">or</string>
+    <string name="spool_load_pick_first">Pick a spool first.</string>
+    <string name="spool_load_pick_hint">Pick a spool: tap its tag on a reader, or search.</string>
     <!-- 1=id 2=name 3=location 4=grams -->
-    <string name="web_load_picked">Spool %1$s, %2$s (%3$s, %4$s g)</string>
+    <string name="spool_load_picked">Spool %1$s, %2$s (%3$s, %4$s g)</string>
     <!-- 1=spool 2=slot -->
-    <string name="web_load_plan">Load %1$s into %2$s</string>
+    <string name="spool_load_plan">Load %1$s into %2$s</string>
     <!-- 1=id 2=slot 3=location -->
-    <string name="web_load_plan_goes_back">Spool %1$s now in %2$s goes back to %3$s</string>
+    <string name="spool_load_plan_goes_back">Spool %1$s now in %2$s goes back to %3$s</string>
     <!-- 1=mm -->
-    <string name="web_load_plan_nozzle">Nozzle: %1$s mm</string>
+    <string name="spool_load_plan_nozzle">Nozzle: %1$s mm</string>
     <!-- 1=mm -->
-    <string name="web_load_plan_nozzle_assumed">Nozzle size not reported by the printer; assuming %1$s mm</string>
+    <string name="spool_load_plan_nozzle_assumed">Nozzle size not reported by the printer; assuming %1$s mm</string>
     <!-- 1=preset -->
-    <string name="web_load_plan_preset">Preset: %1$s</string>
-    <string name="web_load_plan_preset_none">none</string>
-    <string name="web_load_previous_place">its previous place</string>
-    <string name="web_load_see_above">The Hub found a problem; see above.</string>
+    <string name="spool_load_plan_preset">Preset: %1$s</string>
+    <string name="spool_load_see_above">The Hub found a problem; see above.</string>
     <!-- 1=slot -->
-    <string name="web_load_sent_line">Sent to %1$s. The printer accepted it but hasn\'t shown the change yet.</string>
+    <string name="spool_load_sent_line">Sent to %1$s. The printer accepted it but hasn\'t shown the change yet.</string>
     <!-- 1=slot -->
-    <string name="web_load_sent_toast">Sent to %1$s.</string>
+    <string name="spool_load_sent_toast">Sent to %1$s.</string>
     <!-- 1=tag -->
-    <string name="web_load_tag_unlinked">Tag %1$s is not linked to a spool.</string>
+    <string name="spool_load_tag_unlinked">Tag %1$s is not linked to a spool.</string>
     <!-- 1=slot -->
-    <string name="web_load_title">Load into %1$s</string>
-    <string name="web_load_working_out">Working out the plan…</string>
+    <string name="spool_load_title">Load into %1$s</string>
+    <string name="spool_load_working_out">Working out the plan…</string>
     <!-- 1=position 2=slot -->
-    <string name="web_manual_by_hand">%1$s: Entered by hand (%2$s)</string>
+    <string name="printers_manual_by_hand">%1$s: Entered by hand (%2$s)</string>
     <!-- 1=position 2=slot -->
-    <string name="web_manual_confirmed">%1$s: Confirmed (%2$s)</string>
+    <string name="printers_manual_confirmed">%1$s: Confirmed (%2$s)</string>
     <!-- 1=position 2=slot 3=nozzle -->
-    <string name="web_manual_confirmed_nozzle">%1$s: Confirmed (%2$s, %3$s nozzle)</string>
-    <string name="web_manual_no_loaded">No, I loaded</string>
-    <string name="web_manual_nozzle">Nozzle</string>
-    <string name="web_manual_nozzle_left">Left nozzle</string>
-    <string name="web_manual_nozzle_right">Right nozzle</string>
-    <string name="web_manual_offer">Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you choose to.</string>
-    <string name="web_manual_offer_no">No thanks</string>
-    <string name="web_manual_offer_yes">Yes, how do I share it?</string>
-    <string name="web_manual_positions">Positions</string>
-    <string name="web_manual_save">Save that</string>
-    <string name="web_manual_save_unchecked">Save (not checked by the printer)</string>
-    <!-- 1=position -->
-    <string name="web_manual_skip">Skip %1$s</string>
-    <string name="web_manual_slot_it_is_in">The slot it is in</string>
-    <string name="web_manual_start">Start</string>
-    <string name="web_manual_stop">Stop</string>
-    <string name="web_manual_waiting">The printer reports a change; waiting for it to settle…</string>
-    <string name="web_manual_yes">Yes</string>
-    <string name="web_map_body">The printer changes its slot colours briefly and runs a short job with no motion. The colours are put back afterwards.</string>
-    <string name="web_map_by_loading">Map by loading filament</string>
-    <string name="web_map_earlier">From an earlier mapping; it may be fixed by now. Map the slots again to check.</string>
-    <string name="web_map_report">Collect a report</string>
-    <string name="web_map_report_attach">Then attach it to a \"Printer report\" issue on the project\'s issue tracker.</string>
-    <string name="web_map_report_download">Download report</string>
-    <string name="web_map_report_offline">The printer is offline, so the report holds only what the Hub saved earlier.</string>
-    <string name="web_map_report_ready">Report ready.</string>
-    <string name="web_map_running">Mapping…</string>
-    <string name="web_map_running_reason">Mapping is running.</string>
-    <string name="web_map_slots">Map slots</string>
-    <!-- 1=printer -->
-    <string name="web_map_title">Map the slots of %1$s?</string>
-    <string name="web_more_home_screen">Add to Home Screen</string>
-    <string name="web_more_home_screen_summary">Open filament-kit like an app</string>
-    <string name="web_more_hub_page_summary">Features, settings, backups</string>
-    <string name="web_more_install">Install app</string>
-    <string name="web_more_settings_summary">Appearance, theme, print alerts</string>
+    <string name="printers_manual_confirmed_nozzle">%1$s: Confirmed (%2$s, %3$s nozzle)</string>
+    <string name="printers_manual_positions">Positions</string>
+    <string name="printers_manual_start">Start</string>
+    <string name="printers_map_earlier">From an earlier mapping; it may be fixed by now. Map the slots again to check.</string>
+    <string name="printers_map_report_attach">Then attach it to a \"Printer report\" issue on the project\'s issue tracker.</string>
+    <string name="printers_map_report_download">Download report</string>
+    <string name="printers_map_report_offline">The printer is offline, so the report holds only what the Hub saved earlier.</string>
+    <string name="printers_map_report_ready">Report ready.</string>
+    <string name="printers_map_running_reason">Mapping is running.</string>
+    <string name="nav_more_home_screen">Add to Home Screen</string>
+    <string name="nav_more_home_screen_summary">Open filament-kit like an app</string>
+    <string name="nav_more_hub_page_summary">Features, settings, backups</string>
+    <string name="nav_more_install">Install app</string>
+    <string name="nav_more_settings_summary">Appearance, theme, print alerts</string>
     <!-- 1=count -->
-    <plurals name="web_nav_add_waiting">
+    <plurals name="nav_add_waiting">
         <item quantity="one">Add, %1$d spool waiting</item>
         <item quantity="other">Add, %1$d spools waiting</item>
     </plurals>
-    <string name="web_nav_label">Sections</string>
-    <string name="web_nav_printers_look">Printers, needs a look</string>
-    <string name="web_needs_hub">Needs the Hub.</string>
-    <string name="web_presets_add_button">Add to line</string>
-    <string name="web_presets_add_select">Add to the line</string>
+    <string name="nav_printers_look">Printers, needs a look</string>
+    <string name="nav_recent_public">Recent, on the home address only</string>
+    <string name="shell_needs_hub">Needs the Hub.</string>
+    <string name="presets_add_button">Add to line</string>
+    <string name="presets_add_select">Add to the line</string>
     <!-- 1=line -->
-    <string name="web_presets_added">Added to %1$s.</string>
-    <string name="web_presets_adding">Adding…</string>
-    <string name="web_presets_all_done">Every filament has a preset line.</string>
-    <string name="web_presets_bs_template">Bambu Studio template</string>
-    <string name="web_presets_build">Build presets now</string>
-    <string name="web_presets_building">Building presets… (a minute or two)</string>
-    <string name="web_presets_create">Create line</string>
+    <string name="presets_added">Added to %1$s.</string>
+    <string name="presets_all_done">Every filament has a preset line.</string>
+    <string name="presets_bs_template">Bambu Studio template</string>
+    <string name="presets_build">Build presets now</string>
+    <string name="presets_building">Building presets… (a minute or two)</string>
+    <string name="presets_create">Create line</string>
     <!-- 1=name -->
-    <string name="web_presets_created">Line %1$s created.</string>
-    <string name="web_presets_creating">Creating…</string>
-    <string name="web_presets_installed">Installed</string>
-    <string name="web_presets_intro">New filaments need a preset line before a build covers them. Slicer Sync on the PC installs a build by itself the next time the slicers are closed.</string>
-    <string name="web_presets_last_build">Last build</string>
-    <string name="web_presets_line_name">Line name</string>
-    <string name="web_presets_line_name_help">Brand and line, e.g. Polymaker PolyTerra PLA</string>
+    <string name="presets_created">Line %1$s created.</string>
+    <string name="presets_creating">Creating…</string>
+    <string name="presets_intro">New filaments need a preset line before a build covers them. Slicer Sync on the PC installs a build by itself the next time the slicers are closed.</string>
+    <string name="presets_line_name">Line name</string>
+    <string name="presets_line_name_help">Brand and line, e.g. Polymaker PolyTerra PLA</string>
     <!-- 1=count -->
-    <plurals name="web_presets_lines">
-        <item quantity="one">%1$d line</item>
-        <item quantity="other">%1$d lines</item>
-    </plurals>
-    <!-- 1=count -->
-    <plurals name="web_presets_more_summary">
+    <plurals name="presets_more_summary">
         <item quantity="one">%1$d filament without a preset line</item>
         <item quantity="other">%1$d filaments without a preset line</item>
     </plurals>
-    <string name="web_presets_never">Never</string>
-    <string name="web_presets_new_line_none">Start a new line (new brand or product line)</string>
-    <string name="web_presets_new_line_with_lines">Or start a new line</string>
+    <string name="presets_new_line_none">Start a new line (new brand or product line)</string>
+    <string name="presets_new_line_with_lines">Or start a new line</string>
     <!-- 1=material -->
-    <string name="web_presets_orca_default">Generic %1$s</string>
-    <string name="web_presets_orca_parent">Orca Slicer parent</string>
-    <string name="web_presets_parent">Find a parent</string>
-    <string name="web_presets_waiting">Waiting for Slicer Sync on the PC</string>
-    <string name="web_presets_without_line">Filaments without a preset line</string>
-    <string name="web_preview_title">Preview (nothing saved yet)</string>
-    <!-- 1=code -->
-    <string name="web_printer_alert">Printer alert %1$s</string>
-    <string name="web_printer_camera_hide">Hide camera</string>
-    <string name="web_printer_camera_show">Show camera</string>
-    <string name="web_printer_cert_changed">The printer\'s certificate changed. Forget it under Printer settings if you replaced the printer.</string>
-    <string name="web_printer_developer_mode">The printer needs developer mode (LAN only) for this.</string>
-    <string name="web_printer_group_mapping">Slot mapping</string>
-    <string name="web_printer_group_settings">Printer settings</string>
-    <string name="web_printer_group_slots">Slots</string>
-    <string name="web_printer_group_used">Filament used</string>
-    <string name="web_printer_light_off">Turn the light off</string>
-    <string name="web_printer_light_off_line">Light off.</string>
-    <string name="web_printer_light_on">Turn the light on</string>
-    <string name="web_printer_light_on_line">Light on.</string>
-    <string name="web_printer_open_presets">Open Slicer presets</string>
-    <string name="web_printer_pause">Pause</string>
-    <string name="web_printer_paused_line">Paused.</string>
+    <string name="presets_orca_default">Generic %1$s</string>
+    <string name="presets_parent">Find a parent</string>
+    <string name="presets_waiting">Waiting for Slicer Sync on the PC</string>
+    <string name="presets_without_line">Filaments without a preset line</string>
+    <string name="add_preview_title_unsaved">Preview (nothing saved yet)</string>
+    <string name="printer_camera_hide">Hide camera</string>
+    <string name="printer_camera_show">Show camera</string>
+    <string name="printer_cert_changed">The printer\'s certificate changed. Forget it under Printer settings if you replaced the printer.</string>
+    <string name="printer_developer_mode">The printer needs developer mode (LAN only) for this.</string>
+    <string name="printer_group_used">Filament used</string>
+    <string name="printer_light_on_line">Light on.</string>
+    <string name="printer_open_presets">Open Slicer presets</string>
     <!-- 1=layer 2=total 3=time -->
-    <string name="web_printer_progress">Layer %1$s of %2$s · %3$s left</string>
-    <string name="web_printer_reconnecting">Reconnecting…</string>
-    <string name="web_printer_resume">Resume</string>
-    <string name="web_printer_resumed_line">Resumed.</string>
+    <string name="printer_progress">Layer %1$s of %2$s · %3$s left</string>
+    <string name="printer_reconnecting">Reconnecting…</string>
+    <string name="printer_resumed_line">Resumed.</string>
     <!-- 1=error -->
-    <string name="web_printer_said_no">The printer said no: %1$s</string>
-    <string name="web_printer_stop">Stop print</string>
-    <string name="web_printer_stopped_line">Stopped.</string>
+    <string name="printer_said_no">The printer said no: %1$s</string>
+    <string name="printer_stopped_line">Stopped.</string>
     <!-- 1=name 2=current 3=target -->
-    <string name="web_printer_temperature">%1$s %2$s / %3$s °C</string>
+    <string name="printer_temperature">%1$s %2$s / %3$s °C</string>
     <!-- 1=hours 2=minutes -->
-    <string name="web_printer_time_hours">%1$s h %2$s min</string>
+    <string name="printer_time_hours">%1$s h %2$s min</string>
     <!-- 1=minutes -->
-    <string name="web_printer_time_minutes">%1$s min</string>
-    <string name="web_printer_too_many_views">Too many phones and tabs are watching the printers. Close one; this page tries again by itself.</string>
-    <string name="web_printer_wrong_code">Wrong Access Code. Replace it under Printer settings.</string>
-    <string name="web_printers_add">Add</string>
-    <string name="web_printers_added">Added. The Hub is connecting to it.</string>
-    <string name="web_printers_connecting">Connecting to the printer…</string>
-    <!-- 1=count -->
-    <plurals name="web_printers_count">
-        <item quantity="one">%1$d printer</item>
-        <item quantity="other">%1$d printers</item>
-    </plurals>
-    <string name="web_printers_empty_text">A Bambu printer on the network shows up here by itself; add it with its Access Code. A Klipper printer is added by its address.</string>
-    <string name="web_printers_found_title">Found on the network, not added yet</string>
-    <string name="web_printers_menu_bambu">Bambu printer found on the network</string>
-    <string name="web_printers_menu_klipper">Klipper printer by address</string>
+    <string name="printer_time_minutes">%1$s min</string>
+    <string name="printer_too_many_views">Too many phones and tabs are watching the printers. Close one; this page tries again by itself.</string>
+    <string name="printer_wrong_code">Wrong Access Code. Replace it under Printer settings.</string>
+    <string name="printers_added_connecting">Added. The Hub is connecting to it.</string>
+    <string name="printers_empty_add_hint">A Bambu printer on the network shows up here by itself; add it with its Access Code. A Klipper printer is added by its address.</string>
+    <string name="printers_menu_bambu">Bambu printer found on the network</string>
+    <string name="printers_menu_klipper">Klipper printer by address</string>
     <!-- 1=slot 2=name 3=hex 4=percent -->
-    <string name="web_printers_slot_sr">%1$s %2$s %3$s, %4$s %% left</string>
+    <string name="printers_slot_sr">%1$s %2$s %3$s, %4$s %% left</string>
     <!-- 1=slot -->
-    <string name="web_printers_slot_sr_empty">%1$s empty</string>
-    <!-- 1=count 2=total -->
-    <string name="web_printers_slots_loaded">%1$d of %2$s slots loaded</string>
-    <!-- 1=grams 2=job 3=slot 4=time -->
-    <string name="web_putback_body">Put %1$s g back on the spool? (%2$s, %3$s, %4$s)</string>
-    <string name="web_putback_confirm">Put it back</string>
-    <string name="web_putback_title">Put it back on the spool?</string>
-    <string name="web_reason_add_photo_first">Add a photo first.</string>
-    <string name="web_reason_check_first">Check the spools first: any edit needs a new check.</string>
-    <string name="web_reason_check_first_link">Check first: any change needs a new check.</string>
-    <string name="web_recent_accept">Accept</string>
-    <!-- 1=count 2=number -->
-    <plurals name="web_recent_accepted">
-        <item quantity="one">Accepted. %1$d field changed; revision %2$s keeps the old values.</item>
-        <item quantity="other">Accepted. %1$d fields changed; revision %2$s keeps the old values.</item>
+    <string name="printers_slot_sr_empty">%1$s empty</string>
+    <!-- 1=loaded 2=count -->
+    <plurals name="printers_slots_loaded_of">
+        <item quantity="one">%1$s of %2$d slot loaded</item>
+        <item quantity="other">%1$s of %2$d slots loaded</item>
     </plurals>
-    <string name="web_recent_all_apply">A change applies to all of them.</string>
-    <string name="web_recent_ask_button">Ask the Label Reader</string>
-    <string name="web_recent_ask_help">The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept.</string>
-    <string name="web_recent_ask_label">What is wrong?</string>
-    <string name="web_recent_ask_placeholder">e.g. brand is Polymaker</string>
-    <string name="web_recent_ask_reason">Say what is wrong first.</string>
-    <string name="web_recent_ask_title">Ask the Label Reader to correct it</string>
-    <string name="web_recent_asking">Asking the Label Reader… (up to a minute)</string>
-    <string name="web_recent_back">Back to Recently added</string>
-    <string name="web_recent_empty_text">No spool has been added since the history started.</string>
-    <string name="web_recent_empty_title">Nothing added yet</string>
-    <!-- 1=count -->
-    <string name="web_recent_filter_all">All %1$d</string>
-    <!-- 1=count -->
-    <string name="web_recent_filter_check">To check %1$d</string>
-    <!-- 1=count -->
-    <string name="web_recent_gone">This record is no longer kept. Only the newest %1$d are.</string>
-    <string name="web_recent_group_temperatures">Temperatures</string>
-    <string name="web_recent_group_weights">Weights</string>
+    <string name="add_reason_photo_first">Add a photo first.</string>
+    <string name="add_reason_check_first">Check the spools first: any edit needs a new check.</string>
+    <string name="add_reason_check_first_link">Check first: any change needs a new check.</string>
+    <string name="recent_all_apply">A change applies to all of them.</string>
+    <string name="recent_ask_reason">Say what is wrong first.</string>
     <!-- 1=count 2=size -->
-    <string name="web_recent_intro">The newest %1$d additions are kept with their photos (%2$s now). Change the number on the Hub page under Settings.</string>
-    <string name="web_recent_new">(new)</string>
-    <string name="web_recent_newer">Newer addition</string>
-    <string name="web_recent_no_photo">No photo</string>
-    <!-- 1=ids -->
-    <string name="web_recent_no_spools_left">Filament %1$s has no spools left; it was not deleted.</string>
-    <string name="web_recent_nothing_changed">Nothing changed.</string>
-    <!-- 1=id -->
-    <string name="web_recent_now_use">The spools now use filament %1$s.</string>
-    <string name="web_recent_older">Older addition</string>
-    <!-- 1=number 2=count -->
-    <string name="web_recent_photo_of">Photo %1$s of %2$d</string>
-    <string name="web_recent_photos">Photos</string>
-    <!-- 1=count -->
-    <plurals name="web_recent_proposal">
-        <item quantity="one">Proposal: %1$d change</item>
-        <item quantity="other">Proposal: %1$d changes</item>
+    <plurals name="recent_intro">
+        <item quantity="one">The newest %1$d addition is kept with its photos (%2$s now). Change the number on the Hub page under Settings.</item>
+        <item quantity="other">The newest %1$d additions are kept with their photos (%2$s now). Change the number on the Hub page under Settings.</item>
     </plurals>
-    <string name="web_recent_proposal_discarded">Proposal discarded. Nothing changed.</string>
-    <string name="web_recent_proposal_no_photo">No photo was kept: it worked from the saved values and your note.</string>
-    <string name="web_recent_proposal_none">The Label Reader changed nothing.</string>
-    <string name="web_recent_public_text">Open filament-kit at its home address on the home network to check and correct recent additions.</string>
-    <string name="web_recent_public_title">Recently added is on the home address only.</string>
-    <string name="web_recent_range_error">Enter a range like 190-230.</string>
-    <string name="web_recent_reader_off">The Label Reader is switched off on this Hub. Edit the record by hand, or switch it on on the Hub page under Features.</string>
+    <string name="recent_new">(new)</string>
+    <string name="recent_newer_addition">Newer addition</string>
+    <!-- 1=id -->
+    <string name="recent_now_use">The spools now use filament %1$s.</string>
+    <string name="recent_older_addition">Older addition</string>
+    <string name="recent_public_text">Open filament-kit at its home address on the home network to check and correct recent additions.</string>
+    <string name="recent_public_title">Recently added is on the home address only.</string>
+    <string name="recent_range_error">Enter a range like 190-230.</string>
     <!-- 1=number 2=time 3=changes -->
-    <string name="web_recent_revision_ai">Revision %1$s, %2$s, by AI: %3$s</string>
-    <!-- 1=number 2=time 3=changes -->
-    <string name="web_recent_revision_hand">Revision %1$s, %2$s, by hand: %3$s</string>
-    <!-- 1=number -->
-    <string name="web_recent_revision_undo">Undo revision %1$s</string>
-    <!-- 1=number -->
-    <string name="web_recent_revision_undone">Revision %1$s undone.</string>
+    <string name="recent_revision_ai">Revision %1$s, %2$s, by AI: %3$s</string>
     <!-- 1=field 2=value -->
-    <string name="web_recent_revision_value_again">%1$s is %2$s again.</string>
-    <string name="web_recent_revisions">Revisions</string>
-    <string name="web_recent_revisions_empty">No revisions. Corrections by hand or by the Label Reader appear here.</string>
+    <string name="recent_revision_value_again">%1$s is %2$s again.</string>
     <!-- 1=count 2=fields -->
-    <plurals name="web_recent_saved">
+    <plurals name="recent_saved">
         <item quantity="one">Saved %1$d change: %2$s.</item>
         <item quantity="other">Saved %1$d changes: %2$s.</item>
     </plurals>
-    <string name="web_recent_source_hand">Added by hand</string>
-    <string name="web_recent_source_phone">From a phone photo</string>
-    <string name="web_recent_source_station">From the Weigh Station</string>
-    <!-- 1=ids -->
-    <plurals name="web_recent_spools">
-        <item quantity="one">Spool %1$s</item>
-        <item quantity="other">Spools %1$s</item>
-    </plurals>
-    <string name="web_refusal_text">filament-kit only works on the home network. Connect this phone to the home Wi-Fi and open the page again.</string>
-    <string name="web_refusal_title">Only on the home network</string>
-    <string name="web_refusal_title_address">Not at this address</string>
-    <string name="web_rename_confirm">Rename</string>
-    <string name="web_rename_error">Enter a name.</string>
-    <string name="web_rename_title">Rename printer</string>
-    <string name="web_result_build_requested">Build requested. The Hub builds the presets within a minute or two.</string>
-    <string name="web_result_hub_text">The Hub\'s answer</string>
+    <string name="shell_refusal_text">filament-kit only works on the home network. Connect this phone to the home Wi-Fi and open the page again.</string>
+    <string name="shell_refusal_title">Only on the home network</string>
+    <string name="shell_refusal_title_address">Not at this address</string>
     <!-- 1=address -->
-    <string name="web_set_address_changed">Address changed to %1$s. The Hub reconnects now.</string>
-    <string name="web_set_cert_forgotten">Certificate forgotten. The next connection pins a new one.</string>
-    <string name="web_set_certificate">Certificate</string>
-    <string name="web_set_change">Change</string>
-    <string name="web_set_code_replaced">Access Code replaced.</string>
-    <string name="web_set_forget">Forget</string>
-    <string name="web_set_forget_printer">Forget printer</string>
-    <!-- 1=printer -->
-    <string name="web_set_forgotten">%1$s forgotten.</string>
-    <string name="web_set_home_note">Anyone on the home network can use this page.</string>
-    <string name="web_set_key_saved">API key saved.</string>
-    <string name="web_set_no_address">No address yet</string>
-    <string name="web_set_not_pinned">Not pinned</string>
-    <string name="web_set_pinned">Pinned</string>
-    <string name="web_set_readonly">Read-only here: printer changes from the public address are off. Open this page on the home address to add, change or forget a printer, or allow them on the Hub page under Settings.</string>
-    <string name="web_set_rename">Rename</string>
+    <string name="printer_set_address_changed">Address changed to %1$s. The Hub reconnects now.</string>
+    <string name="printer_set_cert_forgotten">Certificate forgotten. The next connection pins a new one.</string>
+    <string name="printer_set_code_replaced">Access Code replaced.</string>
     <!-- 1=name -->
-    <string name="web_set_renamed">Renamed to %1$s.</string>
-    <string name="web_settings_alerts_blocked">Notifications are blocked for this site. Allow them in the phone\'s settings.</string>
-    <string name="web_settings_alerts_default_title">Printer</string>
-    <string name="web_settings_alerts_on">On: this phone gets print alerts.</string>
-    <string name="web_settings_alerts_sent">Sent.</string>
-    <string name="web_settings_alerts_test">Send a test alert</string>
-    <string name="web_settings_alerts_title">Print alerts on this phone</string>
-    <string name="web_settings_alerts_toggle">Notify this phone</string>
-    <string name="web_settings_alerts_unsupported">This browser cannot receive print alerts. On iPhone, add filament-kit to the Home Screen first.</string>
-    <string name="web_settings_saved">Saved on this phone.</string>
-    <string name="web_settings_theme_help">New phones start with the Hub\'s theme for new devices.</string>
-    <string name="web_settings_this_hub">This Hub</string>
+    <string name="printer_set_code_done">Access Code replaced for %1$s.</string>
+    <string name="printer_set_home_note">Anyone on the home network can use this page.</string>
+    <string name="printer_set_key_saved">API key saved.</string>
+    <string name="printer_set_not_pinned">Not pinned</string>
+    <string name="printer_set_readonly">Read-only here: printer changes from the public address are off. Open this page on the home address to add, change or forget a printer, or allow them on the Hub page under Settings.</string>
+    <string name="settings_alerts_blocked">Notifications are blocked for this site. Allow them in the phone\'s settings.</string>
+    <string name="settings_alerts_default_title">Printer</string>
+    <string name="settings_alerts_on">On: this phone gets print alerts.</string>
+    <string name="settings_alerts_sent">Sent.</string>
+    <string name="settings_alerts_test">Send a test alert</string>
+    <string name="settings_alerts_title">Print alerts on this phone</string>
+    <string name="settings_alerts_toggle">Notify this phone</string>
+    <string name="settings_alerts_unsupported">This browser cannot receive print alerts. On iPhone, add filament-kit to the Home Screen first.</string>
+    <string name="settings_saved_on_phone">Saved on this phone.</string>
+    <string name="settings_theme_help">New phones start with the Hub\'s theme for new devices.</string>
+    <string name="settings_this_hub">This Hub</string>
+    <!-- 1=appearance 2=theme -->
+    <string name="settings_summary_appearance">%1$s · %2$s</string>
+    <!-- 1=hub 2=state -->
+    <string name="settings_summary_hub">%1$s · %2$s</string>
     <!-- 1=name -->
-    <string name="web_sheet_empty_body">%1$s will be marked as used up.</string>
+    <string name="spool_sheet_empty_body">%1$s will be marked as used up.</string>
+    <string name="spool_sheet_humidity_error">Enter a percentage from 0 to 100.</string>
+    <string name="spool_sheet_humidity_optional">Box humidity (optional)</string>
+    <string name="spool_sheet_humidity_placeholder">From the box hygrometer</string>
+    <string name="spool_sheet_link">Link tag and open</string>
+    <string name="spool_sheet_load_which_printer">Load into which printer?</string>
+    <string name="spool_sheet_location_optional">Location (optional)</string>
+    <string name="spool_sheet_no_tag">No tag read yet: tap the spool\'s tag on a reader.</string>
+    <string name="spool_sheet_open_title">Open it and link the tag</string>
     <!-- 1=id -->
-    <string name="web_sheet_empty_title">Mark spool %1$s empty?</string>
-    <string name="web_sheet_gross_error">Enter grams above 0, or leave this empty.</string>
-    <string name="web_sheet_humidity_error">Enter a percentage from 0 to 100.</string>
-    <string name="web_sheet_humidity_optional">Box humidity (optional)</string>
-    <string name="web_sheet_humidity_placeholder">From the box hygrometer</string>
-    <string name="web_sheet_link">Link tag and open</string>
-    <string name="web_sheet_load_printer">Load into a printer</string>
-    <string name="web_sheet_load_which_printer">Load into which printer?</string>
-    <!-- 1=printer -->
-    <string name="web_sheet_load_which_slot">Which slot on %1$s?</string>
-    <string name="web_sheet_location_optional">Location (optional)</string>
-    <string name="web_sheet_mark_empty">Mark empty</string>
-    <string name="web_sheet_marked_empty">Marked empty.</string>
-    <string name="web_sheet_move">Move</string>
-    <!-- 1=location -->
-    <string name="web_sheet_moved">Moved to %1$s.</string>
-    <string name="web_sheet_no_tag">No tag read yet: tap the spool\'s tag on a reader.</string>
-    <string name="web_sheet_open_title">Open it and link the tag</string>
+    <string name="spool_sheet_opened">Spool %1$s is open</string>
     <!-- 1=id -->
-    <string name="web_sheet_opened">Spool %1$s is open</string>
-    <!-- 1=id -->
-    <string name="web_sheet_opened_toast">Spool %1$s opened.</string>
-    <string name="web_sheet_other_actions">Other actions</string>
-    <string name="web_sheet_reason_preview_first">Preview first: nothing changes until you link.</string>
-    <string name="web_sheet_reason_problem">The Hub found a problem. Fix it and preview again.</string>
-    <string name="web_sheet_reason_weight_changed">You changed the weight. Preview again.</string>
-    <string name="web_sheet_save_weight">Save weight</string>
+    <string name="spool_sheet_opened_toast">Spool %1$s opened.</string>
+    <string name="spool_sheet_other_actions">Other actions</string>
+    <string name="spool_sheet_reason_preview_first">Preview first: nothing changes until you link.</string>
+    <string name="spool_sheet_reason_problem">The Hub found a problem. Fix it and preview again.</string>
+    <string name="spool_sheet_reason_weight_changed">You changed the weight. Preview again.</string>
     <!-- 1=tag 2=age 3=reader -->
-    <string name="web_sheet_tag_line">Tag: %1$s, tapped %2$s on %3$s</string>
-    <string name="web_sheet_update_weight">Update weight</string>
+    <string name="spool_sheet_tag_line">Tag: %1$s, tapped %2$s on %3$s</string>
     <!-- 1=from 2=to -->
-    <string name="web_sheet_weight_changes">Remaining changes from %1$s g to %2$s g.</string>
-    <string name="web_show_access_code">Show Access Code</string>
-    <string name="web_show_api_key">Show API key</string>
-    <string name="web_signin_elsewhere">This form only works from its own page. Start again from Claude.</string>
-    <string name="web_signin_expired">This sign-in request expired. Start again from Claude.</string>
+    <string name="spool_sheet_weight_changes">Remaining changes from %1$s g to %2$s g.</string>
+    <string name="printer_api_key_show">Show API key</string>
+    <string name="signin_elsewhere">This form only works from its own page. Start again from Claude.</string>
+    <string name="signin_expired">This sign-in request expired. Start again from Claude.</string>
     <!-- 1=name -->
-    <string name="web_signin_heading">Allow %1$s?</string>
-    <string name="web_signin_hide">Hide passphrase</string>
-    <string name="web_signin_not_set">No passphrase is set on the Hub yet. Set one on the Hub page under Settings > Web passphrase, or run `sudo filament-kit web passphrase` on the Hub.</string>
-    <string name="web_signin_outside">Sign-in is only available from the home network.</string>
-    <string name="web_signin_passphrase">Passphrase</string>
-    <string name="web_signin_show">Show passphrase</string>
-    <string name="web_signin_text">It will be able to read and change your Spoolman inventory and slicer presets.</string>
-    <string name="web_signin_title">filament-kit sign-in</string>
-    <string name="web_signin_too_many">Too many wrong passphrases. Wait 10 minutes.</string>
-    <string name="web_signin_wrong">Wrong passphrase.</string>
+    <string name="signin_heading">Allow %1$s?</string>
+    <string name="signin_hide">Hide passphrase</string>
+    <string name="signin_not_set">No passphrase is set on the Hub yet. Set one on the Hub page under Settings > Web passphrase, or run `sudo filament-kit web passphrase` on the Hub.</string>
+    <string name="signin_outside">Sign-in is only available from the home network.</string>
+    <string name="signin_passphrase">Passphrase</string>
+    <string name="signin_show">Show passphrase</string>
+    <string name="signin_text">It will be able to read and change your Spoolman inventory and slicer presets.</string>
+    <string name="signin_title">filament-kit sign-in</string>
+    <string name="signin_too_many">Too many wrong passphrases. Wait 10 minutes.</string>
+    <string name="signin_wrong">Wrong passphrase.</string>
     <!-- 1=hex 2=grams -->
-    <string name="web_slot_detail">%1$s · %2$s g left</string>
-    <string name="web_slot_empty">Empty</string>
+    <string name="printer_slot_detail">%1$s · %2$s g left</string>
     <!-- 1=label 2=type -->
-    <string name="web_slot_group">%1$s · %2$s</string>
-    <string name="web_slot_in_use">In use</string>
-    <string name="web_slot_none">The printer reports no slots.</string>
-    <string name="web_slots_layout_changed">The slot layout changed since the last mapping.</string>
-    <string name="web_slots_mapped">The slots are mapped.</string>
-    <string name="web_slots_not_mapped">The slots are not mapped yet.</string>
-    <!-- 1=id -->
-    <string name="web_spool_title">Spool %1$s</string>
-    <string name="web_spools_cut">More spools match. Type more of the name to narrow it down.</string>
-    <string name="web_spools_empty">No spools match.</string>
-    <string name="web_spools_empty_sealed">No sealed spools match. Turn off Sealed only to include opened spools.</string>
-    <string name="web_spools_intro">Tap the spool\'s tag on a reader, find the spool, weigh it, link.</string>
-    <string name="web_spools_last_tag">Last tag</string>
-    <string name="web_spools_last_tag_loading">Checking for the last tag…</string>
-    <!-- 1=grams -->
-    <string name="web_spools_left">%1$s g left</string>
+    <string name="printer_slot_group">%1$s · %2$s</string>
+    <string name="printer_slots_layout_changed">The slot layout changed since the last mapping.</string>
+    <string name="printer_slots_mapped">The slots are mapped.</string>
+    <string name="printer_slots_not_mapped">The slots are not mapped yet.</string>
+    <string name="spools_cut">More spools match. Type more of the name to narrow it down.</string>
+    <string name="spools_empty_filtered">No spools match.</string>
+    <string name="spools_empty_sealed">No sealed spools match. Turn off Sealed only to include opened spools.</string>
+    <string name="spools_intro">Tap the spool\'s tag on a reader, find the spool, weigh it, link.</string>
+    <string name="spools_last_tag">Last tag</string>
+    <string name="spools_last_tag_loading">Checking for the last tag…</string>
     <!-- 1=lot -->
-    <string name="web_spools_row_lot">Lot %1$s</string>
-    <string name="web_spools_row_tag">Has a tag</string>
+    <string name="spools_row_lot">Lot %1$s</string>
+    <string name="spools_row_tag">Has a tag</string>
     <!-- 1=seconds -->
-    <string name="web_spools_scale_filled">Filled in from the Weigh Station scale, %1$s s ago</string>
-    <string name="web_spools_sealed_only">Sealed only</string>
-    <string name="web_spools_search_label">Find a spool</string>
+    <string name="spools_scale_filled">Filled in from the Weigh Station scale, %1$s s ago</string>
+    <string name="spools_find_label">Find a spool</string>
     <!-- 1=id -->
-    <string name="web_spools_show">Show spool %1$s</string>
+    <string name="spools_show">Show spool %1$s</string>
     <!-- 1=id 2=name -->
-    <string name="web_spools_tag_linked">Linked to spool %1$s, %2$s</string>
+    <string name="spools_tag_linked">Linked to spool %1$s, %2$s</string>
     <!-- 1=grams -->
-    <string name="web_spools_tag_scale">scale %1$s g</string>
+    <string name="spools_tag_scale">scale %1$s g</string>
     <!-- 1=job -->
-    <string name="web_state_failed">Print failed: %1$s</string>
+    <string name="printer_state_failed">Print failed: %1$s</string>
     <!-- 1=job -->
-    <string name="web_state_finished">Finished: %1$s</string>
-    <string name="web_state_idle">Idle</string>
+    <string name="printer_state_finished">Finished: %1$s</string>
     <!-- 1=job -->
-    <string name="web_state_paused">Paused: %1$s</string>
+    <string name="printer_state_paused">Paused: %1$s</string>
     <!-- 1=job -->
-    <string name="web_state_preparing">Preparing: %1$s</string>
+    <string name="printer_state_preparing">Preparing: %1$s</string>
     <!-- 1=job -->
-    <string name="web_state_printing">Printing: %1$s</string>
-    <!-- 1=job 2=printer -->
-    <string name="web_stop_body">Stop %1$s on %2$s? It cannot be resumed.</string>
-    <!-- 1=printer -->
-    <string name="web_stop_body_nojob">Stop the print on %1$s? It cannot be resumed.</string>
-    <string name="web_stop_keep">Keep printing</string>
-    <string name="web_stop_title">Stop the print?</string>
+    <string name="printer_state_printing">Printing: %1$s</string>
     <!-- 1=count 2=ids -->
-    <plurals name="web_summary_added">
+    <plurals name="add_summary_added">
         <item quantity="one">Added %1$d spool: %2$s.</item>
         <item quantity="other">Added %1$d spools: %2$s.</item>
     </plurals>
-    <string name="web_summary_error_change">The Hub could not finish this. Read its answer below.</string>
-    <string name="web_summary_error_preview">The Hub found a problem. Nothing was changed.</string>
-    <string name="web_summary_preview_ok">Preview ready. Nothing is saved yet.</string>
-    <!-- 1=page_title 2=hub -->
-    <string name="web_title_format">%1$s · %2$s</string>
-    <!-- 1=spool 2=slot 3=location -->
-    <string name="web_unload_body">Unload %1$s from %2$s? It goes back to %3$s. Only the inventory changes; the printer\'s slot setting stays as it is.</string>
+    <string name="add_summary_error_change">The Hub could not finish this. Read its answer below.</string>
+    <string name="add_summary_error_preview">The Hub found a problem. Nothing was changed.</string>
+    <string name="add_summary_preview_ok">Preview ready. Nothing is saved yet.</string>
     <!-- 1=name 2=slot -->
-    <string name="web_unload_line">Unloaded %1$s from %2$s.</string>
+    <string name="printer_unload_line">Unloaded %1$s from %2$s.</string>
     <!-- 1=id 2=location -->
-    <string name="web_unload_moved_back">Moved back: spool %1$s to %2$s.</string>
-    <!-- 1=slot -->
-    <string name="web_unload_title">Unload from %1$s?</string>
-    <string name="web_used_empty">Nothing used in the last 7 days.</string>
-    <string name="web_used_job_default">Print job</string>
-    <string name="web_used_last_days">Last 7 days</string>
+    <string name="printer_unload_moved_back">Moved back: spool %1$s to %2$s.</string>
+    <string name="printer_used_empty">Nothing used in the last 7 days.</string>
+    <string name="printer_used_job_default">Print job</string>
+    <string name="printer_used_last_days">Last 7 days</string>
     <!-- 1=grams -->
-    <string name="web_used_put_back">Put %1$s g back on the spool.</string>
+    <string name="printer_used_put_back">Put %1$s g back on the spool.</string>
     <string name="a11y_action_open">Open</string>
-    <!-- 1=name -->
-    <string name="a11y_appearance">Appearance: %1$s</string>
     <!-- 1=printer -->
     <string name="a11y_camera">Live camera of %1$s</string>
     <!-- 1=state -->
     <string name="a11y_hub_chip">Hub connection: %1$s. Opens details.</string>
-    <!-- 1=left 2=total 3=percent -->
-    <string name="a11y_level_bar">%1$s grams left of %2$s, %3$s percent</string>
-    <!-- 1=name -->
-    <string name="a11y_more_for">More actions for %1$s</string>
+    <!-- 1=count 2=total 3=percent -->
+    <plurals name="a11y_level_bar">
+        <item quantity="one">%1$d gram left of %2$s, %3$s percent</item>
+        <item quantity="other">%1$d grams left of %2$s, %3$s percent</item>
+    </plurals>
     <!-- 1=n -->
     <string name="a11y_photo_draft">Photo %1$s</string>
     <!-- 1=n 2=total -->
     <string name="a11y_photo_record">Label photo %1$s of %2$s</string>
     <!-- 1=n 2=total -->
     <string name="a11y_photo_record_open">Label photo %1$s of %2$s, opens it large</string>
-    <!-- 1=n -->
-    <string name="a11y_photo_remove">Remove photo %1$s</string>
     <!-- 1=state 2=job 3=percent 4=layer 5=layers 6=time -->
     <string name="a11y_printer_progress">%1$s %2$s, %3$s percent, layer %4$s of %5$s, %6$s left</string>
     <!-- 1=field 2=old 3=new -->
     <string name="a11y_proposal_change">%1$s, %2$s, becomes %3$s</string>
     <string name="a11y_qr_viewfinder">Camera viewfinder. Point it at the QR code.</string>
-    <string name="a11y_record_newer">Newer record</string>
-    <string name="a11y_record_older">Older record</string>
     <string name="a11y_secret_hide">Hide Access Code</string>
     <string name="a11y_secret_show">Show Access Code</string>
     <!-- 1=name 2=id 3=material 4=hex -->
     <string name="a11y_spool_header">%1$s, spool %2$s, %3$s, colour %4$s</string>
-    <!-- 1=name 2=id 3=material 4=location 5=left -->
-    <string name="a11y_spool_result">%1$s, spool %2$s, %3$s, %4$s, %5$s grams left</string>
+    <!-- 1=name 2=id 3=material 4=location 5=count -->
+    <plurals name="a11y_spool_result">
+        <item quantity="one">%1$s, spool %2$s, %3$s, %4$s, %5$d gram left</item>
+        <item quantity="other">%1$s, spool %2$s, %3$s, %4$s, %5$d grams left</item>
+    </plurals>
     <!-- 1=hex -->
     <string name="a11y_swatch">Colour %1$s</string>
     <string name="a11y_swatch_empty">Empty slot</string>
@@ -2546,7 +2154,6 @@
     </plurals>
     <!-- 1=id -->
     <string name="add_done_spool">spool %1$s</string>
-    <string name="add_done_status">Added</string>
     <!-- 1=tag 2=id -->
     <string name="add_done_tag_linked">Tag %1$s is linked to spool %2$s.</string>
     <string name="add_done_title">Spools added</string>
@@ -2575,7 +2182,6 @@
         <item quantity="other">Read labels (%1$d photos)</item>
     </plurals>
     <string name="add_photos_read_done">The labels are read.</string>
-    <string name="add_photos_read_done_action">Check</string>
     <!-- 1=count -->
     <plurals name="add_photos_reading">
         <item quantity="one">Reading %1$d photo… (up to a minute)</item>
@@ -2587,7 +2193,6 @@
     <string name="add_photos_tag_none">No tag</string>
     <string name="add_photos_take">Take photo</string>
     <string name="add_photos_taking">Taking photo…</string>
-    <string name="add_photos_title">Photos</string>
     <string name="add_photos_weight_hint">Only for one opened spool. Leave empty for a full spool.</string>
     <string name="add_photos_weight_sealed">Not needed for a sealed spool.</string>
     <string name="add_picker_another">Add another filament</string>
@@ -2614,10 +2219,8 @@
     <string name="add_preview_again_confirm">Add again</string>
     <string name="add_preview_again_title">Add these spools again?</string>
     <string name="add_preview_checking">Checking with the Hub…</string>
-    <string name="add_preview_fix">Fix</string>
     <string name="add_preview_hub_does">What the Hub will do</string>
     <string name="add_preview_nothing_saved">Nothing is saved yet.</string>
-    <string name="add_preview_title">Preview</string>
     <string name="add_read_busy">The Label Reader is busy. Wait a minute, then try again.</string>
     <string name="add_read_cloud">The Hub can\'t reach the Label Reader\'s cloud service. Try again in a minute.</string>
     <string name="add_read_kept">Your photos and edits are kept.</string>
@@ -2653,14 +2256,10 @@
     <string name="add_review_hand_empty">Pick a filament above, or tap New filament.</string>
     <string name="add_review_line_hint">Presets are made per line.</string>
     <string name="add_review_mark_estimated">Estimated: check this</string>
-    <string name="add_review_mark_low">Low: check this</string>
-    <string name="add_review_mark_medium">Medium</string>
-    <string name="add_review_mark_not_on_label">Not on the label</string>
     <!-- 1=fields -->
     <string name="add_review_needs">Needs: %1$s</string>
     <string name="add_review_net_weight_hint">Filament only, as printed on the label.</string>
     <string name="add_review_pick_brand">Pick a brand</string>
-    <string name="add_review_preview">Preview</string>
     <string name="add_review_questions">The Label Reader asks:</string>
     <!-- 1=reason -->
     <string name="add_review_reader_reason">Label Reader: %1$s</string>
@@ -2690,8 +2289,6 @@
     <string name="add_review_to_catalog">Add this line to the Filament Catalog</string>
     <!-- 1=brand 2=weight -->
     <string name="add_review_vendor_option">%1$s · %2$s g spool</string>
-    <!-- 1=step 2=total -->
-    <string name="add_step">Step %1$s of %2$s</string>
     <string name="app_update_downloaded">The update is downloaded. Tap to install to open Android\'s install window again.</string>
     <string name="app_update_downloaded_home">Update downloaded: tap to install.</string>
     <!-- 1=percent -->
@@ -2707,9 +2304,8 @@
     <string name="app_update_fail_none">The Hub has no app update to download.</string>
     <string name="app_update_fail_storage">Not enough storage on this phone.</string>
     <string name="app_update_fail_timeout">The download timed out. Try again.</string>
-    <string name="app_update_cancel_writing">Handing the update to Android. This can\'t be cancelled.</string>
-    <string name="app_update_fail_network">Android needs your permission before the app can reach the Hub on your network.</string>
     <string name="app_update_fail_check">Could not check for updates. Try again.</string>
+    <string name="app_update_fail_network">Android needs your permission before the app can reach the Hub on your network.</string>
     <string name="app_update_hub_newer">Update the app: the Hub is newer than this app, so some things may not work.</string>
     <string name="app_update_install">Install update</string>
     <!-- 1=version -->
@@ -2720,19 +2316,18 @@
     <string name="app_update_permission">Allow filament-kit to install apps, then tap Install update again.</string>
     <string name="app_update_signature">Android refused this update because it is not signed like the app on this phone. Do not install it; check where the app on your Hub came from.</string>
     <string name="app_update_signature_body">An update signed with a different key is what a forged app looks like, so Android refuses it and the app on this phone stays as it is. If you built or replaced the app on your Hub yourself, that is the reason. If you did not, do not install it: check where the app on your Hub came from.</string>
-    <string name="app_update_signature_title">An update signed with a different key</string>
     <string name="app_update_signature_more">What this means</string>
+    <string name="app_update_signature_title">An update signed with a different key</string>
     <string name="app_update_tap_install">Tap to install</string>
+    <string name="app_update_cancel_writing">Handing the update to Android. This can\'t be cancelled.</string>
     <string name="catalog_add_line">Add a line to the Filament Catalog</string>
     <string name="catalog_bed_placeholder">e.g. 55-65</string>
-    <string name="catalog_change_parent">Change parent</string>
-    <string name="catalog_error_range">Enter a range like 190-230.</string>
-    <string name="catalog_field_bed_range">Bed range (°C)</string>
     <string name="catalog_field_brand">Brand *</string>
-    <string name="catalog_field_density">Density (g/cm³)</string>
     <string name="catalog_field_line">Line *</string>
     <string name="catalog_field_material">Material *</string>
-    <string name="catalog_field_max_speed">Max volumetric speed (mm³/s)</string>
+    <string name="catalog_field_max_speed">Max volumetric speed</string>
+    <string name="catalog_field_bed_range">Bed range (°C)</string>
+    <string name="catalog_field_density">Density (g/cm³)</string>
     <string name="catalog_field_nozzle_range">Nozzle range (°C)</string>
     <string name="catalog_fill">Fill in Brand, Line and Material.</string>
     <string name="catalog_group_line">Line</string>
@@ -2740,6 +2335,14 @@
     <string name="catalog_group_notes">Notes</string>
     <string name="catalog_group_slicer">Slicer</string>
     <string name="catalog_intro">Values from the maker\'s label or data sheet for one product line. They apply to every colour of the line.</string>
+    <string name="catalog_nozzle_placeholder">e.g. 190-220</string>
+    <string name="catalog_refused">The Hub could not use these values:</string>
+    <string name="catalog_required_note">Fields marked * are needed.</string>
+    <string name="catalog_save">Save to the catalog</string>
+    <string name="catalog_saved">Saved to the Filament Catalog. Slicer presets are rebuilt in a minute.</string>
+    <string name="catalog_title">New catalog line</string>
+    <string name="catalog_change_parent">Change parent</string>
+    <string name="catalog_error_range">Enter a range like 190-230.</string>
     <string name="catalog_leave_thing">the new catalog line</string>
     <!-- 1=material 2=presets -->
     <string name="catalog_line_material">%1$s · %2$s</string>
@@ -2749,16 +2352,10 @@
     <string name="catalog_line_parent">Bambu Studio parent: %1$s</string>
     <string name="catalog_line_parent_none">Bambu Studio parent: none</string>
     <string name="catalog_lines_title">Existing lines</string>
-    <string name="catalog_nozzle_placeholder">e.g. 190-220</string>
     <string name="catalog_parent_loading">Loading…</string>
     <string name="catalog_parent_saved">Saved. A preset build was asked for.</string>
     <string name="catalog_parent_unsynced">Slicer Sync has not reported any parents yet. It reports them when it runs.</string>
-    <string name="catalog_refused">The Hub could not use these values:</string>
-    <string name="catalog_required_note">Fields marked * are needed.</string>
-    <string name="catalog_save">Save to the catalog</string>
-    <string name="catalog_saved">Saved to the Filament Catalog. Slicer presets are rebuilt in a minute.</string>
     <string name="catalog_saving_wait">Saving to the catalog… wait for the Hub\'s answer.</string>
-    <string name="catalog_title">New catalog line</string>
     <string name="common_add">Add</string>
     <string name="common_bambu_parent_applies">Applies to every colour of this line.</string>
     <string name="common_bambu_parent_unsynced">Bambu Studio\'s presets are not synced to the Hub yet; type the name.</string>
@@ -2809,18 +2406,15 @@
     <string name="presets_not_installed">Not installed on your PC yet</string>
     <string name="presets_status_unavailable">Slicer preset status is not available right now.</string>
     <string name="presets_sync_not_set_up">Slicer Sync is not set up</string>
-    <string name="printer_add_button">Add printer</string>
+    <string name="presets_result_build_requested">Build requested. The Hub builds the presets within a minute or two.</string>
     <string name="printer_add_connecting">Connecting to the printer…</string>
-    <!-- 1=name -->
-    <string name="printer_add_done">Added %1$s.</string>
     <!-- 1=model 2=serial -->
     <string name="printer_add_facts">%1$s · serial %2$s</string>
-    <string name="printer_add_name_placeholder">e.g. Workshop X1</string>
     <!-- 1=model -->
     <string name="printer_add_title">Add %1$s</string>
+    <string name="printer_add_name_placeholder">e.g. Workshop X1</string>
     <!-- 1=code -->
     <string name="printer_alert_code">Printer alert %1$s</string>
-    <string name="printer_available_connected">Available when the printer is connected.</string>
     <string name="printer_available_idle">Available when the printer is idle.</string>
     <string name="printer_camera_error_cert_changed">The printer\'s certificate changed. If you reset the printer or replaced its mainboard, forget its old certificate in Printer settings. If not, something else may be answering at the printer\'s address: check the printer\'s IP address first.</string>
     <string name="printer_camera_error_not_configured">Set up this printer first: enter its Access Code under Printers.</string>
@@ -2830,32 +2424,18 @@
     <string name="printer_camera_title">Camera</string>
     <string name="printer_camera_unsupported">The app can\'t show this printer model\'s camera.</string>
     <string name="printer_camera_waiting">Waiting for the camera picture…</string>
-    <string name="printer_error_access_code">Enter the Access Code shown on the printer.</string>
-    <string name="printer_error_address">Enter the printer\'s address.</string>
-    <string name="printer_error_port">Enter a port from 1 to 65535.</string>
-    <!-- 1=error -->
-    <string name="printer_error_said_no">The printer said no: %1$s.</string>
-    <string name="printer_field_address">Address</string>
-    <string name="printer_field_moonraker_key">Moonraker API key</string>
-    <string name="printer_field_moonraker_key_optional">Moonraker API key (optional)</string>
     <string name="printer_field_port">Port</string>
-    <!-- 1=name -->
-    <string name="printer_find_add_for">Add %1$s</string>
     <string name="printer_find_hint">Leave empty to search the Hub\'s own network.</string>
     <string name="printer_find_network">Network to search (optional)</string>
     <!-- 1=network -->
     <string name="printer_find_none">No Klipper printers answered on %1$s.</string>
-    <string name="printer_find_none_own">No Klipper printers answered on the Hub\'s own network.</string>
     <string name="printer_find_placeholder">e.g. 192.0.2.0/24</string>
-    <string name="printer_find_search">Search</string>
-    <string name="printer_find_searching">Searching…</string>
-    <string name="printer_forget">Forget printer</string>
-    <string name="printer_forget_body_bambu">filament-kit stops connecting to it and deletes its Access Code. To use it again, add it again.</string>
-    <string name="printer_forget_body_klipper">filament-kit stops connecting to it and deletes its Moonraker API key, if one is saved.</string>
+    <!-- 1=name -->
+    <string name="printer_find_add_for">Add %1$s</string>
+    <string name="printer_find_none_own">No Klipper printers answered on the Hub\'s own network.</string>
+    <string name="common_searching">Searching…</string>
     <!-- 1=name -->
     <string name="printer_forget_done">Forgot %1$s.</string>
-    <!-- 1=printer -->
-    <string name="printer_forget_question">Forget %1$s?</string>
     <string name="printer_job_failed">Print failed</string>
     <string name="printer_job_finished">Finished</string>
     <string name="printer_job_idle">Idle</string>
@@ -2863,23 +2443,12 @@
     <string name="printer_job_preparing">Preparing</string>
     <string name="printer_job_printing">Printing</string>
     <string name="printer_job_slicing">Slicing</string>
-    <string name="printer_klipper_address_placeholder">192.0.2.57 or printer.local</string>
     <string name="printer_klipper_connecting">Connecting to Moonraker…</string>
+    <string name="printer_klipper_address_placeholder">192.0.2.57 or printer.local</string>
     <string name="printer_light_off">Turn the light off</string>
     <string name="printer_light_on">Turn the light on</string>
-    <string name="printer_list_empty_text">The Hub finds Bambu Lab printers on its network by itself: turn the printer on, then add it here with its Access Code. A Klipper printer is added by its address.</string>
-    <!-- 1=state 2=percent -->
-    <string name="printer_list_job_percent">%1$s · %2$s %%</string>
-    <!-- 1=model -->
-    <string name="printer_list_model_bambu">Bambu Lab %1$s</string>
-    <!-- 1=model -->
-    <string name="printer_list_model_klipper">%1$s (Klipper)</string>
-    <string name="printer_map_by_loading">Map by loading filament</string>
     <string name="printer_map_confirmed_loaded">Slots mapped: confirmed for the loaded slots</string>
     <string name="printer_map_confirmed_text">The slot numbering is confirmed.</string>
-    <string name="printer_map_dialog_body">The printer changes its slot colours briefly and runs a short job with no motion. The colours are put back afterwards.</string>
-    <!-- 1=printer -->
-    <string name="printer_map_dialog_title">Map the slots of %1$s?</string>
     <string name="printer_map_disagreed">Recent prints disagreed with the map: map again</string>
     <string name="printer_map_failed">Slot mapping failed</string>
     <string name="printer_map_failed_last">The last slot mapping failed</string>
@@ -2893,17 +2462,14 @@
     <string name="printer_map_problems_old">From an earlier mapping; it may be fixed by now:</string>
     <string name="printer_map_report_note">The file holds no serial number, address, name or account id.</string>
     <string name="printer_map_running">Mapping slots…</string>
-    <string name="printer_map_slots">Map slots</string>
     <string name="printer_map_slots_again">Map slots again</string>
     <string name="printer_map_title_bambu">Slot mapping</string>
     <string name="printer_map_title_klipper">Slot names</string>
     <string name="printer_map_unconfirmed">Slot numbering not confirmed</string>
     <string name="printer_map_unconfirmed_last">The last slot mapping did not confirm the numbering</string>
     <string name="printer_mbl_by_hand_note">Saved as you say: the printer can\'t check it.</string>
-    <string name="printer_mbl_left_nozzle">Left nozzle</string>
     <string name="printer_mbl_lost">Lost touch with the Hub for a moment; still trying…</string>
     <string name="printer_mbl_no_other">No, I loaded another one</string>
-    <string name="printer_mbl_right_nozzle">Right nozzle</string>
     <!-- 1=where -->
     <string name="printer_mbl_row_by_hand">entered by hand (%1$s)</string>
     <!-- 1=slot 2=where -->
@@ -2912,18 +2478,10 @@
     <string name="printer_mbl_row_unanswered">not answered yet</string>
     <string name="printer_mbl_row_unmapped">not mapped</string>
     <string name="printer_mbl_settling">The printer shows a change. Waiting a few seconds for it to settle…</string>
-    <string name="printer_mbl_share">Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you choose to.</string>
-    <string name="printer_mbl_share_no">No thanks</string>
     <string name="printer_mbl_share_yes">Yes, how do I share it?</string>
     <!-- 1=slot -->
     <string name="printer_mbl_skip">Skip slot %1$s</string>
     <string name="printer_mbl_starting">Starting…</string>
-    <string name="printer_mbl_stop">Stop</string>
-    <string name="printer_mbl_stop_body">The positions confirmed so far are kept.</string>
-    <string name="printer_mbl_stop_confirm">Stop mapping</string>
-    <string name="printer_mbl_stop_keep">Keep mapping</string>
-    <!-- 1=printer -->
-    <string name="printer_mbl_stop_title">Stop mapping %1$s?</string>
     <string name="printer_mbl_waiting">Waiting for the printer to show the load…</string>
     <string name="printer_mbl_which_nozzle">Which nozzle did you load it to?</string>
     <string name="printer_mbl_which_one">Which one did you load?</string>
@@ -2936,65 +2494,38 @@
     <string name="printer_pick_title">Load into %1$s, slot %2$s</string>
     <!-- 1=layer 2=layers 3=time 4=clock -->
     <string name="printer_progress_detail">layer %1$s of %2$s · %3$s left · done about %4$s</string>
-    <string name="printer_report_collect">Collect a report</string>
     <string name="printer_report_collecting">Collecting a report…</string>
     <string name="printer_report_subject">Printer report</string>
     <string name="printer_result_light_off">Light off.</string>
     <string name="printer_result_paused">Paused.</string>
     <string name="printer_resume">Resume</string>
-    <string name="printer_set_address_button">Change address</string>
     <string name="printer_set_address_code_hint">The Hub needs the Access Code again when the address changes.</string>
     <string name="printer_set_address_done">Address changed. The printer answers.</string>
     <string name="printer_set_address_hint">An IP address or a name; a name is kept as you type it.</string>
     <!-- 1=name -->
-    <string name="printer_set_address_title">Change address: %1$s</string>
-    <string name="printer_set_cert_button">Forget certificate</string>
-    <!-- 1=name -->
     <string name="printer_set_cert_text">The next connection pins the certificate %1$s shows then. Enter its Access Code to go on.</string>
-    <!-- 1=name -->
-    <string name="printer_set_cert_title">Forget the certificate of %1$s?</string>
-    <string name="printer_set_code_button">Replace Access Code</string>
-    <!-- 1=name -->
-    <string name="printer_set_code_done">Access Code replaced for %1$s.</string>
-    <!-- 1=name -->
-    <string name="printer_set_code_title">Replace Access Code: %1$s</string>
     <string name="printer_set_connecting">Saving and connecting…</string>
-    <string name="printer_set_key_button">Save key</string>
     <string name="printer_set_key_hint">Leave empty to remove the API key.</string>
-    <!-- 1=name -->
-    <string name="printer_set_key_title">Moonraker API key: %1$s</string>
     <string name="printer_set_port_hint">Moonraker\'s port. Leave empty to keep it.</string>
-    <string name="printer_set_rename">Rename</string>
-    <string name="printer_set_rename_title">Rename printer</string>
     <!-- 1=name -->
     <string name="printer_set_renamed">Renamed to %1$s.</string>
-    <string name="printer_set_row_access_code">Access Code</string>
-    <string name="printer_set_row_address">Address</string>
     <string name="printer_set_row_api_key">API key</string>
-    <string name="printer_set_row_certificate">Certificate</string>
-    <string name="printer_set_row_name">Name</string>
-    <string name="printer_set_value_not_set">Not set</string>
-    <string name="printer_set_value_pinned">Pinned</string>
-    <string name="printer_set_value_set">Set</string>
     <string name="printer_settings_title">Printer settings</string>
     <string name="printer_slot_empty">This slot is empty.</string>
-    <string name="printer_slot_in_use">In use</string>
-    <!-- 1=left -->
-    <string name="printer_slot_left">%1$s g left</string>
     <string name="printer_slot_load">Load a spool</string>
     <string name="printer_slot_open_spool">Open spool</string>
     <!-- 1=slot -->
     <string name="printer_slot_title">Slot %1$s</string>
     <!-- 1=material -->
     <string name="printer_slot_unlinked">This slot holds %1$s that is not linked to a spool.</string>
-    <string name="printer_slot_unload">Unload</string>
-    <string name="printer_slots_title">Slots</string>
     <!-- 1=state 2=job -->
     <string name="printer_state_job">%1$s · %2$s</string>
     <string name="printer_stop">Stop print</string>
     <!-- 1=job 2=printer -->
     <string name="printer_stop_dialog_body">Stop %1$s on %2$s? It cannot be resumed.</string>
     <string name="printer_stop_dialog_title">Stop the print?</string>
+    <!-- 1=printer -->
+    <string name="printer_stop_dialog_body_nojob">Stop the print on %1$s? It cannot be resumed.</string>
     <string name="printer_stop_keep">Keep printing</string>
     <!-- 1=now 2=target -->
     <string name="printer_temp_bed">Bed %1$s → %2$s °C</string>
@@ -3004,10 +2535,6 @@
     <string name="printer_temp_nozzle">Nozzle %1$s → %2$s °C</string>
     <!-- 1=n 2=now 3=target -->
     <string name="printer_temp_nozzle_n">Nozzle %1$s %2$s → %3$s °C</string>
-    <!-- 1=hours 2=minutes -->
-    <string name="printer_time_hours">%1$s h %2$s min</string>
-    <!-- 1=minutes -->
-    <string name="printer_time_minutes">%1$s min</string>
     <!-- 1=name 2=slot 3=location -->
     <string name="printer_unload_body">Unload %1$s from %2$s? It goes back to %3$s. Only the inventory changes; the printer\'s slot setting stays as it is.</string>
     <!-- 1=slot 2=id 3=location -->
@@ -3040,9 +2567,14 @@
     <!-- 1=grams 2=id -->
     <string name="printer_usage_undone">%1$s g put back on spool %2$s.</string>
     <string name="printer_waiting">Waiting for the printer…</string>
-    <string name="printers_add_klipper">Add a Klipper printer</string>
+    <string name="printer_list_empty_text">The Hub finds Bambu Lab printers on its network by itself: turn the printer on, then add it here with its Access Code. A Klipper printer is added by its address.</string>
+    <!-- 1=state 2=percent -->
+    <string name="printer_list_job_percent">%1$s · %2$s %%</string>
+    <!-- 1=model -->
+    <string name="printer_list_model_bambu">Bambu Lab %1$s</string>
+    <!-- 1=model -->
+    <string name="printer_list_model_klipper">%1$s (Klipper)</string>
     <string name="printers_empty_text">The Hub finds Bambu printers on its network by itself. Turn the printer on, then refresh. Klipper printers are added by address.</string>
-    <string name="printers_find_klipper">Find Klipper printers</string>
     <string name="printers_fix_cert_changed">The printer\'s certificate changed. Forget its old certificate in Printer settings.</string>
     <string name="printers_fix_developer_mode">The printer refuses remote control. Turn on LAN mode and Developer Mode on the printer.</string>
     <string name="printers_fix_not_configured">Add it with its Access Code.</string>
@@ -3053,35 +2585,19 @@
     <string name="printers_job_line">%1$s · %2$s %% · %3$s left</string>
     <!-- 1=count -->
     <string name="printers_slots_more">+%1$d</string>
-    <string name="printers_status_not_configured">Not configured</string>
-    <string name="recent_ask_accept">Accept</string>
-    <!-- 1=count 2=n -->
-    <plurals name="recent_ask_accepted">
-        <item quantity="one">Accepted. %1$d field changed; revision %2$s keeps the old values.</item>
-        <item quantity="other">Accepted. %1$d fields changed; revision %2$s keeps the old values.</item>
-    </plurals>
-    <string name="recent_ask_discarded">Proposal discarded. Nothing changed.</string>
     <string name="recent_ask_error_empty">Say what is wrong first, e.g. brand is Polymaker.</string>
-    <string name="recent_ask_no_change">The Label Reader changed nothing.</string>
     <string name="recent_ask_no_photo">No photo was kept for this record: the Label Reader worked from the saved values and your note.</string>
     <string name="recent_ask_off">The Label Reader is switched off on this Hub. Edit by hand, or switch it on on the Hub page under Features.</string>
-    <!-- 1=count -->
-    <plurals name="recent_ask_proposal">
-        <item quantity="one">Proposal: %1$d change</item>
-        <item quantity="other">Proposal: %1$d changes</item>
-    </plurals>
-    <string name="recent_ask_waiting">Asking the Label Reader… (up to a minute)</string>
-    <string name="recent_edit_nothing">Nothing changed.</string>
-    <string name="recent_edit_save">Save changes</string>
     <!-- 1=count 2=fields -->
     <plurals name="recent_edit_saved">
         <item quantity="one">Saved %1$d change: %2$s. Only this was sent.</item>
         <item quantity="other">Saved %1$d changes: %2$s. Only these were sent.</item>
     </plurals>
-    <string name="recent_edit_title">Edit by hand</string>
-    <!-- 1=keep 2=size -->
-    <string name="recent_facts">The newest %1$s spool additions are kept with their photos (%2$s MB now).</string>
-    <string name="recent_fields_confidence">Read confidence is high unless marked</string>
+    <!-- 1=count 2=size -->
+    <plurals name="recent_facts">
+        <item quantity="one">The newest %1$d spool addition is kept with its photos (%2$s MB now).</item>
+        <item quantity="other">The newest %1$d spool additions are kept with their photos (%2$s MB now).</item>
+    </plurals>
     <string name="recent_item_note">A change applies to both.</string>
     <!-- 1=fields -->
     <string name="recent_mark_low">Low: %1$s</string>
@@ -3093,13 +2609,6 @@
     <string name="recent_photo_close">Close photo</string>
     <string name="recent_photo_failed">The photo could not be loaded.</string>
     <string name="recent_photo_loading">Loading photo…</string>
-    <!-- 1=n 2=total -->
-    <string name="recent_photo_position">Photo %1$s of %2$s</string>
-    <!-- 1=n 2=time 3=change -->
-    <string name="recent_revision_by_hand">Revision %1$s, %2$s, by hand: %3$s</string>
-    <!-- 1=n -->
-    <string name="recent_revision_undo">Undo revision %1$s</string>
-    <string name="recent_revisions_none">No revisions. Corrections by hand or by the Label Reader appear here.</string>
     <!-- 1=ids -->
     <plurals name="recent_spool_label">
         <item quantity="one">Spool %1$s</item>
@@ -3107,15 +2616,8 @@
     </plurals>
     <!-- 1=field 2=value -->
     <string name="recent_undo_body">%1$s goes back to %2$s.</string>
-    <!-- 1=n 2=field 3=value -->
-    <string name="recent_undo_done">Revision %1$s undone. %2$s is %3$s again.</string>
-    <!-- 1=id -->
-    <string name="recent_undo_filament_empty">Filament %1$s has no spools left; it was not deleted.</string>
-    <!-- 1=id -->
-    <string name="recent_undo_filament_new">The spools now use filament %1$s (new).</string>
     <!-- 1=n -->
     <string name="recent_undo_title">Undo revision %1$s?</string>
-    <string name="recent_value_empty">(empty)</string>
     <string name="recent_arrow">→</string>
     <!-- 1=field 2=old 3=new -->
     <string name="recent_change">%1$s %2$s → %3$s</string>
@@ -3167,22 +2669,14 @@
     <string name="recent_when_read">When read: %1$s</string>
     <!-- 1=value 2=unit -->
     <string name="recent_value_unit">%1$s %2$s</string>
-    <string name="spool_details_title">Details</string>
     <!-- 1=name 2=id -->
     <string name="spool_empty_body">%1$s (spool %2$s) will be marked as used up.</string>
     <!-- 1=id -->
     <string name="spool_empty_title">Mark spool %1$s empty?</string>
-    <string name="spool_field_empty_weight">Empty spool weight</string>
-    <string name="spool_field_filament">Filament</string>
-    <string name="spool_field_lot">Lot</string>
-    <string name="spool_field_state">State</string>
     <string name="spool_field_tag">Tag</string>
-    <!-- 1=left -->
-    <string name="spool_left">%1$s g left</string>
     <!-- 1=id 2=material 3=hex -->
     <string name="spool_line">Spool %1$s · %2$s · #%3$s</string>
     <string name="spool_load">Load into a printer</string>
-    <string name="spool_load_button">Load</string>
     <string name="spool_load_confirm_text">This sets the slot on the printer and moves the spool there in the inventory.</string>
     <!-- 1=printer 2=slot -->
     <string name="spool_load_confirm_title">Load into %1$s, slot %2$s?</string>
@@ -3204,13 +2698,13 @@
     <string name="spool_load_which_printer">Which printer?</string>
     <!-- 1=printer -->
     <string name="spool_load_which_slot">Which slot on %1$s?</string>
+    <string name="spool_load_previous_place">its previous place</string>
     <string name="spool_mark_empty">Mark empty</string>
     <string name="spool_move">Move</string>
     <string name="spool_move_here">Now here</string>
     <string name="spool_move_moving">Moving…</string>
     <string name="spool_move_none">The Hub has no storage locations yet. Add them on the Hub page under Settings > Storage locations.</string>
     <string name="spool_move_title">Move to</string>
-    <string name="spool_none">None</string>
     <!-- 1=total -->
     <string name="spool_of_total">of %1$s g</string>
     <!-- 1=tag -->
@@ -3226,9 +2720,7 @@
     <string name="spool_result_weight">Weight updated: %1$s g left.</string>
     <!-- 1=total -->
     <string name="spool_sealed_total">Sealed · %1$s g</string>
-    <string name="spool_state_empty">Empty</string>
     <string name="spool_state_opened">Opened</string>
-    <string name="spool_state_sealed">Sealed</string>
     <string name="spool_update_weight">Update weight</string>
     <string name="spool_weight_hint">Put the spool on the scale and type what it shows.</string>
     <string name="spool_weight_need_preview">Enter the weight to see the result first.</string>
@@ -3254,7 +2746,6 @@
     <string name="tag_find_search">Brand, name or colour</string>
     <!-- 1=tag -->
     <string name="tag_find_title">Link tag %1$s to a sealed spool</string>
-    <string name="tag_find_weight_error">Enter grams above 0, or leave this empty.</string>
     <string name="tag_in_use">This tag is already linked to another spool:</string>
     <string name="tag_link_button">Link tag</string>
     <!-- 1=tag -->
@@ -3303,27 +2794,31 @@
     <string name="cli_address_saved">Saved. %1$s is at %2$s.</string>
     <!-- 1=name -->
     <string name="cli_api_key_saved">Saved the API key of %1$s.</string>
-    <!-- 1=days -->
-    <string name="cli_backup_keep_line">Nightly backups are kept %1$s days.</string>
-    <!-- 1=days -->
-    <string name="cli_backup_keep_set">Backups are kept for %1$s days.</string>
+    <!-- 1=count -->
+    <plurals name="cli_backup_keep_set">
+        <item quantity="one">Backups are kept for %1$d day.</item>
+        <item quantity="other">Backups are kept for %1$d days.</item>
+    </plurals>
     <string name="cli_backup_kind_before_restore">before a restore</string>
     <string name="cli_backup_kind_made_here">made here</string>
     <string name="cli_backup_kind_nightly">nightly</string>
     <!-- 1=path -->
     <string name="cli_backup_written">Backup written: %1$s</string>
-    <!-- 1=folder -->
-    <string name="cli_backups_empty">No backups in %1$s yet.</string>
     <string name="cli_backups_make_hint">Back up now: sudo filament-kit backup create</string>
     <!-- 1=name -->
     <string name="cli_catalog_added">Added %1$s. A preset build follows.</string>
     <!-- 1=folder 2=count -->
-    <string name="cli_catalog_adopted">Took over the catalog in %1$s: %2$d local additions.</string>
+    <plurals name="cli_catalog_adopted">
+        <item quantity="one">Took over the catalog in %1$s: %2$d local addition.</item>
+        <item quantity="other">Took over the catalog in %1$s: %2$d local additions.</item>
+    </plurals>
     <!-- 1=version 2=count -->
-    <string name="cli_catalog_installed">Installed %1$s (%2$d entries downloaded).</string>
+    <plurals name="cli_catalog_installed">
+        <item quantity="one">Installed %1$s (%2$d entry downloaded).</item>
+        <item quantity="other">Installed %1$s (%2$d entries downloaded).</item>
+    </plurals>
     <!-- 1=time 2=reason -->
     <string name="cli_catalog_last_failed">Last check %1$s: failed: %2$s.</string>
-    <string name="cli_catalog_last_never">Last check: never.</string>
     <!-- 1=time -->
     <string name="cli_catalog_last_ok">Last check %1$s: ok.</string>
     <string name="cli_catalog_not_downloaded">The Filament Catalog is not downloaded yet.</string>
@@ -3333,7 +2828,10 @@
     <!-- 1=address -->
     <string name="cli_catalog_source">Source: %1$s</string>
     <!-- 1=version 2=source 3=count -->
-    <string name="cli_catalog_status">Filament Catalog version %1$s (%2$s), %3$d local additions.</string>
+    <plurals name="cli_catalog_status">
+        <item quantity="one">Filament Catalog version %1$s (%2$s), %3$d local addition.</item>
+        <item quantity="other">Filament Catalog version %1$s (%2$s), %3$d local additions.</item>
+    </plurals>
     <string name="cli_catalog_token_saved">Saved the catalog token.</string>
     <!-- 1=version -->
     <string name="cli_catalog_up_to_date">Up to date: %1$s.</string>
@@ -3355,7 +2853,6 @@
     <string name="cli_col_feature">FEATURE</string>
     <string name="cli_col_filament">FILAMENT</string>
     <string name="cli_col_from">FROM</string>
-    <string name="cli_col_id">ID</string>
     <string name="cli_col_key">KEY</string>
     <string name="cli_col_kind">KIND</string>
     <string name="cli_col_last_seen">LAST SEEN</string>
@@ -3375,7 +2872,6 @@
     <string name="cli_config_own_screens">These open their own screens; changes there apply at once:</string>
     <!-- 1=label 2=value -->
     <string name="cli_config_set_saved">Saved: %1$s is %2$s.</string>
-    <string name="cli_config_title">Settings</string>
     <!-- 1=name 2=model 3=slots -->
     <string name="cli_detected">%1$s: %2$s. Slots: %3$s.</string>
     <string name="cli_devices_built_in">built in: this Hub\'s own pairing</string>
@@ -3396,8 +2892,6 @@
     <!-- 1=name -->
     <string name="cli_done_printer_dismiss">Dismissed %1$s.</string>
     <!-- 1=name -->
-    <string name="cli_done_printer_forget_bambu">Forgot %1$s.</string>
-    <!-- 1=name -->
     <string name="cli_done_printer_forget_certificate">Forgot the certificate of %1$s; the next connection pins the one it presents.</string>
     <!-- 1=revision 2=changes -->
     <string name="cli_done_recent_saved_revision">Saved as revision %1$s: %2$s.</string>
@@ -3414,8 +2908,6 @@
     </plurals>
     <!-- 1=name -->
     <string name="cli_done_tag_reader_revoke">Revoked the token %1$s.</string>
-    <string name="cli_done_update_nightly">Following nightly builds.</string>
-    <string name="cli_done_update_stable">Back on signed releases.</string>
     <!-- 1=engine 2=number -->
     <string name="cli_engine_only">Engine: %1$s. Switch on the other one in Features (%2$s) to use both.</string>
     <string name="cli_err_box_count">the number of storage boxes is a whole number, 0 or more.</string>
@@ -3476,14 +2968,7 @@
     <string name="cli_features_rows">rows %1$s-%2$s of %3$s</string>
     <!-- 1=list -->
     <string name="cli_features_turns_off">Off also turns off: %1$s.</string>
-    <string name="cli_field_address">Address</string>
-    <string name="cli_field_api_key">API key</string>
-    <string name="cli_field_certificate">Certificate</string>
-    <string name="cli_field_lane_data">Lane data</string>
     <string name="cli_field_model">Model</string>
-    <string name="cli_field_serial">Serial</string>
-    <string name="cli_field_slots">Slots</string>
-    <string name="cli_field_state">State</string>
     <string name="cli_fix_catalog_file">give the path of one catalog entry as a JSON file.</string>
     <string name="cli_fix_catalog_update">sudo filament-kit catalog update</string>
     <!-- 1=name -->
@@ -3524,7 +3009,6 @@
     <string name="cli_footer_open">"Enter open  s save  q leave  ? help"</string>
     <string name="cli_footer_printer">"q back   ? help"</string>
     <string name="cli_footer_printers">"a add a printer   l look again   q back   ? help"</string>
-    <string name="cli_group_action_backup">Back up now: sudo filament-kit backup create</string>
     <string name="cli_group_action_catalog">Update now: sudo filament-kit catalog update</string>
     <string name="cli_group_action_firewall">Firewall rules: filament-kit remote firewall</string>
     <string name="cli_group_action_restore">Restore: sudo filament-kit restore &lt;zip></string>
@@ -3568,8 +3052,6 @@
     <string name="cli_help_usage">"Usage: filament-kit &lt;command> [options]    More: filament-kit &lt;command> -h"</string>
     <string name="cli_help_web">Access from outside the home, and Claude\'s connector</string>
     <string name="cli_help_weigh_station">Weigh Station: pair it, flash its display</string>
-    <string name="cli_hint_leave_empty_auto">Leave empty to choose automatically.</string>
-    <string name="cli_hub_back">The Hub is back.</string>
     <!-- 1=count -->
     <plurals name="cli_input_ended">
         <item quantity="one">Input ended: %1$d change not saved.</item>
@@ -3602,7 +3084,6 @@
         <item quantity="one">Only the last %1$d line is shown.</item>
         <item quantity="other">Only the last %1$d lines are shown.</item>
     </plurals>
-    <string name="cli_logs_empty">Nothing logged.</string>
     <string name="cli_map_no_number">→ no number yet</string>
     <string name="cli_map_not_put_back">A slot listed above as not put back may still show a test colour: set its colour again on the printer.</string>
     <!-- 1=ams 2=tray 3=number -->
@@ -3635,7 +3116,6 @@
     <!-- 1=kept 2=current -->
     <string name="cli_note_uninstall_older">using the removal script of %1$s, the newest kept release; no copy of %2$s is kept.</string>
     <string name="cli_nothing_applied">Nothing applied.</string>
-    <string name="cli_nothing_changed">Nothing changed.</string>
     <string name="cli_nothing_saved">Nothing saved.</string>
     <string name="cli_nothing_to_save">Nothing to save.</string>
     <!-- 1=old_command -->
@@ -3648,8 +3128,6 @@
     <string name="cli_pair_expires">Expires at %1$s (in %2$s min).</string>
     <string name="cli_pair_fingerprint">Certificate fingerprint (the phone asks for two groups of it):</string>
     <string name="cli_pair_instruction">Open the filament-kit app and scan this code, or type the pairing code.</string>
-    <!-- 1=name -->
-    <string name="cli_pair_paired">Paired: %1$s.</string>
     <string name="cli_pair_slicer_sync">Paste this link into the Slicer Sync when it asks:</string>
     <!-- 1=time -->
     <string name="cli_pair_stopped_waiting">Stopped waiting. The code works until %1$s.</string>
@@ -3664,9 +3142,15 @@
     <!-- 1=reason -->
     <string name="cli_presets_build_failed">The build failed: %1$s. The last good build stays in use.</string>
     <!-- 1=count -->
-    <string name="cli_presets_built">Built %1$d presets, no problems.</string>
-    <!-- 1=count 2=problems -->
-    <string name="cli_presets_built_problems">Built %1$d presets, %2$s problems:</string>
+    <plurals name="cli_presets_built">
+        <item quantity="one">Built %1$d preset, no problems.</item>
+        <item quantity="other">Built %1$d presets, no problems.</item>
+    </plurals>
+    <!-- 1=presets 2=count -->
+    <plurals name="cli_presets_built_problems">
+        <item quantity="one">Built %1$s presets, %2$d problem:</item>
+        <item quantity="other">Built %1$s presets, %2$d problems:</item>
+    </plurals>
     <!-- 1=name -->
     <string name="cli_presets_delete_bambu">Delete in Bambu Studio: %1$s</string>
     <!-- 1=name -->
@@ -3675,7 +3159,10 @@
     <string name="cli_presets_installed">Installed on the PC: the build of %1$s, written %2$s.</string>
     <string name="cli_presets_installed_none">Installed on the PC: nothing yet.</string>
     <!-- 1=time 2=count 3=orca -->
-    <string name="cli_presets_last_build">Last build %1$s: %2$d presets, %3$s for Orca Slicer, no problems.</string>
+    <plurals name="cli_presets_last_build">
+        <item quantity="one">Last build %1$s: %2$d preset, %3$s for Orca Slicer, no problems.</item>
+        <item quantity="other">Last build %1$s: %2$d presets, %3$s for Orca Slicer, no problems.</item>
+    </plurals>
     <!-- 1=count -->
     <string name="cli_presets_lines">Lines: %1$d.</string>
     <string name="cli_presets_lines_empty">No lines yet. They are made from the Spoolman filaments at the next build or addition.</string>
@@ -3684,17 +3171,16 @@
     <string name="cli_presets_lines_filaments_none">filaments: none</string>
     <!-- 1=bambu 2=bambu_source 3=orca 4=orca_source -->
     <string name="cli_presets_lines_parents">parents: Bambu Studio %1$s (%2$s) · Orca Slicer %3$s (%4$s)</string>
-    <string name="cli_presets_no_build">No build yet.</string>
-    <string name="cli_presets_no_updates">No updates to accept.</string>
-    <string name="cli_presets_parent_saved">Saved. A build was asked for.</string>
-    <string name="cli_presets_restore_deleted">The next build brings back the presets deleted in Bambu Studio. A build was asked for.</string>
     <string name="cli_presets_sync_not_set_up">Slicer Sync: not set up.</string>
     <!-- 1=time -->
     <string name="cli_presets_sync_reported">Slicer Sync: last reported %1$s.</string>
     <!-- 1=line 2=preset 3=file 4=keys -->
     <string name="cli_presets_update_line">"%1$s  Bambu Studio: %2$s (in your file %3$s): %4$s"</string>
-    <!-- 1=count 2=lines -->
-    <string name="cli_presets_updates">Updates: %1$d on %2$s lines. Presets already in your slicers are never replaced unless you accept them.</string>
+    <!-- 1=updates 2=count -->
+    <plurals name="cli_presets_updates">
+        <item quantity="one">Updates: %1$s on %2$d line. Presets already in your slicers are never replaced unless you accept them.</item>
+        <item quantity="other">Updates: %1$s on %2$d lines. Presets already in your slicers are never replaced unless you accept them.</item>
+    </plurals>
     <!-- 1=count -->
     <plurals name="cli_presets_would_accept">
         <item quantity="one">%1$d update would be accepted; nothing was changed.</item>
@@ -3723,8 +3209,6 @@
     <!-- 1=name 2=address -->
     <string name="cli_progress_connecting">Connecting to %1$s at %2$s…</string>
     <string name="cli_progress_ctrl_c">(Ctrl-C stops)</string>
-    <!-- 1=name -->
-    <string name="cli_progress_detect">Asking %1$s…</string>
     <!-- 1=percent -->
     <string name="cli_progress_firmware">Writing the firmware… %1$s %%</string>
     <!-- 1=port 2=percent -->
@@ -3739,8 +3223,6 @@
         <item quantity="one">Reading %1$d photo with %2$s…</item>
         <item quantity="other">Reading %1$d photos with %2$s…</item>
     </plurals>
-    <!-- 1=name -->
-    <string name="cli_progress_report">Collecting a report from %1$s…</string>
     <string name="cli_progress_restore">Restoring…</string>
     <!-- 1=version -->
     <string name="cli_progress_rollback">Rolling back to %1$s…</string>
@@ -3847,18 +3329,16 @@
     <string name="cli_q_uninstall_purge">This also deletes everything filament-kit keeps on this machine.</string>
     <!-- 1=version -->
     <string name="cli_q_update">Update to %1$s? filament-kit stops while it installs and starts again by itself. Settings and data stay. The version before is kept, so you can roll back.</string>
-    <string name="cli_q_update_nightly">Follow nightly builds? Nightly builds are untested and unsigned: filament-kit checks a download only against the nightly\'s own checksum list, which proves nothing about who built it. The newest nightly build is installed now, and each new one after it. To go back to signed releases, run sudo filament-kit update --channel stable.</string>
+    <!-- 1=latest -->
+    <string name="cli_update_from_nightly">going back to the signed release %1$s</string>
     <!-- 1=version -->
     <string name="cli_q_update_rollback">Roll back to %1$s? filament-kit stops while it installs and starts again by itself. Settings and data stay.</string>
-    <string name="cli_q_update_stable">Go back to signed releases? The latest signed release replaces the nightly build now.</string>
     <!-- 1=port -->
     <string name="cli_q_weigh_station_flash_display">Write the Weigh Station display firmware to %1$s?</string>
     <!-- 1=network -->
     <string name="cli_reader_done">Done. The Tag Reader joined \"%1$s\" and reached the Hub.</string>
     <!-- 1=network -->
     <string name="cli_reader_join_failed">The Tag Reader did not join \"%1$s\".</string>
-    <!-- 1=id 2=name -->
-    <string name="cli_reader_new_token">New Tag Reader token %1$s (%2$s):</string>
     <string name="cli_reader_option_base">The Hub\'s reader address when this machine is not the Hub: `&lt;public address>/reader`</string>
     <string name="cli_reader_option_name">The token\'s name</string>
     <string name="cli_reader_option_ota_pubkey">The public key that updates over Wi-Fi are signed with</string>
@@ -3874,41 +3354,17 @@
     <!-- 1=name -->
     <string name="cli_readers_make_hint">Make one: sudo filament-kit tag-reader new-token --name %1$s</string>
     <string name="cli_recent_ai_suggests">The AI suggests:</string>
-    <string name="cli_recent_confidence_note">Read confidence is high unless marked.</string>
-    <string name="cli_recent_empty">No spool has been added since the history started.</string>
-    <string name="cli_recent_field_bed">Bed</string>
-    <string name="cli_recent_field_bed_range">Bed range</string>
-    <string name="cli_recent_field_brand">Brand</string>
-    <string name="cli_recent_field_colour">Colour</string>
-    <string name="cli_recent_field_density">Density</string>
-    <string name="cli_recent_field_empty_spool_weight">Empty spool weight</string>
-    <string name="cli_recent_field_line">Line</string>
-    <string name="cli_recent_field_material">Material</string>
-    <string name="cli_recent_field_name">Name</string>
-    <string name="cli_recent_field_net_weight">Net weight</string>
-    <string name="cli_recent_field_nozzle">Nozzle</string>
-    <string name="cli_recent_field_nozzle_range">Nozzle range</string>
-    <string name="cli_recent_field_price_per_kg">Price per kg</string>
-    <string name="cli_recent_from_by_hand">by hand</string>
     <string name="cli_recent_from_command_line">command line</string>
     <string name="cli_recent_from_phone_photo">phone photo</string>
     <string name="cli_recent_from_web_app">web app</string>
-    <string name="cli_recent_from_weigh_station">Weigh Station</string>
-    <string name="cli_recent_group_identity">Identity</string>
-    <string name="cli_recent_group_other">Other</string>
-    <string name="cli_recent_group_temperatures">Temperatures</string>
-    <string name="cli_recent_group_weights">Weights</string>
     <!-- 1=number 2=spool 3=filament -->
     <string name="cli_recent_item_line">Item %1$s: spool %2$s (filament %3$s); changes apply to all of them</string>
     <!-- 1=record -->
     <string name="cli_recent_low_confidence">%1$s has fields read with low confidence: filament-kit recent show %1$s</string>
-    <string name="cli_recent_no_photo">No photo was taken for this addition.</string>
-    <string name="cli_recent_nothing_changed">The Label Reader changed nothing.</string>
     <!-- 1=url -->
     <string name="cli_recent_photos_open">Photos open on the Hub page: %1$s</string>
     <!-- 1=record 2=time 3=source 4=kind -->
     <string name="cli_recent_record_line">Record %1$s · %2$s · from a %3$s · %4$s</string>
-    <string name="cli_recent_revision_by_hand">by hand</string>
     <!-- 1=filament -->
     <string name="cli_recent_revision_filament_empty">· filament %1$s has no spools left (not deleted)</string>
     <!-- 1=note -->
@@ -3934,7 +3390,10 @@
     <!-- 1=name 2=time 3=version -->
     <string name="cli_restore_summary_1">Backup of %1$s made %2$s by filament-kit %3$s:</string>
     <!-- 1=count 2=features -->
-    <string name="cli_restore_summary_2">%1$d files and the Spoolman database. Features: %2$s</string>
+    <plurals name="cli_restore_summary_2">
+        <item quantity="one">%1$d file and the Spoolman database. Features: %2$s</item>
+        <item quantity="other">%1$d files and the Spoolman database. Features: %2$s</item>
+    </plurals>
     <string name="cli_restore_summary_3">This replaces the spools, settings, printers and pairings on this Hub.</string>
     <string name="cli_restore_summary_4">What is here now is saved as a backup first.</string>
     <string name="cli_restore_summary_5">The Hub restarts, and afterwards the setup code is the one from the backup.</string>
@@ -3942,17 +3401,10 @@
     <string name="cli_rollback_done">Rolled back to %1$s. The Hub is back.</string>
     <!-- 1=version -->
     <string name="cli_rollback_failed">Rolling back to %1$s failed.</string>
-    <!-- 1=count 2=list -->
-    <plurals name="cli_saved_changes">
-        <item quantity="one">Saved %1$d change: %2$s.</item>
-        <item quantity="other">Saved %1$d changes: %2$s.</item>
-    </plurals>
     <!-- 1=subnet 2=address 3=name -->
     <string name="cli_scan_found">Found on %1$s: %2$s (add it: sudo filament-kit printer use %3$s)</string>
     <!-- 1=subnet 2=address 3=name -->
     <string name="cli_scan_found_added">Found on %1$s: %2$s (added as %3$s)</string>
-    <!-- 1=subnet -->
-    <string name="cli_scan_none">No Moonraker found on %1$s.</string>
     <string name="cli_setting_orders_error">give the path of the order history file.</string>
     <string name="cli_setting_orders_line">Order history needs its file.</string>
     <string name="cli_setting_orders_prompt">"Path of the order history file: "</string>
@@ -3975,8 +3427,6 @@
     <string name="cli_setup_custom">custom</string>
     <!-- 1=address -->
     <string name="cli_setup_hub_address">Weigh Station answers at: %1$s</string>
-    <!-- 1=setup -->
-    <string name="cli_setup_line">Setup: %1$s</string>
     <!-- 1=setup 2=features -->
     <string name="cli_setup_line_features">Setup: %1$s (%2$s).</string>
     <!-- 1=url -->
@@ -3989,7 +3439,6 @@
     <string name="cli_state_certificate_changed">certificate changed</string>
     <string name="cli_state_confirmed">confirmed</string>
     <string name="cli_state_connected">connected</string>
-    <string name="cli_state_done">done</string>
     <string name="cli_state_entered_by_hand">entered by hand</string>
     <string name="cli_state_error">error</string>
     <string name="cli_state_failed">failed</string>
@@ -4004,10 +3453,8 @@
     <string name="cli_state_note">note</string>
     <string name="cli_state_off">off</string>
     <string name="cli_state_offline">offline</string>
-    <string name="cli_state_ok">OK</string>
     <string name="cli_state_on">on</string>
     <string name="cli_state_set">set</string>
-    <string name="cli_state_skipped">skipped</string>
     <string name="cli_state_stopped_without_finishing">stopped without finishing</string>
     <string name="cli_state_unknown">unknown</string>
     <string name="cli_state_working">working</string>
@@ -4033,22 +3480,10 @@
     <!-- 1=version 2=name 3=setup -->
     <string name="cli_status_header">filament-kit %1$s · %2$s · %3$s</string>
     <!-- 1=count -->
-    <string name="cli_status_summary_connected">%1$d connected</string>
-    <!-- 1=count -->
-    <plurals name="cli_status_summary_needs">
-        <item quantity="one">%1$d needs a look</item>
-        <item quantity="other">%1$d need a look</item>
-    </plurals>
-    <!-- 1=count -->
     <plurals name="cli_status_summary_notes">
         <item quantity="one">%1$d note</item>
         <item quantity="other">%1$d notes</item>
     </plurals>
-    <!-- 1=count -->
-    <string name="cli_status_summary_offline">%1$d offline</string>
-    <!-- 1=count -->
-    <string name="cli_status_summary_ok">%1$d OK</string>
-    <string name="cli_stopped">Stopped.</string>
     <string name="cli_sudo_mark">(sudo)</string>
     <string name="cli_theme_console_line">dense and technical</string>
     <string name="cli_theme_keep">Devices that already chose a theme keep theirs.</string>
@@ -4061,7 +3496,6 @@
     <string name="cli_theme_workbench_line">calm cards</string>
     <string name="cli_typing_not_shown">(typing is not shown)</string>
     <string name="cli_unchanged">Unchanged.</string>
-    <string name="cli_undone">(undone)</string>
     <string name="cli_uninstall_done">filament-kit is removed from this machine.</string>
     <!-- 1=reason -->
     <string name="cli_uninstall_failed">The removal stopped: %1$s.</string>
@@ -4082,11 +3516,8 @@
     <string name="cli_update_none">No updates available: %1$s is the latest.</string>
     <string name="cli_update_not_auto">Not checked by itself: the Automatic updates feature is off.</string>
     <string name="cli_value_empty">empty</string>
-    <string name="cli_value_empty_paren">(empty)</string>
     <string name="cli_value_mapped">mapped</string>
     <string name="cli_value_pinned">pinned</string>
-    <!-- 1=version -->
-    <string name="cli_version">filament-kit %1$s</string>
     <!-- 1=url -->
     <string name="cli_where_add">Add spools in the web app, app or Weigh Station: %1$s</string>
     <!-- 1=url -->
