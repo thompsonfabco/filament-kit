@@ -1,4 +1,5 @@
 """Remote module (spec 4.4): plan, executor, issue command; the kit never changes a firewall."""
+import datetime
 import os
 import re
 import shutil
@@ -424,6 +425,17 @@ def test_the_nginx_start_check_is_listed_before_the_distro_nginx_test():
     assert pre[0] == ""                                  # reset: the unit's own lines are dropped
     assert pre[1] == f"-{remote.HOOK} check"             # the check, which may fail without stopping the start
     assert pre[2].startswith("/usr/sbin/nginx -t") and len(pre) == 3
+
+
+def test_an_expired_served_certificate_warns_and_names_how_to_renew():
+    """`web status` shows this as a failing row; it is what tells the owner the start check served an expired pair."""
+    now = datetime.datetime(2026, 11, 12, tzinfo=datetime.timezone.utc)
+    expired, text, fix = remote.certificate_warning(
+        {"self_signed": False, "not_after": now - datetime.timedelta(days=3)}, now)
+    assert expired and "ended on 2026-11-09" in text and "sudo certbot renew" in fix
+    expired, text, fix = remote.certificate_warning(
+        {"self_signed": True, "not_after": now - datetime.timedelta(days=3)}, now)
+    assert expired and "sudo filament-kit modules apply" in fix
 
 
 # ---- v0.3.0: the kit's own route marker (the ops router writes "written by mcp-route" too) ----
