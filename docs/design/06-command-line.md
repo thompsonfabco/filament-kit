@@ -757,7 +757,7 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 | Label Reader | Address | `local_intake.url` | text |
 | Label Reader | Tier | `local_intake.tier` | choice: Automatic · Processor (CPU) · Graphics card (GPU) |
 | Label Reader | Records kept | `intake.history_keep` | whole number 0 to 500; the row adds `Now 5 records, 14.2 MB of photos` |
-| Backups and restore | Keep nightly backups for (days) | `backups.keep_days` | whole number 1 to 365 |
+| Backups and restore | Keep nightly backups for | `backups.keep_days` | whole number of days, 1 to 365 |
 | Network and addresses | Public address | `web.public_url` | text, an https address |
 | Network and addresses | Weigh Station address | `station.url` | text; empty answer keeps, `-` clears |
 | Network and addresses | Names for this page | `setup.hosts` | text, separated by spaces |
@@ -1221,7 +1221,7 @@ Photos open on the Hub page: https://192.0.2.10:8710/setup#recent/35
 ```
 $ sudo spoolwarden recent revise 35 --note "it is the matte one"
 ◐ Asking the AI… (up to a minute) 6 s
-The AI suggests:
+The Label Reader suggests:
   Name: PolyTerra PLA Charcoal Black
      → PolyTerra PLA Charcoal Black (Matte)
   Nozzle range: 190-230 °C → 190-220 °C

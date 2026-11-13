@@ -408,7 +408,7 @@ poorly. Numbers are text fields with an `inputmode` and are checked by the page.
 | Subnet | `text` | `text` | `off` | `autocapitalize="off"`, `spellcheck="false"` (the slash needs the full keyboard) |
 | Serial number | `text` | `text` | `off` | `autocapitalize="characters"`, `spellcheck="false"` |
 | Names (Hub display name, printer, computer, Tag Reader) | `text` | `text` | `off` | |
-| Weights, density, price per kg | `text` | `decimal` | `off` | Unit shown beside the field and in the label ("Net weight (g)") |
+| Weights, density, price per kg | `text` | `decimal` | `off` | Unit shown inside the field and read after the label ("Net weight", then "g"); never in the label |
 | Counts, days, records kept, reads per day, temperatures | `text` | `numeric` | `off` | Unit beside the field where there is one |
 | Colour (hex) | `text` | `text` | `off` | `autocapitalize="off"`, `spellcheck="false"`; the `#` is optional |
 | Search | `search` | `search` | `off` | `enterkeyhint="search"` |

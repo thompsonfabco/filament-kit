@@ -1091,13 +1091,25 @@ storage keys, file and package names) are not part of the catalogue and do not f
 - Text that arrives from the Hub while running (a printer's name, a message about one specific failure) is shown as
   it arrives and is not in the catalogue.
 
+**One key per meaning, one text per key.** Where two interfaces show the same thing they read the same key, so
+no key carries an interface in its name (`_hub`, `_web`, `_app`). Two keys may hold the same text only when they
+mean different things ("System" as the navigation group and "System" as the appearance choice); keys that mean the
+same are merged (the status words are the `status_…` keys, used by every badge and chip).
+
+**A label never carries its unit.** A field's label is the bare name ("Nozzle", "Net weight", "Density",
+"Weight with spool"); the unit is shown inside the field (`02-components.md` section 5.4; the `suffix` of the text
+field on Android) and comes from its own key (`unit_g`, `unit_c`, `unit_g_cm3`, `unit_mm3_s`, `unit_days`). In a
+key-value list the unit follows the value ("1000 g", "210 °C"). "(optional)" stays in the label, alone in its
+brackets. A format a person must type goes in the placeholder or the hint ("e.g. 190-220", "A hex colour, like
+#2B2B2E"), not in the label.
+
 **Shared wording.** One term per thing, in every interface (Hub page, web app, app and the `spoolwarden` command)
 and in the user documents. Each term is one catalogue key (`common_…` where several screens use it), so the interfaces
 cannot drift apart; the words lint (`07-accessibility.md` AUT-7) lists the words in the right-hand column.
 
 | Thing | Term | Never |
 |---|---|---|
-| What a spool weighs on a scale, filament and empty spool together | "Weight with spool" (field label "Weight with spool (g)") | "Gross weight", "Weight on the scale", "scale weight" |
+| What a spool weighs on a scale, filament and empty spool together | "Weight with spool" (also the field's label; the unit g is shown inside the field) | "Gross weight", "Weight on the scale", "scale weight" |
 | Repeating a request that failed | "Try again" | "Retry" |
 | Hint under an optional field that the Hub fills in by itself when it is left empty (location, Bambu Studio parent, density) | "Leave empty to choose automatically." | "Blank = automatic", "Empty = chosen automatically", "Blank = <value>" |
 | Hint under Weight with spool | "Leave empty for a full spool." | "Blank = full" |

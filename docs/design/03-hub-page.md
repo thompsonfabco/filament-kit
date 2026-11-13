@@ -813,7 +813,7 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 | Header | Breadcrumb with the list as link; title "<vendor> <name>" (x<n>), or "No spools" for a record with no spools (its photos, fields and revisions still show; a change the Hub refuses because the spools are gone shows the Hub's text at the Save or Accept button); meta: time, source, state badge, spools. Actions: ghost **Back** (to `#recent`), icon buttons "Newer record" and "Older record" (disabled at the ends) |
 | Item choice | Only when the record has several items: segmented choice "Item 1", "Item 2", … with the line "Spools <ids> (filament <id>). Changes apply to all of them." |
 | Photos | Photo thumbnails (96 px); pressing one opens the photo viewer (full width, Left and Right between photos, Escape closes, "Photo <n> of <m>"). No photo: "No photo was taken for this addition." |
-| Fields | Key-value list in four groups. Identity: Brand, Name, Material, Colour (filament swatch and hex). Weights: Net weight (g), Empty spool weight (g), Density (g/cm³). Temperatures: Nozzle (°C), Bed (°C), Nozzle range (°C), Bed range (°C). Other: Price per kg, Line. Empty values read "(empty)" in `--muted`. Per-field confidence display next to the value when it is not high. Card action: default **Edit by hand**. |
+| Fields | Key-value list in four groups. Identity: Brand, Name, Material, Colour (filament swatch and hex). Weights: Net weight, Empty spool weight, Density. Temperatures: Nozzle, Bed, Nozzle range, Bed range. Other: Price per kg, Line. Empty values read "(empty)" in `--muted`. Per-field confidence display next to the value when it is not high. Card action: default **Edit by hand**. |
 | Fields, editing | The values become fields (text; numbers with unit). Foot: inline result, default **Cancel**, primary **Save changes**. Only changed fields are sent: `P intake/history/<id>/apply` (code) `{item, values}`. |
 | Ask the Label Reader to correct it | Text area "What is wrong?", placeholder "e.g. brand is Polymaker", hint "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept." Default button **Ask the Label Reader** → `P intake/history/<id>/revise` (code) `{item, note}` |
 | Suggestion | Change list (before → after per field), title "The Label Reader (<engine>) suggests <n> changes" or "The Label Reader changed nothing."; when no photo was kept: "No photo was kept for this record: it worked from the saved values and your note." Primary **Accept** → `P intake/history/<id>/apply` (code) `{proposal}`; default **Discard** (nothing is sent) |
@@ -839,7 +839,7 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 | Loading | Five skeleton rows; record: skeleton photos and field groups |
 | Empty | Empty state with spool icon: "Nothing added yet" / "No spool has been added since the history started. Spools added from the web app, the app or the Weigh Station appear here." |
 | Record not found (deep link to an old id) | Error state "This record is no longer kept. Only the newest <keep> are." with **Back to Recently added** |
-| Label Reader off (`ai: false`) | The Ask card shows the off state: "The Label Reader is switched off, so corrections are by hand." with link **Features**; Edit by hand works |
+| Label Reader off (`ai: false`) | The Ask card shows the off state: "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page." with link **Features**; Edit by hand works |
 | Locked | Edit by hand, Ask, Accept and Undo ask for the code in place |
 | Error | "Could not read the additions. <Hub's text>" + **Try again** |
 
@@ -1037,7 +1037,7 @@ Phone:  one column; product lines become cards.
 | Part | Content |
 |---|---|
 | Summary | "Last build <stamp>: <n> presets, <m> for Orca Slicer, <k> problems." or "No build yet." |
-| Last attempt failed | Error line: "The last build failed: <error>" |
+| Last attempt failed | Error line: "The last preset build failed: <error>" |
 | Waiting | Note line with `waiting_text` |
 | Slicer Sync | Status badge "OK" with "Slicer Sync has reported in.", or "Not configured" (Note) with "Slicer Sync is not set up. Link it in Devices." (link to `#devices`) |
 | Problems | List of `problems` as error lines |

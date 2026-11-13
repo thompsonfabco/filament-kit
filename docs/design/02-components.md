@@ -325,7 +325,7 @@ item has `aria-current="page"`, also when the page shown is a detail inside the 
 **More** collects every item that the current layout hides: the shell lists the items whose `li` is not rendered
 (`offsetParent === null`), clones them in order into the More container and marks the current one. With `pills` on
 wide screens More opens a menu (4.2) below the button; on phones it opens the More sheet (2.5). When the current
-section is in More, the More button shows the active style and its hidden text says ", current: Logs"; with `pills`
+section is in More, the More button shows the active style and its accessible name is "More, current: Logs"; with `pills`
 its visible label becomes the section's name. With `list` on phones the navigation is the root page: `#` with no
 section shows the list full screen; choosing an item drills in; the top bar's Back returns to the list.
 
@@ -1446,7 +1446,7 @@ reached.
   <label class="field__label" for="ai-note">What is wrong?</label>
   <textarea class="field__control" id="ai-note" rows="3" placeholder="e.g. brand is Polymaker"
             aria-describedby="ai-note-hint ai-note-error"></textarea>
-  <p class="field__hint" id="ai-note-hint">The AI reads the photos again with your note and proposes changes.
+  <p class="field__hint" id="ai-note-hint">The Label Reader reads the photos again with your note and suggests changes.
     Nothing changes until you accept.</p>
   <p class="field__error" id="ai-note-error" hidden></p>
 </div>
