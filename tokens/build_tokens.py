@@ -27,7 +27,11 @@ COLOUR_ORDER = [
 ]
 TYPE_ORDER = ["sans", "mono", "fs-xs", "fs-s", "fs-m", "fs-b", "fs-l", "fs-xl", "fs-2xl",
               "lh-body", "lh-title", "fw-text", "fw-label", "fw-title"]
-SIZE_ORDER = ["ctl", "top", "rail", "tab", "row", "gap", "drawer", "hairline", "nav-mark", "thumb", "qr", "side-w", "list-w"]
+SIZE_ORDER = ["ctl", "top", "rail", "tab", "row", "gap", "drawer", "hairline", "nav-mark", "thumb", "qr", "side-w", "list-w",
+              "content-max", "label-col", "thumb-s", "swatch-row-w", "swatch-row-h", "swatch-head", "empty-mark", "chip",
+              "slot-label", "port-field", "column-max", "preview-max", "list-pane"]
+# Groups that hold values for one platform only: type.android and elevation.android (version 2) are Android's, not CSS.
+PLATFORM_ONLY = ("android",)
 MOTION_ORDER = ["t-fast", "t", "t-slow", "ease"]
 
 
@@ -52,12 +56,16 @@ def non_phone(d):
     return {k: v for k, v in d.items() if not k.endswith("-phone")}
 
 
+def web(d):
+    return {k: v for k, v in d.items() if k not in PLATFORM_ONLY}
+
+
 def light_decls(t):
     ex = t.get("extra", {})
     out = ["color-scheme: light;"]
     out += [decl(k, v) for k, v in ordered(t["light"], COLOUR_ORDER)]
     out += [decl(k, v) for k, v in ordered(ex.get("colour", {}).get("light", {}), [])]
-    out += [decl(k, v) for k, v in ordered(t["type"], TYPE_ORDER)]
+    out += [decl(k, v) for k, v in ordered(web(t["type"]), TYPE_ORDER)]
     out += [decl(k, v) for k, v in ordered(ex.get("type", {}), [])]
     out += [decl(k, v) for k, v in t["space"].items()]
     out += [decl(k, v) for k, v in ex.get("space", {}).items()]
