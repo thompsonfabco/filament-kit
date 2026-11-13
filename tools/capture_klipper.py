@@ -33,7 +33,7 @@ _OCTET = r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
 _IPV4 = re.compile(rf"(?<![\w.]){_OCTET}(?:\.{_OCTET}){{3}}(?![\w.])")
 _URL_HOST = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://(?:[^/@\s]*@)?)(\[[0-9a-f:]+\]|[^/:?#\s]+)")
 _IPV6 = re.compile(r"(?i)(?<![\w:.])[0-9a-f:]*:[0-9a-f:]*(?![\w:.])")     # candidates; ipaddress decides
-_LOCAL_NAME = re.compile(r"(?i)(?<![\w-])(?:[a-z0-9-]+\.)+(?:local|lan|arpa|localdomain|home|internal|intranet|corp)(?!\.?[\w-])")
+_LOCAL_NAME = re.compile(r"(?i)(?<![\w-])(?:[a-z0-9-]+\.)+(?:local(?:domain)?|lan|arpa|home|internal|intranet|corp)(?!\.?[\w-])")
 _HOME = re.compile(r"(?i)(/home/|/Users/|[A-Z]:\\Users\\|[A-Z]:/Users/)([^/\\\s\"']+)")
 MACRO = re.compile(r"gcode_macro .*(SPOOL|TOOL|\bT\d+\b)", re.I)
 
