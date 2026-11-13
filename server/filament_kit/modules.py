@@ -59,19 +59,26 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        units=("filament-kit-web.service",), depends=("server",)),
     _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",
        depends=("web",), apt=("nginx", "certbot")),
+    # orders needs Claude (ai_intake) even when the local reader is on: the order history goes only into Claude's
+    # prompt; the local reader never gets it (reader contract v1). The decision of 2026-11-12, after review R127.
     _m("orders", "Orders", "Order history file for the shop tools",
-       depends=("ai_intake",)),
+       depends=("ai_intake",), needs_text="order matching needs the Claude reader"),
     _m("updates", "Auto-update", "Daily check for a new signed release; installs it and keeps the one before",
        units=("filament-kit-update.timer",)),
     _m("klipper", "Klipper printers", "Moonraker bridge: discovery, spool loads, usage log, camera",
        depends=("server",)),
+    # The reader itself is a separate program (its own repository and release, installed on request, or already
+    # running on another machine); the kit only talks to it over HTTP (local_reader.py). Appended last: numbers
+    # 1-13 keep their meaning in the checklist.
+    _m("local_intake", "Local AI intake", "A label reader on your own network reads spool photos, no cloud",
+       depends=("server",), needs_text="the local reader service (local_intake.url)", optional_ai=True),
 )}
 
 # Switched on by hand (modules set / config menu, the installer's question), never by a mode: a mode is the kit
 # as it was. ai_intake (spec R 2.4): AI is optional, so a new install has it off; one that had it keeps it. The
 # library is not bundled: switching it on downloads it; one without the key has none until asked. klipper is for
 # owners of Klipper printers only (Klipper spec: opt-in, runs inside filament-kit.service).
-OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates", "klipper"})
+OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates", "klipper", "local_intake"})
 
 MODES: dict[str, frozenset[str]] = {
     "server": frozenset(MODULES) - {"station"} - OPT_IN,
@@ -97,7 +104,7 @@ def enabled(cfg: dict) -> frozenset[str]:
 
 # Modules newer than an earlier release, with the version that added them. That release's `validate` refuses the
 # name even when false, and `update --rollback` ends in its `modules apply`.
-NEWER: dict[str, tuple[int, int, int]] = {"klipper": (0, 4, 0)}
+NEWER: dict[str, tuple[int, int, int]] = {"klipper": (0, 4, 0), "local_intake": (0, 5, 3)}
 
 
 def module_map(on, before: dict | None = None) -> dict[str, bool]:
@@ -186,7 +193,8 @@ def validate(cfg: dict) -> None:
         if n in on:
             for dep in MODULES[n].depends:
                 if dep not in on:
-                    raise ModuleError(f"{n} needs {dep}")
+                    why = f" ({MODULES[n].needs_text})" if n == "orders" else ""
+                    raise ModuleError(f"{n} needs {dep}{why}")
     if needs_spoolman_url(on, cfg):
         raise ModuleError(
             "server without the spoolman module needs spoolman_url "

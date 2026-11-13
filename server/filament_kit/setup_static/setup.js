@@ -69,7 +69,7 @@ const TABS = {
   devices: ["Devices", () => [pairCard(), stationAsksCard(), webAppCard(), readersCard(), trustCard()]],
   presets: ["Presets", () => presetsTab()],
   intake: ["Intake", () => intakeTab()],
-  settings: ["Settings", () => [generalCard(), backupCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
+  settings: ["Settings", () => [generalCard(), readerCard(), backupCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
   updates: ["Updates", () => updatesTab()],
   logs: ["Logs", () => logsTab()],
 };

@@ -54,6 +54,9 @@ def _set(app, key, value):
     ("placement.box_count", 0, lambda c: c["placement"]["box_count"] == 0),
     ("placement.overflow", "Floor", lambda c: c["placement"]["overflow"] == "Floor"),
     ("station.tts", "espeak", lambda c: c["station"]["tts"] == "espeak"),
+    ("intake.reader", "cloud-then-local", lambda c: c["intake"]["reader"] == "cloud-then-local"),
+    ("local_intake.url", "http://gpu-box.example:7915/", lambda c: c["local_intake"]["url"] == "http://gpu-box.example:7915"),
+    ("local_intake.tier", "gpu", lambda c: c["local_intake"]["tier"] == "gpu"),
 ])
 def test_each_key_saves(app, restarts, applies, key, value, read):
     r = _set(app, key, value)
@@ -68,6 +71,9 @@ def test_each_key_saves(app, restarts, applies, key, value, read):
     ("locations", []), ("locations", "Rack"), ("locations", [""]), ("locations", [5]), ("locations", ["x"] * 51),
     ("placement.box_count", -1), ("placement.box_count", 1000), ("placement.box_prefix", ""),
     ("station.tts", "other"),
+    ("intake.reader", "fastest"), ("intake.reader", None),
+    ("local_intake.url", "gpu-box:7915"), ("local_intake.url", "http://h:7915/v1/read"), ("local_intake.url", "file:///x"),
+    ("local_intake.tier", "tpu"),
 ])
 def test_a_bad_value_is_refused_and_nothing_saved(app, restarts, applies, key, value):
     before = config.load()
@@ -99,6 +105,11 @@ def test_what_is_read_once_at_the_start_restarts_the_server(app, restarts, appli
 def test_what_is_read_each_time_restarts_nothing(app, restarts, applies):
     r = _set(app, "server_name", "Shop").json()
     assert r["restarts"] is False and r["applies"] is False and not restarts and not applies
+    for key, value in (("intake.reader", "local"), ("local_intake.url", "http://10.0.0.5:7915"),
+                       ("local_intake.tier", "cpu")):         # read on every label read
+        r = _set(app, key, value).json()
+        assert r["restarts"] is False and r["applies"] is False
+    assert not restarts and not applies
 
 
 def test_the_station_voice_goes_through_an_apply(app, restarts, applies):

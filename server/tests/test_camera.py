@@ -530,12 +530,9 @@ def jpeg_printer(tmp_path):
 
 
 def serve_app(app):
-    port = free_port()
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    assert wait_until(lambda: server.started, 10)
-    return server, t, f"http://127.0.0.1:{port}"
+    from fakes import serving          # binds its own socket: no port picked and closed before uvicorn binds it
+    running = serving.start(app)
+    return running.server, running.thread, running.url
 
 
 def passthrough(fn):

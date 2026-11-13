@@ -13,6 +13,8 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     key_set {key}  key_remove                  the Anthropic key (cli.write_key / cli.remove_key)
     passphrase_set {passphrase}                the web passphrase (cli.write_passphrase: scrypt, root:filament-kit 640)
     library_token_set {token}  library_token_remove   /etc/filament-kit/github_token (library.write_token)
+    local_intake_token_set {token}  local_intake_token_remove   /etc/filament-kit/local_intake_token (the local label
+                                               reader's bearer token, local_reader.write_token)
     module {name, on[, settings]}              one module on/off with the checklist's rules (modules.toggle,
                                                cli._apply_selection, cli._plan_error), saved, then an apply
     setting {key, value}                       web.public_url or station.url, checked, saved, then an apply
@@ -97,7 +99,11 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "roll
         "remote_issue": ("remote", "issue"),
         # the Updates tab's "Follow nightly builds" switch: save updates.channel and update on it now
         "channel_nightly": ("update", "--channel", "nightly"), "channel_stable": ("update", "--channel", "stable"),
-        "backup": ("backup", "create"), "restore": ("restore", "--uploaded", "--yes")}
+        "backup": ("backup", "create"), "restore": ("restore", "--uploaded", "--yes"),
+        # the local label reader: the page showed the release's sizes and the owner confirmed (tier: local_intake.tier)
+        "local_intake_plan": ("local-intake", "plan"),         # the server cannot reach GitHub: a job, as `check`
+        "local_intake_install": ("local-intake", "install", "--yes", "--planned"),
+        "local_intake_remove": ("local-intake", "remove", "--yes")}
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
@@ -120,7 +126,10 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "channel_nightly": "an update is running; wait until it has finished",
         "channel_stable": "an update is running; wait until it has finished",
         "backup": "a backup is being written; wait until it has finished",
-        "restore": "a restore is running; wait until it has finished"}
+        "restore": "a restore is running; wait until it has finished",
+        "local_intake_plan": "the reader's release is being checked; try again in a moment",
+        "local_intake_install": "the local label reader is being installed; wait until it has finished",
+        "local_intake_remove": "the local label reader is being removed; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}
 
@@ -363,6 +372,20 @@ def _library_token_remove(req: dict) -> dict:
     return {"removed": library.remove_token()}
 
 
+def _local_intake_token_set(req: dict) -> dict:
+    from . import local_reader
+    try:
+        local_reader.write_token(_text(req, "token", 400, word=True))
+    except ValueError as e:
+        raise Refused(400, str(e)) from None
+    return {}
+
+
+def _local_intake_token_remove(req: dict) -> dict:
+    from . import local_reader
+    return {"removed": local_reader.remove_token()}
+
+
 def _answers(raw) -> dict[str, str]:
     """The settings a module needs (web.public_url, orders.file), as the checklist would ask for them."""
     if raw is None:
@@ -513,6 +536,29 @@ def _bool(value) -> bool:
     return value
 
 
+def _reader(value) -> str:
+    from . import intake
+    if value not in intake.READER_CHOICES:
+        raise ValueError("must be one of: " + ", ".join(intake.READER_CHOICES))
+    return value
+
+
+def _reader_url(value) -> str:
+    from . import local_reader
+    text = _one_line(value, 200)
+    err = local_reader.check_url(text)
+    if err:
+        raise ValueError(f"is not usable: {err}")
+    return text.rstrip("/")
+
+
+def _reader_tier(value) -> str:
+    from . import local_reader
+    if value not in local_reader.TIERS:
+        raise ValueError("must be one of: " + ", ".join(local_reader.TIERS))
+    return value
+
+
 def _tts(value) -> str:
     if value not in ("auto", "espeak"):
         raise ValueError("must be auto or espeak")
@@ -535,6 +581,10 @@ GENERAL = {
     "station.tts": (_tts, "apply"),
     "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
     "web.printer_changes": (_bool, None),   # read on every request (printers_app.changes_allowed): no restart
+    # read on every label read (intake._call): no restart
+    "intake.reader": (_reader, None),
+    "local_intake.url": (_reader_url, None),
+    "local_intake.tier": (_reader_tier, None),
 }
 
 
@@ -820,6 +870,7 @@ def _apply(req: dict) -> dict:
 
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
+       "local_intake_token_set": _local_intake_token_set, "local_intake_token_remove": _local_intake_token_remove,
        "module": _module, "setting": _setting, "general": _general, "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
        "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open, "restore_pin": _restore_pin,
        "restore_forget": _restore_forget, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,

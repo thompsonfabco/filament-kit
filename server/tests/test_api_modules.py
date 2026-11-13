@@ -1,16 +1,13 @@
 """Module gating of the app API, /api/station, and the main wiring without printers."""
 import asyncio
-import threading
-import time
 
 import pytest
-import uvicorn
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from conftest import free_port
+from fakes import serving
 from filament_kit import config, pairing
 from filament_kit import __main__ as m
 from filament_kit.api import create_app
@@ -90,28 +87,22 @@ class FakeStation:
     def __init__(self):
         self.hits = 0
         self.fail = False
-        self.port = free_port()
+        self.sock = serving.bind()
+        self.port = self.sock.getsockname()[1]
 
         def state(request):
             self.hits += 1
             if self.fail:
                 return Response("no", status_code=500)
             return JSONResponse(STATE)
-        self.server = uvicorn.Server(uvicorn.Config(Starlette(routes=[Route("/state", state)]),
-                                                    host="127.0.0.1", port=self.port, log_level="warning"))
-        self.thread = threading.Thread(target=self.server.run, daemon=True)
+        self.running = serving.Running(Starlette(routes=[Route("/state", state)]), self.sock)
 
     def __enter__(self):
-        self.thread.start()
-        for _ in range(200):
-            if self.server.started:
-                return self
-            time.sleep(0.05)
-        raise RuntimeError("station fake did not start")
+        self.running.start()
+        return self
 
     def __exit__(self, *a):
-        self.server.should_exit = True
-        self.thread.join(timeout=5)
+        self.running.stop()
 
     @property
     def url(self):

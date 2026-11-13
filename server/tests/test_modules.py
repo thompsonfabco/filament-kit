@@ -15,12 +15,12 @@ def test_missing_modules_is_server_mode():
 def test_registry_order_and_modes():
     assert list(MODULES) == ["spoolman", "server", "ai_intake", "printers",
                              "presets", "library", "backup", "station", "web", "remote", "orders",
-                             "updates", "klipper"]
+                             "updates", "klipper", "local_intake"]
     assert MODES["station"] == frozenset({"station"})
     assert MODES["all-in-one"] == frozenset(MODULES) - {"ai_intake", "web", "remote", "orders", "library",
-                                                        "updates", "klipper"}
+                                                        "updates", "klipper", "local_intake"}
     assert MODES["server"] == frozenset(MODULES) - {"station", "ai_intake", "web", "remote", "orders", "library",
-                                                    "updates", "klipper"}
+                                                    "updates", "klipper", "local_intake"}
 
 
 def test_mode_of_custom():
@@ -179,7 +179,8 @@ def test_new_config_defaults():
     assert d["orders"] == {"file": None}
     assert d["tag_sources"] == [] and d["slot_service"] is None and d["slicer_printers"] == []
     assert d["presets_orca"] is False and d["web_instructions"] is None
-    assert d["intake"] == {"tare_hints": {}, "model": None}
+    assert d["intake"] == {"tare_hints": {}, "model": None, "reader": "auto"}
+    assert d["local_intake"] == {"url": "http://127.0.0.1:7915", "tier": "auto"}
 
 
 # ---------- C-I3: a mode change keeps the opt-in modules switched on by hand ----------

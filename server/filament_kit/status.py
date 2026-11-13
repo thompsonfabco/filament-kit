@@ -230,6 +230,8 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
 
     if "ai_intake" in on:
         yield from _key_rows(client_factory, live_key)
+    if "local_intake" in on:
+        yield from local_reader_rows(cfg)
 
     if "server" in on:
         cert = p.etc / "cert.pem"
@@ -254,6 +256,28 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
         yield from profile_rows()
     elif "library" in on:
         yield from _library_safe()
+
+
+def local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
+    """The local label reader (local_intake): does it answer, which tiers it can use, the reader order."""
+    from . import intake, local_reader
+    cfg = cfg if cfg is not None else config.load()
+    h = local_reader.health(cfg)
+    if h["ok"]:
+        tiers = ", ".join(f"{k} {'usable' if t['usable'] else 'not usable'}" for k, t in h["tiers"].items())
+        yield Row(OK, f"local label reader answering at {h['url']} (version {h['version'] or '?'}, API "
+                      f"{h['api_version']}; {tiers or 'no tiers listed'})")
+        if h["degraded"]:
+            yield Row(INFO, f"local label reader {h['error']}")
+        if h["last_read_at"]:
+            yield Row(INFO, f"local label reader: last read {h['last_read_at']}")
+    else:
+        yield Row(FAIL, f"local label reader at {h['url']}: {h['error']}",
+                  "check that it runs (on its machine: systemctl status filament-kit-image), or set its address: "
+                  "filament-kit config, 9) Label reader")
+    order = intake.reader_order(cfg)
+    names = {"local": "the local reader", "cloud": "Claude"}
+    yield Row(INFO, "label reading: " + (", then ".join(names[r] for r in order) if order else "off"))
 
 
 def web_rows(cfg: dict | None = None) -> Iterator[Row]:

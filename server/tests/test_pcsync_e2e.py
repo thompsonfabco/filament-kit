@@ -10,14 +10,13 @@ import json
 import re
 import shutil
 import sys
-import threading
 import time
 from pathlib import Path
 
 import pytest
 import uvicorn
 
-from conftest import free_port
+from fakes import serving
 from filament_kit import config, library, pairing
 from filament_kit.api import create_app
 from filament_kit.bridge import registry
@@ -65,23 +64,12 @@ def server(tmp_path, monkeypatch):
     monkeypatch.setattr(library, "load", lambda: TG.make_lib())
     registry.upsert(Printer("S1", "H2D", "O1D", "10.0.0.5", "", True))
     sm = FakeSm([json.loads(json.dumps(f)) for f in SUNLU])
-    port = free_port()
     etc = config.paths().etc
-    uv = uvicorn.Server(uvicorn.Config(create_app(sm=sm), host="127.0.0.1", port=port, log_level="warning",
-                                       ssl_certfile=str(etc / "cert.pem"), ssl_keyfile=str(etc / "key.pem"),
-                                       lifespan="off"))
-    t = threading.Thread(target=uv.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if uv.started:
-            break
-        time.sleep(0.05)
-    else:
-        raise RuntimeError("the server did not start")
-    yield port, sm
-    uv.should_exit = True
-    t.join(timeout=10)
-    assert not t.is_alive(), "the uvicorn thread did not stop"
+    running = serving.start(create_app(sm=sm), ssl_certfile=str(etc / "cert.pem"),
+                            ssl_keyfile=str(etc / "key.pem"), lifespan="off")
+    yield running.port, sm
+    running.stop()
+    assert not running.thread.is_alive(), "the uvicorn thread did not stop"
 
 
 # ---------- the PC ----------

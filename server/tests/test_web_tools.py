@@ -11,7 +11,6 @@ pytest.importorskip("mcp")
 
 from fakes import readers_fake  # noqa: E402
 
-from conftest import free_port  # noqa: E402
 from filament_kit import config, inventory, modules, pairing, tags, tagsources  # noqa: E402
 from filament_kit.profiles import bbl, builds, lines as lines_mod  # noqa: E402
 from filament_kit.spoolman import Spoolman  # noqa: E402
@@ -35,7 +34,7 @@ def item(**kw):
 @pytest.fixture
 def readers():
     data = readers_fake.new_data()
-    with readers_fake.Served(readers_fake.app(data), free_port()) as url:
+    with readers_fake.Served(readers_fake.app(data)) as url:
         yield data, url
 
 
@@ -410,7 +409,7 @@ def test_kit_api_pairs_once_and_an_unpair_is_loud_until_the_next_start(env, capl
         if dev is None:
             return JSONResponse({"error": "unauthorized", "message": "pair first"}, status_code=401)
         return JSONResponse({"printers": []})
-    with readers_fake.Served(Starlette(routes=[Route("/api/printers", printers)]), free_port()) as url:
+    with readers_fake.Served(Starlette(routes=[Route("/api/printers", printers)])) as url:
         kit = slots.KitApi(base_url=url)
         kit.ensure_paired()                                                    # at start
         tok_file = config.paths().web / "kit_token"

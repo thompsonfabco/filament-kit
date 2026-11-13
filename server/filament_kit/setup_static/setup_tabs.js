@@ -207,6 +207,12 @@ function generalCard() {
         h("input", { type: "checkbox", checked: v["web.printer_changes"] === true, on: { change: (e) => save("web.printer_changes", e.target.checked) } }),
         " Allow printer changes from the public address")) : null,
       g.web_on ? h("p", { class: "muted", textContent: "Off: the phone web app at the web module's public address shows printers but cannot add, change or forget them. On the home network it always can." }) : null,
+      (g.ai_intake_on && g.local_intake_on) ? h("div", { class: "row" }, h("label", {}, "Label reader: ",
+        h("select", { on: { change: (e) => save("intake.reader", e.target.value) } },
+          ...[["auto", "Local first, Claude when unsure (default)"],
+              ["cloud-then-local", "Claude first, local when Claude fails"], ["local", "Local reader only"], ["cloud", "Claude only"]]
+            .map(([k, t]) => h("option", { value: k, textContent: t, selected: (v["intake.reader"] || "auto") === k }))))) : null,
+      g.local_intake_on ? localReaderRows(v, save) : null,
       text("Claude model", "model", v.model),
       count("Label reads per day", "reads_per_day", v.reads_per_day),
       count("Intake records kept", "intake.history_keep", v["intake.history_keep"] ?? 20),
@@ -218,6 +224,76 @@ function generalCard() {
       g.spoolman_external ? h("div", {},
         h("p", { class: "muted", textContent: `Spoolman in use: ${g.spoolman_url}. A new address must answer as Spoolman before it is saved, and the kit then uses that database for everything.` }),
         h("div", { class: "row" }, url, h("button", { class: "secondary", textContent: "Change", on: { click: () => change(box, "settings/spoolman", { url: url.value }, () => { box.replaceChildren(); followApply(true); }) } }))) : null);
+  }).catch((e) => say(body, e.message, false));
+  return el;
+}
+
+// the local label reader (local_intake): its address, its tier, and a test of /v1/health
+function localReaderRows(v, save) {
+  const url = h("input", { value: v["local_intake.url"] || "", placeholder: "http://127.0.0.1:7915", ariaLabel: "Local reader address" });
+  const out = h("div");
+  const test = () => {
+    out.replaceChildren(h("p", { class: "muted", textContent: "Asking the local reader…" }));
+    api("settings/local-intake").then((r) => {
+      const tiers = Object.entries(r.tiers || {}).map(([k, t]) => `${k} ${t.usable ? "usable" : "not usable" + (t.reason ? " (" + t.reason + ")" : "")}`).join(", ");
+      say(out, r.ok
+        ? `Answering: version ${r.version || "?"}, API ${r.api_version}; ${tiers || "no tiers listed"}${r.revise ? "; can revise readings" : ""}${r.degraded ? ". " + r.error : ""}.`
+        : `Not usable: ${r.error}`, r.ok);
+    }).catch((e) => say(out, e.message, false));
+  };
+  return h("div", {},
+    h("div", { class: "row" }, h("label", {}, "Local reader address: ", url),
+      h("button", { class: "secondary", textContent: "Save", on: { click: () => save("local_intake.url", url.value.trim()) } }),
+      h("button", { class: "secondary", textContent: "Test", on: { click: test } })),
+    h("div", { class: "row" }, h("label", {}, "Local reader tier: ",
+      h("select", { on: { change: (e) => save("local_intake.tier", e.target.value) } },
+        ...[["auto", "Auto: CPU, then GPU when unsure"], ["cpu", "CPU only"], ["gpu", "GPU only"]]
+          .map(([k, t]) => h("option", { value: k, textContent: t, selected: (v["local_intake.tier"] || "auto") === k }))))),
+    h("p", { class: "muted", textContent: "The reader may run on another computer on your network (one with a GPU). The label photos and your filament list go to this address (plain HTTP unless it starts with https), so give one you trust. Only Claude's reads count against the reads per day." }),
+    out);
+}
+
+// ----- the local label reader: install, upgrade, remove (Settings) -----
+// Sizes and time come from the release's signed manifest and are shown before the owner confirms; the install runs
+// as a job (filament-kit local-intake install --yes, tier: local_intake.tier). A reader on another machine needs no
+// install: switch local_intake on in Modules and give its address under General.
+function readerCard() {
+  const body = h("div"), box = boxFor("local_intake");
+  const el = card("Local label reader", body, box);
+  api("settings/general").then((g) => {
+    const have = g.local_intake_installed;
+    const out = h("div");
+    // the check runs as a job (the server does not reach GitHub); what it saved is shown here, and Install takes
+    // exactly that version (the job refuses a plan older than an hour)
+    const check = () => startJob(box, "local_intake_plan");
+    api("settings/local-intake/plan").then((r) => {
+      const s = r.saved;
+      if (!s) return;
+      const p = s.plan, t = p.tiers[p.tier];
+      const when = new Date(s.at * 1000).toLocaleString();
+      const label = p.upgrade ? "Upgrade" : p.same ? "Reinstall" : "Install";
+      fill(out, h("p", { class: "muted", textContent: `Checked ${when}:` }), ...s.text.map((line) => h("p", { textContent: line })),
+        t && s.fresh && !p.downgrade ? h("button", { textContent: `${label} ${p.version} (${p.tier} tier)`, on: { click: () => startJob(box, "local_intake_install",
+          `${s.text.filter((l) => !l.startsWith("Installed") && !l.startsWith("Other")).join(" ")} Go ahead?`) } }) : null,
+        !s.fresh ? h("p", { class: "muted", textContent: "That check is over an hour old: check again to install." }) : null,
+        h("p", { class: "muted", textContent: "The tier is the one under General (Local reader tier); change it there, then check again." }));
+    }).catch((e) => say(out, e.message, false));
+    const tok = secret("Local reader token"), tokBox = h("div");
+    const tokenRow = h("div", {},
+      h("p", { class: "muted", textContent: `Reader token: ${S.local_intake_token && S.local_intake_token.set ? "set" : "not set"}. Only for a reader installed with a token (one on another machine, usually); it is sent with each read, never shown again.` }),
+      h("div", { class: "row" }, tok,
+        h("button", { class: "secondary", textContent: S.local_intake_token && S.local_intake_token.set ? "Replace" : "Set", on: { click: () => change(tokBox, "local_intake_token", { token: tok.value }, null, [tok]) } }),
+        S.local_intake_token && S.local_intake_token.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => change(tokBox, "local_intake_token/remove", {}) } }) : null),
+      tokBox);
+    fill(body,
+      h("p", { class: "muted", textContent: have
+        ? `Installed on this machine: version ${have.version}, ${have.tier} tier.`
+        : "Not installed on this machine. It reads label photos without the cloud; a reader on another machine (one with a GPU) works too: switch local_intake on in Modules and give its address under General." }),
+      h("div", { class: "row" },
+        h("button", { class: "secondary", textContent: have ? "Check for an upgrade" : "Check what an install needs", on: { click: check } }),
+        have ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => startJob(box, "local_intake_remove",
+          "Remove the local label reader from this machine and switch local_intake off? Its settings are kept.") } }) : null),
+      out, tokenRow);
   }).catch((e) => say(body, e.message, false));
   return el;
 }

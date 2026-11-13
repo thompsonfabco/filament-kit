@@ -10,7 +10,6 @@ import time
 from pathlib import Path
 
 import pytest
-import uvicorn
 from fakes.claude_fake import FakeClaude
 
 from conftest import free_port
@@ -68,20 +67,12 @@ def test_not_paired_answers_without_a_call():
 def server(spoolman_url, tmp_path):
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
-    port = free_port()
+    from fakes import serving
     etc = tmp_path / "etc"
-    srv = uvicorn.Server(uvicorn.Config(create_app(sm=sm, claude=FakeClaude({"questions": [], "items": [ITEM]})),
-                                        host="127.0.0.1", port=port, log_level="warning",
-                                        ssl_certfile=str(etc / "cert.pem"), ssl_keyfile=str(etc / "key.pem")))
-    t = threading.Thread(target=srv.run, daemon=True)
-    t.start()
-    for _ in range(100):
-        if srv.started:
-            break
-        time.sleep(0.05)
-    yield port, sm
-    srv.should_exit = True
-    t.join(5)
+    running = serving.start(create_app(sm=sm, claude=FakeClaude({"questions": [], "items": [ITEM]})),
+                            ssl_certfile=str(etc / "cert.pem"), ssl_keyfile=str(etc / "key.pem"))
+    yield running.port, sm
+    running.stop(5)
 
 
 def _pair(port) -> None:
