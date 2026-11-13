@@ -22,7 +22,7 @@ class Done:
         self.returncode, self.stdout, self.stderr = code, out, err
 
 
-_real_sleep = time.sleep       # the fixtures patch panel.time.sleep, and panel.time is this very module
+_real_sleep = time.sleep       # the fakes keep a real sleep, whatever panel's own clock is patched to
 
 
 class FakeSerial:
@@ -60,7 +60,7 @@ def fw(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(Serial=FakeSerial))
     monkeypatch.setattr(st, "usb_ttys", lambda: ["/dev/ttyUSB0"])
     monkeypatch.setattr(st, "panel_ttys", lambda: ["/dev/ttyACM0", "/dev/ttyACM1"])
-    monkeypatch.setattr(panel.time, "sleep", lambda s: None)
+    monkeypatch.setattr(panel, "time", types.SimpleNamespace(sleep=lambda s: None, time=time.time))   # panel only: other threads keep the real sleep
     monkeypatch.setitem(st.ports, "panel", None)
     monkeypatch.setitem(st.ports, "panel_version", None)
     monkeypatch.setitem(st.ports, "panel_chip", None)

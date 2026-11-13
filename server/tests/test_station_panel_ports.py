@@ -19,7 +19,7 @@ class SerialTimeoutException(Exception):
     pass
 
 
-_real_sleep = time.sleep       # the fixtures patch panel.time.sleep, and panel.time is this very module
+_real_sleep = time.sleep       # the fakes keep a real sleep, whatever panel's own clock is patched to
 
 
 class FakeSerial:
@@ -67,7 +67,7 @@ def ports(tmp_path, monkeypatch):
                                                       "/dev/ttyUSB*": ["/dev/ttyUSB0"]}[pat])
     monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(
         Serial=FakeSerial, SerialTimeoutException=SerialTimeoutException))
-    monkeypatch.setattr(panel.time, "sleep", lambda s: None)
+    monkeypatch.setattr(panel, "time", types.SimpleNamespace(sleep=lambda s: None, time=time.time))   # panel only: other threads keep the real sleep
     for k in ("panel", "panel_version", "panel_chip", "nfc"):
         monkeypatch.setitem(st.ports, k, None)
     monkeypatch.setitem(st.panel, "ser", None)
