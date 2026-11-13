@@ -188,3 +188,6 @@ def test_page_audit_on_the_sample():
     assert r.returncode == 0, r.stdout + r.stderr
     out = json.loads(r.stdout)
     assert out["views"] == 4 and out["failing"] == 0 and not out.get("allowed")      # 1280 / 320 px, light / dark
+    for p in out["passes"]:      # each view really ran at its width, appearance and (at 320 px) as a touch device
+        assert (p["innerWidth"], p["dark"], p["coarse"]) == (p["width"], p["scheme"] == "dark", p["width"] == 320), p
+    assert {(p["width"], p["scheme"]) for p in out["passes"]} == {(1280, "light"), (1280, "dark"), (320, "light"), (320, "dark")}

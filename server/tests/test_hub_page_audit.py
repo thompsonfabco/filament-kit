@@ -3,8 +3,8 @@ Hub page (/setup), Console light and dark, at 1280 px and 320 px, through tests/
 or Chromium already on the machine. The page is served with example data only (mockups/CONTENT-SPEC.md: "Workshop hub",
 Workshop X1, Garage Voron, Kitchen phone, rd-01) and the printers and Klipper modules on, with fakes for the managers.
 
-Findings of today's markup that a later step rebuilds are listed in tests/aut5_hub_allowlist.txt; a line nothing matches
-fails the run. The same skip rules as test_web_app_audit.py: no Node 22 or no browser is a skip (a failure with
+Findings of today's markup that a later step rebuilds are listed in tests/aut5_hub_allowlist.txt, one line per section; a
+line nothing matches fails the run, and so does a finding that moved to another section. The same skip rules as test_web_app_audit.py: no Node 22 or no browser is a skip (a failure with
 AUT5_REQUIRED=1)."""
 from __future__ import annotations
 
@@ -168,7 +168,7 @@ def test_the_page_audit_passes_on_every_section(hub):
 
 
 def test_an_unlabelled_button_added_to_the_served_page_fails_the_audit(planted):
-    run = _run("--url", planted, "--views", "#overview", "--widths", "1280", "--schemes", "light")
+    run = _run("--url", planted, "--views", VIEWS, "--allow", str(ALLOW))      # with the whole allow-list on
     assert run.returncode == 1, run.stdout + run.stderr
     found = [f for r in json.loads(run.stdout)["report"] for f in r["findings"]]
     assert any(f["check"] == "focusable element without a name" and f["where"].endswith("button") for f in found), found
@@ -176,6 +176,7 @@ def test_an_unlabelled_button_added_to_the_served_page_fails_the_audit(planted):
 
 def test_the_allow_list_names_a_later_step_and_a_count_on_every_line():
     for line in ALLOW.read_text(encoding="utf-8").splitlines():
-        if line.strip() and not line.startswith("#"):
-            check, where, count, reason = (x.strip() for x in line.split("|"))
-            assert check and where and count.isdigit() and int(count) > 0 and "removed by S2." in reason, line
+        if line.strip() and not line.startswith("# "):
+            view, check, where, count, reason = (x.strip() for x in line.split("|"))
+            assert view in ["#" + s for s in SECTIONS] and check and where, line
+            assert count.isdigit() and int(count) > 0 and "removed by S2." in reason, line

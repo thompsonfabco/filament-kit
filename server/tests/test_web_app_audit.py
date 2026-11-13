@@ -121,6 +121,7 @@ function route() {
   if (v === '#boom') setTimeout(() => { throw new Error('probe error'); }, 0);
 }
 addEventListener('hashchange', route); route();
+if (location.search.includes('loadboom')) throw new Error('load error');
 </script><style>.wide { width: 900px; }</style></html>"""
 
 
@@ -149,3 +150,21 @@ def test_an_allow_list_count_that_does_not_match_fails(probe, tmp_path):
     allow.write_text("view did not open | page | 2 | rebuilt by S3.99\n", encoding="utf-8")
     run = _run("--url", probe, "--views", "#home,#gone", "--widths", "320", "--schemes", "light", "--allow", str(allow))
     assert run.returncode == 1 and "allowed 2, found 1" in run.stdout, run.stdout + run.stderr
+
+
+def test_an_error_thrown_while_the_page_loads_is_reported_against_the_first_view(probe):
+    run = _run("--url", probe + "?loadboom", "--views", "#home,#wide", "--widths", "320", "--schemes", "light")
+    assert run.returncode == 1, run.stdout + run.stderr
+    found = {(r["view"], f["check"]) for r in json.loads(run.stdout)["report"] for f in r["findings"]}
+    assert ("#home", "page error") in found and ("#wide", "page error") not in found, found
+
+
+def test_an_allow_list_line_with_a_view_covers_that_view_only(probe, tmp_path):
+    args = ("--url", probe, "--views", "#home,#gone", "--widths", "320", "--schemes", "light", "--allow")
+    right, wrong = tmp_path / "right.txt", tmp_path / "wrong.txt"
+    right.write_text("# a comment\n#gone | view did not open | page | 1 | rebuilt by S3.99\n", encoding="utf-8")
+    wrong.write_text("#home | view did not open | page | 1 | rebuilt by S3.99\n", encoding="utf-8")
+    assert _run(*args, str(right)).returncode == 0
+    run = _run(*args, str(wrong))
+    assert run.returncode == 1 and "#home | view did not open | page: allowed 1, found 0" in run.stdout, run.stdout + run.stderr
+    assert ("#gone", "view did not open") in {(r["view"], f["check"]) for r in json.loads(run.stdout)["report"] for f in r["findings"]}
