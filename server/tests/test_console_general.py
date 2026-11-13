@@ -207,7 +207,7 @@ def test_firewall_text_takes_the_code_and_the_module(app, monkeypatch):
 def test_the_settings_tab_has_the_cards():
     src = (STATIC / "setup.js").read_text(encoding="utf-8")
     assert "[generalCard, " in src and ", remoteCard]" in src
-    tabs = (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
+    tabs = (STATIC / "setup_settings.js").read_text(encoding="utf-8")
     assert "function generalCard(" in tabs and "function remoteCard(" in tabs and '"remote_issue"' in tabs
 
 

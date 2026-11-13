@@ -799,7 +799,7 @@ def test_wrapper_with_no_program_prints_the_repair_and_exits_1(tmp_path):
 
 
 def test_the_page_shows_the_repair_line_unless_a_job_is_running():
-    assert "u.half_install && !r.job.running" in _read("server/filament_kit/setup_static/setup_tabs.js")
+    assert "u.half_install && !r.job.running" in _read("server/filament_kit/setup_static/setup_overview.js")
 
 
 def _wrapper_status(tmp_path, *, uid="0", folder=True, prog='echo "paired 192.0.2.10:8710"') -> list[str]:
