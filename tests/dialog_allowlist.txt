@@ -1,0 +1,10 @@
+# Native dialogs (AUT-3): confirm and prompt calls in the page scripts. One line each:
+#   <path from the repository root> | <finding> | <reason>
+# A line whose finding is gone must be dropped (09 open point 4); a rewritten file removes its lines.
+server/filament_kit/setup_static/setup.js | confirm | native confirm (foundations 12.4); replaced by the confirm dialog component
+server/filament_kit/setup_static/setup_printers.js | confirm | native confirm (foundations 12.4); replaced by the confirm dialog component
+server/filament_kit/setup_static/setup_printers.js | prompt | native prompt (foundations 12.4); replaced by the confirm dialog component
+server/filament_kit/setup_static/setup_tabs.js | confirm | native confirm (foundations 12.4); replaced by the confirm dialog component
+server/filament_kit/setup_static/setup_trust.js | confirm | native confirm (foundations 12.4); replaced by the confirm dialog component
+server/filament_kit/setup_static/setup_trust.js | prompt | native prompt (foundations 12.4); replaced by the confirm dialog component
+server/filament_kit/web/static/printers.js | confirm | native confirm (foundations 12.4); replaced by the confirm dialog component
