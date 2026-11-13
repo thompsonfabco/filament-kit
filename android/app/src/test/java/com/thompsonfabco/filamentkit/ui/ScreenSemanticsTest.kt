@@ -36,6 +36,7 @@ import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.CommandResult
+import com.thompsonfabco.filamentkit.net.DiscoveredServer
 import com.thompsonfabco.filamentkit.net.MapStatus
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
@@ -44,11 +45,26 @@ import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
 import com.thompsonfabco.filamentkit.net.UnloadResult
 import com.thompsonfabco.filamentkit.net.UsageEntry
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.session.Connection
+import com.thompsonfabco.filamentkit.ui.LocalNetworkAccess
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.components.TOP_BAR_TAG
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersState
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
+import com.thompsonfabco.filamentkit.ui.pair.Mismatch
+import com.thompsonfabco.filamentkit.ui.pair.MismatchSource
+import com.thompsonfabco.filamentkit.ui.pair.PairAddressScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairCertificateScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairCodeScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairField
+import com.thompsonfabco.filamentkit.ui.pair.PairFingerprintScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairMessage
+import com.thompsonfabco.filamentkit.ui.pair.PairNetworkAccessScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairStartScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairUi
+import com.thompsonfabco.filamentkit.ui.pair.ScanProblem
+import com.thompsonfabco.filamentkit.ui.pair.Step
 import com.thompsonfabco.filamentkit.ui.printers.CameraSource
 import com.thompsonfabco.filamentkit.ui.printers.PrinterBackend
 import com.thompsonfabco.filamentkit.ui.printers.PrinterScreen
@@ -86,7 +102,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * AUT-8 (07-accessibility 15): Home (with the Label Reader on and off, with printers loading, empty and listed), Spools, Printers and Printer as they are, Settings as rebuilt (S4.15), drawn under the top bar that
+ * AUT-8 (07-accessibility 15): Home (with the Label Reader on and off, with printers loading, empty and listed), Spools, Printers, Printer and the pairing screens as they are, Settings as rebuilt (S4.15), drawn under the top bar that
  * names them, in light and dark at font scale 1 and 2. Data is fake (RFC 5737 addresses, `*.example`). Each later
  * screen step adds its screen here.
  */
@@ -382,6 +398,110 @@ class ScreenSemanticsTest {
     @Test fun settingsDeveloper() {
         group("Developer", SettingsGroup.Developer)
         auditAllFour("Simulate a tag tap")
+    }
+
+    private val fp = "0123456789abcdef".repeat(4)
+
+    @Test fun pairNetworkAccess() {
+        host("Pair with your Hub") { PairNetworkAccessScreen(LocalNetworkAccess(false, false, {}, {}), "0.5.2") }
+        auditAllFour("Allow")
+    }
+
+    @Test fun pairStart() {
+        val hub = DiscoveredServer("Workshop Hub", "192.0.2.10", 8710)
+        host("Pair with your Hub") {
+            PairStartScreen(PairUi(), listOf(hub), "0.5.2", onScan = {}, onPick = {}, onEnterAddress = {}, unpairedBanner = true)
+        }
+        auditAllFour("Scan QR code")
+    }
+
+    @Test fun pairStartSearchingWithAFailure() {
+        host("Pair with your Hub") {
+            PairStartScreen(
+                PairUi(error = PairMessage.Res(R.string.pair_error_not_code)), emptyList(), "0.5.2",
+                onScan = {}, onPick = {}, onEnterAddress = {},
+            )
+        }
+        auditAllFour("Scan QR code")
+    }
+
+    @Test fun pairStartConnecting() {
+        host("Pair with your Hub") {
+            PairStartScreen(PairUi(busy = true), emptyList(), "0.5.2", onScan = {}, onPick = {}, onEnterAddress = {})
+        }
+        auditAllFour("Connecting…")
+    }
+
+    @Test fun pairAddress() {
+        host("Pair with your Hub") {
+            PairAddressScreen(
+                PairUi(step = Step.Address, host = "192.0.2.10", error = PairMessage.Res(R.string.pair_address_error_port), errorField = PairField.Port),
+                onSubmit = { _, _ -> }, onBack = {},
+            )
+        }
+        auditAllFour("Enter the Hub's address")
+    }
+
+    @Test fun pairAddressWithAConnectionFailure() {
+        host("Pair with your Hub") {
+            PairAddressScreen(
+                PairUi(step = Step.Address, host = "hub.example", error = PairMessage.Res(R.string.common_hub_unreachable)),
+                onSubmit = { _, _ -> }, onBack = {},
+            )
+        }
+        auditAllFour("Enter the Hub's address")
+    }
+
+    @Test fun pairFingerprint() {
+        host("Pair with your Hub") {
+            PairFingerprintScreen(PairUi(step = Step.Confirm, host = "hub.example", fingerprint = fp), {}, {}, {})
+        }
+        auditAllFour("Check the Hub's fingerprint")
+    }
+
+    @Test fun pairCode() {
+        host("Pair with your Hub") {
+            PairCodeScreen(PairUi(step = Step.Code, error = PairMessage.Res(R.string.pair_error_refused)), {}, {})
+        }
+        auditAllFour("Enter the pairing code")
+    }
+
+    @Test fun pairCertificateOfASavedPairing() {
+        host("Hub certificate") {
+            PairCertificateScreen(Mismatch(fp, "f".repeat(64), MismatchSource.STORED), canTrust = true, {}, {}, {})
+        }
+        auditAllFour("The Hub's certificate has changed")
+    }
+
+    @Test fun pairCertificateOfASavedPairingThatCannotBeKept() {
+        host("Hub certificate") {
+            PairCertificateScreen(Mismatch(fp, "f".repeat(64), MismatchSource.STORED), canTrust = false, {}, {}, {})
+        }
+        auditAllFour("The Hub's certificate has changed")
+    }
+
+    @Test fun pairCertificateOfAScannedCode() {
+        host("Pair with your Hub") {
+            PairCertificateScreen(Mismatch(fp, "f".repeat(64), MismatchSource.QR), canTrust = false, {}, {}, {})
+        }
+        auditAllFour("This pairing code doesn't match the Hub")
+    }
+
+    @Test fun pairCertificateChangedWhilePairing() {
+        host("Pair with your Hub") {
+            PairCertificateScreen(Mismatch(fp, "f".repeat(64), MismatchSource.MANUAL), canTrust = false, {}, {}, {})
+        }
+        auditAllFour("The Hub's certificate changed while pairing")
+    }
+
+    @Test fun theScannerWithoutTheCamera() {
+        host("Pair with your Hub") { ScanProblem(denied = true, onPrimary = {}, onEnterAddress = {}) }
+        auditAllFour("Try again")
+    }
+
+    @Test fun theScannerWhoseCameraFailed() {
+        host("Pair with your Hub") { ScanProblem(denied = false, onPrimary = {}, onEnterAddress = {}) }
+        auditAllFour("Enter the address instead")
     }
 
     // The audit itself: each rule fails on a planted violation.

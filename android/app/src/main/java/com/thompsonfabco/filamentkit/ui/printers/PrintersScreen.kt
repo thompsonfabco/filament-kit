@@ -40,8 +40,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import com.thompsonfabco.filamentkit.net.Printer
-import com.thompsonfabco.filamentkit.ui.pair.Mismatch
-import com.thompsonfabco.filamentkit.ui.pair.PairTexts
+import com.thompsonfabco.filamentkit.ui.pair.MismatchSource
+import com.thompsonfabco.filamentkit.ui.pair.mismatchText
 import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
@@ -200,7 +200,7 @@ internal const val TRUST_FAILED = "The new certificate could not be trusted yet.
 @Composable
 internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () -> Unit, trust: TrustAction? = null) {
     // the Pair screen's words and grouped fingerprint, for a saved pairing whose certificate changed
-    val text = PairTexts.mismatch(Mismatch(expected, actual), host = "")
+    val text = mismatchText(MismatchSource.STORED)
     // a failure belongs to the notice it was shown under: gone when it leaves or shows another certificate
     DisposableEffect(expected, actual) { onDispose { trust?.reset?.invoke() } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

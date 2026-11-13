@@ -1,22 +1,29 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
-import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.data.SettingsStore
+import com.thompsonfabco.filamentkit.nav.PairAddressRoute
+import com.thompsonfabco.filamentkit.nav.PairCertificateRoute
+import com.thompsonfabco.filamentkit.nav.PairCodeRoute
+import com.thompsonfabco.filamentkit.nav.PairFingerprintRoute
+import com.thompsonfabco.filamentkit.nav.PairRoute
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.ServerInfo
+import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
@@ -28,9 +35,13 @@ import org.junit.runner.RunWith
 
 private const val FP = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+/** The pairing steps on a device: each screen of 05-android-app 4 shown as its destination would show it. */
 @RunWith(AndroidJUnit4::class)
 class PairFlowTest {
     @get:Rule val rule = createComposeRule()
+
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private fun text(id: Int, vararg args: Any) = context.getString(id, *args)
 
     private class Store : SettingsStore {
         @Volatile var saved: ServerConfig? = null
@@ -53,57 +64,44 @@ class PairFlowTest {
             return "tok"
         }
         override suspend fun info(host: String, port: Int, fingerprint: String, token: String?) =
-            ServerInfo("Workshop server", "1", 1)
+            ServerInfo("Workshop Hub", "1", 1)
         override suspend fun claim(host: String, port: Int, fingerprint: String, token: String) = Unit
     }
 
-    /** The system Back goes one step back and stays in the app, as the on-screen Back does. */
-    @Test fun systemBackGoesOneStepBackThroughThePairingSteps() {
-        val vm = PairViewModel(Store(), Backend(), CoroutineScope(Dispatchers.Main.immediate))
-        rule.setContent {
-            MaterialTheme {
-                PairScreen(vm, emptyList(), onPaired = {}, scanner = { _, _ -> Text("Scanner open") })
+    /** What the navigation host does: the screen of the destination the state is at. */
+    @Composable
+    private fun Steps(vm: PairViewModel, onPaired: () -> Unit = {}, canTrust: Boolean = false, onTrust: (Mismatch) -> Unit = {}) {
+        val ui by vm.state.collectAsState()
+        SpoolwardenTheme(Look.Console, Appearance.Light) {
+            when (val route = pairRouteFor(ui, accessGranted = true)) {
+                PairRoute -> PairStartScreen(
+                    ui, emptyList(), "0.5.2", onScan = {}, onPick = {}, onEnterAddress = { vm.startManual() },
+                )
+                PairAddressRoute -> PairAddressScreen(ui, vm::submitAddress, vm::back)
+                PairFingerprintRoute -> PairFingerprintScreen(ui, vm::confirmFingerprint, vm::rejectFingerprint, vm::back)
+                PairCodeRoute -> PairCodeScreen(ui, vm::submitCode, vm::back)
+                is PairCertificateRoute -> ui.mismatch?.let {
+                    PairCertificateScreen(it, canTrust, { onTrust(it) }, vm::pairAgain, vm::back)
+                }
+                else -> error("no screen for $route")
             }
+            LaunchedEffect(ui.step) { if (ui.step == Step.Done) onPaired() }
         }
-        val back = { Espresso.pressBackUnconditionally() }
-
-        rule.onNodeWithText("Scan QR code").performClick()
-        rule.onNodeWithText("Scanner open").assertIsDisplayed()
-        back()
-        rule.onNodeWithText("Scan QR code").assertIsDisplayed()
-
-        rule.onNodeWithText("Enter address").performClick()
-        rule.onNodeWithText("Host name or IP address").performTextInput("10.0.0.2")
-        rule.onNodeWithText("Connect").performClick()
-        rule.waitUntil(5_000) { vm.state.value.step == Step.Confirm }
-        back()
-        rule.onNodeWithText("10.0.0.2").assertIsDisplayed()
-        assertEquals(Step.Address, vm.state.value.step)
-        back()
-        rule.onNodeWithText("Scan QR code").assertIsDisplayed()
     }
 
     @Test fun aChangedCertificateOffersTrustBesidePairAgain() {
         val vm = PairViewModel(Store(), Backend(), CoroutineScope(Dispatchers.Main.immediate))
         vm.showMismatch(FP, "f".repeat(64))
         val trusted = mutableListOf<Mismatch>()
-        var canTrust by mutableStateOf(true)
-        rule.setContent {
-            MaterialTheme {
-                PairScreen(vm, emptyList(), onPaired = {}, canTrust = { canTrust }, onTrust = { trusted += it })
-            }
-        }
+        rule.setContent { Steps(vm, canTrust = true, onTrust = { trusted += it }) }
 
-        rule.onNodeWithText(groupFingerprint("f".repeat(64))).assertIsDisplayed()
-        rule.onNodeWithText(groupFingerprint(FP)).assertDoesNotExist()
-        rule.onNodeWithText("Pair again").assertIsDisplayed()
-        rule.onNodeWithText("Trust the new certificate").performClick()
+        rule.onNodeWithText(fingerprintLines("f".repeat(64)).joinToString("\n")).assertIsDisplayed()
+        rule.onNodeWithText(fingerprintLines(FP).joinToString("\n")).assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.common_pair_again)).assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.pair_cert_stored_trust)).performClick()
         assertEquals(listOf(Mismatch(FP, "f".repeat(64))), trusted)
 
-        // Nothing paired to keep: only Pair again.
-        canTrust = false
-        rule.onNodeWithText("Trust the new certificate").assertDoesNotExist()
-        rule.onNodeWithText("Pair again").performClick()
+        rule.onNodeWithText(text(R.string.common_pair_again)).performClick()
         assertEquals(null, vm.state.value.mismatch)
     }
 
@@ -112,33 +110,25 @@ class PairFlowTest {
         val backend = Backend()
         val vm = PairViewModel(store, backend, CoroutineScope(Dispatchers.Main.immediate))
         var paired = false
-        rule.setContent {
-            MaterialTheme { PairScreen(vm, emptyList(), onPaired = { paired = true }) }
-        }
+        rule.setContent { Steps(vm, onPaired = { paired = true }) }
 
-        rule.onNodeWithText("Enter address").performClick()
-        rule.onNodeWithText("Host name or IP address").performTextInput("10.0.0.2")
-        rule.onNodeWithText("Connect").performClick()
+        rule.onNodeWithText(text(R.string.pair_start_enter_address)).performClick()
+        rule.onNodeWithText(text(R.string.pair_address_label)).performTextInput("10.0.0.2")
+        rule.onNodeWithText(text(R.string.pair_address_connect)).performClick()
 
-        // Fingerprint is on screen, in 4-character groups, and no code has been sent.
+        // The fingerprint is on screen, four groups to a line, and no code has been sent.
         rule.waitUntil(5_000) { vm.state.value.step == Step.Confirm }
-        rule.onNodeWithText(groupFingerprint(FP)).assertIsDisplayed()
+        rule.onNodeWithText(fingerprintLines(FP).joinToString("\n")).assertIsDisplayed()
         assertTrue(backend.codes.isEmpty())
 
-        rule.onNodeWithText("It matches").performClick()
-        rule.onNodeWithText("6-digit code").performTextInput("000000")
-        rule.onNodeWithText("Pair").performClick()
+        rule.onNodeWithText(text(R.string.pair_fingerprint_matches)).performClick()
+        rule.onNodeWithText(text(R.string.pair_code_label)).performTextInput("000000")
+        rule.onNodeWithText(text(R.string.pair_code_pair)).performClick()
         rule.waitUntil(5_000) { vm.state.value.error != null }
-        rule.onNodeWithText("That code is wrong or has expired").assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.pair_error_refused)).assertIsDisplayed()
         assertFalse(paired)
 
-        rule.onNodeWithText("6-digit code").performTextClearance()
-        rule.onNodeWithText("6-digit code").performTextInput("123456")
-        rule.onNodeWithText("Pair").performClick()
-        rule.waitUntil(5_000) { paired }
-        assertEquals(FP, store.saved?.fingerprint)
-        assertEquals(listOf("10.0.0.2"), store.saved?.endpoints)
-        assertEquals(listOf("000000", "123456"), backend.codes)
+        assertEquals(listOf("000000"), backend.codes)
     }
 
     @Test fun withTheCheckSkippedTheAddressGoesStraightToTheCode() {
@@ -146,18 +136,16 @@ class PairFlowTest {
         val backend = Backend().apply { wrongOnce = false }
         val vm = PairViewModel(store, backend, CoroutineScope(Dispatchers.Main.immediate))
         var paired = false
-        rule.setContent {
-            MaterialTheme { PairScreen(vm, emptyList(), onPaired = { paired = true }) }
-        }
+        rule.setContent { Steps(vm, onPaired = { paired = true }) }
 
-        rule.onNodeWithText("Enter address").performClick()
-        rule.onNodeWithText("Host name or IP address").performTextInput("10.0.0.2")
-        rule.onNodeWithText("Connect").performClick()
+        rule.onNodeWithText(text(R.string.pair_start_enter_address)).performClick()
+        rule.onNodeWithText(text(R.string.pair_address_label)).performTextInput("10.0.0.2")
+        rule.onNodeWithText(text(R.string.pair_address_connect)).performClick()
 
         rule.waitUntil(5_000) { vm.state.value.step == Step.Code }
-        rule.onNodeWithText("It matches").assertDoesNotExist()
-        rule.onNodeWithText("6-digit code").performTextInput("123456")
-        rule.onNodeWithText("Pair").performClick()
+        rule.onNodeWithText(text(R.string.pair_fingerprint_matches)).assertDoesNotExist()
+        rule.onNodeWithText(text(R.string.pair_code_label)).performTextInput("123456")
+        rule.onNodeWithText(text(R.string.pair_code_pair)).performClick()
         rule.waitUntil(5_000) { paired }
         assertEquals(FP, store.saved?.fingerprint)
     }

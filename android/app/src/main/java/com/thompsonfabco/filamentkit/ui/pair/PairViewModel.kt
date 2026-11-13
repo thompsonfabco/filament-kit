@@ -1,7 +1,9 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.data.SettingsStore
 import com.thompsonfabco.filamentkit.net.ApiError
@@ -14,7 +16,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 const val DEFAULT_PORT = 8710
@@ -27,6 +28,15 @@ enum class MismatchSource { STORED, QR, MANUAL }
 /** The certificate that was expected ([expected]) and what the server presents ([actual]). */
 data class Mismatch(val expected: String, val actual: String, val source: MismatchSource = MismatchSource.STORED)
 
+/** A sentence pairing shows (05-android-app 4.9): a string of the catalogue with its fields, or the Hub's own words. */
+sealed interface PairMessage {
+    data class Res(@StringRes val id: Int, val args: List<String> = emptyList()) : PairMessage
+    data class Raw(val text: String) : PairMessage
+}
+
+/** The field a message concerns; a message with none belongs under the step's button. */
+enum class PairField { Address, Port }
+
 data class PairUi(
     val step: Step = Step.Choose,
     val host: String = "",
@@ -34,20 +44,21 @@ data class PairUi(
     /** Lowercase hex, no spaces; show it with [groupFingerprint]. */
     val fingerprint: String? = null,
     val busy: Boolean = false,
-    val error: String? = null,
+    val error: PairMessage? = null,
+    val errorField: PairField? = null,
     val mismatch: Mismatch? = null,
 )
 
 /** `0123456789ab` -> `0123 4567 89ab`. */
 fun groupFingerprint(fingerprint: String): String = fingerprint.chunked(4).joinToString(" ")
 
+/** [groupFingerprint] with four groups to a line (05-android-app 4.6). */
+fun fingerprintLines(fingerprint: String): List<String> = fingerprint.chunked(16).map(::groupFingerprint)
+
 private val CODE = Regex("[0-9]{6}")
-private const val UNEXPECTED = "Unexpected response from the server"
 
 /** The scanned QR's token was not accepted when the app first used it. */
-const val QR_EXPIRED =
-    "This pairing code has expired or was already used. Make a new one on your server's setup page, or run " +
-        "\"sudo filament-kit pair\" on the server."
+val QR_EXPIRED = PairMessage.Res(R.string.pair_error_expired)
 
 /**
  * Pairing flows: QR scan, and manual entry (address, then the server's certificate fingerprint for the user to
@@ -68,25 +79,36 @@ class PairViewModel(
 
     private var confirmed = false
 
+    /** The check began on a Hub picked from the found list, so Back from it returns to the list, not to the address. */
+    private var fromList = false
+
     /** Open the manual flow, optionally prefilled. */
     fun startManual(host: String = "", port: Int = DEFAULT_PORT) {
         confirmed = false
+        fromList = false
         _state.value = PairUi(step = Step.Address, host = host, port = port)
     }
 
-    /** A server found on the network: straight to its fingerprint check; if that fails, the address form says why. */
-    fun connectDiscovered(host: String, port: Int) = submitAddress(host, port.toString())
+    /** A Hub found on the network: straight to its fingerprint check; if that fails, the first screen says why. */
+    fun connectDiscovered(host: String, port: Int) = probe(host, port, Step.Choose)
 
     fun submitAddress(hostInput: String, portInput: String) {
         if (_state.value.busy) return
         val host = hostInput.trim()
         val port = if (portInput.isBlank()) DEFAULT_PORT else portInput.trim().toIntOrNull()
-        if (host.isEmpty()) return fail(Step.Address, PairTexts.EMPTY_HOST, host, DEFAULT_PORT)
+        if (host.isEmpty()) return fail(host, DEFAULT_PORT, R.string.pair_address_error_empty, PairField.Address)
         if (port == null || port !in 1..65535) {
-            return fail(Step.Address, "The port must be a number from 1 to 65535", host, DEFAULT_PORT)
+            return fail(host, DEFAULT_PORT, R.string.pair_address_error_port, PairField.Port)
         }
+        probe(host, port, Step.Address)
+    }
+
+    /** Reads the certificate [host]:[port] presents; the screen it was asked from ([from]) shows a failure. */
+    private fun probe(host: String, port: Int, from: Step) {
+        if (_state.value.busy) return
         confirmed = false
-        _state.value = PairUi(step = Step.Address, host = host, port = port, busy = true)
+        fromList = from == Step.Choose
+        _state.value = PairUi(step = from, host = host, port = port, busy = true)
         scope.launch {
             try {
                 val fp = backend.probe(host, port)
@@ -96,10 +118,7 @@ class PairViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val text = if (e is IOException && e !is FingerprintMismatch && !localNetworkMissing()) {
-                    PairTexts.unreachable(e, host, port)
-                } else errorText(e)
-                _state.value = PairUi(step = Step.Address, host = host, port = port, error = text)
+                _state.value = PairUi(step = from, host = host, port = port, error = errorText(e))
             }
         }
     }
@@ -112,9 +131,11 @@ class PairViewModel(
         _state.value = s.copy(step = Step.Code, error = null)
     }
 
+    /** "It does not match": nothing was paired, and the first screen says so. */
     fun rejectFingerprint() {
         confirmed = false
-        _state.update { it.copy(step = Step.Address, fingerprint = null, error = PairTexts.FINGERPRINT_REJECTED) }
+        fromList = false
+        _state.value = PairUi(error = PairMessage.Res(R.string.pair_fingerprint_rejected))
     }
 
     fun submitCode(codeInput: String) {
@@ -123,7 +144,7 @@ class PairViewModel(
         if (!confirmed || s.step != Step.Code || fp == null || s.busy) return
         val code = codeInput.trim()
         if (!CODE.matches(code)) {
-            _state.value = s.copy(error = "Enter the 6-digit code shown on the server")
+            _state.value = s.copy(error = PairMessage.Res(R.string.pair_code_error_length))
             return
         }
         _state.value = s.copy(busy = true, error = null)
@@ -153,7 +174,7 @@ class PairViewModel(
         val payload = try {
             parsePairingUri(text)
         } catch (e: IllegalArgumentException) {
-            _state.value = PairUi(error = "That is not a filament-kit pairing code")
+            _state.value = PairUi(error = PairMessage.Res(R.string.pair_error_not_code))
             return
         }
         confirmed = false
@@ -205,18 +226,21 @@ class PairViewModel(
     /** Leave an error or mismatch and start over. */
     fun pairAgain() {
         confirmed = false
+        fromList = false
         _state.value = PairUi()
     }
 
     /**
      * One step back, for the system Back and the on-screen Back alike. The fingerprint check and the code go back to
-     * the address with it filled in; the address and a stopped pairing go back to the first screen.
+     * the address with it filled in (to the first screen when the Hub was picked from the found list); the address and
+     * a stopped pairing go back to the first screen.
      */
     fun back() {
         val s = _state.value
         if (s.busy) return
         confirmed = false
-        val toAddress = s.mismatch == null && (s.step == Step.Confirm || s.step == Step.Code)
+        val toAddress = s.mismatch == null && !fromList && (s.step == Step.Confirm || s.step == Step.Code)
+        fromList = false
         _state.value = if (toAddress) PairUi(step = Step.Address, host = s.host, port = s.port) else PairUi()
     }
 
@@ -226,23 +250,26 @@ class PairViewModel(
         _state.value = PairUi(mismatch = Mismatch(expected, actual))
     }
 
-    private fun fail(step: Step, message: String, host: String, port: Int) {
-        _state.value = PairUi(step = step, host = host, port = port, error = message)
+    private fun fail(host: String, port: Int, @StringRes message: Int, field: PairField) {
+        _state.value = PairUi(step = Step.Address, host = host, port = port, error = PairMessage.Res(message), errorField = field)
     }
 
     private fun failure(base: PairUi, e: Exception, source: MismatchSource): PairUi =
         if (e is FingerprintMismatch) base.copy(mismatch = Mismatch(e.expected, e.actual, source), error = null)
         else base.copy(error = errorText(e))
 
-    private fun errorText(e: Exception): String = when {
-        e is ApiError && e.code == "local_network" -> LOCAL_NETWORK_MESSAGE
-        (e is ApiError && e.code == "offline" || e is IOException && e !is FingerprintMismatch) && localNetworkMissing() ->
-            LOCAL_NETWORK_MESSAGE
-        e is ApiError && e.code == "offline" ->
-            "Can't reach the server. Check that this phone is on the same network."
-        e is ApiError -> e.message
-        e is FingerprintMismatch -> "The server's certificate is not the one you paired with."
-        e is IOException -> "Can't reach the server. Check that this phone is on the same network."
-        else -> UNEXPECTED
+    /** The sentence for a failure (05-android-app 4.9); the Hub's own words when the table has no row for what it said. */
+    private fun errorText(e: Exception): PairMessage {
+        val unreachable = e is ApiError && e.code == "offline" || e is IOException && e !is FingerprintMismatch
+        return when {
+            e is ApiError && e.code == "local_network" -> PairMessage.Raw(LOCAL_NETWORK_MESSAGE)
+            unreachable && localNetworkMissing() -> PairMessage.Raw(LOCAL_NETWORK_MESSAGE)
+            unreachable -> PairMessage.Res(R.string.common_hub_unreachable)
+            e is ApiError && e.code == "unauthorized" -> PairMessage.Res(R.string.pair_error_refused)
+            e is ApiError && (e.code == "bad_response" || e.status == 404 || e.status == 405) ->
+                PairMessage.Res(R.string.pair_error_not_hub)
+            e is ApiError -> PairMessage.Raw(e.message)
+            else -> PairMessage.Res(R.string.pair_error_not_hub)
+        }
     }
 }
