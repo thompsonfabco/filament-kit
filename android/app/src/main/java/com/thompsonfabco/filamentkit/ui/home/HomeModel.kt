@@ -91,6 +91,23 @@ internal fun updateNotice(u: UpdateUi): UpdateNoticeKind? = when {
     else -> null
 }
 
+/** Why a read failed, in 05 3.5's terms: the Hub's [message] as given, else [unexpected] (an answer not understood) or neither (no route). */
+internal class PrintersFailure(val message: String?, val unexpected: Boolean)
+
+/**
+ * `Api` wraps nearly everything in [ApiError]: status 0 is no route (offline, local network), `bad_response` is a reply the
+ * app could not read, and an error page without the Hub's own `message` carries `Api`'s stand-in "The server returned an
+ * error (N)", which is not the Hub speaking. Other exceptions: an IO error is no route, the rest an unreadable answer.
+ */
+internal fun printersFailure(e: Exception): PrintersFailure = when {
+    e is ApiError && e.status == 0 -> PrintersFailure(null, false)
+    e is ApiError && (e.code == "bad_response" || e.message.isBlank() || e.message == "The server returned an error (${e.status})") ->
+        PrintersFailure(null, true)
+    e is ApiError -> PrintersFailure(e.message, false)
+    e is IOException -> PrintersFailure(null, false)
+    else -> PrintersFailure(null, true)
+}
+
 /** The Printers panel's data: null [printers] until the first answer; [message] is the Hub's own refusal, if any. */
 data class HomePrintersState(
     val printers: List<Printer>? = null,
@@ -124,10 +141,8 @@ class HomePrintersViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // a refusal keeps the Hub's own words; no route or a timeout is "cannot reach"; anything else is an answer not understood
-                val refusal = (e as? ApiError)?.takeIf { it.status > 0 }?.message?.ifBlank { null }
-                val unexpected = e !is ApiError && e !is IOException
-                _state.update { it.copy(loading = false, failed = true, message = refusal, unexpected = unexpected) }
+                val failure = printersFailure(e)
+                _state.update { it.copy(loading = false, failed = true, message = failure.message, unexpected = failure.unexpected) }
             }
         }
     }

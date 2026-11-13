@@ -296,20 +296,19 @@ class HomeScreenTest {
         assertEquals("Add by hand", filled.single().config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text })
     }
 
-    @Test fun withNothingLoadedACertificateChangeShowsTheHubNoticeInThePanel() {
+    @Test fun withNothingLoadedACertificateChangeIsShownOnceAtTheTopAndThePanelAddsNothing() {
         show(connection = Connection.CertChanged("AA", "BB"), printers = HomePrintersState(failed = true))
-        // once at the top of Home and once where the printers would be
-        rule.onAllNodesWithText("Review the certificate").assertCountEquals(2)
-        rule.onAllNodesWithText("Review the certificate")[1].performClick()
+        rule.onAllNodesWithText("Review the certificate").assertCountEquals(1)
+        text("Review the certificate").performClick()
         assertEquals(listOf("review"), calls)
-        rule.onAllNodesWithText("Cannot reach the Hub").assertCountEquals(0)
+        rule.onAllNodesWithText("Cannot reach the Hub", substring = true).assertCountEquals(0)
         rule.onAllNodesWithText("Try again").assertCountEquals(0)
     }
 
-    @Test fun withNothingLoadedAnUnpairedPhoneShowsTheHubNoticeInThePanel() {
+    @Test fun withNothingLoadedAnUnpairedPhoneIsShownOnceAtTheTopAndThePanelAddsNothing() {
         show(connection = Connection.Unpaired, printers = HomePrintersState(failed = true))
-        rule.onAllNodesWithText("Pair again").assertCountEquals(2)
-        rule.onAllNodesWithText("Pair again")[1].performClick()
+        rule.onAllNodesWithText("Pair again").assertCountEquals(1)
+        text("Pair again").performClick()
         assertEquals(listOf("pair"), calls)
         rule.onAllNodesWithText("Try again").assertCountEquals(0)
     }

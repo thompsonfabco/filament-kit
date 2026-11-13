@@ -147,7 +147,7 @@ internal fun HomeScreen(
     }
     val right: @Composable ColumnScope.() -> Unit = {
         if (showPrinters) {
-            PrintersPanel(printers, connection, onOpenPrinter, onOpenPrinters, onRefreshPrinters, onReviewCertificate, onPairAgain)
+            PrintersPanel(printers, connection, onOpenPrinter, onOpenPrinters, onRefreshPrinters)
         }
         if (showPresets) {
             var updatesOpen by remember { mutableStateOf(false) }
@@ -406,8 +406,6 @@ private fun PrintersPanel(
     onOpenPrinter: (String) -> Unit,
     onOpenAll: () -> Unit,
     onRefresh: () -> Unit,
-    onReviewCertificate: () -> Unit,
-    onPairAgain: () -> Unit,
 ) {
     // the Hub lists the printers it has found too; the panel shows the configured ones
     val list = state.printers?.filter { it.configured }
@@ -418,10 +416,8 @@ private fun PrintersPanel(
         action = { SwButton(stringResource(R.string.home_printers_all), onOpenAll, kind = SwButtonKind.Quiet) },
     ) {
         when {
-            // nothing loaded: say why by state (05 3.3, 3.4, 3.2)
-            list == null && connection is Connection.CertChanged -> HubNotice(HubNoticeKind.CertificateChanged, onReviewCertificate)
-            list == null && connection == Connection.Unpaired -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-            // the local network notice already stands in for the content
+            // nothing loaded: say why by state (05 3.2); the Hub notice at the top of Home already says it (05 3.4), and the local network notice stands in for the content (3.3)
+            list == null && (connection is Connection.CertChanged || connection == Connection.Unpaired) -> Unit
             list == null && connection == Connection.NeedsLocalNetwork -> Unit
             list == null && offline -> SwEmptyState(
                 icon = R.drawable.sw_st_hollow, title = stringResource(R.string.common_offline_title),
