@@ -2497,6 +2497,7 @@ window.SW_TEXT = Object.freeze({
   "tag_looking": "Looking up the tag…",
   "tag_move_here": "Move the tag to this spool",
   "tag_move_replace": "Move the tag here and replace this spool's tag",
+  "tag_read_wait": "Tag read. It opens when loading has finished.",
   "tag_unlinked_text": "Link it to a sealed spool you are opening, or add the spool as new.",
   "tag_unlinked_title": "This tag is not linked to a spool yet",
   "cli_access_code_saved": "Saved the Access Code of {name}.",

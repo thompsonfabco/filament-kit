@@ -42,14 +42,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | module | Hub identifier (feature key), not text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/SlotMapHelp.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/ParentField.kt | blank = | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchScreen.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LinkSealedScreen.kt | gross weight | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LinkSealedScreen.kt | retry | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadFlowScreen.kt | "OK" | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadViewModel.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | gross weight | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | color | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/update/ApkInstaller.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/update/UpdateTexts.kt | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup.js | ai_intake | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
@@ -101,3 +93,4 @@ server/filament_kit/web/static/app.js | setup page | today's string, route, key 
 server/filament_kit/web/static/printers.js | setup page | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | the kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolModel.kt | color | wire identifier (a JSON key of the Hub's answer), never shown; the screen's texts are in the catalogue (S4.8)
