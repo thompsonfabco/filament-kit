@@ -107,6 +107,8 @@ class PrintersApp:
         self._kit = kit
         self.poll, self.ping = POLL_SECONDS, PING_SECONDS
         self.streams = self.cameras = 0
+        self._shared: dict[str, tuple[float, dict]] = {}    # serial -> (when taken, snapshot) for the open streams
+        self._shared_lock: dict[str, anyio.Lock] = {}
         self.last_test = 0.0
         self.push_on = push_on
         self.push_store = self.sender = self.watcher = None
@@ -349,6 +351,30 @@ class PrintersApp:
         return await self._kit_call(self.kit.post, f"/api/printers/{self._serial(request)}/map", {})
 
     # ---------- live status (SSE) ----------
+    async def _shared_snapshot(self, serial: str) -> dict:
+        """The snapshot for one stream's tick. Streams on one printer (two phones, two tabs) share one kit call per
+        tick: an answer younger than half a poll is reused, and a second stream waits for the call under way."""
+        def fresh():
+            hit = self._shared.get(serial)
+            return hit[1] if hit is not None and time.monotonic() - hit[0] < self.poll / 2 else None
+        if (payload := fresh()) is not None:
+            return payload
+        lock = self._shared_lock.setdefault(serial, anyio.Lock())
+        async with lock:
+            if (payload := fresh()) is not None:
+                return payload
+            try:
+                payload = await anyio.to_thread.run_sync(self.snapshot, serial)
+            except SlotError as e:
+                payload = {"error": str(e)}
+            self._shared[serial] = (time.monotonic(), payload)
+            if len(self._shared) > MAX_STREAMS:             # only printers with a stream open matter
+                now = time.monotonic()
+                for old in [k for k, (t, _) in self._shared.items() if now - t >= self.poll and k != serial]:
+                    self._shared.pop(old, None)
+                    self._shared_lock.pop(old, None)
+            return payload
+
     async def events(self, serial: str, is_alive):
         """SSE text chunks: `data: <json>` when the snapshot changes, `: ping` after PING_SECONDS of quiet. Polls
         the kit once per `poll` seconds while `is_alive()`; the loop (and so the polling) ends with the client."""
@@ -356,11 +382,7 @@ class PrintersApp:
         try:
             last, last_write = None, 0.0
             while await is_alive():
-                try:
-                    payload = await anyio.to_thread.run_sync(self.snapshot, serial)
-                except SlotError as e:
-                    payload = {"error": str(e)}
-                text = _dump(payload)
+                text = _dump(await self._shared_snapshot(serial))
                 now = time.monotonic()
                 if text != last:
                     last, last_write = text, now
