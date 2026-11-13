@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
@@ -228,7 +229,25 @@ class PickSpoolViewModelTest {
         assertEquals(7, v.state.value.preview!!.spool.id)
     }
 
-    @Test fun aNewerTapReplacesATagStillHeldAfterARefusal() = runTest(dispatcher) {
+    @Test fun aHeldTagOfTheSpoolWhoseLoadAnswerWasLostDoesNotReopenItsPreview() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(1)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        assertTrue(v.state.value.preview!!.dropped)
+        v.back(); runCurrent()
+        assertNull("Load is not offered again (7.6)", v.state.value.preview)
+        assertNull("dropped once the person leaves", v.state.value.heldTag)
+        assertEquals("no second dry run", listOf(1 to true, 1 to false), fake.loads)
+        assertNull(v.state.value.unlinkedTag)
+    }
+
+    @Test fun aNewerTapReplacesATagStillHeldAfterARefusal()= runTest(dispatcher) {
         fake.tags["4:77:90:e"] = spoolJson(7)
         fake.tags["4:77:90:f"] = spoolJson(8)
         val open = CompletableDeferred<Unit>()
@@ -506,10 +525,14 @@ class PickSpoolScreenTapsTest {
             put("filament", buildJsonObject { put("name", "PolyTerra 7") })
         }
         var writeGate: CompletableDeferred<Unit>? = null
+        var writeError: Exception? = null
         override suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject> = emptyList()
         override suspend fun tag(uid: String): JsonObject? = if (uid == "04:aa") linked else null
         override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
-            if (!dryRun) writeGate?.await()
+            if (!dryRun) {
+                writeGate?.await()
+                writeError?.let { throw it }
+            }
             return LoadResult(slot = LoadSlot(label, 0, 0), nozzleMm = 0.4, confirmed = !dryRun)
         }
     }
@@ -517,16 +540,19 @@ class PickSpoolScreenTapsTest {
     private val backend = Backend()
     private val opened = mutableListOf<String>()
     private val loaded = mutableListOf<Boolean>()
+    private val left = mutableListOf<Unit>()
+    private val toast = SwToastState()
+    private var onScreen by mutableStateOf(true)
 
     private fun show(): PickSpoolViewModel {
         val vm = PickSpoolViewModel(backend, "ABC123", "A4", LoadGate())
         rule.setContent {
             SpoolwardenTheme(Look.Console, Appearance.Light) {
-                val toast = remember { SwToastState() }
                 CompositionLocalProvider(LocalToast provides toast) {
                     Box {
-                        PickSpoolScreen(
-                            vm, "Workshop X1", "A4", onLoaded = { loaded += it }, onPairAgain = {}, onOpenTag = { opened += it },
+                        if (onScreen) PickSpoolScreen(
+                            vm, "Workshop X1", "A4", onLoaded = { loaded += it }, onPairAgain = {}, onLeave = { left += Unit },
+                            onOpenTag = { opened += it },
                         )
                         SwToastHost(toast)
                     }
@@ -538,6 +564,63 @@ class PickSpoolScreenTapsTest {
     }
 
     private fun text(id: Int) = rule.activity.getString(id)
+
+    /** A tag is tapped while the load is written, and the load's answer is then lost: the preview shows its two ways out. */
+    private fun holdATagThroughALostLoad(): PickSpoolViewModel {
+        val open = CompletableDeferred<Unit>()
+        backend.writeGate = open
+        backend.writeError = ApiError(0, "offline", "x")
+        val vm = show()
+        vm.pick(SpoolSummary(1, "Example", "PolyTerra 1", "PLA", "2B2B2E", null, 620.0))
+        rule.waitForIdle()
+        vm.confirm()
+        rule.waitForIdle()
+        TagEvents.emit("04:cc")
+        rule.waitForIdle()
+        open.complete(Unit)
+        rule.waitForIdle()
+        assertTrue(vm.state.value.preview!!.dropped)
+        assertTrue("nothing opens while the preview stays", opened.isEmpty())
+        return vm
+    }
+
+    @Test fun doneAfterALostLoadHandsTheHeldTagOn() {
+        holdATagThroughALostLoad()
+        rule.onNodeWithText(text(R.string.status_done)).performClick()
+        rule.waitForIdle()
+        assertEquals(1, left.size)
+        assertEquals(listOf("04:cc"), opened)
+    }
+
+    @Test fun openThePrinterAfterALostLoadHandsTheHeldTagOn() {
+        holdATagThroughALostLoad()
+        rule.onNodeWithText(text(R.string.spool_load_open_printer)).performClick()
+        rule.waitForIdle()
+        assertEquals(1, left.size)
+        assertEquals(listOf("04:cc"), opened)
+    }
+
+    @Test fun theWaitTextShowsOncePerTapAndNotAgainWhenTheScreenComesBack() {
+        backend.writeGate = CompletableDeferred()
+        val vm = show()
+        vm.pick(SpoolSummary(1, "Example", "PolyTerra 1", "PLA", "2B2B2E", null, 620.0))
+        rule.waitForIdle()
+        vm.confirm()
+        rule.waitForIdle()
+        TagEvents.emit("04:cc")
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.tag_read_wait)).assertExists()
+        assertFalse("the screen said it", vm.state.value.tagWaitPending)
+        rule.runOnUiThread { toast.host.currentSnackbarData?.dismiss() }
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.tag_read_wait)).assertDoesNotExist()
+        // a rotation or a tab switch builds the screen anew
+        rule.runOnUiThread { onScreen = false }
+        rule.waitForIdle()
+        rule.runOnUiThread { onScreen = true }
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.tag_read_wait)).assertDoesNotExist()
+    }
 
     @Test fun aTagTapOnTheScreenPicksItsSpool() {
         val vm = show()
@@ -612,7 +695,35 @@ class TagEventsHandOnTest {
         assertEquals(listOf("04:new"), got)
     }
 
-    @Test fun aHandedOnTapComesAnywayWhenNobodyListens() = runTest {
+    @Test fun aHandedOnTapNobodyListensForIsDroppedAfterItsHoldingTime() = runTest {
+        val got = mutableListOf<String>()
+        TagEvents.emitWhenListening("04:gg", backgroundScope, waitMs = 500, holdMs = 5000)
+        advanceTimeBy(6000); runCurrent()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        assertTrue("it does not open long after", got.isEmpty())
+    }
+
+    @Test fun theNewestTapAlwaysArrivesLastEvenWhenItComesBetweenClaimAndEmit() = runTest {
+        val got = java.util.Collections.synchronizedList(mutableListOf<String>())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        var tap: Thread? = null
+        TagEvents.beforeHandOnEmit = {
+            // the NFC thread's tap lands right here; it has to wait for this step to finish
+            tap = Thread { TagEvents.emit("04:new") }.also { it.start(); it.join(300) }
+        }
+        try {
+            TagEvents.emitWhenListening("04:old", this, waitMs = 500)
+            advanceTimeBy(600); runCurrent()
+            tap!!.join(5000)
+        } finally {
+            TagEvents.beforeHandOnEmit = {}
+        }
+        assertEquals(listOf("04:old", "04:new"), got.toList())
+    }
+
+    @Test fun aHandedOnTapComesAnywayWhenNobodyListens()= runTest {
         val got = mutableListOf<String>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
         runCurrent()

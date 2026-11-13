@@ -174,7 +174,10 @@ class PickSpoolViewModel(
      * spool picks nothing and says so. A load being written holds the tap (05 2.6): the screen says so, and the tag
      * opens when the load ends.
      */
-    fun onTag(uid: String) {
+    fun onTag(uid: String) = onTag(uid, notSpool = null)
+
+    /** [notSpool]: a tag linked to this spool picks nothing (its load answer was lost, so it is not offered again, 7.6). */
+    private fun onTag(uid: String, notSpool: Int?) {
         if (_state.value.preview?.writing == true) {
             _state.update { it.copy(heldTag = uid, tagWaitPending = true) }
             return
@@ -185,7 +188,8 @@ class PickSpoolViewModel(
         tagLookup = viewModelScope.launch {
             try {
                 val found = backend.tag(uid)
-                if (found == null) _state.update { it.copy(unlinkedTag = uid) } else open(found.toSpoolSummary())
+                if (found == null) _state.update { it.copy(unlinkedTag = uid) }
+                else found.toSpoolSummary().let { if (it.id != notSpool) open(it) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FingerprintMismatch) {
@@ -230,13 +234,17 @@ class PickSpoolViewModel(
         }
     }
 
-    /** Back from the preview to the results; refused while the real load is being written. A tag held meanwhile opens now. */
+    /**
+     * Back from the preview to the results; refused while the real load is being written. A tag held meanwhile opens now,
+     * unless it is the spool whose load answer was lost: that preview is not opened again.
+     */
     fun back() {
-        if (_state.value.preview?.writing == true) return
+        val p = _state.value.preview
+        if (p?.writing == true) return
         dryRun?.cancel()
         val held = _state.value.heldTag
         _state.update { it.copy(preview = null, heldTag = null) }
-        if (held != null) onTag(held)
+        if (held != null) onTag(held, notSpool = p?.spool?.id?.takeIf { p.dropped })
     }
 
     /** The screen says it showed the "Tag read" wait text. */
