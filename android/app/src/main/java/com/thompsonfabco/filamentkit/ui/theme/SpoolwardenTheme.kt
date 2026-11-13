@@ -217,12 +217,15 @@ internal fun SpoolwardenTheme(look: Look, appearance: Appearance, content: @Comp
         ) {
             CompositionLocalProvider(
                 LocalContentColor provides colors.text,
-                LocalTextSelectionColors provides TextSelectionColors(colors.accent, colors.accentSoft),
+                LocalTextSelectionColors provides colors.toSelectionColors(),
                 content = content,
             )
         }
     }
 }
+
+/** The selection handle is text-coloured (accentText); accent is only a labelled fill (0014). */
+internal fun SpoolwardenColors.toSelectionColors() = TextSelectionColors(accentText, accentSoft)
 
 /** The window's class, from its own width (so split screen and freeform windows get the layout their width calls for). */
 @Composable

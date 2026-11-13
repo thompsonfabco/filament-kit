@@ -40,6 +40,14 @@ class ColorSchemeTest {
         c.bad, c.badSoft, c.onBad, c.info, c.infoSoft, c.focus, c.scrim, c.code,
     )
 
+    @Test fun selectionUsesAccentTextAndAccentSoft() {
+        for (look in Look.entries) for ((dark, c) in listOf(false to SpoolwardenTokens.of(look).light, true to SpoolwardenTokens.of(look).dark)) {
+            val sel = c.toSelectionColors()
+            assertEquals("$look dark=$dark: handle", c.accentText, sel.handleColor)
+            assertEquals("$look dark=$dark: background", c.accentSoft, sel.backgroundColor)
+        }
+    }
+
     @Test fun appearanceResolvesToDarkOrLight() {
         assertEquals(false, resolveDark(Appearance.Light, systemDark = true))
         assertEquals(true, resolveDark(Appearance.Dark, systemDark = false))
