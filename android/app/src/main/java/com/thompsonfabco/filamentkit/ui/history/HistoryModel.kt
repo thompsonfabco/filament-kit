@@ -187,7 +187,10 @@ data class HistoryListState(
     val message: String? = null,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
-)
+) {
+    /** Whether the server reads labels with the AI; null while unknown (not loaded yet), which is not "off". */
+    val aiAvailable: Boolean? get() = history?.ai
+}
 
 /** Keeps fetched photos for the visit (a list and a record share them), so a photo is downloaded once. */
 class PhotoCache {
@@ -211,6 +214,12 @@ class HistoryListViewModel(private val backend: HistoryBackend) : ViewModel() {
             }
             _state.update { it.copy(loading = false) }
         }
+    }
+
+    /** Loads the list once when nothing is loaded or loading (a record restored on its own needs the AI flag). */
+    fun ensureLoaded() {
+        val s = _state.value
+        if (s.history == null && !s.loading) refresh()
     }
 
     /** Photo [n] of record [id], from the cache or the server; null when it can't be had. */

@@ -67,7 +67,9 @@ fun HistoryEntry(api: Api, onBack: () -> Unit, onPairAgain: () -> Unit) {
     } else {
         BackHandler { openId = null }
         val vm = viewModel(key = "history-record-$apiKey-$id") { RecordViewModel(backend, id) }
-        val ai = list.state.collectAsState().value.history?.ai == true
+        // A record can open with no list loaded (restored after process death): load it for the AI flag.
+        LaunchedEffect(id) { list.ensureLoaded() }
+        val ai = list.state.collectAsState().value.aiAvailable
         RecordScreen(vm, list, ai, onBack = { openId = null; list.refresh() }, onPairAgain = onPairAgain)
     }
 }
@@ -143,7 +145,7 @@ private fun decode(bytes: ByteArray, max: Int): Bitmap? {
 }
 
 @Composable
-private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Boolean, onBack: () -> Unit, onPairAgain: () -> Unit) {
+private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Boolean?, onBack: () -> Unit, onPairAgain: () -> Unit) {
     val s by vm.state.collectAsState()
     LaunchedEffect(vm) { vm.load() }
     var enlarged by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -193,12 +195,12 @@ private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Bo
 
         // revise with AI: greyed with the reason when label reading is off
         Text("Revise with AI", style = MaterialTheme.typography.titleMedium)
-        if (!ai) Text(HistoryTexts.AI_OFF, style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(note, { note = it }, label = { Text(HistoryTexts.NOTE_LABEL) }, enabled = ai && !s.reviseBusy,
+        if (ai == false) Text(HistoryTexts.AI_OFF, style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(note, { note = it }, label = { Text(HistoryTexts.NOTE_LABEL) }, enabled = ai != false && !s.reviseBusy,
             modifier = Modifier.fillMaxWidth())
-        if (ai) Text(HistoryTexts.NOTE_HELP, style = MaterialTheme.typography.bodySmall)
+        if (ai != false) Text(HistoryTexts.NOTE_HELP, style = MaterialTheme.typography.bodySmall)
         s.noteError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Button(onClick = { vm.revise(note) }, enabled = ai && !s.reviseBusy) {
+        Button(onClick = { vm.revise(note) }, enabled = ai != false && !s.reviseBusy) {
             Text(if (s.reviseBusy) HistoryTexts.ASKING else HistoryTexts.ASK)
         }
 

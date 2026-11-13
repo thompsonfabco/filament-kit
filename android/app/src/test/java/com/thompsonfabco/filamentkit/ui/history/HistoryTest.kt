@@ -53,10 +53,12 @@ class HistoryTest {
         val edits = mutableListOf<Pair<Int, JsonObject>>()
         val undos = mutableListOf<Int>()
         val photoCalls = mutableListOf<Int>()
+        var lists = 0
+        var ai = true
         var error: Exception? = null
         var proposal = RevisionProposal("p-1", 0, buildJsonObject { put("vendor", "SUNLU") },
             buildJsonObject { put("vendor", "Polymaker") }, listOf("vendor"))
-        override suspend fun list() = IntakeHistory(20, 1, null, true)
+        override suspend fun list(): IntakeHistory { lists++; return IntakeHistory(20, 1, null, ai) }
         override suspend fun record(id: String) = rec
         override suspend fun photo(id: String, n: Int): ByteArray { photoCalls += n; return byteArrayOf(1, 2) }
         override suspend fun revise(id: String, note: String, item: Int?): RevisionProposal {
@@ -203,6 +205,27 @@ class HistoryTest {
         list.photo("a1", 1)
         list.photo("a1", 2)
         assertEquals(listOf(1, 2), fake.photoCalls)
+    }
+
+    @Test fun aRecordOpenedAloneLoadsTheAiFlag() = runTest(dispatcher) {
+        val list = HistoryListViewModel(fake)
+        assertNull(list.state.value.aiAvailable)
+        list.ensureLoaded()
+        list.ensureLoaded()
+        runCurrent()
+        assertEquals(1, fake.lists)
+        assertEquals(true, list.state.value.aiAvailable)
+        list.ensureLoaded()
+        runCurrent()
+        assertEquals(1, fake.lists)
+    }
+
+    @Test fun aiOffComesOnlyFromTheServer() = runTest(dispatcher) {
+        fake.ai = false
+        val list = HistoryListViewModel(fake)
+        list.ensureLoaded()
+        runCurrent()
+        assertEquals(false, list.state.value.aiAvailable)
     }
 
     @Test fun valuesReadPlainly() {
