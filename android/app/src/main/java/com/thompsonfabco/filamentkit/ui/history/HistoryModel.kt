@@ -45,14 +45,15 @@ interface HistoryBackend {
     suspend fun undo(id: String, revision: Int): HistoryRecord
 
     companion object {
-        fun of(api: Api): HistoryBackend = object : HistoryBackend {
-            override suspend fun list() = api.intakeHistory()
-            override suspend fun record(id: String) = api.intakeRecord(id)
-            override suspend fun photo(id: String, n: Int) = api.intakePhoto(id, n)
-            override suspend fun revise(id: String, note: String, item: Int?) = api.reviseIntake(id, note, item)
-            override suspend fun applyProposal(id: String, proposal: String) = api.applyProposal(id, proposal)
-            override suspend fun applyValues(id: String, item: Int, values: JsonObject) = api.applyValues(id, item, values)
-            override suspend fun undo(id: String, revision: Int) = api.undoIntake(id, revision)
+        /** Every call goes to the Api [current] gives at that moment (a trusted certificate or a re-pair is used at once). */
+        fun of(current: () -> Api): HistoryBackend = object : HistoryBackend {
+            override suspend fun list() = current().intakeHistory()
+            override suspend fun record(id: String) = current().intakeRecord(id)
+            override suspend fun photo(id: String, n: Int) = current().intakePhoto(id, n)
+            override suspend fun revise(id: String, note: String, item: Int?) = current().reviseIntake(id, note, item)
+            override suspend fun applyProposal(id: String, proposal: String) = current().applyProposal(id, proposal)
+            override suspend fun applyValues(id: String, item: Int, values: JsonObject) = current().applyValues(id, item, values)
+            override suspend fun undo(id: String, revision: Int) = current().undoIntake(id, revision)
         }
     }
 }
@@ -65,8 +66,11 @@ enum class RecentGroup(@StringRes val title: Int) {
     Other(R.string.recent_group_other),
 }
 
-/** How a field's text goes back to JSON: text as it is, a number, two numbers, or six hex digits. */
-enum class FieldKind { Text, Number, Range, Colour }
+/**
+ * How a field's text goes back to JSON, by the Hub's rule: text as it is, a number above 0 ([Positive]), whole degrees
+ * from 1 to 499 ([Degrees]), a range written "190-230", or six hex digits.
+ */
+enum class FieldKind { Text, Positive, Degrees, Range, Colour }
 
 /** A field of a saved item, in the order the screens show it. [wire] is the Hub's name for it. */
 enum class RecentField(
@@ -80,14 +84,14 @@ enum class RecentField(
     Name("name", R.string.recent_field_name, RecentGroup.Identity),
     Material("material", R.string.recent_field_material, RecentGroup.Identity),
     Colour("color_hex", R.string.recent_field_colour, RecentGroup.Identity, kind = FieldKind.Colour),
-    Net("net", R.string.recent_field_net_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Number),
-    Tare("tare", R.string.recent_field_empty_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Number),
-    Density("density", R.string.recent_field_density, RecentGroup.Weights, R.string.unit_g_cm3, FieldKind.Number),
-    Nozzle("nozzle", R.string.recent_field_nozzle, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Number),
-    Bed("bed", R.string.recent_field_bed, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Number),
+    Net("net", R.string.recent_field_net_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Positive),
+    Tare("tare", R.string.recent_field_empty_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Positive),
+    Density("density", R.string.recent_field_density, RecentGroup.Weights, R.string.unit_g_cm3, FieldKind.Positive),
+    Nozzle("nozzle", R.string.recent_field_nozzle, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Degrees),
+    Bed("bed", R.string.recent_field_bed, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Degrees),
     NozzleRange("nozzle_range", R.string.recent_field_nozzle_range, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Range),
     BedRange("bed_range", R.string.recent_field_bed_range, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Range),
-    Price("price_per_kg", R.string.recent_field_price, RecentGroup.Other, kind = FieldKind.Number),
+    Price("price_per_kg", R.string.recent_field_price, RecentGroup.Other, kind = FieldKind.Positive),
     Line("line", R.string.recent_field_line, RecentGroup.Other);
 
     companion object {
@@ -96,7 +100,7 @@ enum class RecentField(
 }
 
 /** What is wrong with a typed value. */
-enum class FieldError { Number, Range, Colour }
+enum class FieldError { Whole, Degrees, DegreesMax, Grams, Density, Price, Range, Colour }
 
 /** A typed value turned into JSON, or the reason it can't be. */
 sealed interface Parsed {
@@ -119,18 +123,32 @@ object RecentValues {
 
     private fun number(d: Double): String = if (d == Math.floor(d) && kotlin.math.abs(d) < 1e12) d.toLong().toString() else d.toString()
 
-    /** The edit form's text back to JSON for [field]; blank is null (the value is cleared). */
+    /**
+     * The edit form's text back to JSON for [field], by the Hub's rule (intake_history `_check_values`); blank clears
+     * the value. A range goes as the text "190-230", temperatures as whole numbers.
+     */
     fun parse(text: String, field: RecentField): Parsed {
         val t = text.trim()
         if (t.isEmpty()) return Parsed.Ok(JsonNull)
         return when (field.kind) {
             FieldKind.Text -> Parsed.Ok(JsonPrimitive(t))
-            FieldKind.Number -> t.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { Parsed.Ok(JsonPrimitive(it)) }
-                ?: Parsed.Bad(FieldError.Number)
+            FieldKind.Positive -> {
+                val n = t.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
+                if (n == null) Parsed.Bad(positiveError(field)) else Parsed.Ok(JsonPrimitive(n))
+            }
+            FieldKind.Degrees -> {
+                val n = t.toDoubleOrNull()?.takeIf { it.isFinite() }
+                when {
+                    n == null || n != Math.floor(n) -> Parsed.Bad(FieldError.Whole)
+                    n <= 0 -> Parsed.Bad(FieldError.Degrees)
+                    n >= MAX_DEGREES -> Parsed.Bad(FieldError.DegreesMax)
+                    else -> Parsed.Ok(JsonPrimitive(n.toInt()))
+                }
+            }
             FieldKind.Range -> {
                 val nums = t.split('-', '–', ',').map { it.trim() }.filter { it.isNotEmpty() }.map { it.toDoubleOrNull() }
-                if (nums.size == 2 && nums.all { it != null && it.isFinite() }) {
-                    Parsed.Ok(JsonArray(nums.map { JsonPrimitive(it) }))
+                if (nums.size == 2 && nums.all { it != null && it.isFinite() && it > 0 }) {
+                    Parsed.Ok(JsonPrimitive(nums.joinToString("-") { number(it!!) }))
                 } else {
                     Parsed.Bad(FieldError.Range)
                 }
@@ -145,6 +163,14 @@ object RecentValues {
             }
         }
     }
+
+    private fun positiveError(field: RecentField) = when (field) {
+        RecentField.Density -> FieldError.Density
+        RecentField.Price -> FieldError.Price
+        else -> FieldError.Grams
+    }
+
+    private const val MAX_DEGREES = 500
 
     private const val HEX_DIGITS = 6
     private const val HEX_RADIX = 16
@@ -205,20 +231,32 @@ fun sourceLabel(source: String, photos: Int): SourceLabel = when {
 sealed interface RecentFailure {
     data object Offline : RecentFailure
     data object Unexpected : RecentFailure
+    data object SpoolmanDown : RecentFailure
     data object ReaderOff : RecentFailure
     data object DailyLimit : RecentFailure
     data object ReaderBusy : RecentFailure
+    data object KeyRefused : RecentFailure
+    data object CloudDown : RecentFailure
+    data object Unreadable : RecentFailure
+    data object NoPhoto : RecentFailure
 
     /** A refusal with the Hub's own message, shown as given. */
     data class Hub(val message: String) : RecentFailure
 }
 
+/** 05-android-app 3.5 and 6.2 by the Hub's error code; a reply with no message of the Hub's own is an unknown answer. */
 internal fun failureOf(e: ApiError): RecentFailure = when (e.code) {
-    "offline" -> RecentFailure.Offline
+    "offline", "local_network" -> RecentFailure.Offline
+    "bad_response" -> RecentFailure.Unexpected
+    "spoolman_unreachable" -> RecentFailure.SpoolmanDown
     "ai_off" -> RecentFailure.ReaderOff
     "daily_cap" -> RecentFailure.DailyLimit
-    "local_busy" -> RecentFailure.ReaderBusy
-    else -> RecentFailure.Hub(e.message)
+    "local_busy", "rate_limited" -> RecentFailure.ReaderBusy
+    "bad_key" -> RecentFailure.KeyRefused
+    "unreachable" -> RecentFailure.CloudDown
+    "api_error", "refused", "truncated" -> RecentFailure.Unreadable
+    "no_photo" -> RecentFailure.NoPhoto
+    else -> if (e.notFromHub) RecentFailure.Unexpected else RecentFailure.Hub(e.message)
 }
 
 /** The record's read item that saved item [item] came from, to mark estimated and unread fields. */
@@ -264,6 +302,39 @@ object RecentMarks {
     }
 }
 
+/** What the Label Reader said about an item when it read the photos: colour, how sure, and its least sure fields. */
+class ReadDetails(
+    /** The colour's name; null when the reader gave none or could not name it ([unnamed]). */
+    val colourName: String?,
+    val colourFamily: String?,
+    /** The reader gave a colour but not a name from the library. */
+    val unnamed: Boolean,
+    /** How sure the reader was of the item, in percent. */
+    val percent: Int?,
+    /** The Hub's names of the fields the reader was least sure of (below [SURE]). */
+    val leastSure: List<String>,
+) {
+    companion object {
+        /** A field below this is "least sure" (the Hub's own threshold for an unsure item). */
+        const val SURE = 0.78
+        private const val PERCENT = 100
+
+        /** The details of saved item [item] where the Hub sent any for its read item; null when it sent none. */
+        fun of(r: HistoryRecord, item: Int): ReadDetails? {
+            val read = RecentMarks.readItem(r, item) ?: return null
+            fun text(key: String) = (read[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
+            val name = text("color_name")?.takeIf { it != "unknown" }
+            val named = text("color_name") != null
+            val family = text("color_family")
+            val sure = (read["confidence"] as? JsonPrimitive)?.takeIf { !it.isString }?.contentOrNull?.toDoubleOrNull()
+            val low = (read["field_confidence"] as? JsonObject).orEmpty()
+                .filter { (_, v) -> ((v as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull() ?: 1.0) < SURE }.keys.toList()
+            val d = ReadDetails(name, family, named && name == null, sure?.let { Math.round(it * PERCENT).toInt() }, low)
+            return d.takeIf { name != null || family != null || named || it.percent != null || it.leastSure.isNotEmpty() }
+        }
+    }
+}
+
 data class HistoryListState(
     val history: IntakeHistory? = null,
     val loading: Boolean = false,
@@ -273,6 +344,8 @@ data class HistoryListState(
     /** When [history] was loaded (epoch milliseconds), for the offline notice. */
     val loadedAt: Long? = null,
 ) {
+    val offline: Boolean get() = error == RecentFailure.Offline
+
     /** Whether the Hub reads labels; null while unknown (not loaded yet), which is not "off". */
     val aiAvailable: Boolean? get() = history?.ai
 }
@@ -345,7 +418,8 @@ sealed interface Ask {
     data object NoChange : Ask
     data class Accepted(val count: Int, val revision: Int) : Ask
     data object Discarded : Ask
-    data class Failed(val failure: RecentFailure) : Ask
+    /** A request failed; [proposal] is kept when it was the accept that failed, so "Try again" accepts it again. */
+    data class Failed(val failure: RecentFailure, val proposal: RevisionProposal? = null) : Ask
 }
 
 /** A hand edit that the Hub took: the item and the fields that were sent. */
@@ -371,6 +445,9 @@ data class RecordState(
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
 ) {
+    /** The Hub cannot be reached: what needs it is disabled (05-android-app 3.2). */
+    val offline: Boolean get() = error == RecentFailure.Offline
+
     /** The newest revision not undone, which Undo takes back (null: nothing to undo). */
     val undoTarget: HistoryRevision? get() = record?.takeIf { it.undoable }?.revisions?.lastOrNull { !it.undone }
 }
@@ -385,9 +462,19 @@ class RecordViewModel(
     val state: StateFlow<RecordState> = _state.asStateFlow()
     private var lastNote = ""
 
+    /** The item whose form was just saved: the screen leaving must not open it again while it fades out. */
+    private var sealed: Int? = null
+
+    /** A 401 or a changed certificate keeps what the person typed and shows the Hub notice; whatever was running stops. */
     private val auth: RecordState.(Boolean, Pair<String, String>?) -> RecordState = { u, m ->
-        copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch, edit = null, ask = Ask.Idle, undoAsk = false)
+        copy(
+            unauthorized = u || unauthorized, mismatch = m ?: mismatch, edit = edit?.copy(busy = false),
+            ask = if (ask == Ask.Waiting) Ask.Idle else ask, undoAsk = false,
+        )
     }
+
+    /** A failure leaves the data on screen as it was; the Hub being out of reach is the offline state. */
+    private fun RecordState.failed(f: RecentFailure): RecordState = if (f == RecentFailure.Offline) copy(error = f) else this
 
     /** Loads the record when it isn't there yet (the edit screen can be the first one restored). */
     fun ensureLoaded() {
@@ -418,15 +505,23 @@ class RecordViewModel(
         lastNote = n
         _state.update { it.copy(ask = Ask.Waiting, noteMissing = false, saved = null, undone = null) }
         viewModelScope.launch {
-            guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f)) } }, auth) {
+            guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f)).failed(f) } }, auth) {
                 val p = backend.revise(id, n, null)
-                _state.update { it.copy(ask = if (p.changes.isEmpty()) Ask.NoChange else Ask.Proposal(p)) }
+                _state.update { it.copy(ask = if (p.changes.isEmpty()) Ask.NoChange else Ask.Proposal(p), error = null) }
             }
         }
     }
 
-    /** "Try again" after a failure: the same note. */
-    fun askAgain() = ask(lastNote)
+    /** "Try again": accepts the proposal again when that is what failed, else asks again with the same note. */
+    fun retry() {
+        val a = _state.value.ask
+        if (a is Ask.Failed && a.proposal != null) {
+            _state.update { it.copy(ask = Ask.Proposal(a.proposal)) }
+            accept()
+        } else {
+            ask(lastNote)
+        }
+    }
 
     fun noteTyped() = _state.update { if (it.noteMissing) it.copy(noteMissing = false) else it }
 
@@ -437,9 +532,9 @@ class RecordViewModel(
         if (_state.value.applyBusy) return
         _state.update { it.copy(applyBusy = true) }
         viewModelScope.launch {
-            guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f)) } }, auth) {
+            guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f, p)).failed(f) } }, auth) {
                 val r = backend.applyProposal(id, p.proposal)
-                _state.update { it.copy(record = r, ask = Ask.Accepted(p.changes.size, r.revisions.lastOrNull()?.n ?: 0)) }
+                _state.update { it.copy(record = r, error = null, ask = Ask.Accepted(p.changes.size, r.revisions.lastOrNull()?.n ?: 0)) }
             }
             _state.update { it.copy(applyBusy = false) }
         }
@@ -447,10 +542,15 @@ class RecordViewModel(
 
     // ---- edit by hand ----
 
+    /** The person asked for the form: it may open on [item] again. */
+    fun beginEdit(item: Int) {
+        if (sealed == item) sealed = null
+    }
+
     /** Opens the form on saved item [item] once the record is there; a form already open on it stays as typed. */
     fun startEdit(item: Int) {
         val s = _state.value
-        if (s.edit?.item == item) return
+        if (s.edit?.item == item || sealed == item) return
         val saved = s.record?.saved?.firstOrNull { it.item == item } ?: return
         val texts = RecentField.entries.associateWith { RecentValues.formText(saved.values[it.wire]) }
         _state.update { it.copy(edit = EditUi(item, texts, texts), saved = null, undone = null) }
@@ -487,9 +587,12 @@ class RecordViewModel(
         }
         _state.update { it.copy(edit = e.copy(busy = true, errors = emptyMap(), failure = null, nothingChanged = false)) }
         viewModelScope.launch {
-            guard(_state, { f -> _state.update { s -> s.copy(edit = s.edit?.copy(busy = false, failure = f)) } }, auth) {
+            guard(_state, { f -> _state.update { s -> s.copy(edit = s.edit?.copy(busy = false, failure = f)).failed(f) } }, auth) {
                 val r = backend.applyValues(id, e.item, JsonObject(changes.mapKeys { it.key.wire }))
-                _state.update { it.copy(record = r, edit = null, saved = SavedEdit(e.item, changes.keys.toList()), ask = Ask.Idle) }
+                sealed = e.item
+                _state.update {
+                    it.copy(record = r, error = null, edit = null, saved = SavedEdit(e.item, changes.keys.toList()), ask = Ask.Idle)
+                }
                 onDone()
             }
         }
@@ -506,9 +609,11 @@ class RecordViewModel(
         if (_state.value.undoBusy) return
         _state.update { it.copy(undoBusy = true, undone = null, saved = null) }
         viewModelScope.launch {
-            guard(_state, { f -> _state.update { it.copy(undoFailure = f) } }, auth) {
+            guard(_state, { f -> _state.update { it.copy(undoFailure = f).failed(f) } }, auth) {
                 val r = backend.undo(id, target.n)
-                _state.update { it.copy(record = r, undone = target, ask = Ask.Idle) }
+                // the Hub's answer carries what the undo did to the filaments (undo_to, orphaned_by_undo)
+                val done = r.revisions.firstOrNull { rev -> rev.n == target.n } ?: target
+                _state.update { it.copy(record = r, error = null, undone = done, ask = Ask.Idle) }
             }
             _state.update { it.copy(undoBusy = false, undoAsk = false) }
         }
@@ -530,7 +635,9 @@ fun HistorySpool.asSpoolJson(): JsonObject = buildJsonObject {
 }
 
 /** The key a record's view model is kept under, in the record's own back stack entry. */
-internal fun recordKey(apiKey: String, id: String): String = listOf(apiKey, id).joinToString("/")
+internal fun recordKey(id: String): String = listOf(RECORD_KEY, id).joinToString("/")
+
+private const val RECORD_KEY = "record"
 
 /** The usual error handling: unpaired and certificate changes go to [onAuth], the rest become a [RecentFailure]. */
 private suspend fun <S> guard(

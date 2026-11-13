@@ -1289,3 +1289,21 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/RecordScreen.kt | ai | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | filament | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | id | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | local_network | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bad_response | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | spoolman_unreachable | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | rate_limited | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bad_key | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unreachable | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | api_error | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | refused | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | truncated | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | no_photo | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color_name | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unknown | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color_family | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | confidence | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | field_confidence | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | record | key of a view model in its back stack entry; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/RecentParts.kt | local | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/RecentParts.kt | cloud | wire name or value of the Hub's reply, matched as given; not a text

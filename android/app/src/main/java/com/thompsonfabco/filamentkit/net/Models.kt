@@ -171,6 +171,9 @@ data class HistoryFilaments(
     @Serializable(with = LenientNullableInt::class) val to: Int? = null,
     val created: Boolean = false,
     val orphaned: List<Int> = emptyList(),
+    /** After an undo: the copy of the filament the spools went to, and the filaments the undo left without spools. */
+    @Serializable(with = LenientNullableInt::class) @SerialName("undo_to") val undoTo: Int? = null,
+    @SerialName("orphaned_by_undo") val orphanedByUndo: List<Int> = emptyList(),
 )
 
 /** [by]: `ai` or `hand`. */

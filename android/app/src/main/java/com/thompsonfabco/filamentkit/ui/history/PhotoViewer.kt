@@ -61,17 +61,15 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun HistoryPhotoEntry(
-    api: Api,
+    current: () -> Api,
     id: String,
     n: Int,
     recordOwner: ViewModelStoreOwner,
     listOwner: ViewModelStoreOwner,
     onClose: () -> Unit,
 ) {
-    val backend = remember(api) { HistoryBackend.of(api) }
-    val apiKey = System.identityHashCode(api).toString()
-    val list = viewModel(viewModelStoreOwner = listOwner, key = apiKey) { HistoryListViewModel(backend) }
-    val record = viewModel(viewModelStoreOwner = recordOwner, key = recordKey(apiKey, id)) { RecordViewModel(backend, id) }
+    val list = viewModel(viewModelStoreOwner = listOwner) { HistoryListViewModel(HistoryBackend.of(current)) }
+    val record = viewModel(viewModelStoreOwner = recordOwner, key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
     PhotoViewer(list, record, id, n, onClose)
 }
 

@@ -35,6 +35,7 @@ import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwAction
@@ -50,17 +51,14 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
  */
 @Composable
 fun HistoryEditEntry(
-    api: Api,
+    current: () -> Api,
     id: String,
     item: Int,
     recordOwner: ViewModelStoreOwner,
     onClose: () -> Unit,
     onPairAgain: () -> Unit,
 ) {
-    val backend = remember(api) { HistoryBackend.of(api) }
-    val vm = viewModel(viewModelStoreOwner = recordOwner, key = recordKey(System.identityHashCode(api).toString(), id)) {
-        RecordViewModel(backend, id)
-    }
+    val vm = viewModel(viewModelStoreOwner = recordOwner, key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
     EditScreen(vm, item, onClose, onPairAgain)
 }
 
@@ -85,10 +83,6 @@ internal fun EditScreen(vm: RecordViewModel, item: Int, onClose: () -> Unit, onP
             verticalArrangement = Arrangement.spacedBy(space.s3),
         ) {
             Text(stringResource(R.string.recent_edit_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-            when {
-                s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
-                s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-            }
             ScreenState(
                 loaded = e != null,
                 loading = s.loading || (e == null && s.record != null),
@@ -99,7 +93,12 @@ internal fun EditScreen(vm: RecordViewModel, item: Int, onClose: () -> Unit, onP
                 if (e != null) EditFields(vm, s, e)
             }
         }
-        if (e != null) ActionBar(vm, e, onCancel = { if (e.dirty) leaving = true else leave(vm, onClose) }, onClose = onClose)
+        if (e != null) {
+            ActionBar(
+                vm, e, s, onCancel = { if (e.dirty) leaving = true else leave(vm, onClose) }, onClose = onClose,
+                onPairAgain = onPairAgain,
+            )
+        }
     }
     if (leaving) {
         SwDialog(
@@ -152,7 +151,7 @@ private fun EditFields(vm: RecordViewModel, s: RecordState, e: EditUi) {
                     textStyle = if (field.kind == FieldKind.Text) MaterialTheme.typography.bodyLarge else SpoolwardenTheme.type.input.copy(
                         fontFamily = SpoolwardenTheme.type.data.fontFamily, fontFeatureSettings = SpoolwardenTheme.type.data.fontFeatureSettings,
                     ),
-                    keyboardOptions = KeyboardOptions(keyboardType = if (field.kind == FieldKind.Number) KeyboardType.Decimal else KeyboardType.Text),
+                    keyboardOptions = KeyboardOptions(keyboardType = if (field.kind == FieldKind.Positive) KeyboardType.Decimal else KeyboardType.Text),
                     supportingText = when {
                         error != null -> ({
                             RecentStatusLine(R.drawable.sw_st_octagon, stringResource(errorText(error)), colors.bad, large = true)
@@ -170,18 +169,38 @@ private fun EditFields(vm: RecordViewModel, s: RecordState, e: EditUi) {
     }
 }
 
+/** What each complaint says: the rule, in the words of 05-android-app 6.3 where it has them. */
 private fun errorText(error: FieldError): Int = when (error) {
-    FieldError.Number -> R.string.recent_error_number
+    FieldError.Whole -> R.string.add_review_error_whole
+    FieldError.Degrees -> R.string.add_review_error_degrees
+    FieldError.DegreesMax -> R.string.recent_error_degrees_max
+    FieldError.Grams -> R.string.common_error_grams
+    FieldError.Density -> R.string.add_review_error_density
+    FieldError.Price -> R.string.recent_error_price
     FieldError.Range -> R.string.recent_error_range
     FieldError.Colour -> R.string.recent_error_colour
 }
 
 /** "Cancel" and "Save changes" (the screen's one filled button); "Nothing changed." beside them when nothing was. */
 @Composable
-private fun ActionBar(vm: RecordViewModel, e: EditUi, onCancel: () -> Unit, onClose: () -> Unit) {
+private fun ActionBar(
+    vm: RecordViewModel,
+    e: EditUi,
+    s: RecordState,
+    onCancel: () -> Unit,
+    onClose: () -> Unit,
+    onPairAgain: () -> Unit,
+) {
     val space = SpoolwardenTheme.space
     Column {
         HorizontalDivider(thickness = SpoolwardenTheme.sizes.hairline, color = SpoolwardenTheme.colors.border)
+        // where the result would appear: a 401 or a changed certificate keeps the typing and says so here
+        Column(Modifier.padding(horizontal = space.s3).padding(top = space.s3)) {
+            when {
+                s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+                s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+            }
+        }
         Row(
             Modifier.fillMaxWidth().padding(space.s3),
             horizontalArrangement = Arrangement.spacedBy(space.s2, Alignment.End),
@@ -196,8 +215,9 @@ private fun ActionBar(vm: RecordViewModel, e: EditUi, onCancel: () -> Unit, onCl
             SwButton(stringResource(R.string.common_cancel), onCancel, kind = SwButtonKind.Quiet, enabled = !e.busy)
             SwButton(
                 stringResource(if (e.busy) R.string.common_saving else R.string.recent_edit_save), { vm.saveEdit(onClose) },
-                kind = SwButtonKind.Main, busy = e.busy,
+                kind = SwButtonKind.Main, busy = e.busy, enabled = !s.offline,
             )
         }
+        if (s.offline) NeedsHubReason(Modifier.padding(horizontal = space.s3).padding(bottom = space.s3))
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -46,13 +47,13 @@ import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 
 /** Recently added (05-android-app 10.1): the list of intake records. */
 @Composable
-fun HistoryListEntry(api: Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
-    val backend = remember(api) { HistoryBackend.of(api) }
-    val list = viewModel(key = System.identityHashCode(api).toString()) { HistoryListViewModel(backend) }
+fun HistoryListEntry(current: () -> Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+    val list = viewModel { HistoryListViewModel(HistoryBackend.of(current)) }
     HistoryListScreen(list, onOpen = onOpen, onPairAgain = onPairAgain)
 }
 
@@ -62,7 +63,7 @@ fun HistoryListEntry(api: Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit
  */
 @Composable
 fun HistoryRecordEntry(
-    api: Api,
+    current: () -> Api,
     id: String,
     listOwner: ViewModelStoreOwner,
     onBack: () -> Unit,
@@ -72,10 +73,8 @@ fun HistoryRecordEntry(
     onOpenSpool: (JsonObject) -> Unit,
     onPairAgain: () -> Unit,
 ) {
-    val backend = remember(api) { HistoryBackend.of(api) }
-    val apiKey = System.identityHashCode(api).toString()
-    val list = viewModel(viewModelStoreOwner = listOwner, key = apiKey) { HistoryListViewModel(backend) }
-    val vm = viewModel(key = recordKey(apiKey, id)) { RecordViewModel(backend, id) }
+    val list = viewModel(viewModelStoreOwner = listOwner) { HistoryListViewModel(HistoryBackend.of(current)) }
+    val vm = viewModel(key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
     RecordScreen(
         vm, list, onBack = { list.refresh(); onBack() }, onOpenRecord = onOpenRecord, onEdit = onEdit,
         onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain,
@@ -93,6 +92,13 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, onOpen: (String) -> Uni
     val space = SpoolwardenTheme.space
     val h = s.history
     val failure = s.error
+    // out of reach: keep trying, the data on screen stays (05-android-app 3.2)
+    LaunchedEffect(s.offline) {
+        while (s.offline) {
+            delay(RETRY_MS)
+            vm.refresh()
+        }
+    }
     PullToRefreshBox(isRefreshing = s.loading && h != null, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
             when {
@@ -122,7 +128,7 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, onOpen: (String) -> Uni
                         SwEmptyState(
                             icon = R.drawable.sw_ic_clock,
                             title = stringResource(R.string.recent_empty_title),
-                            text = stringResource(R.string.recent_empty_text),
+                            text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
                         )
                     } else {
                         Box(
@@ -147,6 +153,7 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, onOpen: (String) -> Uni
 }
 
 private const val MS_PER_S = 1000L
+internal const val RETRY_MS = 10_000L
 
 /** The hollow circle and "The Label Reader is switched off. ..." (10.1, 10.4). */
 @Composable

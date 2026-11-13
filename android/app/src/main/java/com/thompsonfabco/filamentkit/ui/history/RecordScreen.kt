@@ -51,16 +51,20 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.HistoryRecord
 import com.thompsonfabco.filamentkit.net.HistorySaved
 import com.thompsonfabco.filamentkit.net.HistorySpool
+import com.thompsonfabco.filamentkit.net.RevisionProposal
 import com.thompsonfabco.filamentkit.net.HistoryRevision
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwAction
@@ -101,6 +105,13 @@ internal fun RecordScreen(
     }
     var note by rememberSaveable { mutableStateOf("") }
     val space = SpoolwardenTheme.space
+    // out of reach: keep trying, the data on screen stays and what needs the Hub waits (05-android-app 3.2)
+    LaunchedEffect(s.offline) {
+        while (s.offline) {
+            delay(RETRY_MS)
+            vm.load()
+        }
+    }
     val r = s.record
     val failure = s.error
     val offline = failure == RecentFailure.Offline
@@ -131,7 +142,7 @@ internal fun RecordScreen(
                     onOpenRecord = onOpenRecord, onOpenSpool = { onOpenSpool(it.asSpoolJson()) },
                 )
                 PhotosPanel(r, list, onOpenPhoto)
-                r.saved.forEach { item -> FieldsPanel(r, item, s.saved?.takeIf { it.item == item.item }, severalItems = r.saved.size > 1) { onEdit(item.item) } }
+                r.saved.forEach { item -> FieldsPanel(r, item, s.saved?.takeIf { it.item == item.item }, severalItems = r.saved.size > 1) { vm.beginEdit(item.item); onEdit(item.item) } }
                 AskPanel(vm, s, ls.aiAvailable, note, onNote = { note = it; vm.noteTyped() })
                 RevisionsPanel(vm, s, r)
             }
@@ -166,6 +177,16 @@ private fun RecordHeader(r: HistoryRecord, newer: String?, older: String?, onOpe
             Row(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically) {
                 IntakeStateLabel(r.state)
                 Text(spools, color = colors.muted, style = SpoolwardenTheme.type.dataSmall)
+            }
+            val weighed = r.weight?.let {
+                stringResource(
+                    R.string.recent_weighed,
+                    stringResource(R.string.recent_value_unit, RecentValues.text(JsonPrimitive(it)).orEmpty(), stringResource(R.string.unit_g)),
+                )
+            }
+            val withTag = if (r.tag != null) stringResource(R.string.recent_tag_read) else null
+            listOfNotNull(weighed, withTag).takeIf { it.isNotEmpty() }?.let {
+                Text(it.joinToString(" · "), color = colors.muted, style = MaterialTheme.typography.bodySmall)
             }
         }
         StepButton(R.string.a11y_record_newer, flip = true, enabled = newer != null) { newer?.let(onOpenRecord) }
@@ -235,10 +256,18 @@ private fun FieldsPanel(r: HistoryRecord, item: HistorySaved, saved: SavedEdit?,
         actions = { IconTextButton(R.drawable.sw_ic_pencil, stringResource(R.string.recent_edit_title), onEdit) },
     ) {
         if (ids.size > 1) {
+            val filament = r.spools.firstOrNull { it.spoolId in ids }?.filamentId
             Text(
-                stringResource(if (ids.size == 2) R.string.recent_item_note else R.string.recent_item_note_all),
+                if (ids.size == 2 || filament == null) {
+                    stringResource(R.string.recent_item_note)
+                } else {
+                    stringResource(R.string.recent_item_line, RecentValues.idList(ids), filament)
+                },
                 color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium,
             )
+        }
+        ReadDetails.of(r, item.item)?.let {
+            Text(readDetailsText(it), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodySmall)
         }
         RecentGroup.entries.forEach { group ->
             Text(stringResource(group.title), color = SpoolwardenTheme.colors.muted, style = SpoolwardenTheme.type.tableHeader)
@@ -320,6 +349,7 @@ private fun AskPanel(vm: RecordViewModel, s: RecordState, ai: Boolean?, note: St
     val space = SpoolwardenTheme.space
     val off = ai == false
     val waiting = s.ask == Ask.Waiting
+    val needsHub = s.offline
     RecentPanel(stringResource(R.string.recent_ask_title)) {
         if (off) ReaderOffLine()
         OutlinedTextField(
@@ -337,7 +367,8 @@ private fun AskPanel(vm: RecordViewModel, s: RecordState, ai: Boolean?, note: St
                 }
             },
         )
-        SwButton(stringResource(R.string.recent_ask_button), { vm.ask(note) }, enabled = !off && !waiting)
+        SwButton(stringResource(R.string.recent_ask_button), { vm.ask(note) }, enabled = !off && !waiting && !needsHub)
+        if (needsHub) NeedsHubReason()
         when (val ask = s.ask) {
             Ask.Idle -> Unit
             Ask.Waiting -> Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
@@ -347,17 +378,21 @@ private fun AskPanel(vm: RecordViewModel, s: RecordState, ai: Boolean?, note: St
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
-            is Ask.Proposal -> ProposalBox(vm, s, ask)
+            is Ask.Proposal -> ProposalBox(vm, s, ask.proposal, needsHub)
             Ask.NoChange -> Text(stringResource(R.string.recent_ask_no_change), style = MaterialTheme.typography.bodyMedium)
             is Ask.Accepted -> NoticeCard(
                 NoticeKind.Ok,
                 pluralStringResource(R.plurals.recent_ask_accepted, ask.count, ask.count, ask.revision),
             )
             Ask.Discarded -> RecentStatusLine(R.drawable.sw_st_hollow, stringResource(R.string.recent_ask_discarded), colors.muted)
-            is Ask.Failed -> NoticeCard(
-                NoticeKind.Bad, failureText(ask.failure),
-                actions = listOf(SwAction(stringResource(R.string.common_try_again), vm::askAgain)),
-            )
+            is Ask.Failed -> {
+                // a failed accept keeps its proposal on screen; "Try again" accepts it again
+                ask.proposal?.let { ProposalBox(vm, s, it, needsHub, decided = true) }
+                NoticeCard(
+                    NoticeKind.Bad, failureText(ask.failure),
+                    actions = listOf(SwAction(stringResource(R.string.common_try_again), vm::retry)),
+                )
+            }
         }
     }
 }
@@ -367,10 +402,9 @@ private const val ASK_LINES = 3
 /** The before-and-after list (02-components 7.9): `accentSoft` ground, a 1 dp `accentText` outline. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProposalBox(vm: RecordViewModel, s: RecordState, ask: Ask.Proposal) {
+private fun ProposalBox(vm: RecordViewModel, s: RecordState, p: RevisionProposal, needsHub: Boolean, decided: Boolean = false) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
-    val p = ask.proposal
     Column(
         Modifier.fillMaxWidth().background(colors.accentSoft, SpoolwardenTheme.shapes.r)
             .border(BorderStroke(SpoolwardenTheme.sizes.hairline, colors.accentText), SpoolwardenTheme.shapes.r).padding(space.s3),
@@ -380,6 +414,8 @@ private fun ProposalBox(vm: RecordViewModel, s: RecordState, ask: Ask.Proposal) 
             pluralStringResource(R.plurals.recent_ask_proposal, p.changes.size, p.changes.size),
             Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall,
         )
+        rereadText(p.reader, p.confidence)?.let { Text(it, color = colors.muted, style = MaterialTheme.typography.bodySmall) }
+        p.note?.takeIf { it.isNotBlank() }?.let { Text(it, color = colors.muted, style = MaterialTheme.typography.bodySmall) }
         if (p.noPhoto) Text(stringResource(R.string.recent_ask_no_photo), style = MaterialTheme.typography.bodyMedium)
         p.changes.forEach { wire ->
             val field = RecentField.of(wire)
@@ -397,9 +433,11 @@ private fun ProposalBox(vm: RecordViewModel, s: RecordState, ask: Ask.Proposal) 
                 }
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
-            SwButton(stringResource(R.string.recent_ask_accept), vm::accept, kind = SwButtonKind.Main, busy = s.applyBusy)
-            SwButton(stringResource(R.string.common_discard), vm::discard, enabled = !s.applyBusy)
+        if (!decided) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                SwButton(stringResource(R.string.recent_ask_accept), vm::accept, kind = SwButtonKind.Main, busy = s.applyBusy, enabled = !needsHub)
+                SwButton(stringResource(R.string.common_discard), vm::discard, enabled = !s.applyBusy)
+            }
         }
     }
 }
@@ -416,7 +454,8 @@ private fun RevisionsPanel(vm: RecordViewModel, s: RecordState, r: HistoryRecord
         }
         r.revisions.asReversed().forEach { rev -> RevisionLine(rev) }
         s.undoTarget?.let { t ->
-            IconTextButton(R.drawable.sw_ic_undo, stringResource(R.string.recent_undo, t.n), vm::askUndo, enabled = !s.undoBusy)
+            IconTextButton(R.drawable.sw_ic_undo, stringResource(R.string.recent_undo, t.n), vm::askUndo, enabled = !s.undoBusy && !s.offline)
+            if (s.offline && !s.undoBusy) NeedsHubReason()
         }
         s.undone?.let { UndoneLines(it) }
         s.undoFailure?.let {
@@ -432,13 +471,34 @@ private fun RevisionLine(rev: HistoryRevision) {
     val changes = rev.changes.map { changeText(it.field, it.old, it.new) }.joinToString("; ")
     val time = RecentValues.time(rev.at)
     val line = stringResource(if (rev.by == READER) R.string.recent_revision_reader else R.string.recent_revision_by_hand, rev.n, time, changes)
-    Row(horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2)) {
-        Text(
-            line, Modifier.weight(1f, fill = false), style = SpoolwardenTheme.type.dataSmall,
-            color = if (rev.undone) colors.muted else colors.text,
-            textDecoration = if (rev.undone) TextDecoration.LineThrough else null,
+    Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s1)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2)) {
+            Text(
+                line, Modifier.weight(1f, fill = false), style = SpoolwardenTheme.type.dataSmall,
+                color = if (rev.undone) colors.muted else colors.text,
+                textDecoration = if (rev.undone) TextDecoration.LineThrough else null,
+            )
+            if (rev.undone) Text(stringResource(R.string.recent_revision_undone), color = colors.muted, style = MaterialTheme.typography.bodySmall)
+        }
+        val extra = listOfNotNull(
+            rev.note?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.recent_revision_note, it) },
+            rev.device?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.recent_revision_device, it) },
         )
-        if (rev.undone) Text(stringResource(R.string.recent_revision_undone), color = colors.muted, style = MaterialTheme.typography.bodySmall)
+        if (extra.isNotEmpty()) Text(extra.joinToString(" · "), color = colors.muted, style = MaterialTheme.typography.bodySmall)
+        // what the revision did to the filaments: a re-link, and a filament left without spools (kept, not deleted)
+        val f = rev.filaments
+        if (f != null && !rev.undone) {
+            val to = f.to
+            if (to != null && to != f.from) {
+                Text(
+                    stringResource(if (f.created) R.string.recent_undo_filament_new else R.string.recent_relink_other, to),
+                    color = colors.muted, style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            f.orphaned.forEach {
+                Text(stringResource(R.string.recent_undo_filament_empty, it), color = colors.muted, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
@@ -461,10 +521,11 @@ private fun UndoneLines(rev: HistoryRevision) {
             NoticeCard(NoticeKind.Ok, line)
             more.forEach { NoticeCard(NoticeKind.Ok, it) }
         }
+        // what the undo itself did (undo_to, orphaned_by_undo), not what the revision did before
         val f = rev.filaments
         if (f != null) {
-            if (f.created && f.to != null) NoticeCard(NoticeKind.Info, stringResource(R.string.recent_undo_filament_new, f.to))
-            f.orphaned.forEach { NoticeCard(NoticeKind.Info, stringResource(R.string.recent_undo_filament_empty, it)) }
+            f.undoTo?.let { NoticeCard(NoticeKind.Info, stringResource(R.string.recent_undo_filament_new, it)) }
+            f.orphanedByUndo.forEach { NoticeCard(NoticeKind.Info, stringResource(R.string.recent_undo_filament_empty, it)) }
         }
     }
 }

@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.history
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.HistoryChange
+import com.thompsonfabco.filamentkit.net.HistoryFilaments
 import com.thompsonfabco.filamentkit.net.HistoryRead
 import com.thompsonfabco.filamentkit.net.HistoryRecord
 import com.thompsonfabco.filamentkit.net.HistoryRevision
@@ -138,36 +139,71 @@ class HistoryTest {
         assertFalse(vm.state.value.applyBusy)
     }
 
-    @Test fun aStaleProposalShowsTheHubsMessageAndTryAgainAsksAgain() = runTest(dispatcher) {
+    @Test fun aStaleProposalShowsTheHubsMessageAndTryAgainAcceptsAgain() = runTest(dispatcher) {
         val vm = loaded()
         vm.ask("x")
         runCurrent()
         fake.error = ApiError(409, "stale", "The record changed since the answer.")
         vm.accept()
         runCurrent()
-        assertEquals(Ask.Failed(RecentFailure.Hub("The record changed since the answer.")), vm.state.value.ask)
+        val failed = vm.state.value.ask as Ask.Failed
+        assertEquals(RecentFailure.Hub("The record changed since the answer."), failed.failure)
+        assertEquals("p-1", failed.proposal?.proposal)
         fake.error = null
-        vm.askAgain()
+        vm.retry()
         runCurrent()
-        assertEquals(2, fake.revises.size)
-        assertTrue(vm.state.value.ask is Ask.Proposal)
+        // the accept is tried again with the proposal kept; the Label Reader is not asked again
+        assertEquals(1, fake.revises.size)
+        assertEquals(listOf("p-1", "p-1"), fake.applied)
+        assertTrue(vm.state.value.ask is Ask.Accepted)
     }
 
-    @Test fun readerFailuresAreToldApart() = runTest(dispatcher) {
+    @Test fun tryAgainAfterAFailedAcceptAcceptsTheSameProposal() = runTest(dispatcher) {
+        val vm = loaded()
+        vm.ask("x")
+        runCurrent()
+        fake.error = ApiError(0, "offline", "no route")
+        vm.accept()
+        runCurrent()
+        val failed = vm.state.value.ask as Ask.Failed
+        assertEquals("p-1", failed.proposal?.proposal)
+        assertTrue(vm.state.value.offline)
+        fake.error = null
+        vm.retry()
+        runCurrent()
+        assertEquals(listOf("p-1", "p-1"), fake.applied)
+        assertEquals(1, fake.revises.size)
+        assertTrue(vm.state.value.ask is Ask.Accepted)
+        assertFalse(vm.state.value.offline)
+    }
+
+    @Test fun failuresAreToldApartByTheHubsRealCodes() = runTest(dispatcher) {
         val vm = loaded()
         for ((code, want) in listOf(
             "ai_off" to RecentFailure.ReaderOff, "daily_cap" to RecentFailure.DailyLimit,
             "local_busy" to RecentFailure.ReaderBusy, "offline" to RecentFailure.Offline,
+            "bad_key" to RecentFailure.KeyRefused, "unreachable" to RecentFailure.CloudDown,
+            "api_error" to RecentFailure.Unreadable, "no_photo" to RecentFailure.NoPhoto,
+            "spoolman_unreachable" to RecentFailure.SpoolmanDown, "bad_response" to RecentFailure.Unexpected,
         )) {
-            fake.error = ApiError(409, code, "x")
+            fake.error = ApiError(409, code, "the Hub's words")
             vm.ask("x")
             runCurrent()
             assertEquals(code, Ask.Failed(want), vm.state.value.ask)
         }
+        // a page with no message of the Hub's own is an answer the app does not understand
+        fake.error = ApiError(502, "internal", apiStandIn(502))
+        vm.ask("x")
+        runCurrent()
+        assertEquals(Ask.Failed(RecentFailure.Unexpected), vm.state.value.ask)
         fake.error = IllegalStateException("not json")
         vm.ask("x")
         runCurrent()
         assertEquals(Ask.Failed(RecentFailure.Unexpected), vm.state.value.ask)
+        fake.error = ApiError(409, "something_else", "Only the newest revision can be undone.")
+        vm.ask("x")
+        runCurrent()
+        assertEquals(Ask.Failed(RecentFailure.Hub("Only the newest revision can be undone.")), vm.state.value.ask)
     }
 
     // ---- edit by hand ----
@@ -183,8 +219,8 @@ class HistoryTest {
         assertEquals(0, item)
         assertEquals(buildJsonObject {
             put("vendor", "Polymaker")
-            put("nozzle", 215.0)
-            put("nozzle_range", JsonArray(listOf(JsonPrimitive(200.0), JsonPrimitive(235.0))))
+            put("nozzle", 215)
+            put("nozzle_range", "200-235")
             put("color_hex", "8A8D8F")
         }, sent)
         assertNull(vm.state.value.edit)
@@ -217,18 +253,38 @@ class HistoryTest {
         assertFalse(vm.state.value.edit!!.nothingChanged)
     }
 
-    @Test fun badValuesStayUnderTheirFieldsAllAtOnce() = runTest(dispatcher) {
+    @Test fun badValuesStayUnderTheirFieldsAllAtOnceWithTheHubsRule() = runTest(dispatcher) {
         val vm = loaded()
-        edited(vm, RecentField.Nozzle to "hot", RecentField.BedRange to "200", RecentField.Colour to "12345")
+        edited(vm, RecentField.Nozzle to "hot", RecentField.Bed to "600", RecentField.BedRange to "200",
+            RecentField.Colour to "12345", RecentField.Net to "0", RecentField.Density to "-1", RecentField.Price to "free")
         vm.saveEdit {}
         runCurrent()
         assertTrue(fake.edits.isEmpty())
         assertEquals(
-            mapOf(RecentField.Nozzle to FieldError.Number, RecentField.BedRange to FieldError.Range, RecentField.Colour to FieldError.Colour),
+            mapOf(
+                RecentField.Nozzle to FieldError.Whole, RecentField.Bed to FieldError.DegreesMax,
+                RecentField.BedRange to FieldError.Range, RecentField.Colour to FieldError.Colour,
+                RecentField.Net to FieldError.Grams, RecentField.Density to FieldError.Density, RecentField.Price to FieldError.Price,
+            ),
             vm.state.value.edit!!.errors,
         )
         vm.setText(RecentField.Nozzle, "215")
         assertFalse(RecentField.Nozzle in vm.state.value.edit!!.errors)
+    }
+
+    @Test fun aSavedFormDoesNotOpenAgainWhileItLeavesButDoesOnTheNextVisit() = runTest(dispatcher) {
+        val vm = loaded()
+        edited(vm, RecentField.Vendor to "Polymaker")
+        vm.saveEdit {}
+        runCurrent()
+        assertNull(vm.state.value.edit)
+        vm.startEdit(0) // the screen still composed, the record has just changed
+        assertNull(vm.state.value.edit)
+        assertEquals(listOf(RecentField.Vendor), vm.state.value.saved?.fields)
+        vm.beginEdit(0)
+        vm.startEdit(0)
+        assertEquals(0, vm.state.value.edit?.item)
+        assertNull(vm.state.value.saved)
     }
 
     @Test fun aFailedSaveKeepsTheFormWithItsReason() = runTest(dispatcher) {
@@ -252,14 +308,38 @@ class HistoryTest {
         assertNull(vm.state.value.edit)
     }
 
-    @Test fun anUnpairedPhoneClosesTheFormAndTheDialogs() = runTest(dispatcher) {
+    @Test fun anUnpairedPhoneKeepsTheTypingAndShowsTheNotice() = runTest(dispatcher) {
         val vm = loaded()
         edited(vm, RecentField.Vendor to "X")
         fake.error = ApiError(401, "unauthorized", "x")
         vm.saveEdit {}
         runCurrent()
         assertTrue(vm.state.value.unauthorized)
-        assertNull(vm.state.value.edit)
+        val e = vm.state.value.edit!!
+        assertEquals("X", e.texts[RecentField.Vendor])
+        assertFalse(e.busy)
+        assertTrue(e.dirty)
+    }
+
+    @Test fun aChangedCertificateKeepsTheTypingToo() = runTest(dispatcher) {
+        val vm = loaded()
+        edited(vm, RecentField.Vendor to "X")
+        fake.error = com.thompsonfabco.filamentkit.net.FingerprintMismatch("AA", "BB")
+        vm.saveEdit {}
+        runCurrent()
+        assertEquals("AA" to "BB", vm.state.value.mismatch)
+        assertEquals("X", vm.state.value.edit!!.texts[RecentField.Vendor])
+    }
+
+    @Test fun aHubOutOfReachDuringASaveIsTheOfflineStateAndKeepsTheForm() = runTest(dispatcher) {
+        val vm = loaded()
+        edited(vm, RecentField.Vendor to "X")
+        fake.error = ApiError(0, "offline", "no route")
+        vm.saveEdit {}
+        runCurrent()
+        assertTrue(vm.state.value.offline)
+        assertEquals(RecentFailure.Offline, vm.state.value.edit!!.failure)
+        assertEquals("X", vm.state.value.edit!!.texts[RecentField.Vendor])
     }
 
     // ---- undo ----
@@ -280,6 +360,20 @@ class HistoryTest {
         assertEquals(listOf(1), fake.undos)
         assertEquals(rev1, vm.state.value.undone)
         assertFalse(vm.state.value.undoAsk)
+    }
+
+    @Test fun theUndoResultIsWhatTheHubsAnswerSaysTheUndoDid() = runTest(dispatcher) {
+        val before = rev1.copy(filaments = HistoryFilaments(41, 42, created = true, orphaned = listOf(41)))
+        fake.rec = record.copy(revisions = listOf(before))
+        val vm = loaded()
+        // the Hub's answer: revision 1 undone, the spools on a copy (filament 43), filament 42 left without spools
+        fake.rec = record.copy(revisions = listOf(before.copy(undone = true, filaments = before.filaments!!.copy(undoTo = 43, orphanedByUndo = listOf(42)))))
+        vm.askUndo()
+        vm.undo()
+        runCurrent()
+        val done = vm.state.value.undone!!
+        assertEquals(43, done.filaments?.undoTo)
+        assertEquals(listOf(42), done.filaments?.orphanedByUndo)
     }
 
     @Test fun nothingToUndoWhenTheHubSaysSo() = runTest(dispatcher) {
@@ -379,20 +473,49 @@ class HistoryTest {
         assertNull(RecentValues.text(JsonArray(listOf(JsonNull, JsonNull))))
     }
 
-    @Test fun parseKeepsTheFieldsShape() {
+    @Test fun parseFollowsTheHubsRulePerField() {
         assertEquals(Parsed.Ok(JsonNull), RecentValues.parse(" ", RecentField.Name))
         assertEquals(Parsed.Ok(JsonPrimitive(1.5)), RecentValues.parse("1.5", RecentField.Density))
-        assertEquals(Parsed.Bad(FieldError.Number), RecentValues.parse("abc", RecentField.Nozzle))
+        assertEquals(Parsed.Bad(FieldError.Density), RecentValues.parse("0", RecentField.Density))
+        assertEquals(Parsed.Bad(FieldError.Grams), RecentValues.parse("abc", RecentField.Tare))
         assertEquals(Parsed.Ok(JsonPrimitive("abc")), RecentValues.parse("abc", RecentField.Line))
+        // temperatures: whole degrees, 1 to 499, sent as whole numbers
+        assertEquals(Parsed.Ok(JsonPrimitive(215)), RecentValues.parse("215", RecentField.Nozzle))
+        assertEquals(Parsed.Ok(JsonPrimitive(215)), RecentValues.parse("215.0", RecentField.Nozzle))
+        assertEquals(Parsed.Bad(FieldError.Whole), RecentValues.parse("215.5", RecentField.Nozzle))
+        assertEquals(Parsed.Bad(FieldError.Degrees), RecentValues.parse("0", RecentField.Bed))
+        assertEquals(Parsed.Bad(FieldError.DegreesMax), RecentValues.parse("500", RecentField.Bed))
+        assertEquals(Parsed.Ok(JsonPrimitive(499)), RecentValues.parse("499", RecentField.Bed))
+        // ranges go as the text the Hub keeps
+        assertEquals(Parsed.Ok(JsonPrimitive("55-65")), RecentValues.parse("55, 65", RecentField.BedRange))
+        assertEquals(Parsed.Ok(JsonPrimitive("190-230")), RecentValues.parse("190–230", RecentField.NozzleRange))
         assertEquals(Parsed.Bad(FieldError.Range), RecentValues.parse("200", RecentField.BedRange))
         assertEquals(Parsed.Bad(FieldError.Range), RecentValues.parse("1-2-3", RecentField.BedRange))
-        assertEquals(
-            Parsed.Ok(JsonArray(listOf(JsonPrimitive(55.0), JsonPrimitive(65.0)))),
-            RecentValues.parse("55, 65", RecentField.BedRange),
-        )
         assertEquals(Parsed.Ok(JsonPrimitive("2B2B2E")), RecentValues.parse("#2b2b2e", RecentField.Colour))
         assertEquals(Parsed.Bad(FieldError.Colour), RecentValues.parse("2B2B2", RecentField.Colour))
         assertEquals(Parsed.Bad(FieldError.Colour), RecentValues.parse("GGGGGG", RecentField.Colour))
+    }
+
+    @Test fun whatTheReaderSaidWhenItReadTheItem() {
+        val read = HistoryRead(listOf(buildJsonObject {
+            put("vendor", "SUNLU"); put("name", "PLA+ Grey"); put("material", "PLA")
+            put("color_name", "Charcoal"); put("color_family", "grey"); put("confidence", 0.86)
+            put("field_confidence", buildJsonObject { put("density", 0.5); put("vendor", 0.95) })
+        }))
+        val r = record.copy(read = read, saved = listOf(savedWith()))
+        val d = ReadDetails.of(r, 0)!!
+        assertEquals("Charcoal", d.colourName)
+        assertEquals("grey", d.colourFamily)
+        assertEquals(86, d.percent)
+        assertEquals(listOf("density"), d.leastSure)
+        assertNull(ReadDetails.of(record.copy(read = null), 0))
+        // a colour the library has no name for
+        val unnamed = HistoryRead(listOf(buildJsonObject {
+            put("vendor", "SUNLU"); put("name", "PLA+ Grey"); put("material", "PLA"); put("color_name", "unknown")
+        }))
+        val u = ReadDetails.of(record.copy(read = unnamed, saved = listOf(savedWith())), 0)!!
+        assertTrue(u.unnamed)
+        assertNull(u.colourName)
     }
 
     @Test fun theFieldsFollowTheFourGroups() {

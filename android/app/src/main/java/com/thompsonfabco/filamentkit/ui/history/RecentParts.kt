@@ -149,11 +149,55 @@ internal fun changeText(wire: String, old: JsonElement?, new: JsonElement?): Str
 internal fun failureText(f: RecentFailure): String = when (f) {
     RecentFailure.Offline -> stringResource(R.string.common_hub_unreachable)
     RecentFailure.Unexpected -> stringResource(R.string.common_hub_answer_unknown)
+    RecentFailure.SpoolmanDown -> stringResource(R.string.common_spoolman_unreachable)
     RecentFailure.ReaderOff -> stringResource(R.string.recent_reader_off)
     RecentFailure.DailyLimit -> stringResource(R.string.add_read_limit)
     RecentFailure.ReaderBusy -> stringResource(R.string.add_read_busy)
+    RecentFailure.KeyRefused -> stringResource(R.string.add_read_key_refused)
+    RecentFailure.CloudDown -> stringResource(R.string.add_read_cloud)
+    RecentFailure.Unreadable -> stringResource(R.string.add_read_unreadable)
+    RecentFailure.NoPhoto -> stringResource(R.string.recent_error_no_photo)
     is RecentFailure.Hub -> f.message
 }
+
+/** "Colour: Charcoal (grey) · 86 % sure · Least sure: Brand, Name": what the reader said about the item. */
+@Composable
+internal fun readDetailsText(d: ReadDetails): String {
+    val parts = mutableListOf<String>()
+    when {
+        d.unnamed && d.colourFamily == null -> parts += stringResource(R.string.recent_read_colour_unknown)
+        d.colourName != null && d.colourFamily != null ->
+            parts += stringResource(R.string.recent_read_colour_family, d.colourName, d.colourFamily)
+        d.colourName != null -> parts += stringResource(R.string.recent_read_colour, d.colourName)
+        d.colourFamily != null -> parts += stringResource(R.string.recent_read_colour, d.colourFamily)
+    }
+    d.percent?.let { parts += stringResource(R.string.recent_read_sure, it) }
+    if (d.leastSure.isNotEmpty()) {
+        val names = d.leastSure.map { fieldName(it) }.joinToString(", ")
+        parts += stringResource(R.string.recent_read_least_sure, names)
+    }
+    return stringResource(R.string.recent_when_read, parts.joinToString(" · "))
+}
+
+/** Which reader read again and how sure it was ("local" or "cloud"); null from an older Hub that says neither. */
+@Composable
+internal fun rereadText(reader: String?, confidence: Double?): String? {
+    val engine = when (reader) {
+        READER_LOCAL -> stringResource(R.string.settings_reader_engine_local)
+        READER_CLOUD -> stringResource(R.string.settings_reader_engine_cloud)
+        else -> return null
+    }
+    val percent = confidence?.let { Math.round(it * PERCENT).toInt() }
+    return if (percent == null) {
+        stringResource(R.string.recent_reread, engine)
+    } else {
+        stringResource(R.string.recent_reread_sure, engine, percent)
+    }
+}
+
+private const val READER_LOCAL = "local"
+private const val READER_CLOUD = "cloud"
+private const val PERCENT = 100
 
 /** A dashed `border` outline in [shape] (the box that stands for a photo that is not there). */
 internal fun Modifier.dashedOutline(colour: Color, shape: Shape, dash: Dp, width: Dp): Modifier =
