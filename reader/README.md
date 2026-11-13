@@ -7,7 +7,7 @@ filament-kit server links that spool to the slot (Spoolman location + the printe
 works with any printer and any AMS layout the server knows: the printer list and the slot list come from the
 server, so a new printer or an added AMS unit needs no firmware change.
 
-It started as the H2D-only reader of h2d-filament-scanner; this version has no hard-coded slots or URLs.
+It has no hard-coded slots or URLs.
 
 ## Hardware
 

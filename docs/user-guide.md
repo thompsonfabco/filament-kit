@@ -352,7 +352,6 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit reader token --name <name>` | Makes a token for the bench NFC reader, shown once ([reader/README.md](../reader/README.md)); `reader tokens` lists them, `sudo filament-kit reader revoke <id>` removes one. |
 | `sudo filament-kit reader setup --source <checkout>/reader` | Sets up a bench reader plugged in by USB: makes its token, asks which USB board to flash (`[y/N]`, unless `--port` names it; a board that answers as the station's button panel is refused), asks the Wi-Fi name and password, and builds and flashes it with PlatformIO. A script that pipes the Wi-Fi name in must pass `--port` or answer that prompt first. `--out <file>` only writes its `secrets.h` (mode 600) for a build elsewhere ([reader/README.md](../reader/README.md)). |
 | `sudo filament-kit update` / `update --check` / `update --rollback` | Installs the newest signed release, only checks, or goes back (see [Update](#update)). |
-| `sudo filament-kit migrate-ops <bundle>` | Moving from filament-ops: shows what it would do; `--apply` does it (see [Moving from filament-ops](#moving-from-filament-ops)). |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
 `http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type
@@ -1070,20 +1069,6 @@ sudo filament-kit modules enable orders
 The kit's user must be able to read the file (for example owner `root`, group `filament-kit`, mode 640). If it
 cannot be read, labels are still read, without the orders. From v0.4.0 only the web service itself can read the
 order list through the server: phones, the PC sync and the station are refused.
-
-## Moving from filament-ops
-
-If you ran the older filament-ops setup (filament MCP server, phone intake app, `regen.py` presets, the
-`intake-station` service and the `fpsync` task), the kit takes over all of it. The steps, checks and rollback for
-each computer are in [Moving from filament-ops](migrate-from-filament-ops.md). In short:
-
-1. On the old server, export a bundle with `tools/export_ops.sh` (it only reads).
-2. Install the kit in server mode, then `sudo filament-kit migrate-ops <bundle>`: it shows what it would do and
-   changes nothing. `sudo filament-kit migrate-ops <bundle> --apply` then moves your Spoolman data, lines,
-   calibrated preset values, the connector's sign-ins, the passphrase and your settings. Running it again changes
-   nothing.
-3. Turn on `web`, `orders` and `remote`; the connector and phone app keep their addresses and sign-ins.
-4. Then the station computer and the Windows PC, as the guide says.
 
 ## Troubleshooting
 

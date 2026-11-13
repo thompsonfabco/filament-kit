@@ -176,8 +176,6 @@ with `sudo filament-kit library update`, or turn on the `library` module to also
   the intake station, the Claude connector and phone web app, remote access, order history, troubleshooting.
 - [docs/klipper.md](docs/klipper.md): Klipper printers (Moonraker), the printer pack and Spool Sync.
 - [docs/known-gaps.md](docs/known-gaps.md): what doesn't work the way the how-tos describe yet.
-- [docs/migrate-from-filament-ops.md](docs/migrate-from-filament-ops.md): moving from the older filament-ops
-  setup.
 - For maintainers and contributors: [docs/maintainer.md](docs/maintainer.md) (releases, signing keys, secrets),
   [docs/testing-e2e.md](docs/testing-e2e.md) and [docs/android-e2e.md](docs/android-e2e.md) (the end-to-end
   tests).
