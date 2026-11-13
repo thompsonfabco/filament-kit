@@ -22,6 +22,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class AddRoute(val tag: String? = null, val draft: String? = null, val manual: Boolean = false)
 @Serializable data object AddProfileRoute
 
+/** The top bar's title on [AddProfileRoute] (05-android-app 8); the shell and the AUT-8 test both read it. */
+@get:StringRes
+internal val AddProfileTitle: Int get() = R.string.catalog_title
+
 @Serializable data object SpoolsGraph
 @Serializable data object SpoolsRoute
 

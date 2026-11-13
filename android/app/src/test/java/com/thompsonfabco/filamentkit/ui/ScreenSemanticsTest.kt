@@ -1,5 +1,32 @@
 package com.thompsonfabco.filamentkit.ui
 
+import com.thompsonfabco.filamentkit.ui.components.SwToastState
+import com.thompsonfabco.filamentkit.ui.components.SwToastHost
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.runtime.key
+import kotlinx.coroutines.CompletableDeferred
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.activity.OnBackPressedDispatcher
+import androidx.compose.ui.test.onAllNodesWithText
+import com.thompsonfabco.filamentkit.nav.AddProfileTitle
+import org.robolectric.RuntimeEnvironment
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.LocalEntryResult
+import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.ProfileLine
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField
+import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
+import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
+import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -245,6 +272,108 @@ class ScreenSemanticsTest {
     private fun group(title: String, group: SettingsGroup, facts: SettingsFacts = facts()) =
         host(title) { SettingsGroupPage(group, facts, actions()) }
 
+    /** The title the app's top bar shows on the catalog route: the shell reads the same resource. */
+    private fun catalogTitle() = RuntimeEnvironment.getApplication().getString(AddProfileTitle)
+
+    @Test fun catalogLine() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false))
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Existing lines").assertExists()
+        rule.onNodeWithText("Bambu Studio parent: none").assertExists()
+        auditAllFour("Save to the catalog", CATALOG_SECTIONS)
+    }
+
+    @Test fun catalogLineWhileSavingBlocksBack() {
+        val gate = CompletableDeferred<Unit>()
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false, gate = gate))
+        val toast = SwToastState()
+        var left = 0
+        var saved = 0
+        var dispatcher: OnBackPressedDispatcher? = null
+        host(catalogTitle()) {
+            dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+            CompositionLocalProvider(LocalToast provides toast) {
+                Box {
+                    AddProfileScreen(vm, onBack = { left++ }, onSaved = { saved++ }, onPairAgain = {})
+                    SwToastHost(toast, Modifier.align(Alignment.BottomCenter))
+                }
+            }
+        }
+        fillCatalog(vm)
+        vm.save() // the Hub does not answer until the gate opens
+        rule.waitForIdle()
+        rule.runOnUiThread { dispatcher!!.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Leave without saving?").assertDoesNotExist()
+        rule.onNodeWithText("Saving to the catalog… wait for the Hub's answer.").assertExists()
+        assertEquals("Back does not leave while saving", 0, left)
+        assertEquals(0, saved)
+        gate.complete(Unit)
+        rule.waitForIdle()
+        assertEquals(1, saved)
+    }
+
+    @Test fun catalogLineKeepsItsFailureWhenTheScreenComesBackUnchanged() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false, failure = FingerprintMismatch("aa", "bb")))
+        var round by mutableStateOf(0)
+        host(catalogTitle()) {
+            // a new composition of the screen over the same view model, as after "Review the certificate"
+            key(round) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}, paired = true) }
+        }
+        fillCatalog(vm)
+        vm.save()
+        rule.waitForIdle()
+        rule.onNodeWithText("certificate has changed", substring = true).assertExists()
+        round++
+        rule.waitForIdle()
+        rule.onNodeWithText("certificate has changed", substring = true).assertExists()
+    }
+
+    @Test fun catalogLineClearsAFailureWhenThePhoneBecomesPaired() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false, failure = ApiError(401, "unauthorized", "x")))
+        var paired by mutableStateOf(false)
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}, paired = paired) }
+        fillCatalog(vm)
+        vm.save()
+        rule.waitForIdle()
+        rule.onAllNodesWithText("This phone is no longer paired with the Hub.").assertCountEquals(2)
+        paired = true
+        rule.waitForIdle()
+        rule.onNodeWithText("This phone is no longer paired with the Hub.").assertDoesNotExist()
+    }
+
+    @Test fun catalogLineWithoutAPairingKeepsTheFormAndShowsTheHubNotice() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false))
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}, paired = false) }
+        fillCatalog(vm)
+        rule.waitForIdle()
+        rule.onNodeWithText("This phone is no longer paired with the Hub.").assertExists()
+        rule.onNodeWithText("Save to the catalog").assertIsNotEnabled()
+        rule.onNodeWithText("Example Filaments").assertExists()
+        rule.onNodeWithText("Existing lines").assertDoesNotExist()
+        auditAllFour("Save to the catalog", CATALOG_SECTIONS - "Existing lines")
+    }
+
+    private fun fillCatalog(vm: AddProfileViewModel) {
+        vm.set(ProfileField.Vendor, "Example Filaments")
+        vm.set(ProfileField.Line, "PolyTerra")
+        vm.set(ProfileField.Material, "PLA")
+    }
+
+    @Test fun catalogLineRefused() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = true))
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+        fillCatalog(vm)
+        vm.set(ProfileField.Density, "9")
+        vm.save()
+        rule.waitForIdle()
+        rule.onNodeWithText("The Hub could not use these values:").assertExists()
+        // the notice lists the problem and the Density field carries it again under itself
+        assertEquals(2, rule.onAllNodesWithText(DENSITY_PROBLEM, substring = true).fetchSemanticsNodes().size)
+        auditAllFour("Save to the catalog", CATALOG_SECTIONS)
+    }
+
     @Test fun settings() {
         host("Settings") { SettingsScreen(facts(UpdateUi(available = 7, offeredVersion = "0.5.3")), onOpen = {}) }
         auditAllFour("Hub connection")
@@ -466,11 +595,40 @@ class ScreenSemanticsTest {
         override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult = error("not used")
     }
 
+    private class FakeCatalog(
+        private val refuse: Boolean,
+        private val gate: CompletableDeferred<Unit>? = null,
+        private val failure: Exception? = null,
+    ) : ProfileApi {
+        override suspend fun parents(material: String) = ParentList(listOf("Generic PLA", "Example PLA Basic"), synced = true)
+        override suspend fun profileLines() = listOf(
+            ProfileLine(lineId = "example--polyterra", vendor = "Example Filaments", product = "PolyTerra", material = "PLA", presets = 4, bambuParent = "Generic PLA"),
+            ProfileLine(lineId = "example--silk", vendor = "Example Filaments", product = "Silk", material = "PLA"),
+        )
+        override suspend fun setLineParent(lineId: String, parent: String) = profileLines().first { it.lineId == lineId }
+        override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {
+            gate?.await()
+            failure?.let { throw it }
+            if (refuse) {
+                throw ApiError(
+                    400, "invalid_entry", "not valid",
+                    JsonObject(mapOf("problems" to JsonArray(listOf(JsonPrimitive(DENSITY_PROBLEM))))),
+                )
+            }
+            return LocalEntryResult(entry, "example--polyterra")
+        }
+    }
+
     private class FakeTools : PrinterToolsBackend {
         override suspend fun startMap(id: String): String = error("not used")
         override suspend fun mapStatus(id: String): MapStatus = error("not used")
         override suspend fun report(id: String): PrinterReport = error("not used")
         override suspend fun usage(id: String, days: Int): List<UsageEntry> = emptyList()
         override suspend fun undoUsage(entryId: String): UsageEntry = error("not used")
+    }
+
+    private companion object {
+        const val DENSITY_PROBLEM = "fields.filament_density '9' is outside 0.5-3.0 g/cm3"
+        val CATALOG_SECTIONS = listOf("Line", "Temperatures", "Material", "Slicer", "Notes", "Existing lines")
     }
 }
