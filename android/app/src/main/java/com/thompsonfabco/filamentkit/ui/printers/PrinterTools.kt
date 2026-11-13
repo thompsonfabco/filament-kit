@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.ui.printers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.MapStatus
@@ -15,7 +16,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /** Slot mapping and filament-used calls; [ApiPrinterBackend] adapts the Api, tests pass a fake. */
 interface PrinterToolsBackend {
@@ -26,16 +26,13 @@ interface PrinterToolsBackend {
     suspend fun undoUsage(entryId: String): UsageEntry
 }
 
-/** "Collect a report": texts, and the file name the report is shared under. */
+/** "Collect a report": what asks for one, and the file name the report is shared under. */
 object ReportHelp {
-    const val BUTTON = "Collect a report"
-    const val BUSY = "Collecting…"
-    const val PRIVACY = "The file holds no serial number, address, name or account id."
-    const val SHARE_TITLE = "Share or save the printer report"
-    const val NO_APP = "No app on this phone can share or save the file"
+    /** The server's own sentence for why a report would help; null when it gave none. */
+    fun why(m: MapStatus?): String? = m?.reportWhy?.ifBlank { null }
 
-    /** Why the server would like a report; null when it doesn't ask for one (the button is still there). */
-    fun wanted(m: MapStatus?): String? = m?.reportWanted?.let { m.reportWhy ?: "A printer report would help." }
+    /** The Hub says a report would help: the button is the main one (when nothing before it in 05 9.7 is). */
+    fun wanted(m: MapStatus?): Boolean = m?.reportWanted != null
 
     /**
      * The server's name reduced to one plain file name (no folder part, only letters, digits, `.`, `_`, `-`), so it
@@ -49,55 +46,32 @@ object ReportHelp {
     }
 }
 
-/** Texts for the "Filament used" list. */
+/** Rules for the "Filament used" list. */
 object UsageHelp {
-    const val OBSERVE_NOTICE = "Filament use is only logged for this printer, not taken off spools, until slot mapping succeeds"
-
     /** Only a real deduction can be undone: not logged-only, not failed, not already undone. */
     fun canUndo(e: UsageEntry): Boolean = !e.observe && !e.undone && e.error == null && e.grams != null && e.spoolId != null
 
-    /** "12.5 g · Benchy · A1". */
-    fun line(e: UsageEntry): String = listOfNotNull(
-        e.grams?.let { String.format(Locale.ROOT, "%.1f g", it) } ?: "? g",
-        e.job?.ifBlank { null },
-        e.slot?.ifBlank { null },
-    ).joinToString(" · ")
+    /** "12.4 g · benchy.3mf · A2": a part the Hub does not give reads as a dash. */
+    fun headline(e: UsageEntry): Say = Say.Words(
+        R.string.printer_usage_headline,
+        listOf(grams(e.grams), e.job?.ifBlank { null } ?: DASH, e.slot?.ifBlank { null } ?: DASH),
+    )
 
-    /** The entry's status, or null for a plain deduction. */
-    fun note(e: UsageEntry): String? = when {
-        e.undone -> "undone"
-        e.error != null -> reason(e.error)
-        e.observe -> "logged only"
-        e.spoolId == null -> "no spool in that slot, nothing taken off"
-        else -> null
-    }
-
-    /** The server's codes (route-contract addendum); an unknown one still gets a readable line. */
-    private fun reason(code: String): String = "not taken off a spool: " + when (code) {
-        "file_not_found" -> "print file not found on the printer"
-        "no_slice_info" -> "the print file has no filament amounts"
-        "plate_not_found" -> "the printed plate was not in the print file"
-        "printer_unreachable" -> "the printer could not be reached"
-        "cert_changed" -> "the printer's certificate changed"
-        "spoolman_unreachable" -> "the inventory could not be reached"
-        "spoolman_failed" -> "the inventory refused the change"
-        "ambiguous_spool" -> "two spools are set to that slot"
-        "no_mapping" -> "the printer didn't say which slots it used"
-        "unmapped_slot" -> "that slot isn't in the slot map — run Map slots"
-        else -> code.replace('_', ' ')
-    }
+    private const val DASH = "–"
 }
 
 data class ToolsUiState(
     val map: MapStatus? = null,
-    /** The "Map slots" confirm dialog is open. */
+    /** The "Map slots" question is open; it stays open while the start request is out. */
     val confirmMap: Boolean = false,
     val mapBusy: Boolean = false,
-    val mapMessage: String? = null,
+    val mapProblem: Problem? = null,
     val usage: List<UsageEntry> = emptyList(),
     val usageLoaded: Boolean = false,
-    val usageMessage: String? = null,
-    /** The entry the Undo confirm dialog asks about. */
+    val usageProblem: Problem? = null,
+    /** The line after an undo: "12.4 g put back on spool 214." */
+    val undoneNote: Say? = null,
+    /** The entry the "Put it back on the spool?" question asks about; it stays open while the undo is being written. */
     val undoTarget: UsageEntry? = null,
     val undoBusy: Boolean = false,
     val unauthorized: Boolean = false,
@@ -105,10 +79,9 @@ data class ToolsUiState(
     val reportBusy: Boolean = false,
     /** A report fetched and not handed to the share sheet yet ([PrinterToolsViewModel.reportShown] clears it). */
     val report: PrinterReport? = null,
-    val reportMessage: String? = null,
+    val reportProblem: Say? = null,
 ) {
     val mapRunning: Boolean get() = map?.state == "running"
-    val observeNotice: String? get() = if (map?.observe == true) UsageHelp.OBSERVE_NOTICE else null
 
     /** Greyed only by the printer ([canStart]) or a job under way or being started, never by a past result. */
     fun mapEnabled(canStart: Boolean): Boolean = canStart && !mapRunning && !mapBusy
@@ -116,7 +89,8 @@ data class ToolsUiState(
 
 /**
  * "Map slots" and "Filament used" for one printer. [start] (screen visible) loads both and follows a running map
- * job; the job is polled every [pollMs] only while it is `running` and the screen is visible ([stop] ends it).
+ * job; the job is polled every [pollMs] only while it is `running` and the screen is visible ([stop] ends it). Every
+ * request goes to the session's client of that moment; a Hub notice is cleared by the next request that succeeds.
  */
 class PrinterToolsViewModel(
     private val backend: PrinterToolsBackend,
@@ -125,6 +99,9 @@ class PrinterToolsViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(ToolsUiState())
     val state: StateFlow<ToolsUiState> = _state.asStateFlow()
+
+    /** Runs after any request succeeded, so the screen's other view models drop their Hub notice too. */
+    var onHubOk: () -> Unit = {}
 
     private var poll: Job? = null
     private var visible = false
@@ -143,22 +120,26 @@ class PrinterToolsViewModel(
         poll = null
     }
 
+    /** The Hub notice goes away; the next request puts it back if the problem is still there. */
+    fun clearHubNotice() = _state.update { it.copy(unauthorized = false, mismatch = null) }
+
     // --- map slots ---
 
-    fun askMap() = _state.update { it.copy(confirmMap = true, mapMessage = null) }
+    fun askMap() = _state.update { it.copy(confirmMap = true, mapProblem = null) }
 
-    fun cancelMap() = _state.update { it.copy(confirmMap = false) }
+    /** The question cannot be left while the start request is out: the job may already be starting. */
+    fun cancelMap() = _state.update { if (it.mapBusy) it else it.copy(confirmMap = false) }
 
     fun confirmMap() {
         if (_state.value.mapBusy) return
-        _state.update { it.copy(confirmMap = false, mapBusy = true, mapMessage = null) }
+        _state.update { it.copy(mapBusy = true, mapProblem = null) }
         // an older poll still in flight would report the state from before this job (and then stop polling)
         generation++
         poll?.cancel()
         poll = null
         viewModelScope.launch {
             var started = false
-            guard(onError = { msg -> _state.update { it.copy(mapMessage = msg) } }) {
+            guard(onError = { p -> _state.update { it.copy(mapProblem = p) } }) {
                 try {
                     backend.startMap(id)
                 } catch (e: ApiError) {
@@ -166,7 +147,7 @@ class PrinterToolsViewModel(
                 }
                 started = true
             }
-            _state.update { it.copy(mapBusy = false) }
+            _state.update { it.copy(mapBusy = false, confirmMap = false) }
             if (started) follow(force = true)
         }
     }
@@ -186,14 +167,14 @@ class PrinterToolsViewModel(
         val mine = generation
         poll = viewModelScope.launch {
             var failures = 0
-            var pollError: String? = null
+            var pollError: Problem? = null
             while (true) {
                 var keep = false
                 var stale = false
-                val ok = guard(onError = { msg ->
+                val ok = guard(onError = { p ->
                     if (mine == generation) {
-                        pollError = msg
-                        _state.update { it.copy(mapMessage = msg) }
+                        pollError = p
+                        _state.update { it.copy(mapProblem = p) }
                     }
                 }) {
                     val m = backend.mapStatus(id)
@@ -202,8 +183,8 @@ class PrinterToolsViewModel(
                         return@guard
                     }
                     _state.update { s ->
-                        // clear only a message this loop's own failure put there
-                        s.copy(map = m, mapMessage = if (pollError != null && s.mapMessage == pollError) null else s.mapMessage)
+                        // clear only a problem this loop's own failure put there
+                        s.copy(map = m, mapProblem = if (pollError != null && s.mapProblem == pollError) null else s.mapProblem)
                     }
                     pollError = null
                     keep = m.state == "running"
@@ -227,9 +208,9 @@ class PrinterToolsViewModel(
     /** Asks the server for a report; the screen offers it through the share sheet, then calls [reportShown]. */
     fun collectReport() {
         if (_state.value.reportBusy) return
-        _state.update { it.copy(reportBusy = true, reportMessage = null, report = null) }
+        _state.update { it.copy(reportBusy = true, reportProblem = null, report = null) }
         viewModelScope.launch {
-            guard(onError = { msg -> _state.update { it.copy(reportMessage = msg) } }) {
+            guard(onError = { p -> _state.update { it.copy(reportProblem = p.say()) } }) {
                 val r = backend.report(id)
                 _state.update { it.copy(report = r) }
             }
@@ -238,7 +219,7 @@ class PrinterToolsViewModel(
     }
 
     /** The share sheet was opened ([problem] null) or could not be ([problem] says why). */
-    fun reportShown(problem: String? = null) = _state.update { it.copy(report = null, reportMessage = problem) }
+    fun reportShown(problem: Say? = null) = _state.update { it.copy(report = null, reportProblem = problem) }
 
     // --- filament used ---
 
@@ -247,46 +228,51 @@ class PrinterToolsViewModel(
     }
 
     private suspend fun loadUsage() {
-        guard(onError = { msg -> _state.update { it.copy(usageMessage = msg) } }) {
+        guard(onError = { p -> _state.update { it.copy(usageProblem = p) } }) {
             val list = backend.usage(id, DAYS)
-            _state.update { it.copy(usage = list, usageLoaded = true) }
+            _state.update { it.copy(usage = list, usageLoaded = true, usageProblem = null) }
         }
     }
 
     fun askUndo(entry: UsageEntry) {
         if (!UsageHelp.canUndo(entry)) return
-        _state.update { it.copy(undoTarget = entry, usageMessage = null) }
+        _state.update { it.copy(undoTarget = entry, undoneNote = null, usageProblem = null) }
     }
 
-    fun cancelUndo() = _state.update { it.copy(undoTarget = null) }
+    /** The question cannot be left while the undo is being written. */
+    fun cancelUndo() = _state.update { if (it.undoBusy) it else it.copy(undoTarget = null) }
 
     fun confirmUndo() {
         val target = _state.value.undoTarget ?: return
         if (_state.value.undoBusy) return
-        _state.update { it.copy(undoTarget = null, undoBusy = true) }
+        _state.update { it.copy(undoBusy = true) }
         viewModelScope.launch {
-            val ok = guard(onError = { msg -> _state.update { it.copy(usageMessage = msg) } }) {
+            val ok = guard(onError = { p -> _state.update { it.copy(usageProblem = p) } }) {
                 backend.undoUsage(target.id)
-                _state.update { it.copy(usageMessage = "Undone: ${UsageHelp.line(target)}") }
+                _state.update {
+                    it.copy(undoneNote = Say.Words(R.string.printer_usage_undone, listOf(grams(target.grams), target.spoolId ?: "?")))
+                }
             }
+            _state.update { it.copy(undoBusy = false, undoTarget = null) }
             if (ok) loadUsage()
-            _state.update { it.copy(undoBusy = false) }
         }
     }
 
     /** False after an error (shown through [onError]) or when the phone was unpaired / the certificate changed. */
-    private suspend fun guard(onError: (String) -> Unit, block: suspend () -> Unit): Boolean {
+    private suspend fun guard(onError: (Problem) -> Unit, block: suspend () -> Unit): Boolean {
         try {
             block()
+            if (_state.value.unauthorized || _state.value.mismatch != null) clearHubNotice()
+            onHubOk()
             return true
         } catch (e: CancellationException) {
             throw e
         } catch (e: FingerprintMismatch) {
             _state.update { it.copy(mismatch = e.expected to e.actual) }
         } catch (e: ApiError) {
-            if (e.code == "unauthorized") _state.update { it.copy(unauthorized = true) } else onError(PrinterHelp.actionMessage(e))
+            if (e.code == "unauthorized") _state.update { it.copy(unauthorized = true) } else onError(printerProblem(e))
         } catch (e: Exception) {
-            onError(PrinterHelp.UNEXPECTED)
+            onError(UNREADABLE)
         }
         return false
     }

@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.MapStatus
 import com.thompsonfabco.filamentkit.net.PrinterReport
@@ -54,7 +55,7 @@ class PrinterReportTest {
         val s = vm.state.value
         assertEquals(fake.report, s.report)
         assertFalse(s.reportBusy)
-        assertNull(s.reportMessage)
+        assertNull(s.reportProblem)
         vm.reportShown()
         assertNull(vm.state.value.report)
         assertEquals(1, fake.calls)
@@ -78,16 +79,16 @@ class PrinterReportTest {
         runCurrent()
         val s = vm.state.value
         assertNull(s.report)
-        assertTrue(s.reportMessage!!.isNotBlank())
+        assertEquals(Say.FromHub("The printer is offline"), s.reportProblem)
         assertFalse(s.reportBusy)
     }
 
     @Test fun aShareSheetProblemIsShown() = runTest(dispatcher) {
         vm.collectReport()
         runCurrent()
-        vm.reportShown(ReportHelp.NO_APP)
+        vm.reportShown(Say.Words(R.string.printer_report_no_app))
         assertNull(vm.state.value.report)
-        assertEquals(ReportHelp.NO_APP, vm.state.value.reportMessage)
+        assertEquals(Say.Words(R.string.printer_report_no_app), vm.state.value.reportProblem)
     }
 
     @Test fun anUnpairedPhoneIsNotAnErrorLine() = runTest(dispatcher) {
@@ -95,14 +96,17 @@ class PrinterReportTest {
         vm.collectReport()
         runCurrent()
         assertTrue(vm.state.value.unauthorized)
-        assertNull(vm.state.value.reportMessage)
+        assertNull(vm.state.value.reportProblem)
     }
 
-    @Test fun theReasonShowsOnlyWhenTheServerAsks() {
-        assertNull(ReportHelp.wanted(null))
-        assertNull(ReportHelp.wanted(MapStatus()))
-        assertEquals("Why.", ReportHelp.wanted(MapStatus(reportWanted = "no_scheme", reportWhy = "Why.")))
-        assertEquals("A printer report would help.", ReportHelp.wanted(MapStatus(reportWanted = "new_code")))
+    @Test fun theReasonShowsOnlyWhenTheHubAsks() {
+        assertNull(ReportHelp.why(null))
+        assertNull(ReportHelp.why(MapStatus()))
+        assertFalse(ReportHelp.wanted(null))
+        assertFalse(ReportHelp.wanted(MapStatus()))
+        assertEquals("Why.", ReportHelp.why(MapStatus(reportWanted = "no_scheme", reportWhy = "Why.")))
+        assertTrue(ReportHelp.wanted(MapStatus(reportWanted = "new_code")))
+        assertNull("the Hub gave no sentence, so none is made up", ReportHelp.why(MapStatus(reportWanted = "new_code")))
     }
 
     @Test fun theFileNameIsTheServersWhenPlain() {
@@ -117,9 +121,5 @@ class PrinterReportTest {
         assertEquals("printer-report.xml", ReportHelp.fileName("../"))
         assertEquals("hidden.xml", ReportHelp.fileName(".hidden"))
         assertTrue(ReportHelp.fileName("x".repeat(500)).length <= 100)
-    }
-
-    @Test fun thePrivacyLineNamesWhatIsNotInTheFile() {
-        for (w in listOf("serial", "address", "name", "account id")) assertTrue(w, ReportHelp.PRIVACY.contains(w))
     }
 }

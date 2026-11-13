@@ -63,6 +63,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
+import com.thompsonfabco.filamentkit.ui.components.MAIN_BUTTON_TAG
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
@@ -111,7 +113,30 @@ import com.thompsonfabco.filamentkit.ui.pair.ScanProblem
 import com.thompsonfabco.filamentkit.ui.pair.ScannerFrame
 import com.thompsonfabco.filamentkit.ui.pair.ScannerState
 import com.thompsonfabco.filamentkit.ui.pair.Step
+import com.thompsonfabco.filamentkit.net.LoadSlot
+import com.thompsonfabco.filamentkit.net.ManualChoice
+import com.thompsonfabco.filamentkit.net.ManualMapState
+import com.thompsonfabco.filamentkit.net.ManualOfferAnswer
+import com.thompsonfabco.filamentkit.net.ManualPosition
+import com.thompsonfabco.filamentkit.net.ManualSeen
+import com.thompsonfabco.filamentkit.net.ManualStep
+import com.thompsonfabco.filamentkit.net.ManualStepPosition
+import com.thompsonfabco.filamentkit.net.PrinterEditResult
+import com.thompsonfabco.filamentkit.net.SlotSpool
+import com.thompsonfabco.filamentkit.net.LoadResult
+import com.thompsonfabco.filamentkit.ui.pair.PairTopBarOverflow
+import com.thompsonfabco.filamentkit.ui.printers.PickBackend
+import com.thompsonfabco.filamentkit.ui.printers.PickSpoolScreen
+import com.thompsonfabco.filamentkit.ui.printers.PickSpoolViewModel
+import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
 import com.thompsonfabco.filamentkit.ui.printers.CameraSource
+import com.thompsonfabco.filamentkit.ui.printers.EditField
+import com.thompsonfabco.filamentkit.ui.printers.ManualMapBackend
+import com.thompsonfabco.filamentkit.ui.printers.ManualMapScreen
+import com.thompsonfabco.filamentkit.ui.printers.ManualMapViewModel
+import com.thompsonfabco.filamentkit.ui.printers.PrinterEditBackend
+import com.thompsonfabco.filamentkit.ui.printers.PrinterEditViewModel
+import com.thompsonfabco.filamentkit.ui.printers.PrinterSettingsScreen
 import com.thompsonfabco.filamentkit.ui.printers.PrinterBackend
 import com.thompsonfabco.filamentkit.ui.printers.PrinterScreen
 import com.thompsonfabco.filamentkit.ui.printers.PrinterToolsBackend
@@ -140,6 +165,8 @@ import kotlinx.serialization.json.put
 import java.io.File
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -343,16 +370,12 @@ class ScreenSemanticsTest {
         rule.onNodeWithContentDescription("More actions").assertExists()
     }
 
-    @Test fun theAddBambuFormAndTheReKeyFormOnPhone() {
+    @Test fun theAddBambuFormOnPhone() {
         val vm = PrintersViewModel(FakePrinters())
         host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
         rule.waitForIdle()
         vm.openAdd(vm.state.value.printers.first { !it.configured })
         auditWindowsAllFour("Access Code")
-        vm.cancelAdd()
-        rule.waitForIdle()
-        vm.openAdd(vm.state.value.printers.first { it.state == "wrong_code" })
-        auditWindowsAllFour("Replace Access Code: Study A1 mini")
     }
 
     @Test fun theAddKlipperFormOnPhone() {
@@ -377,13 +400,270 @@ class ScreenSemanticsTest {
         auditAllFour("No printers yet")
     }
 
-    @Test fun printer() {
+    private val camera = CameraSource(OkHttpClient(), "https://hub.example/hls", "https://hub.example/mjpeg", emptyMap())
+
+    private fun showPrinter(): Triple<PrinterViewModel, PrinterToolsViewModel, FakePrinters> {
         val backend = FakePrinters()
         val vm = PrinterViewModel(backend, "ABC123", pollMs = 600_000)
         val tools = PrinterToolsViewModel(FakeTools(), "ABC123", pollMs = 600_000)
-        val camera = CameraSource(OkHttpClient(), "https://hub.example/hls", "https://hub.example/mjpeg", emptyMap())
-        host("Printer") { PrinterScreen(vm, tools, camera, onBack = {}, onPairAgain = {}) }
-        auditAllFour("Pause")
+        host("Workshop X1") { PrinterScreen(vm, tools, camera, onPairAgain = {}) }
+        return Triple(vm, tools, backend)
+    }
+
+    private val printerSections = listOf("Camera", "Slots", "Slot mapping", "Filament used (last 7 days)")
+
+    @Test fun printer() {
+        showPrinter()
+        auditAllFour("Pause", printerSections)
+        // the panels of 9.4 to 9.10 and the last row
+        for (shown in listOf("Printing · benchy.3mf", "Stop print", "Turn the light off", "Hide", "AMS A", "Map slots again",
+            "Map by loading filament", "Collect a report", "12.4 g · benchy.3mf · A2", "Printer settings")) {
+            rule.onNodeWithText(shown, substring = true).assertExists()
+        }
+        rule.onNodeWithText("The nozzle temperature is abnormal.").assertExists()
+        rule.onNodeWithContentDescription("More actions").assertExists()
+    }
+
+    @Test fun printerWithOneFilledButton() {
+        showPrinter()
+        rule.waitForIdle()
+        // Pause is the main button while a print runs: no other main button is on the screen (F1.2)
+        rule.onAllNodes(hasTestTag(MAIN_BUTTON_TAG)).assertCountEquals(1)
+        rule.onNodeWithText("Pause").assertIsEnabled()
+    }
+
+    @Test fun printerNotConnected() {
+        val backend = FakePrinters(state = "offline")
+        val vm = PrinterViewModel(backend, "ABC123", pollMs = 600_000)
+        val tools = PrinterToolsViewModel(FakeTools(), "ABC123", pollMs = 600_000)
+        host("Workshop X1") { PrinterScreen(vm, tools, camera, onPairAgain = {}) }
+        auditAllFour("Slot mapping", printerSections)
+                // under the controls and under the slot mapping buttons
+        rule.onAllNodesWithText("Available when the printer is connected.").assertCountEquals(2)
+    }
+
+    @Test fun printerWithTheHubNotice() {
+        val backend = FakePrinters()
+        val vm = PrinterViewModel(backend, "ABC123", pollMs = 600_000)
+        val tools = PrinterToolsViewModel(FakeTools(ApiError(401, "unauthorized", "no")), "ABC123", pollMs = 600_000)
+        backend.failWith = ApiError(401, "unauthorized", "no")
+        host("Workshop X1") { PrinterScreen(vm, tools, camera, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("This phone is no longer paired with the Hub.").assertExists()
+        auditAllFour("This phone is no longer paired with the Hub.")
+    }
+
+    @Test fun theStopDialog() {
+        val (vm) = showPrinter()
+        rule.waitForIdle()
+        vm.askStop()
+        auditWindowsAllFour("Stop the print?")
+        rule.onNodeWithText("Stop benchy.3mf on Workshop X1? It cannot be resumed.").assertExists()
+    }
+
+    @Test fun theMapSlotsDialog() {
+        val (_, tools) = showPrinter()
+        rule.waitForIdle()
+        tools.askMap()
+        auditWindowsAllFour("Map the slots of Workshop X1?")
+    }
+
+    @Test fun thePutItBackDialog() {
+        val (_, tools) = showPrinter()
+        rule.waitForIdle()
+        tools.askUndo(tools.state.value.usage.first { it.spoolId != null })
+        auditWindowsAllFour("Put it back on the spool?")
+    }
+
+    @Test fun theSlotSheetOfAnInventorySpool() {
+        showPrinter()
+        rule.waitForIdle()
+        rule.onNodeWithText("PLA · PolyTerra Charcoal Black").performClick()
+        auditWindowsAllFour("Open spool")
+        rule.onNodeWithText("Unload").assertExists()
+    }
+
+    @Test fun theSlotSheetOfAnEmptySlot() {
+        showPrinter()
+        rule.waitForIdle()
+        rule.onNodeWithText("Empty").performClick()
+        auditWindowsAllFour("This slot is empty.")
+        rule.onNodeWithText("Load a spool").assertExists()
+    }
+
+    @Test fun theUnloadDialog() {
+        val (vm) = showPrinter()
+        rule.waitForIdle()
+        vm.askUnload(vm.state.value.status!!.ams.first().slots.first { it.spool != null })
+        rule.waitForIdle()
+        auditWindowsAllFour("Unload from A1?")
+    }
+
+    private fun showSettings(family: String = "bambu", openAccessCode: Boolean = false): PrinterEditViewModel {
+        val backend = FakePrinters()
+        val vm = PrinterViewModel(backend, "ABC123", pollMs = 600_000)
+        val edit = PrinterEditViewModel(FakeEdit(), "ABC123", family)
+        host("Printer settings") {
+            PrinterSettingsScreen(vm, edit, onPairAgain = {}, onForgotten = {}, openAccessCode = openAccessCode)
+        }
+        return edit
+    }
+
+    @Test fun aRefusedAccessCodeOpensSettingsWithReplaceAccessCodeAlreadyOpen() {
+        showSettings(openAccessCode = true)
+        auditWindowsAllFour("Replace Access Code: Workshop X1")
+    }
+
+    @Test fun replaceAccessCodeOpensOnceAndNotAgainAfterItIsClosed() {
+        var ask by mutableStateOf(true)
+        val edit = PrinterEditViewModel(FakeEdit(), "ABC123", "bambu")
+        val vm = PrinterViewModel(FakePrinters(), "ABC123", pollMs = 600_000)
+        host("Printer settings") {
+            PrinterSettingsScreen(vm, edit, onPairAgain = {}, onForgotten = {}, openAccessCode = ask)
+        }
+        rule.waitForIdle()
+        assertNotNull("opened on arrival", edit.state.value.dialog)
+        edit.close()
+        rule.waitForIdle()
+        // the screen is asked again (the route's argument changes and returns): the dialog stays closed
+        rule.runOnUiThread { ask = false }
+        rule.waitForIdle()
+        rule.runOnUiThread { ask = true }
+        rule.waitForIdle()
+        assertNull("not opened a second time", edit.state.value.dialog)
+    }
+
+    @Test fun aWrongCodeRowOpensItsPrinterToReplaceTheCode() {
+        var replaced: String? = null
+        var opened: String? = null
+        val vm = PrintersViewModel(FakePrinters())
+        host("Printers") { PrintersScreen(vm, onOpen = { opened = it }, onPairAgain = {}, onReplaceCode = { replaced = it }) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Study A1 mini").performClick()
+        assertEquals("GHI789", replaced)
+        assertNull(opened)
+        rule.onNodeWithText("Workshop X1").performClick()
+        assertEquals("ABC123", opened)
+    }
+
+    private class FakePick : PickBackend {
+        override suspend fun search(query: String, sealedOnly: Boolean) = listOf(
+            buildJsonObject {
+                put("id", 214)
+                put("filament", buildJsonObject {
+                    put("name", "PolyTerra Charcoal")
+                    put("material", "PLA")
+                    put("color_hex", "2B2B2E")
+                    put("vendor", buildJsonObject { put("name", "Example Filaments") })
+                })
+                put("remaining_weight", 620.0)
+            },
+        )
+        override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean) =
+            LoadResult(slot = com.thompsonfabco.filamentkit.net.LoadSlot(label, 0, 0), nozzleMm = 0.4)
+    }
+
+    private fun showPick(): PickSpoolViewModel {
+        val vm = PickSpoolViewModel(FakePick(), "ABC123", "A4")
+        host("Printers") { PickSpoolScreen(vm, "Workshop X1", "A4", onLoaded = {}, onPairAgain = {}) }
+        return vm
+    }
+
+    @Test fun pickASpoolForASlotBeforeASearch() {
+        showPick()
+        auditAllFour("Or hold the spool's tag to the back of the phone.")
+        rule.onNodeWithText("Load into Workshop X1, slot A4").assertExists()
+    }
+
+    @Test fun pickASpoolForASlotWithResults() {
+        val vm = showPick()
+        rule.waitForIdle()
+        vm.setQuery("poly")
+        vm.search()
+        rule.waitForIdle()
+        auditAllFour("Example Filaments PolyTerra Charcoal")
+    }
+
+    @Test fun thePreviewOfALoadIntoTheSlot() {
+        val vm = showPick()
+        rule.waitForIdle()
+        vm.pick(SpoolSummary(214, "Example Filaments", "PolyTerra Charcoal", "PLA", "2B2B2E", null, 620.0))
+        rule.waitForIdle()
+        auditWindowsAllFour("Load into Workshop X1, slot A4?")
+    }
+
+    @Test fun thePairingOverflowOffersSettings() {
+        var opened = false
+        host("Pair with your Hub") { PairTopBarOverflow { opened = true } }
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("More actions").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Settings").performClick()
+        assertTrue(opened)
+    }
+
+    @Test fun printerSettings() {
+        showSettings()
+        auditAllFour("Name")
+        for (shown in listOf("Workshop X1", "Address", "192.0.2.40", "Access Code", "Set", "Certificate", "Pinned", "Forget printer")) {
+            rule.onNodeWithText(shown, substring = true).assertExists()
+        }
+    }
+
+    @Test fun printerSettingsDialogs() {
+        val edit = showSettings()
+        rule.waitForIdle()
+        for ((field, shown) in listOf(
+            EditField.NAME to "Rename printer",
+            EditField.ADDRESS to "Change address: Workshop X1",
+            EditField.ACCESS_CODE to "Replace Access Code: Workshop X1",
+            EditField.TRUST_CERT to "Forget the certificate of Workshop X1?",
+        )) {
+            edit.open(field)
+            auditWindowsAllFour(shown)
+            edit.close()
+            rule.waitForIdle()
+        }
+    }
+
+    @Test fun printerSettingsFieldError() {
+        val edit = showSettings()
+        rule.waitForIdle()
+        edit.open(EditField.NAME)
+        edit.submit("  ")
+        auditWindowsAllFour("Enter a name.")
+    }
+
+    @Test fun forgetPrinterDialog() {
+        val edit = showSettings()
+        rule.waitForIdle()
+        edit.askForget()
+        auditWindowsAllFour("Forget Workshop X1?")
+    }
+
+    @Test fun mapByLoadingFilament() {
+        val vm = ManualMapViewModel(FakeManual(), "ABC123", pollMs = 600_000)
+        host("Map by loading filament") { ManualMapScreen(vm, "Workshop X1", onBack = {}, onPairAgain = {}) }
+        auditAllFour("Load any filament into slot 1 of AMS A.", listOf("Slots"))
+        for (shown in listOf("Did you load slot 1?", "Yes", "No, I loaded another one", "Skip slot A1", "Stop", "A1: not answered yet")) {
+            rule.onNodeWithText(shown, substring = true).assertExists()
+        }
+    }
+
+    @Test fun mapByLoadingFilamentStopQuestion() {
+        val vm = ManualMapViewModel(FakeManual(), "ABC123", pollMs = 600_000)
+        host("Map by loading filament") { ManualMapScreen(vm, "Workshop X1", onBack = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        vm.askStop()
+        auditWindowsAllFour("Stop mapping Workshop X1?")
+    }
+
+    @Test fun mapByLoadingFilamentWhichOne() {
+        val vm = ManualMapViewModel(FakeManual(), "ABC123", pollMs = 600_000)
+        host("Map by loading filament") { ManualMapScreen(vm, "Workshop X1", onBack = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        vm.openOther()
+        auditWindowsAllFour("Which one did you load?")
     }
 
     private val hub = SettingsHub("Workshop Hub", "192.0.2.10:8443", "AB12".repeat(16), "0.5.3")
@@ -1185,10 +1465,12 @@ class ScreenSemanticsTest {
         override suspend fun undo(id: String, revision: Int) = record
     }
 
-    private class FakePrinters(private val list: List<Printer>? = null) : PrinterBackend {
+    private class FakePrinters(private val list: List<Printer>? = null, state: String = "connected") : PrinterBackend {
+        var failWith: Exception? = null
         private val online = Printer(
             id = "ABC123", name = "Workshop X1", model = "X1C", serial = "ABC123", ip = "192.0.2.40", configured = true,
-            state = "connected", summary = PrinterSummary("RUNNING", 42, 31, "Benchy"),
+            state = state, summary = PrinterSummary("RUNNING", 42, 31, "Benchy"), pinned = true,
+            camera = com.thompsonfabco.filamentkit.net.PrinterCamera("hls"),
         )
         private val unset = Printer(id = "DEF456", name = "Spare P1S", model = "P1S", serial = "DEF456", ip = "192.0.2.41")
         private val klipper = Printer(
@@ -1200,8 +1482,30 @@ class ScreenSemanticsTest {
             configured = true, state = "wrong_code",
         )
         private val status = PrinterStatus(
-            gcodeState = "RUNNING", job = "Benchy", percent = 42, remainingMin = 31,
-            ams = listOf(AmsUnit(unit = 0, slots = listOf(AmsSlot(slot = 0, label = "A1", type = "PLA", colorHex = "2B2B2E")))),
+            gcodeState = "RUNNING", job = "benchy.3mf", percent = 42, layer = 120, totalLayers = 284, remainingMin = 72,
+            eta = "2026-11-12T15:40:00Z", light = "on",
+            temps = com.thompsonfabco.filamentkit.net.Temps(
+                nozzle = listOf(com.thompsonfabco.filamentkit.net.Temp(215.0, 215.0)),
+                bed = com.thompsonfabco.filamentkit.net.Temp(60.0, 60.0),
+                chamber = com.thompsonfabco.filamentkit.net.Temp(31.0, null),
+            ),
+            hms = listOf(com.thompsonfabco.filamentkit.net.HmsAlert("0300_0100", "The nozzle temperature is abnormal.")),
+            ams = listOf(
+                AmsUnit(
+                    unit = 0, label = "A", kind = "ams",
+                    slots = listOf(
+                        AmsSlot(
+                            slot = 0, label = "A1", type = "PLA", colorHex = "2B2B2E", active = true,
+                            spool = SlotSpool(214, "PolyTerra Charcoal Black", "PLA", "2B2B2E", 620.0),
+                        ),
+                        AmsSlot(
+                            slot = 1, label = "A2", type = "PETG", colorHex = "E8731A",
+                            spool = SlotSpool(212, "PETG HF Orange", "PETG", "E8731A", 880.0),
+                        ),
+                        AmsSlot(slot = 3, label = "A4", present = false),
+                    ),
+                ),
+            ),
         )
 
         override suspend fun printers() = list ?: listOf(online, klipper, wrongCode, unset)
@@ -1209,9 +1513,13 @@ class ScreenSemanticsTest {
         override suspend fun addKlipperPrinter(host: String, port: Int, name: String?) = online
         override suspend fun scanKlipper(subnet: String?) = emptyList<KlipperFound>()
         override suspend fun setApiKey(id: String, key: String) = Unit
-        override suspend fun printer(id: String) = PrinterDetail(online, status)
+        override suspend fun printer(id: String): PrinterDetail {
+            failWith?.let { throw it }
+            return PrinterDetail(online, status)
+        }
         override suspend fun command(id: String, action: String) = CommandResult(ok = true)
-        override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult = error("not used")
+        override suspend fun unload(id: String, label: String, dryRun: Boolean) =
+            UnloadResult(slot = LoadSlot(label, 0, 0), location = "Shelf A")
     }
 
     private class FakeCatalog(
@@ -1238,12 +1546,39 @@ class ScreenSemanticsTest {
         }
     }
 
-    private class FakeTools : PrinterToolsBackend {
-        override suspend fun startMap(id: String): String = error("not used")
-        override suspend fun mapStatus(id: String): MapStatus = error("not used")
-        override suspend fun report(id: String): PrinterReport = error("not used")
-        override suspend fun usage(id: String, days: Int): List<UsageEntry> = emptyList()
+    private class FakeTools(private val failWith: Exception? = null) : PrinterToolsBackend {
+        override suspend fun startMap(id: String): String = "j-1"
+        override suspend fun mapStatus(id: String): MapStatus =
+            failWith?.let { throw it } ?: MapStatus(state = "done", calibrated = true, slots = listOf("A1", "A2", "A3", "A4").map { com.thompsonfabco.filamentkit.net.MapSlot(label = it) })
+        override suspend fun report(id: String): PrinterReport = PrinterReport("report-X1C.xml", "<printer-report/>")
+        override suspend fun usage(id: String, days: Int): List<UsageEntry> = failWith?.let { throw it } ?: listOf(
+            UsageEntry(id = "u1", at = "2026-11-12T14:05:00Z", job = "benchy.3mf", grams = 12.4, spoolId = 214, slot = "A2"),
+            UsageEntry(id = "u2", at = "2026-11-11T09:30:00Z", job = "clip.3mf", grams = 3.1, spoolId = null, slot = "A3", observe = true),
+        )
         override suspend fun undoUsage(entryId: String): UsageEntry = error("not used")
+    }
+
+    private class FakeEdit : PrinterEditBackend {
+        override suspend fun editPrinter(id: String, changes: JsonObject): PrinterEditResult = error("not used")
+        override suspend fun removePrinter(id: String) = Unit
+    }
+
+    private class FakeManual : ManualMapBackend {
+        private val a1 = JsonObject(mapOf("ams_id" to JsonPrimitive(0), "tray_id" to JsonPrimitive(0)))
+        private val open = ManualMapState(
+            session = "s1", open = true, dualNozzle = false, reportsLoads = true,
+            step = ManualStep(
+                ManualStepPosition("A1", "A1"), "Load any filament into slot 1 of AMS A.",
+                ManualSeen(a1, "A1", settled = true), "Did you load slot 1?",
+            ),
+            positions = listOf("A1", "A2").map { ManualPosition(it, it) }, summary = "0 of 2 positions confirmed.",
+        )
+        override suspend fun start(id: String) = open
+        override suspend fun state(id: String) = open
+        override suspend fun confirm(id: String, session: String, position: String, reported: JsonObject, nozzle: String?, byHand: Boolean) = open
+        override suspend fun skip(id: String, session: String, position: String) = open
+        override suspend fun stop(id: String, session: String) = open
+        override suspend fun offer(id: String, share: Boolean) = ManualOfferAnswer(share, "Noted")
     }
 
     private companion object {

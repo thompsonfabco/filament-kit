@@ -122,7 +122,7 @@ class ManualMapViewModelTest {
         val vm = vm()
         vm.start(); runCurrent()
         assertNull(vm.state.value.map)
-        assertEquals("Slot mapping is running on this printer.", vm.state.value.message)
+        assertEquals(Problem.HubSaid("Slot mapping is running on this printer."), vm.state.value.problem)
         backend.startError = null
         backend.startResult = state()
         vm.retry(); runCurrent()
@@ -215,7 +215,7 @@ class ManualMapViewModelTest {
         val vm = vm()
         vm.start(); runCurrent()
         vm.yes(); runCurrent()
-        assertNull(vm.state.value.message)
+        assertNull(vm.state.value.problem)
         assertEquals("A2", vm.state.value.map!!.step!!.position.id)
         stopAll()
     }
@@ -226,7 +226,7 @@ class ManualMapViewModelTest {
         val vm = vm()
         vm.start(); runCurrent()
         vm.yes(); runCurrent()
-        assertEquals("C3 is already confirmed as C1 in this mapping.", vm.state.value.message)
+        assertEquals(Problem.HubSaid("C3 is already confirmed as C1 in this mapping."), vm.state.value.problem)
         stopAll()
     }
 
@@ -247,11 +247,11 @@ class ManualMapViewModelTest {
         val vm = vm()
         vm.start(); runCurrent()
         advanceTimeBy(1001); runCurrent()
-        assertEquals(ManualMapViewModel.POLL_FAILED, vm.state.value.message)
+        assertTrue(vm.state.value.lost)
         backend.stateError = null
         backend.current = state()
         advanceTimeBy(3000); runCurrent()
-        assertNull(vm.state.value.message)
+        assertFalse(vm.state.value.lost)
         stopAll()
     }
 
@@ -277,12 +277,19 @@ class ManualMapViewModelTest {
         stopAll()
     }
 
-    @Test fun listLinesSayWhatWasRecorded() {
-        assertEquals("A1: confirmed (A2, left nozzle)",
-            ManualMapHelp.line(ManualPosition("A1", "A1", "confirmed", "A2", "left")))
-        assertEquals("A1: entered by hand (A2)", ManualMapHelp.line(ManualPosition("A1", "A1", "by_hand", "A2")))
-        assertEquals("A1: skipped", ManualMapHelp.line(ManualPosition("A1", "A1", "skipped")))
-        assertEquals("A1: not answered yet", ManualMapHelp.line(ManualPosition("A1", "A1")))
-        assertEquals("A1: not mapped", ManualMapHelp.line(ManualPosition("A1", "A1"), open = false))
+    @Test fun aHubNoticeClearsAfterTheNextSuccessfulRequest() = runTest(dispatcher) {
+        backend.startResult = state()
+        backend.stateError = ApiError(401, "unauthorized", "x")
+        val vm = vm()
+        vm.start(); runCurrent()
+        advanceTimeBy(1001); runCurrent()
+        assertTrue(vm.state.value.unauthorized)
+        backend.stateError = null
+        backend.current = state()
+        vm.stop()
+        vm.start(); runCurrent()
+        advanceTimeBy(3000); runCurrent()
+        assertFalse(vm.state.value.unauthorized)
+        stopAll()
     }
 }

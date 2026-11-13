@@ -61,6 +61,8 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 @Serializable data object PrintersRoute
 @Serializable data class PrinterRoute(val id: String)
 @Serializable data class PrinterMapRoute(val id: String)
+@Serializable data class PrinterSettingsRoute(val id: String, val replaceCode: Boolean = false)
+@Serializable data class PrinterPickRoute(val id: String, val slot: String)
 
 @Serializable data object RecentGraph
 @Serializable data object RecentRoute
@@ -124,6 +126,13 @@ fun tabTap(current: Tab?, tapped: Tab, atRoot: Boolean): TabTap = when {
  */
 fun showsBackArrow(atTabRoot: Boolean, inPairing: Boolean, pairingOverMain: Boolean, atPairStart: Boolean = true): Boolean =
     !atTabRoot && (!inPairing || pairingOverMain || !atPairStart)
+
+/**
+ * Settings opened from the pairing graph's overflow (05-android-app 4): it behaves as part of pairing, with no bottom
+ * bar and no Hub chip, and Back returns to the pairing step beneath it ([pairGraphOnStack]).
+ */
+fun settingsOverPairing(inPairing: Boolean, tab: Tab?, pairGraphOnStack: Boolean): Boolean =
+    !inPairing && tab == Tab.Settings && pairGraphOnStack
 
 /** Goes to [tab], keeping every tab's stack as it was left (saved and restored). */
 fun NavController.selectTab(tab: Tab) = navigate(tab.graph) {

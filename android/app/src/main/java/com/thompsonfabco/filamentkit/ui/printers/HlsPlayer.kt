@@ -1,14 +1,8 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
 import androidx.annotation.OptIn
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -17,9 +11,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -30,7 +25,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.PlayerView
-import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.LocalNetwork
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -40,11 +35,19 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Plays the printer's HLS camera stream from [url] through the app's pinned [client] with [headers] (the Bearer
- * header). The player is released when this leaves composition.
+ * header). The player is released when this leaves composition; a failure is shown in place of the picture
+ * (05-android-app 9.4).
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun HlsPlayer(client: OkHttpClient, url: String, headers: Map<String, String>, modifier: Modifier = Modifier) {
+fun HlsPlayer(
+    client: OkHttpClient,
+    url: String,
+    headers: Map<String, String>,
+    printerName: String,
+    modifier: Modifier = Modifier,
+    onPairAgain: () -> Unit = {},
+) {
     val context = LocalContext.current
     var error by remember(url) { mutableStateOf<String?>(null) }
     var hasPicture by remember(url) { mutableStateOf(false) }
@@ -73,7 +76,7 @@ fun HlsPlayer(client: OkHttpClient, url: String, headers: Map<String, String>, m
                     player.seekToDefaultPosition()
                     player.prepare()
                 } else {
-                    error = cameraErrorText(e)
+                    error = cameraErrorCode(e)
                 }
             }
         }
@@ -83,42 +86,41 @@ fun HlsPlayer(client: OkHttpClient, url: String, headers: Map<String, String>, m
             player.release()
         }
     }
-    Box(modifier, contentAlignment = Alignment.Center) {
+    val live = stringResource(R.string.a11y_camera, printerName)
+    Box(modifier.semantics { contentDescription = live }, contentAlignment = Alignment.Center) {
         AndroidView(
             factory = { PlayerView(it).apply { useController = false } },
             update = { it.player = player },
             onRelease = { it.player = null },
             modifier = Modifier.fillMaxSize(),
         )
-        if (!hasPicture && error == null) Text(PrinterHelp.CAMERA_WAITING, color = Color.White)
-        error?.let { msg ->
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(msg, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = {
-                    error = null
-                    player.prepare()
-                }) { Text("Try again") }
-            }
+        if (!hasPicture && error == null) CameraWaiting()
+        error?.let { code ->
+            CameraFailure(code, onTryAgain = {
+                error = null
+                player.prepare()
+            }, onPairAgain = onPairAgain)
         }
     }
 }
 
-/** A plain-English text for a playback failure; the server's error code is read from an HTTP error body. */
+/** The failure of a playback as a code of [cameraErrorText]: the Hub's error code read from an HTTP error body. */
 @OptIn(UnstableApi::class)
-private fun cameraErrorText(e: PlaybackException): String {
+private fun cameraErrorCode(e: PlaybackException): String {
     var cause: Throwable? = e
     while (cause != null) {
         if (cause is HttpDataSource.InvalidResponseCodeException) {
-            val code = try {
+            if (cause.responseCode == UNAUTHORIZED_STATUS) return CAMERA_UNAUTHORIZED
+            return try {
                 (Json.parseToJsonElement(String(cause.responseBody, Charsets.UTF_8)) as? JsonObject)
-                    ?.get("error")?.jsonPrimitive?.content
+                    ?.get("error")?.jsonPrimitive?.content ?: CAMERA_INTERRUPTED
             } catch (_: Exception) {
-                null
+                CAMERA_INTERRUPTED
             }
-            return PrinterHelp.cameraFix(code ?: if (cause.responseCode == 401) "unauthorized" else "http_${cause.responseCode}")
         }
         cause = cause.cause
     }
-    return if (LocalNetwork.missing()) LOCAL_NETWORK_MESSAGE else "The camera stream was interrupted. Tap Try again."
+    return if (LocalNetwork.missing()) CAMERA_LOCAL_NETWORK else CAMERA_INTERRUPTED
 }
+
+private const val UNAUTHORIZED_STATUS = 401

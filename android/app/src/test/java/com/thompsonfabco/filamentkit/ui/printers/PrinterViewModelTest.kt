@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.ApiError
@@ -102,10 +103,12 @@ class PrinterViewModelTest {
         }
         val unloads = mutableListOf<Pair<String, Boolean>>()
         var unloadError: Exception? = null
+        var unloadGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
         var unloadResult = UnloadResult(slot = LoadSlot("A1", 0, 0), location = "Shelf 2",
             movedBack = listOf(MovedBack(7, "Shelf 2")))
         override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult {
             unloads += label to dryRun
+            if (!dryRun) unloadGate?.await()
             unloadError?.let { throw it }
             return unloadResult
         }
@@ -151,10 +154,10 @@ class PrinterViewModelTest {
         backend.detailError = ApiError(0, "offline", "x")
         val vm = vm()
         vm.start(); runCurrent()
-        assertTrue(vm.state.value.message!!.contains("Could not reach the server"))
+        assertEquals(Problem.Unreachable, vm.state.value.problem)
         backend.detailError = null
         advanceTimeBy(2000); runCurrent()
-        assertNull(vm.state.value.message)
+        assertNull(vm.state.value.problem)
         assertNotNull(vm.state.value.status)
         vm.stop()
     }
@@ -181,57 +184,62 @@ class PrinterViewModelTest {
         backend.detailError = IllegalStateException("boom")
         val vm = vm()
         vm.start(); runCurrent()
-        assertEquals("Unexpected response from the server", vm.state.value.message)
+        assertEquals(Problem.Unexpected, vm.state.value.problem)
         vm.stop()
     }
 
     // --- controls ---
 
-    @Test fun stopNeedsTwoConfirmsNamingPrinterAndJob() = runTest(dispatcher) {
+    @Test fun stopAsksOnceThenSendsStop() = runTest(dispatcher) {
         val vm = vm()
         vm.start(); runCurrent()
         vm.askStop()
-        assertEquals(StopStep.First, vm.state.value.stopStep)
-        vm.confirmStop()
-        runCurrent()
-        assertEquals(StopStep.Second, vm.state.value.stopStep)
-        assertTrue(backend.commands.isEmpty())
-        val text = vm.state.value.stopQuestion!!
-        assertTrue(text, text.contains("Garage H2D") && text.contains("Benchy"))
+        assertTrue(vm.state.value.confirmStop)
+        assertTrue("nothing is sent before the answer", backend.commands.isEmpty())
         vm.confirmStop()
         runCurrent()
         assertEquals(listOf("stop"), backend.commands)
-        assertEquals(StopStep.None, vm.state.value.stopStep)
+        assertFalse(vm.state.value.confirmStop)
+        assertEquals(Note(Say.Words(R.string.printer_result_stopped)), vm.state.value.commandNote)
         vm.stop()
     }
 
     @Test fun cancellingStopSendsNothing() = runTest(dispatcher) {
         val vm = vm()
         vm.start(); runCurrent()
-        vm.askStop(); vm.confirmStop(); vm.cancelStop()
+        vm.askStop(); vm.cancelStop()
         runCurrent()
-        assertEquals(StopStep.None, vm.state.value.stopStep)
+        assertFalse(vm.state.value.confirmStop)
         vm.confirmStop(); runCurrent()
         assertTrue(backend.commands.isEmpty())
         vm.stop()
     }
 
-    @Test fun offline409ShowsPrinterIsOffline() = runTest(dispatcher) {
+    @Test fun aRefusalShowsTheHubsOwnMessage() = runTest(dispatcher) {
         backend.commandError = ApiError(409, "printer_offline", "the printer is offline; check that it is on")
         val vm = vm()
         vm.start(); runCurrent()
         vm.pauseOrResume(); runCurrent()
-        assertTrue(vm.state.value.commandMessage!!.contains("printer is offline"))
+        assertEquals(Note(Say.FromHub("the printer is offline; check that it is on"), ok = false), vm.state.value.commandNote)
         assertFalse(vm.state.value.commandBusy)
         vm.stop()
     }
 
-    @Test fun noReplyIsExplained() = runTest(dispatcher) {
-        backend.commandError = ApiError(504, "no_reply", "x")
+    @Test fun noAnswerAtAllIsCannotReachTheHub() = runTest(dispatcher) {
+        backend.commandError = ApiError(0, "offline", "x")
         val vm = vm()
         vm.start(); runCurrent()
         vm.toggleLight(); runCurrent()
-        assertTrue(vm.state.value.commandMessage!!.contains("did not answer"))
+        assertEquals(Note(Say.Words(R.string.common_hub_unreachable), ok = false), vm.state.value.commandNote)
+        vm.stop()
+    }
+
+    @Test fun anErrorPageThatIsNotTheHubIsAnAnswerTheAppDoesNotUnderstand() = runTest(dispatcher) {
+        backend.commandError = ApiError(502, "http_502", "Bad Gateway", noHubMessage = true)
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.toggleLight(); runCurrent()
+        assertEquals(Note(Say.Words(R.string.common_hub_answer_unknown), ok = false), vm.state.value.commandNote)
         vm.stop()
     }
 
@@ -257,16 +265,36 @@ class PrinterViewModelTest {
         vm.stop()
     }
 
-    @Test fun commandShowsThePrintersReply() = runTest(dispatcher) {
+    @Test fun commandShowsWhatWasDoneOrWhyThePrinterSaidNo() = runTest(dispatcher) {
         val vm = vm()
         vm.start(); runCurrent()
         vm.pauseOrResume(); runCurrent()
-        assertTrue(vm.state.value.commandMessage!!, vm.state.value.commandMessage!!.contains("success"))
+        assertEquals(Note(Say.Words(R.string.printer_result_paused)), vm.state.value.commandNote)
+        // until the Hub sends a message: "The printer said no: <the reply's error>."
         backend.commandResult = CommandResult(ok = true, reply = Json.parseToJsonElement(
-            """{"ok":false,"reply":{"result":"failed","reason":"not allowed"}}""").jsonObject)
+            """{"ok":false,"reply":{"result":"failed","error":"not allowed"}}""").jsonObject)
         vm.pauseOrResume(); runCurrent()
-        val msg = vm.state.value.commandMessage!!
-        assertTrue(msg, msg.contains("refused") && msg.contains("not allowed"))
+        assertEquals(Note(Say.Words(R.string.printer_error_said_no, listOf("not allowed")), ok = false), vm.state.value.commandNote)
+        // the Hub's own message is shown as sent
+        backend.commandResult = CommandResult(ok = true, reply = Json.parseToJsonElement(
+            """{"ok":false,"message":"The printer is busy with a job.","reply":{"result":"failed"}}""").jsonObject)
+        vm.pauseOrResume(); runCurrent()
+        assertEquals(Note(Say.FromHub("The printer is busy with a job."), ok = false), vm.state.value.commandNote)
+        vm.stop()
+    }
+
+    @Test fun aHubNoticeClearsAfterTheNextSuccessfulCall() = runTest(dispatcher) {
+        backend.detailError = ApiError(401, "unauthorized", "no")
+        val vm = vm()
+        var told = 0
+        vm.onHubOk = { told++ }
+        vm.start(); runCurrent()
+        assertTrue(vm.state.value.unauthorized)
+        backend.detailError = null
+        vm.start(); runCurrent()
+        assertFalse(vm.state.value.unauthorized)
+        assertNull(vm.state.value.mismatch)
+        assertTrue("the screen's other view models are told", told >= 1)
         vm.stop()
     }
 
@@ -452,15 +480,14 @@ class PrinterViewModelTest {
         vm.askUnload(a1)
         runCurrent()
         assertEquals(listOf("A1" to true), backend.unloads)
-        assertEquals("Unload Acme Basic Black from slot A1? It goes back to Shelf 2.", vm.state.value.unloadAsk!!.question)
+        assertEquals(UnloadAsk("A1", "Acme Basic Black", 7, "Shelf 2"), vm.state.value.unloadAsk)
         val calls = backend.printerCalls
         vm.confirmUnload()
         runCurrent()
         assertEquals(listOf("A1" to true, "A1" to false), backend.unloads)
         assertNull(vm.state.value.unloadAsk)
         assertNull(vm.state.value.slotBusy)
-        assertEquals(listOf("Unloaded Acme Basic Black from slot A1.", "Moved back: Acme Basic Black → Shelf 2"),
-            vm.state.value.slotMessage)
+        assertEquals(Note(Say.Words(R.string.printer_unload_done, listOf("A1", 7, "Shelf 2"))), vm.state.value.slotNote)
         assertTrue("the status is fetched again", backend.printerCalls > calls)
         vm.stop()
     }
@@ -488,11 +515,29 @@ class PrinterViewModelTest {
         vm.start(); runCurrent()
         vm.askUnload(a1); runCurrent()
         assertNull(vm.state.value.unloadAsk)
-        assertEquals(listOf("no spool is in Garage H2D slot A1"), vm.state.value.slotMessage)
+        assertEquals(Note(Say.FromHub("no spool is in Garage H2D slot A1"), ok = false), vm.state.value.slotNote)
         assertNull(vm.state.value.slotBusy)
         backend.unloadError = ApiError(409, "already_running", "x")
         vm.askUnload(a1); runCurrent()
-        assertEquals(listOf(PrinterHelp.message(ApiError(409, "already_running", ""))), vm.state.value.slotMessage)
+        assertEquals(Note(Say.FromHub("x"), ok = false), vm.state.value.slotNote)
+        vm.stop()
+    }
+
+    @Test fun theUnloadQuestionCannotBeLeftWhileTheUnloadIsWritten() = runTest(dispatcher) {
+        withSlots()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        backend.unloadGate = gate
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(a1); runCurrent()
+        // the dry run is not behind the gate; the real one is
+        vm.confirmUnload(); runCurrent()
+        assertTrue(vm.state.value.unloading)
+        vm.cancelUnload()
+        assertNotNull("Cancel, Back and the scrim do nothing now", vm.state.value.unloadAsk)
+        gate.complete(Unit); runCurrent()
+        assertFalse(vm.state.value.unloading)
+        assertNull(vm.state.value.unloadAsk)
         vm.stop()
     }
 
@@ -503,11 +548,10 @@ class PrinterViewModelTest {
         val vm = vm()
         vm.start(); runCurrent()
         vm.askUnload(ext); runCurrent()
-        assertEquals("Unload Acme PETG Green from the external spool holder? It goes back to Sealed stock.",
-            vm.state.value.unloadAsk!!.question)
+        assertEquals(UnloadAsk("Ext", "Acme PETG Green", 5, "Sealed stock"), vm.state.value.unloadAsk)
         vm.confirmUnload(); runCurrent()
         assertEquals(listOf("Ext" to true, "Ext" to false), backend.unloads)
-        assertEquals("Moved back: Acme PETG Green → Sealed stock", vm.state.value.slotMessage[1])
+        assertEquals(Note(Say.Words(R.string.printer_unload_done, listOf("Ext", 5, "Sealed stock"))), vm.state.value.slotNote)
         vm.stop()
     }
 
@@ -552,10 +596,9 @@ class PrinterViewModelTest {
         val vm = vm()
         vm.start(); runCurrent()
         vm.askUnload(left); runCurrent()
-        assertEquals("Unload Acme PETG Green from the external left spool holder? It goes back to Sealed stock.",
-            vm.state.value.unloadAsk!!.question)
+        assertEquals(UnloadAsk("Ext-L", "Acme PETG Green", 5, "Sealed stock"), vm.state.value.unloadAsk)
         vm.confirmUnload(); runCurrent()
-        assertEquals("Unloaded Acme PETG Green from the external left spool holder.", vm.state.value.slotMessage[0])
+        assertEquals(Note(Say.Words(R.string.printer_unload_done, listOf("Ext-L", 5, "Sealed stock"))), vm.state.value.slotNote)
         vm.stop()
     }
 

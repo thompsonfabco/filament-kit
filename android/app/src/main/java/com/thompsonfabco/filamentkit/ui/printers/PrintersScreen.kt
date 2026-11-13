@@ -85,6 +85,8 @@ fun PrintersScreen(
     onOpen: (id: String) -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
+    onReplaceCode: (id: String) -> Unit = onOpen,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleStartEffect(viewModel) {
@@ -94,8 +96,7 @@ fun PrintersScreen(
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
     val addedText = state.added?.let { stringResource(R.string.printers_added, it) }
-        ?: state.replaced?.let { stringResource(R.string.printer_set_code_done, it) }
-    LaunchedEffect(state.added, state.replaced) {
+    LaunchedEffect(state.added) {
         if (addedText != null) {
             viewModel.addedShown()
             scope.launch { toast?.show(addedText) }
@@ -130,7 +131,7 @@ fun PrintersScreen(
                 offline = offline,
                 loadedSecondsAgo = (System.currentTimeMillis() - state.loadedAt).coerceAtLeast(0) / MS_PER_S,
             ) {
-                PrinterLists(state, offline, onOpen, onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper)
+                PrinterLists(state, offline, onOpen, onReplaceCode, onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper)
             }
         }
     }
@@ -165,6 +166,7 @@ private fun ColumnScope.PrinterLists(
     state: PrintersUiState,
     offline: Boolean,
     onOpen: (String) -> Unit,
+    onReplaceCode: (String) -> Unit,
     onAdd: (Printer) -> Unit,
     onAddKlipper: (host: String, port: Int) -> Unit,
 ) {
@@ -174,7 +176,7 @@ private fun ColumnScope.PrinterLists(
         Panel {
             configured.forEachIndexed { i, p ->
                 if (i > 0) Divider()
-                PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onAdd(p) else onOpen(p.id) }
+                PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
             }
         }
     }
@@ -339,10 +341,7 @@ private fun FoundRow(p: Printer, enabled: Boolean, reason: Boolean, onAdd: () ->
     }
 }
 
-/**
- * 9.2: asks for the Access Code of a printer the Hub found. For a printer that is set up and was refused its code
- * (9.9, "Replace Access Code") it asks again, with no name field. The code lives only in this form's memory.
- */
+/** 9.2: asks for the Access Code of a printer the Hub found, and a name if the person wants one. The code lives only in this form's memory. */
 @Composable
 private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
     var code by remember(d.serial) { mutableStateOf("") }
@@ -352,22 +351,11 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
     } else {
         stringResource(R.string.printer_list_model_bambu, d.model)
     }
-    val busyWords = if (d.rekey) R.string.printer_set_connecting else R.string.printer_add_connecting
     SwDialog(
-        title = if (d.rekey) {
-            stringResource(R.string.printers_access_code_title, d.printerName)
-        } else {
-            stringResource(R.string.printer_add_title, model)
-        },
+        title = stringResource(R.string.printer_add_title, model),
         onClose = { if (!d.busy) viewModel.cancelAdd() },
         confirm = SwDialogButton(
-            label = stringResource(
-                when {
-                    d.busy -> busyWords
-                    d.rekey -> R.string.printers_replace_access_code
-                    else -> R.string.common_add_printer
-                },
-            ),
+            label = stringResource(if (d.busy) R.string.printer_add_connecting else R.string.common_add_printer),
             onClick = { viewModel.submitAdd(code, name) },
             kind = SwButtonKind.Main,
             enabled = code.isNotBlank(),
@@ -376,23 +364,19 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelAdd),
         cancelEnabled = !d.busy,
     ) {
-        if (!d.rekey) {
-            val facts = stringResource(R.string.printer_add_facts, model, d.serial)
-            Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
-        }
+        val facts = stringResource(R.string.printer_add_facts, model, d.serial)
+        Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
         FormField(
             code, { code = it }, stringResource(R.string.common_field_access_code), secret = true, enabled = !d.busy,
             hint = stringResource(R.string.common_hint_access_code),
             error = if (d.codeMissing) stringResource(R.string.common_error_access_code) else null,
         )
-        if (!d.rekey) {
-            FormField(
-                name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !d.busy,
-                placeholder = stringResource(R.string.printer_add_name_placeholder),
-            )
-        }
+        FormField(
+            name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !d.busy,
+            placeholder = stringResource(R.string.printer_add_name_placeholder),
+        )
         d.problem?.let { ProblemNotice(it, onPairAgain) }
-        if (d.busy) BusyReason(if (d.rekey) R.string.printers_set_code_wait else R.string.printers_add_wait)
+        if (d.busy) BusyReason(R.string.printers_add_wait)
     }
 }
 

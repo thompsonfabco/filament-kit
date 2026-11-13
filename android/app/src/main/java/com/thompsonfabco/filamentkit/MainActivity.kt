@@ -65,6 +65,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.createSavedStateHandle
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
@@ -101,7 +102,9 @@ import com.thompsonfabco.filamentkit.nav.PairNetworkAccessRoute
 import com.thompsonfabco.filamentkit.nav.PairRoute
 import com.thompsonfabco.filamentkit.nav.PairScanRoute
 import com.thompsonfabco.filamentkit.nav.PrinterMapRoute
+import com.thompsonfabco.filamentkit.nav.PrinterPickRoute
 import com.thompsonfabco.filamentkit.nav.PrinterRoute
+import com.thompsonfabco.filamentkit.nav.PrinterSettingsRoute
 import com.thompsonfabco.filamentkit.nav.PrintersGraph
 import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.RecentGraph
@@ -136,6 +139,7 @@ import com.thompsonfabco.filamentkit.nav.keepLastKnown
 import com.thompsonfabco.filamentkit.nav.openAdd
 import com.thompsonfabco.filamentkit.nav.popToRootThrough
 import com.thompsonfabco.filamentkit.nav.selectTab
+import com.thompsonfabco.filamentkit.nav.settingsOverPairing
 import com.thompsonfabco.filamentkit.nav.showsBackArrow
 import com.thompsonfabco.filamentkit.nav.tab
 import com.thompsonfabco.filamentkit.nav.tabTap
@@ -164,6 +168,7 @@ import com.thompsonfabco.filamentkit.ui.components.AppearanceMenu
 import com.thompsonfabco.filamentkit.ui.components.HubFacts
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.HubSheet
 import com.thompsonfabco.filamentkit.ui.components.HubSheetActions
 import com.thompsonfabco.filamentkit.ui.components.LocalNetworkNotice
@@ -195,15 +200,18 @@ import com.thompsonfabco.filamentkit.ui.pair.PairCertificateScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairCodeScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairFingerprintScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairNetworkAccessScreen
+import com.thompsonfabco.filamentkit.ui.pair.PairTopBarOverflow
 import com.thompsonfabco.filamentkit.ui.pair.PairRouteSync
 import com.thompsonfabco.filamentkit.ui.pair.PairStartScreen
 import com.thompsonfabco.filamentkit.ui.pair.QrScanner
 import com.thompsonfabco.filamentkit.ui.pair.pairViewModel
 import com.thompsonfabco.filamentkit.ui.pair.routeSource
 import com.thompsonfabco.filamentkit.ui.printers.ManualMapEntry
+import com.thompsonfabco.filamentkit.ui.printers.PickSpoolEntry
 import com.thompsonfabco.filamentkit.ui.printers.PrinterEntry
+import com.thompsonfabco.filamentkit.ui.printers.PrinterSettingsEntry
+import com.thompsonfabco.filamentkit.ui.printers.printerPlaceTitle
 import com.thompsonfabco.filamentkit.ui.printers.PrintersListEntry
-import com.thompsonfabco.filamentkit.ui.printers.TrustAction
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
@@ -308,6 +316,9 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     val destination = entry?.destination
     val inPairing = destination.inPairing()
     val tab = destination.tab()
+    // Settings opened from the pairing graph's overflow: part of pairing (05 4): no bottom bar, no Hub chip, Back returns to the step
+    val pairingBelow = runCatching { nav.getBackStackEntry<PairGraph>() }.isSuccess
+    val settingsOverPairing = settingsOverPairing(inPairing, tab, pairingBelow)
 
     val api by app.session.api.collectAsStateWithLifecycle()
     val config by app.session.config.collectAsStateWithLifecycle()
@@ -355,6 +366,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     // screens ask for the client at each call, so a trusted certificate or a re-pair reaches them with their state intact
     fun currentApi(): Api = app.session.api.value ?: throw ApiError(0, "offline", "No Hub is paired.")
     fun pushPairing() {
+        if (nav.leaveSettingsForPairing()) return
         hubBefore = hubIdentity(config)
         nav.navigate(PairGraph) { launchSingleTop = true }
     }
@@ -409,7 +421,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     // A tag tap opens tag/{uid} on the stack of the selected tab (05 2.6), anywhere except pairing and the add steps that
     // take taps themselves (photos, check). While a load is being written it waits: the toast says so and the tag opens
     // when the write ends.
-    val tapsOn = destination != null && !inPairing && !destination.takesTagTaps()
+    val tapsOn = destination != null && !inPairing && !settingsOverPairing && !destination.takesTagTaps()
     val loadWriting by app.loadGate.writing.collectAsStateWithLifecycle()
     var queuedTag by rememberSaveable { mutableStateOf<String?>(null) }
     val tagWaits = stringResource(R.string.tag_read_wait)
@@ -461,12 +473,13 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
 
     val phone = SpoolwardenTheme.window == WindowClass.Phone
     val imeVisible = WindowInsets.isImeVisible
-    val navVisible = !inPairing && destination != null && !(phone && imeVisible)
+    val openSettingsOverPairing: () -> Unit = { nav.navigate(SettingsGraph) { launchSingleTop = true } }
+    val navVisible = !inPairing && !settingsOverPairing && destination != null && !(phone && imeVisible)
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val pairingOverMain = remember(entry) { nav.previousBackStackEntry != null }
     val atPairStart = destination?.hasRoute(PairRoute::class) == true || destination?.hasRoute(PairNetworkAccessRoute::class) == true
-    val showBack = showsBackArrow(destination.isTabRoot(), inPairing, pairingOverMain, atPairStart)
+    val showBack = showsBackArrow(destination.isTabRoot(), inPairing, pairingOverMain, atPairStart) || settingsOverPairing
     val scanning = destination?.hasRoute(PairScanRoute::class) == true
     val storedCertificate = destination?.hasRoute(PairCertificateRoute::class) == true &&
         entry?.toRoute<PairCertificateRoute>()?.source == MismatchSource.STORED.routeSource()
@@ -739,12 +752,12 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
             topBar = {
                 if (!scanning) SwTopBar(
-                    title = placeTitle(destination, entry, storedCertificate),
+                    title = printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
                     subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
                     onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                     scrollBehavior = scroll,
                 ) {
-                    if (!inPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
+                    if (!inPairing && !settingsOverPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
                     AppearanceMenu(appearance, app::setAppearance)
                     topBarActions.content?.invoke(this)
                 }
@@ -761,6 +774,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             NavHost(nav, startDestination = if (paired) HomeGraph else PairGraph, modifier = Modifier.padding(padding)) {
                 navigation<PairGraph>(startDestination = PairRoute) {
                     composable<PairRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         // no NSD browse until the local network permission is granted
@@ -777,7 +791,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             access = localNetwork,
                         )
                     }
-                    composable<PairNetworkAccessRoute> { PairNetworkAccessScreen(localNetwork, BuildConfig.VERSION_NAME) }
+                    composable<PairNetworkAccessRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
+                        PairNetworkAccessScreen(localNetwork, BuildConfig.VERSION_NAME)
+                    }
                     composable<PairScanRoute> {
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         // closing, a result and "enter the address" may arrive twice; only the entry on screen is popped
@@ -789,21 +806,25 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         )
                     }
                     composable<PairAddressRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         PairAddressScreen(ui, pairVm::submitAddress, pairVm::back, localNetwork)
                     }
                     composable<PairFingerprintRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         PairFingerprintScreen(ui, pairVm::confirmFingerprint, pairVm::rejectFingerprint, pairVm::back)
                     }
                     composable<PairCodeRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         PairCodeScreen(ui, pairVm::submitCode, pairVm::back, localNetwork)
                     }
                     composable<PairCertificateRoute> {
+                        PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
                         // gone while the screen leaves: nothing is asked then
@@ -986,7 +1007,13 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             HubNoticePage(::pushPairing)
                             return@composable
                         }
-                        PrintersListEntry(::currentApi, onOpen = { nav.navigate(PrinterRoute(it)) }, onPairAgain = app.router::pairAgain)
+                        PrintersListEntry(::currentApi, onOpen = { nav.navigate(PrinterRoute(it)) },
+                            onReplaceCode = { id ->
+                                // the printer under its settings, so Back returns to the printer
+                                nav.navigate(PrinterRoute(id))
+                                nav.navigate(PrinterSettingsRoute(id, replaceCode = true))
+                            },
+                            onPairAgain = app.router::pairAgain)
                     }
 
                     composable<PrinterRoute> { e ->
@@ -996,24 +1023,57 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             return@composable
                         }
                         val id = e.toRoute<PrinterRoute>().id
-                        val trustFailed by app.trustFailed.collectAsStateWithLifecycle()
-                        val trust = TrustAction({ config.canTrust(it) }, { x, y -> app.trustCertificate(x, y) }, trustFailed, app::clearTrustFailed)
                         PrinterEntry(
-                            a, id,
-                            onBack = { nav.popBackStack() },
-                            onManualMap = { nav.navigate(PrinterMapRoute(id)) },
+                            a, ::currentApi, id,
                             onPairAgain = app.router::pairAgain,
-                            trust = trust,
+                            onOpenSettings = { nav.navigate(PrinterSettingsRoute(id)) },
+                            onMapByLoading = { nav.navigate(PrinterMapRoute(id)) },
+                            onPickSlot = { nav.navigate(PrinterPickRoute(id, it)) },
+                            onOpenSpool = { sp -> sp.id?.let { nav.navigate(SpoolRoute(it)) } },
+                        )
+                    }
+
+                    composable<PrinterSettingsRoute> { e ->
+                        if (api == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        PrinterSettingsEntry(
+                            ::currentApi, e.toRoute<PrinterSettingsRoute>().id, e.toRoute<PrinterSettingsRoute>().replaceCode,
+                            onPairAgain = app.router::pairAgain,
+                            onForgotten = { name ->
+                                nav.popBackStack<PrintersRoute>(inclusive = false)
+                                // the toast outlives this screen, so it runs in the shell's scope
+                                val said = context.getString(R.string.printer_forget_done, name)
+                                pairScope.launch { toast.show(said) }
+                            },
+                        )
+                    }
+
+                    composable<PrinterPickRoute> { e ->
+                        if (api == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        val route = e.toRoute<PrinterPickRoute>()
+                        PickSpoolEntry(
+                            ::currentApi, route.id, route.slot,
+                            onLoaded = { name, confirmed ->
+                                nav.popBackStack()
+                                val said = if (confirmed) context.getString(R.string.spool_result_loaded, name, route.slot)
+                                else context.getString(R.string.spool_load_unconfirmed)
+                                pairScope.launch { toast.show(said, kind = if (confirmed) null else NoticeKind.Warn) }
+                            },
+                            onPairAgain = app.router::pairAgain,
                         )
                     }
 
                     composable<PrinterMapRoute> { e ->
-                        val a = api
-                        if (a == null) {
+                        if (api == null) {
                             HubNoticePage(::pushPairing)
                             return@composable
                         }
-                        ManualMapEntry(a, e.toRoute<PrinterMapRoute>().id, onBack = { nav.popBackStack() }, onPairAgain = app.router::pairAgain)
+                        ManualMapEntry(::currentApi, e.toRoute<PrinterMapRoute>().id, onBack = { nav.popBackStack() }, onPairAgain = app.router::pairAgain)
                     }
                     sharedRoutes()
                 }
@@ -1151,7 +1211,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         }
     }
 
-    if (sheetOpen && !inPairing) {
+    if (sheetOpen && !inPairing && !settingsOverPairing) {
         HubSheet(
             state = shown,
             checking = connection is Connection.Checking,
@@ -1177,6 +1237,16 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             onDismiss = { sheetOpen = false },
         )
     }
+}
+
+/**
+ * "Pair" or "Pair again" from Settings that was opened over a pairing step: that step is still below it, so only the
+ * Settings entries go (no second pairing graph, and not the pairing steps). False when no pairing is below.
+ */
+internal fun NavController.leaveSettingsForPairing(): Boolean {
+    if (currentDestination.inPairing() || runCatching { getBackStackEntry<PairGraph>() }.isFailure) return false
+    popBackStack<SettingsGraph>(inclusive = true)
+    return true
 }
 
 /** The place the top bar names (05-android-app 2.2): the screen, not the product. */

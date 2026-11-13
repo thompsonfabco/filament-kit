@@ -58,11 +58,7 @@ data class AddDialog(
     val serial: String,
     /** The model's name; null when the Hub does not know it. */
     val model: String?,
-    /** The printer's name, for the re-key form's title. */
-    val printerName: String,
     val name: String,
-    /** The Access Code of a printer that is set up is entered again (it was refused), not a new printer added. */
-    val rekey: Boolean = false,
     val busy: Boolean = false,
     val codeMissing: Boolean = false,
     val problem: Problem? = null,
@@ -104,9 +100,6 @@ data class PrintersUiState(
     val find: FindSheet? = null,
     /** The name of a printer just added: the screen says so once. */
     val added: String? = null,
-
-    /** The name of a printer whose Access Code was just replaced: the screen says so once. */
-    val replaced: String? = null,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
 ) {
@@ -170,9 +163,8 @@ class PrintersViewModel(
     fun openAdd(p: Printer) = _state.update {
         it.copy(
             dialog = AddDialog(
-                serial = p.serial, model = p.shownModel, printerName = p.name,
+                serial = p.serial, model = p.shownModel,
                 name = if (p.name == p.serial) "" else p.name,
-                rekey = p.configured,
             ),
         )
     }
@@ -199,9 +191,7 @@ class PrintersViewModel(
                 val p = backend.addPrinter(d.serial, code, name.trim().ifBlank { null })
                 settleLater()
                 if (p.state == "connected") {
-                    _state.update {
-                        if (d.rekey) it.copy(dialog = null, replaced = p.name) else it.copy(dialog = null, added = p.name)
-                    }
+                    _state.update { it.copy(dialog = null, added = p.name) }
                     load()
                 } else {
                     _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, problem = Problem.PrinterState(p.state))) }
@@ -308,7 +298,7 @@ class PrintersViewModel(
     }
 
     /** The screen showed the "Added" message. */
-    fun addedShown() = _state.update { it.copy(added = null, replaced = null) }
+    fun addedShown() = _state.update { it.copy(added = null) }
 
     private suspend fun guard(onError: (Problem) -> Unit, block: suspend () -> Unit) {
         try {
