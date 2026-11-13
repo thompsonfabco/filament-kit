@@ -94,8 +94,9 @@ internal fun SpoolRow(spool: SpoolSummary, modifier: Modifier = Modifier, onClic
     val said = pluralStringResource(
         R.plurals.a11y_spool_result, spool.remaining?.roundToInt() ?: 0,
         spool.title, spool.id.toString(), spool.material, spool.location.orEmpty(),
-        spool.remaining?.let { formatGrams(it) }.orEmpty(),
-    ).split(", ").filter { it.isNotBlank() && !it.startsWith(" ") }.joinToString(", ")
+        spool.remaining?.roundToInt() ?: 0,
+    ).split(", ").let { if (spool.remaining == null) it.dropLast(1) else it } // no grams part for an unknown weight
+        .filter { it.isNotBlank() && !it.startsWith(" ") }.joinToString(", ")
     val click = if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier
     Row(
         modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).semantics(mergeDescendants = true) {

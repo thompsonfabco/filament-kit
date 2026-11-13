@@ -226,6 +226,24 @@ class SpoolScreenSemanticsTest {
         rule.onNodeWithText("% left", substring = true).assertDoesNotExist()
     }
 
+    @Test fun spoolLevelBarIsSpokenWithTheGramsLeft() {
+        spoolScreen()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("620 grams left of 1000, 62 percent").assertExists()
+    }
+
+    @Test fun spoolRowIsSpokenWithTheGramsLeftAndLeavesThemOutWhenUnknown() {
+        host("Spools") {
+            Column {
+                SpoolRow(spoolJson(214, location = "Dry box 1").toSpoolSummary())
+                SpoolRow(spoolJson(215, location = "Dry box 2", remaining = null).toSpoolSummary())
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Polymaker PolyTerra PLA Charcoal Black, spool 214, PLA, Dry box 1, 620 grams left").assertExists()
+        rule.onNodeWithContentDescription("Polymaker PolyTerra PLA Charcoal Black, spool 215, PLA, Dry box 2").assertExists()
+    }
+
     @Test fun spoolEmptyShowsItsStatus() {
         spoolScreen(spoolJson(214, remaining = 0.0, archived = true).toSpoolSummary())
         auditAllFour(listOf("Empty"), listOf("Details"))

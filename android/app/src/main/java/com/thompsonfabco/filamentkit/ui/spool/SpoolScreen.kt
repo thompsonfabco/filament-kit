@@ -195,7 +195,7 @@ private fun Remaining(spool: SpoolSummary) {
             val total = spool.total
             val percent = spool.percent
             val said = if (total != null && percent != null) {
-                pluralStringResource(R.plurals.a11y_level_bar, left.roundToInt(), formatGrams(left), formatGrams(total), percent.toString())
+                pluralStringResource(R.plurals.a11y_level_bar, left.roundToInt(), left.roundToInt(), formatGrams(total), percent.toString())
             } else {
                 stringResource(R.string.spool_left_grams, formatGrams(left))
             }
