@@ -136,6 +136,70 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
   .coll--features{grid-template-columns:minmax(0,1fr) max-content max-content}
   .coll--features .coll__cell[data-col="what"]{display:none}
   .coll--features .coll__sub{display:block}
+
+/* Printers (S2.4) */
+/* the header: the counts, and the three ways to the rest (03 5.1) */
+.printers-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); margin: 0 0 var(--s3); }
+.printers-head > .page-head__meta { flex: 1 1 auto; margin: 0; }
+.printers-head > .page-head__actions { margin-left: auto; }
+/* the printer collection: Expand, Printer, Address, State, Slots, Connection, Actions; the tablet drops Address and Connection into the expansion */
+.coll--printers { grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1.9fr) minmax(0, 1.3fr) minmax(calc(var(--s7) * 3), 1.1fr) minmax(0, 0.9fr) max-content; }
+.printers-found { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.printers-found > .coll__item:first-child { background: var(--surface-2); }
+.printers-found > .coll__item:first-child .coll__cell { min-height: calc(var(--s7) - var(--s2)); font-size: var(--fs-s); }
+.printers-tag { display: inline-block; margin-left: var(--s2); padding: 0 var(--s2); border: var(--hairline) solid var(--border); border-radius: var(--r-s);
+                color: var(--muted); font-size: var(--fs-xs); font-weight: var(--fw-label); line-height: var(--lh-title); vertical-align: middle; }
+.coll__title-text { color: var(--text); font-size: var(--fs-b); font-weight: var(--fw-label); }
+.printers-state { display: grid; justify-items: start; gap: var(--s1); }
+.printers-connecting { display: inline-flex; align-items: center; gap: var(--s1); }
+.coll--printers .slot-strip--compact { flex-wrap: wrap; }
+.coll--printers .slot-strip__count { white-space: nowrap; }
+.printers-short, .printers-expand__label { display: none; }
+/* the message row: the problem line, and under it the printer's latest result */
+.coll__row--note > .coll__cell { padding: 0 var(--s3) var(--s3) calc(var(--s7) + var(--s4)); }
+.printers-problem { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin-bottom: var(--s2); padding: var(--s2) var(--s3);
+                    border-radius: var(--r); background: var(--warn-soft); }
+.printers-problem > .status { white-space: normal; flex: 1 1 calc(var(--s7) * 4); min-width: 0; }
+.printers-line { margin-top: var(--s1); }
+.printers-line .status { white-space: normal; }
+/* the expansion */
+.detail .detail__section > .actions .btn, .detail .actions--list .btn { white-space: normal; text-align: left; }
+.printers-slots .slot-strip__row { grid-template-columns: calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) auto auto; }
+.printers-lane { display: grid; gap: var(--s1); }
+.printers-lane .field__hint { margin: 0; }
+/* the drawers: Saved reports and Map by loading filament */
+.drawer__body { display: grid; gap: var(--s4); margin-bottom: var(--s4); }
+.drawer__body p { margin: 0; }
+.drawer__body > div { display: grid; gap: var(--s3); }
+.coll--reports { grid-template-columns: minmax(0, 1fr) max-content max-content; }
+.coll--load { grid-template-columns: max-content minmax(0, 1fr); }
+.detail--drawer .coll { font-size: var(--fs-m); }
+.printers-ask, .printers-offer { display: grid; gap: var(--s2); }
+.printers-ask__other { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s2); }
+.printers-ask__other > .field { flex: 1 1 calc(var(--s7) * 3); }
+dialog > .detail .detail__foot { margin-top: var(--s2); }
+/* the only-one-family line at the page foot */
+.printers-note { margin-top: var(--s4); }
+@media (max-width: 1024px) {
+  .coll--printers { grid-template-columns: auto minmax(0, 1.6fr) minmax(0, 1.4fr) minmax(calc(var(--s7) * 3), 1.2fr) max-content; }
+  .printers-long { display: none; }
+  .printers-short { display: inline; }
+}
+@media (max-width: 600px) {
+  .coll__row--note > .coll__cell { padding: 0; }
+  .printers-long { display: inline; }
+  .printers-short { display: none; }
+  .coll--printers .coll__item .coll__cell[data-col="expand"] { order: 1; width: 100%; }
+  .coll--printers .coll__expand { width: auto; padding: 0 var(--s3); }
+  .printers-expand__label { display: inline; margin-left: var(--s1); }
+  .coll--printers .coll__cell[data-col="actions"] .actions { flex-wrap: nowrap; justify-content: flex-end; }
+  .coll--printers .coll__cell[data-col="actions"] .btn:not(.btn--icon) { flex: 1 1 auto; }
+  .printers-head > .page-head__actions { margin-left: 0; width: 100%; }
+  .printers-head > .page-head__actions > .btn--primary { order: -1; }
+  .printers-found { display: block; }
+  .detail .actions--list { grid-template-columns: minmax(0, 1fr); }
+  .printers-found .coll__cell[data-col="actions"] .actions { flex-wrap: wrap; }
+  .printers-found > .coll__item:first-child { border: 0; background: none; margin-bottom: var(--s1); }
 }
 
 /* Overview (S2.2) */

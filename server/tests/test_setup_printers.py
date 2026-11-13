@@ -521,8 +521,9 @@ def test_the_add_form_asks_a_klipper_printer_for_no_access_code():
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     klipper = text.split('if (family.value === "klipper") {')[1].split("} else {")[0]
     assert "Access Code" not in klipper and "access_code" not in klipper and "API key (optional)" in klipper
-    row = text.split("function klipperRow(p)")[1].split("// -----")[0]
-    assert "Access Code" not in row and "access_code" not in row
+    acts = text.split("function actionsOf(p, box)")[1].split("\n}\n")[0]
+    klipper_acts = acts.split("else if (klip) {")[1].split("} else {")[0]
+    assert "accessCode" not in klipper_acts and "access_code" not in klipper_acts
 
 
 def test_a_running_mapping_is_followed_again_after_a_reload(mapped):
@@ -539,7 +540,7 @@ def test_a_running_mapping_is_followed_again_after_a_reload(mapped):
     rows = c.get("/setup/api/state").json()["printers"]["list"]
     assert [r["mapping"] for r in rows if r["serial"] == SERIAL] == [True]
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    assert "if (p.mapping) followMap(p, mapBox);" in text
+    assert "if (p.mapping) followMap(p, box);" in text
     start = text.split("async function startMap(p, box)")[1].split("\n}\n")[0]
     assert 'state === "running") followMap(p, box)' in start
 
@@ -575,10 +576,9 @@ def test_the_printers_tab_links_the_live_view_in_the_phone_web_app():
     is the phone web app's Printers tab; the setup page links it, only when the printers module gives the web app
     that tab, at /intake beside /setup on the same server."""
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    card = text.split("function liveCard()")[1].split("\n}\n")[0]
-    assert 'replace(/\/setup\/?$/, "") + "/intake#printers"' in card
-    assert 'rel: "noopener"' in card and "Open the live printer view" in card
-    assert "P.bambu ? liveCard : null" in text
+    assert 'replace(/\/setup\/?$/, "") + "/intake#printers"' in text
+    head = text.split("function header(found)")[1].split("\n}\n")[0]
+    assert 'P.bambu ? X("a"' in head and "href: url" in head and 'rel: "noopener"' in head and "printers_live_view" in head
 
 
 @pytest.mark.skipif(not __import__("shutil").which("node"), reason="needs node")
@@ -588,7 +588,7 @@ def test_the_live_view_link_resolves_beside_the_setup_page():
     import shutil
     import subprocess
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    expr = re.search(r"const url = (location\.pathname\..*);$", text, re.M).group(1)
+    expr = re.search(r"const liveUrl = \(\) => (location\.pathname\..*);$", text, re.M).group(1)
     probe = ["/setup", "/setup/", "/kit/setup"]
     js = f"console.log(JSON.stringify({json.dumps(probe)}.map((p) => {{ const location = {{ pathname: p }}; return {expr}; }})));"
     out = subprocess.run([shutil.which("node"), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
@@ -688,4 +688,29 @@ def test_the_row_says_when_a_report_would_help(mapped):
     row = next(p for p in client(app).get("/setup/api/state").json()["printers"]["list"] if p["serial"] == SERIAL)
     assert row["report_why"]
     js = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    assert "Collect a report" in js and "Saved reports" in js and "function listReports(" in js
+    assert "printers_collect_report" in js and "printers_saved_reports" in js and "function openReports(" in js and "report_why" in js
+
+
+def test_the_states_read_says_which_bambu_printers_hold_a_slot_map(both, kl):
+    """03 5.2: the Connection column says "Slots mapped" for a printer whose map the Hub holds. The read stays light (a file
+    check, no connection) and a Klipper printer has no such field."""
+    from filament_kit.bridge import ams
+    _bambu()
+    c = client(both)
+    rows = {r["serial"]: r for r in c.get("/setup/api/printers/states").json()["printers"]}
+    assert rows[SERIAL]["mapped"] is False and "mapped" not in rows[kl.serial]
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}))
+    rows = {r["serial"]: r for r in c.get("/setup/api/printers/states").json()["printers"]}
+    assert rows[SERIAL]["mapped"] is True
+
+
+def test_every_action_of_a_printer_row_is_still_in_the_script():
+    """S2.4 kept every action of the old cards (03 14.4): each one is reachable from the expansion and the row's menu."""
+    text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
+    acts = text.split("function actionsOf(p, box)")[1].split("\n}\n")[0]
+    for key in ("common_connect", "printers_detect", "printers_map_loading", "printers_map_slots", "common_rename", "printers_change_address",
+                "printers_set_key", "printers_clear_key", "printers_replace_access_code", "printers_collect_report", "printers_saved_reports",
+                "printers_forget_cert", "printers_forget"):
+        assert f'SW.t("{key}")' in acts or f'"{key}"' in acts, key
+    assert 'api(printerPath(p, "lane_data")' in text and "printersTab" in text and "usePrinter" in text and "forgetPrinter(p, box, \"dismiss\")" in text
+

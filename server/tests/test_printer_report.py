@@ -463,7 +463,7 @@ def test_every_interface_offers_the_report():
     phone = (root / "web" / "static" / "printers.js").read_text(encoding="utf-8")
     assert 'h("button", { class: m.report_wanted ? "" : "secondary", textContent: "Collect a report"' in phone
     page = (root / "setup_static" / "setup_printers.js").read_text(encoding="utf-8")
-    assert 'textContent: "Collect a report", on: { click: () => collectReport(p, reportBox) }' in page
+    assert 'label: SW.t("printers_collect_report"), run: () => collectReport(p, box)' in page      # the expansion and its menu, for every configured Bambu printer
 # ---------------------------------------------------------------- a real printer takes a moment to connect (live bug)
 
 @pytest.fixture

@@ -9,16 +9,10 @@
 # delete their lines.
 #printers | field without a label | div > section.card > div.row > input | 4 | Printers (today's markup); removed by S2.4 and S2.5
 #printers | field without a label | section.card > div > div.row > input | 16 | Printers (today's markup); removed by S2.4 and S2.5
-#printers | field without a label | section.card > div.item > div.row > input | 8 | Printers (today's markup); removed by S2.4 and S2.5
-#printers | field without a label | section.card > div.item > div.row > select | 4 | Printers (today's markup); removed by S2.4 and S2.5
 #printers | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 4 | Printers (today's markup); removed by S2.4 and S2.5
 #printers | hit area under 44 x 44 | div > section.card > div.row > input | 2 | Printers (today's markup); removed by S2.4 and S2.5
 #printers | hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 2 | Printers (today's markup); removed by S2.4 and S2.5
 #printers | hit area under 44 x 44 | section.card > div > div.row > input | 8 | Printers (today's markup); removed by S2.4 and S2.5
-#printers | hit area under 44 x 44 | section.card > div.item > div.row > button.btn--primary | 4 | Printers (today's markup); removed by S2.4 and S2.5
-#printers | hit area under 44 x 44 | section.card > div.item > div.row > button.secondary | 28 | Printers (today's markup); removed by S2.4 and S2.5
-#printers | hit area under 44 x 44 | section.card > div.item > div.row > input | 4 | Printers (today's markup); removed by S2.4 and S2.5
-#printers | hit area under 44 x 44 | section.card > div.item > div.row > select | 2 | Printers (today's markup); removed by S2.4 and S2.5
 #recent | hit area under 44 x 44 | div > div.item > div.row > button.secondary | 2 | Recently added (today's markup); removed by S2.7
 #recent | img alt is "photo N" | div > div.item > div.row > img | 4 | Recently added (today's markup); removed by S2.7
 #devices | field without a label | div > section.card > div.row > input | 4 | Devices (today's markup); removed by S2.9
