@@ -44,15 +44,9 @@ The full list of names, with what each was called before, is in `01-foundations.
 | `06-command-line.md` | The `spoolwarden` command: tree, spellings, output, confirmations, menus, every command |
 | `07-accessibility.md` | Requirements, contrast pairs, automated checks AUT-1 to AUT-9, the one-hour release checklist |
 | `08-platform-mapping.md` | `tokens.json`, the generator, the checks, how each token, component, icon and word maps to web and Android |
-| `09-implementation-order.md` | 94 small steps in eight stages, the Hub API additions, open points, coverage |
+| `09-implementation-order.md` | 95 small steps in eight stages, the Hub API additions, open points, coverage |
 | `10-feature-ideas.md` | 38 ideas beyond this design, each with effort, value and what it needs from the Hub |
-| `tokens/tokens.json` | The source of every token value, for the four themes in light and dark |
-| `tokens/tokens.css` | Generated from `tokens.json`; never edited by hand |
-| `tokens/build_tokens.py` | Writes `tokens.css`; `--check` fails when it is out of date |
-| `tokens/check_contrast.py` | Checks the required contrast pairs of every theme; fails below a ratio |
-| `tokens/contrast-report.txt` | The last output of the contrast check |
-| `tokens/ADJUSTMENTS.md` | Colours changed to meet a contrast ratio |
-| `tokens/README.md` | The token files in short |
+| `/tokens/` (top of the repository, not in this folder) | The token files: `tokens.json` (the source of every value, four themes in light and dark), the generated `tokens.css`, `build_tokens.py`, `check_contrast.py`, and `ADJUSTMENTS.md` (colours changed to meet a contrast ratio). They exist only there |
 | `mockups/c-console.html` | Mockup of the Hub page in Console, the default theme |
 | `mockups/a-workbench.html`, `b-spool.html`, `d-panes.html` | The same page in Workbench, Spool and Panes |
 | `mockups/gallery.html` | The four mockups side by side, with one control for screen, appearance and device size. Open it through a local web server (for example `python -m http.server` in `mockups/`): browsers do not let a page opened from a file show other files in frames |
@@ -85,7 +79,8 @@ The full eight rules are in `01-foundations.md` section 12.
 
 ## Changing the design
 
-- **A colour, size, radius, duration or font:** edit `tokens/tokens.json`, then run, in `tokens/`:
+- **A colour, size, radius, duration or font:** edit `tokens/tokens.json` at the top of the repository, then run,
+  in that `tokens/` folder:
 
   ```
   python build_tokens.py

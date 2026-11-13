@@ -37,26 +37,34 @@ Font weights are `--fw-text`, `--fw-label` and `--fw-title` (F4.2); no other wei
 
 Fixed dimensions that are not steps of the space scale are entries of the `size` group (F4.3) and components read
 them through `SpoolwardenTheme.sizes` (`08-platform-mapping.md`); no component writes them inline. "Existing" entries
-are in `tokens.json` today; "proposed" entries are new `size` entries this app needs, to be added to every theme with
-the Console value given here. Collection, settings and slot rows use `ListItem`'s own minimum height (56 dp), the
+are in `tokens.json` today; "new" entries are `size` entries this app needs, added to every theme with the values
+given here (the web reads the same entries where it draws the same part). The other themes scale with their type
+and density: Workbench and Panes one step roomier than Console where a size holds text, Spool larger again, and
+its swatches larger still because the spool colour is that theme's main mark. Collection, settings and slot rows use `ListItem`'s own minimum height (56 dp), the
 accepted difference of `08-platform-mapping.md` for rows; it is not a size entry. Selection outlines (2 dp) are border
 widths, not sizes.
 
-| `size` entry | Console value | Status | Used for |
-|---|---|---|---|
-| `hairline` | 1 dp | existing | Hairlines between rows and around panels |
-| `thumb` | 96 dp | existing | Photo thumbnails in strips (6.2, 10.2) |
-| `drawer` | 420 dp | existing | Minimum width of the detail pane of `ListDetailPaneScaffold` (2.1) |
-| `label-col` | 118 dp | proposed | Label column of the key-value list on medium width (3.1) |
-| `thumb-s` | 48 dp | proposed | Photo thumbnails in Recently added rows (10.1) |
-| `swatch-row` / `swatch-head` | 16 × 22 dp / 40 dp | proposed | Swatch in rows / in the spool header (3.1, 7.2) |
-| `empty-mark` | 56 dp | proposed | Circle of the empty state (3.1) |
-| `chip` | 32 dp | proposed | Height of the connection chip (hit area still 48 dp) |
-| `slot-label` | 32 dp | proposed | Slot label column (9.5) |
-| `port-field` | 120 dp | proposed | Port field width (4.5) |
-| `column-max` | 560 dp | proposed | Maximum width of single-column content on medium and expanded width (4, 5) |
-| `preview-max` | 400 dp | proposed | Camera preview width on medium and expanded width (6.2) |
-| `list-pane` | 360 dp | proposed | Minimum width of the list pane of `ListDetailPaneScaffold` (2.1) |
+| `size` entry | Console | Workbench | Spool | Panes | Status | Used for |
+|---|---|---|---|---|---|---|
+| `hairline` | 1 dp | 1 dp | 1 dp | 1 dp | existing | Hairlines between rows and around panels |
+| `thumb` | 96 dp | 96 dp | 96 dp | 96 dp | existing | Photo thumbnails in strips (6.2, 10.2) |
+| `drawer` | 420 dp | 420 dp | 420 dp | 420 dp | existing | Minimum width of the detail pane of `ListDetailPaneScaffold` (2.1) |
+| `label-col` | 118 dp | 128 dp | 144 dp | 128 dp | new | Label column of the key-value list on medium width (3.1) |
+| `thumb-s` | 48 dp | 56 dp | 64 dp | 48 dp | new | Photo thumbnails in Recently added rows (10.1) |
+| `swatch-row-w` | 16 dp | 20 dp | 28 dp | 20 dp | new | Width of the swatch in rows (3.1, 7.2) |
+| `swatch-row-h` | 22 dp | 20 dp | 28 dp | 20 dp | new | Height of the swatch in rows (3.1, 7.2) |
+| `swatch-head` | 40 dp | 44 dp | 64 dp | 40 dp | new | Swatch in the spool header, square (3.1, 7.2) |
+| `empty-mark` | 56 dp | 64 dp | 80 dp | 56 dp | new | Circle of the empty state (3.1) |
+| `chip` | 32 dp | 32 dp | 40 dp | 32 dp | new | Height of the connection chip (hit area still 48 dp) |
+| `slot-label` | 32 dp | 36 dp | 40 dp | 36 dp | new | Slot label column (9.5) |
+| `port-field` | 120 dp | 120 dp | 136 dp | 120 dp | new | Port field width (4.5) |
+| `column-max` | 560 dp | 600 dp | 640 dp | 560 dp | new | Maximum width of single-column content on medium and expanded width (4, 5) |
+| `preview-max` | 400 dp | 400 dp | 400 dp | 400 dp | new | Camera preview width on medium and expanded width (6.2) |
+| `list-pane` | 360 dp | 360 dp | 400 dp | 360 dp | new | Minimum width of the list pane of `ListDetailPaneScaffold` (2.1) |
+
+In `tokens.json` the values are written in px (`"label-col": "118px"`); 1 px in the file is 1 dp in the app. In
+Spool the row swatch is drawn as a ring (the spool seen from the side); in the other themes it is a rounded
+rectangle with `--r-s` corners.
 
 ---
 
@@ -109,7 +117,7 @@ scanner 4.4, photo viewer 10.5), which draw their own close button.
 | Slot | Content | Material 3 |
 |---|---|---|
 | Navigation icon | Back arrow on every screen that is not a destination root. Absent on the five roots and on the first pairing screen. Pressing it does exactly what system Back does (2.5). | `IconButton` with the "chevron" icon pointing left, content description "Back" |
-| Title | The place, not the product (F9): "Home", "Spools", "Printers", "Recently added", "Settings", or the thing's name ("Workshop X1"). One line, ellipsis at the end, `--fs-xl` `--fw-title` on medium and expanded, `--fs-l` `--fw-title` on compact. On Home the title is "Home" with the Hub's name under it in `--fs-s` `--muted` ("Workshop kit"). | `TopAppBar` `title` |
+| Title | The place, not the product (F9): "Home", "Spools", "Printers", "Recently added", "Settings", or the thing's name ("Workshop X1"). One line, ellipsis at the end, `--fs-xl` `--fw-title` on medium and expanded, `--fs-l` `--fw-title` on compact. On Home the title is "Home" with the Hub's name under it in `--fs-s` `--muted` ("Workshop hub"). | `TopAppBar` `title` |
 | Connection chip | The Hub connection state as shape plus word (2.4). Tapping it opens the **Hub connection sheet** (2.4). Shown on every screen of the main graph. On the pairing graph it is replaced by nothing. | `AssistChip` with a leading status shape, `chip` tall, hit area 48 dp |
 | Appearance icon | One icon button showing the current choice (sun, moon or half-circle). Opens a menu with three items "Light", "Dark", "System", each with its icon and a check mark on the current one. Choosing applies at once (F5). Present on every screen including pairing. | `IconButton` + `DropdownMenu` / `DropdownMenuItem` |
 | Overflow | Only where a screen names one ("More actions"). | `IconButton` "more" + `DropdownMenu` |
@@ -150,9 +158,9 @@ sentence in the sheet.
 
 | State | Shape (F10) and colour | Chip word | Meaning, shown in the sheet |
 |---|---|---|---|
-| Connected | filled circle, `--ok` | Connected | "Connected to Workshop kit at 192.0.2.10:8710." |
+| Connected | filled circle, `--ok` | Connected | "Connected to Workshop hub at 192.0.2.10:8710." |
 | Not known yet (first check after start) | none: a skeleton of the badge's width (02 7.1, Loading) | none; content description "Hub connection: checking" | "Checking the connection to the Hub…" |
-| Offline | hollow circle, `--bad` | Offline | "Cannot reach Workshop kit. Check that this phone is on the home network." |
+| Offline | hollow circle, `--bad` | Offline | "Cannot reach Workshop hub. Check that this phone is on the home network." |
 | Certificate changed | triangle, `--warn` | Needs a look | "The Hub's certificate is not the one this phone paired with." |
 | No longer paired | triangle, `--warn` | Needs a look | "This phone is no longer paired with the Hub." |
 | Needs local network access | triangle, `--warn` | Needs a look | "Android needs your permission before Spoolwarden can reach the Hub on your network." |
@@ -305,7 +313,7 @@ the Console theme.
 | Spinner | `CircularProgressIndicator`, 16 dp, inside the button that started the work | Replaced by the word "Working…" when animations are off |
 | Skeleton | `Box` blocks in `--surface-2` with `--r-s` corners | Same height as the rows they stand for; no shimmer |
 | Empty state | `Column` centred in a panel with a dashed `--border` | `empty-mark` circle in `--accent-soft` with the section icon, title `--fs-l` `--fw-title`, one sentence `--muted`, at most two buttons |
-| Swatch | `Box` `swatch-row` (rows) or `swatch-head` square (spool header), `--r-s` corners, 1 dp `--border-strong` outline, fill from the data | Empty slot: dashed `--border-strong` outline, no fill; always next to the colour's name or hex (F4.1) |
+| Swatch | `Box` `swatch-row-w` by `swatch-row-h` (rows) or `swatch-head` square (spool header), `--r-s` corners, 1 dp `--border-strong` outline, fill from the data | Empty slot: dashed `--border-strong` outline, no fill; always next to the colour's name or hex (F4.1) |
 | Determinate bar (02 8.3) for the level ("level bar" in this document) | `LinearProgressIndicator` (determinate) | Remaining filament against net weight, with the grams in `--mono` beside it |
 | Confidence mark | Status at `--fs-s` | 6.3 |
 
@@ -398,7 +406,7 @@ itself.
 |                                      |
 | Hubs found on this network           |
 | +----------------------------------+ |
-| | (o) Workshop kit   192.0.2.10  > | |
+| | (o) Workshop hub   192.0.2.10  > | |
 | +----------------------------------+ |
 | [ Enter the address instead        ] |
 +--------------------------------------+
@@ -458,7 +466,7 @@ stay visible over a `--scrim` band.
 | Text | "Type the 6-digit code shown on the Hub page." |
 | Code | Label "6-digit code", digits only, at most 6, `KeyboardType.NumberPassword`, `--mono` `--fs-l` with letter spacing, focused on open. The sixth digit does not submit by itself. |
 | Pair | "Pair"; "Pairing…" with a spinner while busy; disabled until six digits are typed, with the reason under it: "Enter all 6 digits." |
-| Success | The pairing graph is cleared and Home opens with the snackbar "Paired with Workshop kit." When the pairing graph was opened with "Pair again" from a screen of the main graph (2.7), it closes and that screen shows again instead of Home, with the same snackbar. |
+| Success | The pairing graph is cleared and Home opens with the snackbar "Paired with Workshop hub." When the pairing graph was opened with "Pair again" from a screen of the main graph (2.7), it closes and that screen shows again instead of Home, with the same snackbar. |
 
 ### 4.8 Certificate changed (`pair/certificate/{source}`)
 
@@ -495,7 +503,7 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 ```
 +--------------------------------------+
 | Home               (o) Connected  ☼  |
-| Workshop kit                         |
+| Workshop hub                         |
 +--------------------------------------+
 | (i) Update ready: Spoolwarden 0.5.3 >|  <- only when there is one
 |                                      |
@@ -1466,7 +1474,7 @@ Hub connection.
 | Row | Summary | Opens |
 |---|---|---|
 | Appearance | "System · Console" | 12.2 |
-| Hub connection | "Workshop kit · Connected" (or the state word) | 12.3 |
+| Hub connection | "Workshop hub · Connected" (or the state word) | 12.3 |
 | App updates | "App 0.5.2 · up to date" / "Update ready: 0.5.3" (with the dot of 2.3) | 12.4 |
 | Licences | "Free software under GPL-3.0-or-later" | 12.5 |
 | Developer | "Debug build tools" (debug builds only) | 12.6 |
@@ -1489,11 +1497,11 @@ Console.
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
 | Status | Shape and word (2.4) with the last answer time. | Status |
-| Field rows | "Hub" Workshop kit; "Address" 192.0.2.10:8710 (`--mono`); "Certificate fingerprint" (grouped, `--mono`, selectable); "Hub version" 0.5.2. None paired: "No Hub is paired." with the main button "Pair with a Hub". | Panel, field rows |
+| Field rows | "Hub" Workshop hub; "Address" 192.0.2.10:8710 (`--mono`); "Certificate fingerprint" (grouped, `--mono`, selectable); "Hub version" 0.5.2. None paired: "No Hub is paired." with the main button "Pair with a Hub". | Panel, field rows |
 | Open the Hub page | Outlined button "Open the Hub page", with the line "Features, keys, devices and backups are set on the Hub page." Opens the Hub page's address (today `https://<host>:<port>/setup`) in the browser. Errors: "No browser on this phone could open it." / "The Hub's address isn't known yet." | `OutlinedButton` |
 | Pair again | Outlined button "Pair again" (opens `pair`). | `OutlinedButton` |
 | Fingerprint check | Group "Security". Switch row "Check the fingerprint when pairing by address", on by default, with the supporting text "When this is off, the app trusts the certificate a Hub presents when you pair by typing its address. A scanned QR code is always checked." Turning it off asks: dialog "Skip the fingerprint check?" / "Only do this on a network you trust." / "Cancel" / "Skip the check". | `ListItem` + `Switch` |
-| Forget this Hub | Below a divider, danger outlined "Forget this Hub". Dialog: title "Forget Workshop kit?", body "This phone stops using it until you pair again. Drafts stay on this phone.", buttons "Cancel" and "Forget" (danger, filled). Afterwards the pairing graph opens. | `OutlinedButton` (danger), `AlertDialog` |
+| Forget this Hub | Below a divider, danger outlined "Forget this Hub". Dialog: title "Forget Workshop hub?", body "This phone stops using it until you pair again. Drafts stay on this phone.", buttons "Cancel" and "Forget" (danger, filled). Afterwards the pairing graph opens. | `OutlinedButton` (danger), `AlertDialog` |
 
 ### 12.4 App updates (`settings/updates`)
 
@@ -1613,6 +1621,9 @@ announced once when they start and once when they end, not on every percent.
   `common_try_again`, `common_hub_unreachable`).
 - A lint check fails the build when a string literal is passed to `Text`, `label`, `placeholder`,
   `supportingText`, `contentDescription` or a snackbar call.
+- The product's name is never written into a text: the catalogue holds it once (`app_name`, also the launcher
+  label) and texts that name it use the `{product}` placeholder, which the generator fills
+  (`08-platform-mapping.md` section 12). The command's name is held the same way (`command_name`, `{command}`).
 - Text that comes from the Hub (its messages, printer alerts, the Label Reader's questions, names) is shown as
   given and never translated or reworded by the app.
 - Wording follows F2: the names of F2 everywhere ("Hub", "Hub page", "Label Reader", "Weigh Station", "Recently

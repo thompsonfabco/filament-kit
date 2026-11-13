@@ -16,7 +16,12 @@ Contents: 1 Files and who owns them · 2 `tokens/tokens.json` · 3 The generator
 
 One source per kind of thing. Everything else is generated from it by a script, and the generated files are checked
 in, so nobody installing Spoolwarden runs a build step (foundations, section 12, rule 2). The token files live
-together in one folder, `tokens/` (in the design set, `design/tokens/`).
+together in one folder, `tokens/`, at the top of the repository, beside the code that is generated from them.
+That folder is the only place they exist: the design folder holds no copy of `tokens.json`, `tokens.css` or the
+two scripts, so there is nothing to keep in step. Values quoted in the design documents (foundations section 4,
+`05-android-app.md` section 1) and the colours inside the mockups are illustrations of `tokens/tokens.json` at the
+time of writing; where they differ, `tokens/tokens.json` is right for a value, and a change of the design starts
+there (README, "Changing the design").
 
 The files marked "exists" are the token schema and tooling as they are today. The files marked "proposed" are
 additions this mapping needs; they are specified in section 3.4 and are not yet in the files.
@@ -328,6 +333,7 @@ group of every theme with the same values; they no longer sit in `extra.size`.
 | Key | Console value | Purpose |
 |---|---|---|
 | `size.content-max` in every theme | `1400px` | The widest the content column gets on Desktop (foundations section 7; `--content-max`, `sizes.contentMax`) |
+| The `size` entries of `05-android-app.md` section 1 marked "new" (`label-col`, `thumb-s`, `swatch-row-w`, `swatch-row-h`, `swatch-head`, `empty-mark`, `chip`, `slot-label`, `port-field`, `column-max`, `preview-max`, `list-pane`) | per theme, in that table | Fixed dimensions of parts the app draws; one `SwSizes` field each |
 | `type.android.sans` / `.mono` | `default` / `monospace` | Android system family, one of `default`, `monospace`, `serif`, `sans-serif`; `default` and `monospace` in all four themes (Spool's rounded stack has no Android equivalent, section 14) |
 | `elevation.android.e0` / `.e2` | `0px` / `8px` | Shadow depth Android uses for that level; the same in all four themes |
 
@@ -1040,11 +1046,24 @@ snake case; `{count}` is the number a plural depends on.
   "appearance_system": "System",
   "printer_forget": "Forget printer",
   "printer_forget_question": "Forget {printer}?",
-  "printer_forget_body_bambu": "Spoolwarden stops connecting to it and deletes its Access Code. To use it again, add it again.",
-  "printer_forget_body_klipper": "Spoolwarden stops connecting to it and deletes its Moonraker API key, if one is saved.",
+  "command_name": "spoolwarden",
+  "printer_forget_body_bambu": "{product} stops connecting to it and deletes its Access Code. To use it again, add it again.",
+  "printer_forget_body_klipper": "{product} stops connecting to it and deletes its Moonraker API key, if one is saved.",
+  "status_fix_run": "Run {command} status on the Hub.",
   "spools_added": { "one": "{count} spool added", "other": "{count} spools added" }
 }
 ```
+
+**The product's name is held once.** `app_name` is the only entry whose text contains the product's name, and
+`command_name` the only one that contains the command's name. Every other text that names either uses the
+reserved placeholders `{product}` and `{command}`; the generator fills them from those two entries, so they are
+not arguments at run time: `strings.js` and `strings.xml` hold the finished text, and no caller passes the name.
+The app's launcher label is `@string/app_name`; the web app manifest's `name` and `short_name` (section 13), the
+top bar and the browser tab take the same entry. Where a part of this design writes "Spoolwarden" or
+`spoolwarden` inside a text, it stands for these two entries. A change of the product's name is therefore a
+change of two lines and a regeneration. Test 7 also fails when any other entry contains the value of `app_name`
+or of `command_name` as a word. Addresses and identifiers that are not text on screen (the deep-link scheme,
+storage keys, file and package names) are not part of the catalogue and do not follow these entries.
 
 **Generated files.**
 

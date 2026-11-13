@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Spoolwarden · Workshop kit</title>
+<title>Spoolwarden · Workshop hub</title>
 <style>
 /* Layout concept: "Panes" - flat grouped-list master-detail (one screen on phone, two panes on tablet, three on desktop). */
 :root{
@@ -328,7 +328,7 @@ textarea.in{resize:vertical;min-height:84px;line-height:1.45}
 <div class="dock" id="dock">
 <div class="toasts" id="toasts" aria-hidden="true"></div>
 <div id="jobP"></div>
-<div class="bbar"><div class="bb-brand"><p class="bn" data-dname>Workshop kit</p><p class="bv">Spoolwarden 0.5.2</p></div><div id="bbSeg"></div></div>
+<div class="bbar"><div class="bb-brand"><p class="bn" data-dname>Workshop hub</p><p class="bv">Spoolwarden 0.5.2</p></div><div id="bbSeg"></div></div>
 </div>
 <div id="live" class="sr" aria-live="polite"></div>
 <div class="scrim" id="scrim" hidden></div>
@@ -427,7 +427,7 @@ REV[0].what=chTxt(REV[0].ch);
 const AIP=[['Name','PolyTerra PLA Charcoal Black','PolyTerra PLA Charcoal Black (Matte)'],['Nozzle range','190–230 °C','190–220 °C']];
 const PACK='curl -fsSL https://kit.example/pack/install.sh -o kit-pack.sh\ncurl -fsSL https://kit.example/pack/install.sh.sig -o kit-pack.sh.sig';
 const S={sec:'printers',item:null,root:false,lock:'locked',emptyP:false,emptyI:false,found:true,scanned:null,st:{},job:null,jobOpen:false,addType:'bambu',addPre:null,edit:false,ai:null,recSt:'det',key:true,pass:false,libAdds:3,tokenSet:false,
-set:{dname:'Workshop kit',hosts:'kit.example.net',locs:'Shelf A, Shelf B, Dry box 1, Dry box 2',pla:'Shelf A',prefix:'Dry box',boxes:'2',over:'Shelf B',model:'',reads:'40',kept:'20',pub:'',station:'',allow:false,keep:'14',token:'',voice:'piper',newlook:'Console'},
+set:{dname:'Workshop hub',hosts:'kit.example.net',locs:'Shelf A, Shelf B, Dry box 1, Dry box 2',pla:'Shelf A',prefix:'Dry box',boxes:'2',over:'Shelf B',model:'',reads:'40',kept:'20',pub:'',station:'',allow:false,keep:'14',token:'',voice:'piper',newlook:'Console'},
 bk:[['2026-11-12 03:00','nightly','4,812 KiB'],['2026-11-11 03:00','nightly','4,790 KiB'],['2026-11-10 16:32','made here','4,771 KiB']]};
 const FK={general:['dname','hosts'],storage:['locs','pla','over','prefix','boxes'],network:['pub','station','allow'],ai:['model','reads','kept'],backups:['keep'],library:['token'],voice:['voice'],look:['newlook']};
 const SF={general:['General','tag'],storage:['Storage locations','box'],network:['Network and addresses','globe'],pass:['Web passphrase','key'],ai:['Label Reader','spark'],library:['Filament Catalog','book'],voice:['Weigh Station voice','speaker'],backups:['Backups','archive'],appearance:['Appearance','sun'],look:['Theme for new devices','sun']};

@@ -2635,8 +2635,8 @@ for updates, Filament Catalog update, get the certificate, pair the Weigh Statio
 Done or Failed, with its log one press away.
 
 **Anatomy.** A floating panel (`job`): head with status badge (Running, Done, Failed), the job's title, the current
-step line (the newest log line, one line, `mono`), a log toggle, and Hide (while running) or Close (after the end); a
-determinate bar under the head (indeterminate when the step count is unknown); the log (`pre`, hidden until
+step line ("Step K of N: <sentence>" for a counted job, else the newest log line; one line, `mono`), a log toggle, and Hide (while running) or Close (after the end); a
+determinate bar under the head (indeterminate for a job that is not counted, see Steps below); the log (`pre`, hidden until
 toggled); after the end, **Show the whole log** and the note "Addresses and serials are hidden here." In the top bar,
 the job indicator chip (2.2) mirrors it: spinner or shape, title, state.
 
@@ -2654,6 +2654,40 @@ Job titles by the Hub's job `name`:
 
 End lines: "<Title>: done." · "<Title>: failed. See the log." · a job that stopped without finishing: "<Title>:
 failed. It stopped without finishing; see the log and the Logs section."
+
+**Steps.** A job that has countable steps says so, and the strip shows a determinate bar; a job that has none
+shows an indeterminate bar. Which is which is fixed here, so every interface shows the same thing.
+
+| Job (`name`) | Steps | The step sentences, in order |
+|---|---|---|
+| `backup` | Counted | Collecting the settings and pairings · Copying the Spoolman database · Writing the zip · Checking the zip |
+| `restore` | Counted | Checking the backup · Keeping what is here now as a backup · Stopping the services · Putting the backup in place · Starting the services · Checking that everything answers |
+| `update` | Counted | Downloading <version> · Checking its signature · Installing · Restarting the Hub · Checking that it answers |
+| `rollback` | Counted | Finding the kept version · Installing <version> · Restarting the Hub · Checking that it answers |
+| `apply` | Counted | One step per feature or service that changes ("Switching on Klipper printers", "Restarting the Hub service"), then "Checking that everything answers"; the count is known once the plan is made, before the first step |
+| `library_update` | Counted | Downloading the Filament Catalog · Checking its signature · Putting it in place · Asking for a preset build |
+| `library_rollback` | Counted | Putting the previous Filament Catalog back · Asking for a preset build |
+| `reader_setup` (flashing on the Hub) | Counted | Finding the board · Writing the program · Checking what was written · Joining the Wi-Fi · Reaching the Hub |
+| `station_pair` | Counted | Asking the Hub · Saving the pairing · Restarting the Weigh Station service |
+| `check` | Not counted | One short request |
+| `remote_issue` | Not counted | The certificate tool runs for an unknown time and reports no steps |
+| any other name | Not counted | |
+
+The sentences are the wording; a job may have one step more or fewer than listed when its work differs, as long as
+each sentence names what the person is waiting for. Rules:
+
+1. The command a job runs writes one line when each step **starts**: `==> step K of N <sentence>`. N is fixed
+   before the first step line and never changes; K starts at 1 and goes up by one. A step sentence holds no
+   address, serial or name of a person or device (a version number is fine), so it is shown without the lock.
+2. The Hub's job reply carries `step` (`index` K, `count` N, `text` the sentence) and `progress`: `(K - 1) / N`
+   while step K runs, so the bar is never full while work remains, and `1` when the job has ended with exit 0. A
+   failed job keeps the fraction of the step it stopped in. With no step line both are null.
+3. Counted job: the step line reads "Step K of N: <sentence>" and the bar is determinate, with
+   `aria-valuetext` "Step K of N". Not counted: the step line is the newest log line and the bar is indeterminate.
+4. After 10 seconds in one step (or in a job that is not counted) the step line ends with the time in that step,
+   "… (42 s)", then "(2 min 10 s)"; it is not announced.
+5. The command line prints the same sentences as its progress lines (`06-command-line.md` section 6.6), because the
+   same commands write them.
 
 **Sizes and tokens.** Fixed at the bottom right, `--s4` from the edges plus the safe-area insets; width
 `min(25rem, 100vw - 2 * var(--s4))`; `--surface`, 1 px `--border-strong`, `--r`, `--e0` (its outline sets it apart;
