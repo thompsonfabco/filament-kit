@@ -187,12 +187,15 @@ class PairResult:
     message: str
 
 
-def pair_with_link(link: Link, confirm=None) -> PairResult:
+def pair_with_link(link: Link, confirm=None, step=None) -> PairResult:
     """Pair this station from a link: reach the server, check the certificate it presents against the link, claim
     the token, save the pairing, update the station's unit. Needs root; prompts for nothing, so `station pair` and
     the console's helper job share it. `confirm(fingerprint) -> bool`: the owner's own comparison, asked after the
-    link's check; with none (the link came from this machine), the link's check is the decision."""
+    link's check; with none (the link came from this machine), the link's check is the decision. `step(sentence)` is
+    told when each of the three steps of the pairing job starts (steps.py)."""
     from .. import apply, modules, pairing
+    step = step or (lambda _text: None)
+    step("Asking the Hub")
     cfg = config.load()
     on = modules.enabled(cfg)
     if "server" in on:  # the server is on this machine: talk to it over loopback first (the link lists LAN IPs)
@@ -223,10 +226,12 @@ def pair_with_link(link: Link, confirm=None) -> PairResult:
         else:
             why = f"the server answered {status} ({body.get('message') or body.get('error')})"
         return PairResult("failed", f"not paired: {why}.\nfix: {again} within {pairing.TOKEN_TTL // 60} minutes")
+    step("Saving the pairing")
     save_pairing(link, first=first)
     if "station" not in on:
         return PairResult("paired", "Paired. Switch the station module on to use it: "
                                     "sudo filament-kit modules enable station")
+    step("Restarting the Weigh Station service")
     try:  # the station's unit lets only listed addresses through: add the server's, then restart it
         done = apply.refresh_station(cfg)
     except (apply.ApplyError, modules.ModuleError) as e:

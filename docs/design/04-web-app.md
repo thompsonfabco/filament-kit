@@ -334,8 +334,7 @@ States: "Searching…" (working shape in the field's trailing slot); empty: "No 
 ### 4.3 From label photos
 
 Shown when the Label Reader is on (`data-ai`). When it is off the group stays, collapsed to one line: info circle
-and "The Label Reader is switched off on this Hub. Add the spool by hand, or switch it on on the Hub page under
-Features."
+and "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page."
 
 | Control | Label and text | Behaviour |
 |---|---|---|
@@ -428,8 +427,8 @@ required unless its label ends in "(optional)"; there is no "required" word and 
 | | **Empty spool weight (optional)** (pair) | decimal, unit "g" | "Enter grams above 0." | `tare` |
 | State | **Still sealed (in its bag or box)** | toggle | Under it, when the Label Reader gave a reason: "Label Reader: <sealed reason>". Turning it on moves Location to the sealed-stock location and hides the weight; turning it off sets Location to Automatic. | `sealed` |
 | | **Weight with spool (optional)** | decimal, unit "g" | Shown only when not sealed. Helper: "Leave empty for a full spool." With Spools above 1: aria-disabled, "Only used for one opened spool." | `gross` |
-| Print settings | **Nozzle (°C, optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `nozzle` |
-| | **Bed (°C, optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `bed` |
+| Print settings | **Nozzle (optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `nozzle` |
+| | **Bed (optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `bed` |
 | Storage | **Location** | select: "Automatic (<placement rule>)", then every configured location; always has a value | | `location` |
 | Other | **Lot (optional)** | text, `--mono` | | `lot` |
 | | **Price per kg (optional)** | decimal | Helper, when the label showed a price: "From the label: <price line>". | `price_per_kg`, `price_line` |
@@ -542,7 +541,7 @@ The add is a long form with drafts as in 02-components 5.11 (`data-draft="add"`)
 |---|---|
 | Intro | "Nothing is saved until you preview and press Add." |
 | Empty list | "No spools yet. Photograph the labels, or find a filament you already have." |
-| Label Reader off | "The Label Reader is off on this Hub. Add by hand, or switch it on on the Hub page under Features." |
+| Label Reader off | "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." |
 | Reading | "The Label Reader is reading <n> photos… (up to a minute)" |
 | Daily limit (429) | the Hub's text, then "Add by hand, or try again tomorrow." |
 | Read failed (502) | the Hub's text, then "Your photos and edits are kept." with "Try again" |
@@ -670,7 +669,7 @@ Hub has today. When none of the four is available the group is absent and the sh
 
 | Action | How it works |
 |---|---|
-| "Update weight" | Opens a small form in place: "Weight with spool" (g); "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight". |
+| "Update weight" | Opens a small form in place: "Weight with spool"; "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight". |
 | "Move" | A menu of locations; choosing one moves it at once; inline result "Moved to Dry box 1." with "Undo" for 5 s. |
 | "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." |
 | "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (one row per slot with its current spool), then the automatic preview and "Load", exactly as the load sheet of 6.5. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`. |
@@ -796,7 +795,7 @@ when the page is left or hidden. Until the first message arrives, the status and
 | Facts | model · address (`--mono`) |
 | Connection | a badge (3.3) from the printer's `state`: `connected` Connected · `offline` Offline · `not_configured` Not configured · every problem state Needs a look, followed by a sentence: `wrong_code` "Wrong Access Code. Replace it under Printer settings.", `needs_developer_mode` "The printer needs developer mode (LAN only) for this.", `cert_changed` "The printer's certificate changed. Forget it under Printer settings if you replaced the printer.", any other state the Hub's word (underscores as spaces, sentence case). Under it: the Hub's fix text. |
 | Print state | a sentence with its shape (3.3), from `gcode_state`: RUNNING "Printing", PAUSE "Paused", PREPARE "Preparing", FINISH "Finished", FAILED "Print failed", IDLE "Idle" (others: the word in sentence case), then ": <job name>" |
-| Progress | while Printing, Paused or Preparing: progress bar (4 px, `--accent`) with the percent at the right (`--mono`), then "Layer <n> of <total> · <time> left" and the stage when the printer reports one; <time> is "<h> h <m> min", or "<m> min" under one hour |
+| Progress | while Printing, Paused or Preparing: progress bar (4 px, `--accent-text`) with the percent at the right (`--mono`), then "Layer <n> of <total> · <time> left" and the stage when the printer reports one; <time> is "<h> h <m> min", or "<m> min" under one hour |
 | Temperatures | "<name> <current> / <target> °C" joined by " · " (`--mono` numbers) |
 | Printer alerts | one octagon line each: the printer's text, or "Printer alert <code>" |
 | Notes | `--muted` lines |
@@ -815,7 +814,7 @@ when the page is left or hidden. Until the first message arrives, the status and
 While a command is sent its button shows the working shape. The inline result sits under the row: the words above,
 or, when the printer refuses, the sentence in the reply's `message` as sent (until the Hub sends one: "The printer
 said no: <the reply's `error` text>"; 02-components 8.6 and 12; never the raw reply, never JSON), or the Hub's text (its refusals: printer offline, no reply, busy, slot in use,
-certificate changed, needs developer mode, no preset, write refused, already running). A refusal that points at
+certificate changed, needs Developer Mode, no preset, write refused, already running). A refusal that points at
 Slicer presets carries the button "Open Slicer presets".
 
 **Camera.** A box with a 16:9 ratio, radius `--r`, ground `--surface-3`, under the controls. MJPEG printers:
@@ -826,7 +825,7 @@ muted playsinline>` from GET `printers/<id>/camera/<name>`. The picture is never
 |---|---|
 | Starting | skeleton and "Starting the camera…" |
 | Browser cannot play HLS | "This browser cannot play this printer's camera. Use Safari on iPhone or Mac." |
-| Did not start | "The camera did not start. Check that the printer is on, LAN mode live view is on, and not too many views are open." · "Try again" |
+| Did not start | "The camera did not start. Check that the printer is on, LAN Mode Liveview is on, and not too many views are open." · "Try again" |
 | Too many views (429) | "Too many camera views are open (4 at most). Close one on another phone or tab." · "Try again" |
 
 ### 6.5 Slots, load and unload
@@ -838,7 +837,7 @@ One group per unit, headed "<label> · <type>" (for example "AMS A · AMS 2 Pro"
 | Slot | label in `--mono` ("A1", "T0") |
 | Swatch | the medium swatch of 02-components 7.3, the slot's colour; dashed outline when empty, hatched "no colour" without one |
 | Name | the spool's name, else the slot's material type, else the state; under it `--muted` "<hex> · <g> g left", "Empty" or "Reading…" (the hex accompanies the swatch, F4.1) |
-| In use | as the slot strip (02-components 7.5): the active slot carries the words "In use" in `--accent-text` weight 650 and a 3 px `--accent` mark on its left, not only bold text |
+| In use | as the slot strip (02-components 7.5): the active slot carries the words "In use" in `--accent-text` weight 650 and a 3 px `--accent-text` mark on its left, not only bold text |
 | Buttons | on their own line under the name: "Load" (always) and "Unload" (when the slot holds a spool); each `--ctl` (44 px) high, at least `calc(2 * var(--ctl))` (88 px) wide |
 
 Empty: "The printer reports no slots." Results of load and unload appear in a line under that slot's row.
@@ -992,7 +991,7 @@ While the Hub connects: "Connecting to the printer…". On success the sheet clo
 ### 6.10 Printers switched off
 
 When the Printers Feature is off, the destination is dimmed and the page shows: printer icon, "Printers is switched
-off on this Hub." and "Switch it on on the Hub page under Features." with "Open the Hub page" (home address only).
+off" and "Switch it on in Features on the Hub page." with "Open the Hub page" (home address only).
 
 ---
 
@@ -1038,7 +1037,7 @@ undo a correction. Served on the home address only (7.4). Code today: `historyTa
   long-press); state: the badge "As detected", "Revised by AI" or "Edited by hand" (3.3); "Spool 214" or "Spools
   212, 213" in `--mono`; when confidence is known, a last line with the record summary of 02-components 7.2, e.g.
   "Medium: Colour · Not on the label: Price per kg" (triangle) or "Low: check Material, Net weight" (octagon).
-- Empty: "Nothing added yet" with the text "No spool has been added since the history started."
+- Empty: "Nothing added yet" with the text "No spool has been added since the history started. Spools added from the web app, the app or the Weigh Station appear here."
 - Tablet: the list keeps the full content width; opening a record expands it in place under its card (2.3).
 
 ### 7.2 One record (`#recent/<id>`)
@@ -1097,11 +1096,11 @@ of them." Fields in four groups, label left (`--muted`) and value right; units i
 | Group | Fields |
 |---|---|
 | Identity | Brand · Name · Material · Colour (swatch and hex) · Line |
-| Weights | Net weight (g) · Empty spool weight (g) · Density (g/cm³) |
-| Temperatures | Nozzle (°C) · Bed (°C) · Nozzle range (°C, "190-230") · Bed range (°C) |
+| Weights | Net weight · Empty spool weight · Density |
+| Temperatures | Nozzle · Bed · Nozzle range (placeholder "190-230") · Bed range |
 | Other | Price per kg |
 
-"Edit" (pencil) turns the values into inputs in place (same rules and error texts as 4.5; ranges: "Enter a range
+"Edit by hand" (pencil) turns the values into inputs in place (same rules and error texts as 4.5; ranges: "Enter a range
 like 190-230."). The group footer then shows "Cancel" and "Save changes" (filled). Only changed fields are sent:
 POST `history/<id>/apply` `{item, values}`. Results in the footer: "Saving…"; ok "Saved 2 changes: Name, Empty spool
 weight."; "Nothing changed." when no field differs; then, from the Hub, "The spools now use filament <id>." (with
@@ -1115,12 +1114,12 @@ weight."; "Nothing changed." when no field differs; then, from the Hub, "The spo
 | Field | label "What is wrong?", placeholder "e.g. brand is Polymaker", helper "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept." | |
 | "Ask the Label Reader" | default button; aria-disabled with "Say what is wrong first." while the field is empty | POST `history/<id>/revise` `{item, note}` |
 | Waiting | working shape and "Asking the Label Reader… (up to a minute)" | |
-| Proposal | the before-and-after change list (02-components 7.9) on `--accent-soft` with an `--accent` outline: "Proposal: <n> changes" then one row per change: field name, old value struck through, arrow (read as "becomes"), new value (600); or "The Label Reader changed nothing." When the record has no photo: `--muted` "No photo was kept: it worked from the saved values and your note." | |
+| Proposal | the before-and-after change list (02-components 7.9) on `--accent-soft` with an `--accent-text` outline: "Proposal: <n> changes" then one row per change: field name, old value struck through, arrow (read as "becomes"), new value (600); or "The Label Reader changed nothing." When the record has no photo: `--muted` "No photo was kept: it worked from the saved values and your note." | |
 | "Accept" | filled | POST `history/<id>/apply` `{proposal}`; result "Accepted. 2 fields changed; revision 2 keeps the old values." State becomes "Revised by AI". |
 | "Discard" | default | nothing is sent; line "Proposal discarded. Nothing changed." |
 
-When the Label Reader is off (`ai` false in the list, or 409 `ai_off`) the group shows only: info circle "The Label
-Reader is switched off on this Hub. Edit the record by hand, or switch it on on the Hub page under Features."
+When the Label Reader is off (`ai` false in the list, or 409 `ai_off`) the group shows only: info circle
+"The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page."
 
 **Revisions.** One row per revision, oldest first: "Revision <n>, <time>, by hand|by AI: <field old → new; …>" with
 the note when there is one. Undone revisions are struck through with "(undone)" (02-components 7.10). The newest revision that is
@@ -1185,7 +1184,7 @@ More (and from the Add result). Code today: `presetsTab` in `app.js`.
 Empty: filled circle "Every filament has a preset line." Errors per card in a line under its buttons.
 
 When the Slicer presets Feature is off, the More row and the page are dimmed and the page shows "Slicer presets is
-switched off on this Hub." and "Switch it on on the Hub page under Features." with "Open the Hub page" (home address
+switched off" and "Switch it on in Features on the Hub page." with "Open the Hub page" (home address
 only).
 
 ---
@@ -1232,7 +1231,7 @@ A sheet on phones with the address `#settings` (2.4), opened over the last place
 | | technical       | |                 |  |
 | +-----------------+ +-----------------+  |
 | +-----------------+ +-----------------+  |
-| | ( ) Spool       | | ( ) Panes       |  |
+| | ( ) Palette     | | ( ) Panes       |  |
 | | Colourful and   | | Simple lists    |  |
 | | roomy           | |                 |  |
 | +-----------------+ +-----------------+  |
@@ -1256,7 +1255,7 @@ The segmented control takes the full content width; each theme tile is a radio t
 | Group | Content |
 |---|---|
 | Appearance | The wide segmented control "Light / Dark / System" with sun, moon and half-circle icons (F5). Applies at once; line "Saved on this phone." |
-| Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Spool "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this phone." Helper: "New phones start with the Hub's theme for new devices." |
+| Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this phone." Helper: "New phones start with the Hub's theme for new devices." |
 | Print alerts on this phone (only when print alerts are offered, `data-push`) | Status: "Off" (hollow circle), "On: this phone gets print alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive print alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). |
 | This Hub | Hub name; the address this page is using (`--mono`); on the home address "Open the Hub page". |
 
@@ -1627,13 +1626,13 @@ this design.
 | Detail photos | Photos group (7.2) |
 | "Spool <ids>: a change applies to all of them" | Panel heading and line (7.2) |
 | Inputs Brand, Name, Material, Colour (hex), Net g, Spool g, Density, Nozzle °C, Bed °C, Nozzle range, Bed range, Price per kg, Line | The same fields in four groups; "Spool g" is now "Empty spool weight" (7.2) |
-| "Save changes", "Saving…", "Saved.", "Nothing changed." | "Edit", then "Save changes" with its results (7.2) |
+| "Save changes", "Saving…", "Saved.", "Nothing changed." | "Edit by hand", then "Save changes" with its results (7.2) |
 | Textarea "e.g. brand is Polymaker" | "What is wrong?" (7.2) |
 | "Ask the AI to correct it" | "Ask the Label Reader" (7.2) |
 | "Asking the AI… (up to a minute)" | "The Label Reader is reading it again… (up to a minute)" (7.2) |
 | "The AI suggests:" / "The AI changed nothing." / no-photo note | "The Label Reader suggests:" / "The Label Reader changed nothing." / same note (7.2) |
 | "Accept", "Discard" | Same (7.2) |
-| "Label reading is off on this server: edit by hand." | "The Label Reader is off on this Hub: edit by hand." (7.2) |
+| "Label reading is off on this server: edit by hand." | "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page." (7.2) |
 | Revision log lines | Revisions group (7.2) |
 | "Undo revision <n>", "Undone." | Same, "Revision <n> undone." (7.2) |
 | "The spools now use filament <id> (new)", "Filament <ids> has no spools left; it was not deleted." | Same lines (7.2) |

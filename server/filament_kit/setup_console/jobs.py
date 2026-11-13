@@ -12,9 +12,11 @@ line waits until it has ended.
 The server restarts during apply, update and rollback; the log lives in /run, so the page comes back and reads on.
 `version` tells it when the server it reloaded under is another release.
 
-`progress` is the fraction (0 to 1) of the job's newest complete `==> step K of N` line, so the page can draw a determinate
-bar (docs/design N13); null when the job writes no step lines, which the page shows as an indeterminate bar. A job that
-finished with exit 0 after writing step lines reports 1.
+A counted job (steps.py) writes `==> step K of N <sentence>` when each step starts. `step` is {index, count, text} of the
+newest complete one and `progress` is (K - 1) / N while step K runs (0 to 1, never full while work remains), so the page
+can draw a determinate bar (docs/design N13); both are null when the job writes no step lines, which the page shows as
+an indeterminate bar. A job that finished with exit 0 after writing step lines reports 1; a failed one keeps its
+fraction. The sentence is redacted like the log.
 """
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ STALE_AFTER = 65 * 60       # past the unit's TimeoutStartSec: a job with no las
 GONE_AFTER = 15.0           # seconds a log may stand with no unit behind it (the unit writes it, then ends)
 GONE_MEMO = 2.0
 _FINISHED = re.compile(rb"^==> finished \(exit (-?[0-9]+)\)\s*$", re.M)
-_STEP = re.compile(rb"^==> step ([0-9]{1,6}) of ([0-9]{1,6})\b[^\n]*\n", re.M)
+_STEP = re.compile(rb"^==> step ([0-9]{1,6}) of ([0-9]{1,6})\b *([^\n]*)\n", re.M)
 _memo_lock = threading.Lock()
 _memo: tuple | None = None  # (the bytes it was made from, the redacted text): a page polls once a second
 _gone_memo: tuple | None = None  # (when it was asked, the answer)
@@ -76,20 +78,28 @@ def _unit_gone(age: float) -> bool:
     return gone
 
 
-def _progress(data: bytes, done: bool, exit_code: int | None) -> float | None:
-    """The fraction of the newest complete step line in `data`, or None when there is none (or it says 0 steps)."""
-    steps = [m for m in _STEP.finditer(data) if int(m.group(2)) > 0]
-    if not steps:
-        return None
+def _progress(data: bytes, done: bool, exit_code: int | None) -> tuple[float | None, dict | None]:
+    """(the fraction, the step) of the newest complete step line in `data`; (None, None) when there is none (or it says
+    0 steps). The fraction is (K - 1) / N, and 1 for a job that ended with exit 0. Only lines with 1 <= K <= N count, and
+    only those with the N of the job's first step line (02 8.4: N is fixed before the first line and never changes)."""
+    found = [m for m in _STEP.finditer(data) if 1 <= int(m.group(1)) <= int(m.group(2))]
+    if found:
+        first_n = found[0].group(2)
+        found = [m for m in found if m.group(2) == first_n]
+    if not found:
+        return None, None
+    k, n = int(found[-1].group(1)), int(found[-1].group(2))
+    text = redact.text(found[-1].group(3).decode("utf-8", "replace").strip())
+    step = {"index": k, "count": n, "text": text}
     if done and exit_code == 0:
-        return 1.0
-    k, n = int(steps[-1].group(1)), int(steps[-1].group(2))
-    return round(min(max(k / n, 0.0), 1.0), 3)
+        return 1.0, step
+    return round(min(max((k - 1) / n, 0.0), 1.0), 3), step
 
 
 def view(start: int, *, with_text: bool = True, whole: bool = False) -> dict:
     empty = {"seen": False, "name": None, "running": False, "exit": None, "lost": False, "text": "", "next": 0,
-             "version": __version__, "redacted": not whole, "progress": None}
+             "version": __version__, "redacted": not whole, "progress": None,
+             "step": None}
     path = setup_helper.job_log()
     try:
         data, age = path.read_bytes(), time.time() - path.stat().st_mtime
@@ -102,7 +112,8 @@ def view(start: int, *, with_text: bool = True, whole: bool = False) -> dict:
     out = {"seen": True, "name": setup_helper.job_name_of(data.split(b"\n", 1)[0].decode("utf-8", "replace")),
            "running": not done and not lost, "exit": exit_code, "lost": lost,
            "version": __version__, "redacted": not whole, "text": "", "next": 0,
-           "progress": _progress(data, done, exit_code)}
+           "progress": None, "step": None}
+    out["progress"], out["step"] = _progress(data, done, exit_code)
     if not with_text:
         return out
     if whole:

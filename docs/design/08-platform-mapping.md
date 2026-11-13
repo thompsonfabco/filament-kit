@@ -23,8 +23,9 @@ two scripts, so there is nothing to keep in step. Values quoted in the design do
 time of writing; where they differ, `tokens/tokens.json` is right for a value, and a change of the design starts
 there (README, "Changing the design").
 
-The files marked "exists" are the token schema and tooling as they are today. The files marked "proposed" are
-additions this mapping needs; they are specified in section 3.4 and are not yet in the files.
+Every file in the table exists once the groundwork steps of `09-implementation-order.md` (stage 0) are in; the
+"Status" column says which were there before them ("Exists") and which those steps added ("Proposed", specified
+in section 3.4).
 
 | File (repository path) | Kind | Status | Written by | Read by |
 |---|---|---|---|---|
@@ -62,7 +63,7 @@ identical `:root` blocks) and the Android app uses the stock Material 3 scheme w
 
 ### 2.1 The file
 
-`tokens/tokens.json` is the only source of every token value. Its shape is version 1. The top level holds two
+`tokens/tokens.json` is the only source of every token value. Its shape is version 2. The top level holds two
 keys, `version` and `themes`; everything else is inside a theme. A value is changed in this file and nowhere else,
 and `build_tokens.py` is run afterwards (section 3.1).
 
@@ -81,9 +82,10 @@ and `build_tokens.py` is run afterwards (section 3.1).
   (`"4px"`), which become `dp` on Android. Durations are strings in `ms` (`"120ms"`). The easing is a
   `cubic-bezier(a, b, c, d)` string. Line heights and weights are strings holding a plain number (`"1.45"`,
   `"650"`); the CSS carries them unquoted.
-- A key of `size` (or of `extra.size`) that ends in `-phone` is the value at 600 px and below of the key without
-  the suffix: `ctl-phone` is `--ctl` on phones, Workbench's `extra.size.top-phone` is its `--top` on phones. It is
-  emitted only where it differs from the base value (section 3.2).
+- A key of `size` (or of `extra.size`) that ends in `-phone` is the value on small or touch screens of the key
+  without the suffix. `ctl-phone` is `--ctl` at 1024 px and below and wherever the main pointer is coarse
+  (foundations 4.3); every other `-phone` key (Workbench's `extra.size.top-phone` is its `--top`) applies at 600 px
+  and below. It is emitted only where it differs from the base value (section 3.2).
 - Elevation levels are CSS `box-shadow` values. A 1 px ring drawn with the shadow is written as the last part,
   `0 0 0 1px var(--<colour token>)`; the Kotlin output (section 3.4) reads the ring's colour token from it.
 - Layout profile values must be one of the choices in foundations section 6.1.
@@ -96,7 +98,7 @@ The Console entry as it is in the file; the other three themes have the same key
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "themes": {
     "console": {
       "label": "Console",
@@ -128,7 +130,7 @@ The Console entry as it is in the file; the other three themes have the same key
       "extra": {"colour": {"light": {"accent-2": "#0b7d6d"}, "dark": {"accent-2": "#3bc6a2"}}}
     },
     "workbench": {"...": "same keys"},
-    "spool": {"...": "same keys"},
+    "palette": {"...": "same keys"},
     "panes": {"...": "same keys"}
   }
 }
@@ -139,7 +141,7 @@ The Console entry as it is in the file; the other three themes have the same key
 | Path | Type | Meaning |
 |---|---|---|
 | `version` | integer, `1` | The version of the shape |
-| `themes.<key>` | object | One theme; keys are `console`, `workbench`, `spool`, `panes`, in that order. `build_tokens.py` writes `console` on bare `:root`, so Console is the default theme and the fallback for a missing or unknown `data-look`; every other theme goes under `:root[data-look="<key>"]` |
+| `themes.<key>` | object | One theme; keys are `console`, `workbench`, `palette`, `panes`, in that order. `build_tokens.py` writes `console` on bare `:root`, so Console is the default theme and the fallback for a missing or unknown `data-look`; every other theme goes under `:root[data-look="<key>"]` |
 | `.label` | text | The theme's name, on its preview tile (foundations section 6.2) and in the comment above its CSS blocks |
 | `.profile.nav` / `.collection` / `.detail` | choice | Layout profile (foundations section 6.1) |
 | `.light` / `.dark` | object of 25 colours | Every colour token of foundations section 4.1 |
@@ -149,8 +151,8 @@ The Console entry as it is in the file; the other three themes have the same key
 | `.type.fw-text` / `.fw-label` / `.fw-title` | number as text, 100 to 900 | Weights |
 | `.space.s1` … `.s7` | px | The seven space steps, strictly increasing |
 | `.radius.r-s` / `.r` / `.r-l` | px | The three radii |
-| `.size.ctl` / `.ctl-phone` | px | Control height above 600 px and at or below it |
-| `.size.top` / `.rail` / `.tab` | px | Top bar height, navigation rail width, bottom bar height (without safe-area inset); `rail` is `0px` in a theme whose profile has no rail (Spool, Panes) |
+| `.size.ctl` / `.ctl-phone` | px | Control height on a desktop with a mouse, and at 1024 px and below or with a coarse pointer |
+| `.size.top` / `.rail` / `.tab` | px | Top bar height, navigation rail width, bottom bar height (without safe-area inset); `rail` is `0px` in a theme whose profile has no rail (Palette, Panes) |
 | `.size.row` | px | `--row`: minimum height of one item of a collection (48px in every theme) |
 | `.size.gap` | px | `--gap`: space between separate items of a group (Console `12px`, the value of `--s3`) |
 | `.size.drawer` | px | Width of the side drawer on Desktop (420px) |
@@ -176,7 +178,7 @@ The tokens whose names foundations section 4 gives in its tables rather than as 
 | `type.lh-body` / `type.lh-title` | `--lh-body` / `--lh-title` | 1.45 / 1.25 |
 | `type.fw-text` / `fw-label` / `fw-title` | `--fw-text` / `--fw-label` / `--fw-title` | 400 / 600 / 650 |
 | `motion.ease` | `--ease` | `cubic-bezier(.2, 0, 0, 1)` |
-| `size.ctl-phone` | (becomes `--ctl` at or below 600 px) | 44px |
+| `size.ctl-phone` | (becomes `--ctl` at 1024 px and below or with a coarse pointer) | 44px |
 | `size.row` | `--row` | 48px |
 | `size.gap` | `--gap` | 12px |
 | `size.drawer` / `hairline` / `nav-mark` / `thumb` / `qr` | `--drawer` / `--hairline` / `--nav-mark` / `--thumb` / `--qr` | 420px / 1px / 3px / 96px / 224px |
@@ -184,13 +186,13 @@ The tokens whose names foundations section 4 gives in its tables rather than as 
 
 ### 2.6 The other three themes, `derived` and `extra`
 
-The Workbench, Spool and Panes entries were transcribed from `mockups/a-workbench.html`, `mockups/b-spool.html` and
+The Workbench, Palette and Panes entries were transcribed from `mockups/a-workbench.html`, `mockups/b-palette.html` and
 `mockups/d-panes.html`; each theme's `derived` list names the values that were not taken from its mockup (for
 example the `size` entries a mockup has no equal for, copied from Console).
 
 `extra` holds what a mockup has with no matching token: Console's `accent-2` gradient stop; Workbench's inverse
 colours, hover tint, swatch line, card border, `lh` / `lh-tight`, `r-xl` / `r-full`, `top-phone` and the
-`e1` / `e3` shadows; Spool's ring, toast and preview colours, `lh`, `fs-3xl`, `s8`, `r-pill`, `tap`, `btn-lg` and
+`e1` / `e3` shadows; Palette's ring, toast and preview colours, `lh`, `fs-3xl`, `s8`, `r-pill`, `tap`, `btn-lg` and
 `e1` / `e3`; Panes' knob and inverse colours.
 
 `build_tokens.py` emits `extra` as custom properties: each group's extras follow that group's tokens in the same
@@ -235,9 +237,10 @@ same change. The person installing Spoolwarden never runs it: the Hub serves the
      `<light selector>[data-theme="dark"] { … }`. A dark block holds only what changes with the appearance:
      `color-scheme: dark`, the dark colours and `extra.colour.dark`, and the dark elevation and
      `extra.elevation.dark`.
-3. Phone: for each theme that has a `-phone` key whose value differs from its base, an
-   `@media (max-width: 600px) { <light selector> { --<base>: <value>; } }` block. Today these are Console's
-   `--ctl: 44px` and Workbench's `--top: 60px`.
+3. Phone: for each theme that has a `-phone` key whose value differs from its base, a media block
+   `{ <light selector> { --<base>: <value>; } }`: under `@media (max-width: 1024px), (pointer: coarse)` for
+   `ctl-phone`, under `@media (max-width: 600px)` for every other key. Today these are Console's `--ctl: 44px`
+   and Workbench's `--top: 60px`.
 4. Last: `@media (prefers-reduced-motion: reduce)` setting `--t-fast`, `--t` and `--t-slow` to `0ms` on `:root` and
    on each `:root[data-look="<key>"]`.
 
@@ -290,19 +293,20 @@ Console, as written (several declarations per line here, dark repeated blocks sh
   }
 }
 :root[data-theme="dark"] { /* the same declarations as the block above */ }
-/* … Workbench, Spool, Panes … */
+/* … Workbench, Palette, Panes … */
 
-/* Phone: control height and chrome sizes at 600 px and below */
-@media (max-width: 600px) {
+/* Control height wherever a finger is the pointer, or the screen is a tablet or phone */
+@media (max-width: 1024px), (pointer: coarse) {
   :root { --ctl: 44px; }
 }
+/* Chrome sizes at 600 px and below */
 @media (max-width: 600px) {
   :root[data-look="workbench"] { --top: 60px; }
 }
 
 /* Reduced motion: all durations 0 ms */
 @media (prefers-reduced-motion: reduce) {
-  :root, :root[data-look="workbench"], :root[data-look="spool"], :root[data-look="panes"] {
+  :root, :root[data-look="workbench"], :root[data-look="palette"], :root[data-look="panes"] {
     --t-fast: 0ms; --t: 0ms; --t-slow: 0ms;
   }
 }
@@ -315,14 +319,14 @@ Two checks exist and run in the project's normal test run:
 | Check | Command | Fails when |
 |---|---|---|
 | **`tokens.css` equals `tokens.json`** | `python tokens/build_tokens.py --check` | `tokens.css` was edited by hand, or `tokens.json` changed without running the script (exit 1, message as in 3.1). |
-| **Contrast** (AUT-1 of `07-accessibility.md`) | `python tokens/check_contrast.py` (optionally with the path of a `tokens.json`) | For any theme in light or dark, a required pair is below its ratio. Required at 4.5:1: `text`, `muted`, `accent-text`, `ok`, `warn`, `bad`, `info` on `bg`, `surface` and `surface-2`; `ok`, `warn`, `bad`, `info` each on its `-soft` ground; `on-accent` on `accent`; `on-bad` on `bad`. Required at 3:1: `border-strong` and `focus` against `surface` and `bg`. It prints one table row per pair and exits 1 on a failure. `accent-text` on `accent-soft` and `text` on `surface-3` are advisory: printed as WARN, never a failure. `contrast-report.txt` beside it holds its last output and `ADJUSTMENTS.md` lists any colour changed to meet a ratio. |
+| **Contrast** (AUT-1 of `07-accessibility.md`) | `python tokens/check_contrast.py` (optionally with the path of a `tokens.json`) | For any theme in light or dark, a required pair is below its ratio. Required at 4.5:1: `text`, `muted`, `accent-text`, `ok`, `warn`, `bad`, `info` on `bg`, `surface` and `surface-2`; `ok`, `warn`, `bad`, `info` each on its `-soft` ground; `on-accent` on `accent`; `on-bad` on `bad`. Required at 3:1: `border-strong` and `focus` against `surface` and `bg`. It prints one table row per pair and exits 1 on a failure. `accent-text` on `accent-soft` and `text` on `surface-3` were advisory in the first version and are required since the check covers every pair of `07-accessibility.md` sections 3.1 and 3.2 (test 3 below). `ADJUSTMENTS.md` lists any colour changed to meet a ratio; the check writes no report file. |
 
 The first check is the equality test of the web side today: a `tokens.css` that differs from its source cannot
 pass.
 
 ### 3.4 Proposed additions to the token tooling
 
-**Not yet in the files.** Everything in this subsection is an addition this mapping needs; `tokens.json`,
+**Added by the groundwork steps.** Everything in this subsection is an addition this mapping needs beyond the first token files; `tokens.json`,
 `build_tokens.py` and `check_contrast.py` do not do it today. Until the Kotlin output exists, the Android token
 values are copied from `tokens.json` by hand into `SpoolwardenTokens.kt`, in the shape given below.
 
@@ -336,7 +340,7 @@ group of every theme with the same values; they no longer sit in `extra.size`.
 |---|---|---|
 | `size.content-max` in every theme | `1400px` | The widest the content column gets on Desktop (foundations section 7; `--content-max`, `sizes.contentMax`) |
 | The `size` entries of `05-android-app.md` section 1 marked "new" (`label-col`, `thumb-s`, `swatch-row-w`, `swatch-row-h`, `swatch-head`, `empty-mark`, `chip`, `slot-label`, `port-field`, `column-max`, `preview-max`, `list-pane`) | per theme, in that table | Fixed dimensions of parts the app draws; one `SwSizes` field each |
-| `type.android.sans` / `.mono` | `default` / `monospace` | Android system family, one of `default`, `monospace`, `serif`, `sans-serif`; `default` and `monospace` in all four themes (Spool's rounded stack has no Android equivalent, section 14) |
+| `type.android.sans` / `.mono` | `default` / `monospace` | Android system family, one of `default`, `monospace`, `serif`, `sans-serif`; `default` and `monospace` in all four themes (Palette's rounded stack has no Android equivalent, section 14) |
 | `elevation.android.e0` / `.e2` | `0px` / `8px` | Shadow depth Android uses for that level; the same in all four themes |
 
 The one-line description of each theme on its preview tile is the string `theme_<key>_line` of the string catalogue
@@ -347,7 +351,7 @@ files marked "proposed" in section 1; `--check` then covers every output.
 
 | Output | Content |
 |---|---|
-| Preview tile blocks in `tokens.css` | For the theme preview tiles (section 9), after the theme blocks: every theme's light colour, type and radius tokens again under `[data-look="<key>"]` (without `:root`), and its dark colours under `:root:not([data-theme="light"]) [data-look="<key>"]` inside the dark media query and under `:root[data-theme="dark"] [data-look="<key>"]`. These blocks hold no size, elevation or motion token. On `<html>` such a block (0,1,0) competes with `:root` (0,1,0) harmlessly: it repeats the same theme's values and carries no `--ctl`, so it cannot undo a phone block. |
+| Preview tile blocks in `tokens.css` | For the theme preview tiles (section 9), after the theme blocks: every theme's light colour, type and radius tokens again under `[data-look="<key>"]` (without `:root`), and its dark colours under `:root:not([data-theme="light"]) [data-look="<key>"]` inside the dark media query and under `:root[data-theme="dark"] [data-look="<key>"]`. These blocks may also repeat the theme's `extra` colour, type and radius properties. They hold no size, elevation or motion token. On `<html>` such a block (0,1,0) competes with `:root` (0,1,0) harmlessly: it repeats the same theme's values and carries no `--ctl`, so it cannot undo a phone block. |
 | `tokens/theme-init.js` | Section 8 |
 | `SpoolwardenTokens.kt` | Below |
 | `sw_window.xml` | Below |
@@ -401,11 +405,11 @@ internal object SpoolwardenTokens {
         profile = LayoutProfile(NavStyle.Rail, CollectionStyle.Table, DetailStyle.Inline),
     )
     val workbench = ThemeTokens(/* … */)
-    val spool = ThemeTokens(/* … */)
+    val palette = ThemeTokens(/* … */)
     val panes = ThemeTokens(/* … */)
 
     fun of(look: Look): ThemeTokens = when (look) {
-        Look.Console -> console; Look.Workbench -> workbench; Look.Spool -> spool; Look.Panes -> panes
+        Look.Console -> console; Look.Workbench -> workbench; Look.Palette -> palette; Look.Panes -> panes
     }
 }
 ```
@@ -421,7 +425,7 @@ and the resolved objects `SpoolwardenTheme` provides to components. `Spoolwarden
 | `SwType` | Resolved | The styles of section 5.2; `input` depends on the window class | `SpoolwardenTheme.type` |
 | `Spacing` | Token holder and provided as is | `s1` … `s7` | `SpoolwardenTheme.space` |
 | `SwSizes` | Token holder and provided as is | Every `size` entry: `control`, `controlPhone`, `top`, `rail`, `tab`, `row`, `gap`, `drawer`, `hairline`, `navMark`, `thumb`, `qr`, and the proposed `sideW`, `listW`, `contentMax` | `SpoolwardenTheme.sizes` |
-| `SwDensity` | Resolved | `control` (`control` or `controlPhone` of `SwSizes`, for the window class), `row`, `gap` | `SpoolwardenTheme.density` |
+| `SwDensity` | Resolved | `control` (always `controlPhone` of `SwSizes`: the app runs on touch screens, where the pointer is coarse at every window size), `row`, `gap` | `SpoolwardenTheme.density` |
 | `SwRadius` | Token holder | `rS`, `r`, `rL` as dp | Builds `Shapes` and `SwShapes` |
 | `SwShapes` | Resolved | `rS`, `r`, `rL` as `RoundedCornerShape` | `SpoolwardenTheme.shapes` |
 | `SwElevation`, `SwShadow` | Token holder and provided as is | `e0`, `e2`, each a depth and a ring | `SpoolwardenTheme.elevation` |
@@ -437,8 +441,8 @@ The enums are `Look`, `Appearance`, `NavStyle` (`Rail`, `Sidebar`, `Pills`, `Lis
 
 **`sw_window.xml`.** One colour, `sw_window_bg`, set to Console's `bg` (light in `values/`, dark in
 `values-night/`). `res/values/themes.xml` uses it as `android:windowBackground` so the frame shown before Compose
-draws matches the page ground. It also holds the launcher icon's two backgrounds, `sw_launcher_bg` (Console's light
-`accent`) and `sw_launcher_bg_nightly` (Console's light `warn`), equal in both folders (section 11).
+draws matches the page ground. It also holds the launcher icon's background, `sw_launcher_bg` (Console's light
+`accent`), equal in both folders (section 11).
 
 **Proposed tests.** `tests/test_design_sources.py` runs with the project's normal Python test command. Each check
 below is one test function, so a failure names what is wrong. Checks 1 and 3 extend the two existing checks of 3.3
@@ -476,18 +480,18 @@ On Android the theme has two layers:
 | Token | CSS custom property | Material 3 `ColorScheme` role(s) | `SpoolwardenColors` field |
 |---|---|---|---|
 | `--bg` | `--bg` | `background`, `surfaceDim` | `bg` |
-| `--surface` | `--surface` | `surface`, `surfaceBright`, `surfaceContainerLowest`, `surfaceContainerLow`, `surfaceContainer`, `surfaceContainerHigh`, `surfaceTint`, `inverseOnSurface` | `surface` |
+| `--surface` | `--surface` | `surface`, `surfaceBright`, `surfaceContainerLowest`, `surfaceContainerLow`, `surfaceContainer`, `surfaceContainerHigh`, `surfaceTint`, `inverseOnSurface`, `onPrimary`, `onSecondary`, `onTertiary` | `surface` |
 | `--surface-2` | `--surface-2` | `surfaceVariant`, `surfaceContainerHighest` | `surface2` |
 | `--surface-3` | `--surface-3` | none | `surface3` |
 | `--text` | `--text` | `onBackground`, `onSurface`, `inverseSurface` | `text` |
 | `--muted` | `--muted` | `onSurfaceVariant` | `muted` |
 | `--border` | `--border` | `outlineVariant` | `border` |
 | `--border-strong` | `--border-strong` | `outline` | `borderStrong` |
-| `--accent` | `--accent` | `primary`, `secondary`, `tertiary` | `accent` |
+| `--accent` | `--accent` | none (the fill of the main button and of the chosen segment, through `SwButton` and the segmented choice) | `accent` |
 | `--accent-hover` | `--accent-hover` | none | `accentHover` |
-| `--on-accent` | `--on-accent` | `onPrimary`, `onSecondary`, `onTertiary` | `onAccent` |
+| `--on-accent` | `--on-accent` | none (the label on `accent`) | `onAccent` |
 | `--accent-soft` | `--accent-soft` | `primaryContainer`, `secondaryContainer`, `tertiaryContainer` | `accentSoft` |
-| `--accent-text` | `--accent-text` | `onPrimaryContainer`, `onSecondaryContainer`, `onTertiaryContainer` | `accentText` |
+| `--accent-text` | `--accent-text` | `primary`, `secondary`, `tertiary`, `onPrimaryContainer`, `onSecondaryContainer`, `onTertiaryContainer` | `accentText` |
 | `--ok` | `--ok` | none | `ok` |
 | `--ok-soft` | `--ok-soft` | none | `okSoft` |
 | `--warn` | `--warn` | none | `warn` |
@@ -503,7 +507,14 @@ On Android the theme has two layers:
 
 Rules:
 
-- `inversePrimary` has no token of its own: it is the `accent` of the other appearance of the same theme.
+- `inversePrimary` has no token of its own: it is the `accent-text` of the other appearance of the same theme.
+- **Why `primary` is `accent-text`, not `accent`.** Material draws `primary` as content on surfaces: the label of
+  a text button, a checked box, a switch that is on, a progress indicator, the cursor and the focused label of a
+  field, the selected tab. A theme's `accent` may be too light for that (Palette light: 2.20:1 on `surface`), while
+  `accent-text` is checked at 4.5:1 on `bg`, `surface` and `surface-2` in every theme. So every stock component is
+  readable without being told its colours, and `onPrimary` is `surface`, which has the same ratio against it. Only
+  the filled main button and the chosen segment take `accent` and `onAccent`, from `SpoolwardenColors`
+  (`07-accessibility.md` CON-8 and CON-9).
 - Any role the table does not name (for example the `…Fixed` roles of newer Material versions) is still set
   explicitly by `toColorScheme()`, never left at Material's baseline purple: container-like roles take
   `accentSoft`, their `on…` roles take `accentText`. A Spoolwarden composable never reads such a role.
@@ -514,7 +525,7 @@ Rules:
   AI" note is `info` on `infoSoft` (the current app uses `primary` and `tertiaryContainer` for these, in
   `ui/spool/SpoolCard.kt` and `ui/add/ReviewScreen.kt`).
 - Text selection: web `::selection { background: var(--accent-soft); color: var(--text); }`; Android
-  `LocalTextSelectionColors provides TextSelectionColors(handleColor = accent, backgroundColor = accentSoft)`.
+  `LocalTextSelectionColors provides TextSelectionColors(handleColor = accentText, backgroundColor = accentSoft)` (the handle is a mark on a surface, so it is `accentText`, not `accent`).
 - Filament colours come from the data on both platforms (foundations section 4.1) and never pass through
   `SpoolwardenColors`.
 
@@ -541,8 +552,8 @@ missing.
 | `--row` | `--row` | `SpoolwardenTheme.density.row` (dp) |
 | `--gap` | `--gap` | `SpoolwardenTheme.density.gap` (dp) |
 | `--top` | `--top` | `SpoolwardenTheme.sizes.top`, the `expandedHeight` of the top bar |
-| `--rail` | `--rail` | `SpoolwardenTheme.sizes.rail`, the width of the `NavigationRail` (section 10.1) |
-| `--tab` | `--tab` | `SpoolwardenTheme.sizes.tab`, the height of the `NavigationBar` without the inset (section 10.1) |
+| `--rail` | `--rail` | `SpoolwardenTheme.sizes.rail`; not used for the `NavigationRail`, which keeps Material's own 80 dp width (section 14) |
+| `--tab` | `--tab` | `SpoolwardenTheme.sizes.tab`; not used for the `NavigationBar`, which keeps Material's own 80 dp height without the inset (section 14) |
 | `--drawer` | `--drawer` | `SpoolwardenTheme.sizes.drawer`, the width of the side drawer (section 10.5) |
 | `--hairline` | `--hairline` | `SpoolwardenTheme.sizes.hairline`, the thickness of dividers and outlines |
 | `--nav-mark` | `--nav-mark` | `SpoolwardenTheme.sizes.navMark`, the current-item mark of the rail (section 10.1) |
@@ -610,7 +621,7 @@ values, as on the web only `var(--s1)` … `var(--s7)` are used.
 
 | Thing | Web | Android |
 |---|---|---|
-| Visible height of buttons, segmented controls, chips | `min-height: var(--ctl)`; `--ctl` is 40 px, 44 px at or below 600 px (Console) | `Modifier.height(SpoolwardenTheme.density.control)`; `control` resolves to `controlPhone` when the window class is Phone |
+| Visible height of buttons, segmented controls, chips | `min-height: var(--ctl)`; `--ctl` is 44 px at 1024 px and below or with a coarse pointer, 40 px on a desktop with a mouse (Console) | `Modifier.height(SpoolwardenTheme.density.control)`; `control` is `controlPhone` at every window size, because the app's pointer is a finger |
 | Visible height of text fields | `min-height: var(--ctl)` | Material's `OutlinedTextField` height, which holds the floating label (section 10.4; section 14) |
 | Hit area | A `::after` layer that extends the control to 44 px (foundations section 4.3) | `LocalMinimumInteractiveComponentSize` stays at Material's 48 dp; every Spoolwarden control applies `Modifier.minimumInteractiveComponentSize()`, so a 40 dp button is touchable over 48 dp |
 | Collection item | `min-height: var(--row)` | A `ListItem` keeps its own minimum height (section 14); any other tappable row uses `heightIn(min = max(density.row, LocalMinimumInteractiveComponentSize.current))`; a row that cannot be tapped uses `density.row` |
@@ -722,7 +733,7 @@ theme keys always matches `tokens.json`:
   var a = null, l = null;
   try { a = localStorage.getItem("spoolwarden.appearance"); l = localStorage.getItem("spoolwarden.look"); } catch (e) {}
   if (a === "light" || a === "dark") r.setAttribute("data-theme", a);
-  if (["console", "workbench", "spool", "panes"].indexOf(l) >= 0) r.setAttribute("data-look", l);
+  if (["console", "workbench", "palette", "panes"].indexOf(l) >= 0) r.setAttribute("data-look", l);
 })(document.documentElement);
 ```
 
@@ -755,7 +766,7 @@ Which themes exist, what they are made of and where the picker sits are in found
 | | Web | Android |
 |---|---|---|
 | Stored where | `localStorage`, key `spoolwarden.look` | The settings store, key `look` |
-| Values | `console`, `workbench`, `spool`, `panes` | `console`, `workbench`, `spool`, `panes` (the `Look` enum) |
+| Values | `console`, `workbench`, `palette`, `panes` | `console`, `workbench`, `palette`, `panes` (the `Look` enum) |
 | A device that has not chosen | The `data-look` the Hub rendered on `<html>` (its default theme, section 15); if none, the CSS falls through to Console on bare `:root` | The Hub's default theme from `GET api/info` (section 15); if unknown, Console |
 | Applied by | `data-look` on `<html>` | `SpoolwardenTheme(look, appearance)` |
 | Token set | The theme's blocks in `tokens.css` (section 3.2) | `SpoolwardenTokens.of(look)` |
@@ -776,14 +787,14 @@ section 10) read the composition locals and pick their arrangement; screens neve
 Phone; on Tablet and Desktop `NavigationRail` for rail, `NavigationDrawer` (Desktop) or `NavigationRail` (Tablet)
 for sidebar, none with a `PrimaryScrollableTabRow` under the top bar for pills, and none with the list pane of
 `ListDetailPaneScaffold` for list (section 10.1). `nav` applies at Tablet and Desktop only. On Phone, Console,
-Workbench and Spool use the bottom bar, and Panes opens on its list of sections and drills in (foundations
+Workbench and Palette use the bottom bar, and Panes opens on its list of sections and drills in (foundations
 section 6).
 
 **`SpoolwardenTheme`.** Hand-written in `SpoolwardenTheme.kt`; the values come from the generated
 `SpoolwardenTokens`.
 
 ```kotlin
-enum class Look { Console, Workbench, Spool, Panes }
+enum class Look { Console, Workbench, Palette, Panes }
 enum class Appearance { Light, Dark, System }
 enum class WindowClass { Phone, Tablet, Desktop }
 
@@ -827,7 +838,7 @@ fun SpoolwardenTheme(look: Look, appearance: Appearance, content: @Composable ()
         LocalDetailStyle provides t.profile.detail,
     ) {
         MaterialTheme(
-            colorScheme = colors.toColorScheme(dark = dark, inversePrimary = other.accent),
+            colorScheme = colors.toColorScheme(dark = dark, inversePrimary = other.accentText),
             typography = t.type.toTypography(),
             shapes = t.radius.toShapes(),
         ) {
@@ -878,11 +889,11 @@ Rules for every Android composable below:
 | Shell (2.1) | `shell`, `shell__main`, `skip` | `SwNav`: a `NavigationSuiteScaffold` around a `Scaffold` | Ground `bg`; insets from the scaffolds; no skip link (section 14) |
 | Top bar (2.2) | `topbar`, `topbar__brand`, `topbar__mark`, `topbar__name`, `topbar__hub`, `topbar__version`, `topbar__tools` | `SwTopBar`: `TopAppBar(expandedHeight = sizes.top)` with `pinnedScrollBehavior()`, and a `HorizontalDivider` under it | Ground `surface`, tonal 0, `e0`, 1 dp `border` below; title `titleLarge` on Tablet and Desktop, `titleMedium` on Phone; Hub name `bodySmall` in `muted`; actions: Hub connection chip and appearance icon (`05-android-app.md` section 2.2); no lock chip and no job indicator (`02-components.md` 3.1, 8.4); insets: status bar and horizontal display cutout |
 | Hub connection chip (web app, `04-web-app.md` 2.2; app, `05-android-app.md` 2.2) | `chip chip--connection` | `SwConnectionChip` on `AssistChip` | Height `space.s6`, touch area 48 dp; shape `r`; border `borderStrong`; leading `StatusLabel` shape; word `labelLarge` |
-| Navigation, `nav` = rail (2.3) | `nav`, `nav__item`, `nav__icon`, `nav__label` | `NavigationRail` (`NavigationSuiteType.NavigationRail`) on Tablet and Desktop | `Modifier.width(sizes.rail)`; container `surface`, 1 dp `border` at the end edge; `NavigationRailItemDefaults.colors` with indicator `accentSoft`, selected icon and label `accentText`, unselected `muted`; labels always shown in `labelSmall`, the current one at `--fw-title`; the 3 dp `accent` mark at the outer edge of the current item drawn with `Modifier.drawBehind`; the two groups split by a 1 dp `border` divider |
+| Navigation, `nav` = rail (2.3) | `nav`, `nav__item`, `nav__icon`, `nav__label` | `NavigationRail` (`NavigationSuiteType.NavigationRail`) on Tablet and Desktop | Material's own width (80 dp); container `surface`, 1 dp `border` at the end edge; `NavigationRailItemDefaults.colors` with indicator `accentSoft`, selected icon and label `accentText`, unselected `muted`; labels always shown in `labelSmall`, the current one at `--fw-title`; the 3 dp `accentText` mark at the outer edge of the current item drawn with `Modifier.drawBehind`; the two groups split by a 1 dp `border` divider |
 | Navigation, `nav` = sidebar (2.3) | the same classes | `PermanentNavigationDrawer` (`NavigationSuiteType.NavigationDrawer`) on Desktop, `NavigationRail` on Tablet | Width `sizes.sideW` (web `--side-w`); items `density.control` high, shape `r`, current item as the rail |
 | Navigation, `nav` = pills (2.3) | the same classes | `PrimaryScrollableTabRow` under the top bar, with a trailing "More" tab opening `SwMenu` | Current pill `accentSoft` / `accentText`; shape `shapes.rL` |
 | Navigation, `nav` = list (2.3) | the same classes | The list pane of `ListDetailPaneScaffold`, items as `ListItem` with `supportingContent` summary and a chevron | Pane width `sizes.listW` (web `--list-w`); the chosen section opens in the pane beside it (Tablet, Desktop) or replaces it (Phone) |
-| Bottom bar (2.4) | `nav` at phone width (`nav__item`, `nav__more`) | `NavigationBar` with `NavigationBarItem` (`NavigationSuiteType.NavigationBar`) on Phone | Height `sizes.tab` plus the navigation-bar inset; container `surface`, 1 dp `border` on top, tonal 0; item colours as the rail; `alwaysShowLabel = true`, `labelSmall`; destinations as `05-android-app.md` section 2.3 |
+| Bottom bar (2.4) | `nav` at phone width (`nav__item`, `nav__more`) | `NavigationBar` with `NavigationBarItem` (`NavigationSuiteType.NavigationBar`) on Phone | Material's own height (80 dp) plus the navigation-bar inset; container `surface`, 1 dp `border` on top, tonal 0; item colours as the rail; `alwaysShowLabel = true`, `labelSmall`; destinations as `05-android-app.md` section 2.3 |
 | More sheet (2.5) | `sheet` with `nav nav--sheet` | `SwMoreSheet`: `SwSheet` holding `ListItem`s | `leadingContent` icon, `headlineContent` name in `bodyLarge` at `--fw-label`, `supportingContent` live summary in `bodySmall` / `muted`, `trailingContent` chevron; current row `accentSoft` / `accentText`; row height is `ListItem`'s own |
 | Page header (2.6) | `page-head`, `page-head__crumbs`, `page-head__title`, `page-head__meta`, `page-head__actions` | `SwPageHeader`: a `Column` under the top bar | The title goes to the top bar; meta row `bodyMedium` in `muted`; actions as `SwButton` (main, then plain), the rest in the top bar's overflow; at the end on Tablet and Desktop, full width below the meta on Phone; 1 dp `border` under it; the breadcrumb is not shown (section 14) |
 | Settings sub-navigation (6.4) | `subnav`, `subnav__link`, `subnav__dirty` | A `LazyColumn` of `ListItem`s, one per group, each opening its own screen; `ListDetailPaneScaffold` on Desktop | The unsaved mark is a small `StatusLabel` of kind warn |
@@ -894,7 +905,7 @@ Rules for every Android composable below:
 | Lock chip, job indicator (3.1, 8.4) | `chip chip--lock`, `chip chip--job` | none | The app is allowed to change things by its pairing and starts no Hub jobs |
 | Unlock dialog (3.2) | `dialog` with `field field--secret` | none | As above |
 | Appearance control (3.3) | `appearance segmented` (wide), `btn btn--ghost btn--icon appearance appearance--menu` (phone) | `SwSegmented` in Settings > Appearance; `SwIconButton` opening `SwMenu` in the top bar | Sun, moon and half-circle icons with the words; the current menu item carries the check icon in `accentText` |
-| Theme picker (3.4) | `theme-picker`, `theme-picker__tile`, `theme-picker__preview` | `SwThemeTile(look)`: a `Card` with `Modifier.selectable(role = Role.RadioButton)` inside `Modifier.selectableGroup()`, holding a drawn preview and a `RadioButton` | Drawn in its own theme's tokens (section 9); chosen tile: 2 dp `accent` border and `accentSoft` ground; name `titleSmall`, line `bodySmall`; a grid on Tablet and Desktop |
+| Theme picker (3.4) | `theme-picker`, `theme-picker__tile`, `theme-picker__preview` | `SwThemeTile(look)`: a `Card` with `Modifier.selectable(role = Role.RadioButton)` inside `Modifier.selectableGroup()`, holding a drawn preview and a `RadioButton` | Drawn in its own theme's tokens (section 9); chosen tile: 2 dp `accentText` border and `accentSoft` ground; name `titleSmall`, line `bodySmall`; a grid on Tablet and Desktop |
 
 ### 10.3 Actions
 
@@ -915,14 +926,14 @@ Rules for every Android composable below:
 
 | Component | Web | Android | Tokens and notes |
 |---|---|---|---|
-| Field, shared rules (5.1) | `field`, `field__label`, `field__control`, `field__hint`, `field__error` | `SwTextField` on `OutlinedTextField` | Material's floating label inside the outline, "(optional)" in the label text; `supportingText` for the hint (`bodySmall` in `muted`) or the error (`bodySmall` in `bad`, starting with the octagon shape); `isError`; shape `r` passed explicitly; `OutlinedTextFieldDefaults.colors` with containers `surface`, unfocused border `borderStrong`, focused border `focus`, error border `bad`, cursor `accent`, label `muted`; text style `type.input`; height is Material's own, not `--ctl` (section 14). An error summary at the top of a form is a `NoticeCard` of kind bad |
+| Field, shared rules (5.1) | `field`, `field__label`, `field__control`, `field__hint`, `field__error` | `SwTextField` on `OutlinedTextField` | Material's floating label inside the outline, "(optional)" in the label text; `supportingText` for the hint (`bodySmall` in `muted`) or the error (`bodySmall` in `bad`, starting with the octagon shape); `isError`; shape `r` passed explicitly; `OutlinedTextFieldDefaults.colors` with containers `surface`, unfocused border `borderStrong`, focused border `focus`, error border `bad`, cursor `accentText`, label `muted`; text style `type.input`; height is Material's own, not `--ctl` (section 14). An error summary at the top of a form is a `NoticeCard` of kind bad |
 | Text field (5.2) | `field` | `SwTextField(singleLine = true)` | `KeyboardOptions(capitalization, autoCorrect = false, keyboardType = Uri or Ascii)`; search with `ImeAction.Search` |
 | Secret field (5.3) | `field field--secret`, `field__action` | `SwSecretField` on `OutlinedSecureTextField` | A trailing `SwButton(kind = Quiet)` saying "Show" / "Hide" switches `textObfuscationMode` (words, because the icon set has no eye: foundations section 10); its content description names the field ("Show Access Code"); `KeyboardType.Password` (`NumberPassword` for codes); never prefilled |
 | Number field with unit (5.4) | `field field--number`, `field__unit` | `SwTextField` with `suffix` | Value in `type.data`; unit in `type.dataSmall`, `muted`; `KeyboardType.Number` or `Decimal` |
 | Select (5.5) | `field field--select`, `field__chevron` | `SwSelect` on `ExposedDropdownMenuBox` with a read-only `SwTextField` and `ExposedDropdownMenu` | Menu styled as `SwMenu`; chevron icon at the small size in `muted` |
-| Toggle (5.6) | `toggle`, `toggle__row`, `toggle__word` | `SwSwitch`: `Switch` in a `Row(Modifier.toggleable(role = Role.Switch))` | Track `accent` / `surface3`, thumb `onAccent` / `muted`, unchecked border `borderStrong`; no thumb icon; the word "On" / "Off" follows in `type.dataSmall`, `accentText` / `muted`; row at least 48 dp |
+| Toggle (5.6) | `toggle`, `toggle__row`, `toggle__word` | `SwSwitch`: `Switch` in a `Row(Modifier.toggleable(role = Role.Switch))` | Track `accentText` / `surface3`, thumb `surface` / `muted`, unchecked border `borderStrong`; no thumb icon; the word "On" / "Off" follows in `type.dataSmall`, `accentText` / `muted`; row at least 48 dp |
 | Segmented choice (5.7) | `segmented`, `segmented__option`; `segmented--wide` | `SwSegmented` on `SingleChoiceSegmentedButtonRow` + `SegmentedButton`; the cards variant as a `Column(Modifier.selectableGroup())` of `Card`s with a `RadioButton` | Height `density.control`; outer shape `r`; active ground `accentSoft`, content `accentText` at `--fw-title`; inactive ground `surface`, content `muted`; border `borderStrong`; each option shows its own icon in place of Material's check mark |
-| Checkbox (5.8) | `check`, `check__input`, `check__label` | `SwCheckbox`: `Checkbox(onCheckedChange = null)` in a `Row(Modifier.toggleable(role = Role.Checkbox))`; `TriStateCheckbox` for select-all | Box `accent` with `onAccent` mark when checked, `borderStrong` when not; the whole row toggles; row at least 48 dp |
+| Checkbox (5.8) | `check`, `check__input`, `check__label` | `SwCheckbox`: `Checkbox(onCheckedChange = null)` in a `Row(Modifier.toggleable(role = Role.Checkbox))`; `TriStateCheckbox` for select-all | Box `accentText` with `surface` mark when checked, `borderStrong` when not; the whole row toggles; row at least 48 dp |
 | File field (5.9) | `field field--file` | `SwFileField`: a `SwButton(kind = Plain)` that launches the photo picker (`PickMultipleVisualMedia`) or `GetContent()` | Thumbnails as 7.6; the app's own camera capture is a screen on the camera surface (10.6) |
 | Text area (5.10) | `field` with a `textarea` | `SwTextField(singleLine = false, minLines = 3, maxLines = 10)` | The character count in `supportingText` |
 | Form group, "panel" (5.11) | `group`, `group__head`, `group__title`, `group__body`, `group__foot` | `SwPanel(title, actions, footer)` on `OutlinedCard`; on the Settings screen a `Column` section | Ground `surface`, border 1 dp `border`, shape `r`, `e0`, tonal 0; header at least 48 dp with the title in `titleMedium` (`--fs-l`, weight 650: foundations section 9); body padding `s4`; footer ground `surface2` with a 1 dp `border` above it, the result line at the start and the buttons at the end |
@@ -962,7 +973,7 @@ Rules for every Android composable below:
 |---|---|---|---|
 | Inline spinner (8.1) | `spinner` | `SwSpinner`: `CircularProgressIndicator(Modifier.size(space.s4), strokeWidth = space.s1 / 2)` | Current content colour; the label "Working…" in its place under reduced motion (section 6.5) |
 | Step progress (8.2) | `steps`, `steps__step` | Step line: `Text` with `SwProgress`; numbered steps: a custom `Column` of numbered rows | As `02-components.md` 8.2 |
-| Determinate bar (8.3) | `progress`, `progress__fill`; `progress--indeterminate` | `SwProgress` on `LinearProgressIndicator` | Height `space.s1`; colour `accent`, solid; track `surface3`; `gapSize = 0.dp`, no stop indicator; indeterminate without a value |
+| Determinate bar (8.3) | `progress`, `progress__fill`; `progress--indeterminate` | `SwProgress` on `LinearProgressIndicator` | Height `space.s1`; colour `accentText`, solid; track `surface3`; `gapSize = 0.dp`, no stop indicator; indeterminate without a value |
 | Background-job strip (8.4) | `job`, `job__head`, `job__log` | `SwJobPanel`: a `Card` docked above the `NavigationBar`, only where `05-android-app.md` shows a Hub job | Ground `surface`, border 1 dp `borderStrong`, shape `r`, elevation `e0` (foundations section 4.3 keeps `e2` for dialogs, sheets, menus and toasts); `SwProgress` along its edge; the log expands as a `SwCodeBlock` |
 | The Hub is restarting (8.5) | `job` with `data-state="restarting"` | none | The connection chip shows "Connecting…" |
 | Inline result (8.6) | `result`, `result--block` | `ResultLine(kind, text)`: a `Row` of the status shape or icon and `Text` | Text `bodyMedium`; shape in the kind's colour; polite live region (`liveRegion = LiveRegionMode.Polite`; web `role="status"`) |
@@ -989,7 +1000,7 @@ and the generated sprite and drawables are proposed additions to the tooling (se
 | | Source | Web | Android |
 |---|---|---|---|
 | Files | `icons/src/<name>.svg` per icon and `icons/status/<shape>.svg` per status shape, names in lower case with hyphens | One generated `icons/sprite.svg` with a `<symbol id="i-<name>" viewBox="0 0 24 24">` per icon and a `<symbol id="s-<shape>" viewBox="0 0 24 24">` per status shape (`02-components.md` 1.1) | One generated `res/drawable/sw_ic_<name>.xml` per icon and `sw_st_<shape>.xml` per status shape (hyphens become underscores) |
-| Drawing | Icons: `viewBox="0 0 24 24"`, `<path>` elements only (circles, lines and rectangles are written as paths), `fill="none"`, `stroke="currentColor"`, `stroke-width="1.75"`, `stroke-linecap="round"`, `stroke-linejoin="round"`. Status shapes: `viewBox="0 0 24 24"`, `<path>` elements only, filled or stroked with `currentColor` | The attributes sit on each `<symbol>`; the colour follows the text through `currentColor` | `<vector android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">` with one `<path>` per source path: `pathData` copied from `d`; a stroked path gets `strokeWidth`, round `strokeLineCap` and `strokeLineJoin` and `strokeColor="#FF000000"`; a filled path gets `fillColor="#FF000000"`; the other colour is `#00000000` |
+| Drawing | Icons: `viewBox="0 0 24 24"`, `<path>` elements only (circles, lines and rectangles are written as paths), `fill="none"`, `stroke="currentColor"`, `stroke-width="1.75"`, `stroke-linecap="round"`, `stroke-linejoin="round"`. Status shapes: `viewBox="0 0 24 24"`, `<path>` elements only, filled or stroked with `currentColor`; the two stroked shapes (`hollow`, `half`) use `stroke-width="2"`, so they hold at badge size. No path of an icon or a status shape sets a colour, a fill or a stroke width of its own other than these; the icon test checks the paths as well as the root | The attributes sit on each `<symbol>`; the colour follows the text through `currentColor` | `<vector android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">` with one `<path>` per source path: `pathData` copied from `d`; a stroked path gets `strokeWidth`, round `strokeLineCap` and `strokeLineJoin` and `strokeColor="#FF000000"`; a filled path gets `fillColor="#FF000000"`; the other colour is `#00000000` |
 | Placed by | | The Hub places the sprite inline as the first child of `<body>` in every page it serves, as `<svg class="sprite" aria-hidden="true" width="0" height="0">` (no `style` attribute: the Content-Security-Policy forbids inline style) | Bundled in the app |
 | Used as | | `<svg class="icon" aria-hidden="true"><use href="#i-printer"/></svg>`; `<svg class="status__shape" aria-hidden="true"><use href="#s-filled"/></svg>` | `SwIcon(R.drawable.sw_ic_printer, contentDescription, size)`, built on `Icon(painterResource(…), tint = LocalContentColor.current)`; `StatusLabel` draws `sw_st_<shape>` the same way. The tint recolours the black drawing as `currentColor` does |
 | Sizes | | `icon` 20 px, `icon--s` 16 px, `icon--l` 28 px, status shape `--s2`, all as the `calc()` expressions of `02-components.md` 1.2 | `SwIcon` `size = Normal` (`space.s4 + space.s1`), `Small` (`space.s4`), `Large` (`space.s5 + space.s1`); status shape as `StatusLabel` (10.6) |
@@ -1020,10 +1031,7 @@ The app's destinations use `overview` (Home), `spool` (Spools), `printer`, `cloc
   `ic_launcher_round.xml` with three layers: `foreground` a 108 dp vector drawable of the product mark (a spool seen
   from the side inside a ring, in the stroke style of foundations section 10, scaled into the central 66 dp safe
   zone) in Console's light `on-accent`; `background` the colour `sw_launcher_bg`, Console's light `accent`;
-  `monochrome` the same mark as a single-colour drawable, so Android 13 and newer can tint it for themed icons. The
-  nightly flavour (and any other pre-release flavour) has its own `ic_launcher.xml` and `ic_launcher_round.xml` in
-  its source set whose background is `sw_launcher_bg_nightly`, Console's light `warn`, so a pre-release app never
-  looks like the stable one in the launcher. The generator writes both colours into `sw_window.xml` (the same values
+  `monochrome` the same mark as a single-colour drawable, so Android 13 and newer can tint it for themed icons. The generator writes the colour into `sw_window.xml` (the same values
   in `values/` and `values-night/`); the manifest sets `android:icon` and `android:roundIcon`. The web app's home-screen icons (section 13) show the same
   mark on the same ground.
 - Status shapes are in the sprite (`s-<shape>`) and in the drawables (`sw_st_<shape>`), drawn by `status__shape` on
@@ -1073,7 +1081,7 @@ storage keys, file and package names) are not part of the catalogue and do not f
 |---|---|---|
 | Form | `window.SW_TEXT = Object.freeze({ … })`, keys and texts as in the source | `<string name="key">…</string>`; plurals as `<plurals name="key">` with `<item quantity="one">` and `<item quantity="other">` |
 | Placeholders | Kept as `{name}`; the shared page script's `t(key, values)` replaces them and picks the plural form with `Intl.PluralRules("en")` | Numbered in order of first appearance: `{count}` becomes `%n$d`, every other placeholder `%n$s`; a comment above the string lists the order (`<!-- 1=printer -->`); read with `stringResource` / `pluralStringResource` |
-| Escaping | JSON string escaping | `'` and `"` escaped with a backslash, `&` and `<` as XML entities, a literal `%` as `%%`, a leading `@` or `?` escaped |
+| Escaping | JSON string escaping | `'` and `"` escaped with a backslash, `&` and `<` as XML entities, a leading `@` or `?` escaped, a backslash and a line break escaped, leading, trailing and double spaces kept by quoting. A literal `%` is written `%%` in a string that has placeholders; a string without placeholders keeps the bare `%` and is marked `formatted="false"`, because Android reads it without formatting |
 | Loaded | With `<script src defer>` after `theme-init.js` | Bundled; it is the app's only string file, so every text the app shows, including the app's name, comes from it |
 
 - Proposed test 7 of section 3.4 parses both generated files and compares them with the source: same keys, same
@@ -1086,13 +1094,25 @@ storage keys, file and package names) are not part of the catalogue and do not f
 - Text that arrives from the Hub while running (a printer's name, a message about one specific failure) is shown as
   it arrives and is not in the catalogue.
 
+**One key per meaning, one text per key.** Where two interfaces show the same thing they read the same key, so
+no key carries an interface in its name (`_hub`, `_web`, `_app`). Two keys may hold the same text only when they
+mean different things ("System" as the navigation group and "System" as the appearance choice); keys that mean the
+same are merged (the status words are the `status_…` keys, used by every badge and chip).
+
+**A label never carries its unit.** A field's label is the bare name ("Nozzle", "Net weight", "Density",
+"Weight with spool"); the unit is shown inside the field (`02-components.md` section 5.4; the `suffix` of the text
+field on Android) and comes from its own key (`unit_g`, `unit_c`, `unit_g_cm3`, `unit_mm3_s`, `unit_days`). In a
+key-value list the unit follows the value ("1000 g", "210 °C"). "(optional)" stays in the label, alone in its
+brackets. A format a person must type goes in the placeholder or the hint ("e.g. 190-220"; for a colour the hint key
+`common_field_colour_hint`, "A hex colour, like #2B2B2E"), not in the label.
+
 **Shared wording.** One term per thing, in every interface (Hub page, web app, app and the `spoolwarden` command)
 and in the user documents. Each term is one catalogue key (`common_…` where several screens use it), so the interfaces
 cannot drift apart; the words lint (`07-accessibility.md` AUT-7) lists the words in the right-hand column.
 
 | Thing | Term | Never |
 |---|---|---|
-| What a spool weighs on a scale, filament and empty spool together | "Weight with spool" (field label "Weight with spool (g)") | "Gross weight", "Weight on the scale", "scale weight" |
+| What a spool weighs on a scale, filament and empty spool together | "Weight with spool" (also the field's label; the unit g is shown inside the field) | "Gross weight", "Weight on the scale", "scale weight" |
 | Repeating a request that failed | "Try again" | "Retry" |
 | Hint under an optional field that the Hub fills in by itself when it is left empty (location, Bambu Studio parent, density) | "Leave empty to choose automatically." | "Blank = automatic", "Empty = chosen automatically", "Blank = <value>" |
 | Hint under Weight with spool | "Leave empty for a full spool." | "Blank = full" |
@@ -1150,12 +1170,13 @@ difference not listed is a defect.
 |---|---|---|---|
 | System font | The device's own: San Francisco on iPhone and Mac, Segoe UI on Windows, Roboto in browsers on Android | Roboto, or the phone maker's system font | By design: system fonts only, nothing downloaded (foundations sections 1 and 4.2). Sizes, weights and line heights are equal. |
 | Odd weights (650) | Shown at 650 where the font is variable, else the nearest weight | The same rule | The system font decides |
-| Spool's rounded stack | `ui-rounded` and the stack of foundations section 6.3 | `FontFamily.Default` | Android has no system rounded font; downloading one is not allowed |
+| Palette's rounded stack | `ui-rounded` and the stack of foundations section 6.3 | `FontFamily.Default` | Android has no system rounded font; downloading one is not allowed |
 | Monospace font | `ui-monospace` stack | `FontFamily.Monospace` | System fonts only. Tabular figures on both. |
 | Back | The browser's back follows the address (`#printers/<id>`) | System Back (gesture or button) and predictive back (`android:enableOnBackInvokedCallback="true"`): it first closes the topmost menu, tooltip, dialog, sheet or drawer; then returns to the previous place, the same places the web address records; at a bottom-bar destination other than the first it goes to the first; at the first it leaves the app. With unsaved edits it asks first (foundations principle 4). | Each platform's own back control |
 | Breadcrumb | Shown above the page title | An Up button in the top bar named "Back to <parent>" | The Android top bar is where people look for it |
 | Pickers | Native `<select>` (a wheel on iPhone), the photo sheet of `<input type="file">`, the Web Share sheet where the browser offers it, else a download | `SwMenu`, CameraX in the app and the system photo picker, the Android share sheet | Each platform's own picker is the one people know |
 | Touch and hover feedback | Hover `--surface-2`, pressed `--surface-3` on devices with a pointer | The platform's press ripple, coloured from the content colour | Native feedback. States that last (selected, current, expanded) use the same tokens on both. |
+| Bottom bar height and rail width | `--tab` 60 px, `--rail` 76 px | Material's own 80 dp for both | `NavigationBar` and `NavigationRail` lay out their indicator and labels for that size; a smaller size would need a hand-drawn bar or would clip the indicator. Destinations, order, icons, labels and colours are the same. |
 | Minimum touch size | 44 px | 48 dp for controls, tappable rows and menu items; icon buttons are 48 dp | Each platform's guideline (foundations principle 7). Visible heights of buttons and segmented controls are equal (`--ctl`). |
 | Switch | 40 × 24 px track | Material `Switch`, 52 × 32 dp | Material's switch geometry; the colours and the On/Off word are the same |
 | Window class edges | Phone up to 600 px, Tablet 601 to 1024 px, Desktop above | Material's classes: compact below 600 dp, medium to 839 dp, expanded from 840 dp | Foundations section 7 pairs Phone, Tablet and Desktop with these classes. A window from 840 to 1024 wide is Desktop in the app and Tablet in a browser. |

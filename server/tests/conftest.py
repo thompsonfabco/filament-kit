@@ -53,6 +53,15 @@ def fake_reader():
 
 
 @pytest.fixture(autouse=True)
+def _one_job_per_test(monkeypatch):
+    """Each test is its own job for steps.py: no step owner in the environment and no Steps made yet (a real job is
+    one process; the tests run many commands in one)."""
+    from filament_kit import steps
+    monkeypatch.delenv(steps.ENV, raising=False)
+    monkeypatch.setattr(steps, "_made_here", False)
+
+
+@pytest.fixture(autouse=True)
 def _state_dir(tmp_path, monkeypatch):
     """Tests that read the printer registry indirectly (camera sources pin TLS leaves through it) never touch the
     real /var/lib/filament-kit; a test's own FK_STATE still wins."""

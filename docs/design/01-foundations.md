@@ -100,11 +100,11 @@ Token names are the same in every theme. A theme (section 6) supplies the values
 | `--muted` | Secondary text, placeholders | `#545e68` | `#98a4ae` |
 | `--border` | Hairlines between things | `#d6dce1` | `#253039` |
 | `--border-strong` | Outlines of controls (3:1 against the surface) | `#7d8892` | `#66737e` |
-| `--accent` | Main action fill, active navigation mark | `#00788a` | `#3cccd8` |
+| `--accent` | Fill of the main action, always behind a label in `--on-accent` | `#00788a` | `#3cccd8` |
 | `--accent-hover` | Hover on accent fill | `#00636f` | `#6bdbe4` |
 | `--on-accent` | Text and icons on `--accent` | `#ffffff` | `#04262b` |
 | `--accent-soft` | Selected chip, active navigation ground | `#e0f2f4` | `#0e2a30` |
-| `--accent-text` | Links and accent-coloured text on surfaces | `#006474` | `#5fd6e0` |
+| `--accent-text` | Everything accent-coloured that stands on a surface: links, icons, marks, a checked box, a switch that is on, a progress fill | `#006474` | `#5fd6e0` |
 | `--ok` / `--ok-soft` | Good state: text or icon / its ground | `#1a7a3c` / `#e3f3e8` | `#5ccf88` / `#0f2619` |
 | `--warn` / `--warn-soft` | Needs attention | `#8a5700` / `#fbf0d5` | `#efb946` / `#2a210e` |
 | `--bad` / `--bad-soft` | Error, destructive | `#b42519` / `#fbe7e5` | `#ff7d73` / `#311816` |
@@ -116,6 +116,10 @@ Token names are the same in every theme. A theme (section 6) supplies the values
 
 Rules:
 - Semantic colours (`ok`, `warn`, `bad`, `info`) are separate from the accent and mean the same in every theme.
+- `--accent` is only ever the fill of a part that carries its own label or icon in `--on-accent` (the main button,
+  the chosen part of a segmented choice, the skip link). A theme may make it light, as Palette does, so it is never text, an icon, an
+  outline, or a mark that has to be seen on its own against a surface. All of those use `--accent-text`, which is
+  checked at 4.5:1 on `--bg`, `--surface` and `--surface-2` in every theme.
 - Text pairs must reach 4.5:1: `--text`, `--muted`, `--accent-text`, `--ok`, `--warn`, `--bad`, `--info` on `--bg`,
   `--surface` and `--surface-2`; each semantic colour on its own `-soft` ground; `--on-accent` on `--accent`;
   `--on-bad` on `--bad`. Control outlines and focus rings must reach 3:1 against what is behind them. A test
@@ -152,7 +156,7 @@ No web fonts are downloaded; a theme may only choose among system font stacks.
 |---|---|
 | Space | `--s1` 4 · `--s2` 8 · `--s3` 12 · `--s4` 16 · `--s5` 24 · `--s6` 32 · `--s7` 48 (px). Only these steps. |
 | Rhythm | `--row` (height of a collection row: 48 px in Console) · `--gap` (space between items of a group: `--s3` in Console). Themes set these two for density. |
-| Control height | `--ctl` 40 px on wide screens, 44 px at 600 px and below. A control shorter than 44 px gets an invisible hit area that reaches 44 px. |
+| Control height | `--ctl` 44 px at 1024 px and below and wherever the main pointer is coarse (a finger); 40 px only on desktop width with a fine pointer (a mouse). There, a button or chip shorter than 44 px gets an invisible hit area that reaches 44 px; a text field is 40 px tall, which a mouse does not need larger. |
 | Chrome sizes | `--top` 52 px (top bar) · `--rail` 76 px (navigation rail) · `--tab` 60 px (phone bottom bar, plus the safe-area inset) |
 | Radius | `--r-s` 4 px (chips, small parts) · `--r` 6 px (controls, cards) · `--r-l` 10 px (dialogs, sheets) |
 | Elevation | `--e0` none: things are separated by hairlines, not shadows. `--e2`: dialogs, sheets, drawers, menus and toasts only. |
@@ -197,10 +201,10 @@ Four themes ship; **Console is the default.**
 |---|---|---|---|---|
 | **Console** (default) | Dense, technical, hairlines, monospace data, teal accent, 6 px radius | Icon rail with small labels | Table rows | Row expands in place; long forms open a side drawer |
 | **Workbench** | Calm app shell, cards on a tinted ground, indigo accent, 12 px radius | Labelled sidebar (rail on tablets) | Cards in a grid | Card expands; dialogs for forms |
-| **Spool** | Colour-led and roomy, spool rings, large type and buttons, warm amber accent, 20 px radius | Pill tabs in the top bar | Large tiles with a spool ring | Full-height sheet, one step at a time |
+| **Palette** | Colour-led and roomy, spool rings, large type and buttons, warm amber accent, 20 px radius | Pill tabs in the top bar | Large tiles with a spool ring | Full-height sheet, one step at a time |
 | **Panes** | Flat grouped lists like a phone's settings, green accent, 10 px radius | A list of sections in the left pane | Rows with a chevron | Its own pane (two or three panes side by side) |
 
-On phones Console, Workbench and Spool use a bottom bar; Panes opens on the list of sections and drills in.
+On phones Console, Workbench and Palette use a bottom bar; Panes opens on the list of sections and drills in.
 
 ### 6.1 What a theme is made of
 
@@ -209,7 +213,7 @@ On phones Console, Workbench and Spool use a bottom bar; Panes opens on the list
 2. **A layout profile**: one choice from each of three fixed sets. Components are written once and read the
    profile; a theme never brings its own markup or script.
 
-| Profile key | Choices | Console | Workbench | Spool | Panes |
+| Profile key | Choices | Console | Workbench | Palette | Panes |
 |---|---|---|---|---|---|
 | `nav` (wide screens) | `rail` · `sidebar` · `pills` · `list` | rail | sidebar | pills | list |
 | `collection` | `table` · `cards` · `tiles` · `rows` | table | cards | tiles | rows |
@@ -217,7 +221,7 @@ On phones Console, Workbench and Spool use a bottom bar; Panes opens on the list
 
 ### 6.2 How a theme is applied
 
-- Web: `<html data-look="console">` (or `workbench`, `spool`, `panes`). Missing or unknown means Console. One
+- Web: `<html data-look="console">` (or `workbench`, `palette`, `panes`). Missing or unknown means Console. One
   stylesheet holds the components; each theme adds a short block that redefines tokens under
   `:root[data-look="…"]` (light), and the two dark selectors of section 5 with `[data-look="…"]` added. Layout
   profiles are CSS only, keyed on the same attribute: the markup of the navigation, of a collection and of a detail
@@ -236,10 +240,10 @@ On phones Console, Workbench and Spool use a bottom bar; Panes opens on the list
 
 ### 6.3 The other three token sets
 
-The full values for Workbench, Spool and Panes, light and dark, are in `tokens/tokens.json` and shown in
-`mockups/a-workbench.html`, `mockups/b-spool.html` and `mockups/d-panes.html`. Their light accents: Workbench
-`#3949C0` (white text on it), Spool `#F59A2E` (dark text `#2A1806` on it; links and accent text use `#9A4700`),
-Panes `#1b7a43` (white text on it). Spool uses a rounded system stack
+The full values for Workbench, Palette and Panes, light and dark, are in `tokens/tokens.json` and shown in
+`mockups/a-workbench.html`, `mockups/b-palette.html` and `mockups/d-panes.html`. Their light accents: Workbench
+`#3949C0` (white text on it), Palette `#F59A2E` (dark text `#2A1806` on it; links and accent text use `#9A4700`),
+Panes `#19763f` (white text on it). Palette uses a rounded system stack
 (`ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", "Segoe UI", system-ui, …`) and a type scale one step
 larger than Console; Workbench and Panes use `--fs-b` 0.9375rem (15 px) as body size.
 
@@ -247,7 +251,7 @@ larger than Console; Workbench and Panes use `--fs-b` 0.9375rem (15 px) as body 
 
 Console first, complete, with the `data-look` hook and the token structure in place. Then the Appearance group
 with the theme picker showing Console only as selected and the others arriving one by one: Workbench (tokens plus
-`sidebar` and `cards`), Spool (tokens plus `pills`, `tiles`, `sheet`), Panes (tokens plus `list`, `rows`, `pane`;
+`sidebar` and `cards`), Palette (tokens plus `pills`, `tiles`, `sheet`), Panes (tokens plus `list`, `rows`, `pane`;
 the most work, because of the drill-in navigation). See `09-implementation-order.md`.
 
 ## 7. Layout and breakpoints
@@ -328,7 +332,10 @@ except progress indicators. Everything respects `prefers-reduced-motion`.
 5. Every colour, size and duration comes from a token. A check fails the build on a literal colour in a component
    rule.
 6. Every page works by keyboard alone and with a screen reader (`07-accessibility.md`).
-7. Fast on a phone: the shared stylesheet stays under 40 KB and the shared script under 60 KB uncompressed; no
-   layout shift after the first paint; lists of more than 50 items are paged or virtualised.
+7. Fast on a phone: the shared core stylesheet stays under 40 KB and the shared core script under 60 KB
+   uncompressed. Parts only some pages need (the job strip, photos and the photo viewer) are separate files of
+   at most 30 KB each, loaded only by those pages; no page loads more than 80 KB of styles or 120 KB of script in
+   all, its own included. No layout shift after the first paint; lists of more than 50 items are paged or
+   virtualised.
 8. No owner data in examples, placeholders, screenshots or tests: example addresses use `192.0.2.x`,
    `printer.local`, `*.example`.

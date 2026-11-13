@@ -268,7 +268,7 @@ screen readers' quick navigation; Ctrl+K stays the documented shortcut and `/` c
 **What the person sees.** Settings > Appearance offers four themes with preview tiles; choosing one changes the
 look at once on that device (foundations section 6).
 
-**Why.** Chosen as part of the design: Console is the default and Workbench, Spool and Panes stay available as
+**Why.** Chosen as part of the design: Console is the default and Workbench, Palette and Panes stay available as
 themes. This entry records the cost and the parity only; the behaviour, the order of building and the token rules
 are foundations sections 6.1 to 6.4.
 
@@ -594,8 +594,7 @@ name are in backticks.
 | `Install mode set` (Setup) | app N, web app N | B4 shows it. Left: changing the Setup. |
 | Backup now / list / download | app N, web app N | B4 shows the last backup. Left: making and downloading backups (the zip holds every secret). |
 | Restore from backup | app N, web app N | Left: a restore replaces the Hub's data and runs as a job on the Hub. |
-| Update: check / install / rollback / channel | app P, web app N | B4 shows the Hub's versions; the app's own update check is `05-android-app.md` 12.4. Left: installing Hub updates and rolling back. |
-| Nightly channel | app N, web app N | B4 shows the channel. Left: switching it. |
+| Update: check / install / rollback | app P, web app N | B4 shows the Hub's versions; the app's own update check is `05-android-app.md` 12.4. Left: installing Hub updates and rolling back. |
 | Anthropic key set/check/remove | app N, web app N | B4 shows set or not set. Left: secrets are typed on the Hub page or at the command line only. |
 | `Web passphrase / library token` | app N, web app N, command line P | Command line: closed by `06-command-line.md` 3.2 (`catalog token`). Left in the apps: secrets. |
 | Setup code show / new / revoke trusted computers | app N, web app N | Left: the setup code is shown at the Hub's own terminal on purpose. |

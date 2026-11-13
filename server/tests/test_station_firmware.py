@@ -22,6 +22,9 @@ class Done:
         self.returncode, self.stdout, self.stderr = code, out, err
 
 
+_real_sleep = time.sleep       # the fakes keep a real sleep, whatever panel's own clock is patched to
+
+
 class FakeSerial:
     """pyserial stand-in: each port in VERSIONS says HELLO <version> on open; the rest stay silent."""
     VERSIONS: dict[str, str] = {}
@@ -38,7 +41,7 @@ class FakeSerial:
             self._lines.append(b"HELLO intake-panel %s\r\n" % self.VERSIONS[self.port].encode())
 
     def readline(self):
-        time.sleep(0.005)
+        _real_sleep(0.005)          # still yields: a silent port waits out the panel's deadline without spinning
         return self._lines.pop(0) if self._lines else b""
 
     def write(self, data):
@@ -57,7 +60,7 @@ def fw(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(Serial=FakeSerial))
     monkeypatch.setattr(st, "usb_ttys", lambda: ["/dev/ttyUSB0"])
     monkeypatch.setattr(st, "panel_ttys", lambda: ["/dev/ttyACM0", "/dev/ttyACM1"])
-    monkeypatch.setattr(panel.time, "sleep", lambda s: None)
+    monkeypatch.setattr(panel, "time", types.SimpleNamespace(sleep=lambda s: None, time=time.time))   # panel only: other threads keep the real sleep
     monkeypatch.setitem(st.ports, "panel", None)
     monkeypatch.setitem(st.ports, "panel_version", None)
     monkeypatch.setitem(st.ports, "panel_chip", None)

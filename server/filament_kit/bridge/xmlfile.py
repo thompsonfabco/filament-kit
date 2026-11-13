@@ -99,6 +99,7 @@ class E:
     children: dict = field(default_factory=dict)     # tag -> E
     text: bool = False                               # element carries text (checked non-empty)
     once: tuple = ()                                 # child tags allowed at most once
+    ignored: tuple = ()                              # child tags of an older file format: skipped without a warning
     text_check: Callable[[str], object] | None = None   # extra check of the text (raise ValueError)
 
 
@@ -140,6 +141,8 @@ def check(el, spec: E, path: str, errors: list[str], warnings: list[str]) -> Non
         if not isinstance(child.tag, str):
             continue
         sub = spec.children.get(child.tag)
+        if sub is None and child.tag in spec.ignored:
+            continue
         if sub is None:
             warnings.append(f"{where(el, path)}: unknown element <{child.tag}> ignored")
             continue

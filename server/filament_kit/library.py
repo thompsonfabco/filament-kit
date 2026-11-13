@@ -948,13 +948,16 @@ def _file_sha(path: Path) -> str | None:
         return None
 
 
-def update(url: str | None = None, *, opener=None, now: float | None = None, scheduled: bool = False) -> UpdateResult:
+def update(url: str | None = None, *, opener=None, now: float | None = None, scheduled: bool = False,
+           step=None) -> UpdateResult:
     """Fetch the index at `url` (default: config, else DEFAULT_LIBRARY_URL) and swap to it only if every entry
     downloads, matches its sha256, validates and sits at its own path. Raises LibraryError for an unusable URL;
     every other failure is returned in `error` (and recorded in last_check.json) with the current version kept.
     `opener` (urlopen-like) defaults to one that speaks only http(s) and refuses redirects away from https.
     A `scheduled` run installs nothing at or below the version a rollback left (`rolled_back_from`) and says so in
-    `held_from`; an update asked for by hand installs it."""
+    `held_from`; an update asked for by hand installs it. `step(sentence)` is told when each of the first three steps of
+    the job starts (steps.py): the download, its check, putting it in place (not reached when nothing is new)."""
+    step = step or (lambda _text: None)
     base = _check_url(configured_url() if url is None else url)
     now = time.time() if now is None else now
     with _locked():
@@ -968,9 +971,11 @@ def update(url: str | None = None, *, opener=None, now: float | None = None, sch
         note = None
         try:
             archive = None
+            step("Downloading the Filament Catalog")
             if _is_archive(base):
                 table, note = _signed_sums(fetch, base)
                 data = fetch.get(base, "library archive", ARCHIVE_LIMIT)
+                step("Checking its signature")
                 if table is not None:
                     _check_archive(table, base, data)
                 archive = _read_archive(data, fetch.remaining)
@@ -979,6 +984,7 @@ def update(url: str | None = None, *, opener=None, now: float | None = None, sch
                 note = (f"{base} is a folder URL: it is not signature-checked (only the hashes in its index.json "
                         "are)")
                 raw = fetch.get(base + "index.json", "index.json", INDEX_LIMIT)
+                step("Checking its signature")
             idx, rows = _parse_index(raw, cur_version)
             new_rows = {r["path"]: r["sha256"] for r in rows}
             # what this kit dropped from a signed library is on disk changed: compare with what was published, and this kit
@@ -995,6 +1001,7 @@ def update(url: str | None = None, *, opener=None, now: float | None = None, sch
             kept: list[dict] = []
             dropped: list[str] = []
             fields_gone = 0
+            step("Putting it in place")
             name = _new_dir_name(idx["library_version"], now)
             tmp = _dir() / "versions" / (name + ".tmp")
             make_state_dir(tmp)

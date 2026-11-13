@@ -19,6 +19,9 @@ class SerialTimeoutException(Exception):
     pass
 
 
+_real_sleep = time.sleep       # the fakes keep a real sleep, whatever panel's own clock is patched to
+
+
 class FakeSerial:
     """pyserial stand-in: each port in HELLOS answers that line on open; the rest stay silent."""
     HELLOS: dict[str, bytes] = {}
@@ -36,7 +39,7 @@ class FakeSerial:
             self._lines.append(self.HELLOS[self.port] + b"\r\n")
 
     def readline(self):
-        time.sleep(0.005)
+        _real_sleep(0.005)          # still yields: a silent port waits out the panel's deadline without spinning
         return self._lines.pop(0) if self._lines else b""
 
     def write(self, data):
@@ -64,7 +67,7 @@ def ports(tmp_path, monkeypatch):
                                                       "/dev/ttyUSB*": ["/dev/ttyUSB0"]}[pat])
     monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(
         Serial=FakeSerial, SerialTimeoutException=SerialTimeoutException))
-    monkeypatch.setattr(panel.time, "sleep", lambda s: None)
+    monkeypatch.setattr(panel, "time", types.SimpleNamespace(sleep=lambda s: None, time=time.time))   # panel only: other threads keep the real sleep
     for k in ("panel", "panel_version", "panel_chip", "nfc"):
         monkeypatch.setitem(st.ports, k, None)
     monkeypatch.setitem(st.panel, "ser", None)

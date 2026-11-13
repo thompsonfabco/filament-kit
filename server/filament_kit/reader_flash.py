@@ -226,9 +226,12 @@ class Result:
 
 
 def setup(port: str, settings: dict, *, reflash: bool = False, device: Device | None = None, run=subprocess.run,
-          say=print) -> Result:
+          say=print, step=None) -> Result:
     """The whole USB flow for one board: the kit's image unless it already runs that build (or newer), the settings,
-    then the reader's own report of its first start. `settings` is the FK-SET JSON (settings.h)."""
+    then the reader's own report of its first start. `settings` is the FK-SET JSON (settings.h). `step(sentence)` is
+    told when each of the steps 2 to 5 of the job starts (steps.py); the caller has said step 1, "Finding the board",
+    and this asks the board in it."""
+    step = step or (lambda _text: None)
     dev = device or Device(port)
     found = bundled_image()
     if found is None:
@@ -237,25 +240,38 @@ def setup(port: str, settings: dict, *, reflash: bool = False, device: Device | 
     flashed = False
     now = dev.hello(wait=4.0)
     if reflash or now is None or now.build < build:
+        step("Writing the program")
         say(f"Writing the Printer Station firmware (build {build}) to {port}...")
         if not flash(port, image, run=run):
             return Result(False, f"writing the firmware to {port} failed (esptool). Unplug and replug the board, "
                                  "then run this again.")
         flashed = True
+        step("Checking what was written")
         now = dev.hello(wait=20.0)
         if now is None or now.build != build:
             return Result(False, f"{port} was written but does not answer as the Printer Station"
                                  + (f" (it reports build {now.build})" if now else "")
                                  + ". Unplug and replug it, then run this again.", flashed)
-    else:
+    else:       # steps 2 and 3 keep their places: nothing is written, the settings are
+        step("Keeping the program that is on the board")
+        step("Writing the settings")
         say(f"The board on {port} already runs Printer Station build {now.build}: writing its settings only.")
     try:
         dev.send_settings(settings)
     except FlashError as e:
         return Result(False, str(e), flashed)
+    step("Joining the Wi-Fi")
     say("Settings written; the reader is restarting and joining the Wi-Fi...")
-    # done once it tried: no Wi-Fi means it never tries the kit, so server stays "-"
-    h = dev.hello(wait=60.0, done=lambda h: h.configured and (h.wifi == "fail" or (h.wifi != "-" and h.server != "-")))
+    reaching = []
+
+    def tried(h) -> bool:
+        # done once it tried: no Wi-Fi means it never tries the kit, so server stays "-"
+        if h.configured and h.wifi == "ok" and not reaching:
+            reaching.append(True)
+            step("Reaching the Hub")
+        return h.configured and (h.wifi == "fail" or (h.wifi != "-" and h.server != "-"))
+
+    h = dev.hello(wait=60.0, done=tried)
     ssid = settings.get("ssid", "")
     if h is None:
         return Result(False, "the reader took its settings but did not report back within a minute. Watch its "

@@ -7,6 +7,7 @@ import urllib.error
 import pytest
 
 from filament_kit import cli, config, library
+from step_lines import sentences
 
 
 @pytest.fixture(autouse=True)
@@ -223,3 +224,31 @@ def test_status_prints_sanitized_url(capsys):
     out = capsys.readouterr().out
     assert "url: https://mirror.example/lib/\n" in out
     assert "s3cret" not in out and "pw@" not in out and "frag" not in out
+
+
+def test_the_update_command_writes_its_four_steps(capsys, monkeypatch, rebuilds):
+    def update(url=None, step=None, **k):
+        for text in ("Downloading the Filament Catalog", "Checking its signature", "Putting it in place"):
+            step(text)
+        return library.UpdateResult(True, 3, 1, None)
+    monkeypatch.setattr(library, "update", update)
+    assert cli.main(["library", "update"]) == 0
+    assert sentences(capsys.readouterr().out, 4) == [
+        "Downloading the Filament Catalog", "Checking its signature", "Putting it in place", "Asking for a preset build"]
+
+
+def test_an_update_with_nothing_new_stops_after_two_steps(capsys, monkeypatch, rebuilds):
+    def update(url=None, step=None, **k):
+        step("Downloading the Filament Catalog")
+        step("Checking its signature")
+        return library.UpdateResult(False, 2, 0, None)
+    monkeypatch.setattr(library, "update", update)
+    assert cli.main(["library", "update"]) == 0
+    assert len(sentences(capsys.readouterr().out, 4, whole=False)) == 2 and rebuilds == []
+
+
+def test_the_rollback_command_writes_its_two_steps(capsys, monkeypatch, rebuilds):
+    monkeypatch.setattr(library, "rollback", lambda: 3)
+    assert cli.main(["library", "rollback"]) == 0
+    assert sentences(capsys.readouterr().out, 2) == [
+        "Putting the previous Filament Catalog back", "Asking for a preset build"]

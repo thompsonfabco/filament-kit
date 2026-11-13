@@ -25,13 +25,13 @@ Contents: 1 Baseline · 2 App shell · 3 Shared parts and states · 4 Pairing ·
 | Icons | Spoolwarden's own vector drawables (F10). No Material icon library. |
 | Strings | Every user-visible text is in `res/values/strings.xml` (section 15). |
 | Units on screen | dp for layout; `sp` derived from the type tokens so the phone's font size setting scales all text. |
-| App label | "Spoolwarden" (nightly builds: "Spoolwarden Nightly"). |
-| Launcher icon | An adaptive icon (`android:icon` and `android:roundIcon`): foreground the Spoolwarden mark (a spool seen from the side inside a ring) drawn in the icon style of F10 in `--on-accent`, inside the adaptive icon's safe zone; background Console's light `--accent`; a monochrome layer of the same mark for themed icons. Nightly builds (and any other pre-release flavour) use Console's light `--warn` as the background, so the two apps tell apart in the launcher. Files and colours: `08-platform-mapping.md` section 11. |
+| App label | "Spoolwarden". |
+| Launcher icon | An adaptive icon (`android:icon` and `android:roundIcon`): foreground the Spoolwarden mark (a spool seen from the side inside a ring) drawn in the icon style of F10 in `--on-accent`, inside the adaptive icon's safe zone; background Console's light `--accent`; a monochrome layer of the same mark for themed icons. Files and colours: `08-platform-mapping.md` section 11. |
 | Threads | No file, database or network read on the main thread: assets (the Licences texts of 12.5 included), DataStore and every Hub request are read in a coroutine on `Dispatchers.IO` (`produceState`, or the screen's view model) and the screen shows a skeleton until they arrive. |
 
 Spacing, size and radius values in this document are the tokens of F4.3 read as dp: `--s1` 4 dp, `--s2` 8 dp,
 `--s3` 12 dp, `--s4` 16 dp, `--s5` 24 dp, `--s6` 32 dp, `--s7` 48 dp; `--r-s` 4 dp, `--r` 6 dp, `--r-l` 10 dp;
-`--top` 52 dp (plus the status bar inset), `--rail` 76 dp, `--tab` 60 dp (plus the gesture inset).
+`--top` 52 dp (plus the status bar inset). The bottom bar and the rail keep Material's own sizes (80 dp high, 80 dp wide, plus the insets), not `--tab` and `--rail`: an accepted difference of `08-platform-mapping.md` section 14.
 
 Font weights are `--fw-text`, `--fw-label` and `--fw-title` (F4.2); no other weight is used.
 
@@ -39,12 +39,12 @@ Fixed dimensions that are not steps of the space scale are entries of the `size`
 them through `SpoolwardenTheme.sizes` (`08-platform-mapping.md`); no component writes them inline. "Existing" entries
 are in `tokens.json` today; "new" entries are `size` entries this app needs, added to every theme with the values
 given here (the web reads the same entries where it draws the same part). The other themes scale with their type
-and density: Workbench and Panes one step roomier than Console where a size holds text, Spool larger again, and
+and density: Workbench and Panes one step roomier than Console where a size holds text, Palette larger again, and
 its swatches larger still because the spool colour is that theme's main mark. Collection, settings and slot rows use `ListItem`'s own minimum height (56 dp), the
 accepted difference of `08-platform-mapping.md` for rows; it is not a size entry. Selection outlines (2 dp) are border
 widths, not sizes.
 
-| `size` entry | Console | Workbench | Spool | Panes | Status | Used for |
+| `size` entry | Console | Workbench | Palette | Panes | Status | Used for |
 |---|---|---|---|---|---|---|
 | `hairline` | 1 dp | 1 dp | 1 dp | 1 dp | existing | Hairlines between rows and around panels |
 | `thumb` | 96 dp | 96 dp | 96 dp | 96 dp | existing | Photo thumbnails in strips (6.2, 10.2) |
@@ -63,7 +63,7 @@ widths, not sizes.
 | `list-pane` | 360 dp | 360 dp | 400 dp | 360 dp | new | Minimum width of the list pane of `ListDetailPaneScaffold` (2.1) |
 
 In `tokens.json` the values are written in px (`"label-col": "118px"`); 1 px in the file is 1 dp in the app. In
-Spool the row swatch is drawn as a ring (the spool seen from the side); in the other themes it is a rounded
+Palette the row swatch is drawn as a ring (the spool seen from the side); in the other themes it is a rounded
 rectangle with `--r-s` corners.
 
 ---
@@ -127,8 +127,8 @@ When the title and the chip do not fit, the title shortens first (ellipsis). The
 ### 2.3 Destinations (bottom navigation and rail)
 
 Component: **bottom bar** and **navigation rail** (F8, `02-components.md` "Navigation"), the same component the web
-app uses with its own destinations. `NavigationBar` height `--tab` plus the gesture inset; `NavigationRail` width
-`--rail`. Active item: `--accent-soft` indicator, `--accent-text` icon and label, label weight `--fw-label`; inactive items
+app uses with its own destinations. `NavigationBar` and `NavigationRail` keep Material's own height and width (80 dp, plus the insets), so their
+indicator and label layout stay intact. Active item: `--accent-soft` indicator, `--accent-text` icon and label, label weight `--fw-label`; inactive items
 `--muted`. Labels are always shown (`alwaysShowLabel = true`), `--fs-xs`.
 
 | Order | Label | Icon | Root screen | Badge |
@@ -144,8 +144,8 @@ that destination, pops back to its root. Every destination root is one tap away 
 
 A Feature switched off on the Hub never removes a destination (F8): the destination stays in the bar or rail,
 dimmed (icon and label drawn like a disabled control, but still selectable; content description "Printers, switched
-off on this Hub"). Printers with the printers Feature off opens a page that says "Printers is switched off on this
-Hub. Switch it on on the Hub page under Features." with the
+off"). Printers with the printers Feature off opens a page that says "Printers is switched
+off. Switch it on in Features on the Hub page." with the
 button "Open the Hub page" (opens the Hub page in the browser, as 12.3).
 
 ### 2.4 Hub connection state
@@ -294,7 +294,7 @@ the Console theme.
 | Key-value list (02 6.3; "field rows" in this document) | `Row` in a panel | Label `--fs-m` `--muted` (`label-col` column on medium width, above the value on compact), value `--fs-b`, data in `--mono`; 48 dp min height; hairline between rows |
 | Text field | `OutlinedTextField`, `--r` corners, `--border-strong` outline, `--focus` when focused, `--bad` when invalid | Label above inside the outline (Material floating label), supporting text under it for hint or error; error text starts with the octagon shape |
 | Secret field | `OutlinedSecureTextField` with a trailing `TextButton` "Show" / "Hide" (no eye icon) | The button's accessible name adds the field ("Show Access Code" / "Hide Access Code"); never prefilled; cleared on rotation |
-| Main button | `Button`, fill `--accent`, text `--on-accent`, `--r` corners, height `--ctl` (44 dp on compact) | At most one enabled filled button per screen (Home: 5; Printer: 9.7); a sheet or dialog has its own |
+| Main button | `Button`, fill `--accent`, text `--on-accent`, `--r` corners, height `--ctl` (44 dp at every window size; the app's pointer is a finger) | At most one enabled filled button per screen (Home: 5; Printer: 9.7); a sheet or dialog has its own |
 | Other button | `OutlinedButton`, `--border-strong` outline, `--text` text | |
 | Quiet button | `TextButton`, `--accent-text` | For "Cancel", "Not now", links inside text |
 | Danger button | `OutlinedButton` with `--bad` outline and text; filled `--bad` with `--on-bad` text only as the confirming button inside a danger dialog | Always separated from other buttons by space or a divider |
@@ -309,7 +309,7 @@ the Console theme.
 | Dialog | Medium width and up: `AlertDialog` (`BasicAlertDialog` when it holds a form), `--r-l`, `--e2`, scrim `--scrim`. Compact width: the same content in a `ModalBottomSheet` (F7: dialogs become bottom sheets on phones). | Title `--fs-l` `--fw-title`; body `--fs-b`; buttons at the bottom right (in a sheet: full width, stacked, confirming button on top); confirming button last in reading order on wide screens. Every "dialog" in this document follows this rule. |
 | Sheet | `ModalBottomSheet`, `--r-l` top corners, drag handle | Used for short tasks on one thing (update weight, move, slot actions) |
 | Toast | `Snackbar` in the `Scaffold`'s `SnackbarHost`, `--surface` ground, `--border-strong` outline, `--e2` | One line, optional one action ("Undo"); held 5 s, 10 s when it has an action, by the host's own timer |
-| Determinate bar (02 8.3; "progress line" in this document) | `LinearProgressIndicator`, 4 dp, track `--surface-3`, indicator `--accent` | Determinate when the Hub gives a number; indeterminate while it does not |
+| Determinate bar (02 8.3; "progress line" in this document) | `LinearProgressIndicator`, 4 dp, track `--surface-3`, indicator `--accent-text` | Determinate when the Hub gives a number; indeterminate while it does not |
 | Spinner | `CircularProgressIndicator`, 16 dp, inside the button that started the work | Replaced by the word "Working…" when animations are off |
 | Skeleton | `Box` blocks in `--surface-2` with `--r-s` corners | Same height as the rows they stand for; no shimmer |
 | Empty state | `Column` centred in a panel with a dashed `--border` | `empty-mark` circle in `--accent-soft` with the section icon, title `--fs-l` `--fw-title`, one sentence `--muted`, at most two buttons |
@@ -361,7 +361,7 @@ Hub and network failures use these texts everywhere (`strings.xml`, one key each
 | No route to the Hub, timeout | "Cannot reach the Hub. Check that this phone is on the home network." |
 | Unexpected answer | "The Hub sent an answer this app does not understand. Update the app or the Hub, then try again." |
 | A refusal with the Hub's own message | the Hub's message, as given |
-| Feature off | "<Feature name> is switched off on this Hub. Switch it on on the Hub page under Features." |
+| Feature off | Title "<Feature name> is switched off", text "Switch it on in Features on the Hub page." |
 | Spoolman unreachable | "The Hub can't reach Spoolman right now. Try again in a minute." |
 
 Ellipses are always the single character "…".
@@ -535,7 +535,7 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 | Top bar | Title "Home", the Hub's name under it, connection chip, appearance icon (2.2). | `GET api/info` | `TopAppBar` |
 | Local network notice | 3.3, at the top, only in that state. | | Panel |
 | Update notice | Only when an app update is offered or the Hub is newer than the app (13). Notice line of kind `info` "Update ready: Spoolwarden 0.5.3." or of kind `warn` "Update the app: the Hub is newer, so some things may not work." Trailing chevron; tapping opens `settings/updates`. | `GET api/info` | Notice line |
-| Add spools panel | Title "Add spools". Text "Photograph each label, check what was read, then add. Nothing is saved until you add." Main button "Add from label photos" (camera icon) starts a new draft at `add/{id}/photos`. Other button "Add by hand" starts a new draft at `add/{id}/review` with the filament picker (6.4). When the Label Reader is off on the Hub, "Add by hand" is the main button, the photo button is absent, and one line says "The Label Reader is switched off on this Hub. Add the spool by hand, or switch it on on the Hub page under Features." | `GET api/info` (`labelReading`) | Panel, `Button`, `OutlinedButton` |
+| Add spools panel | Title "Add spools". Text "Photograph each label, check what was read, then add. Nothing is saved until you add." Main button "Add from label photos" (camera icon) starts a new draft at `add/{id}/photos`. Other button "Add by hand" starts a new draft at `add/{id}/review` with the filament picker (6.4). When the Label Reader is off on the Hub, "Add by hand" is the main button, the photo button is absent, and one line says "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." | `GET api/info` (`labelReading`) | Panel, `Button`, `OutlinedButton` |
 | Drafts panel | Only when drafts exist. Title "Drafts" with the count. One row per draft, newest first: headline the relative time ("3 minutes ago"; exact time on long-press), supporting line "2 photos · note: 3 of the grey ones · tag <tag ID>" (only the parts that exist), trailing chevron. Tapping resumes the draft where it stopped. The row's overflow offers "Discard": dialog "Discard this add?" / "Its photos and edits are removed from this phone." / "Keep" / "Discard" (danger); then the snackbar "Add discarded." | none (drafts live on the phone) | Panel, `ListItem`, `DropdownMenu` |
 | Printers panel | Title "Printers" with the count; header action "All printers" selects the Printers destination. One row per configured printer, at most 4, then "and 2 more": status shape and word, name, and the job when printing ("Printing · 42 % · 1 h 12 min left"). Tapping a row opens `printers/{id}` in the Printers destination. Empty: "No printers yet." with the text button "Add a printer" (selects Printers). Absent when the printers Feature is off. | `GET api/printers` (with each connection check) | Panel, `ListItem` |
 | Slicer presets panel | 11.1 | `GET api/profiles/status` | Panel |
@@ -616,7 +616,7 @@ Under the page header every step shows the draft's tags (`--fs-s`, `--r-s`, `--s
 | Photo strip | Thumbnails `thumb` square, `--r` corners. Each has a close-icon `IconButton` in its corner with a 48 dp hit area, content description "Remove photo 2". Tapping a thumbnail opens it full screen (viewer as 10.5). After a removal: snackbar "Photo removed." with "Undo". | `LazyRow`, `IconButton` |
 | Tag row | Tag icon. No tag: headline "No tag", supporting "Hold the spool's tag to the back of the phone to link it (optional)." With a tag: headline "Tag <tag ID>" (`--mono`), supporting "It is linked when you add exactly one opened spool.", trailing text button "Remove". | `ListItem`, `TextButton` |
 | Still sealed | Switch row "Still sealed (in its bag or box)", on by default. | `ListItem` + `Switch` |
-| Weight with spool | Label "Weight with spool (g, optional)", supporting "Only for one opened spool. Leave empty for a full spool.", `KeyboardType.Decimal`, `--mono`. Disabled while Still sealed is on, with the supporting text "Not needed for a sealed spool." Error "Enter grams above 0." | `OutlinedTextField` |
+| Weight with spool | Label "Weight with spool (optional)", supporting "Only for one opened spool. Leave empty for a full spool.", `KeyboardType.Decimal`, `--mono`. Disabled while Still sealed is on, with the supporting text "Not needed for a sealed spool." Error "Enter grams above 0." | `OutlinedTextField` |
 | Note | Label "Note for the Label Reader (optional)", placeholder "e.g. 3 of the grey ones", up to 3 lines. | `OutlinedTextField` |
 | Action bar | Sticky above the navigation bar, `--surface` with a top hairline. Main button "Read labels (2 photos)" (plural from strings), disabled with no photo, with the reason above it: "Take at least one photo first." When the draft already holds read results, "Back to the check" (outlined) appears to its left. | `Surface`, `Button`, `OutlinedButton` |
 
@@ -640,7 +640,7 @@ id, else a new read), "Add without the tag", "Pair again", "Add by hand".
 | Photos gone on the Hub | "The Hub no longer has these photos. Read the labels again." |
 | A photo unusable | "One photo could not be used. Remove it and take it again." |
 | Tag already linked | "This tag is already linked to another spool. Add without the tag, or open that spool first." |
-| Label Reader off | "The Label Reader is switched off on this Hub. Add the spool by hand, or switch it on on the Hub page under Features." |
+| Label Reader off | "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." |
 | Spoolman unreachable | 3.5 |
 | Offline | "Needs the Hub. Your photos are kept; read them when the Hub is back." |
 
@@ -711,12 +711,12 @@ up. Numeric fields use `KeyboardType.Decimal` or `Number` and `--mono`.
 | | Material | |
 | | Colour (hex) | `--mono`, with the live swatch at the leading end. Error "Enter 6 hex digits, e.g. 2B2B2E." |
 | Amount | Spools | Whole number, at least 1. |
-| | Net weight (g) | Supporting: "Filament only, as printed on the label." |
-| | Empty spool weight (g) | Error "Enter grams above 0." |
+| | Net weight | Supporting: "Filament only, as printed on the label." |
+| | Empty spool weight | Error "Enter grams above 0." |
 | State | Still sealed | Check row "Still sealed (in its bag or box)"; the whole row toggles. |
-| | Weight with spool (g, optional) | Only when Spools is 1 and the spool is not sealed. Supporting: "Leave empty for a full spool." |
-| Print settings | Density (g/cm³) | Always on the hand path; on the photo path only when the Hub asks for it. Supporting "Leave empty to choose automatically."; placeholder the usual value for the material ("1.24"). |
-| | Nozzle (°C, optional), Bed (°C, optional) | Hand path only. |
+| | Weight with spool (optional) | Only when Spools is 1 and the spool is not sealed. Supporting: "Leave empty for a full spool." |
+| Print settings | Density | Always on the hand path; on the photo path only when the Hub asks for it. Supporting "Leave empty to choose automatically."; placeholder the usual value for the material ("1.24"). |
+| | Nozzle (optional), Bed (optional) | Hand path only. |
 | | Bambu Studio parent | `ExposedDropdownMenuBox` with "Automatic" first, then the Hub's parent presets when they are synced. Without synced presets it is a plain text field with the supporting text "Bambu Studio's presets are not synced to the Hub yet; type the name." Always under it: "Applies to every colour of this line." As a plain text field it adds the supporting text "Leave empty to choose automatically." |
 | Storage | Location | `ExposedDropdownMenuBox`: "Automatic" first, then the Hub's locations. |
 
@@ -888,7 +888,7 @@ weight, Load into a printer, Move, More actions, Details rows.
 
 | Element | Text / behaviour |
 |---|---|
-| Field | Label "Weight with spool (g)", `KeyboardType.Decimal`, `--mono`, focused on open (the keyboard opens with the sheet). Supporting "Put the spool on the scale and type what it shows." Error "Enter grams above 0." |
+| Field | Label "Weight with spool", `KeyboardType.Decimal`, `--mono`, focused on open (the keyboard opens with the sheet). Supporting "Put the spool on the scale and type what it shows." Error "Enter grams above 0." |
 | Preview | 400 ms after a valid weight is typed the app asks the Hub for a dry run and shows, under the field: "Remaining becomes 482 g (now 620 g)." with a progress line while it asks. |
 | Buttons | "Cancel" (text) and "Save weight" (main), disabled until a preview is shown; the reason under the field: "Enter the weight to see the result first." "Saving…" with a spinner while saving. |
 | After saving | The sheet closes; the result line of 7.2 shows "Weight updated: 482 g left." |
@@ -939,7 +939,7 @@ While the load is being written Back is ignored (2.5 rule 2). Results:
 ### 7.8 Link to a sealed spool (`tag/{uid}/link`, `tag/{uid}/link/{spoolId}`)
 
 **Find** (`tag/{uid}/link`): header "Link tag <tag ID> to a sealed spool". Fields: search "Brand, name or colour"
-(searches as in 7.1, sealed spools only) and "Weight with spool (g, optional)" (`--mono`; error
+(searches as in 7.1, sealed spools only) and "Weight with spool (optional)" (`--mono`; error
 "Enter grams above 0, or leave this empty."). Results as rows; tapping one opens the preview. Rows are disabled while the
 weight is invalid, with the reason above the list. Empty: "No sealed spools match." Error: notice with "Try again".
 
@@ -968,8 +968,8 @@ Request: `POST api/library/local`; parents from `GET api/profiles/parents?materi
 | Top bar | Title "New catalog line", back arrow. |
 | Intro | "Values from the maker's label or data sheet for one product line. They apply to every colour of the line." |
 | Group "Line" | "Brand *", "Line *", "Material *" |
-| Group "Temperatures" | "Nozzle range (°C)" with placeholder "e.g. 190-220", "Bed range (°C)" with placeholder "e.g. 55-65" |
-| Group "Material" | "Density (g/cm³)", "Max volumetric speed (mm³/s)" |
+| Group "Temperatures" | "Nozzle range" with placeholder "e.g. 190-220", "Bed range" with placeholder "e.g. 55-65" |
+| Group "Material" | "Density", "Max volumetric speed" |
 | Group "Slicer" | "Bambu Studio parent" (as in 6.3) |
 | Group "Notes" | "Notes" (multi-line) |
 | Required marker | "*" after the label and the line "Fields marked * are needed." at the top. |
@@ -1336,10 +1336,10 @@ API routes that the app's pairing already allows.
 
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
-| Header facts | "The newest 20 spool additions are kept with their photos (14.2 MB now)." from `keep` and `photo_bytes`. When the Label Reader is off: an extra line with the hollow circle "The Label Reader is switched off on this Hub. Correct by hand, or switch it on on the Hub page under Features." | `Text` |
+| Header facts | "The newest 20 spool additions are kept with their photos (14.2 MB now)." from `keep` and `photo_bytes`. When the Label Reader is off: an extra line with the hollow circle "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page." | `Text` |
 | Filter | Segmented control "All 5" / "To check 2". Shown only when the Hub sends read confidence (16); otherwise absent. | `SingleChoiceSegmentedButtonRow` |
 | Rows | Thumbnail `thumb-s` of the first photo with the photo count in a small `--mono` badge, or a dashed box with "No photo" for the screen reader; headline the filaments ("Polymaker PolyTerra PLA Charcoal Black", "×2" tag when several spools); supporting "2026-11-12 14:05 · Spool 214" (`--mono`; "Spools 212, 213"); the state as a status; the source word ("From a phone photo", "From the Weigh Station", "Added by hand"); when there is confidence data, the lowest mark ("Colour: medium", "Low: Material, Net weight"). Chevron. Tapping opens `recent/{hid}`. | Panel, `ListItem` |
-| Empty | Empty state with the clock icon: title "Nothing added yet", text "No spool has been added since the history started." | Empty state |
+| Empty | Empty state with the clock icon: title "Nothing added yet", text "No spool has been added since the history started. Spools added from the web app, the app or the Weigh Station appear here." | Empty state |
 
 Record state vocabulary (the badges of `02-components.md` 7.1, as on the Hub page):
 
@@ -1390,10 +1390,10 @@ Station", records without photos "Added by hand"; any other value is shown as th
 |---|---|---|
 | Top bar | Title: the filament name; back arrow; overflow "Open spool 214" (opens `spools/214` in the Spools destination; one item per spool). | `TopAppBar` |
 | Header | Meta row: "2026-11-12 14:05 · From a phone photo", the state, "Spool 214" (`--mono`). Two icon buttons "Newer record" and "Older record" (disabled at the ends) step through the list without going back. | `Row`, `IconButton` |
-| Photos panel | Title "Photos" with the count. Thumbnails `thumb` square in a `LazyRow`; each has the content description "Label photo 1 of 2, opens it large". Tapping opens 10.5. No photo: "No photo: this spool was added by hand." | Panel, `LazyRow` |
-| Fields panel | Title "Fields", the tag "Read confidence is high unless marked" (only with confidence data), header action "Edit" (pencil icon; opens 10.3 for this item). Field rows in four groups: **Identity** Brand, Name, Material, Colour (swatch + hex); **Weights** Net weight (g), Empty spool weight (g), Density (g/cm³); **Temperatures** Nozzle (°C), Bed (°C), Nozzle range (°C), Bed range (°C); **Other** Price per kg, Line. Empty values read "(empty)" in `--muted`. Confidence marks as in 6.3 next to the value. When one record saved several items, there is one Fields panel per item, titled "Spools 212, 213" with the line "A change applies to both." | Panel, field rows |
+| Photos panel | Title "Photos (2)", the count in brackets. Thumbnails `thumb` square in a `LazyRow`; each has the content description "Label photo 1 of 2, opens it large". Tapping opens 10.5. No photo: "No photo: this spool was added by hand." | Panel, `LazyRow` |
+| Fields panel | Title "Fields", the tag "Read confidence is high unless marked" (only with confidence data), header action "Edit by hand" (pencil icon; opens 10.3 for this item). Field rows in four groups: **Identity** Brand, Name, Material, Colour (swatch + hex); **Weights** Net weight, Empty spool weight, Density; **Temperatures** Nozzle, Bed, Nozzle range, Bed range; **Other** Price per kg, Line. Empty values read "(empty)" in `--muted`. Confidence marks as in 6.3 next to the value. When one record saved several items, there is one Fields panel per item, titled "Spools 212, 213" with the line "A change applies to both." | Panel, field rows |
 | Ask the Label Reader panel | 10.4. | Panel |
-| Revisions panel | Title "Revisions" with the count. One entry per revision: "Revision 1, 2026-11-12 14:09, by hand: Empty spool weight 150 → 140 g" (`--mono` for the change); undone ones are struck through with the status "Undone". The newest live revision has the button "Undo revision 1" (outlined, undo icon). None: "No revisions. Corrections by hand or by the Label Reader appear here." | Panel |
+| Revisions panel | Title "Revisions (2)", the count in brackets. One entry per revision: "Revision 1, 2026-11-12 14:09, by hand: Empty spool weight 150 → 140 g" (`--mono` for the change); undone ones are struck through and followed by "(undone)" (02 7.10; text, not a badge). The newest live revision has the button "Undo revision 1" (outlined, undo icon). None: "No revisions. Corrections by hand or by the Label Reader appear here." | Panel |
 
 Undo asks: dialog "Undo revision 1?", body "Empty spool weight goes back to 150 g.", buttons "Cancel" and "Undo" (main).
 Result: notice line in the Revisions panel "Revision 1 undone. Empty spool weight is 150 g again." plus, when the Hub
@@ -1418,13 +1418,13 @@ A panel on 10.2, titled "Ask the Label Reader to correct it".
 
 | State | Content |
 |---|---|
-| Ready | Field "What is wrong?" (placeholder "e.g. brand is Polymaker", up to 3 lines); hint "The Label Reader reads the photos again with your note and proposes changes. Nothing changes until you accept."; button "Ask the Label Reader" (outlined). Empty note: error "Say what is wrong first, e.g. brand is Polymaker." |
+| Ready | Field "What is wrong?" (placeholder "e.g. brand is Polymaker", up to 3 lines); hint "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept."; button "Ask the Label Reader" (outlined). Empty note: error "Say what is wrong first, e.g. brand is Polymaker." |
 | Waiting | Progress line and "Asking the Label Reader… (up to a minute)". |
-| Proposal | Before-and-after change list (02 7.9) with `--accent-soft` ground and a 1 dp `--accent` outline: heading "Proposal: 2 changes", one row per change: field name, old value struck through in `--muted`, arrow, new value at `--fw-label` ("Name: PolyTerra PLA Charcoal Black → PolyTerra PLA Charcoal Black (Matte)"); TalkBack reads "Name, PolyTerra PLA Charcoal Black, becomes PolyTerra PLA Charcoal Black (Matte)". With no photo kept: "No photo was kept: it worked from the saved values and your note." Buttons "Accept" (main) and "Discard" (outlined). |
+| Proposal | Before-and-after change list (02 7.9) with `--accent-soft` ground and a 1 dp `--accent-text` outline: heading "Proposal: 2 changes", one row per change: field name, old value struck through in `--muted`, arrow, new value at `--fw-label` ("Name: PolyTerra PLA Charcoal Black → PolyTerra PLA Charcoal Black (Matte)"); TalkBack reads "Name, PolyTerra PLA Charcoal Black, becomes PolyTerra PLA Charcoal Black (Matte)". With no photo kept: "No photo was kept: it worked from the saved values and your note." Buttons "Accept" (main) and "Discard" (outlined). |
 | No change | "The Label Reader changed nothing." |
 | Accepted | `ok` line "Accepted. 2 fields changed; revision 2 keeps the old values." |
 | Discarded | Hollow-circle line "Proposal discarded. Nothing changed." |
-| Label Reader off | Field and button disabled, line "The Label Reader is switched off on this Hub. Edit by hand, or switch it on on the Hub page under Features." |
+| Label Reader off | Field and button disabled, line "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page." |
 | Failure | `bad` notice with the reason (texts of 6.2 where they apply) and "Try again". |
 
 ### 10.5 Photo viewer (`recent/{hid}/photos/{n}`)
@@ -1486,7 +1486,7 @@ On expanded width the list is the left pane and the chosen group the right pane 
 | Element | Text / behaviour |
 |---|---|
 | Appearance | Group title "Appearance". Segmented control with icons and words: "Light", "Dark", "System". Applies at once. |
-| Theme | Group title "Theme". Four preview tiles in a 2 × 2 grid on compact and medium width, one row of four on expanded width: each tile a small drawing of the theme in its own colours, the name and one line: "Console" "Dense and technical"; "Workbench" "Calm cards"; "Spool" "Colourful and roomy"; "Panes" "Simple lists". The tiles are a radio group; the chosen one has a 2 dp `--accent` outline and a check mark. Choosing applies at once, with no save button. |
+| Theme | Group title "Theme". Four preview tiles in a 2 × 2 grid on compact and medium width, one row of four on expanded width: each tile a small drawing of the theme in its own colours, the name and one line: "Console" "Dense and technical"; "Workbench" "Calm cards"; "Palette" "Colourful and roomy"; "Panes" "Simple lists". The tiles are a radio group; the chosen one has a 2 dp `--accent-text` outline and a check mark. Choosing applies at once, with no save button. |
 | Note | "These choices are kept on this phone only." |
 
 Stored in the app's settings store (DataStore) beside each other. When nothing is chosen yet the app uses System and

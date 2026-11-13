@@ -121,6 +121,7 @@ def test_old_file_with_dropped_fields_still_loads(etc):
                    'unknown="_Y"/><tag-source url="http://{host}:5002/last-tag"/></model></models>')
     hw = kh.load()
     assert hw.errors == []
+    assert hw.warnings == []
     assert hw.model("old").name == "Old"
 
 

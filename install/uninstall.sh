@@ -91,7 +91,7 @@ for f in /etc/nginx/mcp.d/*.conf; do
     [ -f "$f" ] || continue
     OTHER_ROUTES="$OTHER_ROUTES $(basename "$f" .conf)"
 done
-REMOTE_FILES=/etc/letsencrypt/renewal-hooks/deploy/filament-kit
+REMOTE_FILES="/etc/letsencrypt/renewal-hooks/deploy/filament-kit /etc/systemd/system/nginx.service.d/filament-kit-pair.conf"
 if [ -z "$OTHER_ROUTES" ]; then
     REMOTE_FILES="/etc/nginx/conf.d/filament-kit-router.conf $REMOTE_FILES"
 elif [ -f /etc/nginx/conf.d/filament-kit-router.conf ]; then
@@ -102,6 +102,7 @@ for f in $REMOTE_FILES; do
     [ -e "$f" ] && rm -f "$f" && REMOTE_GONE=1
 done
 if [ "$REMOTE_GONE" -eq 1 ]; then
+    systemctl daemon-reload 2>/dev/null || true    # the nginx start-check drop-in may be gone
     if command -v nginx >/dev/null 2>&1 && nginx -t -q 2>/dev/null && systemctl is-active -q nginx; then
         systemctl reload nginx || true
     fi

@@ -136,6 +136,15 @@ def make_stage(host):
     return stage
 
 
+def drop_stage(host, stage):
+    """Best-effort removal of the staging folder after a failed upload or install (the success path's install
+    command removes it itself); a failure here must not hide the error that got us here."""
+    try:
+        subprocess.run(["ssh", host, f"rm -rf {shlex.quote(stage)}"], check=False, timeout=60)
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"could not remove {stage} on {host}: {e}; remove it by hand (it holds the image)")
+
+
 def live_problem(base, token, build):
     """Why the live check failed (a string), or None when the server reports `build`."""
     try:
@@ -208,10 +217,14 @@ def main(argv=None):
         return
 
     stage = make_stage(args.host)
-    run(["scp", "-q", str(build_dir / "firmware.bin"), str(build_dir / "manifest.json"),
-         f"{args.host}:{stage}/"])
-    run(["ssh", args.host, remote_install_cmd(stage, args.remote_dir, args.remote_owner,
-                                              args.remote_group, sudo=not args.no_sudo)])
+    try:
+        run(["scp", "-q", str(build_dir / "firmware.bin"), str(build_dir / "manifest.json"),
+             f"{args.host}:{stage}/"])
+        run(["ssh", args.host, remote_install_cmd(stage, args.remote_dir, args.remote_owner,
+                                                  args.remote_group, sudo=not args.no_sudo)])
+    except BaseException:    # the install command's own rm -rf did not run: the image holds the Wi-Fi password
+        drop_stage(args.host, stage)
+        raise
     if args.no_verify:
         print(f"published build {build}. Hold the reader's knob for 4 s to install it.")
         return

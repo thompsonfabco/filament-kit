@@ -121,19 +121,22 @@ def test_load_gcode_refused_word_for_word(printer, sm, fil):
     assert loc_of(sm, s["id"]) == "Shelf 2"
 
 
-def test_load_ws_drop_mid_confirm(printer, sm, fil):
+def test_load_ws_drop_mid_confirm(printer, sm, fil, monkeypatch):
     """Review Focus 1: the websocket closes between the gcode and the confirmation → not confirmed, no write."""
     fam, pid, fake = printer
+    monkeypatch.setattr(loads, "CONFIRM_TIMEOUT", 30.0)     # far from the test's own ceiling: only the drop can end it early
     fake.ignore_gcode = True                 # the printer takes the gcode but no update arrives ...
     s = spool(sm, fil, "Shelf 2")
 
     def drop_soon():
-        time.sleep(0.2)
-        fake.drop()
-    threading.Thread(target=drop_soon).start()
+        if wait_for(lambda: fake.gcode_log):         # ... the gcode has arrived: the kit is now waiting to confirm
+            fake.drop()
+    dropper = threading.Thread(target=drop_soon)
+    dropper.start()
     t0 = time.monotonic()
     r = fam.load(sm, pid, "T0", s["id"], False, sealed_location="Sealed stock")
-    assert time.monotonic() - t0 < loads.CONFIRM_TIMEOUT - 0.5     # the drop ended the wait, not the timeout
+    dropper.join(10)
+    assert time.monotonic() - t0 < 15      # the drop ended the wait, not the 30 s timeout
     assert r["confirmed"] is False
     assert loc_of(sm, s["id"]) == "Shelf 2"
 
@@ -227,6 +230,7 @@ def test_follow_retries_a_tap_when_spoolman_was_down(printer, sm, fil, monkeypat
     time.sleep(0.2)
     assert loc_of(sm, s["id"]) == "Shelf 3"
     up.set()                                 # Spoolman is back
+    fam._follow_fail.clear()                 # and the pause has run out
     fam._follow_q.put(pid)                   # the next update
     assert wait_for(lambda: loc_of(sm, s["id"]) == LOC)
 
@@ -242,6 +246,7 @@ def test_follow_retries_an_unload_when_spoolman_was_down(printer, sm, fil, monke
     time.sleep(0.2)
     assert loc_of(sm, s["id"]) == LOC
     up.set()
+    fam._follow_fail.clear()
     fam._follow_q.put(pid)
     assert wait_for(lambda: loc_of(sm, s["id"]) == "Shelf 3")
 
@@ -259,6 +264,7 @@ def test_connect_reconcile_is_retried_when_spoolman_was_down(moonraker, sm, fil,
         time.sleep(0.2)
         assert loc_of(sm, s["id"]) == "Shelf 1"
         up.set()                             # Spoolman is back
+        fam._follow_fail.clear()             # and the pause has run out
         fam._follow_q.put(pid)               # the next update
         assert wait_for(lambda: loc_of(sm, s["id"]) == "Voron – T0")
     finally:
@@ -297,6 +303,48 @@ def test_one_failing_slot_does_not_block_the_next(printer, monkeypatch):
     assert done == ["T1"]
 
 
+def test_a_failing_spoolman_pauses_the_follow_calls_with_a_growing_bounded_backoff(printer, monkeypatch):
+    fam, pid, fake = printer
+    clock = [100.0]
+    fam._follow_clock = lambda: clock[0]
+    fam._seen[pid] = {"T0": None, "T1": None}
+    monkeypatch.setattr(fam, "_current", lambda p: {"T0": 11, "T1": 12})
+    calls, broken = [], [True]
+
+    def move(p, label, sid):
+        calls.append(label)
+        if broken[0]:
+            raise OSError("spoolman down")
+        fam._seen[p][label] = sid
+    monkeypatch.setattr(fam, "_follow_move", move)
+    first, cap = loads.FOLLOW_BACKOFF
+    fam._follow_check(pid)
+    assert calls == ["T0", "T1"]                       # both slots tried once: one failure does not skip the other
+    fam._follow_check(pid)
+    clock[0] += first - 0.1
+    fam._follow_check(pid)
+    assert len(calls) == 2                             # inside the pause: Spoolman is not called
+    clock[0] += 0.2
+    fam._follow_check(pid)
+    assert len(calls) == 4                             # the pause is over; fails again, and the pause doubles
+    clock[0] += first + 0.1
+    fam._follow_check(pid)
+    assert len(calls) == 4
+    for _ in range(10):                                # the pause stops growing at the cap
+        clock[0] += cap + 0.1
+        fam._follow_check(pid)
+    assert fam._follow_fail[pid][1] == cap
+    n = len(calls)
+    broken[0] = False
+    clock[0] += cap + 0.1
+    fam._follow_check(pid)
+    assert len(calls) == n + 2 and pid not in fam._follow_fail      # a success clears it
+    fam._seen[pid] = {"T0": None, "T1": None}
+    broken[0] = True
+    fam._follow_check(pid)
+    assert fam._follow_fail[pid][1] == first           # and the next failure starts small again
+
+
 def test_tap_during_kit_load(printer, sm, fil):
     """Review Focus 2: a kit load of spool A is in flight and a tap sets spool B → one spool ends in the slot,
     the one the printer shows."""
@@ -306,10 +354,12 @@ def test_tap_during_kit_load(printer, sm, fil):
     fake.ignore_gcode = True                 # the kit's gcode never lands; the tap does
 
     def tap():
-        time.sleep(0.3)
-        fake.set_spool(b["id"])
-    threading.Thread(target=tap).start()
+        if wait_for(lambda: fake.gcode_log):         # the kit's gcode has gone out and it is waiting to confirm
+            fake.set_spool(b["id"])
+    tapper = threading.Thread(target=tap)
+    tapper.start()
     r = fam.load(sm, pid, "T0", a["id"], False, sealed_location="Sealed stock")
+    tapper.join(10)
     assert r["confirmed"] is False
     assert wait_for(lambda: loc_of(sm, b["id"]) == LOC)
     here = [x["id"] for x in sm.get("spool") if x.get("location") == LOC]

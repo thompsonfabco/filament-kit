@@ -152,7 +152,7 @@ Record 1 in detail:
 | Built in | This Hub's web app | built in: this Hub's own pairing |
 | Built in | This Hub's command line | built in: this Hub's own pairing |
 | Weigh Station | On this machine | scale and tag reader connected |
-| Weigh Stations asking to pair | Printer Station at 192.0.2.60 | its screen shows 482 913 (Pair / Refuse) |
+| Weigh Stations asking to pair | Bench station at 192.0.2.60 | its screen shows 482 913 (Pair / Refuse) |
 | Tag Readers | rd-01 · Tag Reader for Workshop X1 | made 2026-10-20 |
 | Tag Readers | rd-02 · Tag Reader for Garage Voron | made 2026-11-01 |
 | Trusted computers (on) | Desk PC browser (this computer) | made 2026-11-01 · last seen 2026-11-12 at 192.0.2.21 · runs out 2027-02-10 |

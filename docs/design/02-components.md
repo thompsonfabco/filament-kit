@@ -29,7 +29,7 @@ One scheme for every component:
 | State | A native or ARIA attribute where one exists (`disabled`, `aria-disabled`, `aria-expanded`, `aria-invalid`, `aria-busy`, `aria-current`, `aria-checked`, `aria-sort`, `:checked`); otherwise `data-state="…"` | `[aria-expanded="true"]`, `[data-state="running"]`, `[data-state="dirty"]` |
 | Theme profile | Never in markup. CSS selects on `:root[data-look="…"]` (foundations §6.2) | `:root[data-look="panes"] .coll` |
 | Script hook | `data-action`, `data-id`, `data-col`, `data-prio`, `data-tab`, `data-group`, `data-section` (a page's section), `data-draft` (a form group whose input is kept as a draft, 5.11), `data-effect` (a field whose saving restarts the Hub or starts an apply job, 5.11), `data-photo` (a thumbnail's photo id, 7.6), `data-revision` (a revision's id, 7.10); never a class | `data-action="test"` |
-| Theme preview | `data-preview="<look>"` on a theme picker's drawing (3.4): each theme's token blocks also match it | `data-preview="spool"` |
+| Theme preview | `data-preview="<look>"` on a theme picker's drawing (3.4): each theme's token blocks also match it | `data-preview="palette"` |
 | Utility | Only three: `sr` (visually hidden, still read), `mono` (`--mono`, tabular numbers), `muted` (`--muted`) | `<span class="sr">Connected: </span>` |
 | Icon | `icon` (20 px), `icon--s` (16 px), `icon--l` (28 px); symbol ids in the inline sprite `i-<name>` for icons, `s-<shape>` for status shapes; only the icons of foundations §10. The one chevron, `i-chevron`, points right; CSS turns it (down in a select, up or down by `aria-sort` in a sort button) | `<svg class="icon"><use href="#i-printer"/></svg>` |
 | Icon sprite | `sprite`: the one hidden inline `<svg>` near the top of `body` that holds every `<symbol>` (`i-<name>`, `s-<shape>`); `aria-hidden="true"`, never shown | `<svg class="sprite" aria-hidden="true">…</svg>` |
@@ -134,6 +134,20 @@ hover, focus, pressed, disabled, loading, error) · **Behaviour and keyboard** �
 (what changes with `nav`, `collection` and `detail`; token values change with every theme and are not repeated) ·
 **Android** (the Material 3 component it maps to; details in `08-platform-mapping.md`) · **HTML**.
 
+**Files.** The components ship as a core and two additions, so a page loads only what it shows (foundations
+section 12, rule 7):
+
+| File pair | Holds | Loaded by |
+|---|---|---|
+| `components.css`, `components.js` (the core) | Shell and navigation, lock, appearance control, buttons, menu, every field (without the photos variant of the file field), form group and saving, collection, detail region, status, confidence, swatch and slot strip, spinner, step progress and bar, inline result, toast, banner, dialogs, sheet, page states, code block, key-value list, change list, revision list, tooltip | Every page |
+| `components-jobs.css`, `components-jobs.js` | Background-job strip (8.4), the Hub is restarting (8.5) | The Hub page (the web app starts no jobs) |
+| `components-media.css`, `components-media.js` | The photos variant of the file field (5.9), photo thumbnail and viewer (7.6), QR block with its expiry (7.8) | Pages that show photos or a pairing code |
+
+The core's forms call two hooks, `waitJob` and `waitHub`, that do nothing until `components-jobs.js` is loaded.
+What belongs to one page only is that page's own code, not a shared file: the Settings sub-navigation's
+scroll-following, form drafts of the web app's Add flow, selection in a collection. The spool ring (7.4) is drawn
+by the Palette theme and ships with that theme's styles.
+
 ---
 
 ## 2. App shell
@@ -148,7 +162,7 @@ on phones (2.4) · job strip (8.4) · toast region (8.7) · announcer · dialog 
 elements, children of `body`).
 
 ```
-Desktop, nav = rail                        Phone (Console, Workbench, Spool)
+Desktop, nav = rail                        Phone (Console, Workbench, Palette)
 +--------------------------------------+   +--------------------+
 | top bar                              |   | top bar            |
 +----+---------------------------------+   +--------------------+
@@ -239,9 +253,11 @@ appearance icon button; the job indicator and version move out (the job strip is
 bottom bar). With `nav` = `list` on phones the top bar shows a Back button in front of the mark when the page is
 deeper than the section list (2.3).
 
-**Accessibility.** `header` landmark. The mark is `aria-hidden`. The version reads "version 0.5.2" through a hidden
-prefix. The job indicator's name is "Background job: <title>, <state>. Show the job panel."; it has
-`aria-controls` pointing at the job strip.
+**Accessibility.** `header` landmark. The mark is `aria-hidden`. The brand link holds the product name and the
+Hub's name only, and its accessible name is exactly that visible text. The version stands after the link as plain
+text, not inside it, and reads "version 0.5.2" through a hidden prefix. The job indicator's accessible name
+starts with its visible words: "<title>, <state>, background job. Show the job panel." ("Backup, running,
+background job. Show the job panel."); it has `aria-controls` pointing at the job strip.
 
 **Theme profiles.** `nav` = `pills`: on desktop the pill row sits in the top bar; on tablet it forms a second row of
 the top bar, full width. `nav` = `list`: Back button on phones as above. `collection`, `detail`: no change.
@@ -282,7 +298,7 @@ in the phone bottom bar carry `data-tab`. A **More** button closes the navigatio
 breakpoints that hide items (pills on wide screens, the bottom bar on phones).
 
 ```
-rail (Console)     sidebar (Workbench)       pills (Spool)                         list (Panes)
+rail (Console)     sidebar (Workbench)       pills (Palette)                       list (Panes)
 +------+           +--------------------+    [Overview][Printers][Recently added]  +--------------------------+
 | [ic] |           | EVERYDAY           |    [Devices][Slicer presets][More v]     | EVERYDAY                 |
 |Overvw|           | [ic] Overview      |                                          | [ic] Overview          > |
@@ -300,11 +316,11 @@ rail (Console)     sidebar (Workbench)       pills (Spool)                      
 | Part | rail | sidebar | pills | list |
 |---|---|---|---|---|
 | Width | `--rail` | `--side-w` | content width | `--list-w` pane |
-| Item | Icon over label, min height 56 px (`calc(var(--s7) + var(--s2))`), margin `0 var(--s1)`, `--r` | Icon left of label, height `--ctl`, padding `0 var(--s3)`, `--r` | Icon left of label, height `--ctl`, padding `0 var(--s4) 0 var(--s3)`, radius `--r-l` (pill shape comes from the Spool token values) | Icon in a `calc(var(--s5) + var(--s1))` tile, label, summary line, chevron; min height `calc(var(--s7) + var(--s1))`; inset hairline `--border` between rows |
+| Item | Icon over label, min height 56 px (`calc(var(--s7) + var(--s2))`), margin `0 var(--s1)`, `--r` | Icon left of label, height `--ctl`, padding `0 var(--s3)`, `--r` | Icon left of label, height `--ctl`, padding `0 var(--s4) 0 var(--s3)`, radius `--r-l` (pill shape comes from the Palette token values) | Icon in a `calc(var(--s5) + var(--s1))` tile, label, summary line, chevron; min height `calc(var(--s7) + var(--s1))`; inset hairline `--border` between rows |
 | Label | `--fs-xs` weight 600 | `--fs-m` weight 600 | `--fs-m` weight 600 | `--fs-b` weight 600 |
 | Summary | hidden | hidden | hidden | `--fs-s` `--muted` |
 | Group heading | visually hidden; groups split by a 1 px `--border` hairline | `--fs-xs` uppercase, 0.05em spacing, `--muted` | hidden (System group lives in More) | `--fs-xs` uppercase, `--muted`, above a grouped `--surface` block with `--r` |
-| Active | `--accent-soft` ground, `--accent-text`, weight 650, 3 px `--accent` mark on the outer edge | same, mark on the left edge | `--accent-soft` ground, `--accent-text` | `--surface-3` ground, icon tile `--accent` with `--on-accent` |
+| Active | `--accent-soft` ground, `--accent-text`, weight 650, 3 px `--accent-text` mark on the outer edge | same, mark on the left edge | `--accent-soft` ground, `--accent-text` | `--surface-3` ground, icon tile `--accent` with `--on-accent` |
 
 Ground of the rail, sidebar and section pane: `--surface` with a 1 px `--border` edge. Icon colour `--muted`, active
 `--accent-text`.
@@ -325,7 +341,7 @@ item has `aria-current="page"`, also when the page shown is a detail inside the 
 **More** collects every item that the current layout hides: the shell lists the items whose `li` is not rendered
 (`offsetParent === null`), clones them in order into the More container and marks the current one. With `pills` on
 wide screens More opens a menu (4.2) below the button; on phones it opens the More sheet (2.5). When the current
-section is in More, the More button shows the active style and its hidden text says ", current: Logs"; with `pills`
+section is in More, the More button shows the active style and its accessible name is "More, current: Logs"; with `pills`
 its visible label becomes the section's name. With `list` on phones the navigation is the root page: `#` with no
 section shows the list full screen; choosing an item drills in; the top bar's Back returns to the list.
 
@@ -386,7 +402,7 @@ full and a short form, and the CSS shows the short form only here.
 **Sizes and tokens.** Height `--tab` plus the bottom safe-area inset; `--surface` ground, 1 px `--border` top hairline.
 Cells: min height 52 px (`calc(var(--s7) + var(--s1))`), label `--fs-xs` weight 600. Active: `--accent-soft` highlight
 behind the icon (`calc(var(--s7) + var(--s3))` wide, `calc(var(--s5) + var(--s2))` tall, radius `--r-l`), label
-`--accent-text` weight 650, and the 3 px `--accent` mark on the top edge. Fixed to the bottom; `z-index` above the
+`--accent-text` weight 650, and the 3 px `--accent-text` mark on the top edge. Fixed to the bottom; `z-index` above the
 page, below dialogs.
 
 **States.**
@@ -443,7 +459,7 @@ hidden section's `nav__item`, cloned from 2.3, with its icon, label, summary and
 - Error: "Not available" summary.
 
 **Behaviour and keyboard.** Opening moves focus to the first row. Choosing a row closes the sheet and navigates;
-focus goes to the new page's title (not back to More). Escape, the Close button, the scrim or a downward swipe close
+focus goes to the new page's title (not back to More). Escape, the Close button or a tap on the scrim close
 it without navigating, focus back on More.
 
 **Accessibility.** The sheet is a modal `dialog` labelled "More sections"; inside, `nav aria-label="More sections"`.
@@ -545,7 +561,7 @@ connection chip of the web app and the Android app (`chip--connection`, below).
 |---|---|---|---|
 | `locked` | `i-lock` | Locked | `--text`, `--border-strong` |
 | `unlocked` | `i-lock-open` | Unlocked | `--ok`, `--ok` |
-| `trusted` | `i-shield` | Trusted computer | `--accent-text`, `--accent` |
+| `trusted` | `i-shield` | Trusted computer | `--accent-text`, `--accent-text` |
 
 **States.**
 - Default: one of the three `data-state` values above.
@@ -739,7 +755,7 @@ themes and Save (a Hub setting, so it needs the setup code).
 
 **Sizes and tokens.** Tiles in a grid: four columns on desktop, two on tablet and phone, gap `--s3`. Tile: padding
 `--s3`, 1 px `--border-strong`, `--r`; preview area aspect 4:3, `--r-s`; name `--fs-b` weight 650; line `--fs-s`
-`--muted`. Checked tile: 2 px `--accent` border (1 px border plus 1 px inset), `--accent-soft` ground, check icon
+`--muted`. Checked tile: 2 px `--accent-text` border (1 px border plus 1 px inset), `--accent-soft` ground, check icon
 `--accent-text` in the top right. The preview drawing is plain elements styled by tokens: each theme's token blocks
 also match `[data-preview="<look>"]`, in light and in both dark selectors, so a tile shows its theme in the current
 appearance.
@@ -759,7 +775,7 @@ appearance.
 
 **Behaviour and keyboard.** Arrow keys move and select. Choosing sets `data-look` on `html`, writes
 `spoolwarden.look` (try/catch), and re-lays out the page at once: no reload, no Save. Focus stays on the chosen tile
-even when the layout around it changes. Result area: "Theme: Spool. Saved on this device." The same group exists in
+even when the layout around it changes. Result area: "Theme: Palette. Saved on this device." The same group exists in
 the web app's settings sheet.
 
 **Accessibility.** `fieldset` with `legend` "Theme"; each tile is a `label` wrapping a radio input; the preview is
@@ -784,7 +800,7 @@ and expanded widths.
     <span class="theme-picker__name">Console</span>
     <span class="theme-picker__line" id="look-console-line">Dense and technical</span>
   </label>
-  …Workbench, Spool, Panes…
+  …Workbench, Palette, Panes…
 </fieldset>
 ```
 
@@ -817,7 +833,7 @@ actions are default or ghost; when a thing has more than three secondary actions
 then the confirming button. On phones, footer buttons share the row equally in the same order; a page header's
 primary takes the full width.
 
-**Sizes and tokens.** Min height `--ctl` (40 px wide, 44 px phones); padding `0 var(--s4)`; gap `--s2`; `--fs-m`
+**Sizes and tokens.** Min height `--ctl` (44 px at 1024 px and below or with a coarse pointer, 40 px on a desktop with a mouse); padding `0 var(--s4)`; gap `--s2`; `--fs-m`
 weight 600, line height 1.2; `--r`; no shadow. Icon button width `--ctl`. Transition of ground, border and colour
 over `--t-fast`. Every button also has an `::after` hit area reaching 44 px.
 
@@ -1018,7 +1034,7 @@ error is in the list even while hidden, so it is read once shown); `aria-invalid
 (radios, segments, checkbox lists) use `fieldset` and `legend`. An error summary is a `role="alert"` region whose
 links move focus to the fields.
 
-**Theme profiles.** No change with `nav`, `collection`, `detail`. Spool's larger type and control height come from
+**Theme profiles.** No change with `nav`, `collection`, `detail`. Palette's larger type and control height come from
 its tokens.
 
 **Android.** `OutlinedTextField` with `label`, `supportingText` (hint or error), `isError`, `singleLine`; optional
@@ -1219,15 +1235,14 @@ applies when its value changes (with the lock and a result, like a toggle).
 
 ### 5.6 Toggle (switch)
 
-**Purpose.** Switch something on or off **at once**, with no Save: "Follow nightly builds", "Trusted computers",
+**Purpose.** Switch something on or off **at once**, with no Save: "Allow printer changes from the public address", "Trusted computers",
 "Notify this phone" (in the web app's group "Print alerts on this phone").
 
 **Anatomy.** A switch (track and thumb), its label, and the state word "On" or "Off" after it. A hint and a result
 area below.
 
 **Rule.** A toggle applies the moment it changes. It is never placed inside a form group that has a Save button;
-there the same choice is a checkbox (5.8). When switching has a consequence worth reading first (nightly builds are
-untested), the change opens a confirm dialog (9.1) before anything is sent.
+there the same choice is a checkbox (5.8). When switching has a consequence worth reading first (turning Trusted computers off), the change opens a confirm dialog (9.1) before anything is sent.
 
 **Toggles that guard security** (the Android app's "Check the fingerprint when pairing by address", on by default)
 are never placed among routine options or at the bottom of a task screen. They sit last in their screen or group,
@@ -1239,8 +1254,8 @@ lowers security. Turning it off opens a destructive dialog (9.1) naming the risk
 badge (7.1) beside the state word. Turning it back on asks nothing.
 
 **Sizes and tokens.** Track `calc(var(--s6) + var(--s2))` by `--s5` (40 by 24 px), radius half its height, 1 px
-`--border-strong`, `--surface-3` ground; thumb `--s4`, `--muted`. On: track `--accent` with border `--accent`, thumb
-`--on-accent`, moved by `--s4` over `--t-fast`. State word `--fs-s` `--mono`, `--muted` (Off) or `--accent-text`
+`--border-strong`, `--surface-3` ground; thumb `--s4`, `--muted`. On: track `--accent-text` with border `--accent-text`, thumb
+`--surface`, moved by `--s4` over `--t-fast`. State word `--fs-s` `--mono`, `--muted` (Off) or `--accent-text`
 (On). The row is at least 44 px high and the label is part of the hit area.
 
 **States.**
@@ -1255,7 +1270,7 @@ badge (7.1) beside the state word. Turning it back on asks nothing.
   not answer. Try again."). Cancelling the unlock dialog or the confirm dialog also returns it.
 
 **Behaviour and keyboard.** Space toggles (Enter too). The change passes the lock (1.4). Success writes a result
-naming the consequence ("On: each new nightly build is installed after the current one.").
+naming the consequence ("On: this browser needs no setup code for 90 days after its last use.").
 
 **Accessibility.** `input type="checkbox" role="switch"` with its `label`; the state word is `aria-hidden` (the
 switch's checked state is read); the result area is `role="status"`.
@@ -1268,11 +1283,11 @@ switch's checked state is read); the result area is `role="status"`.
 ```html
 <div class="toggle">
   <label class="toggle__row">
-    <input class="toggle__input" type="checkbox" role="switch" aria-describedby="nightly-hint">
-    <span class="toggle__label">Follow nightly builds</span>
+    <input class="toggle__input" type="checkbox" role="switch" aria-describedby="public-changes-hint">
+    <span class="toggle__label">Allow printer changes from the public address</span>
     <span class="toggle__word" aria-hidden="true"></span>
   </label>
-  <p class="toggle__hint" id="nightly-hint">Nightly builds are untested and unsigned.</p>
+  <p class="toggle__hint" id="public-changes-hint">Printers can then be renamed, re-addressed and removed from the public address too.</p>
   <p class="result" role="status"></p>
 </div>
 ```
@@ -1291,7 +1306,7 @@ in `mono`). The cards variant draws each option as a card with the radio, a bold
 `calc(var(--ctl) - var(--s2))` with a hit area reaching 44 px, padding `0 var(--s3)`, `--fs-m`, `--muted`; checked
 `--accent-soft` ground, `--accent-text`, weight 650. `segmented--wide` stretches segments to equal widths. Cards
 variant: grid of two columns (one on phones), gap `--s2`, card padding `--s3`, 1 px `--border-strong`, `--r`;
-checked card `--accent-soft` with a 1 px inset `--accent`.
+checked card `--accent-soft` with a 1 px inset `--accent-text`.
 
 **States.**
 - Default: one option checked.
@@ -1333,7 +1348,7 @@ selection of collection items, and on/off settings that are saved with a group's
 
 **Anatomy.** Native checkbox, label text, optional second line (`check__desc`).
 
-**Sizes and tokens.** Box `calc(var(--s4) + var(--s1) / 2)` (18 px), `accent-color: var(--accent)`; row min height
+**Sizes and tokens.** Box `calc(var(--s4) + var(--s1) / 2)` (18 px), `accent-color: var(--accent-text)`; row min height
 44 px, gap `--s2`, `--fs-m`; description `--fs-s` `--muted`. The whole row is the hit area.
 
 **States.**
@@ -1374,7 +1389,7 @@ On wide screens the field is also a drop zone. The photos variant (`field--photo
 thumbnails (7.6) with a Remove button on each and a count "Photos: 2 of 8".
 
 **Sizes and tokens.** As 5.1; selector button as `btn` (4.1). Drop zone: 1 px dashed `--border-strong`, `--r`,
-padding `--s4`; while a file is dragged over it `--accent-soft` ground and `--accent` border. Thumbnails 96 px
+padding `--s4`; while a file is dragged over it `--accent-soft` ground and `--accent-text` border. Thumbnails 96 px
 (`calc(var(--s7) * 2)`) in a wrapping grid, gap `--s2`; their Remove buttons are 44 px.
 
 **States.**
@@ -1446,7 +1461,7 @@ reached.
   <label class="field__label" for="ai-note">What is wrong?</label>
   <textarea class="field__control" id="ai-note" rows="3" placeholder="e.g. brand is Polymaker"
             aria-describedby="ai-note-hint ai-note-error"></textarea>
-  <p class="field__hint" id="ai-note-hint">The AI reads the photos again with your note and proposes changes.
+  <p class="field__hint" id="ai-note-hint">The Label Reader reads the photos again with your note and suggests changes.
     Nothing changes until you accept.</p>
   <p class="field__error" id="ai-note-error" hidden></p>
 </div>
@@ -1587,7 +1602,7 @@ spools) so they can be scanned, sorted, opened and acted on. One markup renders 
 
 **Sizes and tokens.**
 
-| | `table` (Console) | `cards` (Workbench) | `tiles` (Spool) | `rows` (Panes) |
+| | `table` (Console) | `cards` (Workbench) | `tiles` (Palette) | `rows` (Panes) |
 |---|---|---|---|---|
 | Container | `--surface`, 1 px `--border`, `--r`; CSS grid, every row a `subgrid` of the collection's column template | Grid `repeat(auto-fill, minmax(18rem, 1fr))`, gap `--s4` | Grid `repeat(auto-fill, minmax(14rem, 1fr))`, gap `--s4` | `--surface` block, `--r`, 1 px `--border` hairlines between rows inset by the visual's width |
 | Item | Main row min height `var(--row)` (48 px); 1 px `--border` between items | Card: `--surface`, 1 px `--border`, `--r`, padding `--s4`, gap `--s2` | Tile: `--surface`, 1 px `--border`, `--r`, padding `--s4`; `visual` at the top, `calc(var(--s7) * 2)` | Row min height `var(--row)` (48 px), padding `var(--s3) var(--s4)` |
@@ -1735,7 +1750,7 @@ long forms open in a side **drawer**.
 - **Foot** (forms only): result area, Cancel, the primary button.
 
 ```
-inline (Console)                         sheet (Spool, phone)        pane (Panes, desktop)
+inline (Console)                         sheet (Palette, phone)      pane (Panes, desktop)
 | v Workshop X1  ...   [Test] [...] |    +------------------+       +--------+-------------+--------------+
 |  +---------------------------------+   | < Workshop X1  x |       |Sections| Printers    | Workshop X1  |
 |  | AMS slots        | Actions      |   |------------------|       |        | Workshop X1>| AMS slots    |
@@ -1751,7 +1766,7 @@ inline (Console)                         sheet (Spool, phone)        pane (Panes
 |---|---|---|
 | `inline` (Console) | Under its row, full width of the collection | `--surface-2` ground, 1 px dashed `--border` above, padding `var(--s4) var(--s4) var(--s5)`, left edge aligned with the title column (`calc(var(--s7) + var(--s4))` on desktop, `--s4` below); body two columns `minmax(0, 1.25fr) minmax(0, 1fr)` with gap `--s5` on desktop, one column below |
 | `card` (Workbench) | Inside its card, which grows to the full width of the grid | 1 px `--border` above, padding-top `--s4`, same two columns on desktop |
-| `sheet` (Spool) | A modal sheet: the region is moved into the detail host (below) | Phone: from `--top` below the top edge to the bottom, full width, top corners `--r-l`. Tablet and desktop: full height at the right edge, 420 px wide, 1 px `--border-strong` on its left. `--surface`, `--e2`, `--scrim` behind; rises or slides in over `--t-slow` |
+| `sheet` (Palette) | A modal sheet: the region is moved into the detail host (below) | Phone: from `--top` below the top edge to the bottom, full width, top corners `--r-l`. Tablet and desktop: full height at the right edge, 420 px wide, 1 px `--border-strong` on its left. `--surface`, `--e2`, `--scrim` behind; rises or slides in over `--t-slow` |
 | `pane` (Panes) | The right pane | Desktop: third column, at least 22rem, own scroll, sticky below the top bar, 1 px `--border` on its left. Tablet and phone: covers the list pane (drill in), Back in its head |
 | drawer (form container under `inline`) | The region moved into the drawer host, a `dialog--drawer` (9.1) | Full height at the right edge, 420 px, as the sheet on wide screens; a bottom sheet on phones |
 
@@ -1914,7 +1929,7 @@ dirty (5.11). In `list` it also shows each group's one-line summary ("Set", "3 l
 
 **Sizes and tokens.** Wide screens: a sticky column 200 px wide (`calc(var(--s7) * 4 + var(--s1) * 2)`) at the
 left of the groups, top offset `calc(var(--top) + var(--s4))`; links height `--ctl`, padding `0 var(--s3)`, `--r`,
-`--fs-m`, `--muted`; current link `--surface` ground, `--text`, weight 650, a 2 px `--accent` mark on its left and a
+`--fs-m`, `--muted`; current link `--surface` ground, `--text`, weight 650, a 2 px `--accent-text` mark on its left and a
 1 px `--border` ring. Tablet: a sticky row under the top bar on `--bg` with a 1 px `--border` below, links as chips
 (1 px `--border`, height `calc(var(--s6) + var(--s1))` = 36 px plus hit area) that **wrap** onto a second line rather than scroll. Phone: one sticky
 button "Group: General" (`btn`, full width) that opens a bottom sheet listing the groups. Dirty mark `--fs-xs`
@@ -2131,7 +2146,7 @@ dashed ring for empty), kept and fed from the theme.
 ### 7.4 Spool ring
 
 **Purpose.** Show one spool's colour and how much is left as a ring, the way a spool looks from the side. The main
-visual of the Spool theme's tiles, and the spool picture in every detail of a spool.
+visual of the Palette theme's tiles, and the spool picture in every detail of a spool.
 
 **Anatomy.** An inline SVG: a track circle (`--surface-3`), an arc in the filament colour from 12 o'clock clockwise
 for the remaining share, 1 px `--border-strong` rings inside and outside the band (pale colours stay visible), a hub
@@ -2191,7 +2206,7 @@ is in use; offer Load and Unload where the interface has them.
 **Sizes and tokens.** Compact: swatches gap `--s1`. Full: rows min height 44 px, grid
 `calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) 7rem auto` (30 px, 18 px), gap
 `--s2`, padding `var(--s1) var(--s3)`, 1 px `--border` between rows, the list in `--surface` with 1 px `--border` and `--r`. Active row:
-3 px `--accent` mark on its left and "In use" in `--accent-text` weight 650. On phones the bar is hidden (the
+3 px `--accent-text` mark on its left and "In use" in `--accent-text` weight 650. On phones the bar is hidden (the
 percentage stays) and the last column shrinks to 4.5rem.
 
 **States.**
@@ -2256,7 +2271,7 @@ Placeholder 1 px dashed `--border-strong`, icon `--muted`. Viewer: `dialog--wide
 - Default: as above.
 - Hover: thumbnail border `--border-strong`, `cursor: zoom-in`.
 - Focus: 2 px `--focus` ring.
-- Pressed: border `--accent`.
+- Pressed: border `--accent-text`.
 - Disabled: not applicable.
 - Loading: a skeleton box of the same size (width and height are set, so nothing shifts); in the viewer a spinner in
   the image area.
@@ -2406,7 +2421,7 @@ value, struck through; an arrow; new value, bold; an optional note), a sentence 
 and the actions **Accept** (primary) and **Discard**. A compact variant without actions and container (`changes--compact`)
 is used inside revision lists.
 
-**Sizes and tokens.** Container 1 px `--accent`, `--accent-soft` ground, `--r`, padding `--s3`; heading `--fs-s`
+**Sizes and tokens.** Container 1 px `--accent-text`, `--accent-soft` ground, `--r`, padding `--s3`; heading `--fs-s`
 weight 650. Each change: `--surface`, 1 px `--border`, `--r`, padding `var(--s2) var(--s3)`, grid
 `minmax(6rem, auto) minmax(0, 1fr) auto minmax(0, 1fr)`, gap `--s2`, `--fs-m`; old value `--muted` with
 `line-through`; new value weight 600; values in `mono` with units. On phones the field name takes its own line and
@@ -2550,7 +2565,7 @@ person goes through in steps (Restore a backup, Map by loading filament, pairing
    bar (8.3) whose value is the share of steps done.
 2. **Numbered steps** (`steps`, the person does them): an ordered list; each step has a number circle, a title and
    its content (fields, buttons, result). Each step is **done** (check icon in the circle, `--ok`), **current**
-   (circle `--accent` border, title weight 650) or **later** (`--muted`).
+   (circle `--accent-text` border, title weight 650) or **later** (`--muted`).
 
 **Sizes and tokens.** Step line as the inline result (8.6) with the bar `max-width: 20rem` under the sentence.
 Numbered steps: grid `var(--s5) minmax(0, 1fr)`, gap `--s3`; circle `--s5`, 1 px `--border-strong`, `--fs-s` `mono`
@@ -2597,7 +2612,7 @@ bar is a `progressbar` with `aria-valuetext` "Step 2 of 4".
 **Anatomy.** A label (what, and the value: "Uploading… 42 %", "62 % · layer 120 of 310 · 1 h 12 min left"), a track
 and its fill. An indeterminate variant (`progress--indeterminate`) is used when the amount is not known.
 
-**Sizes and tokens.** Height `--s1`, radius half the height, track `--surface-3`, fill `--accent`, fill width from
+**Sizes and tokens.** Height `--s1`, radius half the height, track `--surface-3`, fill `--accent-text`, fill width from
 `--level` (set by script), changing over `--t`. Label `--fs-s`, numbers `mono`. A failed task's fill is `--bad`.
 
 **States.**
@@ -2649,7 +2664,6 @@ Job titles by the Hub's job `name`:
 | `rollback` | Rolling back | `check` | Checking for updates |
 | `library_update` | Updating the Filament Catalog | `library_rollback` | Going back to the previous Filament Catalog |
 | `remote_issue` | Getting the certificate | `station_pair` | Pairing the Weigh Station |
-| `channel_nightly` | Switching to nightly builds | `channel_stable` | Switching to signed releases |
 | `reader_setup` | Setting up a Tag Reader | any other name | Working |
 
 End lines: "<Title>: done." · "<Title>: failed. See the log." · a job that stopped without finishing: "<Title>:
@@ -2660,14 +2674,14 @@ shows an indeterminate bar. Which is which is fixed here, so every interface sho
 
 | Job (`name`) | Steps | The step sentences, in order |
 |---|---|---|
-| `backup` | Counted | Collecting the settings and pairings · Copying the Spoolman database · Writing the zip · Checking the zip |
-| `restore` | Counted | Checking the backup · Keeping what is here now as a backup · Stopping the services · Putting the backup in place · Starting the services · Checking that everything answers |
-| `update` | Counted | Downloading <version> · Checking its signature · Installing · Restarting the Hub · Checking that it answers |
-| `rollback` | Counted | Finding the kept version · Installing <version> · Restarting the Hub · Checking that it answers |
-| `apply` | Counted | One step per feature or service that changes ("Switching on Klipper printers", "Restarting the Hub service"), then "Checking that everything answers"; the count is known once the plan is made, before the first step |
+| `backup` | Counted | Copying the Spoolman database · Collecting the settings and pairings · Writing the zip |
+| `restore` | Counted | Checking the backup · Keeping what is here now as a backup (left out, and the count one lower, on a machine with nothing to keep) · Stopping the services · Putting the backup in place · Starting the services · Checking that everything answers |
+| `update` | Counted | Downloading <version> · Checking its signature · Installing <version> (the restart and the check that the Hub answers are part of this step; the strip shows the Hub restarting state, 8.5, while they run) |
+| `rollback` | Counted | Finding the kept version · Installing <version> (with the restart and the check, as for `update`) |
+| `apply` | Counted | One step per phase of the plan (installing what is needed, writing the settings, switching services on or off, restarting), then "Checking that everything answers"; the count is known once the plan is made, before the first step |
 | `library_update` | Counted | Downloading the Filament Catalog · Checking its signature · Putting it in place · Asking for a preset build |
 | `library_rollback` | Counted | Putting the previous Filament Catalog back · Asking for a preset build |
-| `reader_setup` (flashing on the Hub) | Counted | Finding the board · Writing the program · Checking what was written · Joining the Wi-Fi · Reaching the Hub |
+| `reader_setup` (flashing on the Hub) | Counted | Finding the board · Writing the program · Checking what was written · Joining the Wi-Fi · Reaching the Hub. When the board already runs the current program, steps two and three read "Keeping the program that is on the board" and "Writing the settings" |
 | `station_pair` | Counted | Asking the Hub · Saving the pairing · Restarting the Weigh Station service |
 | `check` | Not counted | One short request |
 | `remote_issue` | Not counted | The certificate tool runs for an unknown time and reports no steps |
@@ -2704,7 +2718,7 @@ left and right `--s2`, bottom above the bottom bar (`calc(var(--tab) + env(safe-
 - Pressed: buttons as 4.1.
 - Disabled: Show the whole log is disabled until the job has ended (reason "Available when the job has ended.").
 - Loading: on page load, before `GET job` answers, nothing is shown.
-- Error: polling fails during a job that restarts the Hub (`apply`, `update`, `rollback`, `restore`, `channel_*`):
+- Error: polling fails during a job that restarts the Hub (`apply`, `update`, `rollback`, `restore`):
   the Hub restarting state (8.5). Polling fails otherwise: a `--warn` line "Lost touch with the Hub; still trying…"
   under the head, polling continues.
 - Done / Failed: badge and end line; bar full (`--bad` when failed); Close shown.
@@ -3044,8 +3058,8 @@ bottom); `--surface`, top corners `--r-l`, `--e2`, `--scrim` behind; handle `cal
 - Error: the body shows the error state (10.2).
 
 **Behaviour and keyboard.** Opened with `showModal()`; focus moves to the first item or field. It closes with Close,
-Escape, a tap on the scrim, or a downward swipe that starts on the handle or head (more than a third of its height,
-or a quick flick); the swipe always has the Close button as its equivalent. When the on-screen keyboard opens, the
+Escape or a tap on the scrim; there is no swipe to close (the web has no press-down handlers outside the photo
+viewer, `07-accessibility.md` TGT-5), and the handle is a drawing, not a control. When the on-screen keyboard opens, the
 sheet shrinks to stay above it (`visualViewport`). Focus returns to the opener on close.
 
 **Accessibility.** As a modal dialog: labelled by its title; the handle is `aria-hidden`.

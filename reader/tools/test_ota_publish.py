@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import shlex
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -47,6 +48,16 @@ def test_sig2_signs_the_build_number_with_the_hash(tmp_path):
         pub.verify(base64.b64decode(m["sig2"]), op.build_digest(sha, 1793600001), pre)
     # the old signature (hash only) is kept so readers flashed earlier still install it
     pub.verify(base64.b64decode(m["sig"]), sha, pre)
+
+
+def test_sig2_preimage_matches_the_firmware():
+    # The same vector and hex as test_ota_sig_preimage_matches_publisher in
+    # reader/test/test_core/test_main.cpp (the firmware's otaSigPreimage); change both or neither.
+    sha = bytes(range(32))
+    pre_hex = ("666b2d7265616465722d6f746101000102030405060708090a0b0c0d0e0f1011121314151617"
+               "18191a1b1c1d1e1f000000006ae82a00")
+    assert op.SIG2_PREFIX + sha + (1793600000).to_bytes(8, "big") == bytes.fromhex(pre_hex)
+    assert op.build_digest(sha, 1793600000) == hashlib.sha256(bytes.fromhex(pre_hex)).digest()
 
 
 def test_key_file_is_created_once_and_reused(tmp_path):
@@ -179,6 +190,32 @@ def test_make_stage_refuses_an_unusable_reply(monkeypatch, out):
     monkeypatch.setattr(op.subprocess, "run", lambda cmd, **kw: types.SimpleNamespace(stdout=out))
     with pytest.raises(SystemExit):
         op.make_stage("srv")
+
+
+@pytest.mark.parametrize("failing", ["scp", "ssh"])
+def test_a_failed_upload_or_install_still_removes_the_stage(monkeypatch, tmp_path, failing):
+    key = tmp_path / "k.pem"
+    op.load_or_create_key(key, create=True)
+    build_dir = tmp_path / "pio" / ".pio" / "build" / "env"
+    build_dir.mkdir(parents=True)
+    monkeypatch.setattr(op, "READER", tmp_path / "pio")
+    ran = []
+
+    def fake_run(cmd, **kw):     # subprocess.run: mktemp -d and the cleanup
+        ran.append(cmd)
+        return types.SimpleNamespace(stdout="/tmp/tmp.Ab12Cd\n")
+
+    def run(cmd, **kw):          # ota_publish.run: the build, the scp, the install
+        if cmd[0] == sys.executable:
+            (build_dir / "firmware.bin").write_bytes(b"\xe9" * 64)
+            (build_dir / "fw_build.txt").write_text(kw["env"]["FW_BUILD"])
+        elif cmd[0] == failing:
+            raise subprocess.CalledProcessError(1, cmd)
+    monkeypatch.setattr(op, "run", run)
+    monkeypatch.setattr(op.subprocess, "run", fake_run)
+    with pytest.raises(subprocess.CalledProcessError):
+        op.main(["--host", "srv", "--key", str(key), "--env", "env"])
+    assert ["ssh", "srv", "rm -rf /tmp/tmp.Ab12Cd"] in ran
 
 
 def test_live_problem_reports_instead_of_raising(monkeypatch):

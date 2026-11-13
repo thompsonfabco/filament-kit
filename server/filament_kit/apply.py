@@ -655,7 +655,10 @@ def _remote_install(ex: _Exec, host: str) -> None:
         try:
             ex.write(f"{remote.TLS_DIR}/fullchain.pem", cert_pem, 0o644)
         except BaseException:       # a stop between the two replaces: put the old key back so the pair still matches
-            _put_back(key, old_key)
+            # (not when the new certificate is already in place: an error after its replace, in the chmod, would
+            # leave the old key beside it)
+            if not (cert.exists() and cert.read_bytes() == cert_pem):
+                _put_back(key, old_key)
             raise
         ex.write(remote.PLACEHOLDER_MARK, (new + "\n").encode("ascii"), 0o644)
     try:
@@ -731,6 +734,8 @@ def _remote_off(ex: _Exec, name: str) -> None:
             gone.append(what)
     if not gone:
         return
+    if "the kit's nginx start check" in gone:
+        ex.ok(["systemctl", "daemon-reload"])    # systemd keeps reading the drop-in until told it is gone
     print(f"Remote is off: removed {', '.join(gone)} (nginx, certbot, the certificate and other routes were left).")
     if ex.ok(["nginx", "-t"]):
         ex.ok(["systemctl", "reload", "nginx"])  # a stopped nginx needs nothing
@@ -902,17 +907,45 @@ def _fail(a: Action, e: Exception) -> None:
     raise ApplyError(f"{_label(a)}: {e}") from e
 
 
+def step_name(a: Action) -> str:
+    """The sentence of the job step an action belongs to (docs/design 02 8.4): the actions of the plan, grouped by what
+    the person is waiting for."""
+    k, arg = a.kind, a.arg
+    if k in ("apt", "apt_lean"):
+        return "Installing the packages the features need"
+    if k == "wait_http" or (k == "enable" and arg == "spoolman.service"):
+        return "Starting Spoolman"
+    if k == "ensure_fields" or (k == "enable" and arg in ("filament-kit.service", "filament-kit-setup.socket")):
+        return "Restarting the Hub service"
+    if k in ("enable", "remote_route", "remote_print"):
+        return "Starting the other services"
+    if k == "library_fetch":
+        return "Downloading the Filament Catalog"
+    if k == "first_build":
+        return "Building the presets"
+    return "Writing the service files and settings"
+
+
+def step_names(actions: list[Action]) -> list[str]:
+    """The steps `execute` tells its `step` about, in order: a new one starts where the sentence changes."""
+    return [n for i, n in enumerate(map(step_name, actions)) if i == 0 or n != step_name(actions[i - 1])]
+
+
 def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_checked,
-            resources: Path | None = None, root: Path = Path("/")) -> None:
+            resources: Path | None = None, root: Path = Path("/"),
+            step: Callable[[str], None] | None = None) -> None:
     """Run `actions` in order; stop at the first failure with `FAIL <step>` / `fix: <hint>` (ApplyError).
 
-    `resources` defaults to config.paths().opt / "resources" (what install.sh copies there)."""
+    `resources` defaults to config.paths().opt / "resources" (what install.sh copies there). `step(sentence)` is told
+    when each of step_names(actions) starts (steps.py)."""
     if resources is None:
         resources = config.paths().opt / "resources"
     ex = _Exec(run, Path(resources), Path(root))
     i = 0
     while i < len(actions):
         a = actions[i]
+        if step is not None and (i == 0 or step_name(a) != step_name(actions[i - 1])):
+            step(step_name(a))
         if a.kind in ("apt", "apt_lean"):
             # one batched install for consecutive apt actions of the same kind; apt_lean skips recommended packages
             # (espeak-ng would otherwise pull in a whole audio stack)

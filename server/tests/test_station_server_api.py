@@ -17,6 +17,7 @@ from filament_kit import cli, config, inventory, modules, pairing
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
 from filament_kit.station import server_api
+from step_lines import sentences
 
 UID = "a:b:c:d:e:f:1"
 FP = "ab" * 32
@@ -153,6 +154,19 @@ def test_station_pair_local_needs_no_link_and_no_answer(server, monkeypatch, cap
     api = server_api.ServerApi(timeout=10)
     assert api.paired and api.ips[0] == "127.0.0.1" and api.tag_lookup(UID)[0] == 200
     assert api.token not in out.out + out.err           # the output goes to the page's job log
+
+
+def test_station_pair_local_writes_its_three_steps(server, monkeypatch, capsys):
+    _local_pair(server, monkeypatch)
+    assert cli.main(["station", "pair", "--local"]) == 0
+    assert sentences(capsys.readouterr().out, 3) == [
+        "Asking the Hub", "Saving the pairing", "Restarting the Weigh Station service"]
+
+
+def test_station_pair_local_with_the_station_off_stops_after_saving(server, monkeypatch, capsys):
+    _local_pair(server, monkeypatch, on=("server",))
+    assert cli.main(["station", "pair", "--local"]) == 0
+    assert sentences(capsys.readouterr().out, 3, whole=False) == ["Asking the Hub", "Saving the pairing"]
 
 
 def test_station_pair_local_refuses_with_no_server_here(server, monkeypatch, capsys):

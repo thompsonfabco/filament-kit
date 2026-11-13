@@ -43,6 +43,7 @@ import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.ui.pair.Mismatch
 import com.thompsonfabco.filamentkit.ui.pair.PairTexts
 import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /** The printers the server knows; tapping a set-up printer opens it, an unset one asks for its Access Code. */
 @Composable
@@ -110,11 +111,12 @@ private fun PrinterRow(p: Printer, onClick: () -> Unit) {
 }
 
 
+@Composable
 internal fun stateColor(state: String): Color = when (state) {
-    "connected" -> Color(0xFF2E7D32)
-    "wrong_code", "cert_changed" -> Color(0xFFC62828)
-    "needs_developer_mode" -> Color(0xFFF9A825)
-    else -> Color(0xFF9E9E9E)
+    "connected" -> SpoolwardenTheme.colors.ok
+    "wrong_code", "cert_changed" -> SpoolwardenTheme.colors.bad
+    "needs_developer_mode" -> SpoolwardenTheme.colors.warn
+    else -> SpoolwardenTheme.colors.muted
 }
 
 /** Asks for the Access Code. The code lives only in this dialog's memory and goes straight to the server. */

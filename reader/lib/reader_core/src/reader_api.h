@@ -73,20 +73,24 @@ bool listsDue(uint32_t now, uint32_t lastAt, bool serverOk, bool screenOn,
 
 // Decides whether a tag read counts as a new scan: the same tag is ignored for
 // cooldownMs after it counted, and after requireLift() (a refused or refreshed tap)
-// no read counts until a poll saw no tag at all, so a spool left on the reader is
-// not posted to a slot the user has not confirmed.
+// no read counts until LIFT_EMPTY_POLLS polls in a row saw no tag (one missed 80 ms
+// poll of a tag at the edge of the field is not a lift), so a spool left on the
+// reader is not posted to a slot the user has not confirmed.
+static const int LIFT_EMPTY_POLLS = 4;   // x ~80 ms poll = ~320 ms without a tag
 struct TagGate {
   std::string uid;
   uint32_t at = 0;
   bool needLift = false;
+  int emptyPolls = 0;
   bool accept(const std::string& u, uint32_t now, uint32_t cooldownMs) {
+    emptyPolls = 0;                           // a tag was read: the empty run starts over
     if (needLift) return false;
     if (u == uid && now - at <= cooldownMs) return false;
     uid = u; at = now;
     return true;
   }
-  void noTag() { needLift = false; }          // a poll found no tag: it was lifted
-  void requireLift() { needLift = true; }
+  void noTag() { if (++emptyPolls >= LIFT_EMPTY_POLLS) needLift = false; }   // a poll found no tag
+  void requireLift() { needLift = true; emptyPolls = 0; }
 };
 
 // Retry delay after `failures` failed refreshes in a row: 10 s, 20 s, 40 s, then 60 s.

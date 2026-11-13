@@ -137,6 +137,20 @@ def _descendants(pid: int) -> list[int]:
     return found
 
 
+def _final_output(proc: subprocess.Popen, grace: float = 10) -> str:
+    """What `proc` printed after it was killed. A descendant that escaped the kill and still holds the pipe would make a
+    plain communicate() wait for ever: after `grace` seconds the process this test started is killed again (by its PID)
+    and what was read so far is returned."""
+    try:
+        out, _ = proc.communicate(timeout=grace)
+    except subprocess.TimeoutExpired as e:
+        proc.kill()
+        out = e.output
+        if isinstance(out, bytes):
+            out = out.decode(errors="replace")
+    return out or ""
+
+
 def run_get(get_sh: Path, args: list[str], *, tty: bool, env_extra: dict | None = None, piped: bool = True,
             timeout: float = 300):
     """`cat get.sh | sudo bash -s -- args` (or `sudo bash get.sh args` with piped=False); without tty in a new
@@ -158,8 +172,8 @@ def run_get(get_sh: Path, args: list[str], *, tty: bool, env_extra: dict | None 
         pids = _descendants(proc.pid)               # before the parents die and the children are re-parented
         subprocess.run(["sudo", "-n", "kill", "-KILL", *map(str, pids)], capture_output=True)   # sudo's child runs as root
         proc.kill()
-        out, _ = proc.communicate()
-        return subprocess.CompletedProcess(cmd, None, out or "", "timed out (stopped on the terminal?)")
+        out = _final_output(proc)
+        return subprocess.CompletedProcess(cmd, None, out, "timed out (stopped on the terminal?)")
 
 
 def run_get_keys(get_sh: Path, args: list[str], *, piped: bool) -> tuple[int | None, bytes, bool]:

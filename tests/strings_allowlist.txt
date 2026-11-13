@@ -1545,3 +1545,4 @@ server/filament_kit/web/static/printers.js | Yes | today's literal in a page scr
 server/filament_kit/web/static/printers.js | Yes, how do I share it? | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
 server/filament_kit/web/static/printers.js | left nozzle | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
 server/filament_kit/web/static/printers.js | right nozzle | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/theme/SpoolwardenTheme.kt | tnum | OpenType feature name for tabular figures, not text on the screen

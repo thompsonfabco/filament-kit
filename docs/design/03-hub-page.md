@@ -263,7 +263,7 @@ two groups separated by a hairline.
 
 - **Desktop and tablet:** the navigation rail, `--rail` wide, icon above a `--fs-xs` label; labels that do not fit
   in two lines ("Recently added", "Slicer presets", "Flash a device") break into two lines, never truncate. The
-  active entry has `--accent-soft` ground, weight 600 label, the 3 px `--accent` mark at the rail's inner edge and
+  active entry has `--accent-soft` ground, weight 600 label, the 3 px `--accent-text` mark at the rail's inner edge and
   `aria-current="page"`. Hover shows the live summary as a tooltip.
 - **Phone:** the bottom bar with Overview, Printers, Recent, Settings, More. More opens the More sheet: the six
   other sections, each a row with icon, name, live summary and chevron; the active one has `aria-current="page"`.
@@ -321,7 +321,7 @@ Where each job is started:
 | `name` | Started from |
 |---|---|
 | `apply` | Features; Settings > General (Spoolman address), Network and addresses, Weigh Station voice |
-| `update`, `rollback`, `check`, `channel_nightly`, `channel_stable` | Updates |
+| `update`, `rollback`, `check` | Updates |
 | `backup`, `restore` | Settings > Backups and restore |
 | `library_update`, `library_rollback` | Settings > Filament Catalog |
 | `remote_issue` | Settings > Network and addresses |
@@ -813,7 +813,7 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 | Header | Breadcrumb with the list as link; title "<vendor> <name>" (x<n>), or "No spools" for a record with no spools (its photos, fields and revisions still show; a change the Hub refuses because the spools are gone shows the Hub's text at the Save or Accept button); meta: time, source, state badge, spools. Actions: ghost **Back** (to `#recent`), icon buttons "Newer record" and "Older record" (disabled at the ends) |
 | Item choice | Only when the record has several items: segmented choice "Item 1", "Item 2", … with the line "Spools <ids> (filament <id>). Changes apply to all of them." |
 | Photos | Photo thumbnails (96 px); pressing one opens the photo viewer (full width, Left and Right between photos, Escape closes, "Photo <n> of <m>"). No photo: "No photo was taken for this addition." |
-| Fields | Key-value list in four groups. Identity: Brand, Name, Material, Colour (filament swatch and hex). Weights: Net weight (g), Empty spool weight (g), Density (g/cm³). Temperatures: Nozzle (°C), Bed (°C), Nozzle range (°C), Bed range (°C). Other: Price per kg, Line. Empty values read "(empty)" in `--muted`. Per-field confidence display next to the value when it is not high. Card action: default **Edit by hand**. |
+| Fields | Key-value list in four groups. Identity: Brand, Name, Material, Colour (filament swatch and hex). Weights: Net weight, Empty spool weight, Density. Temperatures: Nozzle, Bed, Nozzle range, Bed range. Other: Price per kg, Line. Empty values read "(empty)" in `--muted`. Per-field confidence display next to the value when it is not high. Card action: default **Edit by hand**. |
 | Fields, editing | The values become fields (text; numbers with unit). Foot: inline result, default **Cancel**, primary **Save changes**. Only changed fields are sent: `P intake/history/<id>/apply` (code) `{item, values}`. |
 | Ask the Label Reader to correct it | Text area "What is wrong?", placeholder "e.g. brand is Polymaker", hint "The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept." Default button **Ask the Label Reader** → `P intake/history/<id>/revise` (code) `{item, note}` |
 | Suggestion | Change list (before → after per field), title "The Label Reader (<engine>) suggests <n> changes" or "The Label Reader changed nothing."; when no photo was kept: "No photo was kept for this record: it worked from the saved values and your note." Primary **Accept** → `P intake/history/<id>/apply` (code) `{proposal}`; default **Discard** (nothing is sent) |
@@ -839,7 +839,7 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 | Loading | Five skeleton rows; record: skeleton photos and field groups |
 | Empty | Empty state with spool icon: "Nothing added yet" / "No spool has been added since the history started. Spools added from the web app, the app or the Weigh Station appear here." |
 | Record not found (deep link to an old id) | Error state "This record is no longer kept. Only the newest <keep> are." with **Back to Recently added** |
-| Label Reader off (`ai: false`) | The Ask card shows the off state: "The Label Reader is switched off, so corrections are by hand." with link **Features**; Edit by hand works |
+| Label Reader off (`ai: false`) | The Ask card shows the off state: "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page." with link **Features**; Edit by hand works |
 | Locked | Edit by hand, Ask, Accept and Undo ask for the code in place |
 | Error | "Could not read the additions. <Hub's text>" + **Try again** |
 
@@ -1037,7 +1037,7 @@ Phone:  one column; product lines become cards.
 | Part | Content |
 |---|---|
 | Summary | "Last build <stamp>: <n> presets, <m> for Orca Slicer, <k> problems." or "No build yet." |
-| Last attempt failed | Error line: "The last build failed: <error>" |
+| Last attempt failed | Error line: "The last preset build failed: <error>" |
 | Waiting | Note line with `waiting_text` |
 | Slicer Sync | Status badge "OK" with "Slicer Sync has reported in.", or "Not configured" (Note) with "Slicer Sync is not set up. Link it in Devices." (link to `#devices`) |
 | Problems | List of `problems` as error lines |
@@ -1242,7 +1242,7 @@ Description: "How this page looks on this device." Per device; needs no setup co
 | Field | Type | Does | Stored / endpoint |
 |---|---|---|---|
 | Light, dark or system | Appearance control (segmented choice with icons), hint "System follows this device's light or dark setting." | Applies at once | `localStorage` `spoolwarden.appearance` (foundations section 5) |
-| Theme | Theme picker: four preview tiles Console "Dense and technical", Workbench "Calm cards", Spool "Colourful and roomy", Panes "Simple lists"; the current one checked | Applies at once, no reload | `localStorage` `spoolwarden.look` (foundations section 6.2) |
+| Theme | Theme picker: four preview tiles Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists"; the current one checked | Applies at once, no reload | `localStorage` `spoolwarden.look` (foundations section 6.2) |
 | Theme for new devices | Select of the four themes, hint "Used by browsers and phones that have not chosen a theme." | Saved with the group's Save | Section 15 (no endpoint yet) |
 
 Save: **Save theme for new devices** (only this field needs it; the button is enabled only while it changed).
@@ -1514,9 +1514,9 @@ half.
 
 ## 12. Updates
 
-**Purpose.** See the installed version, update, follow nightly builds, roll back. Address `#updates`.
+**Purpose.** See the installed version, update, roll back. Address `#updates`.
 
-**Data.** `G updates` (view) → `{installed, latest, newer, checked_at, half_install, installed_text, channel, notes,
+**Data.** `G updates` (view) → `{installed, latest, newer, checked_at, half_install, installed_text, notes,
 going_back, held, failed, previous, module_on, schedule, update_refused, rollback_refused}`.
 
 ### 12.1 Layout
@@ -1531,14 +1531,14 @@ Desktop
 | | Last checked    2026-11-12 03:00              | |                                              | |
 | | Checked by itself daily (Automatic updates).  | |                                              | |
 | +-----------------------------------------------+ +----------------------------------------------+ |
-| +-- Roll back ----------------------------------+ +-- Nightly builds ----------------------------+ |
-| | Goes back to 0.5.1, the version this one      | | [ ] Follow nightly builds                     | |
-| | replaced. Settings and data stay.             | | Off: only signed releases are installed.      | |
-| | [Roll back to 0.5.1]                          | | Nightly builds are untested and unsigned.     | |
-| +-----------------------------------------------+ +----------------------------------------------+ |
+| +-- Roll back ----------------------------------+                                                |
+| | Goes back to 0.5.1, the version this one      |                                                |
+| | replaced. Settings and data stay.             |                                                |
+| | [Roll back to 0.5.1]                          |                                                |
+| +-----------------------------------------------+                                                |
 |  To remove Spoolwarden: on the Hub, run sudo spoolwarden uninstall.                               |
 +--------------------------------------------------------------------------------------------------+
-Tablet: two columns become one; Version, release notes, Roll back, Nightly builds.
+Tablet: two columns become one; Version, release notes, Roll back.
 Phone:  one column; the header buttons go full width, Update first.
 ```
 
@@ -1556,6 +1556,8 @@ Phone:  one column; the header buttons go full width, Update first.
 | Checking | "Checked by itself <schedule> (Automatic updates)." or "Not checked by itself: Automatic updates are switched off." with link **Features** |
 | Refused | `update_refused` as an error line under the buttons |
 
+A Hub that still runs a nightly build shows its version as "<version>-nightly.<date>"; Update then installs the latest signed release over it, even when that release has a lower number, and the confirm dialog says so: "This replaces the nightly build with the signed release <latest>."
+
 | Control | Type | Does | Endpoint |
 |---|---|---|---|
 | **Check now** | Default (header) | Job | job `check` (code) |
@@ -1563,12 +1565,6 @@ Phone:  one column; the header buttons go full width, Update first.
 
 **What <latest> brings** (when `newer` and `notes`) or **Release notes of <latest>** (when not newer and `notes`):
 the notes as text with line breaks kept, at most 72 characters a line, in a box that scrolls inside past 24rem.
-
-**Nightly builds.** Toggle "Follow nightly builds" showing what the Hub does now (`channel`). Changing it never
-flips by itself: it opens the confirm, and the job changes the channel; the toggle follows the Hub afterwards. Text
-under it: "On: <installed> is installed, and each new nightly build after it. Nightly builds are untested and
-unsigned." or "Off: only signed releases are installed. Nightly builds are untested and unsigned." Shown only when
-`G updates` reports a `channel`.
 
 **Roll back.** "Goes back to <previous>, the version this one replaced. Settings and data stay." or "No earlier
 version is kept, so there is nothing to roll back to." `going_back` as a Note block. Danger **Roll back to
@@ -1583,8 +1579,6 @@ version is kept, so there is nothing to roll back to." `going_back` as a Note bl
 |---|---|---|---|
 | Update | "Update to <v>?" | "Spoolwarden stops while it installs and starts again by itself. Settings and data stay. The version before is kept, so you can roll back." | Cancel · **Update to <v>** (primary) |
 | Roll back | "Roll back to <v>?" | "Spoolwarden stops while it installs and starts again by itself. Settings and data stay." | Cancel · **Roll back** (danger) |
-| Follow nightly builds | "Follow nightly builds?" | "Nightly builds are untested and unsigned: Spoolwarden checks a download only against the nightly's own checksum list, which proves nothing about who built it. The newest nightly build is installed now, and each new one after it. Turn this off to go back to signed releases." | Cancel · **Follow nightly builds** (danger) |
-| Stop following | "Go back to signed releases?" | "The latest signed release replaces the nightly build now." | Cancel · **Use signed releases** (primary) |
 
 ### 12.4 States
 
@@ -1887,7 +1881,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | **Update to <latest>** + confirm | Kept | Header primary with dialog (12.2, 12.3) |
 | `update_refused` text | Kept | Error line and tooltip (12.2) |
 | Card "What <v> brings" / "Release notes of <v>" | Kept | (12.2) |
-| Card "Nightly builds": checkbox, two confirms, state texts | Kept | Toggle with dialogs (12.2, 12.3) |
+| Card "Nightly builds": checkbox, two confirms, state texts | Not part of the design | The product has no nightly builds |
 | Card "Roll back": texts, `going_back`, **Roll back to <v>** + confirm, `rollback_refused` | Kept | (12.2, 12.3) |
 | Footer "To remove the kit: at the server, sudo filament-kit uninstall." | Kept | Foot with code block (12.2) |
 | "Reading…", red error | Renamed | Skeleton, error state (12.4) |

@@ -379,10 +379,10 @@ def test_thread_start_failure_releases_the_lock(rig, monkeypatch, stub_jobs):
 
     def boom(self):
         raise RuntimeError("can't start new thread")
-    monkeypatch.setattr(threading.Thread, "start", boom)
-    with pytest.raises(RuntimeError):
-        mp.start(SERIAL)
-    monkeypatch.undo()
+    with monkeypatch.context() as patched:      # undo() would roll back the fixtures' patches (state dirs) as well
+        patched.setattr(threading.Thread, "start", boom)
+        with pytest.raises(RuntimeError):
+            mp.start(SERIAL)
     assert not mp.in_progress(SERIAL)
     assert mp.view(SERIAL)["state"] == "failed"
 

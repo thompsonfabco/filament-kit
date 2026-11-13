@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The window behind the first frame; AppFrame draws the rest. -->
-    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/sw_window_bg</item>
+    </style>
 </resources>

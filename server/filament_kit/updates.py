@@ -47,7 +47,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import __version__, config, modules, release
+from . import __version__, config, modules, release, steps
 from .release import ReleaseError
 
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
@@ -217,6 +217,16 @@ def _sigterm_exits():
     finally:
         for sig, handler in old.items():
             signal.signal(sig, handler)
+
+
+def _start_at(run: Callable[[list[str]], int], job, sentence: str) -> Callable[[list[str]], int]:
+    """`run`, with the job's next step announced before its first command: _install has verified the release and
+    unpacked it by then, and stops the units with the first command."""
+    def started(cmd: list[str]) -> int:
+        if job.index < job.count:
+            job.next(sentence)
+        return run(cmd)
+    return started
 
 
 def _start_again(run, services: list[str], timers: list[str]) -> None:
@@ -515,6 +525,8 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
                 _download(fetcher, s["repo"], cur)
             except ReleaseError as e:
                 print(f"warning: no verified copy of the installed {cur} for a rollback: {e}", file=sys.stderr)
+        job = steps.Steps(3)
+        job.next(f"Downloading {latest}")
         _download(fetcher, s["repo"], latest)
         with printers_idle():
             kept = _kept(cur) and not nightly_now       # a nightly in place is never a rollback target
@@ -525,7 +537,8 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
             if downgrade:
                 print(f"going back to the signed release {latest} (older than this nightly's {cur})")
             try:
-                ok = (_install_older if downgrade else _install)(cfg, latest, run)
+                job.next("Checking its signature")
+                ok = (_install_older if downgrade else _install)(cfg, latest, _start_at(run, job, "Installing"))
             except ReleaseError:        # re-verify or unpack refused it: nothing was stopped or changed
                 _write_state(previous=old_previous)
                 raise
@@ -792,6 +805,8 @@ def _modules_fit(target: str) -> bool:
 def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int:
     if not _require_root():
         return 1
+    job = steps.Steps(2)
+    job.next("Finding the kept version")
     cur = current_version()
     st = _read_state()
     target = st.get("previous")
@@ -801,6 +816,7 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
         return 1
     if not _modules_fit(target):
         return 1
+    job.next(f"Installing {target}")
     try:
         with printers_idle():
             if not _install_older(cfg, target, run):

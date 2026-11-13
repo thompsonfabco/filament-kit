@@ -320,6 +320,16 @@ class SpoolViewModelTest {
         assertEquals(2, c.spoolId)
     }
 
+    @Test fun aSuccessMessageIsNotMarkedAsAnError() {
+        backend.tagResult = spool(1)
+        val vm = vm()
+        vm.onTag("a")
+        vm.move("Dry box")
+        val c = vm.state.value as SpoolUiState.Card
+        assertEquals("Moved to Dry box", c.message)
+        assertEquals(false, c.messageIsError)
+    }
+
     @Test fun failuresKeepTheScreenWithAnInlineMessage() {
         backend.tagResult = spool(1)
         val vm = vm()
@@ -328,6 +338,7 @@ class SpoolViewModelTest {
         backend.updateError = ApiError(500, "internal", "Server broke")
         vm.previewWeight(500.0)
         assertEquals("Server broke", (vm.state.value as SpoolUiState.Card).message)
+        assertTrue((vm.state.value as SpoolUiState.Card).messageIsError)
         backend.updateError = IllegalStateException("boom")
         vm.move("Dry box")
         assertEquals("Unexpected response from the server", (vm.state.value as SpoolUiState.Card).message)
