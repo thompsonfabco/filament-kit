@@ -37,11 +37,13 @@ class UpdaterTest {
         val installer = FakeInstaller(allowed = true)
         val u = updater(FakeSource("7"), installer)
         scheduler.runCurrent()
-        installer.failure.value = UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP
+        installer.failure.value = UpdateFailure.Signature
         scheduler.runCurrent()
-        assertEquals(UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP, u.state.value.error)
+        assertEquals(UpdateFailure.Signature, u.state.value.failure)
+        assertEquals("Signature", u.state.value.error)
         u.install()
         assertNull("a new try starts clean", u.state.value.error)
+        assertNull(u.state.value.failure)
         scheduler.runCurrent()
     }
 
@@ -65,6 +67,7 @@ class UpdaterTest {
         var infoCalls = 0
         var infoError: Exception? = null
         val downloads = mutableListOf<File>()
+        var downloadError: Exception? = null
         override suspend fun info(): ServerInfo {
             infoCalls++
             infoError?.let { throw it }
@@ -75,6 +78,7 @@ class UpdaterTest {
         var watch: (() -> Int?)? = null
         override suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit) {
             downloads += to
+            downloadError?.let { throw it }
             steps.forEach { (d, t) -> onProgress(d, t); seen += watch?.invoke() }
             to.writeText("apk")
         }
@@ -90,11 +94,11 @@ class UpdaterTest {
         var confirmsShown = 0
         override val confirmPending: Flow<Boolean> = pending
         override fun showConfirm() { confirmsShown++ }
-        override val failure = MutableStateFlow<String?>(null)
+        override val failure = MutableStateFlow<UpdateFailure?>(null)
     }
 
     private fun updater(source: UpdateSource, installer: ApkInstall = FakeInstaller(true), router: PairRouter = PairRouter()) =
-        Updater(source, installer, currentVersion = 5, apkFile = File(tmp.root, "update.apk"), onProblem = router::report)
+        Updater(source, installer, currentVersion = 5, apkFile = File(tmp.root, "update.apk"), onProblem = router::report, words = { it.name })
 
     @Test fun decidesOnNullEqualLowerHigherAndJunkVersions() {
         assertFalse(isNewer(null, 5))
@@ -275,5 +279,89 @@ class UpdaterTest {
         installer.pending.value = false
         scheduler.runCurrent()
         assertFalse(u.state.value.confirmPending)
+    }
+
+    @Test fun anAskedCheckSaysCheckingThenUpToDate() {
+        val u = updater(FakeSource("5"))
+        scheduler.runCurrent()
+        assertTrue("the startup check reached the Hub", u.state.value.checked)
+        u.checkNow()
+        assertTrue(u.state.value.checking)
+        scheduler.runCurrent()
+        assertFalse(u.state.value.checking)
+        assertNull(u.state.value.failure)
+        assertTrue(u.state.value.checked)
+    }
+
+    @Test fun anAskedCheckThatCannotReachTheHubSaysSo() {
+        val source = FakeSource("7")
+        val u = updater(source)
+        scheduler.runCurrent()
+        source.infoError = ApiError(0, "offline", "gone")
+        u.checkNow()
+        scheduler.runCurrent()
+        assertEquals(UpdateFailure.HubUnreachable, u.state.value.failure)
+        assertFalse(u.state.value.checking)
+        // the startup and daily checks stay quiet
+        val quiet = updater(FakeSource("7").apply { infoError = ApiError(0, "offline", "gone") })
+        scheduler.runCurrent()
+        assertNull(quiet.state.value.failure)
+        assertFalse(quiet.state.value.checked)
+    }
+
+    @Test fun eachDownloadFailureHasItsOwnLine() {
+        val cases = listOf(
+            ApiError(0, "offline", "x") to UpdateFailure.HubUnreachable,
+            ApiError(404, "not_found", "x") to UpdateFailure.NoUpdate,
+            ApiError(0, "storage", "x") to UpdateFailure.Storage,
+            FingerprintMismatch("aa", "bb") to UpdateFailure.CertificateChanged,
+            ApiError(500, "boom", "x") to UpdateFailure.Generic,
+        )
+        for ((error, expected) in cases) {
+            val source = FakeSource("7").apply { downloadError = error }
+            val u = updater(source)
+            scheduler.runCurrent()
+            u.install()
+            scheduler.runCurrent()
+            assertEquals(expected, u.state.value.failure)
+            assertEquals(expected.name, u.state.value.error)
+            assertFalse(u.state.value.busy)
+        }
+    }
+
+    @Test fun cancelStopsTheDownloadAndGoesBackToTheOffer() {
+        val installer = FakeInstaller(true)
+        val u = updater(FakeSource("7"), installer)
+        scheduler.runCurrent()
+        u.install()
+        assertTrue(u.state.value.busy)
+        u.cancel()
+        scheduler.runCurrent()
+        assertFalse(u.state.value.busy)
+        assertTrue("nothing was handed to Android", installer.installed.isEmpty())
+        assertNull(u.state.value.failure)
+        assertEquals(7, u.state.value.available)
+    }
+
+    @Test fun theInstallWindowIsOpenUntilTheAppIsBackOnScreen() {
+        val u = updater(FakeSource("7"), FakeInstaller(true))
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        assertTrue(u.state.value.installing)
+        u.onResumed()
+        assertFalse(u.state.value.installing)
+    }
+
+    @Test fun aFailureEndsTheInstallingStep() {
+        val installer = FakeInstaller(true)
+        val u = updater(FakeSource("7"), installer)
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        installer.failure.value = UpdateFailure.Storage
+        scheduler.runCurrent()
+        assertFalse(u.state.value.installing)
+        assertEquals(UpdateFailure.Storage, u.state.value.failure)
     }
 }

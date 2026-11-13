@@ -57,6 +57,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             currentVersion = BuildConfig.VERSION_CODE,
             apkFile = File(app.cacheDir, "updates/filament-kit.apk"),
             onProblem = router::report,
+            words = { app.getString(it.text) },
         )
     }
 

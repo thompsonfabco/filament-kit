@@ -58,8 +58,8 @@ interface ApkInstall {
     /** Opens the waiting install confirmation. */
     fun showConfirm()
 
-    /** Why the last install failed, in words for the user; null when it did not. */
-    val failure: Flow<String?>
+    /** Why the last install failed; null when it did not. */
+    val failure: Flow<UpdateFailure?>
 }
 
 /**
@@ -74,11 +74,19 @@ data class UpdateUi(
     /** How much of the APK is downloaded, 0-100, while [busy]; null before the first bytes or with no known size. */
     val progress: Int? = null,
     val needsPermission: Boolean = false,
+    /** The last failure in words (Home shows this); [failure] is the same thing as a value the update panel maps. */
     val error: String? = null,
+    val failure: UpdateFailure? = null,
     /** The download is done and the system confirmation is waiting: Home shows "Tap to install". */
     val confirmPending: Boolean = false,
     /** The server speaks a newer API than [SUPPORTED_API]: Home asks the user to update the app. */
     val serverTooNew: Boolean = false,
+    /** A check the person asked for is running ("Check for updates" says "Checking…"). */
+    val checking: Boolean = false,
+    /** The last check reached the Hub: only then is "This app is up to date." true. */
+    val checked: Boolean = false,
+    /** The install was handed to Android and its window has not been left yet: "Tap Install in the window Android shows." */
+    val installing: Boolean = false,
 )
 
 /** The server API version (`/api/info` `api`) this app understands. */
@@ -87,7 +95,8 @@ const val SUPPORTED_API = 1
 /**
  * Checks the server for a newer APK when created and every [checkEveryMs] after; [install] downloads it to
  * [apkFile] and hands it to [installer]. A revoked token or a changed certificate goes to [onProblem] (the global
- * pairing router); other failures never crash: a failed check just shows no banner.
+ * pairing router); other failures never crash: a failed check just shows no banner. [words] puts a failure in words
+ * for [UpdateUi.error].
  */
 class Updater(
     private val source: UpdateSource,
@@ -95,12 +104,14 @@ class Updater(
     private val currentVersion: Int,
     private val apkFile: File,
     private val onProblem: (Throwable) -> Unit,
+    private val words: (UpdateFailure) -> String,
     private val checkEveryMs: Long = DAY_MS,
 ) : ViewModel() {
     private val _state = MutableStateFlow(UpdateUi())
     val state: StateFlow<UpdateUi> = _state.asStateFlow()
 
     private var checkJob: Job? = null
+    private var installJob: Job? = null
     private var lastCheckOk = false
 
     init {
@@ -114,7 +125,7 @@ class Updater(
             installer.confirmPending.collect { pending -> _state.update { it.copy(confirmPending = pending) } }
         }
         viewModelScope.launch {
-            installer.failure.collect { why -> if (why != null) _state.update { it.copy(error = why) } }
+            installer.failure.collect { why -> if (why != null) _state.update { it.failed(why) } }
         }
     }
 
@@ -124,14 +135,40 @@ class Updater(
         checkJob = viewModelScope.launch { runCheck() }
     }
 
+    /** "Check for updates": like [check], and the screen shows "Checking…" and a failure of the check itself. */
+    fun checkNow() {
+        if (checkJob?.isActive == true) return
+        _state.update { it.copy(checking = true, error = null, failure = null) }
+        checkJob = viewModelScope.launch {
+            try {
+                runCheck(asked = true)
+            } finally {
+                _state.update { it.copy(checking = false) }
+            }
+        }
+    }
+
+    /** "Cancel" while downloading. */
+    fun cancel() {
+        installJob?.cancel()
+        _state.update { it.copy(busy = false, progress = null) }
+    }
+
+    /** "Open settings": the system page where this app is allowed to install apps. */
+    fun openPermissionSettings() = installer.requestPermission()
+
     /** The server became reachable: check again only if the last check failed (no duplicate startup check). */
     fun onOnline() {
         if (!lastCheckOk) check()
     }
 
-    /** Back on screen: drop the "allow, then tap Install" reminder once the permission is there. */
+    /**
+     * Back on screen: drop the "allow, then tap Install" reminder once the permission is there, and treat Android's
+     * install window as left: if it still waits for an answer, the panel offers "Tap to install".
+     */
     fun onResumed() {
         if (_state.value.needsPermission && installer.canInstall()) _state.update { it.copy(needsPermission = false) }
+        if (_state.value.installing) _state.update { it.copy(installing = false) }
     }
 
     /** "Tap to install": opens the waiting system confirmation. */
@@ -141,12 +178,14 @@ class Updater(
         val s = _state.value
         if (s.busy || s.available == null) return
         if (!installer.canInstall()) {
-            _state.update { it.copy(needsPermission = true, error = null) }
+            _state.update { it.copy(needsPermission = true, error = null, failure = null) }
             installer.requestPermission()
             return
         }
-        _state.update { it.copy(busy = true, progress = null, needsPermission = false, error = null) }
-        viewModelScope.launch {
+        _state.update {
+            it.copy(busy = true, progress = null, needsPermission = false, error = null, failure = null, installing = false)
+        }
+        installJob = viewModelScope.launch {
             try {
                 apkFile.parentFile?.mkdirs()
                 source.downloadApk(apkFile) { done, total ->
@@ -154,12 +193,12 @@ class Updater(
                     if (pct != _state.value.progress) _state.update { it.copy(progress = pct) }
                 }
                 installer.install(apkFile)
-                _state.update { it.copy(busy = false, progress = null) }
+                _state.update { it.copy(busy = false, progress = null, installing = true) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 onProblem(e)
-                _state.update { it.copy(busy = false, progress = null, error = messageFor(e)) }
+                _state.update { it.failed(failureFor(e)).copy(busy = false, progress = null) }
             } finally {
                 // the session holds its own copy once committed; a partial or failed download is no use either
                 apkFile.delete()
@@ -167,7 +206,7 @@ class Updater(
         }
     }
 
-    private suspend fun runCheck() {
+    private suspend fun runCheck(asked: Boolean = false) {
         try {
             val info = source.info()
             val offered = info.apkVersion?.trim()?.toIntOrNull()
@@ -176,6 +215,7 @@ class Updater(
                     available = if (isNewer(info.apkVersion, currentVersion)) offered else null,
                     offeredVersion = info.version,
                     serverTooNew = info.api > SUPPORTED_API,
+                    checked = true,
                 )
             }
             lastCheckOk = true
@@ -184,15 +224,18 @@ class Updater(
         } catch (e: Exception) {
             lastCheckOk = false
             onProblem(e)
+            if (asked) _state.update { it.failed(failureFor(e)) }
         }
     }
 
-    private fun messageFor(e: Exception): String = when {
-        e is ApiError && e.code == "offline" -> "Could not reach the server. Check that you are on the same network."
-        e is ApiError && e.code == "not_found" -> "The server has no app update to download."
-        e is ApiError -> e.message
-        e is FingerprintMismatch -> "The server's certificate changed."
-        else -> "The update could not be installed."
+    private fun UpdateUi.failed(why: UpdateFailure) = copy(failure = why, error = words(why), installing = false)
+
+    private fun failureFor(e: Exception): UpdateFailure = when {
+        e is ApiError && e.code == "offline" -> UpdateFailure.HubUnreachable
+        e is ApiError && e.code == "not_found" -> UpdateFailure.NoUpdate
+        e is ApiError && e.code == "storage" -> UpdateFailure.Storage
+        e is FingerprintMismatch -> UpdateFailure.CertificateChanged
+        else -> UpdateFailure.Generic
     }
 
     private companion object {

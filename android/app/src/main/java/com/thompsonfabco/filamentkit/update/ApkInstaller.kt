@@ -33,7 +33,7 @@ class ApkInstaller(context: Context) : ApkInstall {
         context.startActivity(Intent(confirm).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    override val failure: Flow<String?> = PendingConfirm.failure
+    override val failure: Flow<UpdateFailure?> = PendingConfirm.failure
 
     override suspend fun install(apk: File) = withContext(Dispatchers.IO) {
         PendingConfirm.failure.value = null
@@ -70,8 +70,8 @@ class ApkInstaller(context: Context) : ApkInstall {
 internal object PendingConfirm {
     val intent = MutableStateFlow<Intent?>(null)
 
-    /** Why the session failed: kept for Home's update banner, because a toast is gone before it can be read. */
-    val failure = MutableStateFlow<String?>(null)
+    /** Why the session failed: kept for the update panel, because a toast is gone before it can be read. */
+    val failure = MutableStateFlow<UpdateFailure?>(null)
 }
 
 /** Receives the install session's status: shows the system confirmation, or tells the user why it failed. */

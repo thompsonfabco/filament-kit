@@ -1,18 +1,33 @@
 package com.thompsonfabco.filamentkit.update
 
 import android.content.pm.PackageInstaller
+import androidx.annotation.StringRes
+import com.thompsonfabco.filamentkit.R
 
-/** Texts of the update banner and of a failed install. */
+/** Why an update did not go through: one line each in 05-android-app 13, worded in the string catalogue. */
+enum class UpdateFailure(@StringRes val text: Int) {
+    HubUnreachable(R.string.app_update_fail_hub),
+    NoUpdate(R.string.app_update_fail_none),
+    CertificateChanged(R.string.app_update_fail_cert),
+    NewerInstalled(R.string.app_update_fail_newer),
+    Damaged(R.string.app_update_fail_damaged),
+    Storage(R.string.app_update_fail_storage),
+    Blocked(R.string.app_update_fail_blocked),
+    AndroidVersion(R.string.app_update_fail_android),
+    TimedOut(R.string.app_update_fail_timeout),
+    Generic(R.string.app_update_fail_install),
+
+    /** Signed by another key than the installed app: its own panel (with "What this means"). */
+    Signature(R.string.app_update_signature),
+}
+
+/** Texts of the Home update banner (until its screen step) and of a failed install. */
 object UpdateTexts {
-    /** Complete on its own: the guide is one more tap and needs the internet, and this must work on a server's LAN. */
-    const val NOT_SIGNED_LIKE_YOUR_APP = "Android refused this update because it is not signed like your app; " +
-        "check where your server's app came from."
     const val REFUSED_GUIDE_LABEL = "What this means"
     const val REFUSED_GUIDE_URL = "https://github.com/thompsonfabco/filament-kit/blob/main/docs/install-android-app.md#update-refused"
-    private const val GENERIC = "The update could not be installed."
 
     /** The banner is showing the refusal of a differently signed update. */
-    fun refused(ui: UpdateUi): Boolean = ui.error == NOT_SIGNED_LIKE_YOUR_APP
+    fun refused(ui: UpdateUi): Boolean = ui.failure == UpdateFailure.Signature
 
     /** Trying again is how a corrected server copy gets picked up. */
     fun installLabel(ui: UpdateUi): String = when {
@@ -26,25 +41,24 @@ object UpdateTexts {
         version?.trim()?.ifBlank { null }?.let { "Update available (filament-kit $it)" } ?: "Update available"
 
     /**
-     * What to tell the user about a finished install session, or null when there is nothing to say (it worked, it is
+     * What went wrong with a finished install session, or null when there is nothing to say (it worked, it is
      * waiting for the user, or the user cancelled). The system's own [message] decides the signing case, because
      * [status] alone is not specific enough: Android folds several causes into one status. It is never told to
      * uninstall: a different key inside the in-app updater is the one sign of a forged APK.
      */
-    fun installFailure(status: Int, message: String?): String? {
+    fun installFailure(status: Int, message: String?): UpdateFailure? {
         val m = message.orEmpty()
         return when {
             status == PackageInstaller.STATUS_SUCCESS || status == PackageInstaller.STATUS_PENDING_USER_ACTION ||
                 status == PackageInstaller.STATUS_FAILURE_ABORTED -> null
-            "UPDATE_INCOMPATIBLE" in m || "signatures do not match" in m -> NOT_SIGNED_LIKE_YOUR_APP
-            "VERSION_DOWNGRADE" in m -> "This phone already has a newer version of the app."
-            status == PackageInstaller.STATUS_FAILURE_INVALID -> "The download is damaged. Tap Install to try again."
-            status == PackageInstaller.STATUS_FAILURE_STORAGE -> "Not enough storage on this phone to install the update."
-            status == PackageInstaller.STATUS_FAILURE_BLOCKED -> "This phone's settings or another app blocked the update."
-            status == PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "This update does not work on this phone's Android version."
-            status == PackageInstaller.STATUS_FAILURE_TIMEOUT -> "The install took too long. Tap Install to try again."
-            m.isNotBlank() -> "$GENERIC ($m)"
-            else -> GENERIC
+            "UPDATE_INCOMPATIBLE" in m || "signatures do not match" in m -> UpdateFailure.Signature
+            "VERSION_DOWNGRADE" in m -> UpdateFailure.NewerInstalled
+            status == PackageInstaller.STATUS_FAILURE_INVALID -> UpdateFailure.Damaged
+            status == PackageInstaller.STATUS_FAILURE_STORAGE -> UpdateFailure.Storage
+            status == PackageInstaller.STATUS_FAILURE_BLOCKED -> UpdateFailure.Blocked
+            status == PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> UpdateFailure.AndroidVersion
+            status == PackageInstaller.STATUS_FAILURE_TIMEOUT -> UpdateFailure.TimedOut
+            else -> UpdateFailure.Generic
         }
     }
 }
