@@ -192,6 +192,7 @@ def test_each_write_on_the_way_leaves_a_mark_that_holds_the_cert_on_disk(tmp_pat
     pem = (tls / "fullchain.pem").read_bytes()
     assert hashlib.sha256(pem).hexdigest() in (tls / "placeholder.sha256").read_text()
     # and what nginx would load together still matches: the certificate on disk belongs to the key on disk
+    # (step 0 stops before anything is written, so it holds trivially there)
     public = serialization.load_pem_private_key((tls / "privkey.pem").read_bytes(), None).public_key().public_numbers()
     assert x509.load_pem_x509_certificate(pem).public_key().public_numbers() == public
 
