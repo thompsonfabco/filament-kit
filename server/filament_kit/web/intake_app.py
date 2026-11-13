@@ -35,7 +35,7 @@ from starlette.routing import Route
 from .. import intake, inventory, lan, modules, shared_files, tagsources
 from ..intake import CapReached, ReadError
 from ..station_client import StationClient
-from . import mcp_tools, printers_app
+from . import mcp_tools, pages, printers_app
 from .errors import Problem
 from .mcp_tools import SpoolItem, Tools
 
@@ -50,7 +50,6 @@ HEADERS = {
                                "base-uri 'none'",
     "X-Frame-Options": "DENY", "Referrer-Policy": "same-origin", "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff"}
-HOME_ONLY = "<main><p>Spool intake only works on the home network.</p></main>"
 
 
 def icon_png(size: int = 180) -> bytes:
@@ -165,7 +164,7 @@ class IntakeApp:
         self.base = (u.path.rstrip("/") if u else "") + "/intake"  # as the browser sees it (nginx strips it)
         self.host_ok = host_ok
         self.host_refusal = host_refusal    # the kit server: the setup page's refusal text (its names, the Settings fix)
-        self.static = {n: (STATIC / n).read_bytes() for n in ("app.js", "app.css", "printers.js")}
+        self.static = {n: (STATIC / n).read_bytes() for n in ("app.js", "app.css", "printers.js", "signin.js")}
         self.shared = shared_files.load()   # served at <base>/shared/<file>; the sprite goes inline in the page
         self.icon = icon_png()
         self.icon_512 = icon_png(512)
@@ -197,13 +196,30 @@ class IntakeApp:
         """The kit server: every route (the page, its assets and its API) answers the home network only, by the
         server's own names (setup_page.host_ok), as the web unit's outer wrapper does there."""
         async def route(request: Request):
+            if self._public_asset(request.url.path):
+                return await fn(request)
+            page = request.method == "GET" and request.url.path.rstrip("/") == "/intake"
             if not self._lan(request):
+                if page:
+                    return self._refusal(request)
                 return JSONResponse({"error": "home network only"}, 403)
             if not self.host_ok(request):
                 text = self.host_refusal() if self.host_refusal else "open this page by the server's own name or address"
+                if page:
+                    return self._refusal(request, reason=text)
                 return JSONResponse({"error": text}, 403)
             return await fn(request)
         return route
+
+    @staticmethod
+    def _public_asset(path: str) -> bool:
+        """The files the refusal page links (pages.PUBLIC_*): no data in them, so any address may have them."""
+        return path in {f"/intake/shared/{n}" for n in pages.PUBLIC_SHARED} | {f"/intake/{n}" for n in pages.PUBLIC_OWN}
+
+    def _refusal(self, request: Request, reason: str | None = None) -> HTMLResponse:
+        """The refusal page (04 11.1), status 403: outside the home network, or `reason` for a refused address."""
+        client = request.client.host if request.client else ""
+        return HTMLResponse(pages.refusal(self.shared, self.base, client, reason=reason), 403, headers=HEADERS)
 
     def _origin_ok(self, request: Request) -> bool:
         origin = request.headers.get("origin")
@@ -215,6 +231,7 @@ class IntakeApp:
         return [Route(p, fn, methods=m) for p, fn, m in (
             ("/intake", self.page, ["GET"]), ("/intake/app.js", self.asset, ["GET"]),
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
+            ("/intake/signin.js", self.asset, ["GET"]),   # the sign-in page's Show button (auth.py, web unit)
             ("/intake/shared/{name}", self.shared_asset, ["GET"]),
             ("/intake/icon.png", self.icon_route, ["GET"]),
             ("/intake/icon-512.png", self.icon_512_route, ["GET"]),
@@ -376,9 +393,7 @@ class IntakeApp:
 
     async def page(self, request: Request):
         if not self._lan(request):
-            client = request.client.host if request.client else ""
-            hint = f"<main><p>{lan.IPV6_HINT}</p></main>" if lan.over_ipv6(client) else ""
-            return self._html(HOME_ONLY + hint, 403)
+            return self._refusal(request)
         return self._html(await anyio.to_thread.run_sync(self._shell, request), app=True)
 
     async def asset(self, request: Request):
