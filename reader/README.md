@@ -135,7 +135,10 @@ firmware with the example secrets.
    group `filament-kit`, mode 0640) and checks that `<READER_BASE>/fw/manifest.json` shows the new build.
    `--dry-run` builds and signs only. `--help` lists the rest.
 3. Hold the knob 4 s. The reader checks the manifest, downloads into the spare slot while hashing, verifies
-   size, SHA-256 and the ECDSA signature, installs and restarts. "UPD" on the top line means a newer build is
+   size, SHA-256 and the ECDSA signature (which covers the build number too, so an older signed image can't be
+   served as a newer build), installs and restarts. The manifest also keeps the old
+   hash-only `sig`, so readers flashed before this check still update (once) over the air; after that they
+   require `sig2`. An older published image (no `sig2`) is refused by the new firmware. "UPD" on the top line means a newer build is
    waiting (checked at power-on and daily).
 
 ## Moving from the H2D-only reader

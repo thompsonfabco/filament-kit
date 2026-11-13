@@ -31,6 +31,24 @@ def test_sign_image_manifest_verifies_with_public_key(tmp_path):
                ec.ECDSA(utils.Prehashed(hashes.SHA256())))
 
 
+def test_sig2_signs_the_build_number_with_the_hash(tmp_path):
+    key = op.load_or_create_key(tmp_path / "k.pem", create=True)
+    image = b"\xe9" + bytes(range(256)) * 40
+    m = op.sign_image(image, key, 1793600000)
+    pub = serialization.load_pem_public_key(op.public_pem(key).encode())
+    sha = hashlib.sha256(image).digest()
+    pre = ec.ECDSA(utils.Prehashed(hashes.SHA256()))
+    # what a reader from FA-027 on checks: prefix || sha256 || build (8 bytes big-endian)
+    want = hashlib.sha256(b"fk-reader-ota\x01" + sha + (1793600000).to_bytes(8, "big")).digest()
+    pub.verify(base64.b64decode(m["sig2"]), want, pre)
+    # the same image under a higher build number (a downgrade replay) does not verify
+    from cryptography.exceptions import InvalidSignature
+    with pytest.raises(InvalidSignature):
+        pub.verify(base64.b64decode(m["sig2"]), op.build_digest(sha, 1793600001), pre)
+    # the old signature (hash only) is kept so readers flashed earlier still install it
+    pub.verify(base64.b64decode(m["sig"]), sha, pre)
+
+
 def test_key_file_is_created_once_and_reused(tmp_path):
     p = tmp_path / "sub" / "k.pem"
     k1 = op.load_or_create_key(p, create=True)
