@@ -250,6 +250,27 @@ class Tools:
             return self.kit().post("/api/profiles/web/generate", {})
         return presets.generate()
 
+    # the phone page's "presets in your slicers can be updated" (not MCP tools: register() does not publish them)
+    def preset_updates(self) -> dict:
+        self._need("presets")
+        from ..profiles import builds
+        return builds.updates_view()
+
+    def accept_preset_updates(self, stamp, names) -> dict:
+        self._need("presets")
+        body = {"stamp": stamp, "names": names}
+        if self.kit_writes:
+            return self.kit().post("/api/profiles/web/updates_accept", body)
+        from .. import profiles_api
+        return profiles_api.accept_updates(body, "web", "web preset updates accept")
+
+    def restore_deleted_presets(self) -> dict:
+        self._need("presets")
+        if self.kit_writes:
+            return self.kit().post("/api/profiles/web/restore_deleted", {})
+        from .. import profiles_api
+        return profiles_api.restore_deleted("web", "web restore deleted")
+
     # ---------- printer slots ----------
 
     def _slot_backend(self):

@@ -203,7 +203,10 @@ class IntakeApp:
             ("/intake/api/parents", self.api(self.parents), ["GET"]),
             ("/intake/api/line_add", self.api(self.line_add), ["POST"]),
             ("/intake/api/line_new", self.api(self.line_new), ["POST"]),
-            ("/intake/api/generate", self.api(self.generate), ["POST"]))] + (
+            ("/intake/api/generate", self.api(self.generate), ["POST"]),
+            ("/intake/api/updates", self.api(self.updates), ["GET"]),
+            ("/intake/api/updates_accept", self.api(self.updates_accept), ["POST"]),
+            ("/intake/api/restore_deleted", self.api(self.restore_deleted), ["POST"]))] + (
                 self.printers.routes() if self.printers else []) + (self._history_routes() if self.history else [])
 
     # ---------- the intake history (intake_history.py; the kit's own page only, see __init__) ----------
@@ -520,3 +523,14 @@ class IntakeApp:
 
     async def generate(self, request: Request):
         return await anyio.to_thread.run_sync(self.tools.generate)
+
+    async def updates(self, request: Request):
+        return await anyio.to_thread.run_sync(self.tools.preset_updates)
+
+    async def updates_accept(self, request: Request):
+        b = await self._body(request)
+        return await anyio.to_thread.run_sync(self.tools.accept_preset_updates, b.get("stamp"), b.get("names"))
+
+    async def restore_deleted(self, request: Request):
+        await self._body(request)
+        return await anyio.to_thread.run_sync(self.tools.restore_deleted_presets)

@@ -455,10 +455,11 @@ function openTab() {
 function presetsTab() {
   const box = h("div");
   const genBox = h("div");
+  const upBox = h("div");      // presets in the slicers that a newer build would change: shown, then accepted
   const el = h("section", { class: "hidden" },
     h("h1", { textContent: "Slicer presets" }),
     h("p", { class: "muted", textContent: "New filaments need a preset line before a build covers them. The desktop installs a build by itself the next time the slicers are closed." }),
-    box, h("p", {}, h("button", { textContent: "Build presets now", on: { click: build } })), genBox);
+    box, h("p", {}, h("button", { textContent: "Build presets now", on: { click: build } })), genBox, upBox);
 
   async function load() {
     await run(box, "Loading…", async () => {
@@ -501,5 +502,29 @@ function presetsTab() {
   async function build() {
     await run(genBox, "Building presets… (a minute or two)", async () => { const r = await api("generate", { body: {} }); load(); return out(r); });
   }
-  return { el, enter: load };
+  // Updates: the list names each preset and what changes; Accept takes exactly that list (the server refuses it once a
+  // newer build has come, and the list is loaded again). The desktop writes accepted presets at its next sync.
+  async function updates() {
+    await run(upBox, "Loading updates…", async () => {
+      const u = await api("updates");
+      const restore = h("p", {}, h("button", { class: "secondary", textContent: "Restore presets deleted in Bambu Studio", on: { click: () =>
+        run(upBox, "Asking for a build…", async () => { await api("restore_deleted", { body: {} }); setTimeout(updates, 3000); return h("p", { textContent: "The next build brings them back; the desktop installs it at its next sync." }); }) } }));
+      const waiting = (u.updates || []).filter((x) => !x.accepted);
+      if (!waiting.length) return [h("h2", { textContent: "Updates" }), h("p", { class: "muted", textContent: u.accepted ? `Nothing waiting; ${u.accepted} accepted, written at the next desktop sync.` : "No preset in your slicers needs an update." }), restore];
+      const rows = waiting.map((x) => h("li", { textContent: `${x.name} (${x.target}): ${x.keys.join(", ")}` }));
+      const accept = h("button", { textContent: `Accept ${waiting.length} update${waiting.length === 1 ? "" : "s"}`, on: { click: () =>
+        run(upBox, "Accepting…", async () => {
+          try {
+            const r = await api("updates_accept", { body: { stamp: u.stamp, names: waiting.map((x) => x.name) } });
+            setTimeout(updates, 3000);
+            return h("p", { textContent: `${r.accepted.length} accepted: the desktop writes them over the presets at its next sync.` });
+          } catch (e) { setTimeout(updates, 4000); throw e; }
+        }) } });
+      return [h("h2", { textContent: "Updates" }),
+        h("p", { class: "muted", textContent: "A newer build would change these presets already in your slicers. Nothing is written over until you accept." }),
+        h("ul", {}, ...rows), h("p", {}, accept),
+        (u.yours || []).length ? h("p", { class: "muted", textContent: `Never written over (your own preset of that name): ${u.yours.join(", ")}` }) : null, restore];
+    });
+  }
+  return { el, enter: () => { load(); updates(); } };
 }
