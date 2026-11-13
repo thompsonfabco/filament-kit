@@ -49,6 +49,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import com.thompsonfabco.filamentkit.ui.spool.LoadGate
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -78,7 +81,15 @@ class PickSpoolViewModelTest {
         /** A dry run for these spools fails with this once its gate opens. */
         val dryErrors = mutableMapOf<Int, Exception>()
         val loads = mutableListOf<Pair<Int, Boolean>>()
+
+        /** The spool each tag is linked to; a tag not in here is linked to none. */
+        val tags = mutableMapOf<String, JsonObject>()
+        var tagError: Exception? = null
         override suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject> = emptyList()
+        override suspend fun tag(uid: String): JsonObject? {
+            tagError?.let { throw it }
+            return tags[uid]
+        }
         override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
             loads += spoolId to dryRun
             if (dryRun) {
@@ -95,7 +106,12 @@ class PickSpoolViewModelTest {
     }
 
     private val fake = Fake()
-    private fun vm() = PickSpoolViewModel(fake, "ABC123", "A4")
+    private val gate = LoadGate()
+    private fun vm() = PickSpoolViewModel(fake, "ABC123", "A4", gate)
+    private fun spoolJson(id: Int) = buildJsonObject {
+        put("id", id)
+        put("filament", buildJsonObject { put("name", "PolyTerra $id") })
+    }
     private fun spool(id: Int) = SpoolSummary(id, "Example", "PolyTerra $id", "PLA", "2B2B2E", null, 620.0)
 
     @Test fun pickingAsksTheHubForADryRunThenLoadsForReal() = runTest(dispatcher) {
@@ -106,6 +122,96 @@ class PickSpoolViewModelTest {
         assertEquals(listOf(1 to true, 1 to false), fake.loads)
         assertNull(v.state.value.preview)
         assertEquals(true, v.state.value.loaded)
+    }
+
+    @Test fun aTagTapPicksThePreviewOfItsSpool() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val v = vm()
+        v.onTag("4:77:90:e"); runCurrent()
+        assertEquals(7, v.state.value.preview!!.spool.id)
+        assertEquals(listOf(7 to true), fake.loads)
+        assertEquals(7.0, v.state.value.preview!!.result!!.nozzleMm!!, 0.0)
+    }
+
+    @Test fun aTagLinkedToNoSpoolPicksNothingAndSaysSo() = runTest(dispatcher) {
+        val v = vm()
+        v.onTag("4:77:90:f"); runCurrent()
+        assertNull(v.state.value.preview)
+        assertEquals("4:77:90:f", v.state.value.unlinkedTag)
+        assertTrue(fake.loads.isEmpty())
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        v.onTag("4:77:90:e"); runCurrent()
+        assertNull("the next tap clears the message", v.state.value.unlinkedTag)
+    }
+
+    @Test fun aTagTapThatCannotReachTheHubShowsTheProblem() = runTest(dispatcher) {
+        fake.tagError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.onTag("4:77:90:e"); runCurrent()
+        assertNull(v.state.value.preview)
+        assertEquals(Problem.Unreachable, v.state.value.problem)
+    }
+
+    @Test fun aTagTapWhileTheLoadIsWrittenIsIgnored() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        fake.writeGate = CompletableDeferred()
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        v.onTag("4:77:90:f"); runCurrent()
+        assertEquals(1, v.state.value.preview!!.spool.id)
+        assertEquals(listOf(1 to true, 1 to false), fake.loads)
+        assertNull("no message appears over the load being written", v.state.value.unlinkedTag)
+    }
+
+    @Test fun theLoadGateIsHeldWhileTheLoadIsWritten() = runTest(dispatcher) {
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        assertFalse("the dry run is not a write", gate.writing.value)
+        v.confirm(); runCurrent()
+        assertTrue(gate.writing.value)
+        open.complete(Unit); runCurrent()
+        assertFalse(gate.writing.value)
+    }
+
+    @Test fun theLoadGateIsReleasedWhenTheLoadFails() = runTest(dispatcher) {
+        fake.writeError = ApiError(409, "printer_busy", "The printer is printing.")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertFalse(gate.writing.value)
+        assertFalse("a printer's own refusal is a known answer", v.state.value.preview!!.dropped)
+    }
+
+    @Test fun aLostAnswerToTheLoadIsUnknownAndLoadIsNotOfferedAgain() = runTest(dispatcher) {
+        fake.writeError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertTrue(v.state.value.preview!!.dropped)
+        assertEquals(Say.Words(R.string.spool_load_dropped), v.state.value.preview!!.problem)
+        v.confirm(); runCurrent()
+        assertEquals("Load does nothing once the answer is unknown", listOf(1 to true, 1 to false), fake.loads)
+    }
+
+    @Test fun anUnreadableAnswerToTheLoadIsUnknownToo() = runTest(dispatcher) {
+        fake.writeError = IllegalStateException("not json")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertTrue(v.state.value.preview!!.dropped)
+        assertEquals(Say.Words(R.string.spool_load_dropped), v.state.value.preview!!.problem)
+    }
+
+    @Test fun aRefusedPairingIsKnownSoLoadStaysOffered() = runTest(dispatcher) {
+        fake.writeError = ApiError(401, "unauthorized", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertFalse(v.state.value.preview!!.dropped)
     }
 
     @Test fun backIsBlockedWhileTheLoadIsWritten() = runTest(dispatcher) {
@@ -260,7 +366,7 @@ class PrinterShellPartsTest {
         }
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
-        rule.onNodeWithText(rule.activity.getString(R.string.common_working)).assertExists()
+        rule.onNodeWithText(rule.activity.getString(R.string.common_busy_wait)).assertExists()
         assertFalse("Back was taken by the busy screen", rule.activity.isFinishing)
     }
 

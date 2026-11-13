@@ -42,6 +42,8 @@ import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwProgress
+import com.thompsonfabco.filamentkit.ui.add.TagTaps
+import com.thompsonfabco.filamentkit.ui.spool.LoadGate
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
 import com.thompsonfabco.filamentkit.ui.spool.toSpoolSummary
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -59,12 +61,16 @@ import java.math.BigDecimal
 /** The calls "Pick a spool for a slot" makes; [ApiPickBackend] adapts the Api, tests pass a fake. */
 interface PickBackend {
     suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject>
+
+    /** The spool linked to tag [uid], or null when the tag is not linked. */
+    suspend fun tag(uid: String): JsonObject?
     suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult
 }
 
 /** Each call goes to the session's client of that moment, so a screen never holds an old one. */
 class ApiPickBackend(private val current: () -> Api) : PickBackend {
     override suspend fun search(query: String, sealedOnly: Boolean) = current().search(query, sealedOnly)
+    override suspend fun tag(uid: String) = current().tag(uid)
     override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean) =
         current().load(printerId, label, spoolId, dryRun)
 }
@@ -77,6 +83,8 @@ data class LoadPreview(
     val writing: Boolean = false,
     val problem: Say? = null,
     val hubNotice: Problem? = null,
+    /** The answer to the real load was lost or unreadable: nobody knows if it worked, so Load is not offered again (7.6). */
+    val dropped: Boolean = false,
 )
 
 data class PickUiState(
@@ -87,6 +95,8 @@ data class PickUiState(
     val results: List<SpoolSummary> = emptyList(),
     val problem: Problem? = null,
     val preview: LoadPreview? = null,
+    /** A tapped tag that is linked to no spool: its text, until the next search, pick or tap. */
+    val unlinkedTag: String? = null,
     /** The load went through: [confirmed] is whether the printer already shows it. */
     val loaded: Boolean? = null,
 )
@@ -100,12 +110,14 @@ class PickSpoolViewModel(
     private val backend: PickBackend,
     private val printerId: String,
     private val slot: String,
+    private val gate: LoadGate = LoadGate(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(PickUiState())
     val state: StateFlow<PickUiState> = _state.asStateFlow()
     private var job: Job? = null
     private var typing: Job? = null
     private var dryRun: Job? = null
+    private var tagLookup: Job? = null
 
     /** A pause in typing searches by itself; clearing the box clears the results. */
     fun setQuery(q: String) {
@@ -150,12 +162,36 @@ class PickSpoolViewModel(
         }
     }
 
+    /**
+     * A tag held to the phone picks the spool it is linked to (05 9.6), as a tap on its row would. A tag linked to no
+     * spool picks nothing and says so; a load being written takes no tap.
+     */
+    fun onTag(uid: String) {
+        if (_state.value.preview?.writing == true) return
+        tagLookup?.cancel()
+        _state.update { it.copy(unlinkedTag = null, problem = null) }
+        tagLookup = viewModelScope.launch {
+            try {
+                val found = backend.tag(uid)
+                if (found == null) _state.update { it.copy(unlinkedTag = uid) } else pick(found.toSpoolSummary())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: FingerprintMismatch) {
+                _state.update { it.copy(problem = Problem.CertificateChanged) }
+            } catch (e: ApiError) {
+                _state.update { it.copy(problem = if (e.code == "unauthorized") Problem.NoLongerPaired else printerProblem(e)) }
+            } catch (_: Exception) {
+                _state.update { it.copy(problem = UNREADABLE) }
+            }
+        }
+    }
+
     /** Picks [spool]: asks the Hub what loading it here would do (a dry run) and shows the preview. */
     fun pick(spool: SpoolSummary) {
         if (_state.value.preview?.writing == true) return
         // an earlier pick's dry run is over: its late answer must not fill this spool's preview
         dryRun?.cancel()
-        _state.update { it.copy(preview = LoadPreview(spool)) }
+        _state.update { it.copy(preview = LoadPreview(spool), unlinkedTag = null) }
         dryRun = viewModelScope.launch {
             try {
                 val r = backend.load(printerId, slot, spool.id, dryRun = true)
@@ -189,6 +225,8 @@ class PickSpoolViewModel(
         val p = _state.value.preview ?: return
         val r = p.result ?: return
         if (p.writing) return
+        if (p.dropped) return
+        gate.set(true)
         _state.update { it.copy(preview = p.copy(writing = true, problem = null, hubNotice = null)) }
         viewModelScope.launch {
             try {
@@ -198,9 +236,17 @@ class PickSpoolViewModel(
                 throw e
             } catch (e: Exception) {
                 val problem = previewProblem(e, writing = true)
-                _state.update { it.copy(preview = it.preview?.copy(writing = false, problem = problem.first, hubNotice = problem.second)) }
+                _state.update {
+                    it.copy(preview = it.preview?.copy(writing = false, problem = problem.first, hubNotice = problem.second, dropped = unknownAnswer(e)))
+                }
+            } finally {
+                gate.set(false)
             }
         }
+    }
+
+    override fun onCleared() {
+        gate.set(false)
     }
 
     /** The screen has said how the load went. */
@@ -214,9 +260,16 @@ class PickSpoolViewModel(
         e is FingerprintMismatch -> null to Problem.CertificateChanged
         e is ApiError && e.code == "unauthorized" ->
             if (writing) Say.Words(R.string.spool_load_pairing_refused) to null else null to Problem.NoLongerPaired
-        e is ApiError && writing && e.status == 0 && e.code != "storage" -> Say.Words(R.string.spool_load_dropped) to null
+        writing && unknownAnswer(e) -> Say.Words(R.string.spool_load_dropped) to null
         e is ApiError -> printerProblem(e).say() to null
         else -> UNREADABLE.say() to null
+    }
+
+    /** Whether the real load's failure leaves its outcome unknown: no answer, or one the app cannot read (05 7.6). */
+    private fun unknownAnswer(e: Exception): Boolean = when {
+        e is FingerprintMismatch -> false
+        e is ApiError -> e.code != "unauthorized" && printerProblem(e).let { it == Problem.Unreachable || it == Problem.Unexpected }
+        else -> true
     }
 
     private companion object {
@@ -227,7 +280,8 @@ class PickSpoolViewModel(
 
 /**
  * Pick a spool for a slot (05-android-app 9.6): the header "Load into Workshop X1, slot A4", the Spools search, and
- * after a pick the preview of the load. After loading, [onLoaded] returns to the printer screen.
+ * after a pick the preview of the load. A tag held to the phone picks its spool. After loading, [onLoaded] returns to
+ * the printer screen; [onLeave] is "Open the printer" and "Done" after a load whose answer was lost.
  */
 @Composable
 fun PickSpoolScreen(
@@ -236,10 +290,12 @@ fun PickSpoolScreen(
     slot: String,
     onLoaded: (confirmed: Boolean) -> Unit,
     onPairAgain: () -> Unit,
+    onLeave: () -> Unit = {},
 ) {
     val s by viewModel.state.collectAsState()
     val toast = LocalToast.current
     val wait = stringResource(R.string.common_load_wait)
+    TagTaps(viewModel::onTag)
     // the load being written ignores Back and says why (05-android-app 2.5 rule 2)
     val scope = rememberCoroutineScope()
     BackHandler(enabled = s.preview?.writing == true) { scope.launch { toast?.show(wait) } }
@@ -273,6 +329,7 @@ fun PickSpoolScreen(
             }
         }
         if (s.busy) SwProgress(null)
+        s.unlinkedTag?.let { NoticeCard(NoticeKind.Warn, stringResource(R.string.spool_load_tag_unlinked, it)) }
         s.problem?.let {
             if (it.isHubNotice) ProblemNotice(it, onPairAgain) else NoticeCard(
                 NoticeKind.Bad, problemText(it),
@@ -294,7 +351,7 @@ fun PickSpoolScreen(
             }
         }
     }
-    s.preview?.let { PreviewDialog(it, printerName.orEmpty(), slot, viewModel, onPairAgain) }
+    s.preview?.let { PreviewDialog(it, printerName.orEmpty(), slot, viewModel, onPairAgain, onLeave) }
 }
 
 @Composable
@@ -326,7 +383,9 @@ private fun SpoolRow(spool: SpoolSummary, onClick: () -> Unit) {
 
 /** The preview step of 7.6 for this slot: the Hub's dry run as rows, then "Back" and "Load". */
 @Composable
-private fun PreviewDialog(p: LoadPreview, printerName: String, slot: String, viewModel: PickSpoolViewModel, onPairAgain: () -> Unit) {
+private fun PreviewDialog(
+    p: LoadPreview, printerName: String, slot: String, viewModel: PickSpoolViewModel, onPairAgain: () -> Unit, onLeave: () -> Unit,
+) {
     val r = p.result
     val say = rememberBusySay(R.string.common_load_wait)
     SwDialog(
@@ -334,7 +393,7 @@ private fun PreviewDialog(p: LoadPreview, printerName: String, slot: String, vie
         onClose = { if (p.writing) say() else viewModel.back() },
         confirm = SwDialogButton(
             stringResource(if (p.writing) R.string.spool_load_loading else R.string.common_load),
-            viewModel::confirm, kind = SwButtonKind.Main, enabled = r != null && !p.writing, busy = p.writing,
+            viewModel::confirm, kind = SwButtonKind.Main, enabled = r != null && !p.writing && !p.dropped, busy = p.writing,
         ),
         cancel = SwAction(stringResource(R.string.common_back), viewModel::back),
         cancelEnabled = !p.writing,
@@ -360,10 +419,8 @@ private fun PreviewDialog(p: LoadPreview, printerName: String, slot: String, vie
             }
             r.movedBack.filter { it.id != p.spool.id }.forEach { m ->
                 Text(
-                    stringResource(
-                        R.string.printer_load_moved_back, m.id ?: "?", slot,
-                        m.location.ifBlank { stringResource(R.string.printer_unload_previous_place) },
-                    ),
+                    if (m.location.isBlank()) stringResource(R.string.printer_load_moved_back_noplace, m.id ?: "?", slot)
+                    else stringResource(R.string.printer_load_moved_back, m.id ?: "?", slot, m.location),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -373,7 +430,18 @@ private fun PreviewDialog(p: LoadPreview, printerName: String, slot: String, vie
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        p.problem?.let { NoticeCard(NoticeKind.Bad, sayText(it)) }
+        // an answer nobody could read: the load may have gone through, so it is not offered again (05 7.6)
+        if (p.dropped) {
+            p.problem?.let {
+                NoticeCard(
+                    NoticeKind.Bad, sayText(it),
+                    actions = listOf(
+                        SwAction(stringResource(R.string.spool_load_open_printer), onLeave),
+                        SwAction(stringResource(R.string.status_done), onLeave),
+                    ),
+                )
+            }
+        } else p.problem?.let { NoticeCard(NoticeKind.Bad, sayText(it)) }
         p.hubNotice?.let { ProblemNotice(it, onPairAgain) }
     }
 }

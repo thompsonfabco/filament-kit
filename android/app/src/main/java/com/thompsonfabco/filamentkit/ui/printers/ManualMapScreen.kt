@@ -196,7 +196,11 @@ private fun PositionsPanel(positions: List<ManualPosition>, open: Boolean) {
 private fun positionLine(p: ManualPosition, open: Boolean): String {
     if (p.status == "confirmed") {
         val where = listOfNotNull(
-            p.reportedLabel, p.nozzle?.let { stringResource(R.string.printer_mbl_nozzle_where, it) },
+            p.reportedLabel, when (p.nozzle) {
+                "left" -> stringResource(R.string.printers_load_nozzle_left)
+                "right" -> stringResource(R.string.printers_load_nozzle_right)
+                else -> null
+            },
         ).joinToString(WHERE_SEPARATOR)
         return stringResource(R.string.printer_mbl_row_confirmed, p.label, where)
     }

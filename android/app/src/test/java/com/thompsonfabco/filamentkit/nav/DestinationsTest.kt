@@ -69,6 +69,7 @@ class DestinationsTest {
             navigation<PrintersGraph>(startDestination = PrintersRoute) {
                 composable<PrintersRoute> { Text("") }
                 composable<PrinterRoute> { Text("") }
+                composable<PrinterPickRoute> { Text("") }
             }
             navigation<SpoolsGraph>(startDestination = SpoolsRoute) { composable<SpoolsRoute> { Text("") } }
             navigation<RecentGraph>(startDestination = RecentRoute) {
@@ -239,6 +240,12 @@ class DestinationsTest {
         assertFalse("on Preview the tap opens the tag (05 2.6)", nav.currentDestination.takesTagTaps())
         nav.navigate(AddDoneRoute("d1"))
         assertFalse(nav.currentDestination.takesTagTaps())
+    }
+
+    @Test fun aTagTapPicksTheSpoolOnPickASpool() {
+        val nav = controller()
+        nav.navigate(PrinterPickRoute("ABC123", "A4"))
+        assertTrue("on Pick a spool the tap is the pick (05 9.6)", nav.currentDestination.takesTagTaps())
     }
 
     @Test fun aStepThatWasAlreadyPoppedDoesNotMoveTheStackAgain() {

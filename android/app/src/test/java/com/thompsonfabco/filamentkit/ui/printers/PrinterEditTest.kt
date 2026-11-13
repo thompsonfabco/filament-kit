@@ -103,7 +103,7 @@ class PrinterEditTest {
         v.submit("")
         runCurrent()
         assertEquals(listOf(buildJsonObject { put("api_key", "") }), fake.edits)
-        assertEquals(Note(Say.Words(R.string.printer_set_saved)), v.state.value.note)
+        assertEquals(Note(Say.Words(R.string.common_saved)), v.state.value.note)
     }
 
     @Test fun aKlipperAddressCarriesThePortWhenGiven() = runTest(dispatcher) {
