@@ -446,9 +446,39 @@ def _current() -> tuple[Path, dict, str]:
     return root, idx, "bundled" if idx.get("entries") else "none"
 
 
+def _stat_key(path: Path):
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
+def _load_key() -> tuple:
+    """What load() reads, as the files stand: the pointer, the packaged index and each local entry (path, mtime,
+    size, inode). A downloaded version is a folder that is never changed once it is in place, so the pointer is
+    enough for it; an update, rollback, add or removal moves one of these."""
+    local = _local_dir()
+    files = sorted(local.glob("*/*.json")) if local.is_dir() else []
+    return (str(_dir()), str(BUNDLED), _stat_key(_dir() / "current.json"), _stat_key(BUNDLED / "index.json"),
+            tuple((str(f), _stat_key(f)) for f in files))
+
+
+_load_cache: tuple | None = None    # (key, Library)
+
+
 def load() -> Library:
+    """The library as it is now. The parsed index and slug tables are kept while the files behind them stay as they
+    were (one adds, one preset lookup and one parent search each call this, and the index is up to 8 MiB)."""
+    global _load_cache
+    key = _load_key()
+    cached = _load_cache
+    if cached is not None and cached[0] == key:
+        return cached[1]
     root, idx, source = _current()
-    return Library(root, idx, source, _load_local())
+    lib = Library(root, idx, source, _load_local())
+    _load_cache = (key, lib) if key == _load_key() else None
+    return lib
 
 
 # ---------- local additions ----------
