@@ -91,8 +91,9 @@ def test_the_state_without_the_code_leaves_the_public_address_out(app):
 def test_the_page_copes_with_the_missing_address_and_a_wrong_code_keeps_the_card():
     src = (STATIC / "setup.js").read_text(encoding="utf-8")
     assert "S.web.public_url" not in src and "S.web.public_set" in src
-    assert "load(true).catch((e) => say(err, e.message, false))" in src       # not `body`: that holds the card
-    assert "load(true).catch((e) => say(body," not in src
+    # the public address is a hidden value: read with the code once the page is open, its note beside the card (S1.5)
+    assert "whenOpen(body, load)" in src and 'lockNote("lock_hidden_note")' in src
+    assert "Show the public address" not in src
 
 
 def test_the_devices_tab_has_the_card():

@@ -369,15 +369,20 @@ function unlock(change, run, onCancel, opener) {
   const code = field({ type: "secret", name: "code", label: t("unlock_field_label"), hint: t("unlock_field_hint"),
     short: true, mono: true, attrs: { inputmode: "numeric" } });
   const trust = lock.trustOffered ? check({ label: t("unlock_trust"), name: "trust" }) : null;
-  return ask({ kind: "entry", title: t("unlock_title"), opener, text: change ? t("unlock_text_change", { change }) : t("unlock_text_chip"),
-    fields: [code], after: trust, confirm: t(change ? "unlock_continue" : "unlock_button"), busy: t("common_checking"),
+  return ask({ kind: "entry", title: t("unlock_title"), opener, text: conf.noCode ? t("lock_no_code") : change ? t("unlock_text_change", { change }) : t("unlock_text_chip"),
+    fields: [code], after: trust, confirm: t(run ? "unlock_continue" : "unlock_button"), busy: t("common_checking"),
     run: async () => {
       const digits = code._control.value.replace(/\D/g, "");
       const no = (text) => { fieldError(code, text); code._control.focus(); return false; };
       if (!digits) return no(t("unlock_error_empty"));
       if (digits.length !== 8) return no(t("unlock_error_length", { count: digits.length }));
       try { await api(conf.checkPath, { method: "POST", body: { code: digits }, code: false }); }
-      catch (err) { return no(err.unreachable ? t("unlock_error_unreachable") : err.status === 429 ? err.text(t("unlock_error_wrong")) : t("unlock_error_wrong")); }
+      catch (err) {
+        // TIM-3: tries left after a wrong code, the time a lockout ends; else the Hub's own words
+        const d = err.data || {}, at = d.retry_at && !d.tries_left ? d.retry_at.slice(11) : "";
+        return no(err.unreachable ? t("unlock_error_unreachable") : at ? t("unlock_error_lockout", { time: at })
+          : d.tries_left != null ? t("unlock_error_tries", { count: d.tries_left }) : err.status === 403 ? t("unlock_error_wrong") : err.text(t("unlock_error_wrong")));
+      }
       fieldError(code, null);
       if (trust && trust._control.checked) {
         const r = await api(conf.trustPath, { method: "POST", body: { code: digits }, code: false });

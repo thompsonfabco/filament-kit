@@ -574,6 +574,13 @@
     <string name="unlock_error_empty">Enter the 8-digit setup code.</string>
     <!-- 1=count -->
     <string name="unlock_error_length">The setup code has 8 digits; this has %1$d. Check it and try again.</string>
+    <!-- 1=time -->
+    <string name="unlock_error_lockout">Too many wrong setup codes. Try again at %1$s, or see the code at the Hub: `sudo filament-kit setup-code`.</string>
+    <!-- 1=count -->
+    <plurals name="unlock_error_tries">
+        <item quantity="one">This is not the setup code; %1$d try left before a wait. Check it at the Hub: `sudo filament-kit setup-code`.</item>
+        <item quantity="other">This is not the setup code; %1$d tries left before a wait. Check it at the Hub: `sudo filament-kit setup-code`.</item>
+    </plurals>
     <string name="unlock_error_unreachable">Cannot reach the Hub. Check that it is on, then try again.</string>
     <string name="unlock_error_wrong">This is not the setup code. Check it at the Hub: `sudo filament-kit setup-code`.</string>
     <string name="unlock_field_hint">Shown when filament-kit was installed. At the Hub: `sudo filament-kit setup-code`.</string>

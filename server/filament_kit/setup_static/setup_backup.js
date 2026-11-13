@@ -7,7 +7,7 @@
 async function download(path, body, fallback) {
   const r = await fetch("/setup/api/" + path, { method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw new Error(d.error || `HTTP ${r.status}`); }
+  if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
   const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
   const url = URL.createObjectURL(await r.blob());
   const a = h("a", { href: url, download: m ? m[1] : fallback });
@@ -23,7 +23,7 @@ async function upload(path, file, code) {
     headers: { "Content-Type": "application/zip", "X-Setup-Code": code }, body: file });
   let d;
   try { d = await r.json(); } catch { d = { error: `HTTP ${r.status}` }; }
-  if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`);
+  if (!r.ok || d.error) throw hubError(r.status, d);
   return d;
 }
 
@@ -32,27 +32,30 @@ function backupCard() {
   const list = h("div");
   const show = async () => {
     try {
-      const r = await api("backups/list", { code: codeIn.value });
-      offerTrust();
+      const r = await api("backups/list", { code: theCode() });
       const days = h("input", { type: "number", min: 1, max: 365, value: String(r.keep_days), ariaLabel: "Days to keep" });
       fill(list,
         r.backups.length ? null : h("p", { class: "muted", textContent: `No backups in ${r.folder} yet.` }),
         ...r.backups.map((b) => h("div", { class: "row item" },
           h("span", { textContent: `${b.at} · ${b.kind === "daily" ? "nightly" : b.kind === "pre-restore" ? "before a restore" : "made here"} · ${Math.max(1, Math.round(b.size / 1024))} KiB` }),
-          h("button", { class: "secondary", textContent: "Download", on: { click: async () => {
+          h("button", { class: "secondary", textContent: "Download", on: { click: () => coded(box, async () => {
             say(box, "Preparing the zip…", true);
-            try { await download("backups/download", { name: b.name, code: codeIn.value }, b.download); box.replaceChildren(); } catch (e) { say(box, e.message, false); }
-          } } }))),
+            await download("backups/download", { name: b.name, code: theCode() }, b.download);
+            box.replaceChildren();
+          }) } }))),
         h("div", { class: "row" }, h("label", {}, "Keep nightly backups for ", days, " days"),
           h("button", { class: "secondary", textContent: "Save", on: { click: () => change(box, "backups/keep", { days: Number(days.value) }, (x) => say(box, `Backups are kept for ${x.days} days.`, true)) } })));
-    } catch (e) { say(list, e.message, false); }
+    } catch (e) { if (e.locked) throw e; say(list, e.message, false); }
   };
   const file = h("input", { type: "file", accept: ".zip,application/zip", ariaLabel: "Backup zip" });
-  const restore = async () => {
+  const restore = () => {
     if (!file.files.length) { say(rbox, "Choose the backup zip first.", false); return; }
-    say(rbox, "Uploading and checking…", true);
-    let s;
-    try { s = await upload("restore/upload", file.files[0], codeIn.value); offerTrust(); } catch (e) { say(rbox, e.message, false); return; }
+    coded(rbox, async () => {
+      say(rbox, "Uploading and checking…", true);
+      checked(await upload("restore/upload", file.files[0], theCode()));
+    });
+  };
+  const checked = (s) => {
     const word = h("input", { ariaLabel: "Type restore", placeholder: "restore" });
     fill(rbox,
       h("p", { textContent: `Backup of ${s.host || "a kit"} made ${s.created} by filament-kit ${s.kit}: ${s.files} files${s.spoolman ? " and the Spoolman database" : ""}. Modules: ${s.modules.join(", ") || "none"}.` }),
@@ -66,10 +69,8 @@ function backupCard() {
   };
   fill(body,
     h("p", { class: "muted", textContent: "One zip with everything the kit keeps: spools, settings, printers, pairings and the certificate. The zip is not encrypted and holds the setup secrets (the keys, Access Codes and certificate): store it somewhere safe." }),
-    h("div", { class: "row" },
-      h("button", { textContent: "Back up now", on: { click: () => startJob(box, "backup") } }),
-      h("button", { class: "secondary", textContent: "Show the backups", on: { click: show } })),
-    list,
+    h("div", { class: "row" }, h("button", { textContent: "Back up now", on: { click: () => startJob(box, "backup") } })),
+    codeRead("common_list_locked", list, show),
     h("p", { class: "muted", textContent: "Restore: bring this machine to the state in a backup zip, from this computer or another." }),
     h("div", { class: "row" }, file, h("button", { class: "secondary", textContent: "Upload and check", on: { click: restore } })),
     rbox);

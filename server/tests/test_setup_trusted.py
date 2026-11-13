@@ -305,21 +305,22 @@ def test_a_new_setup_code_keeps_trusted_computers_and_says_so(app, helper, monke
 def test_the_page_and_the_guide_say_a_new_code_keeps_trusted_computers():
     trust = (STATIC / "setup_trust.js").read_text(encoding="utf-8")
     assert "keeps trusted computers trusted" in trust and "--revoke-trusted" in trust
-    setup = (STATIC / "setup.js").read_text(encoding="utf-8")
-    assert "unless this computer is trusted (Devices)" in setup
     from pathlib import Path
     guide = (Path(__file__).resolve().parents[2] / "docs" / "user-guide.md").read_text(encoding="utf-8")
     assert "Trust this computer" in guide and "--revoke-trusted" in guide and "every change does." not in guide
 
 
-def test_the_page_offers_it_only_after_the_code_worked_and_keeps_the_rules():
+def test_the_page_offers_it_in_the_unlock_dialog_and_keeps_the_rules():
     trust = (STATIC / "setup_trust.js").read_text(encoding="utf-8")
     assert "innerHTML" not in trust and "document.cookie" not in trust
-    assert "offered" in trust and "codeIn.value" in trust.split("function offerTrust")[1].split("\n")[1]
+    # S1.5: no offer after an unrelated change; the unlock dialog's checkbox, there while the feature is on
+    assert "offerTrust" not in trust and "SW.lock.trustOffered = !!T.enabled" in trust
     setup = (STATIC / "setup.js").read_text(encoding="utf-8")
-    done = setup.split("async function change")[1].split("catch")[0]
-    assert "offerTrust()" in done
-    assert "trustCard()" in setup
+    assert "offerTrust" not in setup and "codeIn" not in setup and "trustCard()" in setup
+    # the code is held in memory by the shared script and sent in the body, never stored by the page
+    assert "const theCode = () => SW.lock.code" in setup and "code: theCode()" in setup
+    every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("setup*.js"))
+    assert "sessionStorage" not in every and "localStorage" not in every
 
 
 def test_the_script_is_served_and_the_second_question_stays(app):

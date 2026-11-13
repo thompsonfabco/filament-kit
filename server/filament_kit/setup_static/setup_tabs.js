@@ -55,19 +55,20 @@ async function jobTick() {
   refresh();
 }
 
-async function showWholeLog() {
+// read only when pressed, it can be long (03 2.1); while Locked it asks for the code in place
+function showWholeLog() {
   const box = h("div");
-  jobNote.replaceChildren(box);
-  try {
+  return coded(box, async () => {
+    jobNote.replaceChildren(box);
     let at = 0, text = "";
     for (;;) {
-      const r = await api("job/log", { from: at, code: codeIn.value });
+      const r = await api("job/log", { from: at, code: theCode() });
       text += r.text;
       if (r.next === at) break;
       at = r.next;
     }
     jobOut.textContent = text;
-  } catch (e) { say(box, e.message, false); }
+  });
 }
 
 // ----- Overview -----
@@ -96,7 +97,7 @@ function checklist() {
 
 function overviewTab() {
   const rowsBox = h("div", {}, h("p", { class: "muted", textContent: "Checking…" }));
-  const head = h("div");
+  const head = h("div"), note = h("div", { role: "status" });     // the hidden-values note
   const show = (r) => {
     const u = r.update;
     head.replaceChildren(h("p", {}, `filament-kit ${r.version_text || r.version} · mode ${S.mode} `,
@@ -104,15 +105,12 @@ function overviewTab() {
       " ", link("updates", u.newer ? "Update" : "Updates")));
     fill(rowsBox,
       u.half_install && !r.job.running ? h("p", { textContent: `The last install or update stopped halfway. To repair it, run on the server: ${u.half_install}` }) : null,
-      ...r.rows.map(rowEl),
-      r.redacted ? h("p", { class: "muted", textContent: "Addresses and serials are hidden until the setup code is given." }) : null);
+      ...r.rows.map(rowEl));
+    note.replaceChildren(...(r.redacted ? [lockNote("lock_hidden_note")] : []));
   };
-  const box = h("div");
-  api("overview").then(show).catch((e) => say(rowsBox, e.message, false));
-  return [checklist(), card("Status", head, rowsBox,
-    h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Show addresses", on: { click: async () => {
-      try { show(await api("overview", { code: codeIn.value })); box.replaceChildren(); } catch (e) { say(box, e.message, false); }
-    } } })), box)];
+  // addresses and serials load by themselves once the page is open, and are read again without the code when it locks
+  whenOpen(rowsBox, (open) => (open ? api("overview", { code: theCode() }) : api("overview")).then(show));
+  return [checklist(), card("Status", head, rowsBox, note)];
 }
 
 // ----- the mode presets -----
