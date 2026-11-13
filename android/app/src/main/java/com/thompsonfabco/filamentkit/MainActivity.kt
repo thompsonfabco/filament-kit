@@ -154,6 +154,7 @@ import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
+import com.thompsonfabco.filamentkit.ui.home.labelReaderOff
 import com.thompsonfabco.filamentkit.ui.home.showLabelPhotos
 import com.thompsonfabco.filamentkit.ui.home.versionLine
 import com.thompsonfabco.filamentkit.ui.pair.NetPairingBackend
@@ -494,12 +495,14 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             showPrinters = showPrinters,
                             onAddSpools = { nav.navigate(AddRoute()) },
                             onAddByHand = { nav.navigate(AddRoute(manual = true)) },
-                            labelPhotos = labelPhotos,
+                            labelReaderOff = labelReaderOff(info),
                             onResumeDraft = { id -> nav.navigate(AddRoute(draft = id)) },
                             onDiscardDraft = app::discardDraft,
                             onOpenPrinter = { id ->
+                                // the Printers stack goes back to its root first, so Back from the printer lands on the list
                                 nav.selectTab(Tab.Printers)
-                                nav.navigate(PrinterRoute(id)) { launchSingleTop = true }
+                                nav.popBackStack<PrintersRoute>(inclusive = false)
+                                nav.navigate(PrinterRoute(id))
                             },
                             onOpenPrinters = { tabTapped(Tab.Printers) },
                             onRefreshPrinters = printersVm::refresh,

@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -21,6 +22,9 @@ import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterSummary
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.ui.components.MAIN_BUTTON_TAG
+import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
@@ -59,7 +63,8 @@ class HomeScreenTest {
         update: UpdateUi = UpdateUi(),
         printers: HomePrintersState = HomePrintersState(printers = emptyList()),
         showPrinters: Boolean = true,
-        labelPhotos: Boolean = true,
+        labelReaderOff: Boolean = false,
+        localNetwork: Boolean = false,
         loadedAgo: Long = 0,
     ) {
         rule.setContent {
@@ -73,8 +78,9 @@ class HomeScreenTest {
                     onRefreshPrinters = { calls += "refresh" }, onReviewCertificate = { calls += "review" },
                     onPairAgain = { calls += "pair" }, onInstallUpdate = { calls += "install" },
                     onConfirmInstall = { calls += "confirm" },
-                    showPrinters = showPrinters, labelPhotos = labelPhotos,
+                    showPrinters = showPrinters, labelReaderOff = labelReaderOff,
                     onAddCatalogLine = { calls += "catalog" },
+                    localNetworkPanel = { SwButton("Allow", {}, kind = SwButtonKind.Main) },
                 )
             }
         }
@@ -102,9 +108,9 @@ class HomeScreenTest {
     }
 
     @Test fun withTheLabelReaderOffOnlyAddByHandIsLeftAndSaysWhy() {
-        show(labelPhotos = false)
+        show(labelReaderOff = true)
         rule.onAllNodesWithText("Add from label photos").assertCountEquals(0)
-        assertTrue(exists("The Label Reader is switched off", substring = true))
+        text("The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page.").assertExists()
         text("Add by hand").performClick()
         assertEquals(listOf("hand"), calls)
     }
@@ -173,7 +179,7 @@ class HomeScreenTest {
         text("Workshop X1").performClick()
         text("Spare P1S").performClick()
         text("All printers").performClick()
-        assertEquals(listOf("printer A", "printers", "printers"), calls)
+        assertEquals(listOf("printer A", "printer D", "printers"), calls)
     }
 
     @Test fun atMostFourPrintersAreListedThenAndNMore() {
@@ -198,9 +204,97 @@ class HomeScreenTest {
 
     @Test fun aFailedFirstReadSaysSoWithTryAgain() {
         show(printers = HomePrintersState(failed = true))
-        text("Cannot reach the Hub. Check that this phone is on the home network.").assertExists()
+        text("Cannot reach the Hub").assertExists()
+        text("Check that this phone is on the home network.").assertExists()
         text("Try again").performClick()
         assertEquals(listOf("refresh"), calls)
+    }
+
+    @Test fun unknownHubInfoDoesNotMeanTheLabelReaderIsOff() {
+        // a cold start or an offline phone: the Hub has not said, so both buttons stay
+        show(connection = Connection.Offline, printers = HomePrintersState(failed = true))
+        text("Add from label photos").assertExists()
+        text("Add by hand").assertExists()
+        rule.onAllNodesWithText("The Label Reader is switched off", substring = true).assertCountEquals(0)
+    }
+
+    @Test fun anOfflinePhoneWithNothingLoadedShowsTheOfflineStateNotSkeletons() {
+        show(connection = Connection.Offline, printers = HomePrintersState())
+        text("Cannot reach the Hub").assertExists()
+        text("Try again").performClick()
+        assertEquals(listOf("refresh"), calls)
+    }
+
+    @Test fun whileTheFirstReadRunsOnlineThePanelHasNoErrorYet() {
+        show(printers = HomePrintersState(loading = true))
+        rule.onAllNodesWithText("Cannot reach the Hub").assertCountEquals(0)
+        rule.onAllNodesWithText("No printers yet.").assertCountEquals(0)
+    }
+
+    @Test fun printersTheHubOnlyFoundAreNotListed() {
+        show(
+            printers = HomePrintersState(
+                printers = listOf(printer("A", "Workshop X1"), printer("B", "Found P1S", Printer.STATE_NOT_CONFIGURED, configured = false)),
+            ),
+        )
+        text("Workshop X1").assertExists()
+        rule.onAllNodesWithText("Found P1S").assertCountEquals(0)
+    }
+
+    @Test fun sectionTitlesAreHeadings() {
+        show(drafts = listOf(draft("d1", 2)))
+        for (title in listOf("Add spools", "Drafts", "Printers")) {
+            val node = rule.onAllNodes(hasText(title)).fetchSemanticsNodes().first { it.config.contains(SemanticsProperties.Heading) }
+            assertNotNull(title, node)
+        }
+    }
+
+    private fun filledButtons(): Int = rule.onAllNodes(hasTestTag(MAIN_BUTTON_TAG)).fetchSemanticsNodes()
+        .count { !it.config.contains(SemanticsProperties.Disabled) }
+
+    @Test fun oneFilledButtonOnlineWithTheReaderOnAndDraftsAndAnUpdate() {
+        show(update = UpdateUi(available = 3, offeredVersion = "0.5.3"), drafts = listOf(draft("d1", 1)))
+        assertEquals(1, filledButtons())
+    }
+
+    @Test fun oneFilledButtonWhenTheHubIsNewerThanTheApp() {
+        show(update = UpdateUi(serverTooNew = true))
+        assertEquals(1, filledButtons())
+    }
+
+    @Test fun oneFilledButtonOfflineWithNothingKnown() {
+        show(connection = Connection.Offline, printers = HomePrintersState(failed = true))
+        assertEquals(1, filledButtons())
+    }
+
+    @Test fun oneFilledButtonWhenTheCertificateChanged() {
+        show(connection = Connection.CertChanged("AA", "BB"))
+        assertEquals(1, filledButtons())
+    }
+
+    @Test fun oneFilledButtonWhileThePrintersLoad() {
+        show(printers = HomePrintersState(loading = true))
+        assertEquals(1, filledButtons())
+    }
+
+    @Test fun oneFilledButtonWithTheLocalNetworkNoticeAndTheReaderOff() {
+        show(connection = Connection.NeedsLocalNetwork, labelReaderOff = true)
+        assertEquals(1, filledButtons())
+        text("Allow").assertExists()
+    }
+
+    @Test fun theLocalNetworkAllowButtonIsTheOnlyFilledOne() {
+        show(connection = Connection.NeedsLocalNetwork)
+        assertEquals(1, filledButtons())
+        text("Allow").assertExists()
+        text("Add from label photos").assertExists()
+    }
+
+    @Test fun withTheLabelReaderOffAddByHandIsTheFilledOne() {
+        show(labelReaderOff = true)
+        assertEquals(1, filledButtons())
+        val filled = rule.onAllNodes(hasTestTag(MAIN_BUTTON_TAG)).fetchSemanticsNodes()
+        assertEquals("Add by hand", filled.single().config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text })
     }
 
     @Test fun theHubsOwnRefusalIsShownAsGiven() {

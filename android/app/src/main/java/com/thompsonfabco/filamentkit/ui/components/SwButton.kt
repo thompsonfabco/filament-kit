@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.R
@@ -40,6 +41,9 @@ internal enum class SwButtonKind {
     /** Filled `bad`: only the confirming button of a destructive dialog. */
     DestructiveFilled,
 }
+
+/** Marks the filled main button for the one-filled-button tests (05-android-app 5). */
+internal const val MAIN_BUTTON_TAG = "sw-main-button"
 
 /** A label and what it does: the buttons of a notice or an empty state. */
 internal class SwAction(val label: String, val onClick: () -> Unit)
@@ -72,8 +76,8 @@ internal fun SwButton(
             val interaction = remember { MutableInteractionSource() }
             val pressed by interaction.collectIsPressedAsState()
             Button(
-                onClick = onClick, modifier = sized, enabled = active, shape = shape, contentPadding = padding,
-                interactionSource = interaction,
+                onClick = onClick, modifier = sized.testTag(MAIN_BUTTON_TAG), enabled = active, shape = shape,
+                contentPadding = padding, interactionSource = interaction,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (pressed) colors.accentHover else colors.accent, contentColor = colors.onAccent,
                     disabledContainerColor = colors.surface2, disabledContentColor = colors.muted,

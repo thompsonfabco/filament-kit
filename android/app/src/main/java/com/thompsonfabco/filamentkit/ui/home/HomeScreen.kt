@@ -28,6 +28,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +62,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
+import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwMenu
@@ -71,9 +73,9 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 import com.thompsonfabco.filamentkit.update.UpdateTexts
 import com.thompsonfabco.filamentkit.update.UpdateUi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
-import java.util.Calendar
 import java.util.Date
 
 /**
@@ -117,14 +119,19 @@ internal fun HomeScreen(
     onPresetsChanged: () -> Unit = {},
     /** Opens the Filament Catalog's new-line form from the presets panel (until S4.14 moves it). */
     onAddCatalogLine: () -> Unit = {},
-    /** Offer the label-photo add flow ([showLabelPhotos]); off, "Add by hand" is the main button. */
-    labelPhotos: Boolean = false,
+    /**
+     * The Hub said its Label Reader is off ([labelReaderOff]): the photo button goes and "Add by hand" is the main one.
+     * Unknown (cold start, offline) is not off: photos are kept on the phone and read when the Hub is back.
+     */
+    labelReaderOff: Boolean = false,
     /** Shown while [connection] is [Connection.NeedsLocalNetwork] (explanation, Allow, Open app settings). */
     localNetworkPanel: @Composable () -> Unit = {},
-    nowMillis: Long = System.currentTimeMillis(),
+    /** The time the ages count from; null: the clock, read again every half minute. */
+    nowMillis: Long? = null,
     extra: @Composable () -> Unit = {},
 ) {
     val space = SpoolwardenTheme.space
+    val now = nowMillis ?: tickingNow()
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
     val discarded = stringResource(R.string.home_draft_discarded)
@@ -134,12 +141,13 @@ internal fun HomeScreen(
         scope.launch { toast?.show(discarded) }
     }
     val left: @Composable ColumnScope.() -> Unit = {
-        AddSpoolsPanel(labelPhotos, onAddSpools, onAddByHand)
-        if (drafts.isNotEmpty()) DraftsPanel(drafts, nowMillis, onResumeDraft, discard)
+        // while the local network notice asks for access, its "Allow" is the one filled button on the screen
+        AddSpoolsPanel(labelReaderOff, connection != Connection.NeedsLocalNetwork, onAddSpools, onAddByHand)
+        if (drafts.isNotEmpty()) DraftsPanel(drafts, now, onResumeDraft, discard)
     }
     val right: @Composable ColumnScope.() -> Unit = {
         if (showPrinters) {
-            PrintersPanel(printers, connection == Connection.Offline, onOpenPrinter, onOpenPrinters, onRefreshPrinters)
+            PrintersPanel(printers, connection, onOpenPrinter, onOpenPrinters, onRefreshPrinters)
         }
         if (showPresets) {
             var updatesOpen by remember { mutableStateOf(false) }
@@ -167,7 +175,7 @@ internal fun HomeScreen(
         if (connection == Connection.Offline && loadedAt != null) {
             NoticeCard(
                 NoticeKind.Info,
-                stringResource(R.string.common_offline_notice, ageWords(((nowMillis - loadedAt) / MS_PER_SECOND).coerceAtLeast(0))),
+                stringResource(R.string.common_offline_notice, ageWords(((now - loadedAt) / MS_PER_SECOND).coerceAtLeast(0))),
             )
         }
         UpdateNotice(update, onInstallUpdate, onConfirmInstall)
@@ -186,7 +194,20 @@ internal fun HomeScreen(
 }
 
 private const val MS_PER_SECOND = 1000L
-private const val MS_PER_DAY = 24 * 60 * 60 * MS_PER_SECOND
+private const val TICK_MS = 30 * MS_PER_SECOND
+
+/** The clock, read again every [TICK_MS], so the draft ages and the day they are counted from keep up. */
+@Composable
+private fun tickingNow(): Long {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(TICK_MS)
+            now = System.currentTimeMillis()
+        }
+    }
+    return now
+}
 
 /** A panel (05-android-app 3.1): `surface` with a hairline `border`, a header row of at least 48 dp with the title and an optional count and action. */
 @Composable
@@ -208,10 +229,13 @@ private fun HomePanel(
         Column(Modifier.padding(horizontal = space.s4).padding(bottom = space.s4)) {
             Row(Modifier.fillMaxWidth().heightIn(min = space.s7), verticalAlignment = Alignment.CenterVertically) {
                 Row(
-                    Modifier.weight(1f).semantics(mergeDescendants = true) { heading() },
+                    Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
+                    Text(
+                        title, style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f, fill = false).semantics { heading() },
+                    )
                     if (count != null) {
                         Text(
                             count.toString(), style = MaterialTheme.typography.labelMedium, color = colors.muted,
@@ -228,21 +252,22 @@ private fun HomePanel(
 }
 
 @Composable
-private fun AddSpoolsPanel(labelPhotos: Boolean, onAddSpools: () -> Unit, onAddByHand: () -> Unit) {
+private fun AddSpoolsPanel(readerOff: Boolean, mainAllowed: Boolean, onAddSpools: () -> Unit, onAddByHand: () -> Unit) {
+    fun kind(main: Boolean) = if (main && mainAllowed) SwButtonKind.Main else SwButtonKind.Plain
     HomePanel(stringResource(R.string.home_add_title)) {
         Text(stringResource(R.string.home_add_text), style = MaterialTheme.typography.bodyMedium)
-        if (labelPhotos) {
-            SwButton(
-                stringResource(R.string.home_add_from_photos), onAddSpools, Modifier.fillMaxWidth(), kind = SwButtonKind.Main,
-                icon = R.drawable.sw_ic_camera,
-            )
-            SwButton(stringResource(R.string.home_add_by_hand), onAddByHand, Modifier.fillMaxWidth())
-        } else {
+        if (readerOff) {
             Text(
                 stringResource(R.string.home_label_reader_off), style = MaterialTheme.typography.bodyMedium,
                 color = SpoolwardenTheme.colors.muted,
             )
-            SwButton(stringResource(R.string.home_add_by_hand), onAddByHand, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
+            SwButton(stringResource(R.string.home_add_by_hand), onAddByHand, Modifier.fillMaxWidth(), kind = kind(true))
+        } else {
+            SwButton(
+                stringResource(R.string.home_add_from_photos), onAddSpools, Modifier.fillMaxWidth(), kind = kind(true),
+                icon = R.drawable.sw_ic_camera,
+            )
+            SwButton(stringResource(R.string.home_add_by_hand), onAddByHand, Modifier.fillMaxWidth(), kind = kind(false))
         }
     }
 }
@@ -277,13 +302,9 @@ private fun UpdateNotice(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
             UpdateNoticeKind.HubNewer -> NoticeCard(NoticeKind.Warn, stringResource(R.string.home_update_hub_newer), actions = actions)
             UpdateNoticeKind.Downloaded -> NoticeCard(NoticeKind.Info, stringResource(R.string.app_update_downloaded_home), actions = actions)
             UpdateNoticeKind.Ready -> {
-                val version = update.offeredVersion?.trim().orEmpty()
-                NoticeCard(
-                    NoticeKind.Info,
-                    if (version.isEmpty()) stringResource(R.string.home_update_ready_plain)
-                    else stringResource(R.string.home_update_ready, version),
-                    actions = actions,
-                )
+                // the Hub always names its release; the offered build number is the fallback
+                val version = update.offeredVersion?.trim()?.ifEmpty { null } ?: update.available.toString()
+                NoticeCard(NoticeKind.Info, stringResource(R.string.home_update_ready, version), actions = actions)
             }
         }
         if (update.needsPermission) NoticeCard(NoticeKind.Warn, stringResource(R.string.app_update_permission))
@@ -293,15 +314,8 @@ private fun UpdateNotice(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
 
 @Composable
 private fun DraftsPanel(drafts: List<Draft>, now: Long, onResume: (String) -> Unit, onDiscard: (String) -> Unit) {
-    val startOfToday = remember(now / MS_PER_DAY) {
-        Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-    }
+    // local midnight of the device's day: recomputed whenever the clock moves into a new day
+    val startOfToday = startOfDay(now)
     HomePanel(stringResource(R.string.home_drafts_title), count = drafts.size) {
         drafts.forEachIndexed { i, d ->
             if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
@@ -388,41 +402,55 @@ private fun DraftRow(draft: Draft, now: Long, startOfToday: Long, onClick: () ->
 @Composable
 private fun PrintersPanel(
     state: HomePrintersState,
-    offline: Boolean,
+    connection: Connection,
     onOpenPrinter: (String) -> Unit,
     onOpenAll: () -> Unit,
     onRefresh: () -> Unit,
 ) {
-    val list = state.printers
+    // the Hub lists the printers it has found too; the panel shows the configured ones
+    val list = state.printers?.filter { it.configured }
+    val offline = connection == Connection.Offline
+    val waiting = (connection is Connection.Online || connection == Connection.Checking) && !state.failed
     HomePanel(
         stringResource(R.string.home_printers_title),
         count = list?.size,
         action = { SwButton(stringResource(R.string.home_printers_all), onOpenAll, kind = SwButtonKind.Quiet) },
     ) {
-        // the data stays when a read fails; while the Hub is simply offline the top notice says so
-        if (state.failed && !(offline && list != null)) {
-            NoticeCard(
-                NoticeKind.Bad, state.message ?: stringResource(R.string.common_hub_unreachable),
+        when {
+            list == null && state.failed && state.message != null -> NoticeCard(
+                NoticeKind.Bad, state.message,
                 actions = listOf(SwAction(stringResource(R.string.common_try_again), onRefresh)),
             )
-        }
-        when {
-            list == null -> if (!state.failed) SwSkeletonRows(PRINTER_SKELETON_ROWS)
-            list.isEmpty() -> {
-                Text(stringResource(R.string.home_printers_empty), style = MaterialTheme.typography.bodyMedium)
-                SwButton(stringResource(R.string.home_printers_add), onOpenAll, kind = SwButtonKind.Quiet)
-            }
+            // nothing loaded and the Hub cannot be reached: 05 3.2 "Offline", never an endless skeleton
+            list == null && !waiting -> SwEmptyState(
+                icon = R.drawable.sw_st_hollow, title = stringResource(R.string.common_offline_title),
+                text = stringResource(R.string.common_offline_text), dashed = false,
+                secondary = SwAction(stringResource(R.string.common_try_again), onRefresh),
+            )
+            list == null -> SwSkeletonRows(PRINTER_SKELETON_ROWS)
             else -> {
-                val rows = printerRows(list)
-                rows.shown.forEachIndexed { i, p ->
-                    if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                    PrinterRow(p, onClick = { if (opensPrinter(p)) onOpenPrinter(p.id) else onOpenAll() })
-                }
-                if (rows.more > 0) {
-                    Text(
-                        stringResource(R.string.home_printers_more, rows.more), style = MaterialTheme.typography.bodySmall,
-                        color = SpoolwardenTheme.colors.muted,
+                // the data stays when a read fails; while the Hub is simply offline the top notice says so
+                if (state.failed && !offline) {
+                    NoticeCard(
+                        NoticeKind.Bad, state.message ?: stringResource(R.string.common_hub_unreachable),
+                        actions = listOf(SwAction(stringResource(R.string.common_try_again), onRefresh)),
                     )
+                }
+                if (list.isEmpty()) {
+                    Text(stringResource(R.string.home_printers_empty), style = MaterialTheme.typography.bodyMedium)
+                    SwButton(stringResource(R.string.home_printers_add), onOpenAll, kind = SwButtonKind.Quiet)
+                } else {
+                    val rows = printerRows(list)
+                    rows.shown.forEachIndexed { i, p ->
+                        if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+                        PrinterRow(p, onClick = { onOpenPrinter(p.id) })
+                    }
+                    if (rows.more > 0) {
+                        Text(
+                            stringResource(R.string.home_printers_more, rows.more), style = MaterialTheme.typography.bodySmall,
+                            color = SpoolwardenTheme.colors.muted,
+                        )
+                    }
                 }
             }
         }
@@ -474,3 +502,6 @@ private fun PrinterRow(p: Printer, onClick: () -> Unit) {
 
 /** The label-photo add flow is offered only when the server says its `ai_intake` module is on ([info] null: unknown). */
 fun showLabelPhotos(info: ServerInfo?): Boolean = info?.labelReading == true
+
+/** Home hides the photo button only when the Hub said so: unknown ([info] null) is not off. */
+fun labelReaderOff(info: ServerInfo?): Boolean = info?.labelReading == false

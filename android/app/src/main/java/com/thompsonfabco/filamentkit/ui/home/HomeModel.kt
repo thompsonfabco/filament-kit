@@ -7,6 +7,8 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
 import com.thompsonfabco.filamentkit.update.UpdateUi
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,8 +60,9 @@ internal fun homePrinterStatus(p: Printer): HomePrinterStatus = when {
     else -> HomePrinterStatus.NeedsLook // wrong Access Code, Developer Mode, a changed certificate
 }
 
-/** A row opens the printer itself only when the Hub holds a working setup for it; the others are fixed in Printers. */
-internal fun opensPrinter(p: Printer): Boolean = p.configured && p.state != Printer.STATE_WRONG_CODE && p.state != Printer.STATE_NOT_CONFIGURED
+/** Local midnight of the day [now] falls in, in [zone] (the device's zone): where "today" starts for the draft ages. */
+internal fun startOfDay(now: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
+    Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
 
 /** The rows shown and how many more there are. */
 internal class PrinterRows(val shown: List<Printer>, val more: Int)

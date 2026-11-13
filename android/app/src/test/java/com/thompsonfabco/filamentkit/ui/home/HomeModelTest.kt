@@ -83,13 +83,6 @@ class HomeModelTest {
         assertEquals(HomePrinterStatus.NotConfigured, homePrinterStatus(printer(state = Printer.STATE_NOT_CONFIGURED)))
     }
 
-    @Test fun onlyAWorkingPrinterOpensItsOwnScreen() {
-        assertTrue(opensPrinter(printer()))
-        assertTrue(opensPrinter(printer(state = Printer.STATE_OFFLINE)))
-        assertFalse(opensPrinter(printer(configured = false)))
-        assertFalse(opensPrinter(printer(state = Printer.STATE_WRONG_CODE)))
-    }
-
     @Test fun theJobIsPercentAndTimeLeftAndOnlyWhilePrinting() {
         val job = printerJob(printer(gcode = "RUNNING", percent = 42, left = 72))!!
         assertEquals(42, job.percent)
@@ -117,6 +110,26 @@ class HomeModelTest {
         assertEquals(UpdateNoticeKind.Downloaded, updateNotice(UpdateUi(confirmPending = true)))
         assertEquals(UpdateNoticeKind.HubNewer, updateNotice(UpdateUi(serverTooNew = true)))
         assertEquals(UpdateNoticeKind.HubNewer, updateNotice(UpdateUi(available = 3, serverTooNew = true)))
+    }
+
+    @Test fun startOfDayIsLocalMidnightInTheGivenZone() {
+        val zone = java.time.ZoneId.of("America/New_York")
+        val at = java.time.ZonedDateTime.of(2026, 11, 13, 23, 30, 0, 0, zone).toInstant().toEpochMilli()
+        val midnightNy = java.time.ZonedDateTime.of(2026, 11, 13, 0, 0, 0, 0, zone).toInstant().toEpochMilli()
+        assertEquals(midnightNy, startOfDay(at, zone))
+        // an hour later it is the next local day
+        assertEquals(midnightNy + 24 * 3_600_000L, startOfDay(at + 3_600_000L, zone))
+        // the day of a daylight-saving change is 25 hours long
+        val change = java.time.ZonedDateTime.of(2026, 11, 1, 12, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val dayStart = java.time.ZonedDateTime.of(2026, 11, 1, 0, 0, 0, 0, zone).toInstant().toEpochMilli()
+        assertEquals(dayStart, startOfDay(change, zone))
+    }
+
+    @Test fun onlyAnExplicitNoFromTheHubMeansTheLabelReaderIsOff() {
+        assertFalse("unknown", labelReaderOff(null))
+        assertTrue(labelReaderOff(ServerInfo("W", "1.0", 1, modules = listOf("spoolman"))))
+        assertFalse(labelReaderOff(ServerInfo("W", "1.0", 1, modules = listOf("ai_intake"))))
+        assertFalse("an older server reads labels", labelReaderOff(ServerInfo("W", "0.1.0", 1)))
     }
 
     @Test fun thePrintersFeatureIsOnUnlessTheHubListsModulesWithoutPrinters() {

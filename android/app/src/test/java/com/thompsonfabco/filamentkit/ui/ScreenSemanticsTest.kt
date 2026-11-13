@@ -126,7 +126,7 @@ class ScreenSemanticsTest {
     }
 
     /** Light and dark, font scale 1 and 2, on the screen already shown. */
-    private fun auditAllFour(shows: String) {
+    private fun auditAllFour(shows: String, sectionTitles: List<String> = emptyList()) {
         rule.waitForIdle()
         rule.onNodeWithText(shows).assertExists()
         assertTrue("the screen has controls to audit", SemanticsAudit.clickableCount(rule.onRoot().fetchSemanticsNode()) >= 1)
@@ -134,7 +134,7 @@ class ScreenSemanticsTest {
             for (scale in listOf(1f, 2f)) {
                 dark = isDark
                 fontScale = scale
-                assertEquals("dark=$isDark fontScale=$scale", emptyList<String>(), audit())
+                assertEquals("dark=$isDark fontScale=$scale", emptyList<String>(), audit(sectionTitles))
             }
         }
     }
@@ -148,7 +148,7 @@ class ScreenSemanticsTest {
         Printer(id = id, name = name, model = "X1C", serial = id, ip = "192.0.2.4", configured = true, state = state, summary = summary)
 
     private fun showHome(
-        labelPhotos: Boolean = true,
+        labelReaderOff: Boolean = false,
         printers: HomePrintersState = HomePrintersState(
             printers = listOf(
                 homePrinter("A1", "Workshop X1", "connected", PrinterSummary("RUNNING", 42, 72, "Benchy")),
@@ -169,29 +169,29 @@ class ScreenSemanticsTest {
             update = update, printers = printers, onAddSpools = {}, onAddByHand = {}, onResumeDraft = {},
             onDiscardDraft = {}, onOpenPrinter = {}, onOpenPrinters = {}, onRefreshPrinters = {},
             onReviewCertificate = {}, onPairAgain = {}, onInstallUpdate = {}, onConfirmInstall = {},
-            labelPhotos = labelPhotos,
+            labelReaderOff = labelReaderOff,
         )
     }
 
     @Test fun home() {
         showHome()
-        auditAllFour("Add by hand")
+        auditAllFour("Add by hand", listOf("Add spools", "Drafts", "Printers"))
     }
 
     @Test fun homeWithTheLabelReaderOff() {
-        showHome(labelPhotos = false)
-        auditAllFour("Add by hand")
+        showHome(labelReaderOff = true)
+        auditAllFour("Add by hand", listOf("Add spools", "Drafts", "Printers"))
         rule.onNodeWithText("Add from label photos").assertDoesNotExist()
     }
 
     @Test fun homeWhilePrintersLoadAndWithoutAnUpdate() {
         showHome(printers = HomePrintersState(loading = true), update = UpdateUi())
-        auditAllFour("Add by hand")
+        auditAllFour("Add by hand", listOf("Add spools", "Drafts", "Printers"))
     }
 
     @Test fun homeWithNoPrintersAndTheHubNewerThanTheApp() {
         showHome(printers = HomePrintersState(printers = emptyList()), update = UpdateUi(serverTooNew = true))
-        auditAllFour("No printers yet.")
+        auditAllFour("No printers yet.", listOf("Add spools", "Drafts", "Printers"))
     }
 
     @Test fun spools() {
