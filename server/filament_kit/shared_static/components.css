@@ -335,7 +335,7 @@ dialog .detail__close{display:inline-flex;margin-left:auto}
 .empty,.error-state{display:grid;justify-items:center;gap:var(--s2);padding:var(--s7) var(--s5);border:var(--hairline) dashed var(--border);text-align:center}
 .empty__disc,.error-state__disc{display:grid;place-items:center;width:calc(var(--s7) + var(--s2));height:calc(var(--s7) + var(--s2));border-radius:50%;background:var(--accent-soft);color:var(--accent-text)}
 .error-state__disc{background:var(--bad-soft);color:var(--bad)}
-.error-state__disc .status__shape{width:var(--s5);height:var(--s5)}
+.empty__disc .status__shape,.error-state__disc .status__shape{width:var(--s5);height:var(--s5)}
 .empty__text,.error-state__text{max-width:min(60ch,var(--column-max))}
 :is(.empty,.error-state)>.actions{justify-content:center}
 .error-state__details{font-size:var(--fs-s)}

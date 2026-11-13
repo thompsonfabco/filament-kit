@@ -31,7 +31,7 @@ async function api(path, body) {
   hubJobs().up();
   let data;
   try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
-  if (!r.ok || data.error) throw hubError(r.status, data);
+  if (!r.ok || data.error) throw Object.assign(hubError(r.status, data), { path });
   return data;
 }
 // an error reply; `locked`: refused for its setup code (none, wrong, too many tries, trust gone), so the lock asks again
@@ -169,6 +169,40 @@ function fill(el, ...kids) {
   if (r) carry(r);
   return el;
 }
+// ----- standard states (02 10; 03 2.4, 2.5) -----
+// a Hub text as it is shown: first letter upper case, a full stop at the end
+const hubText = (m) => { const s = String(m || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) + (/[.!?…]$/.test(s) ? "" : ".") : s; };
+// the error state of a region that could not be read: `key` is the catalogue's "Could not read …" text, `retry` reads again
+function readFailed(el, key, e, retry) {
+  fill(el, SW.errorState({ title: SW.t(key, { reason: "" }).trim(), text: hubText(e.message), onTry: retry,
+    details: (e.path ? `/setup/api/${e.path}
+` : "") + (e.status ? `HTTP ${e.status}: ` : "") + e.message }));
+}
+// A region's read: the skeleton while the first read waits (a later one keeps what is shown), then show(reply); a
+// failure is the error state with Try again, which reads again. `section` is the section's name in TABS: the screen
+// reader hears the section's name, and "<section>_error" is the catalogue's "Could not read …" text. A refusal for the
+// code is the caller's. Resolves when the region is settled.
+function readRegion(el, section, read, show) {
+  const key = section + "_error";
+  const go = () => {
+    const L = el._loaded ? null : SW.loading(el, { thing: SW.t(TABS[section][0]), items: 3, onTry: go, title: SW.t(key, { reason: "" }).trim() });
+    return Promise.resolve().then(read).then((r) => {
+      if (L) L.done();
+      el._loaded = true;
+      show(r);
+    }, (e) => {
+      if (L) L.done();
+      if (e.locked) throw e;
+      el._loaded = false;
+      readFailed(el, key, e, go);
+    });
+  };
+  return go();
+}
+// A section whose feature is switched off (03 2.5): the empty state with the hollow circle and the way to Features;
+// its texts are "<section>_off_title" and "<section>_off_text"
+const switchedOff = (section) => SW.empty({ shape: "s-hollow", title: SW.t(section + "_off_title"), text: SW.t(section + "_off_text"),
+  actions: [h("a", { class: "btn btn--primary", href: "#features", textContent: SW.t("common_go_to_features") })] });
 const pill = (on, yes, no) => h("span", { class: "pill " + (on ? "ok" : "no"), textContent: on ? yes : no });
 const card = (title, ...kids) => h("section", { class: "card" }, h("h2", {}, title), ...kids);
 
@@ -294,7 +328,7 @@ async function refresh(at, sent) {
   const r = at && regionOf(at);
   try { S = await api("state"); } catch (e) {
     if (!S) { hubName.parentElement.dataset.state = "error"; hubName.replaceChildren(SW.shape("s-octagon"), SW.t("topbar_hub_unreachable")); }
-    if (!at) { sections.replaceChildren(h("p", { class: "err", textContent: e.message })); shown = null; }
+    if (!at) { const box = h("div"); readFailed(box, "overview_error", e, () => refresh()); sections.replaceChildren(box); shown = null; }
     return;
   }
   hubName.replaceChildren(S.server_name);

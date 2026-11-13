@@ -694,6 +694,7 @@
   "lock_unlock_forget_action": "forget {name}",
   "lock_unlock_viewing": "Viewing needs nothing; every change needs the code.",
   "logs_empty": "Nothing logged.",
+  "logs_error": "Could not read the services. {reason}",
   "logs_lines": "Lines",
   "logs_locked": "Logs hold addresses and serial numbers, so reading them needs the setup code.",
   "logs_none": "No services are switched on.",

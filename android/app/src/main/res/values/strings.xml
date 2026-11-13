@@ -873,6 +873,8 @@
     <string name="lock_unlock_forget_action">forget %1$s</string>
     <string name="lock_unlock_viewing">Viewing needs nothing; every change needs the code.</string>
     <string name="logs_empty">Nothing logged.</string>
+    <!-- 1=reason -->
+    <string name="logs_error">Could not read the services. %1$s</string>
     <string name="logs_lines">Lines</string>
     <string name="logs_locked">Logs hold addresses and serial numbers, so reading them needs the setup code.</string>
     <string name="logs_none">No services are switched on.</string>
