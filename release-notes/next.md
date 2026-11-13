@@ -40,6 +40,13 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 
 - The app draws in the Console theme from the shared design values, with an app shell (bottom bar, side rail on wide screens, top bar), 44 dp controls and a new launcher icon. Its name and texts come from the shared catalogue. The shared parts every screen uses (page states such as loading and empty, dialogs) now exist, with tests for their accessibility semantics.
 
+## More of the new design is merged
+
+- **Android app:** Settings, app updates and licences; pairing with one screen per step; Home; the Printers list, adding and finding Klipper printers; adding a line to the Filament Catalog. All in the new design.
+- **Phone web app:** sheets replace the browser's own confirm and prompt boxes; results, errors and reasons appear in place; the add preview works per item with colour finding and paging; spools can be read and edited from the phone, with the usage source shown; the offline helper (service worker) is always served.
+- **The Hub:** every printer's state comes in one read; the status shows groups and section summaries; the label reader's confidence and engine are reported; a settings group saves at once, and the last backup time is shown; an address you enter for the Hub can be tested before it is saved.
+- **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `filament-kit modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
+
 ## Still to come
 
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the
