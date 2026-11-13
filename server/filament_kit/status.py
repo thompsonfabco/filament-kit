@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, Iterator
 
 from . import config, modules, pairing, remote
@@ -24,6 +24,13 @@ class Row:
     text: str
     fix: str = ""
     action: str = ""        # what the console can do about it, by its own name ("" = nothing)
+    group: str = ""         # the heading the Overview files it under (06 section 13); `print_rows` does not print it
+
+
+def _in(group: str, source: Iterable[Row]) -> Iterator[Row]:
+    """The rows of `source` filed under `group`; a row that already has a group keeps it."""
+    for r in source:
+        yield r if r.group else replace(r, group=group)
 
 
 def print_rows(rows: Iterable[Row]) -> bool:
@@ -45,6 +52,10 @@ def print_rows(rows: Iterable[Row]) -> bool:
 
 
 def station_rows(url: str) -> Iterator[Row]:
+    yield from _in("Weigh Station", _station_rows(url))
+
+
+def _station_rows(url: str) -> Iterator[Row]:
     from . import cli
     try:
         state = cli.StationClient(url, backoff=0).state()
@@ -62,6 +73,10 @@ def station_rows(url: str) -> Iterator[Row]:
 
 
 def hardware_rows() -> Iterator[Row]:
+    yield from _in("Printers", _hardware_rows())
+
+
+def _hardware_rows() -> Iterator[Row]:
     """The printer hardware data (`bambu_hardware.xml`, `klipper_hardware.xml`; bundled + optional override): a failure
     per error (a refused override: the last good data stays in use), a note per warning (ignored unknown parts). The
     Klipper file only speaks when it has something to say."""
@@ -97,6 +112,10 @@ def _klipper_hardware_rows(module) -> Iterator[Row]:
 
 
 def library_rows() -> Iterator[Row]:
+    yield from _in("Filament Catalog", _library_rows())
+
+
+def _library_rows() -> Iterator[Row]:
     from . import cli, library
     st = cli.library.status()
     source = st["source"]
@@ -122,10 +141,14 @@ def _library_safe() -> Iterator[Row]:
     try:
         yield from library_rows()
     except Exception as e:  # noqa: BLE001 - status reports, it does not crash
-        yield Row(INFO, f"library: could not be read ({e.__class__.__name__}: {e})")
+        yield Row(INFO, f"library: could not be read ({e.__class__.__name__}: {e})", group="Filament Catalog")
 
 
 def profile_rows() -> Iterator[Row]:
+    yield from _in("Slicer presets", _profile_rows())
+
+
+def _profile_rows() -> Iterator[Row]:
     from . import cli
     from .profiles import builds
     yield from _library_safe()
@@ -161,6 +184,10 @@ def profile_rows() -> Iterator[Row]:
 
 
 def _station_pairing_rows(state: str | None = None) -> Iterator[Row]:
+    yield from _in("Weigh Station", _station_pairing_lines(state))
+
+
+def _station_pairing_lines(state: str | None = None) -> Iterator[Row]:
     """server_api.pairing_lines() (also the install's finish, as text) as rows."""
     from .station import server_api
     fixes = []
@@ -175,6 +202,10 @@ def _station_pairing_rows(state: str | None = None) -> Iterator[Row]:
 
 
 def _key_rows(client_factory, live_key: bool) -> Iterator[Row]:
+    yield from _in("Label Reader", _key_lines(client_factory, live_key))
+
+
+def _key_lines(client_factory, live_key: bool) -> Iterator[Row]:
     from . import cli
     if not live_key:        # a look at the page spends no call: the Check button in Settings does that
         key = config.paths().etc / cli.KEY_FILE
@@ -197,7 +228,8 @@ def _key_rows(client_factory, live_key: bool) -> Iterator[Row]:
 
 def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
          station_pairing: str | None = None) -> Iterator[Row]:
-    """`filament-kit status`, row by row. `live_key` False: the Anthropic key is only looked at, not tried.
+    """`filament-kit status`, row by row, each filed under its group (the Overview's headings).
+    `live_key` False: the Anthropic key is only looked at, not tried.
     `station_pairing`: server_api.pairing_state() as root gave it, for a process that can't read the pairing."""
     from . import cli
     cfg = cfg if cfg is not None else config.load()
@@ -205,7 +237,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
     on = modules.enabled(cfg)
 
     if cli._no_systemd():
-        yield Row(INFO, "service checks skipped (FK_NO_SYSTEMD=1)")
+        yield Row(INFO, "service checks skipped (FK_NO_SYSTEMD=1)", group="Hub")
     else:
         for svc in cli.services_for(on):
             try:
@@ -213,20 +245,21 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
                 active = r.stdout.strip() == "active"
             except (OSError, subprocess.SubprocessError):
                 active = False
-            yield Row(OK if active else FAIL, f"service {svc} active", f"sudo systemctl start {svc}")
+            yield Row(OK if active else FAIL, f"service {svc} active", f"sudo systemctl start {svc}", group="Hub")
         if "server" in on:
             ok, url = cli._api_answers(cfg["port"])
             yield Row(OK if ok else FAIL, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
-                      "sudo journalctl -u filament-kit -n 50")
+                      "sudo journalctl -u filament-kit -n 50", group="Hub")
 
     if "server" in on or "spoolman" in on:
         try:
             version = cli.Spoolman(cfg["spoolman_url"]).ping()
-            yield Row(OK, f"Spoolman reachable at {cfg['spoolman_url']} (v{version})")
+            yield Row(OK, f"Spoolman reachable at {cfg['spoolman_url']} (v{version})", group="Spoolman")
         except cli.SpoolmanError as e:
             yield Row(FAIL, f"Spoolman not reachable at {cfg['spoolman_url']}: {e}",
                       "sudo systemctl start spoolman" if "spoolman" in on
-                      else "check that the remote Spoolman is running and spoolman_url is right")
+                      else "check that the remote Spoolman is running and spoolman_url is right",
+                      group="Spoolman")
 
     if "ai_intake" in on:
         yield from _key_rows(client_factory, live_key)
@@ -236,9 +269,10 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
     if "server" in on:
         cert = p.etc / "cert.pem"
         if cert.exists():
-            yield Row(OK, f"certificate present, fingerprint {cli.pairing.fingerprint(cert.read_bytes())}")
+            yield Row(OK, f"certificate present, fingerprint {cli.pairing.fingerprint(cert.read_bytes())}",
+                      group="Hub")
         else:
-            yield Row(FAIL, f"certificate missing ({cert})", "run: sudo filament-kit cert")
+            yield Row(FAIL, f"certificate missing ({cert})", "run: sudo filament-kit cert", group="Hub")
 
     station_url = (cfg.get("station") or {}).get("url")
     if station_url:
@@ -247,9 +281,9 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
         yield from _station_pairing_rows(station_pairing)
 
     if "server" in on:
-        yield Row(INFO, f"display name: {cfg['server_name']}")
-        yield Row(INFO, f"paired devices: {len(pairing.devices())}")
-        yield Row(INFO, f"reads used today: {cli._reads_today()} of {cfg['reads_per_day']}")
+        yield Row(INFO, f"display name: {cfg['server_name']}", group="Hub")
+        yield Row(INFO, f"paired devices: {len(pairing.devices())}", group="Devices")
+        yield Row(INFO, f"reads used today: {cli._reads_today()} of {cfg['reads_per_day']}", group="Label Reader")
     if "printers" in on:
         yield from hardware_rows()
     if "presets" in on:
@@ -259,6 +293,10 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
 
 
 def local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
+    yield from _in("Label Reader", _local_reader_rows(cfg))
+
+
+def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
     """The local label reader (local_intake): does it answer, which tiers it can use, the reader order."""
     from . import intake, local_reader
     cfg = cfg if cfg is not None else config.load()
@@ -335,7 +373,7 @@ def _fields_rows(cfg: dict) -> Iterator[Row]:
         return              # the row above already says Spoolman does not answer
     if missing:
         yield Row(FAIL, "Spoolman is missing the kit's extra fields: " + ", ".join(missing),
-                  "sudo filament-kit ensure-fields", action="ensure_fields")
+                  "sudo filament-kit ensure-fields", action="ensure_fields", group="Spoolman")
 
 
 def collect(cfg: dict | None = None, client_factory=None, station_pairing: str | None = None) -> list[Row]:
@@ -347,5 +385,5 @@ def collect(cfg: dict | None = None, client_factory=None, station_pairing: str |
     if "server" in on or "spoolman" in on:
         out += list(_fields_rows(cfg))
     if "web" in on:
-        out += [r for r in web_rows(cfg) if r.text != "web module is on"]
+        out += [r for r in _in("Hub", web_rows(cfg)) if r.text != "web module is on"]    # design gap: no group for Web access
     return out
