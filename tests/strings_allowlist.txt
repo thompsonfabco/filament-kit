@@ -549,6 +549,29 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.kt | printer with a key moves). Empty: not sent. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.kt | unauthorized | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.kt | unpin | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterForm.kt | bambu | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterForm.kt | klipper | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | Pair again | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | The new certificate could not be trusted yet. Check that the server is reachable and  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | This phone is no longer paired with the server. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | cert_changed | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | connected | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | needs_developer_mode | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | try again, or pair again. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | wrong_code | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | FAILED | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | FINISH | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | IDLE | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | PAUSE | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | PREPARE | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | RUNNING | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | SLICING | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | cert_changed | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | connected | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | needs_developer_mode | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | not_configured | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | offline | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterRows.kt | wrong_code | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt |  Only the inventory changes; the printer's slot setting stays as it is. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | $cur → $target°C | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | ${} g left | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -667,8 +690,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Certificate changed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Connected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Could not reach the server. Check that you are on the same network. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Enter the Access Code. ${}. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Enter the printer's address: the IP address or host name of its Moonraker. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Ext | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Light off | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Light on | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -693,7 +714,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Stop | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The camera could not be shown right now. Leave this screen and come back to try again. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The camera did not start. Check that the printer is on and that LAN Mode Liveview  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The port must be a number between 1 and 65535. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The printer did not accept the Access Code. On the printer open Settings → Network/LAN →  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The printer did not answer in time. Try again. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The printer is offline. Check that it is turned on and on the network. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -718,6 +738,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | already_running | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | already_undone | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | ams_ht | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | api_key | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | camera_unavailable | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | cert_changed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | connected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -763,30 +784,16 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | unauthorized | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | write_refused | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | wrong_code | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Access Code | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Add | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Add a Klipper printer | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Add printer | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Address | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Cancel | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Connecting to the printer… | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Name (optional) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | No printers found yet. The server finds Bambu printers on its network by itself; make sure the  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Pair again | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Port | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Refresh | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Serial: ${} | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Tap to add this printer | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | Tap to enter the Access Code again | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | The IP address or host name of the printer's Moonraker, and its port (usually 7125). | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | The new certificate could not be trusted yet. Check that the server is reachable and  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | This phone is no longer paired with the server. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | cert_changed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | connected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | needs_developer_mode | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | printer is turned on, then tap Refresh. A Klipper printer is added by its address. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | try again, or pair again. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | wrong_code | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | connected | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | klipper | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | wrong_code | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | bad_response | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | connected | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | local_network | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | module | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | module_off | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | offline | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | unauthorized | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ReportShare.kt | ${}.reports | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ReportShare.kt | reports | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ReportShare.kt | text/xml | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -981,6 +988,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | tag_conflict | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | unauthorized | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | vendor | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/theme/SpoolwardenTheme.kt | tnum | OpenType feature name for tabular figures, not text on the screen
 server/filament_kit/setup_static/setup.js |  · OPTIONAL AI | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
 server/filament_kit/setup_static/setup.js |  · needs: ${m.needs.join(", ")} | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
 server/filament_kit/setup_static/setup.js | ${d.name} · paired ${d.paired || "?"} · last seen ${d.last_seen || "never"} | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
@@ -1361,4 +1369,3 @@ server/filament_kit/web/static/printers.js | Yes | today's literal in a page scr
 server/filament_kit/web/static/printers.js | Yes, how do I share it? | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
 server/filament_kit/web/static/printers.js | left nozzle | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
 server/filament_kit/web/static/printers.js | right nozzle | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/theme/SpoolwardenTheme.kt | tnum | OpenType feature name for tabular figures, not text on the screen

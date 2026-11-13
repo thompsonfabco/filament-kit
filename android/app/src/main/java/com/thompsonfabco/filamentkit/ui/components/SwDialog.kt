@@ -66,6 +66,8 @@ internal fun SwDialog(
     confirm: SwDialogButton,
     modifier: Modifier = Modifier,
     cancel: SwAction? = null,
+    /** False while the work the dialog started cannot be taken back: Cancel is off and the reason is in the body. */
+    cancelEnabled: Boolean = true,
     /** The control that opened the dialog: it gets focus back when the dialog closes (AND-12). */
     returnFocusTo: FocusRequester? = null,
     body: @Composable ColumnScope.() -> Unit,
@@ -76,7 +78,7 @@ internal fun SwDialog(
         onDispose { returnFocusTo?.let { runCatching { it.requestFocus() } } }
     }
     if (SpoolwardenTheme.window == WindowClass.Phone) {
-        SwSheet(onClose) {
+        SwSheet(onClose, gesturesEnabled = cancelEnabled) {
             Column(
                 modifier.fillMaxWidth().semantics { paneTitle = title }.verticalScroll(rememberScrollState())
                     .padding(horizontal = space.s4).navigationBarsPadding().padding(bottom = space.s4),
@@ -85,7 +87,7 @@ internal fun SwDialog(
                 DialogTitle(title)
                 body()
                 DialogButton(confirm, Modifier.fillMaxWidth())
-                cancel?.let { SwButton(it.label, it.onClick, Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet) }
+                cancel?.let { SwButton(it.label, it.onClick, Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = cancelEnabled) }
             }
         }
         return
@@ -120,7 +122,7 @@ internal fun SwDialog(
                         verticalArrangement = Arrangement.spacedBy(space.s2),
                         content = body,
                     )
-                    DialogButtons(cancel, confirm)
+                    DialogButtons(cancel, cancelEnabled, confirm)
                 }
             }
         }
@@ -139,12 +141,12 @@ private fun DialogButton(button: SwDialogButton, modifier: Modifier = Modifier) 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DialogButtons(cancel: SwAction?, confirm: SwDialogButton) {
+private fun DialogButtons(cancel: SwAction?, cancelEnabled: Boolean, confirm: SwDialogButton) {
     FlowRow(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2, Alignment.End),
     ) {
-        cancel?.let { SwButton(it.label, it.onClick, kind = SwButtonKind.Quiet) }
+        cancel?.let { SwButton(it.label, it.onClick, kind = SwButtonKind.Quiet, enabled = cancelEnabled) }
         DialogButton(confirm)
     }
 }

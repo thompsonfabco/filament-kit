@@ -255,6 +255,16 @@ class Api(
         return decode(printer)
     }
 
+    /**
+     * The Hub's scan for Moonraker on [subnet] (its own /24 when null or blank). A refusal (a bad or too large network,
+     * a scan already running, the Klipper module off) is an [ApiError] with the Hub's own message.
+     */
+    suspend fun scanKlipper(subnet: String?): List<KlipperFound> {
+        val body = buildJsonObject { subnet?.trim()?.takeIf { it.isNotEmpty() }?.let { put("subnet", it) } }
+        return call(request("api", "printers", "scan").post(body.toBody()), SLOW_READ_S).jsonObject["found"]?.jsonArray.orEmpty()
+            .map { decode(it) }
+    }
+
     suspend fun printer(id: String): PrinterDetail = decode(call(request("api", "printers", id).get()))
 
     /**

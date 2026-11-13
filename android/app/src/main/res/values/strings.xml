@@ -1107,6 +1107,7 @@
     <string name="printers_add_submit">Add printer</string>
     <string name="printers_add_title">Add a printer</string>
     <string name="printers_add_type">Printer type</string>
+    <string name="printers_add_wait">The Hub is adding the printer. Wait for its answer.</string>
     <!-- 1=name -->
     <string name="printers_added">Added %1$s.</string>
     <string name="printers_added_next">Added. Test the connection next.</string>
@@ -1306,6 +1307,7 @@
     <string name="printers_scanning">Scanning %1$s for Klipper printers…</string>
     <!-- 1=serial -->
     <string name="printers_serial_line">SN %1$s</string>
+    <string name="printers_set_code_wait">The Hub is saving the Access Code. Wait for its answer.</string>
     <string name="printers_set_key">Set Moonraker API key</string>
     <string name="printers_slot_empty">Empty</string>
     <string name="printers_slots_ams">AMS slots</string>
@@ -2813,6 +2815,7 @@
     <string name="printer_add_done">Added %1$s.</string>
     <!-- 1=model 2=serial -->
     <string name="printer_add_facts">%1$s · serial %2$s</string>
+    <string name="printer_add_name_placeholder">e.g. Workshop X1</string>
     <!-- 1=model -->
     <string name="printer_add_title">Add %1$s</string>
     <!-- 1=code -->
@@ -2836,10 +2839,13 @@
     <string name="printer_field_moonraker_key">Moonraker API key</string>
     <string name="printer_field_moonraker_key_optional">Moonraker API key (optional)</string>
     <string name="printer_field_port">Port</string>
+    <!-- 1=name -->
+    <string name="printer_find_add_for">Add %1$s</string>
     <string name="printer_find_hint">Leave empty to search the Hub\'s own network.</string>
     <string name="printer_find_network">Network to search (optional)</string>
     <!-- 1=network -->
     <string name="printer_find_none">No Klipper printers answered on %1$s.</string>
+    <string name="printer_find_none_own">No Klipper printers answered on the Hub\'s own network.</string>
     <string name="printer_find_placeholder">e.g. 192.0.2.0/24</string>
     <string name="printer_find_search">Search</string>
     <string name="printer_find_searching">Searching…</string>
@@ -2857,9 +2863,17 @@
     <string name="printer_job_preparing">Preparing</string>
     <string name="printer_job_printing">Printing</string>
     <string name="printer_job_slicing">Slicing</string>
+    <string name="printer_klipper_address_placeholder">192.0.2.57 or printer.local</string>
     <string name="printer_klipper_connecting">Connecting to Moonraker…</string>
     <string name="printer_light_off">Turn the light off</string>
     <string name="printer_light_on">Turn the light on</string>
+    <string name="printer_list_empty_text">The Hub finds Bambu Lab printers on its network by itself: turn the printer on, then add it here with its Access Code. A Klipper printer is added by its address.</string>
+    <!-- 1=state 2=percent -->
+    <string name="printer_list_job_percent">%1$s · %2$s %%</string>
+    <!-- 1=model -->
+    <string name="printer_list_model_bambu">Bambu Lab %1$s</string>
+    <!-- 1=model -->
+    <string name="printer_list_model_klipper">%1$s (Klipper)</string>
     <string name="printer_map_by_loading">Map by loading filament</string>
     <string name="printer_map_confirmed_loaded">Slots mapped: confirmed for the loaded slots</string>
     <string name="printer_map_confirmed_text">The slot numbering is confirmed.</string>
@@ -2941,6 +2955,8 @@
     <string name="printer_set_cert_title">Forget the certificate of %1$s?</string>
     <string name="printer_set_code_button">Replace Access Code</string>
     <!-- 1=name -->
+    <string name="printer_set_code_done">Access Code replaced for %1$s.</string>
+    <!-- 1=name -->
     <string name="printer_set_code_title">Replace Access Code: %1$s</string>
     <string name="printer_set_connecting">Saving and connecting…</string>
     <string name="printer_set_key_button">Save key</string>
@@ -2988,6 +3004,10 @@
     <string name="printer_temp_nozzle">Nozzle %1$s → %2$s °C</string>
     <!-- 1=n 2=now 3=target -->
     <string name="printer_temp_nozzle_n">Nozzle %1$s %2$s → %3$s °C</string>
+    <!-- 1=hours 2=minutes -->
+    <string name="printer_time_hours">%1$s h %2$s min</string>
+    <!-- 1=minutes -->
+    <string name="printer_time_minutes">%1$s min</string>
     <!-- 1=name 2=slot 3=location -->
     <string name="printer_unload_body">Unload %1$s from %2$s? It goes back to %3$s. Only the inventory changes; the printer\'s slot setting stays as it is.</string>
     <!-- 1=slot 2=id 3=location -->

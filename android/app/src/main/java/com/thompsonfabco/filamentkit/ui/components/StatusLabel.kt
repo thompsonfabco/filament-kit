@@ -28,7 +28,8 @@ internal enum class StatusKind(
 ) {
     Connected(R.drawable.sw_st_filled, R.string.status_connected, false, { it.ok }),
     Offline(R.drawable.sw_st_hollow, R.string.status_offline, false, { it.bad }),
-    NeedsLook(R.drawable.sw_st_triangle, R.string.status_needs_look, true, { it.warn });
+    NeedsLook(R.drawable.sw_st_triangle, R.string.status_needs_look, true, { it.warn }),
+    NotConfigured(R.drawable.sw_st_hollow, R.string.status_not_configured, false, { it.muted });
 
     fun colour(colors: SpoolwardenColors): Color = pick(colors)
 }

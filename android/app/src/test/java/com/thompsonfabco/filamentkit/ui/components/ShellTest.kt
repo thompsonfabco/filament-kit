@@ -4,7 +4,9 @@ import android.os.Build
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -106,6 +108,21 @@ class ShellTest {
         rule.onNodeWithContentDescription("Hub connection: checking").performClick()
         assertEquals(2, opened)
         assertNull(HubState.Checking.badge)
+    }
+
+    @Test fun aScreenAddsItsActionsToTheTopBarAndTakesThemAwayWhenItLeaves() {
+        val holder = TopBarActions()
+        var onScreen by mutableStateOf(true)
+        themed {
+            CompositionLocalProvider(LocalTopBarActions provides holder) {
+                SwTopBar(title = "Printers") { holder.content?.invoke(this) }
+                if (onScreen) ScreenTopBarActions { Text("Extra action") }
+            }
+        }
+        rule.onNodeWithText("Extra action").assertExists()
+        onScreen = false
+        rule.onNodeWithText("Extra action").assertDoesNotExist()
+        assertNull(holder.content)
     }
 
     @Test fun theTopBarShowsBackOnlyWhenAskedFor() {
