@@ -254,6 +254,19 @@ def list_records(ai: bool) -> dict:
     return {"keep": keep(), "count": len(recs), "photo_bytes": size, "ai": bool(ai), "records": recs}
 
 
+def newest_spool() -> tuple[int, str] | None:
+    """(spool id, time saved) of the newest saved record that made a spool, or None."""
+    for rid in _ids_newest_first():
+        try:
+            rec = _load(rid)
+            spools = _summary(rec)["spools"]
+        except (HistoryError, OSError):
+            continue
+        if spools:
+            return spools[0]["spool_id"], rec.get("at")
+    return None
+
+
 def get(rid: str) -> dict:
     rec = _load(rid)
     out = _summary(rec)

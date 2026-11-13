@@ -540,7 +540,7 @@ class SetupPage:
             out.append(row)
         return out
 
-    def _state(self) -> dict:
+    def _state_body(self) -> dict:
         from . import cli
         cfg = config.load()
         on = modules.enabled(cfg)
@@ -569,7 +569,15 @@ class SetupPage:
             "web": {"public_set": bool((cfg.get("web") or {}).get("public_url"))},
             "station": {"url": (cfg.get("station") or {}).get("url")},
             "apply": jobs.view(0, with_text=False),
+            # the Label Reader's Cloud reads in the last 24 h and the limit (the same count as the Overview's check)
+            "cloud_reads": {"used": cli._reads_today(), "limit": cfg["reads_per_day"]},
         }
+
+    def _state(self) -> dict:
+        from .setup_console import summaries
+        out = self._state_body()
+        out["summaries"] = summaries.build(out, getattr(self, "overview_cache", None) and self.overview_cache.value)
+        return out
 
     async def state(self, request: Request, body: dict):
         return await anyio.to_thread.run_sync(self._state)
