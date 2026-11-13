@@ -1107,6 +1107,7 @@
     <string name="printers_add_submit">Add printer</string>
     <string name="printers_add_title">Add a printer</string>
     <string name="printers_add_type">Printer type</string>
+    <string name="printers_add_wait">The Hub is adding the printer. Wait for its answer.</string>
     <!-- 1=name -->
     <string name="printers_added">Added %1$s.</string>
     <string name="printers_added_next">Added. Test the connection next.</string>
@@ -1306,6 +1307,7 @@
     <string name="printers_scanning">Scanning %1$s for Klipper printers…</string>
     <!-- 1=serial -->
     <string name="printers_serial_line">SN %1$s</string>
+    <string name="printers_set_code_wait">The Hub is saving the Access Code. Wait for its answer.</string>
     <string name="printers_set_key">Set Moonraker API key</string>
     <string name="printers_slot_empty">Empty</string>
     <string name="printers_slots_ams">AMS slots</string>
@@ -2816,7 +2818,6 @@
     <string name="printer_add_name_placeholder">e.g. Workshop X1</string>
     <!-- 1=model -->
     <string name="printer_add_title">Add %1$s</string>
-    <string name="printer_add_wait">The Hub is adding the printer. Wait for its answer.</string>
     <!-- 1=code -->
     <string name="printer_alert_code">Printer alert %1$s</string>
     <string name="printer_available_connected">Available when the printer is connected.</string>

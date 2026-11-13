@@ -14,11 +14,13 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 /** A bottom sheet: `surface` ground, `rL` top corners, the theme's scrim, no tonal tint (08-platform-mapping 10.8). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SwSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+internal fun SwSheet(onDismiss: () -> Unit, gesturesEnabled: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        // a sheet that holds work which cannot be taken back is not swiped away
+        sheetGesturesEnabled = gesturesEnabled,
         shape = SpoolwardenTheme.shapes.rL.copy(bottomStart = ZeroCornerSize, bottomEnd = ZeroCornerSize),
         containerColor = colors.surface,
         scrimColor = colors.scrim,

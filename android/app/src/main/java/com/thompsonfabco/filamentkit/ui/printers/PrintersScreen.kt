@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -391,7 +392,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             )
         }
         d.problem?.let { ProblemNotice(it, onPairAgain) }
-        if (d.busy) BusyReason()
+        if (d.busy) BusyReason(if (d.rekey) R.string.printers_set_code_wait else R.string.printers_add_wait)
     }
 }
 
@@ -433,15 +434,15 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
             error = d.keyProblem?.let { problemText(it) },
         )
         d.problem?.let { ProblemNotice(it, onPairAgain) }
-        if (d.busy) BusyReason()
+        if (d.busy) BusyReason(R.string.printers_add_wait)
     }
 }
 
 /** Why Cancel is off while an add runs. */
 @Composable
-private fun BusyReason() {
+private fun BusyReason(@StringRes words: Int) {
     Text(
-        stringResource(R.string.printer_add_wait), Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        stringResource(words), Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         style = MaterialTheme.typography.bodySmall, color = SpoolwardenTheme.colors.muted,
     )
 }

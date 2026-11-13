@@ -78,7 +78,7 @@ internal fun SwDialog(
         onDispose { returnFocusTo?.let { runCatching { it.requestFocus() } } }
     }
     if (SpoolwardenTheme.window == WindowClass.Phone) {
-        SwSheet(onClose) {
+        SwSheet(onClose, gesturesEnabled = cancelEnabled) {
             Column(
                 modifier.fillMaxWidth().semantics { paneTitle = title }.verticalScroll(rememberScrollState())
                     .padding(horizontal = space.s4).navigationBarsPadding().padding(bottom = space.s4),
