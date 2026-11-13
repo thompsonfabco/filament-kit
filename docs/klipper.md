@@ -138,7 +138,7 @@ is checked against the pack's version but never changed. If Klipper is not in `~
 ## Printer models
 
 What the kit knows about Klipper printer models (how to recognise them, their slots, their OrcaSlicer printer names,
-their light and scan-feedback macros) lives in `klipper_hardware.xml`, not in the program. To add or correct a model,
+their light macros) lives in `klipper_hardware.xml`, not in the program. To add or correct a model,
 put an override in `/etc/filament-kit/klipper_hardware.xml` with a higher `version` than the kit's own file; the
 server rereads it, and the updater can deliver newer data. If the file is refused, `filament-kit status` says why and
 the kit keeps using the last good data. A printer no entry matches works as a generic Klipper

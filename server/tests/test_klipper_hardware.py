@@ -26,8 +26,7 @@ def test_SV08_model_values():
     assert [s.label for s in m.slots] == ["T0"]
     assert m.detect_objects == ("gcode_macro DEMON_START",)
     assert m.light_on == "SET_LED LED=chamber_light WHITE=1 SYNC=0"
-    assert m.scan_ok == "_SPOOL_SCANNED ID={spool}"
-    assert m.tag_source == "http://{host}:5002/last-tag"
+    assert not hasattr(m, "scan_ok") and not hasattr(m, "tag_source")
 
 
 def test_m1d_is_unverified_with_seven_tools():
@@ -112,6 +111,15 @@ def test_unknown_element_warning(etc):
     hw = kh.load()
     assert hw.errors == []
     assert any("gizmo" in w for w in hw.warnings)
+
+
+def test_old_file_with_dropped_fields_still_loads(etc):
+    """FA-071: <scan-feedback> and <tag-source> were read by nothing and left the schema; an old file that has them loads."""
+    _override(etc, '<models><model key="old" name="Old" system="single"><scan-feedback ok="_X ID={spool}" '
+                   'unknown="_Y"/><tag-source url="http://{host}:5002/last-tag"/></model></models>')
+    hw = kh.load()
+    assert hw.errors == []
+    assert hw.model("old").name == "Old"
 
 
 def test_say():
