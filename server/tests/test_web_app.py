@@ -318,7 +318,8 @@ def test_page_head_has_two_theme_colours_and_the_catalogue_name(app):
             assert [(i["sizes"], i["src"]) for i in j["icons"]] == [("180x180", f"{BASE}/icon.png"),
                                                                     ("512x512", f"{BASE}/icon-512.png")]
         assert c.get("/intake/icon-512.png").content[:4] == bytes([0x89]) + b"PNG"
-        assert c.get("/intake/manifest.webmanifest").status_code == 404
+        old = c.get("/intake/manifest.webmanifest")          # home-screen apps added before keep their manifest
+        assert old.status_code == 200 and old.json() == c.get("/intake/manifest-light.webmanifest").json()
 
 
 def test_public_page_has_hub_name_presets_and_no_hub_page_address(app, env):

@@ -219,6 +219,8 @@ class IntakeApp:
             ("/intake/icon.png", self.icon_route, ["GET"]),
             ("/intake/icon-512.png", self.icon_512_route, ["GET"]),
             ("/intake/manifest-light.webmanifest", self.manifest_light, ["GET"]),
+            # the old address: phones that added the web app to their home screen before 0.6 still ask for it
+            ("/intake/manifest.webmanifest", self.manifest_light, ["GET"]),
             ("/intake/manifest-dark.webmanifest", self.manifest_dark, ["GET"]),
             ("/intake/api/read", self.api(self.read), ["POST"]), ("/intake/api/add", self.api(self.add), ["POST"]),
             ("/intake/api/tag", self.api(self.tag), ["GET"]), ("/intake/api/find", self.api(self.find), ["GET"]),
