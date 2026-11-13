@@ -130,8 +130,8 @@ def test_hls_fetch_counts_as_viewer_for_its_window(fake_hub):
     fake_hub.touch_hls("H1")
     fake_hub.touch_hls("H1")
     assert len(FakeSource.instances) == 1 and fake_hub.running("H1")
-    for _ in range(5):  # keep fetching: stays up
-        time.sleep(0.1)                 # a fifth of the window: a stall of 0.4 s between fetches is still tolerated
+    for _ in range(5):  # keep fetching, for longer than one fetch holds the stream (window + idle = 1.1 s): stays up
+        time.sleep(0.3)                 # under the window of 0.5 s: a stall between fetches is still tolerated
         fake_hub.touch_hls("H1")
     assert fake_hub.running("H1")
     assert wait_until(lambda: not fake_hub.running("H1"), 5), "no fetch for window + idle delay stops it"
