@@ -151,9 +151,11 @@ def test_run_offline_exits_0_with_warning(srv, paths):
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
     cfg.update(host="127.0.0.1", ips=[], port=s.getsockname()[1])
-    s.close()
     store.save_config(dirs, cfg)
-    assert _main(paths, "run", "--quiet") == 0      # offline is a warning, not a failure
+    try:                                            # bound, never listening: refused, and no other worker can take the port
+        assert _main(paths, "run", "--quiet") == 0      # offline is a warning, not a failure
+    finally:
+        s.close()
     log = dirs.log_file.read_text(encoding="utf-8")
     assert "warning" in log and "error" not in log and LINK_TOKEN not in log
 

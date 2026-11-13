@@ -306,9 +306,11 @@ def test_offline_is_said_as_a_try_and_stays_exit_0(srv, paths, capsys):  # noqa:
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
     cfg.update(host="127.0.0.1", ips=[], port=s.getsockname()[1])
-    s.close()
     store.save_config(dirs, cfg)
-    assert _main(paths, "run", "--quiet") == 0
+    try:                                            # bound, never listening: refused, and no other worker can take the port
+        assert _main(paths, "run", "--quiet") == 0
+    finally:
+        s.close()
     capsys.readouterr()
     _main(paths, "status")
     out = capsys.readouterr().out
