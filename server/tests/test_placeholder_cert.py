@@ -3,13 +3,16 @@ and `web status` warns before it ends. And an IPv6 client is told why it was ref
 from __future__ import annotations
 
 import datetime
+import functools
 import hashlib
+import os
 from pathlib import Path
 
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
@@ -32,8 +35,14 @@ class Rec:
         return self.calls
 
 
+@functools.lru_cache(maxsize=None)
+def _key():
+    """One RSA key for every certificate made here (generating one per test costs seconds)."""
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
 def self_signed(host=HOST, days=30, start=NOW) -> bytes:
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key = _key()
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, host)])
     return (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
             .serial_number(x509.random_serial_number()).not_valid_before(start)
@@ -42,7 +51,7 @@ def self_signed(host=HOST, days=30, start=NOW) -> bytes:
 
 
 def signed_by_a_ca(days=90) -> bytes:
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key = _key()
     return (x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, HOST)]))
             .issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Some CA")])).public_key(key.public_key())
             .serial_number(x509.random_serial_number()).not_valid_before(NOW)
@@ -139,11 +148,10 @@ def test_an_apply_leaves_a_good_placeholder_and_a_real_certificate_alone(tmp_pat
     assert (tls / "fullchain.pem").read_bytes() == real and "systemctl reload nginx" not in run.texts()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
 def test_the_key_is_not_readable_by_others(tmp_path):
-    import os
     _install(tmp_path)
-    if os.name != "nt":
-        assert (_tls(tmp_path) / "privkey.pem").stat().st_mode & 0o077 == 0
+    assert (_tls(tmp_path) / "privkey.pem").stat().st_mode & 0o077 == 0
 
 
 def test_a_crash_while_it_changes_leaves_either_certificate_provably_ours():
@@ -156,12 +164,19 @@ def test_a_crash_while_it_changes_leaves_either_certificate_provably_ours():
     assert remote.placeholder_due(pem, mark_of(new) + mark_of(pem), HOST, NOW)  # and renewed in its turn
 
 
-@pytest.mark.parametrize("step", range(3))
+@pytest.mark.parametrize("step", [
+    0,
+    pytest.param(1, marks=pytest.mark.xfail(strict=True, reason="the key is replaced before the certificate: a stop "
+                                            "between the two leaves a pair that does not match (product gap, FB-089)")),
+    2,
+])
 def test_each_write_on_the_way_leaves_a_mark_that_holds_the_cert_on_disk(tmp_path, monkeypatch, step):
     tls = _tls(tmp_path)
     tls.mkdir(parents=True)
     old = self_signed(days=30, start=datetime.datetime.now(datetime.timezone.utc))
     (tls / "fullchain.pem").write_bytes(old)
+    (tls / "privkey.pem").write_bytes(_key().private_bytes(
+        Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption()))
     calls = []
     real = apply._Exec.write
 
@@ -176,6 +191,9 @@ def test_each_write_on_the_way_leaves_a_mark_that_holds_the_cert_on_disk(tmp_pat
         _install(tmp_path)
     pem = (tls / "fullchain.pem").read_bytes()
     assert hashlib.sha256(pem).hexdigest() in (tls / "placeholder.sha256").read_text()
+    # and what nginx would load together still matches: the certificate on disk belongs to the key on disk
+    public = serialization.load_pem_private_key((tls / "privkey.pem").read_bytes(), None).public_key().public_numbers()
+    assert x509.load_pem_x509_certificate(pem).public_key().public_numbers() == public
 
 
 def test_a_mark_of_junk_bytes_is_just_not_ours(tmp_path):
