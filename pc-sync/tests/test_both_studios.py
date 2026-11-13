@@ -252,6 +252,25 @@ def test_a_failing_secondary_backs_off_and_a_new_build_retries_at_once(two):
     assert len(tries) == 2
 
 
+def test_a_failing_secondary_is_tried_again_after_six_hours(two):
+    stable, beta, dirs = two
+    tries = []
+
+    def broken(build_dir, folders, d, **kw):
+        if folders.variant == "BambuStudioBeta":
+            tries.append(1)
+            raise OSError("disk full")
+        return installer.install(build_dir, folders, d, **kw)
+
+    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
+    _run(c, stable, dirs, [beta], install=broken)
+    c.st["live_hash"] = _live(stable)
+    _run(c, stable, dirs, [beta], now=T0 + sync.UPLOAD_BACKOFF - 60, install=broken)
+    assert len(tries) == 1                                                # still inside the back-off
+    _run(c, stable, dirs, [beta], now=T0 + sync.UPLOAD_BACKOFF + 60, install=broken)
+    assert len(tries) == 2                                                # six hours on: the same build again
+
+
 def test_an_interrupted_secondary_install_is_resumed(two):
     stable, beta, dirs = two
     calls = []
@@ -314,6 +333,18 @@ def test_main_passes_no_secondaries_when_switched_off(tmp_path):
     assert cli._secondaries(appdata, {}, stable) == ([beta], True)
     assert cli._secondaries(appdata, {"secondaries": True}, stable) == ([beta], True)
     assert cli._secondaries(appdata, {"secondaries": False}, stable) == ([beta], False)
+
+
+def test_a_run_with_secondaries_off_hands_the_sync_no_installs(two, monkeypatch):
+    from fksync import __main__ as cli
+    stable, beta, dirs = two
+    seen = {}
+    monkeypatch.setattr(store, "load_config", lambda d: {"host": "h", "fp": "f", "secondaries": False})
+    monkeypatch.setattr(store, "load_token", lambda d: "tok")
+    monkeypatch.setattr(cli, "_locate_orca", lambda *a, **kw: None)
+    monkeypatch.setattr(sync, "run_once", lambda c, f, d, **kw: seen.update(kw) or "up_to_date")
+    assert cli.cmd_run(dirs, stable.root.parent, quiet=True) == 0
+    assert seen["secondaries"] is False and seen["others"] == [beta]     # found, but not installed into
 
 
 # --- a change of primary ----------------------------------------------------------------------
@@ -624,7 +655,7 @@ def test_apply_updates_for_one_folder(two, closed, capsys):
     assert rec["differing"] == []
     assert json.loads((_sec(dirs).installed / "base" / f"{A}.json").read_text())["nozzle_temperature"] == ["220"]
     assert A not in json.loads((_sec(dirs).installed / installer.KEPT).read_text())["base"]   # the kit's now
-    assert "apply-updates" in _log(dirs) or "build's copy" in _log(dirs)
+    assert f"wrote the build's copy of 1 presets in {BETA_KEY}" in _log(dirs)     # the earlier "apply-updates" hint is not it
 
 
 def test_apply_updates_refuses_what_is_not_listed(two, closed, capsys):
