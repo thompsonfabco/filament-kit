@@ -6,6 +6,9 @@ import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalBottomSheetProperties
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -21,6 +24,8 @@ internal fun SwSheet(onDismiss: () -> Unit, gesturesEnabled: Boolean = true, con
         onDismissRequest = onDismiss,
         // a sheet that holds work which cannot be taken back is not swiped away
         sheetGesturesEnabled = gesturesEnabled,
+        sheetState = rememberModalBottomSheetState(confirmValueChange = { it != SheetValue.Hidden || gesturesEnabled }),
+        properties = ModalBottomSheetProperties(shouldDismissOnBackPress = gesturesEnabled),
         shape = SpoolwardenTheme.shapes.rL.copy(bottomStart = ZeroCornerSize, bottomEnd = ZeroCornerSize),
         containerColor = colors.surface,
         scrimColor = colors.scrim,

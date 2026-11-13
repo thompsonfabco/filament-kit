@@ -1,9 +1,11 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
 import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.ComponentDialog
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isDisplayed
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -24,12 +26,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 
 /** An add that is running cannot be abandoned (05-android-app 2.5, rule 2): the form on a phone, held busy. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h800dp")
 class PrintersBusyFormTest {
-    @get:Rule val rule = createComposeRule()
+    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val unset = Printer(id = "DEF456", name = "Spare P1S", model = "P1S", serial = "DEF456", ip = "192.0.2.41")
     private val wrongCode = Printer(
@@ -66,6 +69,24 @@ class PrintersBusyFormTest {
         rule.onNodeWithText("Cancel").assertIsNotEnabled()
         rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").assertExists()
         rule.onNodeWithText("Add Bambu Lab P1S").performTouchInput { swipeDown() }
+        rule.waitForIdle()
+        assertNotNull("the form is still open", vm.state.value.dialog)
+        assertTrue("and still shown", rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").isDisplayed())
+        gate.completeExceptionally(ApiError(400, "bad_request", "Refused by the Hub"))
+        rule.waitForIdle()
+        assertTrue("the later refusal is shown", rule.onNodeWithText("Refused by the Hub").isDisplayed())
+    }
+
+    @Test fun systemBackDoesNotHideABusyForm() {
+        val vm = PrintersViewModel(Backend())
+        shown(vm)
+        rule.waitForIdle()
+        vm.openAdd(unset)
+        rule.waitForIdle()
+        vm.submitAdd("12345678", "")
+        rule.waitForIdle()
+        // system Back goes to the sheet's own window, which is a dialog
+        rule.runOnUiThread { (ShadowDialog.getLatestDialog() as ComponentDialog).onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
         assertNotNull("the form is still open", vm.state.value.dialog)
         assertTrue("and still shown", rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").isDisplayed())
