@@ -545,7 +545,8 @@ class SetupPage:
             "devices": [{"id": d["id"], "name": d["name"], "paired": _fmt_time(d["paired"]),
                          "last_seen": _fmt_time(d["last_seen"]), "built_in": d["name"] in BUILT_IN_DEVICES}
                         for d in pairing.devices()],
-            "web": {"public_url": (cfg.get("web") or {}).get("public_url")},
+            # the public address is owner data (`redact` hides its host): this answers without the code, so only that it is set
+            "web": {"public_set": bool((cfg.get("web") or {}).get("public_url"))},
             "station": {"url": (cfg.get("station") or {}).get("url")},
             "apply": jobs.view(0, with_text=False),
         }

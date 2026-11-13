@@ -78,6 +78,23 @@ def test_the_address_is_a_page_the_web_app_serves():
     assert '("/intake", self.page, ["GET"])' in src and '+ "/intake"' in src
 
 
+def test_the_state_without_the_code_leaves_the_public_address_out(app):
+    """FA-017 (review MED): GET /setup/api/state answers without the code too, and fills the Settings box."""
+    _web(public="https://fk.example.org/filament")
+    r = client(app).get("/setup/api/state")
+    assert r.status_code == 200 and "fk.example.org" not in r.text
+    assert "public_url" not in r.json()["web"] and r.json()["web"]["public_set"] is True
+    _web(public=None)
+    assert client(app).get("/setup/api/state").json()["web"]["public_set"] is False
+
+
+def test_the_page_copes_with_the_missing_address_and_a_wrong_code_keeps_the_card():
+    src = (STATIC / "setup.js").read_text(encoding="utf-8")
+    assert "S.web.public_url" not in src and "S.web.public_set" in src
+    assert "load(true).catch((e) => say(err, e.message, false))" in src       # not `body`: that holds the card
+    assert "load(true).catch((e) => say(body," not in src
+
+
 def test_the_devices_tab_has_the_card():
     src = (STATIC / "setup.js").read_text(encoding="utf-8")
     assert "webAppCard()" in src and "function webAppCard(" in src and "Add to Home Screen" in src
