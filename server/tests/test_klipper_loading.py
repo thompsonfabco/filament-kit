@@ -202,27 +202,31 @@ def test_tap_follow_mode(printer, sm, fil):
     assert wait_for(lambda: loc_of(sm, s["id"]) == "Shelf 3")
 
 
-def _spoolman_fails_once(fam, monkeypatch):
-    real, calls = fam._move, []
+def _spoolman_down(fam, monkeypatch):
+    """Spoolman fails every move until the test sets the returned event. Not "fails once": the printer's own updates
+    retry the move, and a retry right after the failure took the call count past 1 before a test polling every 30 ms
+    saw it (the flaky test_connect_reconcile_is_retried_when_spoolman_was_down and its two siblings)."""
+    real, calls, up = fam._move, [], threading.Event()
 
     def flaky(*a, **kw):
         calls.append(a)
-        if len(calls) == 1:
+        if not up.is_set():
             raise OSError("Spoolman unreachable")
         return real(*a, **kw)
     monkeypatch.setattr(fam, "_move", flaky)
-    return calls
+    return calls, up
 
 
 def test_follow_retries_a_tap_when_spoolman_was_down(printer, sm, fil, monkeypatch):
     """FA-066: a spool change made while Spoolman fails is applied on the next update, not lost."""
     fam, pid, fake = printer
     s = spool(sm, fil, "Shelf 3")
-    calls = _spoolman_fails_once(fam, monkeypatch)
+    calls, up = _spoolman_down(fam, monkeypatch)
     fake.set_spool(s["id"])
-    assert wait_for(lambda: len(calls) == 1)
+    assert wait_for(lambda: len(calls) >= 1)
     time.sleep(0.2)
     assert loc_of(sm, s["id"]) == "Shelf 3"
+    up.set()                                 # Spoolman is back
     fam._follow_q.put(pid)                   # the next update
     assert wait_for(lambda: loc_of(sm, s["id"]) == LOC)
 
@@ -232,11 +236,12 @@ def test_follow_retries_an_unload_when_spoolman_was_down(printer, sm, fil, monke
     s = spool(sm, fil, "Shelf 3")
     fake.set_spool(s["id"])
     assert wait_for(lambda: loc_of(sm, s["id"]) == LOC)
-    calls = _spoolman_fails_once(fam, monkeypatch)
+    calls, up = _spoolman_down(fam, monkeypatch)
     fake.set_spool(None)
-    assert wait_for(lambda: len(calls) == 1)
+    assert wait_for(lambda: len(calls) >= 1)
     time.sleep(0.2)
     assert loc_of(sm, s["id"]) == LOC
+    up.set()
     fam._follow_q.put(pid)
     assert wait_for(lambda: loc_of(sm, s["id"]) == "Shelf 3")
 
@@ -246,12 +251,15 @@ def test_connect_reconcile_is_retried_when_spoolman_was_down(moonraker, sm, fil,
     moonraker.set_spool(s["id"])
     pid = registry.add_klipper("Voron", moonraker.host, moonraker.port).serial
     fam = KlipperFamily(sm, backoff=(0.1, 0.4))
-    calls = _spoolman_fails_once(fam, monkeypatch)
+    calls, up = _spoolman_down(fam, monkeypatch)
     fam.start()
     try:
         assert fam.wait_settled(pid, 8) == "unknown_model"
-        assert wait_for(lambda: len(calls) == 1)
-        fam._follow_q.put(pid)               # the next update (the connect's own follow-up may already have done it)
+        assert wait_for(lambda: len(calls) >= 1)
+        time.sleep(0.2)
+        assert loc_of(sm, s["id"]) == "Shelf 1"
+        up.set()                             # Spoolman is back
+        fam._follow_q.put(pid)               # the next update
         assert wait_for(lambda: loc_of(sm, s["id"]) == "Voron – T0")
     finally:
         fam.stop()
