@@ -340,7 +340,8 @@ DRAWABLES = Path("android/app/src/main/res/drawable")
 # currentColor fill, or no fill with a currentColor stroke of width 2. The product mark may also fill in currentColor.
 SHAPES = {"path", "circle", "rect", "line", "polyline", "polygon", "ellipse"}
 GEOMETRY = {"d", "cx", "cy", "r", "rx", "ry", "x", "y", "width", "height", "x1", "y1", "x2", "y2", "points"}
-ICON_ROOT = {"fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin"}     # a source icon or symbol root
+ICON_ROOT = {"fill": "none", "stroke": "currentColor", "stroke-width": "1.75", "stroke-linecap": "round",
+             "stroke-linejoin": "round"}                 # a source icon or symbol root, with its values
 STATUS_FILLED = {"fill": "currentColor"}
 STATUS_STROKED = {"fill": "none", "stroke": "currentColor", "stroke-width": "2", "stroke-linecap": "round",
                   "stroke-linejoin": "round"}
@@ -371,9 +372,14 @@ def path_errors(where, svg, icon, product=False):
             errors.append(f"{where}: the root <svg> sets {root}")
     else:
         root = {k: v for k, v in svg.attrib.items() if k not in ("viewBox", "id")}
-        extra = {k: v for k, v in root.items() if k not in ICON_ROOT or (k == "fill" and v != "none")}
+        extra = {k: v for k, v in root.items() if k not in ICON_ROOT}
         if extra:
             errors.append(f"{where}: the root sets {extra}, which the icon rule does not allow")
+        for key, value in ICON_ROOT.items():
+            if key == "fill" and product and "fill" not in root:
+                continue                                 # the product mark may use fills
+            if root.get(key) != value:
+                errors.append(f'{where}: {key} is not "{value}"')
     return errors
 
 
@@ -391,14 +397,6 @@ def icon_errors(root):
             where, svg = f"icons/{folder}/{f.name}", ET.parse(f).getroot()
             if svg.get("viewBox") != "0 0 24 24":
                 errors.append(f"{where}: viewBox")
-            if icon:
-                rules = {"fill": "none", "stroke-width": "1.75", "stroke-linecap": "round", "stroke-linejoin": "round"}
-                if name == "spoolwarden":
-                    del rules["fill"]                    # the product mark may use fills
-                rules["stroke"] = "currentColor"
-                for key, value in rules.items():
-                    if svg.get(key) != value:
-                        errors.append(f'{where}: {key} is not "{value}"')
             errors += path_errors(where, svg, icon, product=name == "spoolwarden")
         mark = "i-" if icon else "s-"
         for el in sprite:
@@ -463,6 +461,11 @@ def test_icon_check_fails_on_plants(tmp_path):
             ("statuswidth", "icons/status/hollow.svg", 'stroke-width="2"', 'stroke-width="3"', "hollow.svg: a path sets"),
             ("statusstroke", "icons/status/hollow.svg", 'stroke="currentColor"', 'stroke="red"', "hollow.svg: a path sets"),
             ("statusroot", "icons/status/filled.svg", "<svg ", '<svg fill="red" ', "filled.svg: the root"),
+            ("symbolstroke", "icons/sprite.svg", '<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor"',
+             '<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="red"', "sprite.svg #i-plus: stroke is not"),
+            ("symbolwidth", "icons/sprite.svg", '<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"',
+             '<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"',
+             "sprite.svg #i-plus: stroke-width is not"),
             ("symbolroot", "icons/sprite.svg", '<symbol id="i-plus" ', '<symbol id="i-plus" stroke-opacity="0.5" ',
              "sprite.svg #i-plus: the root sets"),
             ("symbolrootcolor", "icons/sprite.svg", '<symbol id="i-plus" ', '<symbol id="i-plus" color="red" ',
@@ -470,7 +473,7 @@ def test_icon_check_fails_on_plants(tmp_path):
             ("symbolrootstyle", "icons/sprite.svg", '<symbol id="i-plus" ', '<symbol id="i-plus" style="stroke:red" ',
              "sprite.svg #i-plus: the root sets"),
             ("symbolrootfill", "icons/sprite.svg", '<symbol id="i-plus" viewBox="0 0 24 24" fill="none"',
-             '<symbol id="i-plus" viewBox="0 0 24 24" fill="red"', "sprite.svg #i-plus: the root"),
+             '<symbol id="i-plus" viewBox="0 0 24 24" fill="red"', "sprite.svg #i-plus: fill is not"),
             ("symbolcircle", "icons/sprite.svg", '<path d="M12 5v14 M5 12h14"/>',
              '<circle cx="12" cy="12" r="3" fill="red"/>\n    <path d="M12 5v14 M5 12h14"/>', "sprite.svg #i-plus: a path sets"),
             ("symbolrect", "icons/sprite.svg", '<path d="M12 5v14 M5 12h14"/>',
@@ -483,7 +486,7 @@ def test_icon_check_fails_on_plants(tmp_path):
             ("rootfill", "icons/src/plus.svg", 'fill="none"', 'fill="red"', "plus.svg: fill is not"),
             ("rootstyle", "icons/src/plus.svg", "<svg ", '<svg style="color:red" ', "plus.svg: the root sets"),
             ("rootcolor", "icons/src/plus.svg", "<svg ", '<svg color="red" ', "plus.svg: the root sets"),
-            ("productfill", "icons/src/spoolwarden.svg", 'fill="none"', 'fill="#ff0000"', "spoolwarden.svg: the root sets"),
+            ("productfill", "icons/src/spoolwarden.svg", 'fill="none"', 'fill="#ff0000"', "spoolwarden.svg: fill is not"),
             ("productstyle", "icons/src/spoolwarden.svg", "<svg ", '<svg style="fill:red" ', "spoolwarden.svg: the root sets"),
             ("sprite", "icons/sprite.svg", '<path d="M12 5v14 M5 12h14"/>', '<path stroke="red" d="M12 5v14 M5 12h14"/>',
              "sprite.svg #i-plus: a path sets")):

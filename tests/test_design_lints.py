@@ -273,9 +273,11 @@ def _outline_off(prop, value):
     return False
 
 
-SHADOW_VAR = re.compile(r"var\([^()]*(?:\([^()]*\))?[^()]*\)")
 SHADOW_LENGTH = re.compile(r"(?<![\w.#-])-?(?:\d+\.?\d*|\.\d+)[a-z]*(?![\w.-])")
-PROGRAMMATIC_FOCUS = re.compile(r"""\[tabindex=['"]?-1['"]?\]|(?<![\w.#:-])main(?![\w-])""")
+FUNCTION = re.compile(r"[\w-]*\([^()]*\)")
+FOCUS_PLAIN = re.compile(r":focus(?![\w-])")
+PROGRAMMATIC_TYPE = r"(?:main|h[1-6])"             # elements that take focus from a script (a heading or main with tabindex -1)
+PROGRAMMATIC_FOCUS = re.compile(r"(?:%s|:is\(\s*%s(?:\s*,\s*%s)*\s*\))(?![\w-])" % ((PROGRAMMATIC_TYPE,) * 3))
 
 
 def _ring(shadow):
@@ -294,7 +296,9 @@ def _ring(shadow):
             cur += c
     layers.append(cur)
     for layer in layers:
-        lengths = SHADOW_LENGTH.findall(SHADOW_VAR.sub(" ", layer))
+        while FUNCTION.search(layer):                  # a number inside var(), color-mix(), rgb() is no length
+            layer = FUNCTION.sub(" ", layer)
+        lengths = SHADOW_LENGTH.findall(layer)
         if not lengths or not all(_zero(x) for x in lengths):
             return True
     return False
@@ -311,17 +315,45 @@ def _focus_rings(text):
     for rule in CSS_RULE.finditer(text):
         decls = [(p.strip().lower(), v.strip(), 0, 0) for p, c, v in (x.partition(":") for x in rule.group(2).split(";")) if c]
         if _draws_ring(decls):
-            out.add(" ".join(rule.group(1).split()))
+            out.update(_selector_list(rule.group(1)))
     return out
 
 
+def _selector_list(selector):
+    """The selectors of a rule's list (spaces squeezed), split at commas outside brackets and parentheses."""
+    out, depth, cur = [], 0, ""
+    for c in selector:
+        depth += {"(": 1, "[": 1, ")": -1, "]": -1}.get(c, 0)
+        if c == "," and depth == 0:
+            out.append(cur)
+            cur = ""
+        else:
+            cur += c
+    out.append(cur)
+    return [" ".join(x.split()) for x in out if x.strip()]
+
+
+def _last_compound(sel):
+    """The compound selector after the last combinator: the element that has the state."""
+    depth, start = 0, 0
+    for i, c in enumerate(sel):
+        depth += {"(": 1, "[": 1, ")": -1, "]": -1}.get(c, 0)
+        if depth == 0 and c in " >+~":
+            start = i + 1
+    return sel[start:]
+
+
 def _focus_exempt(selector, rings):
-    """A :focus rule that hides the outline is fine on a programmatic-focus target ([tabindex="-1"], main), or when the
-    same selector with :focus-visible draws a ring (07 KEY-3)."""
-    sel = " ".join(selector.split())
-    if not re.search(r":focus(?![\w-])", sel):
-        return False
-    return bool(PROGRAMMATIC_FOCUS.search(sel)) or re.sub(r":focus(?![\w-])", ":focus-visible", sel) in rings
+    """A :focus rule that hides the outline is fine when every selector of its list either focuses a heading or main
+    (the focused element is the last compound: `main a:focus` is a link), or has a :focus-visible twin that draws a
+    ring (07 KEY-3). Any other [tabindex="-1"] needs the twin."""
+    sels = _selector_list(selector)
+    for sel in sels:
+        if not FOCUS_PLAIN.search(_last_compound(sel)):
+            return False
+        if not PROGRAMMATIC_FOCUS.match(_last_compound(sel)) and FOCUS_PLAIN.sub(":focus-visible", sel) not in rings:
+            return False
+    return bool(sels)
 
 
 def css_findings(text):
@@ -620,9 +652,18 @@ def test_plants_are_found():
     assert css_findings(".m:focus { outline: none } .m:focus-visible { box-shadow: inset 0 0 0 2px var(--focus) }") == []
     assert css_findings(".m:focus { outline: none } .m:focus-visible { outline: 2px solid var(--focus) }") == []
     assert [w for w, _ in css_findings(".m:focus { outline: none }")] == ["outline: none"]
-    assert [w for w, _ in css_findings(".m:focus { outline: none } .m:focus-visible { box-shadow: 0 0 0 0 var(--focus) }")]         == ["outline: none"]
-    assert [w for w, _ in css_findings(".m:focus { outline: none } .n:focus-visible { outline: 2px solid var(--focus) }")]         == ["outline: none"]
-    assert [w for w, _ in css_findings(".shell_main:focus { outline: none } .xmain:focus { outline: none }")] ==         ["outline: none", "outline: none"]
+    assert [w for w, _ in css_findings(".m:focus { outline: none } .m:focus-visible { box-shadow: 0 0 0 0 var(--focus) }")] == ["outline: none"]
+    assert [w for w, _ in css_findings(".m:focus { outline: none } .n:focus-visible { outline: 2px solid var(--focus) }")] == ["outline: none"]
+    for sel in ('main a:focus', 'a:focus, main:focus', '[tabindex="-1"] a:focus', '.x[tabindex="-1"]:focus',
+                '[tabindex="-1"]:focus', 'main:focus, .x:focus', ':is(main, a):focus', 'main > a:focus'):
+        assert len(css_findings(sel + " { outline: none }")) == 1, sel
+    for sel in ('main:focus', 'h2:focus', 'main:focus, h1:focus', 'main h1:focus', ':is(main,h1,h6)[tabindex="-1"]:focus'):
+        assert css_findings(sel + " { outline: none }") == [], sel
+    assert css_findings('.x[tabindex="-1"]:focus, .y:focus { outline: none } .x[tabindex="-1"]:focus-visible, '
+                        '.y:focus-visible { outline: 2px solid var(--focus) }') == []
+    assert len(css_findings("a:focus { outline: none; box-shadow: 0 0 0 0 color-mix(in srgb, var(--focus) 50%, transparent) }")) == 1
+    assert len(css_findings("a:focus { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 50%, transparent) }")) == 0
+    assert len(css_findings(".shell_main:focus { outline: none } .xmain:focus { outline: none }")) == 2
     assert css_findings("a:focus { outline: none !important; box-shadow: inset 0 0 0 2px var(--focus) }") == []
     src = "el.setAttribute('role', 'alert'); h('div', { role: 'alert' }); // role=\"alert\""
     assert assertive_findings(src) == [('role="alert"', 1), ('role="alert"', 1)]
