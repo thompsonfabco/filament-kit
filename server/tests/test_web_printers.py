@@ -693,18 +693,57 @@ def test_push_test_says_when_every_subscription_is_gone(pushapp, monkeypatch):
     assert r.status_code == 400 and "1 subscription(s) no longer exist" in r.json()["error"]
 
 
-def test_push_send_all_stops_trying_after_its_budget(env):
+def _two_subs_and_a_clock(monkeypatch):
+    """A store with two subscriptions and a fake clock (patched into push) that moves only when told to."""
+    import types
     from filament_kit.web import push
-    store, tried = push.Store(config.paths().web / "push.json"), []
+    store = push.Store(config.paths().web / "push.json")
     for n in "ab":
         store.add({"endpoint": f"https://fcm.googleapis.com/{n}", "keys": {"p256dh": "k", "auth": "a"}})
+    now = [100.0]
+    monkeypatch.setattr(push, "time", types.SimpleNamespace(monotonic=lambda: now[0]))
+    return store, now
+
+
+def test_push_send_all_stops_trying_after_its_budget(env, monkeypatch):
+    from filament_kit.web import push
+    store, now = _two_subs_and_a_clock(monkeypatch)
+    tried = []
 
     def slow(info, payload):
         tried.append(info["endpoint"])
-        time.sleep(0.05)
+        now[0] += 5.0
         return 201
-    r = push.send_all(store, "t", "b", "x", sender=slow, budget=0.01)
+    r = push.send_all(store, "t", "b", "x", sender=slow, budget=1.0)
     assert len(tried) == 1 and r["sent"] == 1 and "not tried" in r["failed"][0]
+
+
+def test_push_send_all_tries_one_subscription_even_when_the_budget_is_spent(env, monkeypatch):
+    from filament_kit.web import push
+    store, now = _two_subs_and_a_clock(monkeypatch)
+    tried = []
+
+    def sender(info, payload):
+        tried.append(info["endpoint"])
+        now[0] += 1.0
+        return 201
+    r = push.send_all(store, "t", "b", "x", sender=sender, budget=-1.0)
+    assert len(tried) == 1 and r["sent"] == 1 and "not tried" in r["failed"][0]
+
+
+def test_push_send_all_budget_starts_after_the_subscriptions_are_read(env, monkeypatch):
+    from filament_kit.web import push
+    store, now = _two_subs_and_a_clock(monkeypatch)
+    tried, real_subs = [], store.subs
+
+    def late_subs():
+        subs = real_subs()
+        now[0] += 5.0       # reading the file took longer than the whole budget
+        return subs
+
+    monkeypatch.setattr(store, "subs", late_subs)
+    r = push.send_all(store, "t", "b", "x", sender=lambda info, payload: tried.append(1) or 201, budget=1.0)
+    assert len(tried) == 2 and r["sent"] == 2 and not r["failed"]
 
 
 def test_service_worker_is_behind_the_lan_guard(pushapp):
