@@ -24,7 +24,8 @@ addresses) and the background `modules apply` go to the root helper (setup_helpe
 setup code, which the helper checks again.
 
 Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the setup code):
-    GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup_printers.js  /setup/setup_trust.js  /setup/setup.css
+    GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup_overview.js  /setup/setup_features.js  /setup/setup_updates.js
+         /setup/setup_settings.js  /setup/setup_devices.js  /setup/setup_printers.js  /setup/setup_trust.js  /setup/setup.css
          /setup/setup_flash.js  /setup/esptool.bundle.js (the Flash a device tab; setup_console/flash_tab.py)
     GET  state                          everything the page shows
     GET  modules/preview?name=N         what switching N would do (the checklist's notes and needed settings)
@@ -291,7 +292,8 @@ class SetupPage:
         self.last_check = 0.0
         self.shared = shared_files.load()           # tokens, strings, icon sprite, components: served at /setup/shared/<file>
         self.static = {n: (STATIC / n).read_bytes()
-                       for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
+                       for n in ("setup.js", "setup_tabs.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
+                                 "setup_settings.js", "setup_devices.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
                                  "setup_backup.js",
                                  "setup_logs.js", "setup_intake.js", "setup_flash.js",
                                  # esptool-js 0.7.0 as published (THIRD-PARTY.md): only the Flash a device tab
@@ -325,6 +327,11 @@ class SetupPage:
         return ([Route("/setup", self.page, methods=["GET"]),
                  Route("/setup/setup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_tabs.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_overview.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_features.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_updates.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_settings.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_devices.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_printers.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_trust.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_presets.js", self.asset, methods=["GET"]),
@@ -501,7 +508,7 @@ class SetupPage:
             "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/shared/components-jobs.css'>"
             "<link rel=stylesheet href='/setup/setup.css'>"
             f"<body>{shared_files.sprite_inline(self.shared)}<div id=app></div><script src='/setup/setup.js'></script>"
-            "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
+            "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_overview.js'></script><script src='/setup/setup_features.js'></script><script src='/setup/setup_updates.js'></script><script src='/setup/setup_settings.js'></script><script src='/setup/setup_devices.js'></script><script src='/setup/setup_printers.js'></script>"
             "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",
             headers=HEADERS)
 
