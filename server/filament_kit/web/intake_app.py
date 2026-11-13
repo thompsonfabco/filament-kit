@@ -328,14 +328,18 @@ class IntakeApp:
             f"<meta name=theme-color content='{light}' media='(prefers-color-scheme: light)'>"
             f"<meta name=theme-color content='{dark}' media='(prefers-color-scheme: dark)'>"
             f"<meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-title content='{name}'>"
-            "<meta name=apple-mobile-web-app-status-bar-style content=default><title>Spool intake</title>"
+            "<meta name=apple-mobile-web-app-status-bar-style content=default>"
+            f"<title>{name}</title>"
             # 08 13: manifest and icon, then the appearance script before any stylesheet, then tokens, components, own
             f"<link rel=manifest href='{b}/manifest-light.webmanifest'><link rel=apple-touch-icon href='{b}/icon.png'>"
             f"<script src='{b}/shared/theme-init.js'></script>"
             f"<link rel=stylesheet href='{b}/shared/tokens.css'><link rel=stylesheet href='{b}/shared/components.css'>"
             f"<link rel=stylesheet href='{b}/app.css'>"
-            + body + (("" if not self.printers else f"<script src='{b}/printers.js'></script>")
-                      + f"<script src='{b}/app.js'></script>" if app else ""),
+            # S3.3: the catalogue and the shared script load before the page's own scripts (the shell turns the title into
+            # "<Page title> · <Hub name>")
+            + body + ((f"<script src='{b}/shared/strings.js'></script><script src='{b}/shared/components.js'></script>"
+                       + ("" if not self.printers else f"<script src='{b}/printers.js'></script>")
+                       + f"<script src='{b}/app.js'></script>") if app else ""),
             status_code=status, headers=self.headers())
 
     def headers(self) -> dict:
@@ -372,7 +376,7 @@ class IntakeApp:
         if not data["hub-page"]:
             del data["hub-page"]
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
-        return f"<body {attrs}>{shared_files.sprite_inline(self.shared)}<main id=app></main></body>"
+        return f"<body {attrs}>{shared_files.sprite_inline(self.shared)}<div id=app></div></body>"
 
     async def page(self, request: Request):
         if not self._lan(request):

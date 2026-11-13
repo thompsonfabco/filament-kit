@@ -62,6 +62,7 @@ window.SW_TEXT = Object.freeze({
   "nav_printers_attention": { "one": "Printers, {count} needs a look", "other": "Printers, {count} need a look" },
   "nav_settings_update": "Settings, update available",
   "nav_printers_off": "Printers, switched off on this Hub",
+  "nav_recent_public": "Recent, on the home address only",
   "hub_chip_checking": "Hub connection: checking",
   "hub_state_connected": "Connected to {hub} at {address}.",
   "hub_state_checking": "Checking the connection to the Hub…",
