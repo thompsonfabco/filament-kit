@@ -5,7 +5,7 @@
 (() => {
 "use strict";
 const doc = document, root = doc.documentElement;
-const conf = { base: "api/", fetch: (u, i) => window.fetch(u, i), lock: true, hub: "", version: "",
+const conf = { base: "api/", fetch: (u, i) => window.fetch(u, i), lock: true, hub: "",
   checkPath: "overview", trustPath: "trust" };
 const configure = (o) => Object.assign(conf, o);
 
@@ -221,8 +221,10 @@ function toast(text, kind = "ok", o = {}) {
   if (o.action) el.append(btn(o.action.label, { name: o.action.name, run: () => { o.action.run(); close(); } }),
     iconBtn("close", t("common_close"), { run: close }));
   const start = () => { clearTimeout(timer); started = Date.now(); timer = setTimeout(close, left); };
-  const pause = () => { clearTimeout(timer); left = Math.max(1000, left - (Date.now() - started)); };
-  for (const [ev, fn] of [["mouseenter", pause], ["mouseleave", start], ["focusin", pause], ["focusout", start]]) on(el, ev, fn);
+  const pause = () => { if (timer) left = Math.max(1000, left - (Date.now() - started)); clearTimeout(timer); timer = 0; };
+  // runs again only when neither the pointer nor the focus is inside
+  const resume = (e) => { if (!el.matches(":hover") && !el.contains(e.type === "focusout" ? e.relatedTarget : doc.activeElement)) start(); };
+  for (const [ev, fn] of [["mouseenter", pause], ["mouseleave", resume], ["focusin", pause], ["focusout", resume]]) on(el, ev, fn);
   box.prepend(el);
   while (box.children.length > 3) box.lastElementChild.remove();
   start();
@@ -244,9 +246,11 @@ function modal(dlg, o = {}) {
     if (o.temp) dlg.remove();
     if (o.onClose) o.onClose();
   });
-  if (o.scrim) on(dlg, "click", (e) => { if (e.target === dlg && !dlg._busy) dlg.close(); });
+  if (o.scrim) on(dlg, "click", (e) => { if (e.target === dlg && !dlg._busy) quit(dlg); });
   return dlg;
 }
+// quit(dlg): Cancel, the close icon and the scrim ask what Escape asks (the dialog's cancel event, 9.1)
+const quit = (dlg) => { if (dlg.dispatchEvent(new Event("cancel", { cancelable: true }))) dlg.close(); };
 // ask({kind confirm|destructive|typed|entry|info, title, text, body, fields, after, confirm, cancel, style, word, busy,
 // write, run(values, {result}) -> false stays open}): resolves with run's answer (or true), null on cancel
 function ask(o) {
@@ -257,10 +261,10 @@ function ask(o) {
     const text = o.text != null ? h("p", { class: "dialog__text", id: id + "-text" }, o.text) : null;
     const res = h("p", { class: "result result--block dialog__result", role: "status" });
     const close = () => dlg.close();
-    const cancel = o.kind === "info" ? null : btn(o.cancel || t("common_cancel"), { action: "cancel", run: close });
+    const cancel = o.kind === "info" ? null : btn(o.cancel || t("common_cancel"), { action: "cancel", run: () => quit(dlg) });
     const go = btn(o.confirm || t("common_close"), { type: "submit", action: "confirm",
       cls: o.style != null ? o.style : danger ? "btn--danger btn--solid" : "btn--primary" });
-    const x = iconBtn("close", t("common_close"), { action: "cancel", run: close });
+    const x = iconBtn("close", t("common_close"), { action: "cancel", run: () => quit(dlg) });
     const form = h("form", { class: "dialog__form", method: "dialog", novalidate: true },
       E("div", "dialog__head", h("h2", { class: "dialog__title", id: id + "-title", text: o.title }), x),
       E("div", "dialog__body", text, o.body, fields, o.after, res), E("div", "dialog__foot", o.extra, cancel, go));
@@ -289,7 +293,7 @@ function ask(o) {
           const r = await o.run(values(), { result: res, dialog: dlg });
           if (r !== false) { answer = r === undefined ? true : r; dlg._busy = false; close(); }
         } catch (err) {
-          if (err && err.locked) throw err;
+          if (err && err.locked && o.write && conf.lock) throw err;
           result(res, "bad", errText(err, o.failed || t("common_hub_no_answer")));
         } finally { dlg._busy = false; idle(go); ro(false); }
       };
@@ -352,7 +356,7 @@ async function lockOptions(chip) {
   }
   const ok = await ask({ title: t("lock_trusted"), text: t("lock_trusted_body", { date: lock.until }), opener: chip,
     body: h("p", null, h("a", { href: "#devices/trusted", text: t("lock_trusted_link") })), cancel: t("common_close"),
-    confirm: t("lock_trusted_stop"), style: "", run: () => api(`${conf.trustPath}/${lock.trustId}/revoke`, { method: "POST" }).then(() => true) });
+    confirm: t("lock_trusted_stop"), style: "", run: () => api(`${conf.trustPath}/${encodeURIComponent(lock.trustId)}/revoke`, { method: "POST" }).then(() => true) });
   if (ok) { setLock("locked"); toast(t("lock_toast_untrusted")); }
 }
 // unlock(change, run, onCancel): change names the pending change ("forget Workshop X1"), null from the chip
@@ -398,10 +402,7 @@ function setAppearance(v) {
   attr(root, "data-theme", v === "system" ? null : v);
   const kept = v === "system" ? store.del("spoolwarden.appearance") : store.set("spoolwarden.appearance", v);
   const surface = getComputedStyle(root).getPropertyValue("--surface").trim();
-  for (const m of $$('meta[name^="theme-"]')) {
-    if (m.dataset.was == null) m.dataset.was = m.content;
-    m.content = v === "system" ? m.dataset.was : surface;
-  }
+  for (const m of $$('meta[name^="theme-"]')) m.content = surface;
   for (const i of $$(".appearance .segmented__input")) i.checked = i.value === v;
   for (const b of $$(".appearance--menu")) {
     attr(b, "aria-label", t("appearance_name", { choice: t(APPEAR[v][1]) }));
@@ -614,7 +615,7 @@ function segmented(o) {
         attr(input, "aria-busy", "true");
         if (ic) ic.replaceWith(sp); else label.prepend(sp);
         try { await o.apply(input.value); was = input.value; }
-        catch (err) { if (err && err.locked) throw err; back(); if (o.result) result(o.result, "bad", errText(err, t("field_toggle_error"))); }
+        catch (err) { if (err && err.locked && o.write && conf.lock) throw err; back(); if (o.result) result(o.result, "bad", errText(err, t("field_toggle_error"))); }
         finally { attr(input, "aria-busy", null); sp.replaceWith(...(ic ? [ic] : [])); }
       };
       if (o.write) guard(o.legend, run, back); else run();
@@ -738,10 +739,10 @@ on(window, "beforeunload", (e) => { if (dirtyGroups().length) { e.preventDefault
 function collection(el, o = {}) {
   const items = () => $$(":scope > .coll__item", el);
   const sortBy = (col, dir, quiet) => {
-    const head = $(`.coll__head [data-col="${col}"]`, el);
+    const head = $(`.coll__head [data-col="${CSS.escape(col)}"]`, el);
     if (!head) return;
     for (const c of $$(".coll__head [role=columnheader]", el)) attr(c, "aria-sort", c === head ? dir : null);
-    const key = (it) => { const c = $(`.coll__row [data-col="${col}"]`, it); return c ? (c.dataset.sort || c.textContent).trim() : ""; };
+    const key = (it) => { const c = $(`.coll__row [data-col="${CSS.escape(col)}"]`, it); return c ? (c.dataset.sort || c.textContent).trim() : ""; };
     for (const it of items().sort((a, b) => key(a).localeCompare(key(b), "en", { numeric: true }) * (dir === "ascending" ? 1 : -1))) el.append(it);
     store.set("spoolwarden.sort." + o.name, col + ":" + dir);
     if (quiet) return;
