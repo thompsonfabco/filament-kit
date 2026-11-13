@@ -971,8 +971,7 @@ def _map_via_server(api, serial: str) -> int:
     return _print_map_view(serial, v, stopped)
 NOT_CONNECTED = {
     "wrong_code": "the printer refused its Access Code; enter it again (sudo filament-kit config, Printers)",
-    "cert_changed": "the printer's certificate changed; add it again with its Access Code "
-                    "(or run: sudo filament-kit printer unpin {serial})",
+    "cert_changed": "the printer's certificate changed; add it again with its Access Code (sudo filament-kit config, Printers)",
 }
 
 
@@ -1218,7 +1217,7 @@ def cmd_printer_map(serial: str, manager_factory, manual: bool = False) -> int:
             return 1
         except mapping.CertChanged:
             _err_line("the printer's certificate changed. If you reset the printer or its mainboard was replaced, "
-                      "add it again with its Access Code (or run: sudo filament-kit printer unpin " + serial + "). "
+                      "add it again with its Access Code. "
                       "If not, something else may be answering at the printer's address: check the printer's IP "
                       "before re-adding")
             return 1
@@ -1279,12 +1278,32 @@ def _report_said(r: dict) -> int:
 
 
 def cmd_printer_unpin(serial: str) -> int:
+    """`printer unpin <serial>`: asks for the Access Code, as the API does (R103), and saves it with the cleared pin."""
     p = registry.load().get(serial)
-    if p is None or not registry.clear_pin(serial):
+    if p is None:
         _err_line(f"no printer {serial}")
         return 1
+    if p.family != "bambu":
+        _err_line("unpin is for a Bambu printer")
+        return 1
+    if not p.configured:
+        _err_line(f"{serial} is not set up here; add it with its Access Code first")
+        return 1
+    try:
+        code = secret_input.ask("Access Code: ").strip()
+    except (EOFError, RuntimeError, OSError):      # no terminal to ask on
+        _err_line("`printer unpin` needs a terminal to ask for the Access Code; nothing changed")
+        return 1
+    if not code:
+        _err_line("trusting a new certificate needs the printer's Access Code; nothing changed")
+        return 1
+    problem = registry.check_fields(serial, code)
+    if problem:
+        _err_line(f"nothing changed: {problem}")
+        return 1
+    registry.set_code(serial, code, replace=True)     # clears the pin, as adding the printer again
     # the service's Manager notices the cleared pin at its next registry sync (within 15 s) and reconnects
-    print(f"Forgot the certificate of {p.name or serial}; the next connection trusts the one it presents.")
+    print(f"Forgot the certificate of {p.name or serial} and saved its Access Code; the next connection trusts the one it presents.")
     return 0
 
 
@@ -2523,7 +2542,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                          "running server; the same session as the setup page and the phone apps)")
     prp = psub.add_parser("report", help="make a report that helps add a printer or AMS the kit doesn't know yet")
     prp.add_argument("serial")
-    pu = psub.add_parser("unpin", help="forget the printer's pinned TLS certificate")
+    pu = psub.add_parser("unpin", help="forget a Bambu printer's pinned TLS certificate (asks for its Access Code)")
     pu.add_argument("serial")
     lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
     lsub = lb.add_subparsers(dest="library_cmd", required=True)

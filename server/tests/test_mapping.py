@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from filament_kit import cli, config
+from filament_kit import cli, config, secret_input
 from filament_kit.bridge import ams, calib3mf, connection, mapping, registry, slottest
 from filament_kit.bridge.calib3mf import CalibResult
 from filament_kit.bridge.connection import Manager, PrinterOffline, UnknownPrinter
@@ -408,18 +408,60 @@ def test_cli_map_unknown_printer(stubs, capsys):
     assert "no printer" in capsys.readouterr().err.lower() and made == []
 
 
-def test_cli_unpin_clears_the_pin(capsys):
+def test_cli_unpin_with_the_access_code_clears_the_pin(monkeypatch, capsys):
+    asked = []
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(prompt) or "24681357")
     assert registry.load()[SERIAL].cert_fp
     assert cli.main(["printer", "unpin", SERIAL]) == 0
+    assert asked == ["Access Code: "]
     assert registry.load()[SERIAL].cert_fp == ""
-    assert registry.load()[SERIAL].access_code == CODE      # nothing else changes
+    assert registry.load()[SERIAL].access_code == "24681357"
     out = capsys.readouterr().out
-    assert "Office H2D" in out and CODE not in out
+    assert "Office H2D" in out and "24681357" not in out
 
 
-def test_cli_unpin_unknown_printer(capsys):
+@pytest.mark.parametrize("typed", ["", "  ", "bad code!"])
+def test_cli_unpin_without_a_usable_access_code_changes_nothing(monkeypatch, capsys, typed):
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: typed)
+    assert cli.main(["printer", "unpin", SERIAL]) == 1
+    assert registry.load()[SERIAL].cert_fp == "ab" * 32 and registry.load()[SERIAL].access_code == CODE
+    assert capsys.readouterr().err
+
+
+def test_cli_unpin_refuses_a_klipper_printer(monkeypatch, capsys):
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code"))
+    k = registry.add_klipper("Workshop", "printer.example.com", 7125)
+    assert cli.main(["printer", "unpin", k.serial]) == 1
+    assert "Bambu" in capsys.readouterr().err
+    assert registry.load()[k.serial].access_code == ""
+
+
+def test_cli_unpin_refuses_a_printer_never_set_up(monkeypatch, capsys):
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code"))
+    registry.upsert(registry.Printer("01P00A222222222", "Found", "", "10.0.0.6", "", False))
+    assert cli.main(["printer", "unpin", "01P00A222222222"]) == 1
+    assert "not set up" in capsys.readouterr().err
+    assert not registry.load()["01P00A222222222"].configured
+
+
+def test_cli_unpin_without_a_terminal_changes_nothing(monkeypatch, capsys):
+    def no_tty(prompt):
+        raise EOFError
+    monkeypatch.setattr(secret_input, "ask", no_tty)
+    assert cli.main(["printer", "unpin", SERIAL]) == 1
+    assert "terminal" in capsys.readouterr().err
+    assert registry.load()[SERIAL].cert_fp == "ab" * 32 and registry.load()[SERIAL].access_code == CODE
+
+
+def test_cli_unpin_unknown_printer(monkeypatch, capsys):
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code for no printer"))
     assert cli.main(["printer", "unpin", "NOPE"]) == 1
     assert "no printer" in capsys.readouterr().err.lower()
+
+
+def test_cert_changed_hint_points_to_adding_the_printer_again_not_unpin():
+    assert "unpin" not in cli.NOT_CONNECTED["cert_changed"]
+    assert "Access Code" in cli.NOT_CONNECTED["cert_changed"]
 
 
 # ---------------------------------------------------------------- numbering scheme (P3)
