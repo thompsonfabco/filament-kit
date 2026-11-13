@@ -144,12 +144,17 @@ def _token(store) -> str:
 
 # ---------- MCP ----------
 
+MCP_TIMEOUT = 60.0         # seconds the test client waits for a reply, as a real MCP client does
+
+
 def _mcp(app, token, fn):
     """Run `fn(client)` against the app served by uvicorn on 127.0.0.1 (real HTTP + SSE and the app's own
     lifespan); the Host header is the public host, as nginx passes it."""
     async def main(url):
+        # httpx's default 5 s read timeout is less than a tool call can take on a loaded test machine: the reply
+        # was cut off as "SSE stream ended without a response" (test_mcp_calls_reach_kit, the flaky list)
         async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}",
-                                               "Host": "mcp.example.test"}) as hc:
+                                               "Host": "mcp.example.test"}, timeout=MCP_TIMEOUT) as hc:
             async with Client(streamable_http_client(url + "/mcp", http_client=hc), mode="legacy") as c:
                 return await fn(c)
     with readers_fake.Served(app) as url:
@@ -184,6 +189,26 @@ def test_mcp_calls_reach_kit(app, store):
     assert not added.is_error and len(json.loads(added.content[0].text)["spool_ids"]) == 1
     assert json.loads(found.content[0].text)["matches"] == 1
     assert refused.is_error and "exactly one of spool or filament" in refused.content[0].text
+
+
+def test_mcp_a_slow_tool_call_still_gets_its_answer(app, store, monkeypatch):
+    """The flaky test_mcp_calls_reach_kit (reproduced under load: 'SSE stream ended without a response'): a tool
+    call longer than the test client's read timeout lost its answer. Real clients wait; so does the test's."""
+    import time
+    from filament_kit import inventory
+    slow = inventory.add_and_link
+
+    def add_and_link(*a, **kw):
+        time.sleep(6)                                     # past httpx's default 5 s read timeout
+        return slow(*a, **kw)
+    monkeypatch.setattr(inventory, "add_and_link", add_and_link)
+
+    async def run(c):
+        return await c.call_tool("add_spools", {"items": [{
+            "vendor": "SUNLU", "name": "PLA+ Grey", "material": "PLA", "net": 1000, "tare": 213, "density": 1.24,
+            "count": 1}], "dry_run": True})
+    added = _mcp(app, _token(store), run)
+    assert not added.is_error, added.content[0].text
 
 
 def test_mcp_needs_token_host_and_origin(app, store):
