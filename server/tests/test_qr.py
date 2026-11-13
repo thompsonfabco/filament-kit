@@ -144,6 +144,12 @@ def test_text_and_svg_stand_for_their_link(link):
     assert decode(from_svg(qr.svg(link))) == link
 
 
+def test_a_link_with_non_ascii_characters_is_encoded_as_utf_8():
+    link = "https://kit.local:8710/intake?name=Kühl-Ärger-日本"
+    assert decode(from_text(qr.text(link))) == link
+    assert decode(from_svg(qr.svg(link))) == link
+
+
 def test_the_reader_is_not_a_rubber_stamp():
     assert decode(from_text(qr.text(LINK))) != LINK + "x"
 

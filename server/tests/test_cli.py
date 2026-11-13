@@ -462,10 +462,10 @@ def test_profiles_build_failed_exits_1(capsys, monkeypatch, spoolman_url):
 def test_pair_pc_prints_link_not_qr(capsys, monkeypatch):
     _cert()
 
-    def no_qr(name):
+    def no_qr(link):
         raise AssertionError("pair --pc must not make a QR code")
 
-    monkeypatch.setattr(cli.shutil, "which", no_qr)
+    monkeypatch.setattr(cli.qr, "text", no_qr)
     assert cli.main(["pair", "--pc"]) == 0
     out = capsys.readouterr().out
     rows = out.splitlines()

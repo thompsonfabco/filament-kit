@@ -10,7 +10,7 @@ QUIET = 4          # modules of quiet zone on every side: what QR readers expect
 
 
 def _code(payload: str):
-    return segno.make(payload, error="L", boost_error=False, micro=False)
+    return segno.make(payload, encoding="utf-8", error="L", boost_error=False, micro=False)
 
 
 def svg(payload: str) -> str | None:

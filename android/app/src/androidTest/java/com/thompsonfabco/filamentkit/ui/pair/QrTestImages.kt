@@ -249,7 +249,7 @@ object QrTestImages {
 
     private fun encode(text: String) = QRCodeWriter().encode(
         text, BarcodeFormat.QR_CODE, 0, 0,
-        // qrencode's default level, which the server's terminal QR uses.
+        // level L, which the Hub's QR codes use.
         mapOf(EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.L, EncodeHintType.MARGIN to 0),
     )
 

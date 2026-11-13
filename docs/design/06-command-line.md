@@ -1296,8 +1296,7 @@ Paired: Shop phone.
 - `--slicer-sync`: `Paste this link into the Slicer Sync when it asks:` then the link alone on its line, never
   wrapped (it may be wider than the terminal; the terminal wraps it, but it is one line to copy).
   `--weigh-station`: `On the Weigh Station run: sudo spoolwarden weigh-station pair, then paste this link:`.
-- No QR possible: `Note: no QR code here: the qrencode package is not installed. Type the pairing code
-  instead.` (section 13 removes the need).
+- No QR possible: none; the Hub draws the QR code itself (section 13), so no note is needed.
 - `--text` prints the link and code without the QR code.
 - Ctrl-C stops waiting; the code stays valid until it expires (`Stopped waiting. The code works until 14:20.`).
 - The pair command on a machine without the Hub service feature: `Error: this machine has no Hub, so it cannot pair
@@ -1613,7 +1612,7 @@ The current command line has these problems; each has a fix in this design.
 | 7 | Some errors go to standard output, others to standard error. | Every error goes to standard error, also in menus, as `Error:` plus `Fix:`. | 6.5 |
 | 8 | No machine-readable output and no quiet mode; scripts parse `status` text. | `--json` on every command that prints data, in the Hub's own reply shapes; `--quiet`; documented exit codes. | 6.7, 6.8 |
 | 9 | Waits of up to 30 seconds print nothing. | A progress line after 2 seconds for every wait, with elapsed seconds and how to stop. | 6.6 |
-| 10 | Pairing falls back silently from QR to a raw link when `qrencode` is missing; long links are printed raw. | A `Note:` says why there is no QR code; links are labelled and printed alone on their line, unwrapped; the Hub renders QR codes itself. | 9.4, 13 |
+| 10 | Pairing fell back silently from QR to a raw link when `qrencode` was missing; long links are printed raw. | The Hub draws the QR code itself (segno), so none goes missing; links are labelled and printed alone on their line, unwrapped; the Hub renders QR codes itself. | 9.4, 13 |
 | 11 | The checklist's key help is cut at narrow widths; below 40 × 8 it switches silently to a numbered list with other keys. | A short key line that fits 40 columns, `?` for all keys; a `Note:` says why the list is numbered; both variants share the same keys; `--numbered` chooses it on purpose. | 8.1, 8.2, 8.5 |
 | 12 | What a feature needs, or switches off with it, shows only after switching. | The footer shows needs and cascade for the cursor row before switching; the plan line shows every change before applying. | 8.5 |
 | 13 | The user guide's command list misses commands and `config` items. | `spoolwarden help --markdown` is the source of the user guide's command table. | 3.2 |
@@ -1698,7 +1697,7 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
 3. **Hub messages in the new words.** Error texts in Hub replies and Fix texts in status rows are printed as they
    come, so they must use the names of foundations section 2 and the commands of section 4 (`spoolwarden …`,
    not `filament-kit …`; Features, not modules; Weigh Station, not station).
-4. **QR codes without `qrencode`.** The Hub renders pairing QR codes itself, for the Hub page (`qr_svg`) and as
+4. **QR codes drawn by the Hub.** The Hub renders pairing QR codes itself, for the Hub page (`qr_svg`) and as
    terminal text for `pair`, so pairing never loses its QR code because a package is missing. Any bundled code
    follows foundations section 12, rule 1.
 5. **The Label Reader's On this Hub engine.** Its settings (`intake.reader`, `local_intake.url`,

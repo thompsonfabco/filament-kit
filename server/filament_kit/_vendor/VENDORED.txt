@@ -3,7 +3,7 @@ Source: https://pypi.org/project/segno/1.6.6/  (segno-1.6.6-py3-none-any.whl)
 Wheel sha256: 28c7d081ed0cf935e0411293a465efd4d500704072cdb039778a2ab8736190c7
 Licence: BSD-3-Clause (segno-LICENSE, the wheel's licenses/LICENSE)
 Vendored: 2026-11-13
-Files are byte for byte the wheel's; tests/test_vendored_segno.py checks each against its sha256 below.
+Files are byte for byte the wheel's; server/tests/test_qr.py::test_vendored_segno_matches_the_recorded_hashes checks each against its sha256 below.
 Format: sha256  path (segno-LICENSE is the wheel's LICENSE).
 e436a1f5aa93f7ac7fa3be1f0ea98e04a792d218dfec385f595adb88dc43d2e6  segno/__init__.py
 4e46cd1fa0fa72a10b53a8f3f8a743a8e9e640a448fde0236aade255ab086dbc  segno/__init__.pyi

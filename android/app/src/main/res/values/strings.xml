@@ -3574,7 +3574,6 @@
     <string name="cli_note_hub_not_running">the Hub is not running, so connection states are unknown.</string>
     <string name="cli_note_label_reader_off">the Label Reader is off on this Hub, so corrections are by hand only.</string>
     <string name="cli_note_no_photo_kept">no photo was kept for this record; it worked from the saved values and your note.</string>
-    <string name="cli_note_no_qr">no QR code here: the qrencode package is not installed. Type the pairing code instead.</string>
     <string name="cli_note_reader_no_ota">without --ota-pubkey this Tag Reader refuses every update over Wi-Fi until it is flashed again with one.</string>
     <!-- 1=used 2=limit -->
     <string name="cli_note_reads_used">this used %1$s of today\'s %2$s reads.</string>
