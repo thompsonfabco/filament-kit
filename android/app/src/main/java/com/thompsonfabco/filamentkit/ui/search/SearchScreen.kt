@@ -119,15 +119,11 @@ fun SearchScreen(
     vm: SearchViewModel,
     onOpenSpool: (JsonObject) -> Unit,
     onPairAgain: () -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text("Search spools", style = MaterialTheme.typography.headlineSmall)
-        }
+        Text("Search spools", style = MaterialTheme.typography.headlineSmall)
         OutlinedTextField(
             value = ui.query,
             onValueChange = vm::setQuery,

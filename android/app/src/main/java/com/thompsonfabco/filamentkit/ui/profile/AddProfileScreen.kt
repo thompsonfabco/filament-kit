@@ -47,7 +47,6 @@ fun AddProfileScreen(vm: AddProfileViewModel, onBack: () -> Unit, onPairAgain: (
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Add profile", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Values from the maker's label or data sheet for one product line. They apply to every colour of the line.",
             style = MaterialTheme.typography.bodySmall,

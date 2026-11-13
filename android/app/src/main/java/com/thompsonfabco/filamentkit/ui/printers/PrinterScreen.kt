@@ -110,11 +110,7 @@ fun PrinterScreen(
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // outside the scrolled column, so Back stays reachable on this long screen
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text(state.printer?.name ?: "Printer", style = MaterialTheme.typography.headlineSmall)
-        }
+        Text(state.printer?.name ?: "Printer", style = MaterialTheme.typography.headlineSmall)
     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         (state.mismatch ?: toolsState.mismatch ?: editState?.mismatch)?.let { (expected, actual) ->

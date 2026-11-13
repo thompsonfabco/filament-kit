@@ -56,10 +56,10 @@ import kotlinx.coroutines.withContext
 
 /** Recently added: the list of intake records. */
 @Composable
-fun HistoryListEntry(api: Api, onOpen: (String) -> Unit, onBack: () -> Unit, onPairAgain: () -> Unit) {
+fun HistoryListEntry(api: Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
     val backend = remember(api) { HistoryBackend.of(api) }
     val list = viewModel(key = System.identityHashCode(api).toString()) { HistoryListViewModel(backend) }
-    HistoryListScreen(list, onOpen = onOpen, onBack = onBack, onPairAgain = onPairAgain)
+    HistoryListScreen(list, onOpen = onOpen, onPairAgain = onPairAgain)
 }
 
 /**
@@ -79,17 +79,13 @@ fun HistoryRecordEntry(api: Api, id: String, listOwner: ViewModelStoreOwner, onB
 }
 
 @Composable
-private fun HistoryListScreen(vm: HistoryListViewModel, onOpen: (String) -> Unit, onBack: () -> Unit, onPairAgain: () -> Unit) {
+private fun HistoryListScreen(vm: HistoryListViewModel, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
     val s by vm.state.collectAsState()
     LifecycleStartEffect(vm) {
         vm.refresh()
         onStopOrDispose { }
     }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text(HistoryTexts.TITLE, style = MaterialTheme.typography.headlineSmall)
-        }
         s.mismatch?.let { (e, a) -> MismatchNotice(e, a, onPairAgain); return@Column }
         if (s.unauthorized) { UnpairedNotice(onPairAgain); return@Column }
         s.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -155,10 +151,7 @@ private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Bo
     var enlarged by rememberSaveable { mutableStateOf<Int?>(null) }
     var note by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text("Intake record", style = MaterialTheme.typography.headlineSmall)
-        }
+        Text("Intake record", style = MaterialTheme.typography.headlineSmall)
         s.mismatch?.let { (e, a) -> MismatchNotice(e, a, onPairAgain); return@Column }
         if (s.unauthorized) { UnpairedNotice(onPairAgain); return@Column }
         val r = s.record

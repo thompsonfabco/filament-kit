@@ -513,7 +513,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             vm = searchVm,
                             onOpenSpool = { spoolVm?.open(it) },
                             onPairAgain = app.router::pairAgain,
-                            onBack = { nav.popBackStack() },
                         )
                     }
                 }
@@ -568,7 +567,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         HistoryListEntry(
                             a,
                             onOpen = { nav.navigate(RecordRoute(it)) },
-                            onBack = { nav.popBackStack() },
                             onPairAgain = app.router::pairAgain,
                         )
                     }
