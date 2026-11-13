@@ -537,7 +537,8 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     # M5: build from a temporary copy of the checkout (the script writes dist/ and server/build there), never inside it
     src = tmp_path / "src"
     skip = shutil.ignore_patterns(".venv", "*.egg-info", "build", "dist", "__pycache__", ".pytest_cache")
-    for part in ("tools", "install", "server", "station/panel/firmware", "printer-pack"):
+    for part in ("tools", "install", "server", "station/panel/firmware", "reader/firmware",
+                 "printer-pack"):
         shutil.copytree(ROOT / part, src / part, ignore=skip)
     for f in ("LICENSE", "THIRD-PARTY.md"):
         shutil.copy(ROOT / f, src / f)
