@@ -53,6 +53,7 @@ async function withBrowser(exe, fn) {
     const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
     const s = (method, params) => send(method, params, sessionId);
     const page = {
+      cdp: s,   // any DevTools protocol command on the page (for probes: mouse input, pseudo states)
       async open(url, o = {}) {
         const narrow = (o.width || 1280) <= 600;
         await s("Emulation.setDeviceMetricsOverride", { width: o.width || 1280, height: o.height || 900, deviceScaleFactor: 1, mobile: false });
