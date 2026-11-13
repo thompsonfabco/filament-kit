@@ -1,0 +1,5 @@
+# Files the design source test 4 (tests/test_design_sources.py) skips for the var(--name) check, one per line:
+#   <path from the repository root> | <reason>
+# Each file must exist and must still use a non-token name, so a rewritten file has to drop its line (09 open point 4).
+server/filament_kit/setup_static/setup.css | own :root names (--card, --ink, --line); removed by S1.1
+server/filament_kit/web/static/app.css | own :root names (--card, --ink, --line); removed by S3.2
