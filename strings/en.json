@@ -2169,6 +2169,7 @@
   "printer_add_facts": "{model} · serial {serial}",
   "printer_add_name_placeholder": "e.g. Workshop X1",
   "printer_add_title": "Add {model}",
+  "printer_add_wait": "The Hub is adding the printer. Wait for its answer.",
   "printer_alert_code": "Printer alert {code}",
   "printer_available_connected": "Available when the printer is connected.",
   "printer_available_idle": "Available when the printer is idle.",

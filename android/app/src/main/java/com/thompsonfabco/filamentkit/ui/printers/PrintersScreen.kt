@@ -37,7 +37,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.LifecycleStartEffect
@@ -356,7 +358,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         } else {
             stringResource(R.string.printer_add_title, model)
         },
-        onClose = viewModel::cancelAdd,
+        onClose = { if (!d.busy) viewModel.cancelAdd() },
         confirm = SwDialogButton(
             label = stringResource(
                 when {
@@ -371,6 +373,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             busy = d.busy,
         ),
         cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelAdd),
+        cancelEnabled = !d.busy,
     ) {
         if (!d.rekey) {
             val facts = stringResource(R.string.printer_add_facts, model, d.serial)
@@ -388,6 +391,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             )
         }
         d.problem?.let { ProblemNotice(it, onPairAgain) }
+        if (d.busy) BusyReason()
     }
 }
 
@@ -402,7 +406,7 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
     val fixed = d.busy || d.createdId != null
     SwDialog(
         title = stringResource(R.string.printers_add_klipper),
-        onClose = viewModel::cancelAddKlipper,
+        onClose = { if (!d.busy) viewModel.cancelAddKlipper() },
         confirm = SwDialogButton(
             label = stringResource(if (d.busy) R.string.printer_klipper_connecting else R.string.printer_add_button),
             onClick = { viewModel.submitAddKlipper(host, port, name, key) },
@@ -410,6 +414,7 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
             busy = d.busy,
         ),
         cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelAddKlipper),
+        cancelEnabled = !d.busy,
     ) {
         FormField(
             host, { host = it }, stringResource(R.string.printer_field_address), enabled = !fixed, mono = true,
@@ -428,7 +433,17 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
             error = d.keyProblem?.let { problemText(it) },
         )
         d.problem?.let { ProblemNotice(it, onPairAgain) }
+        if (d.busy) BusyReason()
     }
+}
+
+/** Why Cancel is off while an add runs. */
+@Composable
+private fun BusyReason() {
+    Text(
+        stringResource(R.string.printer_add_wait), Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        style = MaterialTheme.typography.bodySmall, color = SpoolwardenTheme.colors.muted,
+    )
 }
 
 /** 9.3: "Find Klipper printers", a sheet with the network to search and what answered. */

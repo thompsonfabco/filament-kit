@@ -2816,6 +2816,7 @@
     <string name="printer_add_name_placeholder">e.g. Workshop X1</string>
     <!-- 1=model -->
     <string name="printer_add_title">Add %1$s</string>
+    <string name="printer_add_wait">The Hub is adding the printer. Wait for its answer.</string>
     <!-- 1=code -->
     <string name="printer_alert_code">Printer alert %1$s</string>
     <string name="printer_available_connected">Available when the printer is connected.</string>

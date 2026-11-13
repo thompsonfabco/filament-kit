@@ -9,6 +9,7 @@ import com.thompsonfabco.filamentkit.net.Printer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,9 +123,8 @@ class PrintersViewModel(
     private val now: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     private val _state = MutableStateFlow(PrintersUiState())
-    private var addJob: Job? = null
-    private var klipperJob: Job? = null
     private var findJob: Job? = null
+    private var settleJob: Job? = null
     val state: StateFlow<PrintersUiState> = _state.asStateFlow()
 
     fun refresh() {
@@ -179,7 +179,8 @@ class PrintersViewModel(
 
     /** Closes the form and reloads, since the printer's state may have changed meanwhile. */
     fun cancelAdd() {
-        addJob?.cancel()
+        // an add that is running cannot be taken back: the Hub is connecting to the printer (05-android-app 2.5, rule 2)
+        if (_state.value.dialog?.busy == true) return
         _state.update { it.copy(dialog = null) }
         refresh()
     }
@@ -193,9 +194,10 @@ class PrintersViewModel(
             return
         }
         _state.update { it.copy(dialog = d.copy(name = name, busy = true, codeMissing = false, problem = null)) }
-        addJob = viewModelScope.launch {
+        viewModelScope.launch {
             guard(onError = { p -> _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, problem = p)) } }) {
                 val p = backend.addPrinter(d.serial, code, name.trim().ifBlank { null })
+                settleLater()
                 if (p.state == "connected") {
                     _state.update {
                         if (d.rekey) it.copy(dialog = null, replaced = p.name) else it.copy(dialog = null, added = p.name)
@@ -214,11 +216,10 @@ class PrintersViewModel(
     }
 
     fun cancelAddKlipper() {
-        // a request that was running may have added the printer before it was cancelled: the list shows it either way
-        val worked = _state.value.klipper?.let { it.createdId != null || it.busy } == true
-        klipperJob?.cancel()
+        val k = _state.value.klipper
+        if (k?.busy == true) return
         _state.update { it.copy(klipper = null) }
-        if (worked) refresh()
+        if (k?.createdId != null) refresh()
     }
 
     /**
@@ -243,7 +244,7 @@ class PrintersViewModel(
                 klipper = d.copy(busy = true, addressMissing = false, portInvalid = false, problem = null, keyProblem = null),
             )
         }
-        klipperJob = viewModelScope.launch {
+        viewModelScope.launch {
             guard(onError = { p -> _state.update { s -> s.copy(klipper = s.klipper?.copy(busy = false, problem = p)) } }) {
                 val id: String
                 val shown: String
@@ -254,6 +255,7 @@ class PrintersViewModel(
                     val p = backend.addKlipperPrinter(address, portNumber!!, name.trim().ifBlank { null })
                     id = p.id
                     shown = p.name
+                    settleLater()
                     _state.update { it.copy(klipper = it.klipper?.copy(createdId = p.id, createdName = p.name)) }
                 }
                 if (key.isNotEmpty()) {
@@ -270,6 +272,15 @@ class PrintersViewModel(
                 _state.update { it.copy(klipper = null, added = shown) }
                 load()
             }
+        }
+    }
+
+    /** The Hub's first connection to a new printer takes a moment: the list is read again once it has settled. */
+    private fun settleLater() {
+        settleJob?.cancel()
+        settleJob = viewModelScope.launch {
+            delay(SETTLE_MS)
+            load()
         }
     }
 
@@ -321,5 +332,8 @@ class PrintersViewModel(
 
     companion object {
         const val DEFAULT_KLIPPER_PORT = 7125
+
+        /** How long after an add the list is read again. */
+        const val SETTLE_MS = 10_000L
     }
 }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -350,7 +351,7 @@ class PrintersListTest {
         assertNull("the notice goes with the good load", vm.state.value.klipper!!.problem)
     }
 
-    @Test fun cancelWhileTheKlipperAddRunsCancelsItBeforeTheKeyStep() = runTest(dispatcher) {
+    @Test fun cancelWhileTheKlipperAddRunsDoesNothingAndTheKeyStepStillRuns() = runTest(dispatcher) {
         backend.addResult = printer("K1", family = "klipper")
         backend.addGate = CompletableDeferred()
         val vm = PrintersViewModel(backend)
@@ -359,15 +360,15 @@ class PrintersListTest {
         runCurrent()
         assertTrue(vm.state.value.klipper!!.busy)
         vm.cancelAddKlipper()
+        assertTrue("the form stays: an add cannot be taken back", vm.state.value.klipper!!.busy)
         backend.addGate!!.complete(Unit)
         runCurrent()
         assertNull(vm.state.value.klipper)
-        assertTrue("the key step is never reached", backend.keys.isEmpty())
-        assertNull(vm.state.value.added)
-        assertTrue("the list is reloaded in case the add got through", vm.state.value.loaded)
+        assertEquals(listOf("K1" to "k"), backend.keys)
+        assertEquals("Workshop X1", vm.state.value.added)
     }
 
-    @Test fun cancelWhileTheBambuAddRunsLeavesNoMessage() = runTest(dispatcher) {
+    @Test fun cancelWhileTheBambuAddRunsDoesNothing() = runTest(dispatcher) {
         backend.addResult = printer("A")
         backend.addGate = CompletableDeferred()
         val vm = PrintersViewModel(backend)
@@ -375,10 +376,26 @@ class PrintersListTest {
         vm.submitAdd("12345678", "")
         runCurrent()
         vm.cancelAdd()
+        assertTrue(vm.state.value.dialog!!.busy)
         backend.addGate!!.complete(Unit)
         runCurrent()
         assertNull(vm.state.value.dialog)
-        assertNull(vm.state.value.added)
+        assertEquals("Workshop X1", vm.state.value.added)
+    }
+
+    @Test fun theListIsReadAgainOnceTheFirstConnectionHasSettled() = runTest(dispatcher) {
+        backend.addResult = printer("A")
+        backend.list = listOf(printer("A", state = "offline"))
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(printer("B", state = "not_configured", configured = false))
+        vm.submitAdd("12345678", "")
+        runCurrent()
+        assertEquals("the list read right after the add shows the first, unsettled state", "offline", vm.state.value.printers.single().state)
+        backend.list = listOf(printer("A"))
+        advanceTimeBy(PrintersViewModel.SETTLE_MS - 1); runCurrent()
+        assertEquals("offline", vm.state.value.printers.single().state)
+        advanceTimeBy(2); runCurrent()
+        assertEquals("connected", vm.state.value.printers.single().state)
     }
 
     @Test fun replacingTheCodeSaysSoOnceAndSkipsTheAddedMessage() = runTest(dispatcher) {
