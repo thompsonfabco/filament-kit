@@ -94,13 +94,16 @@ enum class RecentField(
     Price("price_per_kg", R.string.recent_field_price, RecentGroup.Other, kind = FieldKind.Positive),
     Line("line", R.string.recent_field_line, RecentGroup.Other);
 
+    /** Brand, name and material can't be cleared (the Hub refuses an empty one). */
+    val required: Boolean get() = this == Vendor || this == Name || this == Material
+
     companion object {
         fun of(wire: String): RecentField? = entries.firstOrNull { it.wire == wire }
     }
 }
 
 /** What is wrong with a typed value. */
-enum class FieldError { Whole, Degrees, DegreesMax, Grams, Density, Price, Range, Colour }
+enum class FieldError { Required, Whole, Degrees, DegreesMax, Grams, Density, Price, Range, Colour }
 
 /** A typed value turned into JSON, or the reason it can't be. */
 sealed interface Parsed {
@@ -129,7 +132,7 @@ object RecentValues {
      */
     fun parse(text: String, field: RecentField): Parsed {
         val t = text.trim()
-        if (t.isEmpty()) return Parsed.Ok(JsonNull)
+        if (t.isEmpty()) return if (field.required) Parsed.Bad(FieldError.Required) else Parsed.Ok(JsonNull)
         return when (field.kind) {
             FieldKind.Text -> Parsed.Ok(JsonPrimitive(t))
             FieldKind.Positive -> {
@@ -373,7 +376,7 @@ class HistoryListViewModel(
         viewModelScope.launch {
             guard(_state, { f -> _state.update { it.copy(error = f) } }, { u, m -> copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch) }) {
                 val h = backend.list()
-                _state.update { it.copy(history = h, error = null, loadedAt = now()) }
+                _state.update { it.copy(history = h, error = null, loadedAt = now(), unauthorized = false, mismatch = null) }
             }
             _state.update { it.copy(loading = false) }
         }
@@ -488,7 +491,7 @@ class RecordViewModel(
         viewModelScope.launch {
             guard(_state, { f -> _state.update { it.copy(error = f) } }, auth) {
                 val r = backend.record(id)
-                _state.update { it.copy(record = r, error = null, loadedAt = now()) }
+                _state.update { it.copy(record = r, error = null, loadedAt = now(), unauthorized = false, mismatch = null) }
             }
             _state.update { it.copy(loading = false) }
         }

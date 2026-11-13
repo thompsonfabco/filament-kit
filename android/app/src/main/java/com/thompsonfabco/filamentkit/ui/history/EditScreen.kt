@@ -154,7 +154,7 @@ private fun EditFields(vm: RecordViewModel, s: RecordState, e: EditUi) {
                     keyboardOptions = KeyboardOptions(keyboardType = if (field.kind == FieldKind.Positive) KeyboardType.Decimal else KeyboardType.Text),
                     supportingText = when {
                         error != null -> ({
-                            RecentStatusLine(R.drawable.sw_st_octagon, stringResource(errorText(error)), colors.bad, large = true)
+                            RecentStatusLine(R.drawable.sw_st_octagon, stringResource(errorText(error, field)), colors.bad, large = true)
                         })
                         mark != null -> ({
                             RecentStatusLine(mark.shape, stringResource(mark.word), if (mark.warn) colors.warn else colors.muted, large = mark.warn)
@@ -170,7 +170,8 @@ private fun EditFields(vm: RecordViewModel, s: RecordState, e: EditUi) {
 }
 
 /** What each complaint says: the rule, in the words of 05-android-app 6.3 where it has them. */
-private fun errorText(error: FieldError): Int = when (error) {
+private fun errorText(error: FieldError, field: RecentField): Int = when (error) {
+    FieldError.Required -> if (field == RecentField.Vendor) R.string.add_review_pick_brand else R.string.common_error_name
     FieldError.Whole -> R.string.add_review_error_whole
     FieldError.Degrees -> R.string.add_review_error_degrees
     FieldError.DegreesMax -> R.string.recent_error_degrees_max

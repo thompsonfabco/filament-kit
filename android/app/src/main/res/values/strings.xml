@@ -3121,18 +3121,18 @@
     <string name="recent_change">%1$s %2$s → %3$s</string>
     <!-- 1=field 2=old 3=new 4=unit -->
     <string name="recent_change_unit">%1$s %2$s → %3$s %4$s</string>
-    <string name="recent_error_colour">Enter 6 hex digits, e.g. 2B2B2E.</string>
+    <string name="recent_error_colour">Enter 6 hex digits, like 2B2B2E.</string>
     <string name="recent_error_degrees_max">Enter degrees below 500.</string>
     <string name="recent_error_price">Enter a price above 0.</string>
     <string name="recent_error_range">Enter a range like 190-230.</string>
-    <string name="recent_keep_none">The Hub keeps no record of additions. Set how many to keep on the Hub page under Settings.</string>
+    <string name="recent_keep_none">The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page.</string>
     <string name="recent_leave_thing">this record</string>
     <string name="recent_mark_estimated">Estimated: check this</string>
     <!-- 1=name -->
     <string name="recent_read_colour">Colour: %1$s</string>
     <!-- 1=name 2=family -->
     <string name="recent_read_colour_family">Colour: %1$s (%2$s)</string>
-    <string name="recent_read_colour_unknown">Colour: name not in the library</string>
+    <string name="recent_read_colour_unknown">Colour: no name found</string>
     <!-- 1=fields -->
     <string name="recent_read_least_sure">Least sure: %1$s</string>
     <!-- 1=percent -->

@@ -474,7 +474,8 @@ class HistoryTest {
     }
 
     @Test fun parseFollowsTheHubsRulePerField() {
-        assertEquals(Parsed.Ok(JsonNull), RecentValues.parse(" ", RecentField.Name))
+        assertEquals(Parsed.Ok(JsonNull), RecentValues.parse(" ", RecentField.Line))
+        assertEquals(Parsed.Bad(FieldError.Required), RecentValues.parse(" ", RecentField.Name))
         assertEquals(Parsed.Ok(JsonPrimitive(1.5)), RecentValues.parse("1.5", RecentField.Density))
         assertEquals(Parsed.Bad(FieldError.Density), RecentValues.parse("0", RecentField.Density))
         assertEquals(Parsed.Bad(FieldError.Grams), RecentValues.parse("abc", RecentField.Tare))
@@ -631,5 +632,39 @@ class HistoryTest {
         assertNotNull(RecentMarks.readItem(record.copy(read = read, saved = two), 1))
         // a saved item the record does not have
         assertNull(RecentMarks.readItem(record.copy(read = read, saved = two), 5))
+    }
+
+    @Test fun aSuccessfulLoadClearsTheHubNotices() = runTest(dispatcher) {
+        val list = HistoryListViewModel(fake)
+        fake.listError = ApiError(401, "unauthorized", "x")
+        list.refresh(); runCurrent()
+        assertTrue(list.state.value.unauthorized)
+        fake.listError = null
+        list.refresh(); runCurrent()
+        assertFalse(list.state.value.unauthorized)
+        val vm = RecordViewModel(fake, "a1")
+        fake.error = null
+        val real = fake.rec
+        vm.load(); runCurrent()
+        edited(vm, RecentField.Vendor to "X")
+        fake.error = ApiError(401, "unauthorized", "x")
+        vm.saveEdit {}; runCurrent()
+        assertTrue(vm.state.value.unauthorized)
+        fake.error = null
+        vm.load(); runCurrent()
+        assertFalse(vm.state.value.unauthorized)
+        assertNull(vm.state.value.mismatch)
+        assertEquals(real, vm.state.value.record)
+    }
+
+    @Test fun brandNameAndMaterialCannotBeCleared() = runTest(dispatcher) {
+        val vm = loaded()
+        edited(vm, RecentField.Vendor to " ", RecentField.Name to "", RecentField.Material to "PLA", RecentField.Line to "")
+        vm.saveEdit {}; runCurrent()
+        assertTrue(fake.edits.isEmpty())
+        assertEquals(
+            mapOf(RecentField.Vendor to FieldError.Required, RecentField.Name to FieldError.Required),
+            vm.state.value.edit!!.errors,
+        )
     }
 }
