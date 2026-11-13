@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
+import threading
 import time
 from pathlib import Path
 
@@ -175,6 +176,68 @@ def test_an_approval_nobody_fetches_is_revoked_when_it_runs_out(env):  # noqa: F
     assert len(pairing.devices()) == n + 1
     sr.pending(now=1000.0 + sr.TTL + 1)
     assert len(pairing.devices()) == n
+
+
+def _expire():
+    with pairing._locked():
+        pairing._write(sr.FILE, [])
+
+
+def _decide_while(rid, approve, between, monkeypatch):
+    """decide() with `between` run once the device is paired and the request's lock is released: what a second click, a second
+    tab or the clock does in that gap. A thread with a timeout, so a deadlock fails the test instead of hanging it."""
+    real = pairing.redeem_code
+
+    def redeem(code):
+        token = real(code)
+        monkeypatch.setattr(pairing, "redeem_code", real)
+        between()
+        return token
+
+    monkeypatch.setattr(pairing, "redeem_code", redeem)
+    out = []
+
+    def run():
+        try:
+            out.append(sr.decide(rid, approve))
+        except sr.RequestError as e:
+            out.append(e)
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(10)
+    assert not t.is_alive(), "decide() hung: the pairing lock is held twice"
+    return out[0]
+
+
+def test_a_request_answered_twice_at_once_pairs_one_device_and_the_loser_is_404(env, kit, monkeypatch):  # noqa: F811
+    station(kit)
+    rid = sr.pending()[0]["id"]
+    n = len(pairing.devices())
+    out = _decide_while(rid, True, lambda: sr.decide(rid, True), monkeypatch)
+    assert isinstance(out, sr.RequestError) and out.status == 404
+    assert len(pairing.devices()) == n + 1          # the first answer's device stays, the loser's is revoked
+    assert pairing.authorize("not a token") is None  # and the lock is free again
+
+
+def test_a_request_that_runs_out_while_it_is_answered_is_404_and_leaves_no_device(env, kit, monkeypatch):  # noqa: F811
+    station(kit)
+    rid = sr.pending()[0]["id"]
+    n = len(pairing.devices())
+    out = _decide_while(rid, True, _expire, monkeypatch)
+    assert isinstance(out, sr.RequestError) and out.status == 404
+    assert len(pairing.devices()) == n
+    assert pairing.authorize("not a token") is None
+
+
+def test_refused_in_another_tab_while_allowing_is_404_and_leaves_no_device(env, kit, monkeypatch):  # noqa: F811
+    station(kit)
+    rid = sr.pending()[0]["id"]
+    n = len(pairing.devices())
+    out = _decide_while(rid, True, lambda: sr.decide(rid, False), monkeypatch)
+    assert isinstance(out, sr.RequestError) and out.status == 404
+    assert len(pairing.devices()) == n
+    assert pairing.authorize("not a token") is None
 
 
 def test_at_most_three_wait(env, kit):  # noqa: F811

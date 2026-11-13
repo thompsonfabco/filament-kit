@@ -206,14 +206,17 @@ def _decide(rid: str, approve: bool, now: float | None = None) -> dict:
     with pairing._locked():
         rows = _live(pairing._read(FILE), now)
         mine = next((r for r in rows if r["id"] == rid and r.get("state") == "pending"), None)
-        if mine is None:
+        if mine is not None:
+            mine["state"] = "approved" if approve else "refused"
             if token:
-                pairing.revoke(pairing.authorize(token)[0])
-            raise RequestError(404, "not_found", "no such request (it may have run out)")
-        mine["state"] = "approved" if approve else "refused"
+                mine["token"] = token
+            pairing._write(FILE, rows)
+    if mine is None:
+        # gone between the two sections (answered twice, expired): the device just paired is revoked here, with the lock
+        # released: authorize and revoke take it too, and it is not reentrant
         if token:
-            mine["token"] = token
-        pairing._write(FILE, rows)
+            pairing.revoke(pairing.authorize(token)[0])
+        raise RequestError(404, "not_found", "no such request (it may have run out)")
     return {"name": name, "approved": approve}
 
 
