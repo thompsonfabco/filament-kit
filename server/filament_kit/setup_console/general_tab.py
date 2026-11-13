@@ -54,11 +54,11 @@ def routes(page) -> list[tuple]:
     async def spoolman(request, body):
         url = body.get("url")
         if not isinstance(url, str) or not url.strip():
-            raise Refused(400, "give the address of the Spoolman to use")
+            raise Refused(400, "give the address of the Spoolman to use", field="url")
         url = url.strip().rstrip("/")
         err = modules.check_setting("spoolman_url", url)
         if err:
-            raise Refused(400, err)
+            raise Refused(400, err, field="url")
 
         def answers() -> str | None:
             try:
@@ -68,7 +68,8 @@ def routes(page) -> list[tuple]:
                 return str(e)
         why = await anyio.to_thread.run_sync(answers)
         if why:
-            raise Refused(400, f"nothing was changed: no Spoolman answered at that address ({why})")
+            raise Refused(400, f"nothing was changed: no Spoolman answered at that address ({why})",
+                          field="url")
         await page._helper({"op": "spoolman_url", "code": body["code"], "url": url})
         page.audit(request, "Spoolman address changed")
         return {"ok": True}

@@ -1001,6 +1001,36 @@ def test_add_edit_and_forget_go_to_the_kit_with_only_their_keys(managing):
     assert ("DELETE", "/api/printers/sv08-max") in kit.calls
 
 
+def test_a_field_the_kit_names_reaches_the_printers_tab(managing, monkeypatch):
+    """S1.4: the kit's `field` (api.py) travels through the web unit's answer to the page."""
+    from filament_kit.web.slots import SlotError
+    app, kit = managing
+
+    def refuse(path, body):
+        raise SlotError("access_code is required", code="bad_request", http=400, field="access_code")
+    monkeypatch.setattr(kit, "post", refuse)
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        r = c.post(P + "/add", headers=H, json={"serial": SERIAL})
+    assert r.status_code == 400 and r.json() == {"error": "access_code is required", "code": "bad_request",
+                                                          "field": "access_code"}
+
+
+def test_kit_api_client_keeps_the_kits_field(monkeypatch):
+    import io
+    import urllib.error
+    from filament_kit.web import slots
+    body = b'{"error": "bad_request", "message": "port must be 1 to 65535", "field": "port"}'
+
+    def fail(req, timeout, context=None):
+        raise urllib.error.HTTPError("https://kit", 400, "bad", {}, io.BytesIO(body))
+    monkeypatch.setattr(slots, "_http_json", fail)
+    api = slots.KitApi(base_url="http://kit.invalid")
+    monkeypatch.setattr(api, "_token", lambda: "t")
+    with pytest.raises(slots.SlotError) as e:
+        api.post("/api/printers", {})
+    assert (e.value.field, e.value.http, e.value.code) == ("port", 400, "bad_request")
+
+
 def test_add_edit_and_forget_need_the_pages_origin_and_the_home_network(managing):
     app, kit = managing
     with TestClient(app, base_url=ORIGIN, client=HOME) as c:

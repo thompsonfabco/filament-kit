@@ -302,6 +302,19 @@ def test_origin_refusal(app):
         assert c.post("/intake/api/add", json={"items": []}).status_code == 403   # no Origin at all
 
 
+def test_add_and_open_refusals_name_their_field(app):
+    with _client(app) as c:
+        post = {"headers": {"Origin": ORIGIN}}
+        r = c.post("/intake/api/add", json={"items": []}, **post)
+        assert r.status_code == 400 and r.json()["field"] == "items" and r.json()["error"] == "no items"
+        r = c.post("/intake/api/open", json={"spool": "x"}, **post)
+        assert r.status_code == 400 and r.json()["field"] == "spool"
+        r = c.post("/intake/api/open", json={"spool": 1, "gross": "heavy"}, **post)
+        assert r.status_code == 400 and r.json()["field"] == "gross"
+        r = c.post("/intake/api/add", json={"items": []}, headers={"Origin": "https://evil.example"})
+        assert "field" not in r.json()                                  # bad origin: about no field
+
+
 def test_read_add_link_open_flow(app, env, sm, fake):
     data = env
     with _client(app) as c:

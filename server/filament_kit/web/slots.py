@@ -49,8 +49,8 @@ class SlotError(Problem):
     `code` = its error code ("no_preset", "printer_offline", "slot_in_use", "not_found" ...; "unreachable" when it
     did not answer, "unpaired" when it refused this unit's token) and `http` = its status (None: no answer)."""
 
-    def __init__(self, message: str, *, code: str | None = None, http: int | None = None):
-        super().__init__(message)
+    def __init__(self, message: str, *, code: str | None = None, http: int | None = None, field: str | None = None):
+        super().__init__(message, field)
         self.code, self.http = code, http
 
 
@@ -169,7 +169,7 @@ class KitApi:
             err = err if isinstance(err, dict) else {}
             raise SlotError(err.get("message") or f"the kit server answered {e.code}",
                             code=err.get("error") if isinstance(err.get("error"), str) else None,
-                            http=e.code) from None
+                            http=e.code, field=err.get("field") if isinstance(err.get("field"), str) else None) from None
         except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
             raise SlotError(f"the kit server ({self.base}) is not reachable: {e}", code="unreachable") from None
 
@@ -190,7 +190,7 @@ class KitApi:
             err = err if isinstance(err, dict) else {}
             raise SlotError(err.get("message") or f"the kit server answered {e.code}",
                             code=err.get("error") if isinstance(err.get("error"), str) else None,
-                            http=e.code) from None
+                            http=e.code, field=err.get("field") if isinstance(err.get("field"), str) else None) from None
         except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
             raise SlotError(f"the kit server ({self.base}) is not reachable: {e}", code="unreachable") from None
         return r.status, r.headers.get_content_type(), r

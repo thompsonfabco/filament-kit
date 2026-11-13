@@ -70,7 +70,18 @@ def test_without_a_cookie_the_code_path_is_the_same(app, helper):
     assert _helper_change(c).status_code == 403
     r = _change(c, CODE)
     assert r.status_code == 200 and SET_COOKIE not in r.headers
-    assert c.get("/setup/api/trust").json() == {"ok": True, "status": 200, "enabled": True, "trusted": False, "id": None, "name": None}
+    assert c.get("/setup/api/trust").json() == {"ok": True, "status": 200, "enabled": True, "trusted": False, "id": None, "name": None,
+                                                         "expires": None}
+
+
+def test_get_trust_reports_this_computers_expiry_without_the_code(app):
+    import time
+    c = client(app)
+    r = _trust(c)
+    got = c.get("/setup/api/trust").json()
+    listed = {d["id"]: d for d in c.post("/setup/api/trust/list", json={"code": CODE}, headers=H).json()["devices"]}
+    assert got["trusted"] is True and got["expires"] == listed[r.json()["id"]]["expires"]       # the list's own value
+    assert abs(got["expires"] - (time.time() + trusted.LIFETIME)) < 60
 
 
 def test_a_typed_code_wins_over_the_cookie(app):

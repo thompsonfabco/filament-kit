@@ -165,7 +165,8 @@ def status(token, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     st = _load()
     d = _find(st, token, now)
-    return {"enabled": st["enabled"], "trusted": d is not None, "id": d["id"] if d else None, "name": d["name"] if d else None}
+    return {"enabled": st["enabled"], "trusted": d is not None, "id": d["id"] if d else None, "name": d["name"] if d else None,
+            "expires": d["expires"] if d else None}
 
 
 def listing(now: float | None = None) -> list[dict]:
