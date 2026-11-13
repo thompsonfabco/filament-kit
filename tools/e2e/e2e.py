@@ -458,12 +458,13 @@ class E2E:
                 uninstall(run, rel, f"known-state-{key}-uninstall")
             r = rel.get_sh(["--repo", OWNER_REPO, "--version", self.v1, "--modules", "spoolman,server,printers,web",
                             "--set", f"web.public_url={PUBLIC_URL}"], f"known-state-{key}-install")
+            if r.returncode == 0:
+                self.foreign_install = False        # v1 is what is installed now: the check below may say so
             run.check(key, f"known state: get.sh installs {self.v1} (spoolman,server,printers,web)",
                       r.returncode == 0 and self._is_server_v1(), r.stdout[-1500:] + r.stderr[-800:])
             if r.returncode:
                 raise Fail("could not bring the host to the known state; see the log")
             self.installed = True
-            self.foreign_install = False
             self.token = self.spool = None          # the pairing and the spool went with the old install
             if self.printer is not None:            # and the printer entry: g then has none to compare
                 self.printer.close()
