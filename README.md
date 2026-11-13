@@ -49,7 +49,7 @@ Then, on your phone:
 
 Optional afterwards: the PC sync for Bambu Studio presets ([Pair your PC](#pair-your-pc)), an intake station with
 a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the
-[Printer Station](#the-printer-station).
+[Printer Station](#the-reader).
 
 Your spool list is also in any web browser at home, at `http://<computer name>.local:7912` (the installer prints
 the address). Spoolman has no sign-in, so it answers only this computer and your home network (by default
@@ -112,7 +112,7 @@ Windows PC with Bambu Studio, run `sudo filament-kit pair --pc` on the server an
 the setup's console. It keeps both stable and Beta Bambu Studio current (v0.4.0). Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide. On Linux, use
 `filament-kit-sync-linux-x86_64-<version>.tar.gz` instead: [PC sync on Linux](docs/user-guide.md#pc-sync-on-linux).
 
-## The Printer Station
+## The reader
 
 A small ESP32-C3 box next to the printer: tap a spool's tag, turn the knob to a slot, and the spool is loaded
 there. It talks to the `web` module: make its token with `sudo filament-kit reader token --name bench`. Its API and firmware build are in [reader/README.md](reader/README.md), and its parts and wiring in the
