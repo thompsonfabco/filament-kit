@@ -92,14 +92,13 @@ fun NavController.selectTab(tab: Tab) = navigate(tab.graph) {
 }
 
 /**
- * Opens the add flow on the Home stack, whichever tab is showing, so the bar and the stacks stay right. An add already
- * open on that stack is kept, not covered by a second one; returns true then (the caller hands it the tag).
+ * Opens a NEW add flow on the Home stack, whichever tab is showing, so the bar and the stacks stay right. An add already
+ * open on that stack is replaced, not covered; its draft stays saved and is listed under Drafts on Home.
  */
-fun NavController.openAdd(route: AddRoute): Boolean {
+fun NavController.openAdd(route: AddRoute) {
     if (currentDestination.tab() != Tab.Home) selectTab(Tab.Home)
-    if (currentDestination?.hasRoute(AddRoute::class) == true) return true
+    if (currentDestination?.hasRoute(AddRoute::class) == true) popBackStack()
     navigate(route)
-    return false
 }
 
 private const val MAX_STACK_DEPTH = 32

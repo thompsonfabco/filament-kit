@@ -50,8 +50,8 @@ fun hubAddress(connection: Connection, config: ServerConfig?): String {
 }
 
 /**
- * Which Hub a pairing is: its stored addresses (in any order) and port, with the certificate it is paired with. The same
- * Hub keeps this when pairing again; another Hub, or a Hub with another certificate, does not. Null when none is stored.
+ * Which Hub a pairing is: the certificate it is paired with. Addresses and port vary with how the pairing was made and
+ * with DHCP; a reinstalled Hub has a new certificate. Pairing again with the same certificate is the same Hub. Null when
+ * none is stored. (Trusting a new certificate is the same Hub by the user's say-so, not by this rule.)
  */
-fun hubIdentity(config: ServerConfig?): String? =
-    config?.let { "${it.endpoints.sorted().joinToString(",")}:${it.port}|${it.fingerprint.lowercase()}" }
+fun hubIdentity(config: ServerConfig?): String? = config?.fingerprint?.lowercase()

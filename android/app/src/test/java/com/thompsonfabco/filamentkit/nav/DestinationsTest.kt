@@ -8,6 +8,7 @@ import androidx.navigation.compose.ComposeNavigator
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.createGraph
+import androidx.navigation.toRoute
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -167,11 +168,15 @@ class DestinationsTest {
         assertEquals(Tab.Printers, nav.currentDestination.tab())
     }
 
-    @Test fun anAddAlreadyOpenIsKeptNotCoveredByASecondOne() {
+    @Test fun anAddFromTheSpoolCardAlwaysStartsANewOneInPlaceOfTheOpenOne() {
         val nav = controller()
-        assertFalse(nav.openAdd(AddRoute(draft = "d1")))
+        nav.openAdd(AddRoute(draft = "d1"))
         nav.selectTab(Tab.Printers)
-        assertTrue("the open add is reused", nav.openAdd(AddRoute(tag = "04:aa")))
-        assertEquals(1, nav.currentBackStack.value.count { it.destination.hasRoute(AddRoute::class) })
+        nav.openAdd(AddRoute(tag = "04:aa"))
+        assertEquals(Tab.Home, nav.currentDestination.tab())
+        assertEquals("one add, not two", 1, nav.currentBackStack.value.count { it.destination.hasRoute(AddRoute::class) })
+        val top = nav.currentBackStackEntry!!.toRoute<AddRoute>()
+        assertEquals("04:aa", top.tag)
+        assertNull("the older draft is not reused", top.draft)
     }
 }

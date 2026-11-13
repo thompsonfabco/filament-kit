@@ -64,16 +64,13 @@ class HubStateTest {
         assertEquals("", hubAddress(Connection.Offline, null))
     }
 
-    @Test fun aHubIsKnownByItsAddressesAndCertificateNotByItsName() {
-        val same = paired.copy(endpoints = listOf("192.0.2.10", "hub.example"))
+    @Test fun aHubIsKnownByItsCertificateOnly() {
         assertEquals(
-            "address order does not matter",
-            hubIdentity(same),
-            hubIdentity(same.copy(endpoints = listOf("hub.example", "192.0.2.10"), name = "Renamed", token = "new token")),
+            "addresses, port, name and token do not matter",
+            hubIdentity(paired),
+            hubIdentity(paired.copy(endpoints = listOf("hub.example"), port = 8711, name = "Renamed", token = "new")),
         )
         assertEquals("upper case fingerprint is the same", hubIdentity(paired), hubIdentity(paired.copy(fingerprint = "AB")))
-        assert(hubIdentity(paired) != hubIdentity(paired.copy(name = "Workshop hub", endpoints = listOf("192.0.2.99"))))
-        assert(hubIdentity(paired) != hubIdentity(paired.copy(port = 8711)))
         assert(hubIdentity(paired) != hubIdentity(paired.copy(fingerprint = "cd")))
         assertNull(hubIdentity(null))
     }

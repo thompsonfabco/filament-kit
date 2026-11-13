@@ -508,14 +508,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             }
                         })
                         TagTaps(addVm::onTag)
-                        // a tag from the spool card for this add, already open: it takes the tag once it shows
-                        val waiting by app.addTag.collectAsStateWithLifecycle()
-                        LaunchedEffect(waiting) {
-                            waiting?.let {
-                                addVm.onTag(it)
-                                app.addTag.value = null
-                            }
-                        }
                         if (BuildConfig.DEBUG && !route.manual) LaunchedEffect(addVm) { DebugPhotos.photos.collect(addVm::addPhoto) }
                         AddSpoolsScreen(
                             vm = addVm,
@@ -701,7 +693,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onStartAdd = { tag ->
                                 close()
                                 // without label reading on the server the new spool is added by hand
-                                if (nav.openAdd(AddRoute(tag = tag, manual = !labelPhotos))) app.addTag.value = tag
+                                nav.openAdd(AddRoute(tag = tag, manual = !labelPhotos))
                             },
                             onPairAgain = {
                                 close()
