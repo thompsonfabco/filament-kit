@@ -14,7 +14,7 @@ from __future__ import annotations
 import anyio
 from starlette.responses import Response
 
-from .. import config, intake, intake_history, modules
+from .. import config, intake, intake_history
 from ..spoolman import Spoolman
 
 
@@ -28,7 +28,7 @@ def routes(page) -> list[tuple]:
         return Spoolman(config.load()["spoolman_url"])
 
     def ai_on() -> bool:
-        return "ai_intake" in modules.enabled(config.load())
+        return intake.reading_on(config.load())
 
     def call(fn, *a, **k):
         try:
@@ -55,14 +55,12 @@ def routes(page) -> list[tuple]:
         def run() -> dict:
             cfg = config.load()
             cap = intake.ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
-            ticket = cap.take("setup page") if ai_on() else None
-            try:
-                return call(intake_history.revise, sm(), request.path_params["hid"], body.get("note"),
-                            body.get("item"), ai_on=ai_on())
-            except Exception:
-                if ticket is not None:
-                    intake.refund_quietly(cap, ticket, "setup page")
-                raise
+
+            def charge():                   # only a revision by Claude counts against the daily cap
+                ticket = cap.take("setup page")
+                return lambda: intake.refund_quietly(cap, ticket, "setup page")
+            return call(intake_history.revise, sm(), request.path_params["hid"], body.get("note"),
+                        body.get("item"), ai_on=ai_on(), charge=charge)
         out = await anyio.to_thread.run_sync(run)
         page.audit(request, f"intake record {request.path_params['hid']} revision asked of the AI")
         return out

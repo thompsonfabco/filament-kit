@@ -555,7 +555,8 @@ def _has_data() -> bool:
 # file there is root's alone, 600 (folders 700), and `modules apply` afterwards sets what a module needs. The state
 # folders belong to their service user, as on any install; their modes come from the zip, never above 666/777.
 SERVICE_READS = {"config.json": 0o640, "anthropic_key": 0o640, "web_passphrase": 0o640, "github_token": 0o640,
-                 "key.pem": 0o640, "h2d_token": 0o640}          # root:filament-kit, as the kit writes them
+                 "key.pem": 0o640, "h2d_token": 0o640,          # root:filament-kit, as the kit writes them
+                 "local_intake_token": 0o640}                   # the local label reader's bearer token, when set
 WORLD_READS = {"cert.pem": 0o644, "bambu_hardware.xml": 0o644, "bambu_hardware.xml.previous": 0o644,
                "klipper_hardware.xml": 0o644, "klipper_hardware.xml.previous": 0o644}     # root:root
 STATE_OWNER = {"var/lib/filament-kit": "filament-kit", "var/lib/filament-kit-web": "filament-kit-web"}

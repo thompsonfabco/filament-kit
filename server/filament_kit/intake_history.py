@@ -387,13 +387,15 @@ def _item(rec: dict, item) -> dict:
     return saved[item]
 
 
-def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = True) -> dict:
-    """Ask the AI again with the record's photos, its saved values and the owner's note; writes nothing but the
-    proposal (kept PROPOSAL_TTL), which `apply(proposal=...)` accepts."""
-    from . import intake
+def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = True, charge=None) -> dict:
+    """Ask the label reader again with the record's photos, its saved values and the owner's note; writes nothing
+    but the proposal (kept PROPOSAL_TTL), which `apply(proposal=...)` accepts. The reader setting decides who
+    answers (`intake._call`): the local reader through its revise call, Claude through the prompt below; `charge`
+    takes the daily cap only for Claude. A record with no photo can only be revised by Claude."""
+    from . import config, intake
     if not ai_on:
-        raise HistoryError(409, "ai_off", "label reading (the ai_intake module) is off on this server: edit the "
-                                          "values by hand")
+        raise HistoryError(409, "ai_off", "label reading (ai_intake or local_intake) is off on this server: edit "
+                                          "the values by hand")
     if not isinstance(note, str) or not note.strip() or len(note) > 500:
         raise HistoryError(400, "bad_request", "write what is wrong (at most 500 characters)")
     rec = _load(rid)
@@ -403,7 +405,14 @@ def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = Tru
     hint = (f"Correction from the owner: {note.strip()}\nThe values saved from the first reading of this spool "
             f"were: {json.dumps(it['values'])}\nRead the photos again with the correction and give this one item "
             "with every value that follows from it corrected (temperatures, density, spool weight, line).")
-    out = intake._call(sm, images, hint, None, client)
+    readers = intake.reader_order(config.load()) or ["cloud"]
+    if not images:
+        readers = [r for r in readers if r != "local"]
+        if not readers:
+            raise HistoryError(409, "no_photo", "this record has no photo, and the local reader needs one: edit the "
+                                                "values by hand")
+    out = intake._call(sm, images, hint, None, client, readers=readers, charge=charge,
+                       revise=(dict(it["values"]), note.strip()))
     got = (out.get("items") or [None])[0]
     if not isinstance(got, dict):
         raise HistoryError(502, "api_error", "the AI gave no item back; try again")
@@ -427,7 +436,8 @@ def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = Tru
         rec["proposals"] = props
         _save(rec)
     return {"proposal": pid, "item": it["item"], "before": before, "after": after, "changes": changes,
-            "no_photo": not images}
+            "no_photo": not images, "reader": out.get("reader"), "confidence": out.get("confidence"),
+            "note": out.get("note")}
 
 
 def _changed_fields(rev: dict) -> set:

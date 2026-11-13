@@ -591,6 +591,44 @@ def _station_voice_menu(cfg: dict) -> None:
         cfg.setdefault("station", {})["tts"] = "auto" if v == "1" else "espeak"
 
 
+def _reader_name(cfg: dict) -> str:
+    from . import intake
+    order = intake.reader_order(cfg)
+    names = {"local": "local", "cloud": "Claude"}
+    return " then ".join(names[r] for r in order) if order else "off (ai_intake / local_intake in 6) Modules)"
+
+
+READER_MENU = (("1", "auto", "local first, Claude when unsure (default)"),
+               ("2", "cloud-then-local", "Claude first, local when Claude fails"),
+               ("3", "local", "local reader only"), ("4", "cloud", "Claude only"))
+
+
+def _label_reader_menu(cfg: dict) -> None:
+    """Which reader reads first, and the local reader's address and tier (intake.reader, local_intake.*)."""
+    from . import local_reader
+    li = cfg.setdefault("local_intake", {})
+    print("Which label reader reads first (a reader whose module is off is skipped):")
+    for k, _, text in READER_MENU:
+        print(f"  {k}) {text}")
+    v = (_ask("Choice (Enter keeps it): ") or "").strip()
+    pick = next((name for k, name, _ in READER_MENU if k == v), None)
+    if pick:
+        cfg.setdefault("intake", {})["reader"] = pick
+    url = (_ask(f"Local reader address [{local_reader.settings(cfg)['url']}] (Enter keeps it): ") or "").strip()
+    if url:
+        err = local_reader.check_url(url)
+        if err:
+            print(f"Not changed: {err}")
+        else:
+            li["url"] = url.rstrip("/")
+    tier = (_ask(f"Local reader tier auto, cpu or gpu [{local_reader.settings(cfg)['tier']}]: ") or "").strip().lower()
+    if tier:
+        if tier in local_reader.TIERS:
+            li["tier"] = tier
+        else:
+            print("Not changed: give auto, cpu or gpu")
+
+
 def cmd_config() -> int:
     cfg = config.load()
     before = _module_state(cfg)
@@ -604,6 +642,7 @@ def cmd_config() -> int:
               f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
               f"  7) Station voice      {_tts_name(cfg)}\n"
               f"  8) Intake records kept {(cfg.get('intake') or {}).get('history_keep', 20)} (with their photos; 0 = none)\n"
+              f"  9) Label reader       {_reader_name(cfg)}\n"
               "  0) save and exit")
         choice = _ask("> ")
         if choice is None or choice.strip() == "0":
@@ -641,6 +680,8 @@ def cmd_config() -> int:
             n = _ask_int("Intake records kept (0-500): ", 0)
             if n is not None:
                 cfg.setdefault("intake", {})["history_keep"] = min(n, 500)
+        elif choice == "9":
+            _label_reader_menu(cfg)
         else:
             print("Unknown choice.")
     changed = _module_state(cfg) != before
@@ -706,10 +747,17 @@ def cmd_intake(args) -> int:
                     print(f"    filament {rv['filaments']['orphaned']} has no spools left (not deleted)")
             return 0
         if args.intake_cmd == "revise":
-            if "ai_intake" not in modules.enabled(config.load()):
-                _err_line("label reading (ai_intake) is off on this server: use filament-kit intake edit")
+            from . import intake
+            cfg = config.load()
+            if not intake.reading_on(cfg):
+                _err_line("label reading (ai_intake or local_intake) is off on this server: use filament-kit intake "
+                          "edit")
                 return 1
             p = intake_history.revise(sm, args.id, args.note, args.item)
+            if p.get("reader"):
+                print(f"Read again by {'the local reader' if p['reader'] == 'local' else 'Claude'}"
+                      + (f", {round(p['confidence'] * 100)} % sure" if p.get("confidence") is not None else "")
+                      + (f" ({p['note']})" if p.get("note") else "") + ".")
             print(f"Before: {_show_values(p['before'])}\nAfter:  {_show_values(p['after'])}")
             if not p["changes"]:
                 print("The AI changed nothing.")
@@ -2221,6 +2269,52 @@ def cmd_web_status() -> int:
     return 0 if status_rows.print_rows(status_rows.web_rows()) else 1
 
 
+def cmd_local_intake_status() -> int:
+    cfg = config.load()
+    if "local_intake" not in modules.enabled(cfg):
+        print("The local_intake module is off: sudo filament-kit modules enable local_intake")
+        return 1
+    return 0 if status_rows.print_rows(status_rows.local_reader_rows(cfg)) else 1
+
+
+def cmd_local_intake_test(photos: list[str]) -> int:
+    """Read photos with the local reader only (no cloud, no daily read used) and print what it read."""
+    from . import intake
+    cfg = config.load()
+    if "local_intake" not in modules.enabled(cfg):
+        print("The local_intake module is off: sudo filament-kit modules enable local_intake", file=sys.stderr)
+        return 1
+    try:
+        images = intake.check_photos([(p, Path(p).read_bytes()) for p in photos])
+    except OSError as e:
+        print(f"error: {e.filename}: {e.strerror}", file=sys.stderr)
+        return 1
+    except intake.PhotoError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    try:
+        out = intake._call(Spoolman(cfg["spoolman_url"]), images, "", None, None, readers=["local"])
+    except intake.ReadError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    except SpoolmanError as e:
+        print(f"error: Spoolman: {e}", file=sys.stderr)
+        return 1
+    conf = out.get("confidence")
+    print(f"Read by the local reader ({out.get('tier') or '?'} tier"
+          + (f", {round(conf * 100)} % sure" if conf is not None else "") + (", unsure" if out.get("unsure") else "")
+          + (f", {out['usage']['ms'] / 1000:.1f} s" if out["usage"].get("ms") is not None else "") + "):")
+    for it in out["items"]:
+        colour = it.get("color_name") or "?"
+        print(f"  {it['vendor']} {it['name']} ({it['material']}), colour {colour}"
+              + (f" #{it['color_hex']}" if it.get("color_hex") else "")
+              + f", {it['count']} x {it['net']} g, {'sealed' if it.get('sealed') else 'opened'}; {it['match']}"
+              + (f"; {round(it['confidence'] * 100)} % sure" if it.get("confidence") is not None else ""))
+    for q in out.get("questions") or []:
+        print(f"  question: {q}")
+    return 0
+
+
 # ---------- migrate-ops (from filament-ops, sub-project 4) ----------
 
 def cmd_migrate_ops(bundle: str, apply_: bool, replace_spoolman: bool, allow_unknown_spoolman: bool = False) -> int:
@@ -2354,6 +2448,12 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     wbsub = wb.add_subparsers(dest="web_cmd", required=True)
     wbsub.add_parser("passphrase", help="set the sign-in passphrase (root; typed twice, hidden)")
     wbsub.add_parser("status", help="check the web unit: public URL, passphrase, health, connectors")
+    li = sub.add_parser("local-intake", help="the local label reader (local_intake module): status, test a photo")
+    lisub = li.add_subparsers(dest="li_cmd", required=True)
+    lisub.add_parser("status", help="does the local reader answer, which tiers it can use, the reader order")
+    lit = lisub.add_parser("test", help="read photos with the local reader only and print the result (no Claude, "
+                                        "no daily read used, nothing saved)")
+    lit.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
     rd = sub.add_parser("reader", help="the Printer Station reader tokens: make, list, revoke")
     rdsub = rd.add_subparsers(dest="reader_cmd", required=True)
     rdt = rdsub.add_parser("token", help="make a reader token and print it once, for secrets.h (root)")
@@ -2474,6 +2574,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_profiles_restore_deleted()
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
+    if args.cmd == "local-intake":
+        return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)
     if args.cmd == "reader" and args.reader_cmd == "setup":
         return cmd_reader_setup(args)
     if args.cmd == "reader":

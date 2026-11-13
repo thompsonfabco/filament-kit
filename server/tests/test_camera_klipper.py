@@ -1,16 +1,13 @@
 """camera: Klipper printers' webcams (MJPEG over HTTP from Moonraker's webcam list)."""
-import threading
 import time
 
 import pytest
-import uvicorn
 from starlette.applications import Starlette
 from starlette.responses import StreamingResponse
 from starlette.routing import Route
 
 from filament_kit.bridge import camera, registry
 
-from fakes.fake_moonraker import free_port
 
 
 def jpeg(n: int) -> bytes:
@@ -39,15 +36,10 @@ def stream_server():
 
     async def stream(request):
         return StreamingResponse(gen(), media_type="multipart/x-mixed-replace; boundary=frame")
-    port = free_port()
-    server = uvicorn.Server(uvicorn.Config(Starlette(routes=[Route("/webcam/", stream)]), host="127.0.0.1", port=port,
-                                           log_level="warning"))
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    assert wait_for(lambda: server.started)
-    yield f"http://127.0.0.1:{port}/webcam/?action=stream"
-    server.should_exit = True
-    t.join(5)
+    from fakes import serving
+    running = serving.start(Starlette(routes=[Route("/webcam/", stream)]))
+    yield f"{running.url}/webcam/?action=stream"
+    running.stop(5)
 
 
 @pytest.fixture(autouse=True)
