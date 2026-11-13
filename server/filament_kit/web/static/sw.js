@@ -1,12 +1,13 @@
 // Service worker: keeps the page shell for offline start (04 10.2) and handles Printers tab alerts when the server has
-// web.push on. Served whether or not print alerts are on. Never caches /intake/api/ replies.
+// web.push on. Served whether or not print alerts are on. Never caches <app path>/api/ replies.
 "use strict";
 const VERSION = "__VERSION__";   // the server writes its version here when it serves this file
 const CACHE = "fk-shell-" + VERSION;
-const SHELL = ["/intake", "/intake/app.css", "/intake/app.js", "/intake/printers.js", "/intake/icon.png",
-  "/intake/icon-512.png", "/intake/manifest-light.webmanifest", "/intake/manifest-dark.webmanifest",
-  "/intake/shared/theme-init.js", "/intake/shared/tokens.css", "/intake/shared/components.css",
-  "/intake/shared/strings.js", "/intake/shared/components.js", "/intake/shared/sprite.svg"];
+// the web app's address as this worker sees it: its scope is the app's path (/intake/, or under the public path)
+const BASE = new URL(self.registration.scope).pathname.replace(/\/+$/, "");
+const SHELL = [BASE, ...["app.css", "app.js", "printers.js", "icon.png", "icon-512.png", "manifest-light.webmanifest",
+  "manifest-dark.webmanifest", "shared/theme-init.js", "shared/tokens.css", "shared/components.css", "shared/strings.js",
+  "shared/components.js", "shared/sprite.svg"].map((f) => BASE + "/" + f)];
 self.addEventListener("install", (event) => {
   // a file the Hub does not serve (printers.js without the Printers tab) is skipped, not fatal
   event.waitUntil(caches.open(CACHE).then((c) => Promise.all(SHELL.map((u) => c.add(u).catch(() => null)))).then(() => self.skipWaiting()));

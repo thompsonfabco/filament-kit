@@ -733,10 +733,30 @@ def test_service_worker_is_served_with_the_printers_module_off(env, kit):
     assert "fk-shell-" in r.text and "__VERSION__" not in r.text
 
 
+def test_service_worker_shell_follows_its_scope_under_the_public_path(app):
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    page = signed(app).get("/intake").text
+    assert f"data-base='{BASE}'" in page
+    sw = signed(app).get("/intake/sw.js").text
+    script = ("const vm = require('vm'); const ctx = vm.createContext({self: {registration: {scope: process.argv[2]},"
+              " addEventListener() {}, location: {origin: 'x'}}, URL, caches: {}});"
+              " vm.runInContext(process.argv[1], ctx); console.log(vm.runInContext('JSON.stringify(SHELL)', ctx));")
+    for scope, base in ((ORIGIN + BASE + "/", BASE), ("https://hub.test/intake/", "/intake")):
+        out = subprocess.run([node, "-e", script, sw, scope], capture_output=True, text=True, check=True).stdout
+        shell = json.loads(out)
+        assert shell[0] == base and f"{base}/app.js" in shell and f"{base}/shared/tokens.css" in shell
+        assert all(u == base or u.startswith(base + "/") for u in shell)
+    assert f"{BASE}/app.js" in page and f"{BASE}/shared/tokens.css" in page      # the page links what the scope lists
+
+
 def test_service_worker_caches_the_shell_and_never_the_api():
     src = (Path(web_app.__file__).parent / "static" / "sw.js").read_text(encoding="utf-8")
     listed = re.search(r"const SHELL = \[(.*?)\];", src, re.S).group(1)
-    assert "/intake/api" not in listed and "/intake/app.js" in listed and "/intake" in listed
+    assert "api" not in listed.replace("app.", "") and '"app.js"' in listed and "BASE" in listed
     assert "/api" not in re.sub(r"//[^\n]*", "", src)      # no API path anywhere in the code (comments aside)
 
 
