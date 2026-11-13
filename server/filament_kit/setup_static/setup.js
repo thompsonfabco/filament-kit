@@ -15,6 +15,7 @@ function h(tag, props, ...kids) {
     else if (k in el && k !== "list" && k !== "style") el[k] = v;
     else el.setAttribute(k, v);
   }
+  if (tag === "button" && !el.className) el.className = "btn--primary";   // the main button look (CON-9), also for class ""
   for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
   return el;
 }
