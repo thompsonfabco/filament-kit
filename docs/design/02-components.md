@@ -833,7 +833,7 @@ actions are default or ghost; when a thing has more than three secondary actions
 then the confirming button. On phones, footer buttons share the row equally in the same order; a page header's
 primary takes the full width.
 
-**Sizes and tokens.** Min height `--ctl` (40 px wide, 44 px phones); padding `0 var(--s4)`; gap `--s2`; `--fs-m`
+**Sizes and tokens.** Min height `--ctl` (44 px at 1024 px and below or with a coarse pointer, 40 px on a desktop with a mouse); padding `0 var(--s4)`; gap `--s2`; `--fs-m`
 weight 600, line height 1.2; `--r`; no shadow. Icon button width `--ctl`. Transition of ground, border and colour
 over `--t-fast`. Every button also has an `::after` hit area reaching 44 px.
 

@@ -149,7 +149,7 @@ The Console entry as it is in the file; the other three themes have the same key
 | `.type.fw-text` / `.fw-label` / `.fw-title` | number as text, 100 to 900 | Weights |
 | `.space.s1` … `.s7` | px | The seven space steps, strictly increasing |
 | `.radius.r-s` / `.r` / `.r-l` | px | The three radii |
-| `.size.ctl` / `.ctl-phone` | px | Control height above 600 px and at or below it |
+| `.size.ctl` / `.ctl-phone` | px | Control height on a desktop with a mouse, and at 1024 px and below or with a coarse pointer |
 | `.size.top` / `.rail` / `.tab` | px | Top bar height, navigation rail width, bottom bar height (without safe-area inset); `rail` is `0px` in a theme whose profile has no rail (Palette, Panes) |
 | `.size.row` | px | `--row`: minimum height of one item of a collection (48px in every theme) |
 | `.size.gap` | px | `--gap`: space between separate items of a group (Console `12px`, the value of `--s3`) |
@@ -176,7 +176,7 @@ The tokens whose names foundations section 4 gives in its tables rather than as 
 | `type.lh-body` / `type.lh-title` | `--lh-body` / `--lh-title` | 1.45 / 1.25 |
 | `type.fw-text` / `fw-label` / `fw-title` | `--fw-text` / `--fw-label` / `--fw-title` | 400 / 600 / 650 |
 | `motion.ease` | `--ease` | `cubic-bezier(.2, 0, 0, 1)` |
-| `size.ctl-phone` | (becomes `--ctl` at or below 600 px) | 44px |
+| `size.ctl-phone` | (becomes `--ctl` at 1024 px and below or with a coarse pointer) | 44px |
 | `size.row` | `--row` | 48px |
 | `size.gap` | `--gap` | 12px |
 | `size.drawer` / `hairline` / `nav-mark` / `thumb` / `qr` | `--drawer` / `--hairline` / `--nav-mark` / `--thumb` / `--qr` | 420px / 1px / 3px / 96px / 224px |
@@ -423,7 +423,7 @@ and the resolved objects `SpoolwardenTheme` provides to components. `Spoolwarden
 | `SwType` | Resolved | The styles of section 5.2; `input` depends on the window class | `SpoolwardenTheme.type` |
 | `Spacing` | Token holder and provided as is | `s1` … `s7` | `SpoolwardenTheme.space` |
 | `SwSizes` | Token holder and provided as is | Every `size` entry: `control`, `controlPhone`, `top`, `rail`, `tab`, `row`, `gap`, `drawer`, `hairline`, `navMark`, `thumb`, `qr`, and the proposed `sideW`, `listW`, `contentMax` | `SpoolwardenTheme.sizes` |
-| `SwDensity` | Resolved | `control` (`control` or `controlPhone` of `SwSizes`, for the window class), `row`, `gap` | `SpoolwardenTheme.density` |
+| `SwDensity` | Resolved | `control` (always `controlPhone` of `SwSizes`: the app runs on touch screens, where the pointer is coarse at every window size), `row`, `gap` | `SpoolwardenTheme.density` |
 | `SwRadius` | Token holder | `rS`, `r`, `rL` as dp | Builds `Shapes` and `SwShapes` |
 | `SwShapes` | Resolved | `rS`, `r`, `rL` as `RoundedCornerShape` | `SpoolwardenTheme.shapes` |
 | `SwElevation`, `SwShadow` | Token holder and provided as is | `e0`, `e2`, each a depth and a ring | `SpoolwardenTheme.elevation` |
@@ -550,8 +550,8 @@ missing.
 | `--row` | `--row` | `SpoolwardenTheme.density.row` (dp) |
 | `--gap` | `--gap` | `SpoolwardenTheme.density.gap` (dp) |
 | `--top` | `--top` | `SpoolwardenTheme.sizes.top`, the `expandedHeight` of the top bar |
-| `--rail` | `--rail` | `SpoolwardenTheme.sizes.rail`, the width of the `NavigationRail` (section 10.1) |
-| `--tab` | `--tab` | `SpoolwardenTheme.sizes.tab`, the height of the `NavigationBar` without the inset (section 10.1) |
+| `--rail` | `--rail` | `SpoolwardenTheme.sizes.rail`; not used for the `NavigationRail`, which keeps Material's own 80 dp width (section 14) |
+| `--tab` | `--tab` | `SpoolwardenTheme.sizes.tab`; not used for the `NavigationBar`, which keeps Material's own 80 dp height without the inset (section 14) |
 | `--drawer` | `--drawer` | `SpoolwardenTheme.sizes.drawer`, the width of the side drawer (section 10.5) |
 | `--hairline` | `--hairline` | `SpoolwardenTheme.sizes.hairline`, the thickness of dividers and outlines |
 | `--nav-mark` | `--nav-mark` | `SpoolwardenTheme.sizes.navMark`, the current-item mark of the rail (section 10.1) |
@@ -619,7 +619,7 @@ values, as on the web only `var(--s1)` … `var(--s7)` are used.
 
 | Thing | Web | Android |
 |---|---|---|
-| Visible height of buttons, segmented controls, chips | `min-height: var(--ctl)`; `--ctl` is 40 px, 44 px at or below 600 px (Console) | `Modifier.height(SpoolwardenTheme.density.control)`; `control` resolves to `controlPhone` when the window class is Phone |
+| Visible height of buttons, segmented controls, chips | `min-height: var(--ctl)`; `--ctl` is 44 px at 1024 px and below or with a coarse pointer, 40 px on a desktop with a mouse (Console) | `Modifier.height(SpoolwardenTheme.density.control)`; `control` is `controlPhone` at every window size, because the app's pointer is a finger |
 | Visible height of text fields | `min-height: var(--ctl)` | Material's `OutlinedTextField` height, which holds the floating label (section 10.4; section 14) |
 | Hit area | A `::after` layer that extends the control to 44 px (foundations section 4.3) | `LocalMinimumInteractiveComponentSize` stays at Material's 48 dp; every Spoolwarden control applies `Modifier.minimumInteractiveComponentSize()`, so a 40 dp button is touchable over 48 dp |
 | Collection item | `min-height: var(--row)` | A `ListItem` keeps its own minimum height (section 14); any other tappable row uses `heightIn(min = max(density.row, LocalMinimumInteractiveComponentSize.current))`; a row that cannot be tapped uses `density.row` |
@@ -887,11 +887,11 @@ Rules for every Android composable below:
 | Shell (2.1) | `shell`, `shell__main`, `skip` | `SwNav`: a `NavigationSuiteScaffold` around a `Scaffold` | Ground `bg`; insets from the scaffolds; no skip link (section 14) |
 | Top bar (2.2) | `topbar`, `topbar__brand`, `topbar__mark`, `topbar__name`, `topbar__hub`, `topbar__version`, `topbar__tools` | `SwTopBar`: `TopAppBar(expandedHeight = sizes.top)` with `pinnedScrollBehavior()`, and a `HorizontalDivider` under it | Ground `surface`, tonal 0, `e0`, 1 dp `border` below; title `titleLarge` on Tablet and Desktop, `titleMedium` on Phone; Hub name `bodySmall` in `muted`; actions: Hub connection chip and appearance icon (`05-android-app.md` section 2.2); no lock chip and no job indicator (`02-components.md` 3.1, 8.4); insets: status bar and horizontal display cutout |
 | Hub connection chip (web app, `04-web-app.md` 2.2; app, `05-android-app.md` 2.2) | `chip chip--connection` | `SwConnectionChip` on `AssistChip` | Height `space.s6`, touch area 48 dp; shape `r`; border `borderStrong`; leading `StatusLabel` shape; word `labelLarge` |
-| Navigation, `nav` = rail (2.3) | `nav`, `nav__item`, `nav__icon`, `nav__label` | `NavigationRail` (`NavigationSuiteType.NavigationRail`) on Tablet and Desktop | `Modifier.width(sizes.rail)`; container `surface`, 1 dp `border` at the end edge; `NavigationRailItemDefaults.colors` with indicator `accentSoft`, selected icon and label `accentText`, unselected `muted`; labels always shown in `labelSmall`, the current one at `--fw-title`; the 3 dp `accentText` mark at the outer edge of the current item drawn with `Modifier.drawBehind`; the two groups split by a 1 dp `border` divider |
+| Navigation, `nav` = rail (2.3) | `nav`, `nav__item`, `nav__icon`, `nav__label` | `NavigationRail` (`NavigationSuiteType.NavigationRail`) on Tablet and Desktop | Material's own width (80 dp); container `surface`, 1 dp `border` at the end edge; `NavigationRailItemDefaults.colors` with indicator `accentSoft`, selected icon and label `accentText`, unselected `muted`; labels always shown in `labelSmall`, the current one at `--fw-title`; the 3 dp `accentText` mark at the outer edge of the current item drawn with `Modifier.drawBehind`; the two groups split by a 1 dp `border` divider |
 | Navigation, `nav` = sidebar (2.3) | the same classes | `PermanentNavigationDrawer` (`NavigationSuiteType.NavigationDrawer`) on Desktop, `NavigationRail` on Tablet | Width `sizes.sideW` (web `--side-w`); items `density.control` high, shape `r`, current item as the rail |
 | Navigation, `nav` = pills (2.3) | the same classes | `PrimaryScrollableTabRow` under the top bar, with a trailing "More" tab opening `SwMenu` | Current pill `accentSoft` / `accentText`; shape `shapes.rL` |
 | Navigation, `nav` = list (2.3) | the same classes | The list pane of `ListDetailPaneScaffold`, items as `ListItem` with `supportingContent` summary and a chevron | Pane width `sizes.listW` (web `--list-w`); the chosen section opens in the pane beside it (Tablet, Desktop) or replaces it (Phone) |
-| Bottom bar (2.4) | `nav` at phone width (`nav__item`, `nav__more`) | `NavigationBar` with `NavigationBarItem` (`NavigationSuiteType.NavigationBar`) on Phone | Height `sizes.tab` plus the navigation-bar inset; container `surface`, 1 dp `border` on top, tonal 0; item colours as the rail; `alwaysShowLabel = true`, `labelSmall`; destinations as `05-android-app.md` section 2.3 |
+| Bottom bar (2.4) | `nav` at phone width (`nav__item`, `nav__more`) | `NavigationBar` with `NavigationBarItem` (`NavigationSuiteType.NavigationBar`) on Phone | Material's own height (80 dp) plus the navigation-bar inset; container `surface`, 1 dp `border` on top, tonal 0; item colours as the rail; `alwaysShowLabel = true`, `labelSmall`; destinations as `05-android-app.md` section 2.3 |
 | More sheet (2.5) | `sheet` with `nav nav--sheet` | `SwMoreSheet`: `SwSheet` holding `ListItem`s | `leadingContent` icon, `headlineContent` name in `bodyLarge` at `--fw-label`, `supportingContent` live summary in `bodySmall` / `muted`, `trailingContent` chevron; current row `accentSoft` / `accentText`; row height is `ListItem`'s own |
 | Page header (2.6) | `page-head`, `page-head__crumbs`, `page-head__title`, `page-head__meta`, `page-head__actions` | `SwPageHeader`: a `Column` under the top bar | The title goes to the top bar; meta row `bodyMedium` in `muted`; actions as `SwButton` (main, then plain), the rest in the top bar's overflow; at the end on Tablet and Desktop, full width below the meta on Phone; 1 dp `border` under it; the breadcrumb is not shown (section 14) |
 | Settings sub-navigation (6.4) | `subnav`, `subnav__link`, `subnav__dirty` | A `LazyColumn` of `ListItem`s, one per group, each opening its own screen; `ListDetailPaneScaffold` on Desktop | The unsaved mark is a small `StatusLabel` of kind warn |
@@ -1174,6 +1174,7 @@ difference not listed is a defect.
 | Breadcrumb | Shown above the page title | An Up button in the top bar named "Back to <parent>" | The Android top bar is where people look for it |
 | Pickers | Native `<select>` (a wheel on iPhone), the photo sheet of `<input type="file">`, the Web Share sheet where the browser offers it, else a download | `SwMenu`, CameraX in the app and the system photo picker, the Android share sheet | Each platform's own picker is the one people know |
 | Touch and hover feedback | Hover `--surface-2`, pressed `--surface-3` on devices with a pointer | The platform's press ripple, coloured from the content colour | Native feedback. States that last (selected, current, expanded) use the same tokens on both. |
+| Bottom bar height and rail width | `--tab` 60 px, `--rail` 76 px | Material's own 80 dp for both | `NavigationBar` and `NavigationRail` lay out their indicator and labels for that size; a smaller size would need a hand-drawn bar or would clip the indicator. Destinations, order, icons, labels and colours are the same. |
 | Minimum touch size | 44 px | 48 dp for controls, tappable rows and menu items; icon buttons are 48 dp | Each platform's guideline (foundations principle 7). Visible heights of buttons and segmented controls are equal (`--ctl`). |
 | Switch | 40 × 24 px track | Material `Switch`, 52 × 32 dp | Material's switch geometry; the colours and the On/Off word are the same |
 | Window class edges | Phone up to 600 px, Tablet 601 to 1024 px, Desktop above | Material's classes: compact below 600 dp, medium to 839 dp, expanded from 840 dp | Foundations section 7 pairs Phone, Tablet and Desktop with these classes. A window from 840 to 1024 wide is Desktop in the app and Tablet in a browser. |

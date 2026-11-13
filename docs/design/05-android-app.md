@@ -31,7 +31,7 @@ Contents: 1 Baseline · 2 App shell · 3 Shared parts and states · 4 Pairing ·
 
 Spacing, size and radius values in this document are the tokens of F4.3 read as dp: `--s1` 4 dp, `--s2` 8 dp,
 `--s3` 12 dp, `--s4` 16 dp, `--s5` 24 dp, `--s6` 32 dp, `--s7` 48 dp; `--r-s` 4 dp, `--r` 6 dp, `--r-l` 10 dp;
-`--top` 52 dp (plus the status bar inset), `--rail` 76 dp, `--tab` 60 dp (plus the gesture inset).
+`--top` 52 dp (plus the status bar inset). The bottom bar and the rail keep Material's own sizes (80 dp high, 80 dp wide, plus the insets), not `--tab` and `--rail`: an accepted difference of `08-platform-mapping.md` section 14.
 
 Font weights are `--fw-text`, `--fw-label` and `--fw-title` (F4.2); no other weight is used.
 
@@ -127,8 +127,8 @@ When the title and the chip do not fit, the title shortens first (ellipsis). The
 ### 2.3 Destinations (bottom navigation and rail)
 
 Component: **bottom bar** and **navigation rail** (F8, `02-components.md` "Navigation"), the same component the web
-app uses with its own destinations. `NavigationBar` height `--tab` plus the gesture inset; `NavigationRail` width
-`--rail`. Active item: `--accent-soft` indicator, `--accent-text` icon and label, label weight `--fw-label`; inactive items
+app uses with its own destinations. `NavigationBar` and `NavigationRail` keep Material's own height and width (80 dp, plus the insets), so their
+indicator and label layout stay intact. Active item: `--accent-soft` indicator, `--accent-text` icon and label, label weight `--fw-label`; inactive items
 `--muted`. Labels are always shown (`alwaysShowLabel = true`), `--fs-xs`.
 
 | Order | Label | Icon | Root screen | Badge |
@@ -294,7 +294,7 @@ the Console theme.
 | Key-value list (02 6.3; "field rows" in this document) | `Row` in a panel | Label `--fs-m` `--muted` (`label-col` column on medium width, above the value on compact), value `--fs-b`, data in `--mono`; 48 dp min height; hairline between rows |
 | Text field | `OutlinedTextField`, `--r` corners, `--border-strong` outline, `--focus` when focused, `--bad` when invalid | Label above inside the outline (Material floating label), supporting text under it for hint or error; error text starts with the octagon shape |
 | Secret field | `OutlinedSecureTextField` with a trailing `TextButton` "Show" / "Hide" (no eye icon) | The button's accessible name adds the field ("Show Access Code" / "Hide Access Code"); never prefilled; cleared on rotation |
-| Main button | `Button`, fill `--accent`, text `--on-accent`, `--r` corners, height `--ctl` (44 dp on compact) | At most one enabled filled button per screen (Home: 5; Printer: 9.7); a sheet or dialog has its own |
+| Main button | `Button`, fill `--accent`, text `--on-accent`, `--r` corners, height `--ctl` (44 dp at every window size; the app's pointer is a finger) | At most one enabled filled button per screen (Home: 5; Printer: 9.7); a sheet or dialog has its own |
 | Other button | `OutlinedButton`, `--border-strong` outline, `--text` text | |
 | Quiet button | `TextButton`, `--accent-text` | For "Cancel", "Not now", links inside text |
 | Danger button | `OutlinedButton` with `--bad` outline and text; filled `--bad` with `--on-bad` text only as the confirming button inside a danger dialog | Always separated from other buttons by space or a divider |
