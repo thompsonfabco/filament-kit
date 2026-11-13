@@ -33,7 +33,7 @@ async function api(path, body) {
 function hubError(status, data) {
   if (data.trust_gone) trustGone();
   const e = new Error(data.error || `HTTP ${status}`);
-  Object.assign(e, { data, status, locked: !!data.trust_gone || ((status === 403 || status === 429) && /setup code/.test(data.error || "")) });
+  Object.assign(e, { data, status, locked: !!data.trust_gone || ((status === 403 || status === 429) && data.field === "code") });
   return e;
 }
 

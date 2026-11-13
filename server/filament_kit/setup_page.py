@@ -396,7 +396,7 @@ class SetupPage:
         """The root helper checks the code (op `check`); a missing one is refused here and counts nowhere."""
         code = body.get("code")
         if not isinstance(code, str) or not code.strip():
-            raise Refused(403, NEED_CODE)
+            raise Refused(403, NEED_CODE, field="code")
         await self._helper({"op": "check", "code": code, "client": self._client_key(request)})
 
     @staticmethod
@@ -441,7 +441,7 @@ class SetupPage:
                         token = self._trusted_token(request, body)
                     if write == "helper":
                         if not isinstance(body.get("code"), str) or not body["code"].strip():
-                            raise Refused(403, NEED_CODE)
+                            raise Refused(403, NEED_CODE, field="code")
                     elif write:
                         await self._code_ok(request, body)
                 res = await fn(request, body)

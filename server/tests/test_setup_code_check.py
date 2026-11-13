@@ -58,7 +58,7 @@ def test_checks_and_changes_share_one_lockout(app):
     for _ in range(setup_code.LOCK_MAX - 1):
         assert _check(c, "00000000").status_code == 403
     r = post(c, "key", {"key": "sk-ant-EXAMPLE"}, code="00000000")          # the fifth wrong code, on a change
-    assert r.status_code == 403 and r.json()["tries_left"] == 0 and "field" not in r.json()
+    assert r.status_code == 403 and r.json()["tries_left"] == 0 and r.json()["field"] == "code"
     assert _check(c, CODE).status_code == 429
     assert post(c, "key", {"key": "sk-ant-EXAMPLE"}, code=CODE).status_code == 429
 
@@ -154,5 +154,18 @@ def test_helper_endpoint_errors_name_their_field(app, helper):
     _field(post(c, "settings/spoolman", {"url": "not a url"}), "url")
     _field(post(c, "backups/keep", {"days": 0}), "days")
     _field(post(c, "readers", {"name": 5}), "name")
-    # a refusal that is not about one field has none: a missing code
-    assert "field" not in post(c, "key", {"key": "sk-ant-EXAMPLE"}, code=None).json()
+    # a missing code names the code field (the page locks again on it)
+    assert post(c, "key", {"key": "sk-ant-EXAMPLE"}, code=None).json()["field"] == "code"   # refused for the code (S1.5 locks on it)
+
+
+def test_a_gated_change_refused_for_its_code_names_the_code_field(app):
+    """The page locks again only on replies with field "code" (S1.5): no code, a wrong code and a lockout on an ordinary
+    change all carry it; an error about the change's own input does not."""
+    c = client(app)
+    r = post(c, "key", {"key": "sk-ant-EXAMPLE"}, code=None)
+    assert r.status_code == 403 and r.json()["field"] == "code"
+    for _ in range(setup_code.LOCK_MAX):
+        r = post(c, "key", {"key": "sk-ant-EXAMPLE"}, code="00000000")
+        assert r.status_code in (403, 429) and r.json()["field"] == "code"
+    r = post(c, "key", {"key": "sk-ant-EXAMPLE"}, code="00000000")
+    assert r.status_code == 429 and r.json()["field"] == "code"
