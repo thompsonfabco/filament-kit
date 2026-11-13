@@ -42,7 +42,6 @@ from __future__ import annotations
 import logging
 import re
 import time
-from pathlib import Path
 
 import anyio
 from starlette.requests import Request
@@ -66,7 +65,6 @@ ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
 HLS_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}\.(ts|m3u8)")
 HLS_TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
 MAX_SEGMENT = 16 * 1024 * 1024
-STATIC = Path(__file__).parent / "static"
 LIST_FIELDS = ("id", "name", "model", "family", "state", "camera", "summary")
 # the kit path of each step, written out so test_web_token_scope sees every path this unit calls
 MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "/api/printers/{serial}/manual-map/confirm",
@@ -157,8 +155,6 @@ class PrintersApp:
                       ("/push/unsubscribe", g(self.push_unsubscribe), ["POST"]),
                       ("/push/test", g(self.push_test), ["POST"])]
         routes = [Route("/intake/api/printers" + p, fn, methods=m) for p, fn, m in table]
-        if self.push_on:   # the service worker: served from the app's path so its scope is the app (same checks)
-            routes.append(Route("/intake/sw.js", g(self.service_worker), methods=["GET"]))
         return routes
 
     def guard(self, fn):
@@ -488,10 +484,6 @@ class PrintersApp:
                           + ". If the push service cannot be reached, the web service's network limits may block it "
                           "(user guide, Web Push).")
         return {"ok": True, **r}
-
-    async def service_worker(self, request: Request):
-        return Response((STATIC / "sw.js").read_bytes(), media_type="text/javascript",
-                        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
 
 
 class _Relay(StreamingResponse):
