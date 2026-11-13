@@ -204,6 +204,16 @@ class AddViewModelTest {
         assertFalse("location" in sentItem())
     }
 
+    @Test fun aSaveAfterAReadNamesTheRead() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item())
+        vm.preview()
+        advanceUntilIdle()
+        vm.confirm()
+        advanceUntilIdle()
+        assertEquals(listOf("r1", "r1"), api.adds.map { it.readId })
+    }
+
     @Test fun previewIsAlwaysDryAndConfirmIsReal() = runTest(dispatcher) {
         val vm = vm()
         readOne(vm, item())
@@ -909,7 +919,7 @@ class AddViewModelTest {
 
 internal class FakeIntakeApi : IntakeApi {
     data class Read(val photos: List<ByteArray>, val hint: String, val tag: String?)
-    data class Add(val items: JsonArray, val dryRun: Boolean, val tag: String?)
+    data class Add(val items: JsonArray, val dryRun: Boolean, val tag: String?, val readId: String? = null)
 
     val reads = mutableListOf<Read>()
     val retries = mutableListOf<String>()
@@ -934,8 +944,8 @@ internal class FakeIntakeApi : IntakeApi {
         return readResults.removeFirst()
     }
 
-    override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?): AddResult {
-        adds += Add(items, dryRun, tag)
+    override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String?): AddResult {
+        adds += Add(items, dryRun, tag, readId)
         gate?.await()
         addFailures.removeFirstOrNull()?.let { throw it }
         return addResults.removeFirstOrNull() ?: AddResult(emptyList(), listOf("ok"), dryRun)

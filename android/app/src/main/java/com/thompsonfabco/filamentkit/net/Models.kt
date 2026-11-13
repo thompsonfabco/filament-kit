@@ -78,12 +78,124 @@ data class ReadResult(
     @SerialName("read_id") val readId: String? = null,
 )
 
-/** `POST /api/intake/add`. [dry] is true for a preview (nothing written). */
+/**
+ * `POST /api/intake/add`. [dry] is true for a preview (nothing written). [historyId]: the intake record the save made
+ * (null for a preview, with retention 0, or from an older server).
+ */
 @Serializable
 data class AddResult(
     @SerialName("spool_ids") val spoolIds: List<Int> = emptyList(),
     val lines: List<String> = emptyList(),
     val dry: Boolean = true,
+    @SerialName("history_id") val historyId: String? = null,
+)
+
+// ---- intake history (2026-11-12-1031 handoff, API v1) ----------------------------------------------------
+
+/** One spool of an intake record, as it is now. */
+@Serializable
+data class HistorySpool(
+    @Serializable(with = LenientNullableInt::class) @SerialName("spool_id") val spoolId: Int? = null,
+    @Serializable(with = LenientNullableInt::class) @SerialName("filament_id") val filamentId: Int? = null,
+    val vendor: String? = null,
+    val name: String? = null,
+    val material: String? = null,
+    @SerialName("color_hex") val colorHex: String? = null,
+)
+
+/**
+ * A record of `GET /api/intake/history` (the summary). [state]: `detected` (as first saved), `revised_ai`, `edited`.
+ * [source]: `phone`, `web`, `station` or `cli`. [photos]: how many photos it keeps (0: saved by hand).
+ */
+@Serializable
+data class HistorySummary(
+    val id: String,
+    val at: String = "",
+    val source: String = "",
+    val state: String = "detected",
+    @Serializable(with = LenientInt::class) val photos: Int = 0,
+    val undoable: Boolean = false,
+    val spools: List<HistorySpool> = emptyList(),
+)
+
+/** `GET /api/intake/history`. [ai]: label reading is on (the note box works). [photoBytes]: the photos' disk use. */
+@Serializable
+data class IntakeHistory(
+    @Serializable(with = LenientInt::class) val keep: Int = 0,
+    @Serializable(with = LenientInt::class) val count: Int = 0,
+    @Serializable(with = LenientNullableLong::class) @SerialName("photo_bytes") val photoBytes: Long? = null,
+    val ai: Boolean = false,
+    val records: List<HistorySummary> = emptyList(),
+)
+
+/** What the read returned; null in a record saved by hand. */
+@Serializable
+data class HistoryRead(val items: List<JsonObject> = emptyList(), val hint: String? = null)
+
+/** One item as saved: [values] are the add's item fields (vendor, name, material, nozzle, ...). */
+@Serializable
+data class HistorySaved(
+    @Serializable(with = LenientInt::class) val item: Int = 0,
+    @SerialName("spool_ids") val spoolIds: List<Int> = emptyList(),
+    val values: JsonObject = JsonObject(emptyMap()),
+)
+
+@Serializable
+data class HistoryChange(
+    @Serializable(with = LenientNullableInt::class) @SerialName("spool_id") val spoolId: Int? = null,
+    val field: String = "",
+    val old: JsonElement? = null,
+    val new: JsonElement? = null,
+)
+
+/** A re-link: the spools moved from filament [from] to [to]; [orphaned] filaments are left with no spools. */
+@Serializable
+data class HistoryFilaments(
+    @Serializable(with = LenientNullableInt::class) val from: Int? = null,
+    @Serializable(with = LenientNullableInt::class) val to: Int? = null,
+    val created: Boolean = false,
+    val orphaned: List<Int> = emptyList(),
+)
+
+/** [by]: `ai` or `hand`. */
+@Serializable
+data class HistoryRevision(
+    @Serializable(with = LenientInt::class) val n: Int = 0,
+    val at: String = "",
+    val by: String = "",
+    val device: String? = null,
+    val note: String? = null,
+    val changes: List<HistoryChange> = emptyList(),
+    val filaments: HistoryFilaments? = null,
+    val undone: Boolean = false,
+)
+
+/** `GET /api/intake/history/{id}` and the reply of apply / undo: the summary plus the details. */
+@Serializable
+data class HistoryRecord(
+    val id: String,
+    val at: String = "",
+    val source: String = "",
+    val state: String = "detected",
+    @Serializable(with = LenientInt::class) val photos: Int = 0,
+    val undoable: Boolean = false,
+    val spools: List<HistorySpool> = emptyList(),
+    val read: HistoryRead? = null,
+    val saved: List<HistorySaved> = emptyList(),
+    @Serializable(with = LenientDouble::class) val weight: Double? = null,
+    val tag: String? = null,
+    val revisions: List<HistoryRevision> = emptyList(),
+)
+
+/** `POST .../revise`: the AI's proposal for [item], nothing written yet. [changes] are the fields that differ. */
+@Serializable
+data class RevisionProposal(
+    val proposal: String,
+    @Serializable(with = LenientInt::class) val item: Int = 0,
+    val before: JsonObject = JsonObject(emptyMap()),
+    val after: JsonObject = JsonObject(emptyMap()),
+    val changes: List<String> = emptyList(),
+    @SerialName("no_photo") val noPhoto: Boolean = false,
 )
 
 /**

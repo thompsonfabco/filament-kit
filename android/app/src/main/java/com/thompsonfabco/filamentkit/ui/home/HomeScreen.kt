@@ -59,6 +59,8 @@ fun HomeScreen(
     onInstallUpdate: () -> Unit,
     onConfirmInstall: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The intake history (the last spools added, with their photos; revise and edit). */
+    onHistory: () -> Unit = {},
     /** The Presets card; null while the status is unknown. [showPresets] false hides the card (not paired yet). */
     presets: ProfileStatus? = null,
     showPresets: Boolean = true,
@@ -87,6 +89,7 @@ fun HomeScreen(
         }
         OutlinedButton(onClick = onAddProfile, modifier = Modifier.fillMaxWidth()) { Text("Add profile") }
         Button(onClick = onSearch, modifier = Modifier.fillMaxWidth()) { Text("Search") }
+        OutlinedButton(onClick = onHistory, modifier = Modifier.fillMaxWidth()) { Text("Intake history") }
         Button(onClick = onPrinters, modifier = Modifier.fillMaxWidth()) { Text("Printers") }
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings") }
         if (showPresets) PresetsCard(presets)

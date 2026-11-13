@@ -52,7 +52,8 @@ import kotlinx.serialization.json.longOrNull
 interface IntakeApi {
     suspend fun read(photos: List<ByteArray>, hint: String, tag: String?): ReadResult
     suspend fun retry(readId: String): ReadResult
-    suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?): AddResult
+    /** [readId]: the label read the items came from (the server's intake record keeps its photos); null by hand. */
+    suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String?): AddResult
     suspend fun locations(): List<String>
 
     /** The line and Bambu parent the server would use; the defaults keep older fakes compiling (no proposal). */
@@ -70,7 +71,8 @@ interface IntakeApi {
         fun of(api: Api): IntakeApi = object : IntakeApi {
             override suspend fun read(photos: List<ByteArray>, hint: String, tag: String?) = api.read(photos, hint, tag)
             override suspend fun retry(readId: String) = api.retry(readId)
-            override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?) = api.add(items, dryRun, tag)
+            override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String?) =
+                api.add(items, dryRun, tag, readId)
             override suspend fun locations() = api.locations()
             override suspend fun propose(vendor: String, line: String, material: String) = api.propose(vendor, line, material)
             override suspend fun parents(material: String) = api.parents(material)
@@ -675,7 +677,8 @@ class AddViewModel(
         _state.update { it.copy(stage = if (dryRun) Stage.Previewing else Stage.Adding, error = null) }
         viewModelScope.launch {
             try {
-                val res = api.add(JsonArray(s.items.map(::forAdd)), dryRun, s.tag)
+                val readId = if (s.manual) null else (readResult?.get("read_id") as? JsonPrimitive)?.contentOrNull
+                val res = api.add(JsonArray(s.items.map(::forAdd)), dryRun, s.tag, readId)
                 if (dryRun) {
                     _state.update { it.copy(stage = Stage.Preview, previewLines = res.lines) }
                 } else {

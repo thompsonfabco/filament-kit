@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -71,15 +72,67 @@ class Api(
     suspend fun retry(readId: String): ReadResult =
         decode(call(request("api", "intake", "retry", readId).post(ByteArray(0).toRequestBody(null)), SLOW_READ_S))
 
-    /** [items] are sent exactly as given (unknown fields included). */
-    suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?): AddResult {
+    /**
+     * [items] are sent exactly as given (unknown fields included). [readId]: the label read the items came from, so the
+     * server's intake record keeps its photos (null: added by hand).
+     */
+    suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String? = null): AddResult {
         val body = buildJsonObject {
             put("items", items)
             put("dry_run", dryRun)
             tag?.let { put("tag", it) }
+            readId?.let { put("read_id", it) }
         }
         return decode(call(request("api", "intake", "add").post(body.toBody())))
     }
+
+    // ---- intake history ----
+
+    private fun history(vararg rest: String) = request("api", "intake", "history", *rest)
+
+    suspend fun intakeHistory(): IntakeHistory = decode(call(history().get()))
+
+    suspend fun intakeRecord(id: String): HistoryRecord = decode(call(history(id).get()))
+
+    /** Photo [n] (1-based) of record [id], as JPEG bytes; 404 `not_found` when there is none. */
+    suspend fun intakePhoto(id: String, n: Int): ByteArray = withContext(Dispatchers.IO) {
+        val request = history(id, "photos", n.toString()).get().build()
+        execute(request, null).use { resp ->
+            if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string(), request.header("Authorization"))
+            try {
+                resp.body.bytes()
+            } catch (e: IOException) {
+                throw offline("The connection to the server was lost: ${e.message}")
+            }
+        }
+    }
+
+    /** Asks the AI again with the record's photos and [note]; writes nothing. 409 `ai_off`, 429 `daily_cap`. */
+    suspend fun reviseIntake(id: String, note: String, item: Int?): RevisionProposal {
+        val body = buildJsonObject {
+            put("note", note)
+            item?.let { put("item", it) }
+        }
+        return decode(call(history(id, "revise").post(body.toBody()), SLOW_READ_S))
+    }
+
+    /** Accepts an AI proposal as shown; 409 `stale` when the record changed since. */
+    suspend fun applyProposal(id: String, proposal: String): HistoryRecord =
+        decode(call(history(id, "apply").post(buildJsonObject { put("proposal", proposal) }.toBody())))
+
+    /** Edits by hand: [values] is any subset of the item's fields; [spoolIds] null = every spool of the item. */
+    suspend fun applyValues(id: String, item: Int, values: JsonObject, spoolIds: List<Int>? = null): HistoryRecord {
+        val body = buildJsonObject {
+            put("item", item)
+            put("values", values)
+            spoolIds?.let { ids -> put("spool_ids", JsonArray(ids.map { JsonPrimitive(it) })) }
+        }
+        return decode(call(history(id, "apply").post(body.toBody())))
+    }
+
+    /** Undoes [revision], the newest not undone yet; 409 `not_latest` otherwise. */
+    suspend fun undoIntake(id: String, revision: Int): HistoryRecord =
+        decode(call(history(id, "undo").post(buildJsonObject { put("revision", revision) }.toBody())))
 
     /** The spool linked to tag [uid] (format `4:77:90:e`), or null. */
     suspend fun tag(uid: String): JsonObject? {

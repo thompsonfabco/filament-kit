@@ -228,6 +228,22 @@ duplicates: check Spoolman first.
 
 <img src="images/android-label-capture.png" width="240" alt="Add spools: photograph the label"> <img src="images/android-label-review.png" width="240" alt="Check the spools: the fields read from the label">
 
+### Fix a spool that was added wrong: Intake history
+
+**Intake history** on the home screen lists the last spools added (from the app, the phone web app, the intake station
+or the command line), newest first, with the label photo when there was one. Tap a record to see its photos (tap one
+to enlarge it), the values saved and every change since.
+
+- **Revise with AI** (needs AI label reading): write what is wrong, for example `brand is Polymaker`, and tap **Ask the
+  AI**. It looks at the photos again with your note and shows the values it would change, old and new. Nothing changes
+  until you tap **Accept**; **Discard** leaves the record as it was.
+- **Edit by hand** changes any saved value directly, with no AI.
+- **Undo last change** takes back the newest change, one at a time.
+
+A correction never edits a filament other spools also use: the spool is moved to the right filament (found or
+created), and its tag, location, opened state and used weight stay. A filament left with no spools is named, not
+deleted. How many records the server keeps is a setting on the setup page (**Intake records kept**, 20 by default).
+
 ### Link an NFC tag, set the weight, and the rest
 
 With the app open, tap a spool's NFC tag on the back of the phone.

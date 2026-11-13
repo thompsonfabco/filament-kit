@@ -55,6 +55,7 @@ import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.CONNECTION_POLL_MS
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
+import com.thompsonfabco.filamentkit.ui.history.HistoryEntry
 import com.thompsonfabco.filamentkit.ui.home.versionLine
 import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Connection
@@ -118,6 +119,7 @@ private object Routes {
     const val SETTINGS = "settings"
     const val LICENCES = "settings/licences"
     const val PRINTERS = "printers"
+    const val HISTORY = "intake/history"
     const val ADD_PROFILE = "profile/add"
     const val ADD = "add?tag={tag}&draft={draft}&manual={manual}"
 
@@ -291,6 +293,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 onAddProfile = { nav.navigate(Routes.ADD_PROFILE) },
                 onSearch = { nav.navigate(Routes.SEARCH) },
                 onPrinters = { nav.navigate(Routes.PRINTERS) },
+                onHistory = { nav.navigate(Routes.HISTORY) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },
                 onResumeDraft = { id -> nav.navigate(Routes.add(draft = id)) },
                 onRetryConnection = app.session::refresh,
@@ -302,6 +305,15 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 localNetworkPanel = { LocalNetworkPanel(localNetwork) },
                 extra = { if (BuildConfig.DEBUG) SimulateTag() },
             )
+        }
+
+        composable(Routes.HISTORY) {
+            val a = api
+            if (a == null) {
+                NotPaired { nav.navigateClearing(Routes.PAIR) }
+                return@composable
+            }
+            HistoryEntry(a, onBack = { nav.popBackStack() }, onPairAgain = app.router::pairAgain)
         }
 
         composable(Routes.SEARCH) {
