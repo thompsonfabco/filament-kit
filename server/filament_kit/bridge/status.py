@@ -25,6 +25,25 @@ STAGES = {0: 'Printing', 1: 'Auto bed leveling', 2: 'Heatbed preheating', 3: 'Vi
           31: 'Motor noise showoff', 32: 'Paused: nozzle clumping', 33: 'Paused: cutter error',
           34: 'Paused: first layer error', 35: 'Paused: nozzle clog'}
 
+# HMS alert sentences for the common codes, by full code; every other code gets the generic line. Kept small on
+# purpose: the link below is the complete list. (Wording is a paraphrase; check new rows against Bambu's page.)
+HMS_TEXT = {
+    '0300_0100_0001_0001': 'Heatbed temperature is abnormal (heater may be shorted)',
+    '0300_0100_0001_0002': 'Heatbed temperature is abnormal (sensor may be shorted)',
+    '0300_0200_0001_0001': 'Nozzle temperature is abnormal (heater may be shorted)',
+    '0300_0400_0002_0001': 'Part cooling fan speed is too slow or stopped',
+}
+HMS_URL = 'https://wiki.bambulab.com/en/x1/troubleshooting/hmscode/'
+
+
+def hms_text(code: str) -> str:
+    """One line for an alert: the sentence for a known code, else a generic line with the code and the lookup link."""
+    known = HMS_TEXT.get(code)
+    if known:
+        return f"{known} ({code})"
+    return f"Printer alert HMS {code}: see {HMS_URL}{code.lower()}"
+
+
 # gcode_state values during which a stage, ETA and job are meaningful
 ACTIVE = {'RUNNING', 'PAUSE', 'PREPARE', 'SLICING'}
 HT_BASE = 128            # AMS HT units are addressed 128, 129, ... (one slot each, tray 0)
@@ -202,7 +221,7 @@ def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updat
     hms = []
     for e in _l(p.get('hms')):
         code = hms_code(e)
-        hms.append({'code': code, 'text': f"Printer alert HMS {code}"})
+        hms.append({'code': code, 'text': hms_text(code)})
     return {
         'gcode_state': gs,
         'stage': STAGES.get(stg, f"Stage {stg}") if active and 0 <= stg < 255 else '',
