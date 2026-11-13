@@ -421,7 +421,13 @@ class IntakeApp:
                 except Exception as e:  # noqa: BLE001 - best effort
                     log.warning("cap refund failed: %s", e)
             ctx = intake.read_context(cfg, self.tools.sm, self._station(), orders_from=self._orders)
-            return intake.read_labels(self.tools.sm, images, hint, None, self.claude, **ctx, charge=charge)
+            try:
+                return intake.read_labels(self.tools.sm, images, hint, None, self.claude, **ctx, charge=charge)
+            except intake.ReadError as e:
+                # Claude was the last reader and never answered: the read goes back, as the station's path does
+                if e.refund is not None and e.code in ("unreachable", "api_error"):
+                    e.refund()
+                raise
         return await anyio.to_thread.run_sync(run)
 
     # ---------- writes ----------

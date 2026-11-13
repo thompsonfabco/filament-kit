@@ -402,6 +402,17 @@ def test_web_read_refunds_only_when_claude_was_not_reached(app, sm, fake, monkey
         assert r.status_code == 400 and count() == 1
 
 
+def test_web_read_gives_the_cap_back_when_claude_is_unreachable(app, fake):
+    import anthropic
+    reads = config.paths().state / "reads.json"
+    fake.raises = anthropic.APIConnectionError(request=None)
+    with _client(app) as c:
+        r = c.post("/intake/api/read", files=[("photos", ("a.jpg", JPEG, "image/jpeg"))],
+                   headers={"Origin": ORIGIN})
+    assert r.status_code >= 400
+    assert not reads.exists() or len(json.loads(reads.read_text())) == 0
+
+
 def test_web_read_goes_on_without_orders_when_the_kit_cannot_give_them(sm, store, lockout, fake):
     kit = CapKit()
     kit.orders_down = True
