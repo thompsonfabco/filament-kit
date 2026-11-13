@@ -64,12 +64,14 @@ def spool_check(sm, data, pid, fam):
     wait_for(lambda: mr("/server/spoolman/spool_id")["spool_id"] == odd["id"], what="the odd spool active")
     gcode("FK_SPOOL_CHECK MODE=warn")
     t = time.time()
+    canary = Path(data) / "fk-e2e-pwn"        # in this run's folder: a file left by an earlier run cannot fail the check
+    canary.unlink(missing_ok=True)
     # a quote, $( ) and backticks in the sliced vendor: before the fix shlex raised and Klipper shut down
-    gcode('_FK_SPOOL_CHECK FILAMENT="PLA" VENDOR="Jayo\'s $(touch /tmp/fk-e2e-pwn) `id`"')
+    gcode(f'_FK_SPOOL_CHECK FILAMENT="PLA" VENDOR="Jayo\'s $(touch {canary}) `id`"')
     assert klippy_ready(), mr("/printer/info")
     out = console(t)
     assert any("Spool mismatch" in m for m in out), out
-    assert not Path("/tmp/fk-e2e-pwn").exists()
+    assert not canary.exists()
     ok("spool check, warn: a vendor with a quote, $( ) and backticks; Klipper stays ready, the mismatch is shown")
     gcode("FK_SPOOL_CHECK MODE=cancel")
     gcodes = Path(data) / "gcodes"

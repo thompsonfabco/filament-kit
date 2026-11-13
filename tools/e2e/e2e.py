@@ -123,7 +123,8 @@ def jhttp(method: str, url: str, **kw) -> tuple[int, object]:
         return code, data.decode("utf-8", "replace")
 
 
-def wait_for(fn, timeout: float, step: float = 1.0):
+def wait_for(fn, timeout: float, step: float = 1.0, what: str | None = None):
+    """Call `fn` until it returns something truthy. On a timeout: None, and with `what` the last answer or error is printed."""
     deadline = time.monotonic() + timeout
     last = None
     while time.monotonic() < deadline:
@@ -134,6 +135,8 @@ def wait_for(fn, timeout: float, step: float = 1.0):
         except Exception as e:  # noqa: BLE001 - keep trying until the deadline
             last = e
         time.sleep(step)
+    if what:
+        print(f"  (timed out after {timeout:g} s waiting for {what}; last: {last!r})", flush=True)
     return None
 
 
@@ -385,13 +388,17 @@ class E2E:
         self.installed = True
         act = units_active("spoolman.service", "filament-kit.service", "filament-kit-web.service")
         run.check(sc, "spoolman, filament-kit and filament-kit-web active", set(act.values()) == {"active"}, str(act))
-        code, info = jhttp("GET", f"{KIT}/api/info")
+        # the services may still be binding their ports right after get.sh: a refused connection is retried
+        code, info = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(jhttp("GET", f"{KIT}/api/info")), 60, 1,
+                              "the kit API") or (0, None)
         run.check(sc, "kit API answers with the installed version",
                   code == 200 and isinstance(info, dict) and info.get("version") == self.v1, str(info))
-        code, _ = http("GET", f"{SPOOLMAN}/info")
+        code, _ = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(http("GET", f"{SPOOLMAN}/info")), 120, 2,
+                           "Spoolman") or (0, b"")
         run.check(sc, "Spoolman answers (real Spoolman 0.27, downloaded by the spoolman module)", code == 200)
         # active isn't listening yet: the web unit takes a moment to bind its port
-        code, body = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(http("GET", f"{WEB}/health")), 60, 1) or (0, b"")
+        code, body = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(http("GET", f"{WEB}/health")), 60, 1,
+                                "the web unit's /health") or (0, b"")
         run.check(sc, "web unit answers /health", code == 200 and body.strip() == b"ok", body[:200].decode())
         # the phone web app is the kit server's own (the user's decision, 2026-11-09): no web module needed for it
         code, body = http("GET", f"{KIT}/intake")

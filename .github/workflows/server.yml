@@ -6,18 +6,20 @@ on:
     tags: ['**']
   pull_request:
 
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       # test_rollback_modules compares module lists with the oldest release a rollback can reach
       - name: Fetch the v0.3.0 tag
         run: git fetch --depth=1 origin refs/tags/v0.3.0:refs/tags/v0.3.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
 

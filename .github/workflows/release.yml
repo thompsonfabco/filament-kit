@@ -23,6 +23,22 @@ jobs:
       code: ${{ steps.check.outputs.code }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
+      # a v* tag on a branch commit would run the jobs that hold the signing secrets; the repository variable
+      # FK_RELEASE_ANY_BRANCH=1 switches this check off
+      - name: Check the tagged commit is on main
+        env:
+          ANY_BRANCH: ${{ vars.FK_RELEASE_ANY_BRANCH }}
+        run: |
+          if [ "$ANY_BRANCH" = "1" ]; then
+            echo "FK_RELEASE_ANY_BRANCH=1: the tagged commit is not checked against main"
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag $GITHUB_REF_NAME is on a commit that is not on origin/main"
+            exit 1
+          fi
       - name: Check the tag against __version__
         id: check
         run: |
@@ -164,7 +180,7 @@ jobs:
 
       - name: PyInstaller
         run: |
-          pip install pyinstaller==6.11.1
+          pip install --require-hashes --only-binary :all: -r tools/release-sync-requirements.txt
           pyinstaller --noconfirm pc-sync/fksync.spec
           $out = ./dist/filament-kit-sync/filament-kit-sync.exe --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -178,7 +194,7 @@ jobs:
           $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
           if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           if (-not (Test-Path -LiteralPath $iscc)) {
-            choco install innosetup --no-progress -y
+            choco install innosetup --version=6.7.1 --no-progress -y
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           if (-not (Test-Path -LiteralPath $iscc)) {

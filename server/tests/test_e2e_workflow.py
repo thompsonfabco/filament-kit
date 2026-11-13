@@ -44,3 +44,30 @@ def test_every_scenario_names_the_host_state_it_starts_from_and_the_run_prepares
 
 def test_the_previous_tree_is_not_what_clean_up_takes_uninstall_from():
     assert '"$WORK"/tree-*/install/uninstall.sh' in RUN and 'f"previous-{tag}"' in E2E
+
+
+def _e2e_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fk_e2e_tool", ROOT / "tools/e2e/e2e.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_wait_for_retries_a_refused_connection_and_names_the_cause(capsys):
+    """FA-078: right after get.sh a service may not listen yet; a timeout says what the last try saw."""
+    mod = _e2e_module()
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise ConnectionRefusedError("refused")
+        return "up"
+    assert mod.wait_for(flaky, 5, 0.01, "the service") == "up" and len(calls) == 3
+
+    def never():
+        raise ConnectionRefusedError("refused")
+    assert mod.wait_for(never, 0.05, 0.01, "the service") is None
+    out = capsys.readouterr().out
+    assert "waiting for the service" in out and "ConnectionRefusedError" in out
