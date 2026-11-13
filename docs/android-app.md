@@ -120,14 +120,48 @@ you tapping anything. To switch this off, set `"auto_remap": false` in `/etc/fil
 1. Open the printer, make sure it's idle, and tap **Map slots**.
 2. Read the box and tap **Map slots** again. The app briefly changes each slot's colour on the printer, one at a
    time, and runs a short job that doesn't heat or move anything; every slot is set back afterwards.
-3. **Slots mapped (n)** means it worked. **Slots mapped: confirmed for the loaded slots** also works; map again once
-   a second unit or an HT has a spool loaded, to settle the numbering. **Slot numbering not confirmed** or
-   **Slot mapping failed** lists what the server reported; fix that and tap **Map slots again**. **Layout changed** or
-   **Recent prints disagreed with the map** means a new mapping is due; it starts by itself when the printer is
-   idle, or tap **Map slots again**. A result from an earlier server run is labelled as old: it may be fixed by now.
+3. The **Slot mapping** section shows the server's outcome sentence and, under it, the next step. For example,
+   **Mapped and confirmed: filament use comes off the spools.** means it worked. The other sentences are **Mapped, with
+   something left to settle**, **Mapped, but the slot numbering is not confirmed: filament use is only logged**,
+   **The last mapping failed.**, **The AMS layout changed since the map was made.** and **Recent prints disagreed with
+   the map: filament use is only logged until it is mapped again.** Follow the next step under the sentence. A
+   changed layout or disagreeing prints start a new mapping by themselves when the printer is idle, or tap
+   **Map slots again**. A result from an earlier server run is labelled as old: it may be fixed by now. If the
+   server says the printer could not tell its slot numbers, the filled button is **Map by loading filament**
+   (below).
+
+   With an older server (before v0.5.0) the app words the result itself: **Slots mapped (n)**,
+   **Slots mapped: confirmed for the loaded slots**, **Slot numbering not confirmed**, **Slot mapping failed**,
+   **Layout changed** and **Recent prints disagreed with the map**.
 
 The **Map slots** button is greyed only while the printer is not connected or is printing, or while a mapping runs.
 Until a mapping works, use is only logged, not taken off spools.
+
+### Map by loading filament
+
+If **Map slots** keeps failing, map the printer yourself. Under **Slot mapping**, tap **Map by loading filament**
+(it is always there, and is the filled button when the server says the printer could not tell its slot numbers).
+The printer must be connected and not printing. The app names one slot at a time:
+
+1. It says which slot to load, for example "Load A2 to the nozzle, then wait." Load that slot on the printer's screen.
+2. When the printer shows the load, the app asks whether that is the slot you loaded. Tap **Yes**, or
+   **No, I loaded...** and pick the one you loaded. On a printer with two nozzles it also asks which nozzle, unless the
+   printer says so itself. A printer that does not report what is loaded gets a list instead: pick the slot, and it is
+   saved as you say.
+3. **Skip** leaves a slot unmapped. **Stop** (then **Stop mapping**) ends it and keeps what you answered so far.
+
+At the end the app asks whether to share the map in a printer report; **Yes, how do I share it?** says how, and
+nothing is sent unless you choose to. The same flow is on the setup page, in the phone web app and with
+`sudo filament-kit printer map --manual <serial>`; see the
+[user guide](user-guide.md#when-mapping-fails-map-by-loading-filament-v050).
+
+### Collect a report
+
+On a Bambu printer's screen, **Collect a report** asks the server for a short file about the printer and opens the
+phone's share sheet, so you can save it or send it to an app. The button is filled, with the server's reason above it,
+when a report would help (a printer the kit does not know yet, or a mapping that failed). The file holds no serial
+number, address, name or account id. Read it before you attach it to an issue. More:
+[user guide](user-guide.md#when-mapping-fails-map-by-loading-filament-v050).
 
 ### Load and unload a spool
 

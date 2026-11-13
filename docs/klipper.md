@@ -43,8 +43,8 @@ your home network (the note says how to allow it).
   never shown again), **Detect**, **Rename**, **Change address** and **Forget**. A Klipper printer has no Access Code and
   is never asked for one. An address outside your home network is saved with a note: the server's service only reaches
   the home ranges until you allow another (the note says how).
-- The server's API can add one too (`POST /api/printers` with `family: "klipper"` and `host`); the Android app has
-  no Add screen for Klipper printers yet, but shows them once added.
+- The server's API can add one too (`POST /api/printers` with `family: "klipper"` and `host`); the Android app's **Printers**
+  screen has **Add a Klipper printer** (name, address and port).
 
 ## Slots and spools
 
