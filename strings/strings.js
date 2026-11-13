@@ -1661,7 +1661,7 @@ window.SW_TEXT = Object.freeze({
   "web_more_home_screen_summary": "Open filament-kit like an app",
   "web_more_hub_page_summary": "Features, settings, backups",
   "web_more_install": "Install app",
-  "web_more_presets_summary": "Appearance, theme, print alerts",
+  "web_more_settings_summary": "Appearance, theme, print alerts",
   "web_nav_add_waiting": { "one": "Add, {count} spool waiting", "other": "Add, {count} spools waiting" },
   "web_nav_label": "Sections",
   "web_nav_printers_look": "Printers, needs a look",

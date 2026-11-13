@@ -370,7 +370,7 @@ moreBtn.addEventListener("click", () => {
   const rows = [
     moreRow("presets", SW.t("nav_slicer_presets"), "", { href: "#presets", "aria-current": cur("presets"),
       ...(PRESETS ? {} : { "data-state": "off", "aria-label": SW.t("nav_slicer_presets") + SW.t("nav_off_suffix") }) }, to("#presets")),
-    moreRow("settings", SW.t("nav_settings"), SW.t("web_more_presets_summary"), { href: "#settings" }, to("#settings")),
+    moreRow("settings", SW.t("nav_settings"), SW.t("web_more_settings_summary"), { href: "#settings" }, to("#settings")),
     standalone ? null : moreRow("plus", SW.t(installPrompt ? "web_more_install" : "web_more_home_screen"), SW.t("web_more_home_screen_summary", { product: PRODUCT }), {},
       () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); if (installPrompt) { installPrompt.prompt(); installPrompt = null; settling++; history.back(); } else installSheet(moreBtn, true); }),
     HUB_PAGE ? moreRow("overview", SW.t("common_open_hub_page"), SW.t("web_more_hub_page_summary"),

@@ -2130,7 +2130,7 @@
     <string name="web_more_home_screen_summary">Open filament-kit like an app</string>
     <string name="web_more_hub_page_summary">Features, settings, backups</string>
     <string name="web_more_install">Install app</string>
-    <string name="web_more_presets_summary">Appearance, theme, print alerts</string>
+    <string name="web_more_settings_summary">Appearance, theme, print alerts</string>
     <!-- 1=count -->
     <plurals name="web_nav_add_waiting">
         <item quantity="one">Add, %1$d spool waiting</item>

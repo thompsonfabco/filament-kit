@@ -81,6 +81,9 @@ label > input, label > select, label > textarea { margin-top: var(--s1); color: 
 .settings__address { font-family: var(--mono); font-size: var(--fs-s); overflow-wrap: anywhere; }
 .alerts { display: grid; gap: var(--s2); justify-items: start; }
 .alerts > * { margin: 0; }
+/* a state sentence wraps inside the group (the shared status keeps its word on one line elsewhere) */
+.alerts__state { max-width: 100%; }
+.alerts__state .status { max-width: 100%; white-space: normal; }
 .install { margin: 0 0 var(--s3); padding-left: var(--s5); }
 .install li { margin: var(--s1) 0; }
 
