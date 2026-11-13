@@ -1755,6 +1755,7 @@
     <string name="common_field_bed_range">Bed range</string>
     <string name="common_field_brand">Brand</string>
     <string name="common_field_colour">Colour</string>
+    <string name="common_field_colour_hint">A hex colour, like #2B2B2E</string>
     <string name="common_field_density">Density</string>
     <string name="common_field_empty_spool_weight">Empty spool weight</string>
     <string name="common_field_empty_value">(empty)</string>

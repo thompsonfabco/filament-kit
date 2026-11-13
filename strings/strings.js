@@ -1391,6 +1391,7 @@ window.SW_TEXT = Object.freeze({
   "common_field_bed_range": "Bed range",
   "common_field_brand": "Brand",
   "common_field_colour": "Colour",
+  "common_field_colour_hint": "A hex colour, like #2B2B2E",
   "common_field_density": "Density",
   "common_field_empty_spool_weight": "Empty spool weight",
   "common_field_empty_value": "(empty)",
