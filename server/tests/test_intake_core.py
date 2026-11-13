@@ -20,12 +20,12 @@ def test_the_page_is_served_with_no_module_on(app):
     r = client(app).get("/intake")
     assert r.status_code == 200 and "data-base='/intake'" in r.text and "/intake/app.js" in r.text
     assert client(app).get("/intake/app.js").status_code == 200
-    m = client(app).get("/intake/manifest.webmanifest").json()
+    m = client(app).get("/intake/manifest-light.webmanifest").json()
     assert m["start_url"] == "/intake" and m["scope"] == "/intake"
 
 
 def test_only_the_home_network_and_the_servers_own_names(app):
-    for path in ("/intake", "/intake/app.js", "/intake/manifest.webmanifest", "/intake/api/vendors"):
+    for path in ("/intake", "/intake/app.js", "/intake/manifest-light.webmanifest", "/intake/api/vendors"):
         assert client(app, who=("203.0.113.9", 4000)).get(path).status_code == 403, path
         assert client(app, base="https://rebind.example.com:8710").get(path).status_code == 403, path
 

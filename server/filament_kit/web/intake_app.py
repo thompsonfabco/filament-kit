@@ -19,6 +19,7 @@ import html
 import json
 import logging
 import math
+import re
 import struct
 import zlib
 from pathlib import Path
@@ -129,6 +130,24 @@ class KitCap:
             self.kit.post("/api/intake/cap/refund", {"ticket": ticket})
 
 
+def _app_name(shared: dict) -> str:
+    """The product name from the string catalogue (shared_static/strings.js, generated from strings/en.json)."""
+    m = re.search(r'^\s*"app_name":\s*("(?:[^"\\]|\\.)*")', shared.get("strings.js", b"").decode("utf-8"), re.M)
+    return json.loads(m.group(1)) if m else "Hub"   # only when shared_static is missing
+
+
+def _colours(shared: dict) -> dict:
+    """The default theme's (surface, bg) in light and dark, read from the generated tokens.css: its plain `:root`
+    block is the light colours and `:root[data-theme="dark"]` the dark ones."""
+    css = shared.get("tokens.css", b"").decode("utf-8")
+    out = {}
+    for appearance, head in (("light", r"^:root \{"), ("dark", r'^:root\[data-theme="dark"\] \{')):
+        m = re.search(head + r"(.*?)^\}", css, re.M | re.S)
+        got = dict(re.findall(r"^\s*--(bg|surface):\s*(#[0-9a-fA-F]{3,8});", m.group(1), re.M)) if m else {}
+        out[appearance] = (got.get("surface", "#181c24"), got.get("bg", "#181c24"))
+    return out
+
+
 class IntakeApp:
     def __init__(self, tools: Tools, *, public_url: str | None, lan_cidrs, claude=None, kit_api=None, host_ok=None,
                  push: bool = True, host_refusal=None):
@@ -149,6 +168,9 @@ class IntakeApp:
         self.static = {n: (STATIC / n).read_bytes() for n in ("app.js", "app.css", "printers.js")}
         self.shared = shared_files.load()   # served at <base>/shared/<file>; the sprite goes inline in the page
         self.icon = icon_png()
+        self.icon_512 = icon_png(512)
+        self.app_name = _app_name(self.shared)
+        self.colours = _colours(self.shared)    # the default theme's {"light": (surface, bg), "dark": (surface, bg)}
         self.tag_cache: dict = {}
         self.station: list = [None, None]  # [url, StationClient]
         cfg = tools.cfg()
@@ -195,7 +217,9 @@ class IntakeApp:
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
             ("/intake/shared/{name}", self.shared_asset, ["GET"]),
             ("/intake/icon.png", self.icon_route, ["GET"]),
-            ("/intake/manifest.webmanifest", self.manifest, ["GET"]),
+            ("/intake/icon-512.png", self.icon_512_route, ["GET"]),
+            ("/intake/manifest-light.webmanifest", self.manifest_light, ["GET"]),
+            ("/intake/manifest-dark.webmanifest", self.manifest_dark, ["GET"]),
             ("/intake/api/read", self.api(self.read), ["POST"]), ("/intake/api/add", self.api(self.add), ["POST"]),
             ("/intake/api/tag", self.api(self.tag), ["GET"]), ("/intake/api/find", self.api(self.find), ["GET"]),
             ("/intake/api/filaments", self.api(self.filaments), ["GET"]),
@@ -293,13 +317,18 @@ class IntakeApp:
 
     def _html(self, body: str, status: int = 200, app: bool = False) -> HTMLResponse:
         b = html.escape(self.base, quote=True)
+        name = html.escape(self.app_name, quote=True)
+        light, dark = self.colours["light"][0], self.colours["dark"][0]
         return HTMLResponse(
             "<!doctype html><html lang=en><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
-            "<meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-title content=Spools>"
-            "<meta name=theme-color content='#181c24'><title>Spool intake</title>"
+            "<meta name=color-scheme content='light dark'>"
+            f"<meta name=theme-color content='{light}' media='(prefers-color-scheme: light)'>"
+            f"<meta name=theme-color content='{dark}' media='(prefers-color-scheme: dark)'>"
+            f"<meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-title content='{name}'>"
+            "<meta name=apple-mobile-web-app-status-bar-style content=default><title>Spool intake</title>"
             f"<link rel=stylesheet href='{b}/app.css'><link rel=apple-touch-icon href='{b}/icon.png'>"
-            f"<link rel=manifest href='{b}/manifest.webmanifest'>"
+            f"<link rel=manifest href='{b}/manifest-light.webmanifest'>"
             + body + (("" if not self.printers else f"<script src='{b}/printers.js'></script>")
                       + f"<script src='{b}/app.js'></script>" if app else ""),
             status_code=status, headers=self.headers())
@@ -313,7 +342,15 @@ class IntakeApp:
                 "connect-src 'self';", "connect-src 'self'; media-src 'self';")
         return h
 
-    def _shell(self) -> str:
+    def _hub_page(self, request: Request) -> str:
+        """The Hub page's address as this page was opened (https://<hub>:8710/setup; the page route has already checked
+        the name against the Hub's rule); empty on the public address."""
+        host = request.headers.get("host", "")
+        if self.origin or not host:
+            return ""
+        return f"https://{host}/setup"
+
+    def _shell(self, request: Request) -> str:
         cfg = self.tools.cfg()
         pl = cfg["placement"]
         data = {"base": self.base, "locations": json.dumps(cfg["locations"]),
@@ -323,7 +360,12 @@ class IntakeApp:
                 "ai": "1" if {"ai_intake", "local_intake"} & modules.enabled(cfg) else "0",
                 "printers": "1" if self.printers else "0",
                 "push": "1" if self.printers and self.printers.push_on else "0",
-                "history": "1" if self.history else "0"}
+                "history": "1" if self.history else "0",
+                "hub": cfg.get("server_name") or "", "hub-page": self._hub_page(request),
+                "presets": "1" if "presets" in modules.enabled(cfg) else "0",
+                "spool-edit": "0"}   # the web app has no spool-editing endpoints yet, so it is not offered
+        if not data["hub-page"]:
+            del data["hub-page"]
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
         return f"<body {attrs}>{shared_files.sprite_inline(self.shared)}<main id=app></main></body>"
 
@@ -332,7 +374,7 @@ class IntakeApp:
             client = request.client.host if request.client else ""
             hint = f"<main><p>{lan.IPV6_HINT}</p></main>" if lan.over_ipv6(client) else ""
             return self._html(HOME_ONLY + hint, 403)
-        return self._html(await anyio.to_thread.run_sync(self._shell), app=True)
+        return self._html(await anyio.to_thread.run_sync(self._shell, request), app=True)
 
     async def asset(self, request: Request):
         name = request.url.path.rsplit("/", 1)[-1]
@@ -345,11 +387,23 @@ class IntakeApp:
     async def icon_route(self, request: Request):
         return Response(self.icon, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
 
-    async def manifest(self, request: Request):
-        return JSONResponse({"name": "Spool intake", "short_name": "Spools", "start_url": self.base, "scope": self.base,
-                             "display": "standalone", "background_color": "#181c24", "theme_color": "#181c24",
-                             "icons": [{"src": self.base + "/icon.png", "sizes": "180x180", "type": "image/png"}]},
+    async def icon_512_route(self, request: Request):
+        return Response(self.icon_512, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
+
+    def _manifest(self, appearance: str) -> JSONResponse:
+        surface, bg = self.colours[appearance]
+        return JSONResponse({"name": self.app_name, "short_name": self.app_name, "start_url": self.base,
+                             "scope": self.base, "display": "standalone", "background_color": bg,
+                             "theme_color": surface,
+                             "icons": [{"src": self.base + "/icon.png", "sizes": "180x180", "type": "image/png"},
+                                       {"src": self.base + "/icon-512.png", "sizes": "512x512", "type": "image/png"}]},
                             media_type="application/manifest+json")
+
+    async def manifest_light(self, request: Request):
+        return self._manifest("light")
+
+    async def manifest_dark(self, request: Request):
+        return self._manifest("dark")
 
     def api(self, fn):
         async def route(request: Request):
