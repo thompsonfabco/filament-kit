@@ -229,7 +229,14 @@ class ApiError(
     override val message: String,
     val extra: JsonObject = JsonObject(emptyMap()),
     val sentToken: String? = null,
-) : Exception(message)
+) : Exception(message) {
+    /** The reply was not the Hub speaking: unreadable (`bad_response`) or an error page without the Hub's own `message`. */
+    val notFromHub: Boolean get() = code == BAD_RESPONSE || message.isBlank() || message == apiStandIn(status)
+
+    companion object {
+        const val BAD_RESPONSE = "bad_response"
+    }
+}
 
 // ---- printer models (Task 16) ------------------------------------------------------------------------
 // Mirrors the server's printer routes (`api.py` `_printer_view`, `bridge/status.py` `summarize`).

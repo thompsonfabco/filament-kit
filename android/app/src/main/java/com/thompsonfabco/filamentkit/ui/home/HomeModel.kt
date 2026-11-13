@@ -101,8 +101,7 @@ internal class PrintersFailure(val message: String?, val unexpected: Boolean)
  */
 internal fun printersFailure(e: Exception): PrintersFailure = when {
     e is ApiError && e.status == 0 -> PrintersFailure(null, false)
-    e is ApiError && (e.code == "bad_response" || e.message.isBlank() || e.message == "The server returned an error (${e.status})") ->
-        PrintersFailure(null, true)
+    e is ApiError && e.notFromHub -> PrintersFailure(null, true)
     e is ApiError -> PrintersFailure(e.message, false)
     e is IOException -> PrintersFailure(null, false)
     else -> PrintersFailure(null, true)
