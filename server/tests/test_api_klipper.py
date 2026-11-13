@@ -129,6 +129,30 @@ def test_add_klipper_bad_body(body):
     assert _client().post("/api/printers", json=body).status_code == 400
 
 
+def test_printer_errors_name_their_field():
+    """S1.4: a refusal about one body key carries it as `field`, beside `error` and `message`."""
+    registry.add_klipper("SV08 MAX", "sv08.home.arpa")
+    registry.upsert(registry.Printer("S1", "H2D", "H2D", "10.0.0.5", "12345678", True))
+    c = _client()
+
+    def field(r, name):
+        assert r.status_code == 400, r.text
+        assert r.json()["field"] == name and r.json()["error"] == "bad_request" and r.json()["message"]
+    field(c.post("/api/printers", json={"family": "klipper"}), "host")
+    field(c.post("/api/printers", json={"family": "klipper", "host": "h", "port": 70000}), "port")
+    field(c.post("/api/printers", json={"family": "klipper", "host": "h", "name": 5}), "name")
+    field(c.post("/api/printers", json={"family": "prusa", "host": "h"}), "family")
+    field(c.post("/api/printers", json={"serial": "S2", "access_code": " "}), "access_code")
+    field(c.post("/api/printers", json={"access_code": "12345678"}), "serial")
+    field(c.patch("/api/printers/S1", json={"name": " "}), "name")
+    field(c.patch("/api/printers/S1", json={"access_code": "no spaces!"}), "access_code")
+    field(c.patch("/api/printers/S1", json={"address": "not an address"}), "address")
+    field(c.patch("/api/printers/sv08-max", json={"port": 0}), "port")
+    field(c.patch("/api/printers/sv08-max", json={"api_key": "has spaces"}), "api_key")
+    assert "field" not in c.patch("/api/printers/S1", json={}).json()          # not about one key
+    assert "field" not in c.patch("/api/printers/S1", json={"bogus": 1}).json()
+
+
 def test_map_on_klipper_is_409_not_supported():
     registry.add_klipper("SV08 MAX", "h")
     c = _client()

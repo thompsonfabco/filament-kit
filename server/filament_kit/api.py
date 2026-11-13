@@ -41,7 +41,12 @@ APK_TYPE = "application/vnd.android.package-archive"
 
 
 class BadRequest(ValueError):
-    pass
+    """A refusal of the request; `field` names the body key when it is about that one field (an optional extra key of the
+    reply, for a form to show the text beside the field)."""
+
+    def __init__(self, message: str = "", field: str | None = None):
+        super().__init__(message)
+        self.field = field
 
 
 def _err(status: int, code: str, message: str, **extra) -> JSONResponse:
@@ -83,7 +88,8 @@ def _to_response(e: Exception) -> JSONResponse:
     if bridge is not None:
         return bridge
     if isinstance(e, ValueError):
-        return _err(400, "bad_request", str(e))
+        field = getattr(e, "field", None)
+        return _err(400, "bad_request", str(e), **({"field": field} if isinstance(field, str) else {}))
     log.error("internal error", exc_info=e)
     return _err(500, "internal", "internal error")
 
@@ -274,7 +280,7 @@ def _opt(body: dict, key: str, kind: type, default=None):
     else:
         ok = isinstance(v, kind)
     if not ok:
-        raise BadRequest(f"{key} must be {_KINDS[kind]}")
+        raise BadRequest(f"{key} must be {_KINDS[kind]}", key)
     return v
 
 
@@ -384,15 +390,15 @@ def _printer_routes(printers) -> list[Route]:
     async def klipper_add(body: dict):
         host, name, port = body.get("host"), _opt(body, "name", str), _opt(body, "port", int, 7125)
         if not isinstance(host, str) or not HOST.fullmatch(host.strip()):
-            raise BadRequest("host is required: the Moonraker host name or address (letters, digits, . - :)")
+            raise BadRequest("host is required: the Moonraker host name or address (letters, digits, . - :)", "host")
         if isinstance(port, bool) or not 1 <= port <= 65535:
-            raise BadRequest("port must be between 1 and 65535")
+            raise BadRequest("port must be between 1 and 65535", "port")
 
         def run() -> dict:
             try:
                 p = discovery.add((name or "").strip() or host.strip(), host.strip(), port)
             except registry.DuplicatePrinter as e:
-                raise BadRequest(str(e)) from None
+                raise BadRequest(str(e), "host") from None
             printers.sync()
             printers.wait_settled(p.serial, FIRST_STATE_WAIT)
             return _printer_view(p, printers)
@@ -405,17 +411,17 @@ def _printer_routes(printers) -> list[Route]:
         if fam == "klipper":
             return await klipper_add(body)
         if fam != "bambu":
-            raise BadRequest("family must be bambu or klipper")
+            raise BadRequest("family must be bambu or klipper", "family")
         serial, code = body.get("serial"), body.get("access_code")
         if not isinstance(serial, str) or not serial.strip():
-            raise BadRequest("serial is required")
+            raise BadRequest("serial is required", "serial")
         if not isinstance(code, str) or not code.strip():
-            raise BadRequest("access_code is required")
+            raise BadRequest("access_code is required", "access_code")
         name = _opt(body, "name", str)
         serial, code = serial.strip(), code.strip()
         problem = registry.check_fields(serial, code)
         if problem:
-            raise BadRequest(problem)
+            raise BadRequest(problem, "serial" if problem == registry.BAD_SERIAL else "access_code")
 
         def run() -> dict | None:
             old = registry.load().get(serial)
@@ -520,44 +526,45 @@ def _printer_routes(printers) -> list[Route]:
         if "name" in body:
             name = body["name"]
             if not isinstance(name, str) or len(name) > 64 or not name.isprintable() or not name.strip():
-                raise BadRequest("give the printer a name (printable text, at most 64 characters)")
+                raise BadRequest("give the printer a name (printable text, at most 64 characters)", "name")
             want["name"] = name.strip()
         if "access_code" in body:
             if klipper:
-                raise BadRequest("a Klipper printer has no Access Code (a Moonraker API key instead, when it wants one)")
+                raise BadRequest("a Klipper printer has no Access Code (a Moonraker API key instead, when it wants one)",
+                                 "access_code")
             code = body["access_code"]
             code = code.strip() if isinstance(code, str) else ""
             if not registry.ACCESS_CODE.fullmatch(code):
-                raise BadRequest(registry.BAD_ACCESS_CODE)
+                raise BadRequest(registry.BAD_ACCESS_CODE, "access_code")
             want["access_code"] = code
         if "unpin" in body:
             if klipper:
-                raise BadRequest("unpin is for a Bambu printer")
+                raise BadRequest("unpin is for a Bambu printer", "unpin")
             if body["unpin"] is not True:
-                raise BadRequest("unpin must be true")
+                raise BadRequest("unpin must be true", "unpin")
             if "access_code" not in body:      # R103: the stored code never goes to a certificate it hasn't seen
-                raise BadRequest(NEEDS_CODE_TO_UNPIN)
+                raise BadRequest(NEEDS_CODE_TO_UNPIN, "access_code")
             want["unpin"] = True
         if "api_key" in body:
             if not klipper:
-                raise BadRequest("api_key is for a Klipper printer")
+                raise BadRequest("api_key is for a Klipper printer", "api_key")
             key = body["api_key"]
             key = key.strip() if isinstance(key, str) else None
             if key is None or (key and not API_KEY.fullmatch(key)):
-                raise BadRequest(BAD_API_KEY)
+                raise BadRequest(BAD_API_KEY, "api_key")
             want["api_key"] = key
         port = None
         if "port" in body:
             if not klipper:
-                raise BadRequest("port is for a Klipper printer")
+                raise BadRequest("port is for a Klipper printer", "port")
             port = body["port"]
             if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
-                raise BadRequest("the port must be a number from 1 to 65535")
+                raise BadRequest("the port must be a number from 1 to 65535", "port")
         if "address" in body or port is not None:
             if "address" in body:
                 host, problem, note = hostaddr.inspect(body["address"])
                 if problem:
-                    raise BadRequest(problem)
+                    raise BadRequest(problem, "address")
             else:
                 host, note = p.host, None
             if klipper:
@@ -567,10 +574,10 @@ def _printer_routes(printers) -> list[Route]:
                     raise _Conflict(f"{registry.display_name(other)} is already at {host}:{port}")
                 # R103: Moonraker has no certificate pin, so a stored key would go to whatever answers there
                 if p.api_key and "api_key" not in body:
-                    raise BadRequest(NEEDS_KEY_TO_MOVE)
+                    raise BadRequest(NEEDS_KEY_TO_MOVE, "api_key")
             elif p.access_code and not p.cert_fp and "access_code" not in body:
                 # the pin keeps the stored code with the same printer; with none pinned yet, the next leaf would be
-                raise BadRequest(NEEDS_CODE_TO_MOVE)
+                raise BadRequest(NEEDS_CODE_TO_MOVE, "access_code")
             want["address"] = (host, port, note)
         return want
 
@@ -621,7 +628,7 @@ def _printer_routes(printers) -> list[Route]:
         except _ModuleOffError as e:
             return _module_off("klipper" if e.family == "klipper" else "printers")
         except _Conflict as e:
-            return _err(409, "exists", str(e))
+            return _err(409, "exists", str(e), field="address")
         log.info("printer edit device_id=%s serial=%s changed=%s", device, serial, ",".join(out["changed"]))
         return JSONResponse(out)
 

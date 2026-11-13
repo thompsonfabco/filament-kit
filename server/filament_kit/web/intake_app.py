@@ -84,9 +84,9 @@ def _num(b: dict, key: str) -> float | None:
             raise ValueError
         n = float(v)
     except (TypeError, ValueError):
-        raise Problem(f"{key} must be a number") from None
+        raise Problem(f"{key} must be a number", key) from None
     if not math.isfinite(n):
-        raise Problem(f"{key} must be a number")
+        raise Problem(f"{key} must be a number", key)
     return n
 
 
@@ -102,7 +102,7 @@ def _text(b: dict, key: str, *, required: bool = True) -> str:
     if v is None and not required:
         return ""
     if not isinstance(v, str) or (required and not v.strip()):
-        raise Problem(f"{key} must be text")
+        raise Problem(f"{key} must be text", key)
     return v.strip()
 
 
@@ -372,7 +372,8 @@ class IntakeApp:
                     log.exception("intake %s", request.url.path)
                     return JSONResponse({"error": "internal error (see the server log)"}, 500)
                 status = 409 if type(e).__name__ == "TagConflict" else 400
-                return JSONResponse({"error": text}, status)
+                field = getattr(e, "field", None)           # the body key a refusal is about, when it is about one
+                return JSONResponse({"error": text, **({"field": field} if isinstance(field, str) else {})}, status)
         return route
 
     async def _body(self, request: Request) -> dict:
@@ -444,7 +445,7 @@ class IntakeApp:
         items = []
         for raw in body.get("items") or []:
             if not isinstance(raw, dict):
-                raise Problem("each item must be an object")
+                raise Problem("each item must be an object", "items")
             it = {k: v for k, v in raw.items() if k in SpoolItem.model_fields and v not in ("", None)}
             if it.get("price_per_kg"):  # keep the read's order-based line unless the user changed the price
                 ppk = float(it["price_per_kg"])
@@ -457,9 +458,9 @@ class IntakeApp:
             except ValidationError as e:
                 err = e.errors()[0]
                 where = ".".join(str(x) for x in err.get("loc", ()))
-                raise Problem(f"{it.get('vendor')} {it.get('name')}: {where} {err.get('msg')}") from None
+                raise Problem(f"{it.get('vendor')} {it.get('name')}: {where} {err.get('msg')}", "items") from None
         if not items:
-            raise Problem("no items")
+            raise Problem("no items", "items")
         dry = bool(body.get("dry_run", True))
         single_opened = sum(it["count"] for it in items) == 1 and items[0].get("sealed") is False
         link = body.get("link_tag") if single_opened and isinstance(body.get("link_tag"), str) else None
@@ -509,7 +510,7 @@ class IntakeApp:
     async def open(self, request: Request):
         b = await self._body(request)
         if not isinstance(b.get("spool"), int) or isinstance(b.get("spool"), bool):
-            raise Problem("spool must be a spool id")
+            raise Problem("spool must be a spool id", "spool")
         loc = b.get("location")
         kw = dict(spool=b["spool"], location=loc if isinstance(loc, str) and loc.strip() else None,
                   gross=_num(b, "gross"), humidity=_num(b, "humidity"), dry_run=bool(b.get("dry_run", True)))

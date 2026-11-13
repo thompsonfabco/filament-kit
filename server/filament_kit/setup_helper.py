@@ -172,24 +172,28 @@ def _text(req: dict, key: str, limit: int, *, word: bool = False, blank: bool = 
     """A text field: at most `limit` characters, printable; `word`: no spaces inside; `blank`: may be empty."""
     v = req.get(key)
     if not isinstance(v, str):
-        raise Refused(400, f"{key} must be text")
+        raise Refused(400, f"{key} must be text", field=key)
     v = v.strip()
     if (not v and not blank) or len(v) > limit or not v.isprintable() or (word and any(c.isspace() for c in v)):
-        raise Refused(400, f"{key} is not usable" + (": one word of printable characters" if word else ""))
+        raise Refused(400, f"{key} is not usable" + (": one word of printable characters" if word else ""), field=key)
     return v
 
 
 def _check_code(text, client) -> None:
+    client = client if isinstance(client, str) else "?"
     lock = setup_code.Lockout(setup_code.lockout_file())
-    ticket = lock.attempt(client if isinstance(client, str) else "?")
+    ticket = lock.attempt(client)
     if ticket is None:
-        raise Refused(429, LOCKED)
+        _, again = lock.standing(client)
+        raise Refused(429, LOCKED, **({"retry_at": setup_code.local_minute(again)} if again else {}))
     ok = setup_code.check(text)
     if ok is None:
         lock.release(ticket)
         raise Refused(503, NO_CODE)
     if not ok:
-        raise Refused(403, WRONG)
+        left, again = lock.standing(client)
+        # a try that set off the global backoff leaves this client with nothing to count: it waits for that
+        raise Refused(403, WRONG, tries_left=left, **({"retry_at": setup_code.local_minute(again)} if again else {}))
     lock.release(ticket, ok=True)
 
 
@@ -347,13 +351,13 @@ def _passphrase_set(req: dict) -> dict:
     from . import cli
     v = req.get("passphrase")
     if not isinstance(v, str) or len(v) > 1024:
-        raise Refused(400, "passphrase must be text")
+        raise Refused(400, "passphrase must be text", field="passphrase")
     try:
         cli.write_passphrase(v)
     except cli.GroupMissing as e:
         raise Refused(500, f"{e}; nothing was changed") from None
     except ValueError as e:
-        raise Refused(400, str(e)) from None
+        raise Refused(400, str(e), field="passphrase") from None
     return {}
 
 
@@ -459,12 +463,12 @@ def station_url_error(value: str) -> str | None:
 def _setting(req: dict) -> dict:
     key = req.get("key")
     if key not in SETTINGS:
-        raise Refused(400, "key must be one of: " + ", ".join(SETTINGS))
+        raise Refused(400, "key must be one of: " + ", ".join(SETTINGS), field="key")
     value = _text(req, "value", 300, word=True, blank=True)
     if value:
         err = modules.check_setting(key, value) if key == "web.public_url" else station_url_error(value)
         if err:
-            raise Refused(400, err)
+            raise Refused(400, err, field="value")
     _not_applying()
     cfg = config.load()
     modules.set_setting(cfg, key, value.rstrip("/") if key == "station.url" and value else (value or None))
@@ -601,12 +605,12 @@ def _restart_kit() -> None:
 def _general(req: dict) -> dict:
     key = req.get("key")
     if not isinstance(key, str) or key not in GENERAL:
-        raise Refused(400, "key must be one of: " + ", ".join(GENERAL))
+        raise Refused(400, "key must be one of: " + ", ".join(GENERAL), field="key")
     check, then = GENERAL[key]
     try:
         value = check(req.get("value"))
     except ValueError as e:
-        raise Refused(400, f"{key} {e}") from None
+        raise Refused(400, f"{key} {e}", field="value") from None
     _not_applying()
     cfg = config.load()
     parts = key.split(".")
@@ -636,7 +640,7 @@ def _spoolman_url(req: dict) -> dict:
         raise Refused(409, "this machine runs its own Spoolman: turn the spoolman module off first")
     err = modules.check_setting("spoolman_url", url)
     if err:
-        raise Refused(400, err)
+        raise Refused(400, err, field="url")
     _not_applying()
     cfg["spoolman_url"] = url
     try:
@@ -716,7 +720,7 @@ def _journal(req: dict) -> dict:
 def _backup_keep(req: dict) -> dict:
     days = req.get("days")
     if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 365:
-        raise Refused(400, "days must be a whole number from 1 to 365")
+        raise Refused(400, "days must be a whole number from 1 to 365", field="days")
     _not_applying()
     cfg = config.load()
     cfg.setdefault("backup", {})["keep_days"] = days

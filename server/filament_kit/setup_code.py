@@ -263,6 +263,21 @@ class Lockout:
             return ticket
         return self._update(take)
 
+    def standing(self, client: str) -> tuple[int, float | None]:
+        """(wrong codes this client may still try in the window, when it may try again or None): the page shows both.
+        Counts nothing; the time is when the oldest of the client's tries that holds it out leaves the window, or the
+        end of a global backoff, whichever is later."""
+        client = str(client or "?")[:64]
+
+        def look(st, now):
+            mine = sorted(f[0] for f in st["fails"] if f[1] == client)
+            left = max(0, self.max - len(mine))
+            until = st["until"] if now < st["until"] else 0
+            if len(mine) >= self.max:
+                until = max(until, mine[len(mine) - self.max] + self.window)
+            return (0 if until else left), (until or None)
+        return self._update(look)
+
     def release(self, ticket: str | None, ok: bool = False) -> None:
         if ticket is None:
             return
@@ -272,6 +287,11 @@ class Lockout:
             if ok:
                 st["level"] = 0
         self._update(drop)
+
+
+def local_minute(epoch: float) -> str:
+    """`YYYY-MM-DDTHH:MM`, this machine's local time, rounded up to the next whole minute (so nobody tries a second early)."""
+    return time.strftime("%Y-%m-%dT%H:%M", time.localtime(math.ceil(epoch / 60) * 60))
 
 
 def lockout_file() -> Path:

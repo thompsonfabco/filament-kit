@@ -30,7 +30,7 @@ def routes(page) -> list[tuple]:
         try:
             return await page._helper({"op": "trust_status", "token": token if isinstance(token, str) else None})
         except Refused:            # no helper yet: the page still works, with the code
-            return {"enabled": False, "trusted": False, "id": None, "name": None}
+            return {"enabled": False, "trusted": False, "id": None, "name": None, "expires": None}
 
     async def add(request, body):
         if body["code"].startswith(trusted.PREFIX):

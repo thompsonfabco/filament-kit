@@ -4,4 +4,8 @@ from __future__ import annotations
 
 
 class Problem(ValueError):
-    pass
+    """`field`: the request body's key the refusal is about, when it is about one (the web app's reply carries it)."""
+
+    def __init__(self, message: str = "", field: str | None = None):
+        super().__init__(message)
+        self.field = field

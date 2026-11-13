@@ -62,7 +62,7 @@ def routes(page) -> list[tuple]:
         key = body.get("api_key", body.get("key"))
         key = key.strip() if isinstance(key, str) else ""
         if key and not API_KEY.fullmatch(key):
-            raise Refused(400, BAD_API_KEY)
+            raise Refused(400, BAD_API_KEY, field="key" if "key" in body and "api_key" not in body else "api_key")
         return key
 
     def port_of(body: dict) -> int:
@@ -72,16 +72,16 @@ def routes(page) -> list[tuple]:
                 raise ValueError
             port = int(port)
         except (TypeError, ValueError):
-            raise Refused(400, "the port must be a number from 1 to 65535") from None
+            raise Refused(400, "the port must be a number from 1 to 65535", field="port") from None
         if not 1 <= port <= 65535:
-            raise Refused(400, "the port must be a number from 1 to 65535")
+            raise Refused(400, "the port must be a number from 1 to 65535", field="port")
         return port
 
     def address(body: dict, key: str = "address") -> hostaddr.Inspected:
         """The address as it will be kept, with the note to show beside it (the unit doesn't reach it) or None."""
         a = hostaddr.inspect(body.get(key))
         if a.problem:
-            raise Refused(400, a.problem)
+            raise Refused(400, a.problem, field=key)
         return a
 
     def klipper_entry(serial: str) -> registry.Printer:
@@ -112,7 +112,7 @@ def routes(page) -> list[tuple]:
             host, _, note = address(body, "host")
             same = registry.klipper_at(registry.load(), host, port) or found_by_name(host, port)
             if same is not None and same.configured:
-                raise Refused(409, f"{registry.display_name(same)} is already at {host}:{port}")
+                raise Refused(409, f"{registry.display_name(same)} is already at {host}:{port}", field="host")
             if same is not None:        # a scan found it (by this address, or the address this name stands for): into use
                 registry.configure_klipper(same.serial, name)
                 if same.host.lower() != host.lower():
@@ -185,7 +185,7 @@ def routes(page) -> list[tuple]:
         serial = page._serial(request)
         name = page._opt_text(body, "name")
         if not name:
-            raise Refused(400, "give the printer a name")
+            raise Refused(400, "give the printer a name", field="name")
 
         def run() -> None:
             page._entry(serial)
@@ -205,7 +205,7 @@ def routes(page) -> list[tuple]:
             if p.family == "klipper":
                 other = registry.klipper_at(registry.load(), host, port)
                 if other is not None and other.serial != serial:
-                    raise Refused(409, f"{registry.display_name(other)} is already at {host}:{port}")
+                    raise Refused(409, f"{registry.display_name(other)} is already at {host}:{port}", field="address")
             registry.set_address(serial, host, port)
             page.printers.sync()
             return note

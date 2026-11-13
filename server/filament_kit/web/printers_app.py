@@ -171,6 +171,8 @@ class PrintersApp:
                 body = {"error": REFUSALS.get(e.code or "", str(e))}
                 if e.code:
                     body["code"] = e.code
+                if e.field:
+                    body["field"] = e.field       # the kit's refusal names the body key it is about
                 return JSONResponse(body, st if isinstance(st, int) and 400 <= st < 600 and st != 401 else 502)
         return self.intake.api(inner)
 

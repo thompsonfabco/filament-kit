@@ -311,7 +311,7 @@ class SetupPage:
             ("/state", g(self.state), "GET"), ("/modules/preview", g(self.preview), "GET"),
             ("/apply", g(self.apply_get), "GET"),
             ("/key", hw(self.key_set), "POST"), ("/key/remove", hw(self.key_remove), "POST"),
-            ("/key/check", g(self.key_check), "POST"),
+            ("/key/check", g(self.key_check), "POST"), ("/code/check", g(self.code_check), "POST"),
             ("/printers", w(self.printer_add), "POST"), ("/printers/{serial}/code", w(self.printer_code), "POST"),
             ("/printers/{serial}/test", g(self.printer_test), "POST"),
             ("/printers/{serial}/forget", w(self.printer_forget), "POST"),
@@ -472,7 +472,7 @@ class SetupPage:
         if not r.get("ok") or fh is None:
             if fh is not None:
                 fh.close()
-            extra = {k: r[k] for k in ("needs", "trust_gone") if k in r}
+            extra = {k: r[k] for k in ("needs", "trust_gone", "tries_left", "retry_at", "field") if k in r}
             raise Refused(int(r.get("status") or 500), str(r.get("error") or "the setup helper refused"), **extra)
         return r, fh
 
@@ -480,7 +480,7 @@ class SetupPage:
         req.setdefault("client", _CLIENT.get())       # the address the helper's lockout counts against
         r = await anyio.to_thread.run_sync(self.helper, req)
         if not r.get("ok"):
-            extra = {k: r[k] for k in ("needs", "trust_gone") if k in r}
+            extra = {k: r[k] for k in ("needs", "trust_gone", "tries_left", "retry_at", "field") if k in r}
             raise Refused(int(r.get("status") or 500), str(r.get("error") or "the setup helper refused"), **extra)
         return r
 
@@ -594,6 +594,23 @@ class SetupPage:
         from .setup_console import jobs
         return await jobs.read(self, request, body)
 
+    async def code_check(self, request: Request, body: dict):
+        """Is this the setup code? Changes nothing and unlocks nothing: the page asks it of its unlock dialog and
+        then sends the code with each change as ever. A wrong code counts toward the lockout as on any gated call
+        (the helper's `check`), a right one does not; only a typed code is checked, never a trusted computer's cookie.
+        Wrong: 403 with `tries_left`; too many: 429 with `retry_at`; both with `field` "code"."""
+        code = body.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise Refused(403, NEED_CODE, field="code")
+        if code.startswith(trusted.PREFIX):
+            raise Refused(400, "type the setup code", field="code")
+        try:
+            await self._helper({"op": "check", "code": code, "client": self._client_key(request)})
+        except Refused as e:
+            e.extra.setdefault("field", "code")
+            raise
+        return {"ok": True}
+
     # ---------- the Anthropic key (root helper) ----------
     async def key_set(self, request: Request, body: dict):
         had = _present("anthropic_key")
@@ -645,7 +662,7 @@ class SetupPage:
         code = body.get("access_code")
         code = code.strip() if isinstance(code, str) else ""
         if not registry.ACCESS_CODE.fullmatch(code):
-            raise Refused(400, registry.BAD_ACCESS_CODE)
+            raise Refused(400, registry.BAD_ACCESS_CODE, field="access_code")
         return code
 
     @staticmethod
@@ -654,7 +671,7 @@ class SetupPage:
         if v is None:
             return ""
         if not isinstance(v, str) or len(v) > limit or not v.isprintable():
-            raise Refused(400, f"{key} must be text")
+            raise Refused(400, f"{key} must be text", field=key)
         return v.strip()
 
     async def printer_add(self, request: Request, body: dict):
@@ -664,7 +681,7 @@ class SetupPage:
         ip = hostaddr.clean(body.get("address", body.get("ip")))
         problem = hostaddr.form_error(ip)
         if problem:
-            raise Refused(400, f"{problem} (on the printer: Settings > Network)")
+            raise Refused(400, f"{problem} (on the printer: Settings > Network)", field="address")
         access = self._access_code(body)
         name, model = self._opt_text(body, "name"), self._opt_text(body, "model", 32)
         typed = self._opt_text(body, "serial").upper()
@@ -672,20 +689,21 @@ class SetupPage:
         def run() -> dict:
             _, problem, note = hostaddr.inspect(ip)
             if problem:
-                raise Refused(400, problem)
+                raise Refused(400, problem, field="address")
             try:
                 seen, why = setup_serial(ip), ""
             except OSError as e:
                 seen, why = None, f"the printer at {ip} did not answer ({type(e).__name__})"
             if seen and typed and seen != typed:
-                raise Refused(400, f"the printer at {ip} names itself {seen}, not {typed}: check the address")
+                raise Refused(400, f"the printer at {ip} names itself {seen}, not {typed}: check the address",
+                              field="address")
             serial = seen or typed
             if not serial:
                 raise Refused(400, (why or f"the printer at {ip} did not name its serial") +
-                              "; type the serial number (on the printer: Settings > Device)")
+                              "; type the serial number (on the printer: Settings > Device)", field="serial")
             problem = registry.check_fields(serial, access)
             if problem:
-                raise Refused(400, problem)
+                raise Refused(400, problem, field="serial")      # the Access Code was checked first: only the serial is left
             old = registry.load().get(serial)
             # as the CLI's add: a fresh entry (adding the printer again also clears its TLS pin)
             registry.add_bambu(serial, name or (old.name if old else ""), model or (old.model if old else ""), ip, access)
