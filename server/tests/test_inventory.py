@@ -794,3 +794,16 @@ def test_tag_neighbours_one_byte_apart(sm):
     assert inventory.tag_neighbours(sm, UID2) == [a["id"]]                     # a:b:b:... vs a:b:c:...
     assert sorted(inventory.tag_neighbours(sm, "0A:0B:0C:0D:0E:0F:03")) == [a["id"], b["id"]]
     assert inventory.tag_neighbours(sm, UID) == [b["id"]]                      # its own spool is not a neighbour
+
+
+def test_problems_name_the_item_and_the_field(sm, spoolman_fake_store):
+    inventory.add_spools(sm, [item()], RULES, dry=False)
+    with pytest.raises(inventory.ItemsInvalid) as e:        # the re-check of gross against the existing spool weight
+        inventory.add_spools(sm, [item(tare=100, gross=150, count=1, sealed=False)], RULES, dry=True)
+    assert [(p["item"], p["field"]) for p in e.value.problems] == [(0, "gross")]
+    with pytest.raises(inventory.ItemsInvalid) as e:
+        inventory.add_spools(sm, [item(), 5], RULES, dry=True)
+    assert e.value.problems == [{"item": 1, "field": None, "message": "each item must be an object"}]
+    with pytest.raises(inventory.ItemsInvalid) as e:        # a line that is not text is one problem, not two
+        inventory.add_spools(sm, [item(line=5)], RULES, dry=True)
+    assert [(p["item"], p["field"]) for p in e.value.problems] == [(0, "line")]

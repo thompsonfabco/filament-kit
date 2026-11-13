@@ -461,7 +461,9 @@ class IntakeApp:
                     return JSONResponse({"error": "internal error (see the server log)"}, 500)
                 status = 409 if type(e).__name__ == "TagConflict" else 400
                 field = getattr(e, "field", None)           # the body key a refusal is about, when it is about one
-                return JSONResponse({"error": text, **({"field": field} if isinstance(field, str) else {})}, status)
+                problems = getattr(e, "problems", None)     # a refused add: every problem, with its item and field
+                return JSONResponse({"error": text, **({"field": field} if isinstance(field, str) else {}),
+                                     **({"problems": problems} if isinstance(problems, list) else {})}, status)
         return route
 
     async def _body(self, request: Request) -> dict:
@@ -531,9 +533,11 @@ class IntakeApp:
     async def add(self, request: Request):
         body = await self._body(request)
         items = []
-        for raw in body.get("items") or []:
+        problems = []                                   # every refusal, with its item index and the item's own key
+        for i, raw in enumerate(body.get("items") or []):
             if not isinstance(raw, dict):
-                raise Problem("each item must be an object", "items")
+                problems.append({"item": i, "field": None, "message": "each item must be an object"})
+                continue
             it = {k: v for k, v in raw.items() if k in SpoolItem.model_fields and v not in ("", None)}
             if it.get("price_per_kg"):  # keep the read's order-based line unless the user changed the price
                 ppk = float(it["price_per_kg"])
@@ -544,9 +548,13 @@ class IntakeApp:
             try:
                 items.append(mcp_tools.item_dict(SpoolItem.model_validate(it)))
             except ValidationError as e:
-                err = e.errors()[0]
-                where = ".".join(str(x) for x in err.get("loc", ()))
-                raise Problem(f"{it.get('vendor')} {it.get('name')}: {where} {err.get('msg')}", "items") from None
+                for err in e.errors():
+                    loc = err.get("loc", ())
+                    where = ".".join(str(x) for x in loc)
+                    problems.append({"item": i, "field": str(loc[0]) if loc else None,
+                                     "message": f"{it.get('vendor')} {it.get('name')}: {where} {err.get('msg')}"})
+        if problems:
+            raise inventory.ItemsInvalid(problems[0]["message"], problems)
         if not items:
             raise Problem("no items", "items")
         dry = bool(body.get("dry_run", True))
@@ -586,11 +594,15 @@ class IntakeApp:
 
     async def find(self, request: Request):
         q = request.query_params
-        return await anyio.to_thread.run_sync(self.tools.find_spools, q.get("q", ""), q.get("sealed") == "1", None)
+        offset, limit = inventory.page_args(q)
+        return await anyio.to_thread.run_sync(self.tools.find_spools, q.get("q", ""), q.get("sealed") == "1", None,
+                                              offset, limit if limit is not None else mcp_tools.MAX_FILAMENTS)
 
     async def filaments(self, request: Request):  # the manual add's existing-filament picker
-        return {"filaments": await anyio.to_thread.run_sync(inventory.filaments, self.tools.sm,
-                                                            request.query_params.get("q", ""))}
+        offset, limit = inventory.page_args(request.query_params)
+        rows = await anyio.to_thread.run_sync(inventory.filaments, self.tools.sm, request.query_params.get("q", ""))
+        rows, paging = inventory.page(rows, offset, limit)
+        return {"filaments": rows, **paging}
 
     async def vendors(self, request: Request):
         return {"vendors": await anyio.to_thread.run_sync(inventory.vendors, self.tools.sm)}

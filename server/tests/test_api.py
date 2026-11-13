@@ -79,7 +79,7 @@ def test_pair_then_call(sm):
     assert r.status_code == 200
     tok = r.json()["token"]
     r = c.get("/api/spools", headers=auth(tok))
-    assert r.status_code == 200 and r.json() == {"spools": []}
+    assert r.status_code == 200 and r.json()["spools"] == []
 
 
 def test_unpair_revokes_only_the_caller(sm, caplog):
@@ -445,3 +445,129 @@ def test_pair_tells_a_spent_code_from_a_wrong_one(sm):
     assert c.post("/api/pair", json={"code": p.code}).status_code == 200
     r = c.post("/api/pair", json={"code": p.code})
     assert r.status_code == 401 and r.json()["error"] == "code_expired"
+
+
+# ---------- S3.7: the add preview per item, colour in find, search paging ----------
+
+def _snapshot(sm) -> str:
+    return json.dumps({k: sm.get(k) for k in ("vendor", "filament", "spool")}, sort_keys=True)
+
+
+def _two_items(sm):
+    """One item for a filament Spoolman has, one for a new filament (opened, so each spool gets its own box)."""
+    sealed_spool(sm)
+    ok = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
+          "count": 2}
+    new = {"vendor": "SUNLU", "name": "PETG Blue", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
+           "count": 2, "sealed": False, "color_hex": "0000FF"}
+    return ok, new
+
+
+def test_add_preview_answers_per_item_and_writes_nothing(sm):
+    c = client(sm)
+    ok, new = _two_items(sm)
+    before = _snapshot(sm)
+    r = c.post("/api/intake/add", headers=auth(token()), json={"items": [ok, new], "dry_run": True})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["dry"] is True and body["spool_ids"] == [] and body["lines"]       # today's fields stay
+    first, second = body["items"]
+    (existing,) = sm.get("filament")
+    assert (first["index"], first["filament"], first["filament_id"], first["new_vendor"]) == (
+        0, "existing", existing["id"], False)
+    assert (first["spools"], first["location"], first["problems"]) == (2, "Sealed stock", [])
+    assert (second["index"], second["filament"], second["filament_id"], second["new_vendor"]) == (
+        1, "new", None, False)
+    assert second["spools"] == 2 and second["location"] == "Storage box 01" and second["problems"] == []
+    assert [(p["location"], p["spools"]) for p in second["placements"]] == [("Storage box 01", 1),
+                                                                         ("Storage box 02", 1)]
+    assert _snapshot(sm) == before                                                  # the preview wrote nothing
+
+
+def test_add_reply_names_the_created_spools_per_item(sm):
+    c = client(sm)
+    ok, new = _two_items(sm)
+    r = c.post("/api/intake/add", headers=auth(token()), json={"items": [ok, new], "dry_run": False})
+    assert r.status_code == 200, r.text
+    first, second = r.json()["items"]
+    assert len(first["spool_ids"]) == 2 and len(second["spool_ids"]) == 2
+    assert second["filament"] == "new" and isinstance(second["filament_id"], int)
+    assert first["spool_ids"] + second["spool_ids"] == r.json()["spool_ids"]
+
+
+def test_add_preview_problems_name_their_item_and_field(sm):
+    c = client(sm)
+    ok, new = _two_items(sm)
+    before = _snapshot(sm)
+    bad = {**new, "net": 0, "color_hex": "blue"}
+    r = c.post("/api/intake/add", headers=auth(token()), json={"items": [ok, bad], "dry_run": True})
+    body = r.json()
+    assert r.status_code == 400 and body["error"] == "bad_request" and body["field"] == "items"
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(1, "net"), (1, "color_hex")]
+    assert "net must be a positive number" in body["message"]
+    assert body["problems"][0]["message"] == body["message"]            # the first problem is also the reply's text
+    assert _snapshot(sm) == before
+
+
+def test_find_results_carry_the_filament_colour(sm):
+    c = client(sm)
+    sealed_spool(sm, color_hex="8A8C8E")
+    spools = c.get("/api/spools", headers=auth(token())).json()["spools"]
+    assert spools[0]["filament"]["color_hex"] == "8A8C8E"
+
+
+def test_searches_page_with_offset(sm):
+    c = client(sm)
+    tok = token()
+    for n in range(5):
+        sealed_spool(sm, name=f"PETG Grey {n}")
+    first = c.get("/api/spools?limit=2", headers=auth(tok)).json()
+    second = c.get("/api/spools?limit=2&offset=2", headers=auth(tok)).json()
+    last = c.get("/api/spools?limit=2&offset=4", headers=auth(tok)).json()
+    assert (first["total"], first["offset"], first["has_more"]) == (5, 0, True)
+    assert (second["offset"], second["has_more"], last["has_more"]) == (2, True, False)
+    ids = [s["id"] for p in (first, second, last) for s in p["spools"]]
+    assert len(ids) == 5 and len(set(ids)) == 5
+    names = [f["name"] for f in c.get("/api/filaments?limit=2&offset=3", headers=auth(tok)).json()["filaments"]]
+    assert names == ["PETG Grey 3", "PETG Grey 4"]
+    r = c.get("/api/filaments?offset=-1", headers=auth(tok))
+    assert r.status_code == 400 and r.json()["field"] == "offset"
+    assert c.get("/api/spools?limit=x", headers=auth(tok)).json()["field"] == "limit"
+
+
+def _refused(c, sm, items):
+    r = c.post("/api/intake/add", headers=auth(token()), json={"items": items, "dry_run": True})
+    assert r.status_code == 400, r.text
+    return r.json()
+
+
+def test_a_gross_below_the_spool_weight_names_its_item_and_field(sm):
+    sealed_spool(sm)                                    # SUNLU PETG Grey exists with a spool weight of 213 g
+    low = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 100, "density": 1.27,
+           "count": 1, "sealed": False, "gross": 150}
+    body = _refused(client(sm), sm, [low, {**low, "name": "PETG Blue", "gross": 500}])
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "gross")] and body["field"] == "items"
+    assert "not above the spool weight" in body["problems"][0]["message"] == body["message"]
+
+
+def test_an_unknown_bambu_parent_names_its_item_and_field(sm, monkeypatch):
+    monkeypatch.setattr(inventory.builds, "system_store", lambda: object())
+    monkeypatch.setattr(inventory.lines_mod, "usable", lambda store, name: False)
+    ok, new = _two_items(sm)
+    body = _refused(client(sm), sm, [ok, {**new, "bambu_parent": "Bambu Nothing"}])
+    assert body["error"] == "unknown_parent" and body["parent"] == "Bambu Nothing"      # today's fields stay
+    assert body["field"] == "items"
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(1, "bambu_parent")]
+
+
+def test_a_non_object_item_names_its_index(sm):
+    ok, _ = _two_items(sm)
+    body = _refused(client(sm), sm, [ok, 5])
+    assert body["field"] == "items" and body["message"] == "each item must be an object"
+    assert body["problems"] == [{"item": 1, "field": None, "message": "each item must be an object"}]
+
+
+def test_a_non_text_line_is_reported_once(sm):
+    ok, _ = _two_items(sm)
+    body = _refused(client(sm), sm, [{**ok, "line": 5}])
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "line")]
