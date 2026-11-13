@@ -76,3 +76,6 @@ pre.err, p.err { border-color: var(--bad); color: var(--bad); }
 pre.ok { border-color: var(--ok); }
 img.qr { display: block; width: var(--qr); height: var(--qr); max-width: 100%; padding: 0; }
 .hidden { display: none; }
+
+/* the icon sprite is inline at the top of <body> (S0.10); taken out of the flow here too, in case components.css loads late */
+svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
