@@ -713,6 +713,21 @@ def test_service_worker_is_behind_the_lan_guard(pushapp):
     assert r.status_code == 200 and "showNotification" in r.text
 
 
+def test_service_worker_is_served_with_print_alerts_off(app):
+    assert TestClient(app, base_url=ORIGIN, client=AWAY).get("/intake/sw.js").status_code == 403
+    r = signed(app).get("/intake/sw.js")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
+    assert "caches.open" in r.text and "__VERSION__" not in r.text and "fk-shell-" in r.text
+    assert signed(app).get(P + "/push/key").status_code == 404      # the push routes stay absent
+
+
+def test_service_worker_caches_the_shell_and_never_the_api():
+    src = (Path(web_app.__file__).parent / "static" / "sw.js").read_text(encoding="utf-8")
+    listed = re.search(r"const SHELL = \[(.*?)\];", src, re.S).group(1)
+    assert "/intake/api" not in listed and "/intake/app.js" in listed and "/intake" in listed
+    assert "/api" not in re.sub(r"//[^\n]*", "", src)      # no API path anywhere in the code (comments aside)
+
+
 def test_push_mapping_jobs_do_not_alert_and_print_error_does():
     from filament_kit.web import push
     base = {"gcode_state": "RUNNING", "hms": [], "job": "h2d-calib", "percent": 50, "stage": "", "print_error": ""}
