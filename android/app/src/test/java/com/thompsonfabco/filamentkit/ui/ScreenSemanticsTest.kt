@@ -22,11 +22,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
@@ -53,10 +53,19 @@ import com.thompsonfabco.filamentkit.ui.printers.PrintersScreen
 import com.thompsonfabco.filamentkit.ui.printers.PrintersViewModel
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
+import com.thompsonfabco.filamentkit.nav.HubState
+import com.thompsonfabco.filamentkit.ui.settings.LicencesScreen
+import com.thompsonfabco.filamentkit.ui.settings.SettingsActions
+import com.thompsonfabco.filamentkit.ui.settings.SettingsFacts
+import com.thompsonfabco.filamentkit.ui.settings.SettingsGroup
+import com.thompsonfabco.filamentkit.ui.settings.SettingsGroupPage
+import com.thompsonfabco.filamentkit.ui.settings.SettingsHub
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
+import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import com.thompsonfabco.filamentkit.update.UpdateFailure
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -71,7 +80,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * AUT-8 (07-accessibility 15): Home, Spools, Printers, Printer and Settings as they are, drawn under the top bar that
+ * AUT-8 (07-accessibility 15): Home, Spools, Printers and Printer as they are, Settings as rebuilt (S4.15), drawn under the top bar that
  * names them, in light and dark at font scale 1 and 2. Data is fake (RFC 5737 addresses, `*.example`). Each later
  * screen step adds its screen here.
  */
@@ -180,10 +189,91 @@ class ScreenSemanticsTest {
         auditAllFour("Pause")
     }
 
+    private val hub = SettingsHub("Workshop Hub", "192.0.2.10:8443", "AB12".repeat(16), "0.5.3")
+    private fun facts(update: UpdateUi = UpdateUi(), paired: Boolean = true) = SettingsFacts(
+        appearance = Appearance.System, hub = hub.takeIf { paired }, hubState = HubState.Connected, update = update,
+        appVersion = "0.5.2", developer = true,
+    )
+    private fun actions() = SettingsActions(
+        onAppearance = {}, skipFingerprintCheck = false, onSkipFingerprintCheck = {}, onPairAgain = {}, onForget = {},
+        setupUrl = { "https://192.0.2.10:8443/setup" },
+        update = UpdateActions(install = {}, cancel = {}, openSettings = {}, tapToInstall = {}, tryAgain = {}),
+        onCheckForUpdates = {}, onSimulateTag = {},
+    )
+    private fun group(title: String, group: SettingsGroup, facts: SettingsFacts = facts()) =
+        host(title) { SettingsGroupPage(group, facts, actions()) }
+
     @Test fun settings() {
-        val config = ServerConfig(listOf("192.0.2.10"), 8443, "AB12".repeat(16), "token", "Workshop Hub")
-        host("Settings") { SettingsScreen(config, onPairAgain = {}, onForget = {}, onLicences = {}) }
-        auditAllFour("Forget server")
+        host("Settings") { SettingsScreen(facts(UpdateUi(available = 7, offeredVersion = "0.5.3")), onOpen = {}) }
+        auditAllFour("Hub connection")
+    }
+
+    @Test @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w1000dp-h8000dp")
+    fun settingsInTwoPanes() {
+        val facts = facts()
+        host("Settings") { SettingsScreen(facts, onOpen = {}, detail = { SettingsGroupPage(it, facts, actions()) }) }
+        auditAllFour("These choices are kept on this phone only.")
+    }
+
+    @Test fun settingsAppearance() {
+        group("Appearance", SettingsGroup.Appearance)
+        auditAllFour("These choices are kept on this phone only.")
+    }
+
+    @Test fun settingsHub() {
+        group("Hub connection", SettingsGroup.Hub)
+        auditAllFour("Forget this Hub")
+    }
+
+    @Test fun settingsHubNotPaired() {
+        group("Hub connection", SettingsGroup.Hub, facts(paired = false))
+        auditAllFour("No Hub is paired.")
+    }
+
+    @Test fun settingsUpdatesOffered() {
+        group("App updates", SettingsGroup.Updates, facts(UpdateUi(available = 7, offeredVersion = "0.5.3", checked = true)))
+        auditAllFour("Install update")
+    }
+
+    @Test fun settingsUpdatesUpToDate() {
+        group("App updates", SettingsGroup.Updates, facts(UpdateUi(checked = true)))
+        auditAllFour("This app is up to date.")
+    }
+
+    @Test fun settingsUpdatesDownloading() {
+        group("App updates", SettingsGroup.Updates, facts(UpdateUi(available = 7, busy = true, progress = 42)))
+        auditAllFour("Downloading… 42 %")
+    }
+
+    @Test fun settingsUpdatesWaiting() {
+        group("App updates", SettingsGroup.Updates, facts(UpdateUi(available = 7, confirmPending = true)))
+        auditAllFour("Tap to install")
+    }
+
+    @Test fun settingsUpdatesSignatureRefused() {
+        group(
+            "App updates", SettingsGroup.Updates,
+            facts(UpdateUi(available = 7, failure = UpdateFailure.Signature, error = "refused")),
+        )
+        auditAllFour("What this means")
+    }
+
+    @Test fun settingsUpdatesFailed() {
+        group("App updates", SettingsGroup.Updates, facts(UpdateUi(available = 7, failure = UpdateFailure.Storage, error = "storage")))
+        auditAllFour("Try again")
+    }
+
+    @Test fun settingsLicences() {
+        host("Licences") { LicencesScreen() }
+        rule.waitUntil(timeoutMillis = 10_000) {
+            rule.onAllNodesWithText("The Android app").fetchSemanticsNodes().isNotEmpty()
+        }
+        auditAllFour("Show the GPL-3.0 text")
+    }
+
+    @Test fun settingsDeveloper() {
+        group("Developer", SettingsGroup.Developer)
+        auditAllFour("Simulate a tag tap")
     }
 
     // The audit itself: each rule fails on a planted violation.

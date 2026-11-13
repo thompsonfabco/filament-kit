@@ -1,102 +1,115 @@
 package com.thompsonfabco.filamentkit.ui.settings
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.dp
-import com.thompsonfabco.filamentkit.data.ServerConfig
-import com.thompsonfabco.filamentkit.ui.pair.SkipCheckSwitch
-import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
+import androidx.compose.ui.res.stringResource
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.nav.HubState
+import com.thompsonfabco.filamentkit.ui.components.label
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 
 /**
- * Shows the paired server. [onPairAgain] opens pairing; [onForget] should call `Settings.clear()` and go to pairing.
- * [onLicences] opens the licences screen. [setupUrl] gives the server's setup page address at the moment it is opened
- * (the host the app reaches it on now), for the admin features that live only there.
+ * Settings (05-android-app 12.1): a list of groups, each with an icon, a title, a one-line live summary and a chevron.
+ * It works without a Hub connection. On an expanded window the list is the left pane and the chosen group, drawn by
+ * [detail], the right pane; elsewhere (or without [detail]) a tap goes to [onOpen].
  */
 @Composable
-fun SettingsScreen(
-    config: ServerConfig?,
-    onPairAgain: () -> Unit,
-    onForget: () -> Unit,
+internal fun SettingsScreen(
+    facts: SettingsFacts,
+    onOpen: (SettingsGroup) -> Unit,
     modifier: Modifier = Modifier,
-    onLicences: () -> Unit = {},
-    skipFingerprintCheck: Boolean = false,
-    onSkipFingerprintCheck: (Boolean) -> Unit = {},
-    setupUrl: () -> String? = { null },
+    detail: (@Composable (SettingsGroup) -> Unit)? = null,
 ) {
-    var confirmForget by remember { mutableStateOf(false) }
-    var openProblem by remember { mutableStateOf<String?>(null) }
-    val links = LocalUriHandler.current
-    Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (config == null) {
-            Text("No server is paired.")
-        } else {
-            Text("Server", style = MaterialTheme.typography.titleMedium)
-            Text(config.name)
-            Text("${config.endpoints.firstOrNull().orEmpty()}:${config.port}")
-            Text("Certificate fingerprint")
-            Text(groupFingerprint(config.fingerprint), fontFamily = FontFamily.Monospace)
-        }
-        if (config != null) {
-            OutlinedButton(onClick = {
-                val url = setupUrl()
-                openProblem = if (url == null) SetupPageTexts.NO_ADDRESS
-                else if (runCatching { links.openUri(url) }.isSuccess) null else SetupPageTexts.NO_BROWSER
-            }, modifier = Modifier.fillMaxWidth()) { Text(SetupPageTexts.BUTTON) }
-            Text(SetupPageTexts.HELP, style = MaterialTheme.typography.bodySmall)
-            openProblem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        }
-        Button(onClick = onPairAgain, modifier = Modifier.fillMaxWidth()) { Text("Pair again") }
-        if (config != null) {
-            OutlinedButton(onClick = { confirmForget = true }, modifier = Modifier.fillMaxWidth()) { Text("Forget server") }
-        }
-        SkipCheckSwitch(skipFingerprintCheck, onSkipFingerprintCheck)
-        TextButton(onClick = onLicences, modifier = Modifier.fillMaxWidth()) { Text("Licences and third-party software") }
+    val twoPanes = detail != null && SpoolwardenTheme.window == WindowClass.Desktop
+    var chosen by rememberSaveable { mutableStateOf(SettingsGroup.Appearance) }
+    if (!twoPanes) {
+        SettingsList(facts, onOpen, modifier.fillMaxSize(), selected = null)
+        return
     }
-    if (confirmForget) {
-        AlertDialog(
-            onDismissRequest = { confirmForget = false },
-            title = { Text("Forget this server?") },
-            text = { Text("This phone will stop using it until you pair again.") },
-            confirmButton = {
-                TextButton(onClick = { confirmForget = false; onForget() }) { Text("Forget") }
-            },
-            dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Cancel") } },
-        )
+    Row(modifier.fillMaxSize()) {
+        SettingsList(facts, { chosen = it }, Modifier.width(SpoolwardenTheme.sizes.listW).fillMaxHeight(), selected = chosen)
+        VerticalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+        Box(Modifier.weight(1f).fillMaxHeight()) { detail(chosen) }
     }
 }
 
-/** "Open the setup page": its texts and its address. */
-object SetupPageTexts {
-    const val BUTTON = "Open the setup page"
-    const val HELP = "The server's own page in your browser, on the home network, for what this app doesn't do " +
-        "(modules, keys, devices, backups). It asks for the setup code; the browser warns once about the server's own " +
-        "certificate, whose fingerprint is the one above."
-    const val NO_BROWSER = "No browser on this phone could open it"
-    const val NO_ADDRESS = "The server's address isn't known yet"
+@Composable
+private fun SettingsList(facts: SettingsFacts, onOpen: (SettingsGroup) -> Unit, modifier: Modifier, selected: SettingsGroup?) {
+    Column(modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.sizes.hairline)) {
+        settingsGroups(facts.developer).forEach { group ->
+            SettingsRow(
+                icon = group.icon,
+                title = stringResource(group.title),
+                summary = summary(group, facts),
+                onClick = { onOpen(group) },
+                selected = group == selected,
+                dot = group == SettingsGroup.Updates && facts.update.available != null,
+            )
+        }
+    }
+}
 
-    /** `https://<host>:<port>/setup` from the app's `https://<host>:<port>` (null: not paired). */
+@get:DrawableRes
+private val SettingsGroup.icon: Int
+    get() = when (this) {
+        SettingsGroup.Appearance -> R.drawable.sw_ic_half_circle
+        SettingsGroup.Hub -> R.drawable.sw_ic_plug
+        SettingsGroup.Updates -> R.drawable.sw_ic_updates
+        SettingsGroup.Licences -> R.drawable.sw_ic_info
+        SettingsGroup.Developer -> R.drawable.sw_ic_tag
+    }
+
+@get:StringRes
+internal val SettingsGroup.title: Int
+    get() = when (this) {
+        SettingsGroup.Appearance -> R.string.appearance_title
+        SettingsGroup.Hub -> R.string.settings_hub_title
+        SettingsGroup.Updates -> R.string.settings_updates_title
+        SettingsGroup.Licences -> R.string.settings_licences_title
+        SettingsGroup.Developer -> R.string.settings_developer_title
+    }
+
+/** The live summary under a group's title. */
+@Composable
+private fun summary(group: SettingsGroup, facts: SettingsFacts): String = when (group) {
+    SettingsGroup.Appearance -> stringResource(
+        R.string.settings_summary_appearance, stringResource(facts.appearance.label), stringResource(R.string.theme_console_name),
+    )
+    SettingsGroup.Hub -> facts.hub?.let { hub ->
+        stringResource(R.string.settings_summary_hub, hub.name, stringResource(facts.hubState.word))
+    } ?: stringResource(R.string.settings_hub_none)
+    SettingsGroup.Updates -> when (val s = updatesSummary(facts.update)) {
+        is UpdatesSummary.Ready -> stringResource(R.string.settings_updates_ready, s.version)
+        UpdatesSummary.UpToDate -> stringResource(R.string.settings_updates_current, facts.appVersion)
+        UpdatesSummary.Unchecked -> stringResource(R.string.settings_updates_unchecked, facts.appVersion)
+    }
+    SettingsGroup.Licences -> stringResource(R.string.settings_licences_summary)
+    SettingsGroup.Developer -> stringResource(R.string.settings_developer_summary)
+}
+
+/** The word of a Hub state for a summary: the status word, or "Checking…" before the first answer. */
+internal val HubState.word: Int
+    @StringRes get() = badge?.word ?: R.string.common_checking
+
+/** `https://<host>:<port>/setup` from the app's `https://<host>:<port>` (null: not paired). */
+internal object HubPage {
     fun url(base: String?): String? =
         base?.takeIf { it.startsWith("https://") && !it.startsWith("https://unpaired.invalid") }?.trimEnd('/')?.plus("/setup")
 }

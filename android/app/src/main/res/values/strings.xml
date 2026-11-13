@@ -173,8 +173,14 @@
     <string name="settings_developer_title">Developer</string>
     <string name="settings_licences_summary">Free software under GPL-3.0-or-later</string>
     <string name="settings_developer_summary">Debug build tools</string>
+    <!-- 1=appearance 2=theme -->
+    <string name="settings_summary_appearance">%1$s · %2$s</string>
+    <!-- 1=hub 2=state -->
+    <string name="settings_summary_hub">%1$s · %2$s</string>
     <!-- 1=app_version -->
     <string name="settings_updates_current">App %1$s · up to date</string>
+    <!-- 1=app_version -->
+    <string name="settings_updates_unchecked">App %1$s</string>
     <!-- 1=version -->
     <string name="settings_updates_ready">Update ready: %1$s</string>
     <string name="settings_hub_none">No Hub is paired.</string>
@@ -207,6 +213,7 @@
     <string name="settings_licences_missing">%1$s is missing from this build.</string>
     <string name="settings_developer_tag_id">Tag ID</string>
     <string name="settings_developer_simulate">Simulate a tag tap</string>
+    <string name="settings_developer_tag_example">4:77:90:e</string>
     <!-- 1=choice -->
     <string name="appearance_name">Appearance: %1$s</string>
     <!-- 1=choice -->

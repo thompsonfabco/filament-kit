@@ -1,13 +1,14 @@
 package com.thompsonfabco.filamentkit.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,10 +16,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -79,31 +86,39 @@ private val link = Regex("""\[([^\]]+)]\([^)]*\)""")
 
 private fun plain(s: String) = link.replace(s, "$1").replace("**", "").replace("~~", "").replace("`", "")
 
-/** The app's licence and the third-party notices, readable offline. */
+/**
+ * The app's licence and the third-party notices (05-android-app 12.5), readable offline. Both files are read and parsed
+ * off the main thread; skeleton rows stand in until they are ready.
+ */
 @Composable
 fun LicencesScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    // the assets are read off the main thread
-    val notices by produceState(emptyList<NoticeBlock>()) {
+    val notices by produceState<List<NoticeBlock>?>(null) {
         value = withContext(Dispatchers.IO) { noticeBlocks(readAsset(context, THIRD_PARTY_ASSET)) }
     }
     var showGpl by remember { mutableStateOf(false) }
-    val gpl by produceState(emptyList<NoticeBlock>(), showGpl) {
-        value = if (showGpl) withContext(Dispatchers.IO) { noticeBlocks(readAsset(context, LICENSE_ASSET)) } else emptyList()
+    val gpl by produceState<List<NoticeBlock>?>(null, showGpl) {
+        value = if (showGpl) withContext(Dispatchers.IO) { noticeBlocks(readAsset(context, LICENSE_ASSET)) } else null
     }
-    LazyColumn(
-        modifier.fillMaxSize(),
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        item { Text("filament-kit is free software under GPL-3.0-or-later. It comes with no warranty.") }
-        item {
-            OutlinedButton(onClick = { showGpl = !showGpl }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (showGpl) "Hide the GPL-3.0 text" else "Show the GPL-3.0 text")
+    val space = SpoolwardenTheme.space
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxSize(),
+            contentPadding = PaddingValues(space.s4),
+            verticalArrangement = Arrangement.spacedBy(space.s2),
+        ) {
+            item { Text(stringResource(R.string.settings_licences_line), style = MaterialTheme.typography.bodyMedium) }
+            item {
+                SwButton(
+                    stringResource(if (showGpl) R.string.settings_licences_hide else R.string.settings_licences_show),
+                    { showGpl = !showGpl }, Modifier.fillMaxWidth(),
+                )
             }
+            if (showGpl) {
+                gpl?.let { blocks -> items(blocks) { NoticeText(it) } } ?: item { SwSkeletonRows() }
+            }
+            notices?.let { blocks -> items(blocks) { NoticeText(it) } } ?: item { SwSkeletonRows() }
         }
-        items(gpl) { NoticeText(it) }
-        items(notices) { NoticeText(it) }
     }
 }
 
@@ -111,16 +126,15 @@ fun LicencesScreen(modifier: Modifier = Modifier) {
 private fun NoticeText(block: NoticeBlock) {
     when (block) {
         is NoticeBlock.Heading -> Text(
-            block.text,
-            style = if (block.level <= 1) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+            block.text, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium,
         )
         is NoticeBlock.Paragraph -> Text(block.text, style = MaterialTheme.typography.bodyMedium)
         is NoticeBlock.Bullet -> Text("• ${block.text}", style = MaterialTheme.typography.bodyMedium)
-        is NoticeBlock.TableRow -> Text(
-            block.cells.filter { it.isNotEmpty() }.joinToString("  ·  "),
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (block.header) FontWeight.Bold else null,
-        )
+        // a table row is a field row: the first cell names it, the others are its value
+        is NoticeBlock.TableRow -> if (!block.header) {
+            val cells = block.cells.filter { it.isNotEmpty() }
+            FieldRow(cells.firstOrNull().orEmpty(), cells.drop(1).joinToString("  ·  "))
+        }
     }
 }
 
@@ -128,5 +142,5 @@ private fun readAsset(context: android.content.Context, name: String): String =
     try {
         context.assets.open(name).bufferedReader().use { it.readText() }
     } catch (_: java.io.IOException) {
-        "$name is missing from this build."
+        context.getString(R.string.settings_licences_missing, name)
     }

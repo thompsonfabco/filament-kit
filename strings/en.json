@@ -159,7 +159,10 @@
   "settings_developer_title": "Developer",
   "settings_licences_summary": "Free software under GPL-3.0-or-later",
   "settings_developer_summary": "Debug build tools",
+  "settings_summary_appearance": "{appearance} · {theme}",
+  "settings_summary_hub": "{hub} · {state}",
   "settings_updates_current": "App {app_version} · up to date",
+  "settings_updates_unchecked": "App {app_version}",
   "settings_updates_ready": "Update ready: {version}",
   "settings_hub_none": "No Hub is paired.",
   "settings_hub_pair": "Pair with a Hub",
@@ -189,6 +192,7 @@
   "settings_licences_missing": "{name} is missing from this build.",
   "settings_developer_tag_id": "Tag ID",
   "settings_developer_simulate": "Simulate a tag tap",
+  "settings_developer_tag_example": "4:77:90:e",
 
   "appearance_name": "Appearance: {choice}",
   "appearance_saved": "Saved on this device: {choice}.",

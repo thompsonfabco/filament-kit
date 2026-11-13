@@ -87,8 +87,12 @@ import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.RecentGraph
 import com.thompsonfabco.filamentkit.nav.RecentRoute
 import com.thompsonfabco.filamentkit.nav.RecordRoute
+import com.thompsonfabco.filamentkit.nav.SettingsAppearanceRoute
+import com.thompsonfabco.filamentkit.nav.SettingsDeveloperRoute
 import com.thompsonfabco.filamentkit.nav.SettingsGraph
+import com.thompsonfabco.filamentkit.nav.SettingsHubRoute
 import com.thompsonfabco.filamentkit.nav.SettingsRoute
+import com.thompsonfabco.filamentkit.nav.SettingsUpdatesRoute
 import com.thompsonfabco.filamentkit.nav.SpoolsGraph
 import com.thompsonfabco.filamentkit.nav.SpoolsRoute
 import com.thompsonfabco.filamentkit.nav.Tab
@@ -163,9 +167,14 @@ import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
-import com.thompsonfabco.filamentkit.ui.settings.LicencesScreen
+import com.thompsonfabco.filamentkit.ui.settings.HubPage
+import com.thompsonfabco.filamentkit.ui.settings.SettingsActions
+import com.thompsonfabco.filamentkit.ui.settings.SettingsFacts
+import com.thompsonfabco.filamentkit.ui.settings.SettingsGroup
+import com.thompsonfabco.filamentkit.ui.settings.SettingsGroupPage
+import com.thompsonfabco.filamentkit.ui.settings.SettingsHub
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
-import com.thompsonfabco.filamentkit.ui.settings.SetupPageTexts
+import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
 import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
 import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
 import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
@@ -649,27 +658,61 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 }
 
                 navigation<SettingsGraph>(startDestination = SettingsRoute) {
+                    val settingsFacts = SettingsFacts(
+                        appearance = appearance,
+                        hub = config?.let { SettingsHub(it.name, hubAddress(connection, it), it.fingerprint, info?.version) },
+                        hubState = shown,
+                        update = update,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        developer = BuildConfig.DEBUG,
+                    )
+                    val settingsActions = SettingsActions(
+                        onAppearance = app::setAppearance,
+                        skipFingerprintCheck = skipFingerprintCheck,
+                        onSkipFingerprintCheck = app::setSkipFingerprintCheck,
+                        onPairAgain = app.router::pairAgain,
+                        onForget = {
+                            app.forget {
+                                nav.clearSavedStacks()
+                                nav.navigate(PairGraph) {
+                                    popUpTo(nav.graph.id) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        setupUrl = { HubPage.url(app.session.baseUrl()) },
+                        update = UpdateActions(
+                            install = { updater?.install() },
+                            cancel = { updater?.cancel() },
+                            openSettings = { updater?.openPermissionSettings() },
+                            tapToInstall = { updater?.confirmInstall() },
+                            tryAgain = { updater?.checkNow() },
+                        ),
+                        onCheckForUpdates = { updater?.checkNow() },
+                        onSimulateTag = TagEvents::emit,
+                    )
                     composable<SettingsRoute> {
                         SettingsScreen(
-                            config = config,
-                            onPairAgain = app.router::pairAgain,
-                            onForget = {
-                                app.forget {
-                                    nav.clearSavedStacks()
-                                    nav.navigate(PairGraph) {
-                                        popUpTo(nav.graph.id) { inclusive = true }
-                                        launchSingleTop = true
-                                    }
-                                }
+                            facts = settingsFacts,
+                            onOpen = { group ->
+                                nav.navigate(
+                                    when (group) {
+                                        SettingsGroup.Appearance -> SettingsAppearanceRoute
+                                        SettingsGroup.Hub -> SettingsHubRoute
+                                        SettingsGroup.Updates -> SettingsUpdatesRoute
+                                        SettingsGroup.Licences -> LicencesRoute
+                                        SettingsGroup.Developer -> SettingsDeveloperRoute
+                                    },
+                                )
                             },
-                            onLicences = { nav.navigate(LicencesRoute) },
-                            skipFingerprintCheck = skipFingerprintCheck,
-                            onSkipFingerprintCheck = app::setSkipFingerprintCheck,
-                            setupUrl = { SetupPageTexts.url(app.session.baseUrl()) },
+                            detail = { group -> SettingsGroupPage(group, settingsFacts, settingsActions) },
                         )
                     }
-
-                    composable<LicencesRoute> { LicencesScreen() }
+                    composable<SettingsAppearanceRoute> { SettingsGroupPage(SettingsGroup.Appearance, settingsFacts, settingsActions) }
+                    composable<SettingsHubRoute> { SettingsGroupPage(SettingsGroup.Hub, settingsFacts, settingsActions) }
+                    composable<SettingsUpdatesRoute> { SettingsGroupPage(SettingsGroup.Updates, settingsFacts, settingsActions) }
+                    composable<LicencesRoute> { SettingsGroupPage(SettingsGroup.Licences, settingsFacts, settingsActions) }
+                    composable<SettingsDeveloperRoute> { SettingsGroupPage(SettingsGroup.Developer, settingsFacts, settingsActions) }
                 }
             }
         }
@@ -762,6 +805,10 @@ private fun placeTitle(destination: NavDestination?): String = stringResource(
         destination.hasRoute(AddRoute::class) -> R.string.home_add_title
         destination.hasRoute(AddProfileRoute::class) -> R.string.catalog_add_line
         destination.hasRoute(LicencesRoute::class) -> R.string.settings_licences_title
+        destination.hasRoute(SettingsAppearanceRoute::class) -> R.string.appearance_title
+        destination.hasRoute(SettingsHubRoute::class) -> R.string.settings_hub_title
+        destination.hasRoute(SettingsUpdatesRoute::class) -> R.string.settings_updates_title
+        destination.hasRoute(SettingsDeveloperRoute::class) -> R.string.settings_developer_title
         destination.tab() == Tab.Recent -> R.string.nav_recently_added
         else -> (destination.tab() ?: Tab.Home).label
     },
