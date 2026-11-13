@@ -4,6 +4,7 @@
 
 // the tab's one region; a change draws it again and waits for its read (later) before it says the result
 let presetsBody = null;
+const PRESETS = "presets";       // the section's name in TABS; its catalogue keys start with it
 
 function updatesList(box, r) {
   const what = r.chosen.map((u) => h("li", { textContent:
@@ -50,7 +51,7 @@ function lineRow(line, canOrca) {
 }
 
 function drawPresets(v) {
-  if (!v.on) { fill(presetsBody, card("Presets", h("p", { textContent: "Turn on the presets module in Modules to use this tab." }))); return; }
+  if (!v.on) { fill(presetsBody, switchedOff(PRESETS)); return; }
   const box = boxFor("presets"), upBox = boxFor("presetUpdates");
   const a = v.last_attempt, b = v.build;
   const up = v.updates;
@@ -73,13 +74,13 @@ function drawPresets(v) {
       up.count ? h("button", { class: "secondary", textContent: "Show what would be accepted", on: { click: () => change(upBox, "presets/updates", { all: true, dry_run: true }, (r) => updatesList(upBox, r)) } }) : null,
       upBox),
     card("Product lines",
-      v.lines_error ? h("pre", { class: "err", textContent: v.lines_error }) : null,
+      v.lines_error ? SW.errorState({ title: SW.t(PRESETS + "_lines_error", { reason: "" }).trim(), text: hubText(v.lines_error), level: 3, onTry: loadPresets }) : null,
       v.lines.length ? null : h("p", { class: "muted", textContent: "No lines yet. They are made from the Spoolman filaments at the next build or intake." }),
       ...v.lines.map((l) => lineRow(l, v.orca_presets != null))));
 }
 
-async function loadPresets() {
-  try { drawPresets(await api("presets")); } catch (e) { say(presetsBody, e.message, false); }
+function loadPresets() {
+  return readRegion(presetsBody, PRESETS, () => api("presets"), drawPresets);
 }
 
 function presetsTab() {

@@ -864,8 +864,9 @@ function banner(o) {
     key && !o.inline ? iconBtn("close", t("common_dismiss"), { action: "dismiss", run: () => { store.set(key, ver); el.remove(); focusTitle(); } }) : null);
   return el;
 }
-const empty = (o) => E("div", "empty", h("span", { class: "empty__disc", ...AH }, icon(o.icon || "info", "icon--l")),
-  E("h" + (o.level || 2), "empty__title", o.title), E("p", "empty__text", o.text), o.actions ? E("div", "actions", o.actions) : null);
+// empty({icon | shape, title, text, actions, level}); `shape`: a state shape in the disc (switched off: s-hollow)
+const empty = (o) => E("div", "empty", h("span", { class: "empty__disc", ...AH }, o.shape ? shape(o.shape) : icon(o.icon || "info", "icon--l")),
+  E("h" + (o.level || 2), "empty__title", o.title), o.text ? E("p", "empty__text", o.text) : null, o.actions ? E("div", "actions", o.actions) : null);
 // errorState({title, text, details, onTry, alert, level})
 function errorState(o) {
   const tb = o.onTry ? btn(t("common_try_again"), { cls: "btn--primary", action: "try-again" }) : null;

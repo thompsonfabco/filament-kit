@@ -296,12 +296,12 @@ function liveCard() {
 }
 
 function printersOff() {
-  return card("Printers", h("p", { class: "muted", textContent: "The printers and klipper modules are off on this server (see Modules)." }));
+  return switchedOff("printers");
 }
 function printersCard() {
   const P = S.printers, rows = P.list.map((p) => (p.family === "klipper" ? klipperRow(p) : bambuRow(p)));
   return card("Printers",
-    ...(rows.length ? rows : [h("p", { class: "muted", textContent: P.bambu ? "No printer yet. Printers on the network appear here once they announce themselves." : "No printer yet." })]));
+    ...(rows.length ? rows : [SW.empty({ icon: "printer", title: SW.t("printers_empty_title"), text: SW.t(P.bambu ? "printers_empty_bambu" : "printers_empty_klipper"), level: 3 })]));
 }
 // the builders of the section's regions; adding a printer or a scan changes the list too
 function printersTab() {

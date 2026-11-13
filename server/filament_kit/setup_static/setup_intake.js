@@ -22,11 +22,10 @@ function intakePost(box, path, body, done) {
 function intakeTab() {
   const body = h("div"), box = boxFor("intake");
   const el = card("Intake history", body, box);
-  api("intake/history").then((d) => fill(body,
+  later(readRegion(body, "recent", () => api("intake/history"), (d) => fill(body,
     h("p", { class: "muted", textContent: `The newest ${d.keep} spool additions are kept with the photos that were taken (${intakeSize(d.photo_bytes)} of photos now). Change the number in Settings, General.` }),
     d.ai ? null : h("p", { class: "muted", textContent: "Label reading (ai_intake or local_intake) is off on this server: revisions are by hand." }),
-    ...(d.records.length ? d.records.map((r) => intakeRow(r, d.ai)) : [h("p", { class: "muted", textContent: "No spool has been added since the history started." })])))
-    .catch((e) => say(body, e.message, false));
+    ...(d.records.length ? d.records.map((r) => intakeRow(r, d.ai)) : [SW.empty({ icon: "recent", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text"), level: 3 })]))));
   return [el];
 }
 

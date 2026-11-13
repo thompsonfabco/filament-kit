@@ -16,13 +16,13 @@ function logsTab() {
         h("pre", { textContent: r.text || "Nothing logged." })], "info");
     } catch (e) { if (e.locked) fill(box); throw e; }
   });
-  api("logs/units").then((r) => {
-    if (!r.units.length) { fill(body, h("p", { class: "muted", textContent: "No services are on." })); return; }
+  later(readRegion(body, "logs", () => api("logs/units"), (r) => {
+    if (!r.units.length) { fill(body, SW.empty({ icon: "logs", title: SW.t("logs_none"), level: 3 })); return; }
     unit.replaceChildren(...r.units.map((u) => h("option", { value: u, textContent: u })));
     fill(body,
       h("p", { class: "muted", textContent: "Logs hold addresses and serial numbers, so this takes the setup code." }),
       h("div", { class: "row" }, unit, lines, h("button", { textContent: "Show", on: { click: show } })),
       box);
-  }).catch((e) => say(body, e.message, false));
+  }));
   return [card("Logs", body)];
 }

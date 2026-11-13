@@ -59,7 +59,7 @@ function checklist() {
 }
 
 function overviewTab() {
-  const rowsBox = h("div", {}, h("p", { class: "muted", textContent: "Checking…" }));
+  const rowsBox = h("div");
   const head = h("div"), note = h("div", { role: "status" });     // the hidden-values note
   const show = (r) => {
     const u = r.update;
@@ -72,7 +72,7 @@ function overviewTab() {
     note.replaceChildren(...(r.redacted ? [lockNote("lock_hidden_note")] : []));
   };
   // addresses and serials load by themselves once the page is open, and are read again without the code when it locks
-  whenOpen(rowsBox, (open) => (open ? api("overview", { code: theCode() }) : api("overview")).then(show));
+  whenOpen(rowsBox, (open) => readRegion(rowsBox, "overview", () => (open ? api("overview", { code: theCode() }) : api("overview")), show));
   return [checklist(), card("Status", head, rowsBox, note)];
 }
 
@@ -284,9 +284,9 @@ function remoteCard() {
 }
 
 function updatesTab() {
-  const out = h("div", {}, h("p", { class: "muted", textContent: "Reading…" }));
+  const out = h("div");
   const box = boxFor("updates"), back = boxFor("updates:rollback");
-  later(api("updates").then((u) => {
+  later(readRegion(out, "updates", () => api("updates"), (u) => {
     fill(out,
       card("Version",
         h("p", {}, `Installed: ${u.installed_text || u.installed}`),
@@ -309,6 +309,6 @@ function updatesTab() {
           destroy("updates_dialog_rollback_title", "updates_dialog_rollback_body", "updates_roll_back", { version: u.previous })) } }), back) : null,
         u.previous && u.rollback_refused ? h("p", { class: "err", textContent: u.rollback_refused }) : null),
       h("p", { class: "muted", textContent: "To remove the kit: at the server, sudo filament-kit uninstall." }));
-  }).catch((e) => say(out, e.message, false)));
+  }));
   return [out];
 }
