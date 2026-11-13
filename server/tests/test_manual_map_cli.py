@@ -202,3 +202,11 @@ def test_manual_goes_to_the_server_session(env, monkeypatch):
     monkeypatch.setattr(cli, "_manual_map_via_server", lambda api, serial: seen.append((api, serial)) or 0)
     assert cli.main(["printer", "map", "--manual", SERIAL]) == 0
     assert seen == [("API", SERIAL)]
+
+
+def test_a_klipper_printer_is_refused_by_the_plain_map(env, monkeypatch, capsys):
+    p = registry.add_klipper("Shop Box", "box.example")
+    monkeypatch.setattr(cli, "_server_api", lambda: pytest.fail("the server must not be asked"))
+    assert cli.main(["printer", "map", p.serial]) == 1
+    err = capsys.readouterr().err
+    assert "printer map --manual" in err and "Each slot" not in err

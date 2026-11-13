@@ -85,10 +85,6 @@ def _api_answers(port: int) -> tuple[bool, str]:
         return False, url
 
 
-def _station_lines(url: str) -> bool:
-    return status_rows.print_rows(status_rows.station_rows(url))
-
-
 def _hardware_lines() -> bool:
     return status_rows.print_rows(status_rows.hardware_rows())
 
@@ -110,10 +106,6 @@ def _attempt_failed(st: dict) -> str | None:
     if la.get("ok") is False and la.get("error") and la["error"] != builds.NO_SYSTEM:
         return str(la["error"])
     return None
-
-
-def _profile_status_lines() -> bool:
-    return status_rows.print_rows(status_rows.profile_rows())
 
 
 # ---------- pair / unpair ----------
@@ -549,7 +541,11 @@ def _printers_action(choice: str, printers: list) -> None:
             name = (_ask("New name: ") or "").strip()
             if name:
                 registry.rename(p.serial, name)
+                print(f"Renamed {p.name} to {name}.")
         else:
+            if (_ask(f"Remove {p.name}? [y/N] ") or "").strip().lower() not in ("y", "yes"):
+                print("Not removed.")
+                return
             registry.remove(p.serial)
             print(f"Removed {p.name}.")
     else:
@@ -1181,6 +1177,10 @@ def cmd_printer_map(serial: str, manager_factory, manual: bool = False) -> int:
             _err_line("map by loading filament needs the running kit server (sudo systemctl start filament-kit)")
             return 1
         return _manual_map_via_server(api, serial)
+    if p.family != "bambu":
+        _err_line(f"{registry.display_name(p)} is a Klipper printer; Klipper printers are mapped by loading filament: "
+                  f"filament-kit printer map --manual {serial}")
+        return 1
     print(f"Mapping the slots of {registry.display_name(p)}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
     api = _server_api()
@@ -1806,6 +1806,7 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> i
             return 1
     notes: list[str] = []
     err = _change_module(cfg, name, want_on, confirm=_tty_confirm, server=server, notes=notes,
+                         ask_address=_ask_station_server if apply._tty() else None,
                          ask_settings=_ask_module_settings if apply._tty() else None)
     if err:
         print(f"error: {err}", file=sys.stderr)

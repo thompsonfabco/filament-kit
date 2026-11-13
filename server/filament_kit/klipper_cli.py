@@ -24,9 +24,8 @@ import re
 import shlex
 import socket
 import sys
-from getpass import getpass
 
-from . import config, hostaddr, pairing, release, updates
+from . import config, hostaddr, pairing, release, secret_input, updates
 from .bridge import registry
 from .bridge.klipper import detect as kdetect
 from .bridge.klipper import discovery
@@ -247,6 +246,9 @@ def _describe(p: registry.Printer) -> int:
 def run(args) -> int:
     c = args.klipper_cmd
     if c == "add":
+        if not 1 <= args.port <= 65535:
+            print("error: the port must be a number from 1 to 65535", file=sys.stderr)
+            return 1
         host = hostaddr.clean(args.host)
         bad = hostaddr.form_error(host)
         if bad:
@@ -300,7 +302,7 @@ def run(args) -> int:
         print(f"{registry.display_name(p)}: lane_data {args.lane_data}")
         return 0
     if c == "api-key":
-        key = getpass("Moonraker API key (empty clears it): ")
+        key = secret_input.ask("Moonraker API key (empty clears it): ")
         registry.set_api_key(p.serial, key)
         print(f"{registry.display_name(p)}: API key {'stored' if key.strip() else 'cleared'}")
         return 0

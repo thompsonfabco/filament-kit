@@ -136,7 +136,7 @@ def test_cli_add_keeps_an_ipv6_address_without_its_brackets(monkeypatch):
 
 def test_cli_api_key_not_echoed(capsys, monkeypatch):
     registry.add_klipper("P", "h")
-    monkeypatch.setattr(klipper_cli, "getpass", lambda prompt="": "s3cretkey")
+    monkeypatch.setattr(klipper_cli.secret_input, "ask", lambda prompt="": "s3cretkey")
     assert klipper_cli.main(["api-key", "p"]) == 0
     assert "s3cretkey" not in capsys.readouterr().out
     assert registry.load()["p"].api_key == "s3cretkey"
@@ -398,3 +398,11 @@ def test_klipper_add_cli_says_it_is_already_added(capsys):
     args = type("A", (), {"klipper_cmd": "add", "name": "Again", "host": "voron.home.arpa", "port": 7125})
     assert klipper_cli.run(args) == 1
     assert "Voron" in capsys.readouterr().err
+
+
+def test_cli_add_refuses_a_port_outside_1_65535(capsys):
+    for port in ("0", "99999"):
+        assert klipper_cli.main(["add", "Bad", "box.example", "--port", port]) == 1
+        assert "1 to 65535" in capsys.readouterr().err
+    assert registry.load() == {}
+
