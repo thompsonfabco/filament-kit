@@ -1221,7 +1221,7 @@ Photos open on the Hub page: https://192.0.2.10:8710/setup#recent/35
 ```
 $ sudo spoolwarden recent revise 35 --note "it is the matte one"
 ◐ Asking the AI… (up to a minute) 6 s
-The AI suggests:
+The Label Reader suggests:
   Name: PolyTerra PLA Charcoal Black
      → PolyTerra PLA Charcoal Black (Matte)
   Nozzle range: 190-230 °C → 190-220 °C

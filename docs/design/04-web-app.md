@@ -428,8 +428,8 @@ required unless its label ends in "(optional)"; there is no "required" word and 
 | | **Empty spool weight (optional)** (pair) | decimal, unit "g" | "Enter grams above 0." | `tare` |
 | State | **Still sealed (in its bag or box)** | toggle | Under it, when the Label Reader gave a reason: "Label Reader: <sealed reason>". Turning it on moves Location to the sealed-stock location and hides the weight; turning it off sets Location to Automatic. | `sealed` |
 | | **Weight with spool (optional)** | decimal, unit "g" | Shown only when not sealed. Helper: "Leave empty for a full spool." With Spools above 1: aria-disabled, "Only used for one opened spool." | `gross` |
-| Print settings | **Nozzle (°C, optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `nozzle` |
-| | **Bed (°C, optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `bed` |
+| Print settings | **Nozzle (optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `nozzle` |
+| | **Bed (optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `bed` |
 | Storage | **Location** | select: "Automatic (<placement rule>)", then every configured location; always has a value | | `location` |
 | Other | **Lot (optional)** | text, `--mono` | | `lot` |
 | | **Price per kg (optional)** | decimal | Helper, when the label showed a price: "From the label: <price line>". | `price_per_kg`, `price_line` |
@@ -670,7 +670,7 @@ Hub has today. When none of the four is available the group is absent and the sh
 
 | Action | How it works |
 |---|---|
-| "Update weight" | Opens a small form in place: "Weight with spool" (g); "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight". |
+| "Update weight" | Opens a small form in place: "Weight with spool"; "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight". |
 | "Move" | A menu of locations; choosing one moves it at once; inline result "Moved to Dry box 1." with "Undo" for 5 s. |
 | "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." |
 | "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (one row per slot with its current spool), then the automatic preview and "Load", exactly as the load sheet of 6.5. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`. |
@@ -1038,7 +1038,7 @@ undo a correction. Served on the home address only (7.4). Code today: `historyTa
   long-press); state: the badge "As detected", "Revised by AI" or "Edited by hand" (3.3); "Spool 214" or "Spools
   212, 213" in `--mono`; when confidence is known, a last line with the record summary of 02-components 7.2, e.g.
   "Medium: Colour · Not on the label: Price per kg" (triangle) or "Low: check Material, Net weight" (octagon).
-- Empty: "Nothing added yet" with the text "No spool has been added since the history started."
+- Empty: "Nothing added yet" with the text "No spool has been added since the history started. Spools added from the web app, the app or the Weigh Station appear here."
 - Tablet: the list keeps the full content width; opening a record expands it in place under its card (2.3).
 
 ### 7.2 One record (`#recent/<id>`)
@@ -1097,11 +1097,11 @@ of them." Fields in four groups, label left (`--muted`) and value right; units i
 | Group | Fields |
 |---|---|
 | Identity | Brand · Name · Material · Colour (swatch and hex) · Line |
-| Weights | Net weight (g) · Empty spool weight (g) · Density (g/cm³) |
-| Temperatures | Nozzle (°C) · Bed (°C) · Nozzle range (°C, "190-230") · Bed range (°C) |
+| Weights | Net weight · Empty spool weight · Density |
+| Temperatures | Nozzle · Bed · Nozzle range (placeholder "190-230") · Bed range |
 | Other | Price per kg |
 
-"Edit" (pencil) turns the values into inputs in place (same rules and error texts as 4.5; ranges: "Enter a range
+"Edit by hand" (pencil) turns the values into inputs in place (same rules and error texts as 4.5; ranges: "Enter a range
 like 190-230."). The group footer then shows "Cancel" and "Save changes" (filled). Only changed fields are sent:
 POST `history/<id>/apply` `{item, values}`. Results in the footer: "Saving…"; ok "Saved 2 changes: Name, Empty spool
 weight."; "Nothing changed." when no field differs; then, from the Hub, "The spools now use filament <id>." (with
@@ -1119,8 +1119,8 @@ weight."; "Nothing changed." when no field differs; then, from the Hub, "The spo
 | "Accept" | filled | POST `history/<id>/apply` `{proposal}`; result "Accepted. 2 fields changed; revision 2 keeps the old values." State becomes "Revised by AI". |
 | "Discard" | default | nothing is sent; line "Proposal discarded. Nothing changed." |
 
-When the Label Reader is off (`ai` false in the list, or 409 `ai_off`) the group shows only: info circle "The Label
-Reader is switched off on this Hub. Edit the record by hand, or switch it on on the Hub page under Features."
+When the Label Reader is off (`ai` false in the list, or 409 `ai_off`) the group shows only: info circle
+"The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page."
 
 **Revisions.** One row per revision, oldest first: "Revision <n>, <time>, by hand|by AI: <field old → new; …>" with
 the note when there is one. Undone revisions are struck through with "(undone)" (02-components 7.10). The newest revision that is
@@ -1627,7 +1627,7 @@ this design.
 | Detail photos | Photos group (7.2) |
 | "Spool <ids>: a change applies to all of them" | Panel heading and line (7.2) |
 | Inputs Brand, Name, Material, Colour (hex), Net g, Spool g, Density, Nozzle °C, Bed °C, Nozzle range, Bed range, Price per kg, Line | The same fields in four groups; "Spool g" is now "Empty spool weight" (7.2) |
-| "Save changes", "Saving…", "Saved.", "Nothing changed." | "Edit", then "Save changes" with its results (7.2) |
+| "Save changes", "Saving…", "Saved.", "Nothing changed." | "Edit by hand", then "Save changes" with its results (7.2) |
 | Textarea "e.g. brand is Polymaker" | "What is wrong?" (7.2) |
 | "Ask the AI to correct it" | "Ask the Label Reader" (7.2) |
 | "Asking the AI… (up to a minute)" | "The Label Reader is reading it again… (up to a minute)" (7.2) |
