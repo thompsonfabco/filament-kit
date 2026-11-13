@@ -2359,7 +2359,7 @@ with a **Download** link.
 
 **Sizes and tokens.** `--code` ground, 1 px `--border`, `--r`; `pre` padding `var(--s2) var(--s3)`,
 `--fs-s`/1.65 `--mono`. Commands keep their line breaks and scroll sideways inside the box (`white-space: pre`,
-foundations §7); logs wrap (`pre-wrap`). Caption bar: 1 px `--border` above, padding `0 0 0 var(--s3)` (Copy fills
+foundations §7); logs wrap at every width (`pre-wrap`, `overflow-wrap: anywhere`). Caption bar: 1 px `--border` above, padding `0 0 0 var(--s3)` (Copy fills
 the bar's height),
 caption `--fs-xs` `mono` `--muted`.
 
