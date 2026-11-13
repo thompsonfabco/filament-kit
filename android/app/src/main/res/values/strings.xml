@@ -1890,10 +1890,12 @@
         <item quantity="one">Added %1$d spool.</item>
         <item quantity="other">Added %1$d spools.</item>
     </plurals>
+    <string name="web_address_bambu_label">IP address or name</string>
     <string name="web_address_bambu_help">e.g. 192.0.2.40 or printer.local</string>
     <string name="web_address_code_help">The Hub needs it again when the address changes. On the printer: Settings > Network/LAN > Access Code.</string>
     <string name="web_address_confirm">Change address</string>
     <string name="web_address_klipper_help">e.g. voron.example or 192.0.2.57</string>
+    <string name="web_address_key_help">Sent only to the new address. Leave it empty for none: a saved key is cleared.</string>
     <!-- 1=printer -->
     <string name="web_address_title">Change address: %1$s</string>
     <string name="web_banner_back_online">Connected to the Hub again.</string>
@@ -2452,6 +2454,8 @@
     <string name="web_state_printing">Printing: %1$s</string>
     <!-- 1=job 2=printer -->
     <string name="web_stop_body">Stop %1$s on %2$s? It cannot be resumed.</string>
+    <!-- 1=printer -->
+    <string name="web_stop_body_nojob">Stop the print on %1$s? It cannot be resumed.</string>
     <string name="web_stop_keep">Keep printing</string>
     <string name="web_stop_title">Stop the print?</string>
     <!-- 1=count 2=ids -->

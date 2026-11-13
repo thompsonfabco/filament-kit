@@ -252,7 +252,8 @@ function modal(dlg, o = {}) {
 // quit(dlg): Cancel, the close icon and the scrim ask what Escape asks (the dialog's cancel event, 9.1)
 const quit = (dlg) => { if (dlg.dispatchEvent(new Event("cancel", { cancelable: true }))) dlg.close(); };
 // ask({kind confirm|destructive|typed|entry|info, title, text, body, fields, after, confirm, cancel, style, word, busy,
-// write, run(values, {result}) -> false stays open}): resolves with run's answer (or true), null on cancel
+// write, open(dlg, opener) opens it in place of openModal, run(values, {result}) -> false stays open}): resolves with
+// run's answer (or true), null on cancel
 function ask(o) {
   return new Promise((resolve) => {
     const id = uid("dlg"), danger = o.kind === "destructive" || o.kind === "typed", fields = (o.fields || []).slice();
@@ -300,7 +301,7 @@ function ask(o) {
       if (o.write) guard(o.title, run); else run();
     });
     modal(dlg, { temp: true, onClose: () => resolve(answer) });
-    openModal(dlg, o.opener);
+    (o.open || openModal)(dlg, o.opener);
     const f1 = word || fields[0];
     if (f1 && (o.kind === "entry" || o.kind === "typed")) { f1._control.focus(); if (f1._control.select) f1._control.select(); }
     else (o.kind === "destructive" ? cancel : go).focus();
