@@ -20,6 +20,7 @@ from filament_kit import config, modules, tags, tagsources  # noqa: E402
 from filament_kit.spoolman import Spoolman  # noqa: E402
 from filament_kit.web import __main__ as web_main  # noqa: E402
 from filament_kit.web import app as web_app, auth  # noqa: E402
+from test_shared_files import INTAKE_CSP, INTAKE_CSP_PRINTERS, check_files, check_sprite_first  # noqa: E402
 
 PUBLIC = "https://mcp.example.test/filament"
 ORIGIN = "https://mcp.example.test"
@@ -246,6 +247,16 @@ def test_build_app_needs_public_url(sm):
 
 def _client(app, who=HOME):
     return TestClient(app, base_url=ORIGIN, client=who)
+
+
+def test_shared_files_are_served_and_the_sprite_comes_first(app):
+    with _client(app) as c:
+        r = c.get("/intake")
+        check_sprite_first(r.text)
+        assert r.headers["content-security-policy"] in (INTAKE_CSP, INTAKE_CSP_PRINTERS)
+        check_files(c.get, "/intake")
+        assert "/intake/shared/" not in r.text                                  # not linked yet
+    assert _client(app, AWAY).get("/intake/shared/tokens.css").status_code == 403   # no lifespan: the app ran once above
 
 
 def test_page_needs_no_sign_in_and_has_csp(app):

@@ -20,6 +20,7 @@ STRINGS = (Path("strings/en.json"), Path("strings/strings.js"))
 ANDROID_OUTPUTS = (KT, WINDOW, WINDOW_NIGHT)
 DRAWABLES = Path("android/app/src/main/res/drawable")
 ICON_SPRITE = Path("icons/sprite.svg")
+SHARED_STATIC = Path("server/filament_kit/shared_static")
 
 
 def _copy_icons(tmp_path):
@@ -158,7 +159,7 @@ def _mirror(tmp_path):
     """A copy of the token folder, the Android and strings outputs and strings/en.json, laid out as in the repository;
     --check passes on it."""
     for name in ("tokens.json", "build_tokens.py", "tokens.css", "theme-init.js"):
-        (tmp_path / "tokens").mkdir(exist_ok=True)
+        (tmp_path / "tokens").mkdir(parents=True, exist_ok=True)
         (tmp_path / "tokens" / name).write_bytes((TOKENS / name).read_bytes())
     for rel in ANDROID_OUTPUTS:
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -167,6 +168,9 @@ def _mirror(tmp_path):
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / rel).write_bytes((ROOT / rel).read_bytes())
     _copy_icons(tmp_path)
+    shutil.copytree(ROOT / SHARED_STATIC, tmp_path / SHARED_STATIC, dirs_exist_ok=True)
+    if (ROOT / "web-shared").is_dir():
+        shutil.copytree(ROOT / "web-shared", tmp_path / "web-shared", dirs_exist_ok=True)
     return tmp_path / "tokens" / "build_tokens.py"
 
 
@@ -224,6 +228,36 @@ def test_check_fails_on_a_missing_or_stray_icon_output(tmp_path):
     (tmp_path / DRAWABLES / "sw_ic_stray.xml").write_text("<vector/>\n", encoding="utf-8", newline="\n")
     r = _check(script)
     assert r.returncode == 1 and "sw_ic_stray.xml has no source" in r.stderr, r.stdout + r.stderr
+
+
+def test_check_covers_the_copies_the_hub_serves(tmp_path):
+    for name in ("tokens.css", "theme-init.js", "strings.js", "sprite.svg"):
+        assert (ROOT / SHARED_STATIC / name).read_bytes() == next(
+            p for p in (ROOT / "tokens" / name, ROOT / "strings" / name, ROOT / "icons" / name) if p.is_file()).read_bytes()
+        script = _mirror(tmp_path / "edit" / name)
+        f = tmp_path / "edit" / name / SHARED_STATIC / name
+        f.write_text(f.read_text(encoding="utf-8") + "\n", encoding="utf-8", newline="\n")
+        r = _check(script)
+        assert r.returncode == 1 and f"shared_static/{name} differs" in r.stderr, (name, r.stdout + r.stderr)
+        script = _mirror(tmp_path / "gone" / name)
+        (tmp_path / "gone" / name / SHARED_STATIC / name).unlink()
+        r = _check(script)
+        assert r.returncode == 1 and "does not exist" in r.stderr, (name, r.stdout + r.stderr)
+    script = _mirror(tmp_path / "stray")
+    (tmp_path / "stray" / SHARED_STATIC / "stray.js").write_text("x\n", encoding="utf-8", newline="\n")
+    r = _check(script)
+    assert r.returncode == 1 and "shared_static/stray.js has no source" in r.stderr, r.stdout + r.stderr
+
+
+def test_a_web_shared_file_is_copied_and_checked(tmp_path):
+    script = _mirror(tmp_path)
+    (tmp_path / "web-shared").mkdir(exist_ok=True)
+    (tmp_path / "web-shared" / "probe.css").write_text("a{}\n", encoding="utf-8", newline="\n")
+    r = _check(script)
+    assert r.returncode == 1 and "probe.css does not exist" in r.stderr, r.stdout + r.stderr
+    subprocess.run([sys.executable, str(script)], capture_output=True, text=True, cwd=script.parent, timeout=120, check=True)
+    assert (tmp_path / SHARED_STATIC / "probe.css").read_bytes() == b"a{}\n"
+    assert _check(script).returncode == 0
 
 
 def test_check_fails_on_a_source_with_a_circle(tmp_path):

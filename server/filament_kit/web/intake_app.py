@@ -31,7 +31,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import intake, inventory, lan, modules, tagsources
+from .. import intake, inventory, lan, modules, shared_files, tagsources
 from ..intake import CapReached, ReadError
 from ..station_client import StationClient
 from . import mcp_tools, printers_app
@@ -147,6 +147,7 @@ class IntakeApp:
         self.host_ok = host_ok
         self.host_refusal = host_refusal    # the kit server: the setup page's refusal text (its names, the Settings fix)
         self.static = {n: (STATIC / n).read_bytes() for n in ("app.js", "app.css", "printers.js")}
+        self.shared = shared_files.load()   # served at <base>/shared/<file>; the sprite goes inline in the page
         self.icon = icon_png()
         self.tag_cache: dict = {}
         self.station: list = [None, None]  # [url, StationClient]
@@ -192,6 +193,7 @@ class IntakeApp:
         return [Route(p, fn, methods=m) for p, fn, m in (
             ("/intake", self.page, ["GET"]), ("/intake/app.js", self.asset, ["GET"]),
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
+            ("/intake/shared/{name}", self.shared_asset, ["GET"]),
             ("/intake/icon.png", self.icon_route, ["GET"]),
             ("/intake/manifest.webmanifest", self.manifest, ["GET"]),
             ("/intake/api/read", self.api(self.read), ["POST"]), ("/intake/api/add", self.api(self.add), ["POST"]),
@@ -323,7 +325,7 @@ class IntakeApp:
                 "push": "1" if self.printers and self.printers.push_on else "0",
                 "history": "1" if self.history else "0"}
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
-        return f"<body {attrs}><main id=app></main></body>"
+        return f"<body {attrs}>{shared_files.sprite_inline(self.shared)}<main id=app></main></body>"
 
     async def page(self, request: Request):
         if not self._lan(request):
@@ -336,6 +338,9 @@ class IntakeApp:
         name = request.url.path.rsplit("/", 1)[-1]
         return Response(self.static[name], media_type="text/javascript" if name.endswith(".js") else "text/css",
                         headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    async def shared_asset(self, request: Request):
+        return shared_files.response(self.shared, request.path_params["name"])
 
     async def icon_route(self, request: Request):
         return Response(self.icon, media_type="image/png", headers={"Cache-Control": "max-age=86400"})

@@ -49,3 +49,6 @@ pre.err, p.err { border-color: var(--bad); color: var(--bad); }
 pre.ok { border-color: var(--ok); }
 img.qr { width: 14rem; height: 14rem; display: block; background: #fff; padding: 8px; border-radius: 8px; }
 .hidden { display: none; }
+
+/* the icon sprite is inline at the top of <body> (S0.10); it takes no room until the page moves onto components.css */
+svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }

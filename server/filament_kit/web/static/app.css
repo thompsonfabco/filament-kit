@@ -83,3 +83,6 @@ p.err { color: var(--bad); }
 
 .thumb { max-width: 8rem; cursor: zoom-in; border-radius: 6px; }
 .thumb.big { max-width: 100%; cursor: zoom-out; }
+
+/* the icon sprite is inline at the top of <body> (S0.10); it takes no room until the page moves onto components.css */
+svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }

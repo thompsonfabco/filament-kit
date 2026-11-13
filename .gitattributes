@@ -27,6 +27,7 @@ printer-pack/** text eol=lf
 # a CRLF checkout would fail it (docs/design/08-platform-mapping.md 1). Listed now for the outputs later steps add.
 tokens/** text eol=lf
 icons/** text eol=lf
+server/filament_kit/shared_static/** text eol=lf
 strings/** text eol=lf
 web-shared/** text eol=lf
 android/app/src/main/java/**/ui/theme/SpoolwardenTokens.kt text eol=lf

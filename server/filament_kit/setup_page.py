@@ -64,7 +64,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import __version__, config, hostaddr, lan, modules, pairing, reader_tokens, setup_code, trusted
+from . import __version__, config, hostaddr, lan, modules, pairing, reader_tokens, setup_code, shared_files, trusted
 from .bridge import registry
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
 
@@ -291,6 +291,7 @@ class SetupPage:
         self.client_factory = client_factory
         self.hosts = hosts or allowed_hosts         # a function: the names the page answers to
         self.last_check = 0.0
+        self.shared = shared_files.load()           # tokens, strings, icon sprite, components: served at /setup/shared/<file>
         self.static = {n: (STATIC / n).read_bytes()
                        for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
                                  "setup_backup.js",
@@ -334,7 +335,8 @@ class SetupPage:
                  Route("/setup/setup_intake.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_flash.js", self.asset, methods=["GET"]),
                  Route("/setup/esptool.bundle.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup.css", self.asset, methods=["GET"])]
+                 Route("/setup/setup.css", self.asset, methods=["GET"]),
+                 Route("/setup/shared/{name}", self.shared_asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
 
     # ---------- access ----------
@@ -494,7 +496,7 @@ class SetupPage:
             "<!doctype html><html lang=en><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
             f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
-            "<body><main id=app></main><script src='/setup/setup.js'></script>"
+            f"<body>{shared_files.sprite_inline(self.shared)}<main id=app></main><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
             "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",
             headers=HEADERS)
@@ -505,6 +507,11 @@ class SetupPage:
         name = request.url.path.rsplit("/", 1)[-1]
         return Response(self.static[name], media_type="text/javascript" if name.endswith(".js") else "text/css",
                         headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    async def shared_asset(self, request: Request):
+        if not self._lan(request):
+            return Response(status_code=403)
+        return shared_files.response(self.shared, request.path_params["name"])
 
     # ---------- reads ----------
     def _printer_rows(self) -> list[dict]:

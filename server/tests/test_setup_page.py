@@ -23,6 +23,7 @@ from filament_kit import (api, apply, cli, config, library, modules, pairing, re
                           setup_page)
 from filament_kit.bridge import registry
 from filament_kit.spoolman import Spoolman
+from test_shared_files import SETUP_CSP, check_files, check_sprite_first
 
 CODE = "12345678"
 HOSTNAME = "kit.local"
@@ -141,6 +142,16 @@ def test_page_is_served_with_a_strict_csp_and_no_external_assets(app):
     assert "unsafe" not in csp and "http" not in csp
     assert "/setup/setup.js" in r.text and "http" not in r.text.replace(BASE, "")
     assert client(app).get("/setup/setup.js").status_code == 200
+
+
+def test_shared_files_are_served_and_the_sprite_comes_first(app):
+    c = client(app)
+    r = c.get("/setup")
+    check_sprite_first(r.text)
+    assert r.headers["content-security-policy"] == SETUP_CSP
+    check_files(c.get, "/setup")
+    assert client(app, AWAY).get("/setup/shared/tokens.css").status_code == 403
+    assert 'rel=stylesheet' in r.text and "/setup/shared/" not in r.text       # not linked yet
 
 
 def test_page_and_api_answer_only_the_home_network(app):
