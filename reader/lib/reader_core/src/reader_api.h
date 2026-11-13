@@ -63,6 +63,40 @@ struct SlotCache {
 // then shows the first slot and goes back to the saved slot when it returns.
 std::string wantedLabel(const std::string& saved, const std::string& current, bool turnedUnsaved);
 
+// Whether the background list refresh is due. While the server is down it is
+// retried every retryMs, screen on or off, so the lists are back by the next tap;
+// otherwise every refreshMs and only with the screen lit. Wrap-safe (uint32 ms).
+// lastAt is when the last refresh ENDED, so a slow failing refresh cannot make the
+// next one due at once.
+bool listsDue(uint32_t now, uint32_t lastAt, bool serverOk, bool screenOn,
+              uint32_t refreshMs, uint32_t retryMs);
+
+// Decides whether a tag read counts as a new scan: the same tag is ignored for
+// cooldownMs after it counted, and after requireLift() (a refused or refreshed tap)
+// no read counts until a poll saw no tag at all, so a spool left on the reader is
+// not posted to a slot the user has not confirmed.
+struct TagGate {
+  std::string uid;
+  uint32_t at = 0;
+  bool needLift = false;
+  bool accept(const std::string& u, uint32_t now, uint32_t cooldownMs) {
+    if (needLift) return false;
+    if (u == uid && now - at <= cooldownMs) return false;
+    uid = u; at = now;
+    return true;
+  }
+  void noTag() { needLift = false; }          // a poll found no tag: it was lifted
+  void requireLift() { needLift = true; }
+};
+
+// Retry delay after `failures` failed refreshes in a row: 10 s, 20 s, 40 s, then 60 s.
+uint32_t listRetryMs(int failures);
+
+// A background/tap refresh is one short attempt, so a dead server holds the knob and
+// NFC loop for at most connect + read time (not the ~22 s of the normal 2 x 6 s).
+static const uint32_t LIST_QUICK_TIMEOUT_MS = 2000;   // connect and read, each
+static const uint32_t LIST_QUICK_BLOCK_MS   = 2 * LIST_QUICK_TIMEOUT_MS;   // worst case per failed refresh
+
 // One line describing what is in a slot ("PLA Polymaker Grey", "empty", "?").
 std::string slotContents(const SlotEntry& s);
 
