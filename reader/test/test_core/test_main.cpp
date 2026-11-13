@@ -76,7 +76,6 @@ void test_parse_slots_full() {
   ])", s));
   TEST_ASSERT_EQUAL(5, (int)s.size());
   TEST_ASSERT_EQUAL_STRING("A1", s[0].label.c_str());
-  TEST_ASSERT_EQUAL_STRING("ams", s[0].kind.c_str());
   TEST_ASSERT_EQUAL(PRESENT_YES, s[0].present);
   TEST_ASSERT_EQUAL_STRING("PLA", s[0].type.c_str());
   TEST_ASSERT_EQUAL_STRING("Polymaker Grey", s[0].spool.c_str());
@@ -122,6 +121,19 @@ void test_parse_slots_sixteen_units() {
   TEST_ASSERT_EQUAL_STRING("Ext-R", s[73].label.c_str());
 }
 
+void test_parse_slots_caps_count() {
+  std::string j = "[";
+  for (int i = 0; i < MAX_SLOTS + 1; i++) {
+    if (i) j += ",";
+    j += "{\"label\":\"S" + std::to_string(i) + "\"}";
+  }
+  j += "]";
+  std::vector<SlotEntry> s;
+  TEST_ASSERT_TRUE(parseSlots(j.c_str(), s));
+  TEST_ASSERT_EQUAL(128, (int)s.size());   // the cap the server's cap_slots relies on
+  TEST_ASSERT_EQUAL_STRING("S127", s[127].label.c_str());
+}
+
 void test_slot_contents() {
   SlotEntry e;
   e.label = "A1";
@@ -146,11 +158,11 @@ void test_slot_contents() {
 // ---- scan --------------------------------------------------------------------
 
 void test_scan_body() {
-  std::string b = scanBody("4:c7:96:11:9:22:89", "h2d", "HT-B", false);
+  std::string b = scanBody("4:c7:96:11:9:22:89", "h2d", "HT-B");
   TEST_ASSERT_EQUAL_STRING(
-      R"({"uid":"4:c7:96:11:9:22:89","printer":"h2d","slot":"HT-B","dry_run":false})", b.c_str());
-  std::string q = scanBody("a\"b", "p", "s", true);
-  TEST_ASSERT_EQUAL_STRING(R"({"uid":"a\"b","printer":"p","slot":"s","dry_run":true})", q.c_str());
+      R"({"uid":"4:c7:96:11:9:22:89","printer":"h2d","slot":"HT-B"})", b.c_str());
+  std::string q = scanBody("a\"b", "p", "s");
+  TEST_ASSERT_EQUAL_STRING(R"({"uid":"a\"b","printer":"p","slot":"s"})", q.c_str());
 }
 
 void test_scan_statuses() {
@@ -521,6 +533,7 @@ int main(int, char**) {
   RUN_TEST(test_parse_slots_spool_without_name_uses_id);
   RUN_TEST(test_parse_slots_skips_unlabelled_and_rejects_bad);
   RUN_TEST(test_parse_slots_sixteen_units);
+  RUN_TEST(test_parse_slots_caps_count);
   RUN_TEST(test_slot_contents);
   RUN_TEST(test_scan_body);
   RUN_TEST(test_scan_statuses);

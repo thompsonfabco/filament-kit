@@ -109,6 +109,29 @@ def sign_image(image, key, build):
             "sig": base64.b64encode(sig).decode()}
 
 
+def make_stage(host):
+    """A fresh private (mode 0700) staging folder on the host: the image carries the Wi-Fi
+    password and the token, so it must not sit in a predictable, world-readable /tmp path."""
+    print("+ ssh", host, "mktemp -d")
+    out = subprocess.run(["ssh", host, "mktemp -d"], check=True, capture_output=True, text=True).stdout
+    stage = out.strip()
+    if not stage.startswith("/") or "\n" in stage:
+        sys.exit(f"ssh mktemp -d on {host} printed no usable folder: {out!r}")
+    return stage
+
+
+def live_problem(base, token, build):
+    """Why the live check failed (a string), or None when the server reports `build`."""
+    try:
+        live = fetch_manifest(base, token)
+    except (OSError, ValueError) as e:   # URLError/HTTPError/timeouts are OSError; bad JSON is ValueError
+        return f"{type(e).__name__}: {e}"
+    reported = live.get("build") if isinstance(live, dict) else live
+    if reported != build:
+        return f"the server still reports build {reported}"
+    return None
+
+
 def remote_install_cmd(stage, remote_dir, owner, group, sudo=True):
     """Shell command run on the host: image first, manifest last, so a reader never sees
     a manifest for a missing image."""
@@ -168,8 +191,7 @@ def main(argv=None):
     if args.dry_run:
         return
 
-    stage = f"/tmp/reader-fw-{build}"
-    run(["ssh", args.host, f"mkdir -p {shlex.quote(stage)}"])
+    stage = make_stage(args.host)
     run(["scp", "-q", str(build_dir / "firmware.bin"), str(build_dir / "manifest.json"),
          f"{args.host}:{stage}/"])
     run(["ssh", args.host, remote_install_cmd(stage, args.remote_dir, args.remote_owner,
@@ -183,9 +205,9 @@ def main(argv=None):
     if not base or not token:
         sys.exit("uploaded, but cannot check it: no READER_BASE/READER_TOKEN (use --base-url and "
                  "the READER_TOKEN environment variable, or --no-verify)")
-    live = fetch_manifest(base, token)
-    if live.get("build") != build:
-        sys.exit(f"published, but the server still reports build {live.get('build')}")
+    problem = live_problem(base, token, build)
+    if problem:
+        sys.exit(f"uploaded, but the live check failed: {problem}")
     print(f"published build {build}. Hold the reader's knob for 4 s to install it.")
 
 

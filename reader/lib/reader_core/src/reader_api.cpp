@@ -80,7 +80,7 @@ bool parsePrinters(const char* json, std::vector<PrinterEntry>& out) {
 bool parseSlots(const char* json, std::vector<SlotEntry>& out) {
   JsonDocument filter;
   JsonObject f = filter[0].to<JsonObject>();
-  f["label"] = true; f["kind"] = true;
+  f["label"] = true;
   f["present"] = true; f["type"] = true; f["spool"] = true;
   JsonDocument doc;
   if (!parseArray(json, doc, filter)) return false;
@@ -91,7 +91,6 @@ bool parseSlots(const char* json, std::vector<SlotEntry>& out) {
     SlotEntry e;
     e.label = cut(text(s["label"]));
     if (e.label.empty()) continue;
-    e.kind = cut(text(s["kind"]));
     JsonVariantConst pr = s["present"];
     if (pr.is<bool>()) e.present = pr.as<bool>() ? PRESENT_YES : PRESENT_NO;
     e.type = cut(text(s["type"]));
@@ -186,13 +185,11 @@ const char* headline(ScanStatus s) {
   }
 }
 
-std::string scanBody(const std::string& uid, const std::string& printer, const std::string& slot,
-                     bool dryRun) {
+std::string scanBody(const std::string& uid, const std::string& printer, const std::string& slot) {
   JsonDocument doc;
   doc["uid"] = uid;
   doc["printer"] = printer;
   doc["slot"] = slot;
-  doc["dry_run"] = dryRun;
   std::string out;
   serializeJson(doc, out);
   return out;

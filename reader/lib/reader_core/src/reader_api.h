@@ -35,7 +35,6 @@ enum Presence { PRESENT_UNKNOWN = 0, PRESENT_YES = 1, PRESENT_NO = 2 };
 
 struct SlotEntry {
   std::string label;  // the kit label ("A1", "HT-B", "Ext-L"); what the reader saves and sends
-  std::string kind;   // unit kind from the server ("ams", "ams_ht", "external", ...)
   Presence present = PRESENT_UNKNOWN;
   std::string type;   // filament type the printer reports ("PLA"), may be empty
   std::string spool;  // linked spool's display name ("#12" when it has no name), may be empty
@@ -94,9 +93,8 @@ enum Feedback { FB_OK, FB_QUEUED, FB_UNKNOWN, FB_ERROR };
 Feedback feedbackFor(ScanStatus s);
 const char* headline(ScanStatus s);  // short screen text ("Unknown tag")
 
-// {"uid":..,"printer":..,"slot":..,"dry_run":..} with JSON escaping.
-std::string scanBody(const std::string& uid, const std::string& printer, const std::string& slot,
-                     bool dryRun);
+// {"uid":..,"printer":..,"slot":..} with JSON escaping (the server's dry_run defaults to false).
+std::string scanBody(const std::string& uid, const std::string& printer, const std::string& slot);
 
 // Percent-encode one URL path segment (RFC 3986 unreserved characters pass).
 std::string urlEncode(const std::string& s);

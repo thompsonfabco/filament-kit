@@ -4,8 +4,10 @@
 """
 import base64
 import hashlib
+import json
 import shlex
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -123,3 +125,44 @@ def test_live_check_does_not_follow_redirects():
         assert [p for p, _ in hits] == ["/fw/manifest.json"]   # /elsewhere never requested
     finally:
         srv.shutdown()
+
+
+def test_make_stage_uses_a_private_mktemp_folder(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return types.SimpleNamespace(stdout="/tmp/tmp.Ab12Cd\n")
+
+    monkeypatch.setattr(op.subprocess, "run", fake_run)
+    assert op.make_stage("srv") == "/tmp/tmp.Ab12Cd"
+    assert calls == [["ssh", "srv", "mktemp -d"]]      # not a predictable /tmp/reader-fw-<time> path
+
+
+@pytest.mark.parametrize("out", ["", "relative\n", "/tmp/a\n/tmp/b\n"])
+def test_make_stage_refuses_an_unusable_reply(monkeypatch, out):
+    monkeypatch.setattr(op.subprocess, "run", lambda cmd, **kw: types.SimpleNamespace(stdout=out))
+    with pytest.raises(SystemExit):
+        op.make_stage("srv")
+
+
+def test_live_problem_reports_instead_of_raising(monkeypatch):
+    import urllib.error
+
+    def boom(exc):
+        def f(base, token):
+            raise exc
+        return f
+
+    for exc in (urllib.error.HTTPError("u", 502, "Bad Gateway", {}, None),
+                urllib.error.URLError("refused"), TimeoutError("timed out"),
+                json.JSONDecodeError("bad", "x", 0)):
+        monkeypatch.setattr(op, "fetch_manifest", boom(exc))
+        msg = op.live_problem("https://h", "tok", 5)
+        assert msg and type(exc).__name__ in msg
+    monkeypatch.setattr(op, "fetch_manifest", lambda b, t: {"build": 4})
+    assert "build 4" in op.live_problem("https://h", "tok", 5)
+    monkeypatch.setattr(op, "fetch_manifest", lambda b, t: [1])
+    assert op.live_problem("https://h", "tok", 5)
+    monkeypatch.setattr(op, "fetch_manifest", lambda b, t: {"build": 5})
+    assert op.live_problem("https://h", "tok", 5) is None
