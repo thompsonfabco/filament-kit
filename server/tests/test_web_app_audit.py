@@ -85,6 +85,8 @@ def _run(*args: str) -> subprocess.CompletedProcess:
     run = subprocess.run([node, str(RUNNER), *args], capture_output=True, text=True, timeout=600)
     if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
         _missing("AUT-5 needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
+    if run.returncode == 3:          # a browser was found but cannot run headless on this machine (its error is shown)
+        _missing("AUT-5: " + run.stderr.strip().replace("AUT-5: ", "", 1))
     return run
 
 

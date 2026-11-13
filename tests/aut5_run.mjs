@@ -12,7 +12,8 @@
 // it more often fails (a new finding hides behind no line), and a line found less often is stale and fails too, so a
 // rebuilt screen has to drop or lower its lines.
 // Exit 0: no findings; 1: findings, or allow-list counts that do not match (printed); 2: the run itself failed (no
-// browser, the browser closed, a call timed out). The browser is driven over the DevTools protocol with Node's own
+// browser found, the browser closed, a call timed out); 3: a browser was found but could not start headless here
+// (its last error lines are printed). The browser is driven over the DevTools protocol with Node's own
 // WebSocket (Node 22 or later): no npm package.
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
@@ -73,8 +74,17 @@ async function main() {
   if (!exe) { console.error("AUT-5: no Chrome, Edge or Chromium found (set AUT5_BROWSER)"); return 2; }
   sweepOldProfiles();
   const profile = mkdtempSync(join(tmpdir(), PROFILE_PREFIX));
+  // Linux CI runners (ubuntu-24.04) refuse the browser's sandbox (no unprivileged user namespaces) and have a small
+  // /dev/shm; the page under test is the test's own local server, so the sandbox adds nothing here
+  const linux = process.platform === "linux" ? ["--no-sandbox", "--disable-dev-shm-usage"] : [];
   const proc = spawn(exe, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run",
-    "--no-default-browser-check", "--disable-extensions", "--disable-gpu", "about:blank"], { stdio: "ignore" });
+    "--no-default-browser-check", "--disable-extensions", "--disable-gpu", ...linux, "about:blank"],
+    { stdio: ["ignore", "ignore", "pipe"] });
+  let browserErr = "";
+  proc.stderr.on("data", (d) => { browserErr = (browserErr + d).slice(-2000); });
+  let browserExit = null;
+  proc.on("exit", (code, signal) => { browserExit = signal || code; });
+  proc.on("error", (e) => { browserExit = e.code || e.message; });     // could not be started at all
   const cleanup = () => {
     try { proc.kill(); } catch { /* gone */ }
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
@@ -83,11 +93,15 @@ async function main() {
   for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => { cleanup(); process.exit(2); });
   try {
     let port;
-    for (let i = 0; i < 100 && !port; i++) {
+    for (let i = 0; i < 300 && !port && browserExit === null; i++) {
       await sleep(100);
       try { port = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0].trim(); } catch { /* not yet */ }
     }
-    if (!port) { console.error("AUT-5: the browser did not open its DevTools port"); return 2; }
+    if (!port) {      // exit 3: this machine's browser cannot run headless here (the tests skip on it unless required)
+      console.error(`AUT-5: the browser could not start (${exe}; ${browserExit === null ? "no DevTools port after 30 s"
+        : "it exited: " + browserExit})\n${browserErr.trim().split("\n").slice(-8).join("\n")}`);
+      return 3;
+    }
     const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
     const page = targets.find((t) => t.type === "page");
     const ws = new WebSocket(page.webSocketDebuggerUrl);
