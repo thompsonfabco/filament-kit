@@ -11,13 +11,15 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from starlette.applications import Starlette
+from starlette.routing import Mount
 
 from fakes import serving
-from filament_kit import config, modules
+from filament_kit import config, intake_history, inventory, modules
 from filament_kit.profiles import lines
 from filament_kit.spoolman import Spoolman
 from filament_kit.web import mcp_tools
@@ -26,7 +28,7 @@ from filament_kit.web.intake_app import IntakeApp
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
 ALLOW = ROOT / "tests" / "allowlists" / "aut5"      # a folder, one file per screen
-VIEWS = "#add,#spools,#printers,#recent,#presets,#settings"
+PAGES = ("#add", "#spools", "#printers", "#recent", "#recent/{id}", "#presets", "#settings")     # {id}: the seeded record
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2, "overflow": "Overflow",
          "sealed_location": "Sealed stock"}
 FILAMENTS = [("Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "2B2B2E"),
@@ -37,7 +39,28 @@ FILAMENTS = [("Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "2B2B2E"),
 
 # The Slicer presets screen in the states 04 8 draws: filaments waiting for a line (nothing in lines.json), waiting with a
 # line of their brand to join (the "Add to the line" select), every filament covered (the empty state), and switched off.
-STATES = ("waiting", "waiting-with-a-line", "all-covered", "presets-off")
+STATES = ("waiting", "waiting-with-a-line", "all-covered", "presets-off", "public-address")
+
+# Recently added (04 7): a record added from two photos, edited by hand twice with the second edit undone (a revision, and
+# one struck through), and one added at the Weigh Station with no photo; a seeded record also shows on the public address,
+# where the page shows the notice instead
+JPEG = bytes.fromhex("ffd8ffe000104a46494600010100000100010000ffdb004300ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                     "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc2000b080001000101011100ffc4001400010000"
+                     "0000000000000000000000000000ffda0008010100013f10ffd9")
+ITEM = {"vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black", "material": "PLA", "color_hex": "2B2B2E", "net": 1000,
+        "tare": 140, "density": 1.31, "count": 2, "nozzle": 220, "bed": 55, "sealed": True, "line": "PolyTerra PLA"}
+
+
+def _history(sm) -> str:
+    intake_history.stash_read("r1", [JPEG, JPEG], {"items": [ITEM]}, "", None)
+    made = inventory.add_and_link(sm, [dict(ITEM)], RULES, False, None)
+    hid = intake_history.record_save(made.saved, source="phone", read_id="r1")
+    intake_history.apply(sm, hid, item=0, values={"tare": 150})
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 215})
+    intake_history.undo(sm, hid, 2)
+    hand = {**ITEM, "vendor": "Bambu Lab", "name": "PETG HF Orange", "material": "PETG", "color_hex": "F2762E", "count": 1}
+    intake_history.record_save(inventory.add_and_link(sm, [hand], RULES, False, None).saved, source="station")
+    return hid
 
 
 @pytest.fixture(params=STATES)
@@ -77,10 +100,18 @@ def served(request, tmp_path, monkeypatch, spoolman_url):
         lines.save(ls)
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
-    app = Starlette(routes=IntakeApp(mcp_tools.Tools(sm), public_url=None, lan_cidrs=["127.0.0.0/8"], push=False).routes())
+    hid = _history(sm)
+    if request.param == "public-address":       # the web unit's page: its address has a path, and it keeps no history (04 7.4)
+        site = IntakeApp(mcp_tools.Tools(sm), public_url="https://hub.example.test/f", lan_cidrs=["127.0.0.0/8"], push=False)
+        app, path = Starlette(routes=[Mount("/f", routes=site.routes())]), "/f/intake"
+    else:
+        app, path = Starlette(routes=IntakeApp(mcp_tools.Tools(sm), public_url=None, lan_cidrs=["127.0.0.0/8"], push=False).routes()), "/intake"
     running = serving.start(app)
     try:
-        yield running.url + "/intake"
+        # on the public address a record address shows the same notice as the list, so its page title is the list's: the
+        # audit asks for #recent a second time there, to keep every state at the same number of passes
+        views = [v.replace("{id}", hid) if "{id}" in v and path == "/intake" else "#recent" if "{id}" in v else v for v in PAGES]
+        yield SimpleNamespace(url=running.url + path, views=",".join(views))
     finally:
         running.stop()
 
@@ -113,10 +144,10 @@ def _run(*args: str) -> subprocess.CompletedProcess:
 
 
 def test_the_page_audit_passes_on_every_view(served):
-    run = _run("--url", served, "--views", VIEWS, "--allow", str(ALLOW))
+    run = _run("--url", served.url, "--views", served.views, "--allow", str(ALLOW))
     assert run.returncode == 0, run.stdout + run.stderr
     out = json.loads(run.stdout)
-    assert out["views"] == 6 * 2 * 2 and out["failing"] == 0      # six views, two widths, light and dark
+    assert out["views"] == len(PAGES) * 2 * 2 and out["failing"] == 0      # seven views, two widths, light and dark
 
 
 

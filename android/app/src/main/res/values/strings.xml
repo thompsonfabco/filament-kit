@@ -2119,7 +2119,7 @@
         <item quantity="other">Add, %1$d spools waiting</item>
     </plurals>
     <string name="nav_printers_look">Printers, needs a look</string>
-    <string name="nav_recent_public">Recent, on the home address only</string>
+    <string name="nav_recent_public">Recently added, on the home address only</string>
     <string name="shell_needs_hub">Needs the Hub.</string>
     <string name="presets_add_button">Add to line</string>
     <string name="presets_add_select">Add to the line</string>
@@ -2909,9 +2909,13 @@
     <string name="recent_error_colour">Enter 6 hex digits, like 2B2B2E.</string>
     <string name="recent_error_degrees_max">Enter degrees below 500.</string>
     <string name="recent_error_material">Enter a material.</string>
+    <string name="recent_error_number">Enter a number above 0, or leave this empty.</string>
     <string name="recent_error_price">Enter a price above 0.</string>
+    <string name="recent_error_required">This cannot be empty.</string>
     <string name="recent_keep_none">The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page.</string>
     <string name="recent_leave_thing">this record</string>
+    <!-- 1=name 2=count -->
+    <string name="recent_name_many">%1$s x%2$d</string>
     <string name="recent_mark_estimated">Estimated: check this</string>
     <!-- 1=name -->
     <string name="recent_read_colour">Colour: %1$s</string>
@@ -2922,6 +2926,8 @@
     <string name="recent_read_least_sure">Least sure: %1$s</string>
     <!-- 1=percent -->
     <string name="recent_read_sure">%1$s %% sure</string>
+    <!-- 1=size -->
+    <string name="recent_size_mb">%1$s MB</string>
     <!-- 1=engine -->
     <string name="recent_reread">Read again by the Label Reader (%1$s).</string>
     <!-- 1=engine 2=percent -->
