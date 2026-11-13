@@ -23,5 +23,15 @@ server/tests/data/golden/** -text
 server/tests/data/** -text
 printer-pack/** text eol=lf
 
+# Design sources and what build_tokens.py generates from them: its --check compares byte for byte with "\n" endings, so
+# a CRLF checkout would fail it (docs/design/08-platform-mapping.md 1). Listed now for the outputs later steps add.
+tokens/** text eol=lf
+icons/** text eol=lf
+strings/** text eol=lf
+android/app/src/main/java/**/ui/theme/SpoolwardenTokens.kt text eol=lf
+android/app/src/main/res/values/strings.xml text eol=lf
+android/app/src/main/res/values*/sw_window.xml text eol=lf
+android/app/src/main/res/drawable/sw_*.xml text eol=lf
+
 # esptool-js, vendored as published (THIRD-PARTY.md has its SHA-256): byte for byte.
 server/filament_kit/setup_static/esptool.bundle.js -text

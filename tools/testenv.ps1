@@ -3,7 +3,8 @@
 #   powershell -ExecutionPolicy Bypass -File tools\testenv.ps1 [-Only pc-sync,server] [-Workers auto]
 #
 # The default is pc-sync, which is what Windows proves and what the Windows workflows run. The server runs on Linux; it can be added
-# with -Only pc-sync,server, where its golden build needs the Python CI uses (3.12).
+# with -Only pc-sync,server, where its golden build needs the Python CI uses (3.12). -Only tests runs the design checks of the
+# root tests/ folder (the token files' equality and contrast; on Linux they are in testenv.sh's "other" suite).
 #
 # It reuses a venv under %LOCALAPPDATA%\filament-kit while server\pyproject.toml, pc-sync\pyproject.toml and the Python version
 # stay the same, and the program under test is always this tree's (PYTHONPATH). Exit code non-zero if a suite failed.

@@ -25,6 +25,26 @@ def test_required_contrast_pairs_pass():
     assert r.stdout.rstrip().endswith("RESULT: PASS"), r.stdout[-400:]
 
 
+GENERATED_LF = ("tokens/** text eol=lf", "icons/** text eol=lf", "strings/** text eol=lf")
+
+
+def test_token_files_are_checked_out_with_lf():
+    # --check compares bytes with "\n" endings; without these rules a Windows checkout (core.autocrlf) gets CRLF and fails
+    attrs = (TOKENS.parent / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    for rule in GENERATED_LF:
+        assert rule in attrs, rule
+
+
+def test_check_fails_on_a_crlf_css(tmp_path):
+    # what a checkout without the LF rule would hand the check: it must say so rather than pass
+    for name in ("tokens.json", "build_tokens.py"):
+        (tmp_path / name).write_bytes((TOKENS / name).read_bytes())
+    (tmp_path / "tokens.css").write_bytes((TOKENS / "tokens.css").read_bytes().replace(b"\n", b"\r\n"))
+    r = subprocess.run([sys.executable, str(tmp_path / "build_tokens.py"), "--check"], capture_output=True, text=True,
+                       cwd=tmp_path, timeout=120)
+    assert r.returncode == 1, r.stdout + r.stderr
+
+
 def test_check_fails_on_a_hand_edited_css(tmp_path):
     # the equality check must catch a tokens.css edited by hand: run a copy of the folder with one value changed
     for name in ("tokens.json", "build_tokens.py", "tokens.css"):
