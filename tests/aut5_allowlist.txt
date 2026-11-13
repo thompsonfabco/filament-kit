@@ -24,4 +24,4 @@ hit area under 44 x 44 | section.page > section > div.row > input | 2 | Spools s
 hit area under 44 x 44 | div > div.card > details > summary | 24 | Slicer presets "New line" disclosure (also under the Settings sheet); rebuilt by S3.13
 hit area under 44 x 44 | div.card > details > p > button.btn--primary | 8 | Slicer presets line buttons at 1280 px; rebuilt by S3.13
 hit area under 44 x 44 | section > div > p > button.secondary | 2 | Slicer presets Restore button at 1280 px; rebuilt by S3.13
-hit area under 44 x 44 | section.page > section > p > button.btn--primary | 2 | Slicer presets Build button at 1280 px; rebuilt by S3.13
+hit area under 44 x 44 | section.page > section > p > button.btn--primary | 4 | Slicer presets Build button and Add spools Read labels (aria-disabled since S3.6, so audited) at 1280 px; rebuilt by S3.13 and S3.8

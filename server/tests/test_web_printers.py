@@ -935,7 +935,9 @@ def test_manual_map_refuses_another_step_and_a_post_without_origin(app, kit):
 
 def test_the_printers_tab_offers_map_by_loading_filament():
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
-    assert 'textContent: "Map by loading filament", disabled: running, on: { click: manualMap }' in text
+    # S3.6: while a mapping runs the button is aria-disabled with its reason beside it, not natively disabled
+    assert 'textContent: "Map by loading filament", on: { click: (e) => manualMap(e.currentTarget) }' in text
+    assert 'disabled(byLoad, running ? SW.t("web_map_running_reason") : null);' in text
     for step in ("start", "confirm", "skip", "stop", "offer"):
         assert f'"{step}"' in text
 

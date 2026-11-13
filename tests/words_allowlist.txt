@@ -120,7 +120,6 @@ server/filament_kit/web/static/app.js | dry run | today's string, route, key or 
 server/filament_kit/web/static/app.js | gross weight | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | scale weight | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | setup page | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/web/static/printers.js | HMS | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | setup page | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | the kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/printers.js | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
