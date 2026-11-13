@@ -265,7 +265,7 @@ def _outline_off(prop, value):
     """outline: none / 0 / 0 none / none !important, and the longhands outline-style and outline-width."""
     tokens = _plain_value(value).split()
     if prop == "outline":
-        return bool(tokens) and ("none" in tokens or "hidden" in tokens or _zero(tokens[0]))
+        return any(t in ("none", "hidden") or _zero(t) for t in tokens)
     if prop == "outline-style":
         return tokens in (["none"], ["hidden"])
     if prop == "outline-width":
@@ -273,16 +273,62 @@ def _outline_off(prop, value):
     return False
 
 
+SHADOW_VAR = re.compile(r"var\([^()]*(?:\([^()]*\))?[^()]*\)")
+SHADOW_LENGTH = re.compile(r"(?<![\w.#-])-?(?:\d+\.?\d*|\.\d+)[a-z]*(?![\w.-])")
+PROGRAMMATIC_FOCUS = re.compile(r"""\[tabindex=['"]?-1['"]?\]|(?<![\w.#:-])main(?![\w-])""")
+
+
 def _ring(shadow):
-    """A box-shadow draws a ring unless it is none or all zero lengths ("0 0 0 0")."""
+    """A box-shadow draws a ring unless it is none or every layer has only zero lengths ("0 0 0 0 var(--focus)" too);
+    a layer with no length (var(--e2)) counts as a ring."""
     v = _plain_value(shadow)
-    return v not in ("", "none", "initial", "unset") and not re.fullmatch(r"(?:0+(?:px)?\s*)+", v)
+    if v in ("", "none", "initial", "unset"):
+        return False
+    layers, depth, cur = [], 0, ""
+    for c in v:
+        depth += {"(": 1, ")": -1}.get(c, 0)
+        if c == "," and depth == 0:
+            layers.append(cur)
+            cur = ""
+        else:
+            cur += c
+    layers.append(cur)
+    for layer in layers:
+        lengths = SHADOW_LENGTH.findall(SHADOW_VAR.sub(" ", layer))
+        if not lengths or not all(_zero(x) for x in lengths):
+            return True
+    return False
+
+
+def _draws_ring(decls):
+    """Declarations (prop, value, ...) that draw a ring: an outline that is not off, or a box-shadow with a length."""
+    return any(_ring(v) if p == "box-shadow" else p == "outline" and not _outline_off(p, v) for p, v, _, _ in decls)
+
+
+def _focus_rings(text):
+    """The selectors (spaces squeezed) of the rules of text that draw a ring."""
+    out = set()
+    for rule in CSS_RULE.finditer(text):
+        decls = [(p.strip().lower(), v.strip(), 0, 0) for p, c, v in (x.partition(":") for x in rule.group(2).split(";")) if c]
+        if _draws_ring(decls):
+            out.add(" ".join(rule.group(1).split()))
+    return out
+
+
+def _focus_exempt(selector, rings):
+    """A :focus rule that hides the outline is fine on a programmatic-focus target ([tabindex="-1"], main), or when the
+    same selector with :focus-visible draws a ring (07 KEY-3)."""
+    sel = " ".join(selector.split())
+    if not re.search(r":focus(?![\w-])", sel):
+        return False
+    return bool(PROGRAMMATIC_FOCUS.search(sel)) or re.sub(r":focus(?![\w-])", ":focus-visible", sel) in rings
 
 
 def css_findings(text):
     """[(finding, line)] for component rules; tokens.css (the token block) is not read."""
     text = CSS_COMMENT.sub(_blank_keep_lines, text)
     out = []
+    rings = _focus_rings(text)
     for rule in CSS_RULE.finditer(text):
         body, pos = rule.group(2), rule.start(2)
         decls = []
@@ -318,7 +364,7 @@ def css_findings(text):
                         out.append((f"opacity: {value}", ln))
                 except ValueError:
                     out.append((f"opacity: {value}", ln))
-            elif _outline_off(prop, value) and not any(_ring(v) for p, v, _, _ in decls if p == "box-shadow"):
+            elif _outline_off(prop, value) and not any(_ring(v) for p, v, _, _ in decls if p == "box-shadow")                     and not _focus_exempt(rule.group(1), rings):
                 out.append((f"{prop}: {_plain_value(value)}", ln))
             if prop not in ("font-size", "line-height") and not prop.startswith(DURATION_PROPS):
                 if not (FUNC_LENGTH.search(plain) and "var(" in value):
@@ -425,8 +471,10 @@ def empty_label_findings(text):
     return [(f"empty {m.group(1)}", _line_of(code, m.start())) for m in EMPTY_LABEL.finditer(code)]
 
 
+# also a conditional value (role: o.alert ? "alert" : null) and the property (el.ariaLive = "assertive")
 ASSERTIVE = re.compile(
-    r"""role['"`]?\s*[=:,]\s*\\?['"`]?\s*(alert)(?![\w-])|aria-live['"`]?\s*[=:,]\s*\\?['"`]?\s*(assertive)(?![\w-])""")
+    r"""role['"`]?\s*[=:,][^,;{}\n]*?[\\'"`]+\s*(alert)(?![\w-])|"""
+    r"""(?:aria-live['"`]?|ariaLive)\s*[=:,][^,;{}\n]*?[\\'"`]+\s*(assertive)(?![\w-])""")
 
 
 def assertive_findings(text):
@@ -493,9 +541,9 @@ BANNED = [
 ]
 BANNED_RX = [(name, re.compile(r"(?<![A-Za-z0-9])(?:%s)(?![A-Za-z0-9])" % pat, re.I)) for name, pat in BANNED]
 HMS = re.compile(r"(?<![A-Za-z0-9])HMS(?![A-Za-z0-9])")
-# a whole button or link text (LNG-2), compared without case, surrounding space and punctuation; the old mode words
+# a whole button or link text (LNG-2), compared without case ("OK" only as a capital OK), surrounding space and punctuation; the old mode words
 # server and station only as a whole text (the choice of a Setup), so "Hub server address" stays free
-WHOLE_TEXTS = {"ok", "here", "click here", "server", "station"}
+WHOLE_TEXTS = {"here", "click here", "server", "station"}
 WHOLE_EDGE = " \t\r\n.,;:!?'\"\u2026\u2019()[]-"
 
 
@@ -503,8 +551,11 @@ def word_findings_in(content):
     out = [name for name, rx in BANNED_RX if rx.search(content)]
     if HMS.search(content):
         out.append("HMS")
-    if content.strip(WHOLE_EDGE).lower() in WHOLE_TEXTS:
-        out.append('"%s"' % {"ok": "OK"}.get(content.strip(WHOLE_EDGE).lower(), content.strip(WHOLE_EDGE).lower()))
+    whole = content.strip(WHOLE_EDGE)
+    if whole == "OK":                      # with its case: "ok" is a status kind, not a button text
+        out.append('"OK"')
+    elif whole.lower() in WHOLE_TEXTS:
+        out.append('"%s"' % whole.lower())
     return out
 
 
@@ -556,9 +607,22 @@ def test_plants_are_found():
     assert [w for w, _ in css_findings("a { opacity: .6 } b { outline: none }")] == ["opacity: .6", "outline: none"]
     assert css_findings("a:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus) }") == []
     for decl in ("outline: none; box-shadow: none", "outline: none !important", "outline-style: none", "outline: 0 none",
-                 "OUTLINE:NONE", "outline: 0px", "outline-width: 0", "outline: none; box-shadow: 0 0 0 0 red"):
+                 "OUTLINE:NONE", "outline: 0px", "outline-width: 0", "outline: solid 0", "outline: 0 solid", "outline: 1px solid 0",
+                 "outline: none; box-shadow: 0 0 0 0 var(--focus)", "outline: none; box-shadow: 0px 0px 0px 0px var(--focus)",
+                 "outline: none; box-shadow: 0 0 0 0 var(--focus), 0 0 0 0 var(--bad)"):
         assert len(css_findings("a:focus { %s }" % decl)) == 1, decl
     assert css_findings("a:focus { outline: 2px solid var(--focus); box-shadow: none }") == []
+    assert css_findings("a:focus { outline: none; box-shadow: 0 0 0 0 var(--focus), 0 0 0 2px var(--focus) }") == []
+    # a :focus rule that hides the outline: fine on a programmatic-focus target, or when the :focus-visible twin draws a ring
+    assert css_findings('main[tabindex="-1"]:focus { outline: none }') == []
+    assert css_findings(':is(main,h1)[tabindex="-1"]:focus { outline: none; box-shadow: none }') == []
+    assert css_findings("main:focus { outline: none }") == []
+    assert css_findings(".m:focus { outline: none } .m:focus-visible { box-shadow: inset 0 0 0 2px var(--focus) }") == []
+    assert css_findings(".m:focus { outline: none } .m:focus-visible { outline: 2px solid var(--focus) }") == []
+    assert [w for w, _ in css_findings(".m:focus { outline: none }")] == ["outline: none"]
+    assert [w for w, _ in css_findings(".m:focus { outline: none } .m:focus-visible { box-shadow: 0 0 0 0 var(--focus) }")]         == ["outline: none"]
+    assert [w for w, _ in css_findings(".m:focus { outline: none } .n:focus-visible { outline: 2px solid var(--focus) }")]         == ["outline: none"]
+    assert [w for w, _ in css_findings(".shell_main:focus { outline: none } .xmain:focus { outline: none }")] ==         ["outline: none", "outline: none"]
     assert css_findings("a:focus { outline: none !important; box-shadow: inset 0 0 0 2px var(--focus) }") == []
     src = "el.setAttribute('role', 'alert'); h('div', { role: 'alert' }); // role=\"alert\""
     assert assertive_findings(src) == [('role="alert"', 1), ('role="alert"', 1)]
@@ -566,6 +630,11 @@ def test_plants_are_found():
     assert [w for w, _ in assertive_findings(src)] == ['role="alert"', 'aria-live="assertive"']
     assert assertive_findings('h("p", { role: "alertdialog", "aria-live": "polite" }); // aria-live="assertive"') == []
     assert assertive_findings('e.setAttribute("aria-live", "assertive")') == [('aria-live="assertive"', 1)]
+    assert assertive_findings('h("div", { role: o.alert ? "alert" : null })') == [('role="alert"', 1)]
+    assert assertive_findings("h('div', { role: o.quiet ? null : 'alert' })") == [('role="alert"', 1)]
+    assert assertive_findings('e.setAttribute("role", o.alert ? "alert" : "status")') == [('role="alert"', 1)]
+    assert assertive_findings('el.ariaLive = "assertive"; el.ariaLive = "polite"') == [('aria-live="assertive"', 1)]
+    assert assertive_findings('h("p", { role: "button", title: "alert" })') == []
     assert [w for w, _ in kotlin_findings("val c = Color(0xFF112233); val d = Color.White; val e = Color.Transparent")] \
         == ["Color(0xFF112233", "Color.White"]
     assert [w for w, _ in kotlin_findings("Modifier.padding(12.dp, 0.dp, 2.dp); fontSize = 14.sp; x = 0.05.em")] == \
@@ -575,7 +644,9 @@ def test_plants_are_found():
         sorted(word_findings_in("Set the color of the dry run")) == ["color", "dry run"]
     assert word_findings_in("OK") == ['"OK"'] and word_findings_in("HMS error") == ["HMS"]
     assert word_findings_in("Click here") == ['"click here"']
-    assert [word_findings_in(s) for s in ("Ok", "HERE", "Click here.", " ok! ", "Server", "station")] == [['"OK"'], ['"here"'], ['"click here"'], ['"OK"'], ['"server"'], ['"station"']]
+    assert [word_findings_in(s) for s in ("OK", "HERE", "Click here.", " OK! ", "Server", "station")] == [['"OK"'], ['"here"'], ['"click here"'], ['"OK"'], ['"server"'], ['"station"']]
+    assert [word_findings_in(s) for s in ("ok", "Ok", "oK")] == [[], [], []]
+    assert word_findings("var kind = 'ok'; var t = \"ok\"", True) == []
     assert word_findings_in("Intake") == ["intake"] and word_findings_in("Open intake") == ["intake"]
     assert word_findings_in("Presets") == ["presets"] and word_findings_in("Slicer presets") == []
     assert word_findings_in("Okay, Hub address, here and there") == []

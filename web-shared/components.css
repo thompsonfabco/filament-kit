@@ -32,7 +32,6 @@ a{color:var(--accent-text)}
 /* shell, top bar, page header (2.1, 2.2, 2.6) */
 .shell{display:grid;flex:1;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr}
 .shell__main{min-width:0;padding:var(--s5) max(var(--s5),env(safe-area-inset-right)) var(--s7) max(var(--s5),env(safe-area-inset-left))}
-.shell__main:focus{outline:none;box-shadow:none}
 .page{max-width:var(--content-max)}
 .topbar{position:sticky;top:0;z-index:20;grid-area:top;min-height:calc(var(--top) + env(safe-area-inset-top));padding:env(safe-area-inset-top) var(--s4) 0;border-bottom:var(--hairline) solid var(--border);background:var(--surface);box-shadow:var(--e0)}
 .topbar__brand{min-width:0;min-height:var(--top);color:var(--text);text-decoration:none}

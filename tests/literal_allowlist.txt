@@ -51,4 +51,3 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 16.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 4.dp | 2 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolCard.kt | 8.dp | 3 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-web-shared/components.css | outline: none | 3 | :focus rules of programmatic-focus targets (tabindex -1 headings, main, menu item) that draw no ring on purpose (found since the lint reads "box-shadow: none" as no ring); to be settled with KEY-3 in the design
