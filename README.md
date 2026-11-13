@@ -48,8 +48,8 @@ Then, on your phone:
   [Set up a printer](docs/android-app.md#2-set-up-a-printer).
 
 Optional afterwards: the PC sync for Bambu Studio presets ([Pair your PC](#pair-your-pc)), an intake station with
-a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the bench
-[reader](#the-reader).
+a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the
+[Printer Station](#the-printer-station).
 
 Your spool list is also in any web browser at home, at `http://<computer name>.local:7912` (the installer prints
 the address). Spoolman has no sign-in, so it answers only this computer and your home network (by default
@@ -65,7 +65,7 @@ access) is in the **[user guide](docs/user-guide.md)**.
 
 - **Add spools** from the Android app or the phone web app: type them in, or pick a filament you already have.
   Reading the label from a photo is **optional AI** (your own Anthropic API key); everything else works without it.
-- **Load a spool into a printer slot** from the app, or tap its NFC tag on the bench reader: the printer gets the
+- **Load a spool into a printer slot** from the app, or tap its NFC tag on the Printer Station: the printer gets the
   right filament setting and Spoolman the spool's new location. Filament used in a print comes off the right
   spools, after a one-time slot mapping.
 - **Build slicer presets**: a Bambu Studio (and, if you like, Orca Slicer) preset for every filament line you own
@@ -112,7 +112,7 @@ Windows PC with Bambu Studio, run `sudo filament-kit pair --pc` on the server an
 the setup's console. It keeps both stable and Beta Bambu Studio current (v0.4.0). Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide. On Linux, use
 `filament-kit-sync-linux-x86_64-<version>.tar.gz` instead: [PC sync on Linux](docs/user-guide.md#pc-sync-on-linux).
 
-## The reader
+## The Printer Station
 
 A small ESP32-C3 box next to the printer: tap a spool's tag, turn the knob to a slot, and the spool is loaded
 there. It talks to the `web` module: make its token with `sudo filament-kit reader token --name bench`. Its API and firmware build are in [reader/README.md](reader/README.md), and its parts and wiring in the

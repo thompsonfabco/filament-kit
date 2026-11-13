@@ -128,7 +128,7 @@ Installed on your printer by the pack, from the projects' own sources:
 | Spool Sync (`integrations/orca-spool-sync/`) | GPL-3.0-or-later |
 | OrcaSlicer, which Spool Sync runs inside | AGPL-3.0 |
 
-## The bench reader firmware (built from `reader/`)
+## The Printer Station firmware (built from `reader/`)
 
 | Component | Licence |
 |---|---|

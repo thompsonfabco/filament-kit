@@ -105,7 +105,7 @@ and the Samba share.
 
 The kit's `printers` module replaces the `h2d-filament-scanner` services without a new calibration print:
 
-1. Turn on `printers` (and `web` for the bench reader) and add the H2D in the app or with
+1. Turn on `printers` (and `web` for the Printer Station) and add the H2D in the app or with
    `sudo filament-kit config` → Printers, with its Access Code. Don't press Map slots yet.
 2. With no print running, stop the scanner services (`h2d-scanner`, `h2d-remote`, `h2d-usage`), so no print is
    ever deducted twice.
@@ -119,7 +119,7 @@ The kit's `printers` module replaces the `h2d-filament-scanner` services without
    It prints each change as `old → new`, writes a backup first (`/var/backups/filament-kit/migrate-scanner-<stamp>.json`),
    refuses a printer that already has a different map unless `--replace-map`, and changes nothing when run again.
 4. If the kit was pointed at the scanner's slot endpoints (`slot_service` in `config.json`), remove that setting
-   and restart `filament-kit` and `filament-kit-web`. Then reflash the bench reader for the kit
+   and restart `filament-kit` and `filament-kit-web`. Then reflash the Printer Station for the kit
    ([reader/README.md](../reader/README.md)).
 
 Rollback: remove the printer from the kit (or delete its `slotmap.json`, which puts usage back to observe
