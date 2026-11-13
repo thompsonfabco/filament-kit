@@ -29,6 +29,12 @@ def test_scan_finds_fake_on_localhost(moonraker):
     assert found == [("127.0.0.1", moonraker.port)]
 
 
+def test_scan_lists_a_moonraker_that_wants_an_api_key(moonraker):
+    moonraker.api_key = "s3cret"
+    found = discovery.scan(ipaddress.ip_network("127.0.0.1/32"), port=moonraker.port, timeout=0.5)
+    assert found == [("127.0.0.1", moonraker.port)]
+
+
 def test_scan_skips_a_port_that_is_not_moonraker(moonraker):
     import socket
     s = socket.socket()

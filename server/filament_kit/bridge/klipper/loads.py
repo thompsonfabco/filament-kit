@@ -103,10 +103,7 @@ class LoadsMixin:
                     pending.append(more)
             for p in pending:
                 try:
-                    if isinstance(p, tuple):
-                        self._record_job(p[1])
-                    else:
-                        self._follow_check(p)
+                    self._follow_check(p)
                 except PrinterOffline:
                     log.info("klipper follow %s: the printer went offline; the reconcile at connect catches up", p)
                 except Exception:  # noqa: BLE001 - Spoolman down etc.: the next update tries again
@@ -295,6 +292,8 @@ class LoadsMixin:
                 gcode = adapter.clear_gcode(plabel, model, system, self.hw(), st)
             except NotSupported:
                 gcode = None
+            except UnknownSlot as e:        # as load does: a message, not a server error
+                raise loading.NotFound(f"{label}: {e}") from e
         with self._slot_lock(pid, label):
             here = loading.occupants(sm, loc)
             if not here:
@@ -322,10 +321,22 @@ class LoadsMixin:
             return
         _model, _system, adapter = self.model(pid)
         if not lanes.should_publish(p, adapter):
+            if adapter.name not in lanes.NEVER:      # `off`, or `auto` that resolves to off: no kit lane stays behind
+                self._retract_lanes(pid, c)
             return
         try:
             units = self.slots(pid)
-            by_id = {s.get("id"): s for s in (self.sm.get("spool") or [])}
+            ids = {s.spool_id for u in units for s in u.slots if s.spool_id is not None}
+            by_id = {}
+            for i in sorted(ids):               # these spools only, not the whole inventory
+                try:
+                    sp = self.sm.get(f"spool/{i}")
+                except SpoolmanError as e:
+                    if e.status != 404:
+                        raise
+                    continue                    # deleted in Spoolman while a slot still shows it: that slot is empty
+                if sp:
+                    by_id[i] = sp
             presets = {}
             for u in units:
                 for s in u.slots:
@@ -333,11 +344,25 @@ class LoadsMixin:
                     if sp is not None:
                         pr = self._preset(sp.get("filament") or {}, pid)
                         presets[s.label] = pr["name"] if pr else None
-            wrote = lanes.publish(c.client, lanes.payload(units, by_id, presets), c.lane_last)
+            pl = lanes.payload(units, by_id, presets)
+            wrote = lanes.publish(c.client, pl, c.lane_last)
             if wrote:
                 log.info("klipper %s: lane_data %s updated", pid, ", ".join(wrote))
+            gone = lanes.retract(c.client, pl, c.lane_last, c.client.db_get(lanes.NAMESPACE))
+            if gone:
+                log.info("klipper %s: lane_data %s removed", pid, ", ".join(gone))
         except Exception as e:  # noqa: BLE001 - publishing is a convenience: never fail a load over it
             log.warning("klipper %s: cannot publish lane_data (%s)", pid, e)
+
+    def _retract_lanes(self, pid: str, c) -> None:
+        """The printer's setting is `off`: take the lanes the kit published out of lane_data (the slicer would read
+        them as the loaded spools). Lanes without the kit's source stay."""
+        try:
+            gone = lanes.retract(c.client, {}, c.lane_last, c.client.db_get(lanes.NAMESPACE))
+            if gone:
+                log.info("klipper %s: lane_data %s removed (publishing is off)", pid, ", ".join(gone))
+        except Exception as e:  # noqa: BLE001 - a convenience: never fail a load over it
+            log.warning("klipper %s: cannot clear lane_data (%s)", pid, e)
 
     def _nozzle(self, pid: str) -> tuple[float, bool]:
         """(nozzle mm, assumed): Klipper's [extruder] nozzle_diameter, else the model's first Orca nozzle, else 0.4."""

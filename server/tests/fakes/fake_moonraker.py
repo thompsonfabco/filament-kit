@@ -212,6 +212,11 @@ class FakeMoonraker:
                 fake.db.setdefault(body["namespace"], {})[body["key"]] = body["value"]
                 return ok({"namespace": body["namespace"], "key": body["key"], "value": body["value"]})
             ns = request.query_params.get("namespace")
+            if request.method == "DELETE":
+                key = request.query_params.get("key")
+                if key not in fake.db.get(ns, {}):
+                    return err(404, f"Key '{key}' not found")
+                return ok({"namespace": ns, "key": key, "value": fake.db[ns].pop(key)})
             if ns not in fake.db:
                 return err(404, f"Namespace '{ns}' not found")
             return ok({"namespace": ns, "key": None, "value": fake.db[ns]})
@@ -273,7 +278,7 @@ class FakeMoonraker:
             Route("/server/spoolman/status", spoolman_status),
             Route("/server/config", server_config),
             Route("/server/database/list", db_list),
-            Route("/server/database/item", db_item, methods=["GET", "POST"]),
+            Route("/server/database/item", db_item, methods=["GET", "POST", "DELETE"]),
             Route("/server/webcams/list", webcams),
             Route("/printer/restart", restart, methods=["POST"]),
             Route("/server/restart", server_restart, methods=["POST"]),

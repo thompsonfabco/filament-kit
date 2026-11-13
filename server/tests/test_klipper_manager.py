@@ -219,6 +219,38 @@ def test_camera_url(moonraker, fam):
     assert fam.camera_kind(pid) == "mjpeg"
 
 
+def test_camera_url_skips_a_webcam_that_is_not_mjpeg(moonraker, fam):
+    as_sv08(moonraker)
+    moonraker.webcams = [{"name": "Rtc", "enabled": True, "service": "webrtc-camerastreamer",
+                          "stream_url": "/webcam/webrtc"},
+                         {"name": "Hls", "enabled": True, "service": "hlsstream", "stream_url": "/webcam/hls"}]
+    pid = add(moonraker)
+    fam.start()
+    assert wait_for(lambda: fam.state(pid) == "connected")
+    assert fam.camera_url(pid) is None and fam.camera_kind(pid) is None
+
+
+def test_camera_url_takes_only_mjpeg_services(moonraker, fam):
+    as_sv08(moonraker)
+    moonraker.webcams = [{"name": "A", "enabled": True, "service": "jmuxer-stream", "stream_url": "/a"},
+                         {"name": "B", "enabled": True, "service": "ipstream", "stream_url": "/b"},
+                         {"name": "C", "enabled": True, "service": "uv4l-mjpeg", "stream_url": "/c"}]
+    pid = add(moonraker)
+    fam.start()
+    assert wait_for(lambda: fam.state(pid) == "connected")
+    assert fam.camera_url(pid) == f"http://{moonraker.host}/c"
+
+
+def test_the_far_sides_status_text_is_cleaned_and_bounded(moonraker, fam):
+    as_sv08(moonraker)
+    pid = add(moonraker)
+    fam.start()
+    assert wait_for(lambda: fam.state(pid) == "connected")
+    fam._conn(pid)._set("offline", "<script>alert(1)</script>\x00" + "x" * 60000)
+    msg = fam._conn(pid).message
+    assert len(msg) <= kmanager.STATUS_TEXT and "<" not in msg and ">" not in msg and "\x00" not in msg
+
+
 # ---- final review I1 / I2 / M3 -----------------------------------------------------------------------------------
 
 def test_offline_when_the_websocket_stays_down(moonraker):
@@ -408,6 +440,31 @@ def test_a_spool_change_during_set_up_is_not_overwritten(moonraker, spoolman_url
         assert tapped and conn.spool_id == 2
     finally:
         fam.stop()
+
+
+def test_set_up_that_outlives_stop_leaves_no_subscriber_running(env, moonraker, spoolman_url):
+    from filament_kit.bridge.klipper.manager import _Conn
+    pid = registry.add_klipper("P", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(Spoolman(spoolman_url), backoff=(0.1, 0.4))
+    conn = _Conn(fam, registry.load()[pid])
+    conn._stop.set()                        # the printer was removed while the set-up ran
+    conn._setup()
+    assert conn.sub is not None and conn.sub._stop.is_set() and not conn.sub.connected
+
+
+def test_a_failed_spoolman_read_is_not_retried_at_once(env, spoolman_url):
+    calls = []
+
+    class Down:
+        def get(self, path):
+            calls.append(path)
+            raise OSError("down")
+    fam = KlipperFamily(Down(), backoff=(0.1, 0.4))
+    assert fam._spool_list() == [] and fam._spool_list() == []
+    assert calls == ["spool"]
+    fam.forget_spools()                     # a load or unload asks again
+    fam._spool_list()
+    assert calls == ["spool", "spool"]
 
 
 # --- the Scan a client can ask for ------------------------------------------------------------------------------------

@@ -47,7 +47,6 @@ def test_record_and_entries():
     got = kusage.entries("sv08-max", 36500)
     assert [x["id"] for x in got] == [e["id"]]
     assert got[0]["can_undo"] is False and got[0]["undone"] is False
-    assert kusage.owns(e["id"]) and not kusage.owns("abc")
     assert kusage.entries("sv08-max", 0) == [] or all(x["ended"] for x in kusage.entries("sv08-max", 0))
 
 

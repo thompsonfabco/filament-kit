@@ -20,12 +20,13 @@ from typing import Callable
 
 from .. import registry
 from ... import hostaddr
-from .moonraker import Moonraker, MoonrakerError
+from .moonraker import Moonraker, MoonrakerError, Unauthorized
 
 log = logging.getLogger(__name__)
 SERVICE = "_moonraker._tcp.local."
 DEFAULT_PORT = 7125
 MAX_HOSTS = 256
+INFO_TIMEOUT = 2.0      # a busy Raspberry Pi answers /server/info slowly; the TCP probe already narrowed the hosts
 # What the server's unit lets it reach (IPAddressAllow in install/systemd/filament-kit.service; a test keeps the two equal).
 # A probe of anything else times out, and would read as "nothing there".
 REACHABLE = hostaddr.SERVICE_REACH
@@ -84,7 +85,9 @@ def _open(host: str, port: int, timeout: float) -> bool:
 
 def _is_moonraker(host: str, port: int, timeout: float) -> bool:
     try:
-        info = Moonraker(host, port, timeout=max(timeout, 0.5)).server_info()
+        info = Moonraker(host, port, timeout=max(timeout, INFO_TIMEOUT)).server_info()
+    except Unauthorized:
+        return True         # Moonraker here, it wants an API key: adding the printer says so
     except MoonrakerError:
         return False
     return isinstance(info, dict) and "klippy_state" in info

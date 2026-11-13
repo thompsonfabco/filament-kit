@@ -16,6 +16,7 @@ run on the subscriber's thread and must not block for long.
 """
 from __future__ import annotations
 
+import http.client
 import itertools
 import json
 import logging
@@ -103,7 +104,7 @@ class Moonraker:
             if path == "/printer/gcode/script" and e.code == 400:
                 raise GcodeError(msg) from None
             raise MoonrakerError(f"{method} {path}: {e.code} {msg}") from None
-        except (urllib.error.URLError, OSError, TimeoutError) as e:
+        except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as e:     # the last: a reply cut off
             raise Offline(f"Moonraker at {self.host}:{self.port} is not answering ({_reason(e)})") from None
         if len(raw) > MAX_BODY:
             raise MoonrakerError(f"{method} {path}: answer larger than {MAX_BODY} bytes")
@@ -163,6 +164,12 @@ class Moonraker:
 
     def db_post(self, ns: str, key: str, value) -> None:
         self._call("POST", "/server/database/item", body={"namespace": ns, "key": key, "value": value})
+
+    def db_delete(self, ns: str, key: str) -> None:
+        try:
+            self._call("DELETE", "/server/database/item", query={"namespace": ns, "key": key})
+        except NotFound:
+            pass        # already gone
 
     # --- websocket -----------------------------------------------------------------------------------------------
     def ws_url(self) -> str:

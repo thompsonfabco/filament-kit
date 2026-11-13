@@ -40,6 +40,9 @@ COMMON = ("print_stats", "toolhead", "virtual_sdcard", "heater_bed", "webhooks",
 GCODE_STATE = {"printing": "RUNNING", "paused": "PAUSE", "complete": "FINISH", "cancelled": "FAILED",
                "error": "FAILED", "standby": "IDLE"}
 SPOOL_CACHE = 30.0
+MJPEG = ("mjpegstreamer", "uv4l-mjpeg")     # Moonraker webcam `service` values whose stream_url is an MJPEG stream
+STATUS_TEXT = 200       # longest status text taken from the far side
+SPOOL_RETRY = 5.0           # after a failed read, Spoolman is not asked again for this long (its timeout is 15 s)
 OFFLINE_AFTER = 10.0    # seconds a websocket may be down before the printer reads as offline
 SYNC_EVERY = 15.0       # seconds between registry re-reads (the CLI edits it in another process)
 HISTORY_WAIT = 10.0     # seconds to wait for Moonraker to close a finished job's history entry
@@ -47,6 +50,12 @@ SCAN_GAP = 30.0         # seconds from the end of one scan to the start of the n
 ONLINE = ("connected", "unknown_model")
 SYSTEM_WORDS = {"single": "a single-extruder printer", "tool-macros": "a toolchanger", "afc": "an AFC printer",
                 "happy-hare": "a Happy Hare printer", "lane-data": "a printer with lane_data"}
+
+
+def clean_text(text: str) -> str:
+    """The far side's text as shown in the printer's state: one line, no markup or control characters, bounded."""
+    t = " ".join("".join(" " if ch in "<>" or not ch.isprintable() else ch for ch in str(text)).split())
+    return t if len(t) <= STATUS_TEXT else t[:STATUS_TEXT - 1] + "…"
 
 
 def generic_note(system_key: str) -> str:
@@ -99,6 +108,7 @@ class _Conn:
         self.thread.join(5)
 
     def _set(self, state: str, message: str = "") -> None:
+        message = clean_text(message)
         with self.lock:
             changed = (state, message) != (self.state, self.message)
             self.state, self.message = state, message
@@ -155,6 +165,8 @@ class _Conn:
         if self.sub is None:
             self.sub = Subscriber(c, wanted, self._on_status, self._on_event, backoff=self.fam.backoff,
                                   on_connect=self._on_subscribed).start()
+            if self._stop.is_set():         # stop() ran while this set-up did and found no subscriber to stop
+                self.sub.stop()
         else:
             self.sub.set_objects(wanted)
         # wait briefly for the first snapshot so callers see filled-in status
@@ -486,6 +498,7 @@ class KlipperFamily(LoadsMixin):
             spools = self.sm.get("spool") or []
         except Exception as e:  # noqa: BLE001 - Spoolman down: slots show no spool, status still answers
             log.info("klipper status: Spoolman unavailable (%s)", type(e).__name__)
+            self._spools = (time.monotonic() - SPOOL_CACHE + SPOOL_RETRY, spools)    # the old list stands in meanwhile
             return spools
         self._spools = (time.monotonic(), spools)
         return spools
@@ -582,6 +595,9 @@ class KlipperFamily(LoadsMixin):
             return None
         for cam in c.webcams:
             url = cam.get("stream_url") if cam.get("enabled", True) else None
+            service = str(cam.get("service") or "").lower()
+            if service and not service.startswith(MJPEG):
+                continue            # the camera hub reads MJPEG only; WebRTC, HLS, jmuxer or an iframe show nothing
             if isinstance(url, str) and url:
                 full = urllib.parse.urljoin(f"http://{hostaddr.url_host(c.p.host)}/", url)     # an IPv6 host in brackets
                 u = urllib.parse.urlsplit(full)

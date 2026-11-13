@@ -420,7 +420,6 @@ def _expr(v: str) -> str:
 
 _E = xmlfile.E
 _TEXT = xmlfile.TEXT
-_VERSION = xmlfile.VERSION
 _SCHEMA = _E(
     attrs={"version": _text}, required=("version",), once=("models", "ams-types", "numbering-schemes",
                                                              "presence-layouts", "speech"),
@@ -461,10 +460,6 @@ _SCHEMA = _E(
                                   required=("from", "to", "bit"))})}),
         "speech": _E(children={"word": _E(attrs={"text": _text, "say": _text}, required=("text", "say"))}),
     })
-
-
-_where = xmlfile.where
-_check = xmlfile.check
 
 
 def _parse(data: bytes, where: str):
@@ -758,10 +753,6 @@ def validate(data: bytes, where: str = "bambu_hardware.xml") -> list[str]:
 
 
 file_version = xmlfile.file_version
-_root_version = xmlfile.root_version
-_vtext = xmlfile.vtext
-_merge = xmlfile.merge
-_stamp = xmlfile.stamp
 
 _loader = xmlfile.Cached(BUNDLED, lambda: override_path(), parse=lambda d, w: _parse(d, w), elements=lambda r, w: _elements(r, w),
                          build=lambda s, w: _build(s, w), empty=lambda: Hardware(), max_bytes=MAX_BYTES, err=HardwareError)

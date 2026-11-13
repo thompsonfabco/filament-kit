@@ -16,7 +16,7 @@ dependencies = [
     "cryptography>=44",
     "paho-mqtt>=2.0",
     "defusedxml==0.7.1",  # hardware XML: no DTD, entities or external references
-    "websockets>=13",     # Klipper bridge: the Moonraker websocket (sync client)
+    "websockets>=15",     # Klipper bridge: the Moonraker websocket (sync client; 15 added its keepalive pings, which end a half-open connection)
     "zeroconf>=0.136",    # Klipper bridge: Moonraker mDNS discovery (listen only)
 ]
 

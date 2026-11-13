@@ -8,8 +8,8 @@ stateless: every call gets the printer's `Model` and `System` from klipper_hardw
                                                        status = the merged subscription, spool_id = Moonraker's
                                                        active spool, db = the lane_data namespace (or None)
     spool_on(status, spool_id, db, label, model, system) -> int | None   the spool the printer shows in that slot
-    set_gcode(label, spool_id, model, system, hw) -> str     raises UnknownSlot, NotSupported
-    clear_gcode(label, model, system, hw) -> str
+    set_gcode(label, spool_id, model, system, hw, status=None) -> str     raises UnknownSlot, NotSupported
+    clear_gcode(label, model, system, hw, status=None) -> str
     publishes_lane_data: bool                          the kit writes Moonraker lane_data for it by default
 
 A slot's `spool_id` is None when the printer shows none (0, -1, missing or not a number).
