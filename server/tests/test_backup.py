@@ -11,6 +11,7 @@ import stat
 import sys
 import tarfile
 import zipfile
+import zlib
 from pathlib import Path
 
 import pytest
@@ -306,14 +307,15 @@ def test_a_damaged_zip_changes_nothing(kit, tmp_path, capsys):
     assert not (kit / "backups").exists() or not [p for p in (kit / "backups").iterdir() if p.name.startswith("pre")]
 
 
-def test_a_failure_halfway_puts_everything_back(kit, monkeypatch, capsys):
+@pytest.mark.parametrize("error", [OSError(28, "No space left on device"), zlib.error("bad data"), EOFError("cut")])
+def test_a_failure_halfway_puts_everything_back(kit, monkeypatch, capsys, error):
     z = backup.create()
     _wipe_and_change(kit)
     real = backup._extract
 
     def extract(zf, items, target, folder=None):
         if items and items[0].root == "var/lib/filament-kit-web":
-            raise OSError(28, "No space left on device")
+            raise error
         return real(zf, items, target, folder)
     monkeypatch.setattr(backup, "_extract", extract)
     assert backup.restore(z, yes=True, run=Runner()) == 1

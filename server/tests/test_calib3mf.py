@@ -291,6 +291,19 @@ def test_job_never_starts(fake_ftp, printer):
     assert not (fake_ftp.root / "cache" / FILE).exists()
 
 
+def test_a_printer_that_drops_off_during_the_job_is_said_to_be_offline(fake_ftp, printer):
+    class Drops(FakeManager):
+        def wait_report(self, serial, predicate, timeout):
+            if self.published:                          # the job was sent: now the printer is gone
+                self.conn_state = "disconnected"
+            return super().wait_report(serial, predicate, timeout)
+    for behaviour, said in (("silent", "went offline before it started"), ("stuck", "went offline during")):
+        m = Drops(fake_ftp.root, behaviour)
+        r = calib3mf.run(m, SERIAL, slotmap_for(m.report), should_stop=lambda: False)
+        assert any(said in p for p in r.problems), (behaviour, r.problems)
+        assert not any("within" in p for p in r.problems)
+
+
 def test_job_never_ends_is_stopped(fake_ftp, printer):
     m = FakeManager(fake_ftp.root, "stuck")
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))

@@ -840,7 +840,10 @@ The `web` module runs one more service, `filament-kit-web`, on this computer onl
   rest (HLS plays in Safari on iPhone and Mac). The light button follows the printer's reported chamber light;
   the kit switches both light nodes when a printer has two, as the old page did. Print alerts to the phone
   (Web Push) are off; `"web": {"push": true}` turns them on, needs `pip install 'filament-kit[push]'` and lets the
-  web service reach the browsers' push services on the internet, which the kit does not open for you.
+  web service reach the browsers' push services on the internet, which the kit does not open for you: the web service's
+  systemd limits allow only your home network, so run `sudo systemctl edit filament-kit-web`, add `[Service]` and
+  `IPAddressAllow=any`, save, and `sudo systemctl restart filament-kit-web`. The phone's Test button says when the
+  push service cannot be reached.
 
 The connector needs a passphrase; the phone web app has no sign-in: it only answers your home network. Adding
 spools does a dry run first in both, as in the Android app.

@@ -701,7 +701,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
                     os.replace(db_target, db_old)
                 os.replace(tmp, db_target)
                 _spoolman_own(db_target, m.spoolman)
-    except (OSError, zipfile.BadZipFile, KeyError) as e:
+    except (OSError, zipfile.BadZipFile, KeyError, zlib.error, EOFError, NotImplementedError) as e:
         for target, old in reversed(swapped):
             shutil.rmtree(target, ignore_errors=True)
             if old is not None:

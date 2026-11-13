@@ -1072,6 +1072,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         return False
 
     _wait(manager, serial, watch, JOB_TIMEOUT, should_stop)
+    gone = manager.state(serial) not in ONLINE      # the wait ended early or ran out: was the printer still there?
     if st['other'] is not None:
         log.warning("%s: another job started; calibration abandoned, that job left alone", registry.log_label(serial))
         res.other_job, res.consistent = True, False
@@ -1086,12 +1087,14 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     if not st['started']:
         stopped = _stop_ours(manager, serial, name)   # best effort: ours may still start after we gave up on it
         res.report_wanted = "job_refused"
-        res.problems.append(f"the printer did not start the calibration job within {JOB_TIMEOUT:.0f} s"
+        res.problems.append(("the printer went offline before it started the calibration job" if gone else
+                             f"the printer did not start the calibration job within {JOB_TIMEOUT:.0f} s")
                             + ("" if stopped is None else _stopped_text(stopped)))
         return
     if st['final'] is None:
         res.report_wanted = "job_failed"
-        res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s"
+        res.problems.append(("the printer went offline during the calibration job" if gone else
+                             f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s")
                             + _stopped_text(_stop_ours(manager, serial, name)))
         return
     err = st['error']

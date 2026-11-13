@@ -212,3 +212,12 @@ def test_no_compatible_preset_for_the_material_is_a_reported_failure(plugin, mon
     monkeypatch.setattr(plugin, "http_json", fake_http(None, active=3))
     ok, text = plugin.run_sync()
     assert not ok and "no compatible PLA filament preset" in text and plugin.orca_stub.selected == []
+
+
+def test_two_presets_listing_the_filament_id_are_scored_among_themselves(plugin):
+    def p(name, ids, user=False):
+        return {"name": name, "label": name, "type": "PLA", "vendor": "Acme", "is_user": user, "spoolman_ids": ids}
+    spool = {"filament_id": 5, "material": "PLA", "vendor": "Acme", "name": "Silk"}
+    presets = [p("Acme PLA Silk", {5}), p("Acme PLA", {5}), p("Acme PLA Silk tuned", set(), user=True)]
+    # the unlisted user preset scores 4.5 over everything; the pick is still one that lists id 5
+    assert plugin.choose(presets, spool, None, None)[0] == "Acme PLA Silk"

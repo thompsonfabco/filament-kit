@@ -107,13 +107,6 @@ def check_socket(printer: registry.Printer, sock) -> str:
     return check_der(printer, der, port)
 
 
-def check(printer: registry.Printer, port: int, timeout: float = 5) -> None:
-    """Handshake with `printer.ip:port` and verify its leaf (pins on first use). Raises CertChanged, or OSError
-    when the printer cannot be reached. A separate connection: prefer `connect` / `check_socket` when the
-    Access Code goes over a socket you open yourself."""
-    check_der(printer, _leaf_der(printer.ip, port, timeout), port)
-
-
 def connect(printer: registry.Printer, port: int, timeout: float = 10) -> ssl.SSLSocket:
     """A TLS socket to `printer.ip:port` whose leaf already passed the pin check. Raises CertChanged / OSError."""
     raw = socket.create_connection((printer.ip, port), timeout=timeout)

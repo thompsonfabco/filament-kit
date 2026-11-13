@@ -127,17 +127,22 @@ def test_context_does_not_verify_ca_or_hostname():
     assert ctx.verify_mode == tlspin.ssl.CERT_NONE and ctx.check_hostname is False
 
 
+def _check(printer, port):
+    """A separate handshake, then the pin check (the kit itself pins on the socket the code goes over)."""
+    tlspin.check_der(printer, tlspin._leaf_der(printer.ip, port, 5), port)
+
+
 def test_check_pins_on_first_use_and_refuses_a_changed_leaf(tmp_path):
     registry.upsert(printer())
     a, b = Leaf(SERIAL), Leaf(SERIAL)
     sa, sb = TlsPrinter(a, tmp_path), TlsPrinter(b, tmp_path)
     try:
         p = registry.load()[SERIAL]
-        tlspin.check(p, sa.port)
+        _check(p, sa.port)
         assert p.cert_fp == a.fp and registry.load()[SERIAL].cert_fp == a.fp
-        tlspin.check(registry.load()[SERIAL], sa.port)            # same leaf: fine
+        _check(registry.load()[SERIAL], sa.port)            # same leaf: fine
         with pytest.raises(tlspin.CertChanged) as e:
-            tlspin.check(registry.load()[SERIAL], sb.port)        # any port: Task 4 uses it for FTPS 990
+            _check(registry.load()[SERIAL], sb.port)        # any port: Task 4 uses it for FTPS 990
         assert (e.value.expected, e.value.actual) == (a.fp, b.fp)
         assert registry.load()[SERIAL].cert_fp == a.fp            # a changed leaf never replaces the pin
     finally:
@@ -150,7 +155,7 @@ def test_leaf_with_another_serial_as_cn_is_refused_even_on_first_use(tmp_path):
     srv = TlsPrinter(Leaf("01P00A999999999"), tmp_path)
     try:
         with pytest.raises(tlspin.CertChanged) as e:
-            tlspin.check(registry.load()[SERIAL], srv.port)
+            _check(registry.load()[SERIAL], srv.port)
     finally:
         srv.close()
     assert e.value.expected == ""
@@ -162,7 +167,7 @@ def test_leaf_without_cn_pins(tmp_path):
     leaf = Leaf(None)
     srv = TlsPrinter(leaf, tmp_path)
     try:
-        tlspin.check(registry.load()[SERIAL], srv.port)
+        _check(registry.load()[SERIAL], srv.port)
     finally:
         srv.close()
     assert registry.load()[SERIAL].cert_fp == leaf.fp

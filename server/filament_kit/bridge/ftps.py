@@ -7,7 +7,7 @@ MLSD; listings are NLST (names only).
 
 The printer's leaf is checked against its pin (`tlspin`, trust on first use) on the live control socket, after
 the handshake and before USER/PASS: a changed leaf raises `tlspin.CertChanged` and the Access Code is never sent.
-(This is `tlspin.check` done on the very socket the code would go over, as `tlspin.connect` does for the camera.)
+(This is the pin check done on the very socket the code would go over, as `tlspin.connect` does for the camera.)
 
 The Access Code is never logged and never part of a repr; ftplib debugging stays off."""
 from __future__ import annotations
