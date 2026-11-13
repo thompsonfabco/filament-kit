@@ -227,6 +227,7 @@ def test_follow_retries_a_tap_when_spoolman_was_down(printer, sm, fil, monkeypat
     time.sleep(0.2)
     assert loc_of(sm, s["id"]) == "Shelf 3"
     up.set()                                 # Spoolman is back
+    fam._follow_fail.clear()                 # and the pause has run out
     fam._follow_q.put(pid)                   # the next update
     assert wait_for(lambda: loc_of(sm, s["id"]) == LOC)
 
@@ -242,6 +243,7 @@ def test_follow_retries_an_unload_when_spoolman_was_down(printer, sm, fil, monke
     time.sleep(0.2)
     assert loc_of(sm, s["id"]) == LOC
     up.set()
+    fam._follow_fail.clear()
     fam._follow_q.put(pid)
     assert wait_for(lambda: loc_of(sm, s["id"]) == "Shelf 3")
 
@@ -259,6 +261,7 @@ def test_connect_reconcile_is_retried_when_spoolman_was_down(moonraker, sm, fil,
         time.sleep(0.2)
         assert loc_of(sm, s["id"]) == "Shelf 1"
         up.set()                             # Spoolman is back
+        fam._follow_fail.clear()             # and the pause has run out
         fam._follow_q.put(pid)               # the next update
         assert wait_for(lambda: loc_of(sm, s["id"]) == "Voron – T0")
     finally:
@@ -295,6 +298,48 @@ def test_one_failing_slot_does_not_block_the_next(printer, monkeypatch):
     monkeypatch.setattr(fam, "_follow_move", move)
     fam._follow_check(pid)
     assert done == ["T1"]
+
+
+def test_a_failing_spoolman_pauses_the_follow_calls_with_a_growing_bounded_backoff(printer, monkeypatch):
+    fam, pid, fake = printer
+    clock = [100.0]
+    fam._follow_clock = lambda: clock[0]
+    fam._seen[pid] = {"T0": None, "T1": None}
+    monkeypatch.setattr(fam, "_current", lambda p: {"T0": 11, "T1": 12})
+    calls, broken = [], [True]
+
+    def move(p, label, sid):
+        calls.append(label)
+        if broken[0]:
+            raise OSError("spoolman down")
+        fam._seen[p][label] = sid
+    monkeypatch.setattr(fam, "_follow_move", move)
+    first, cap = loads.FOLLOW_BACKOFF
+    fam._follow_check(pid)
+    assert calls == ["T0", "T1"]                       # both slots tried once: one failure does not skip the other
+    fam._follow_check(pid)
+    clock[0] += first - 0.1
+    fam._follow_check(pid)
+    assert len(calls) == 2                             # inside the pause: Spoolman is not called
+    clock[0] += 0.2
+    fam._follow_check(pid)
+    assert len(calls) == 4                             # the pause is over; fails again, and the pause doubles
+    clock[0] += first + 0.1
+    fam._follow_check(pid)
+    assert len(calls) == 4
+    for _ in range(10):                                # the pause stops growing at the cap
+        clock[0] += cap + 0.1
+        fam._follow_check(pid)
+    assert fam._follow_fail[pid][1] == cap
+    n = len(calls)
+    broken[0] = False
+    clock[0] += cap + 0.1
+    fam._follow_check(pid)
+    assert len(calls) == n + 2 and pid not in fam._follow_fail      # a success clears it
+    fam._seen[pid] = {"T0": None, "T1": None}
+    broken[0] = True
+    fam._follow_check(pid)
+    assert fam._follow_fail[pid][1] == first           # and the next failure starts small again
 
 
 def test_tap_during_kit_load(printer, sm, fil):

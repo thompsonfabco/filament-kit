@@ -31,6 +31,7 @@ from .moonraker import GcodeError, MoonrakerError, Offline
 
 log = logging.getLogger(__name__)
 CONFIRM_TIMEOUT = 10.0
+FOLLOW_BACKOFF = (2.0, 30.0)        # a printer's Spoolman calls pause this long (doubling, up to the cap) after a failure
 
 
 def _slot_location(s: dict, cur: str) -> bool:
@@ -52,6 +53,8 @@ class LoadsMixin:
         self._slot_locks: dict[tuple[str, str], threading.Lock] = {}
         self._slot_locks_lock = threading.Lock()
         self._seen: dict[str, dict[str, int | None]] = {}
+        self._follow_clock = time.monotonic
+        self._follow_fail: dict[str, tuple[float, float]] = {}      # pid -> (retry not before, last pause)
         self._follow_q: queue.Queue = queue.Queue()
         self._follow_thread: threading.Thread | None = None
         self.add_listener(self._on_change)
@@ -67,6 +70,7 @@ class LoadsMixin:
             self._follow_thread.join(5)
         self._follow_thread = None
         self._seen.clear()
+        self._follow_fail.clear()
 
     def _slot_lock(self, pid: str, label: str) -> threading.Lock:
         with self._slot_locks_lock:
@@ -116,8 +120,11 @@ class LoadsMixin:
         c = self._conn(pid)
         if c is None or c.state not in ("connected", "unknown_model") or not (c.sub and c.sub.connected):
             return
+        if self._follow_clock() < self._follow_fail.get(pid, (0.0, 0.0))[0]:
+            return          # a recent Spoolman failure: the slots stay unseen, the first update after the pause retries
         cur = self._current(pid)
         seen = self._seen.get(pid)
+        failed = False
         if seen is None:
             # first status after connecting: reconcile what changed while the kit was not watching (a tap during a
             # kit restart). Only a spool the printer shows counts: Moonraker forgets its active spool on a restart,
@@ -133,7 +140,9 @@ class LoadsMixin:
             self._seen[pid] = {l: s for l, s in cur.items() if (l, s) not in todo}
             for label, sid in todo:
                 with self._slot_lock(pid, label):
-                    self._follow_slot(pid, label, sid)
+                    failed |= not self._follow_slot(pid, label, sid)
+            if not failed:
+                self._follow_fail.pop(pid, None)
             return
         for label, sid in cur.items():
             if seen.get(label, "unset") == sid:
@@ -142,18 +151,30 @@ class LoadsMixin:
                 now = self._current(pid).get(label)
                 if self._seen.get(pid, {}).get(label, "unset") == now:
                     continue
-                self._follow_slot(pid, label, now)
+                failed |= not self._follow_slot(pid, label, now)
+        if not failed:
+            self._follow_fail.pop(pid, None)
 
-    def _follow_slot(self, pid: str, label: str, spool_id) -> None:
+    def _follow_slot(self, pid: str, label: str, spool_id) -> bool:
         """One slot's move; a failure (Spoolman down, a 4xx) is logged and leaves the slot unseen for the next update,
-        and never holds back the printer's other slots. One line per failure, not a traceback, as every update retries."""
+        and never holds back the printer's other slots. One line per failure, not a traceback. After a failure the
+        printer's Spoolman calls pause for a short, growing time (FOLLOW_BACKOFF; see _follow_check), so a down or slow
+        Spoolman is not hit on every status update. Returns whether the move went through."""
         try:
             self._follow_move(pid, label, spool_id)
+            return True
         except PrinterOffline:
             raise
         except Exception as e:  # noqa: BLE001
-            log.warning("klipper %s %s: Spoolman could not follow (%s); the next update tries again", pid, label, e)
+            first, cap = FOLLOW_BACKOFF
+            until, last = self._follow_fail.get(pid, (0.0, first / 2))
+            now = self._follow_clock()
+            pause = last if now < until else min(last * 2, cap)      # one doubling per pass, however many slots fail
+            self._follow_fail[pid] = (now + pause, pause)
+            log.warning("klipper %s %s: Spoolman could not follow (%s); trying again in %g s at the earliest",
+                        pid, label, e, pause)
             log.debug("klipper %s %s: follow failure detail", pid, label, exc_info=True)
+            return False
 
     def _follow_move(self, pid: str, label: str, spool_id) -> None:
         """Spoolman follows the printer for one slot. A spool id this Spoolman does not have (Moonraker reports to
