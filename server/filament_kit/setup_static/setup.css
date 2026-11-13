@@ -316,3 +316,40 @@ dialog > .detail .detail__foot { margin-top: var(--s2); }
   /* the Save stays at the bottom, above the bottom bar, while the group has unsaved changes */
   .settings .group[data-state="dirty"] > .group__foot { position: sticky; bottom: calc(var(--tab) + env(safe-area-inset-bottom)); z-index: 4; border-top: var(--hairline) solid var(--border-strong); }
 }
+/* devices (S2.9) */
+/* the section is two columns from a wide tablet up: Paired devices across, then the cards in pairs (03 7.1) */
+@media (min-width: 1025px) {
+  .page[data-section="devices"] > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s4); align-items: start; }
+  .page[data-section="devices"] > div:last-child > :first-child { grid-column: 1 / -1; }
+}
+.page[data-section="devices"] > div:last-child > .card { min-width: 0; width: 100%; box-sizing: border-box; }
+.devices__name { font-weight: var(--fw-label); }
+.devices__badge { display: inline-flex; margin-left: var(--s2); font-weight: var(--fw-text); }
+.devices__digits { font-size: var(--fs-l); }
+.devices__make { align-items: end; }
+.devices__make > .field { flex: 1 1 calc(var(--s7) * 3); min-width: 0; }
+.devices__web { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: flex-start; margin: var(--s2) 0; }
+.devices__web > .code { flex: 1 1 calc(var(--s7) * 4); min-width: 0; }
+.devices__web > img.qr { flex: none; }
+@media (max-width: 600px) { .devices__web > img.qr { margin-inline: auto; } }
+/* the collections' columns (02 6.1); the third-priority column goes on a tablet, every cell stays in a phone's card */
+.coll--paired { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) max-content; }
+.coll--readers { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr) max-content; }
+.coll--trusted { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.2fr) max-content; }
+@media (max-width: 1024px) {
+  .coll--readers { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) max-content; }
+  .coll--trusted { grid-template-columns: minmax(0, 2fr) minmax(0, 1.6fr) minmax(0, 1.2fr) max-content; }
+}
+@media (max-width: 600px) {
+  .coll--paired, .coll--readers, .coll--trusted { grid-template-columns: none; }
+}
+.coll__item .coll__sub { margin-top: var(--s1); }
+/* the pairing dialog (03 7.2): its parts stack, and a long link scrolls inside its own block */
+.pairing { display: grid; gap: var(--s3); min-width: 0; }
+.pairing > * { min-width: 0; margin: 0; }
+.pairing p { margin: 0; }
+.pairing__qr { display: flex; justify-content: center; }
+.pairing__digits { font-size: var(--fs-2xl); font-weight: var(--fw-title); }
+.pairing__print { overflow-wrap: anywhere; font-size: var(--fs-m); }
+.pairing__wait { display: flex; align-items: center; gap: var(--s2); }
+.pairing .code__text { max-height: calc(var(--s7) * 3); }
