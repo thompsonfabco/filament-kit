@@ -66,7 +66,7 @@ server/filament_kit/setup_static/setup_intake.js | ai_intake | 1 | today's strin
 server/filament_kit/setup_static/setup_intake.js | color | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_intake.js | intake | 5 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_intake.js | intake history | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_presets.js | presets | 70 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+server/filament_kit/setup_static/setup_presets.js | presets | 73 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_printers.js | intake | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_printers.js | phone web app | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_printers.js | printer pack | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

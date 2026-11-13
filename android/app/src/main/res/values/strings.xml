@@ -976,6 +976,11 @@
     <string name="presets_build_failed">The last preset build failed: %1$s</string>
     <string name="presets_build_none">No build yet.</string>
     <string name="presets_build_now">Build now</string>
+    <!-- 1=stamp 2=presets 3=count -->
+    <plurals name="presets_build_summary_plain">
+        <item quantity="one">Last build %1$s: %2$s presets, %3$d problem.</item>
+        <item quantity="other">Last build %1$s: %2$s presets, %3$d problems.</item>
+    </plurals>
     <!-- 1=stamp 2=presets 3=orca 4=count -->
     <plurals name="presets_build_summary">
         <item quantity="one">Last build %1$s: %2$s presets, %3$s for Orca Slicer, %4$d problem.</item>
@@ -988,10 +993,15 @@
     <string name="presets_error">Could not read the Slicer presets. %1$s</string>
     <!-- 1=reason -->
     <string name="presets_lines_error">Could not read the product lines. %1$s</string>
-    <!-- 1=vendor -->
-    <string name="presets_line_title">%1$s filament-kit</string>
+    <!-- 1=vendor 2=line -->
+    <string name="presets_line_title">%1$s %2$s</string>
     <string name="presets_lines_none">No product lines yet. They are made from the filaments in Spoolman at the next build or when spools are added.</string>
     <string name="presets_lines_title">Product lines</string>
+    <!-- 1=stamp 2=count -->
+    <plurals name="presets_meta_build_plain">
+        <item quantity="one">Last build %1$s · %2$d preset</item>
+        <item quantity="other">Last build %1$s · %2$d presets</item>
+    </plurals>
     <!-- 1=stamp 2=count 3=orca -->
     <plurals name="presets_meta_build">
         <item quantity="one">Last build %1$s · %2$d preset, %3$s for Orca Slicer</item>

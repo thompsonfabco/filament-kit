@@ -8,6 +8,9 @@ const PRESETS = "presets";       // the section's name in TABS; its catalogue ke
 const TARGET = { bambu: "presets_target_bambu", orca: "presets_target_orca" };
 const LIST_KEYS = 6;             // keys named per update in the change list
 
+// A control that is pressed again while its change is under way does nothing (one request per press)
+const once = (run) => { let on = false; return async (e) => { if (on) return; on = true; try { await run(e); } finally { on = false; } }; };
+
 // a line of the change list: "<slicer>: <name> (in your file <file>): <up to 6 keys>, …"
 function updateLine(u) {
   const keys = u.keys.slice(0, LIST_KEYS).join(", ") + (u.keys.length > LIST_KEYS ? ", …" : "");
@@ -20,7 +23,7 @@ function updatesList(box, r) {
   if (!r.chosen.length) { say(box, SW.t("presets_updates_nothing"), "info"); return; }
   say(box, [h("p", {}, SW.t("presets_updates_would", { count: r.chosen.length })),
     h("ul", {}, ...r.chosen.map((u) => h("li", {}, updateLine(u)))),
-    SW.btn(SW.t("presets_updates_accept"), { cls: "btn--primary", action: "accept", run: () => accept(box, r) })], "info");
+    SW.btn(SW.t("presets_updates_accept"), { cls: "btn--primary", action: "accept", run: once(() => accept(box, r)) })], "info");
 }
 
 // Accepts what the list showed, by name and build: the Hub refuses once a newer build has changed it (409): the list is then
@@ -31,7 +34,8 @@ async function accept(box, shown) {
     let r;
     try { r = await api("presets/updates", { all: true, dry_run: false, stamp: shown.stamp, names: shown.chosen.map((u) => u.name), code: theCode() }); } catch (e) {
       if (e.locked) { SW.result(box, null); throw e; }
-      if (e.status === 409) say(box, SW.t("presets_updates_stale"), "warn"); else say(box, e.message, false);
+      if (e.status === 409 && /show them again/.test(e.message)) say(box, SW.t("presets_updates_stale"), "warn");     // not the module being off
+      else say(box, hubText(e.message), false);
       return;
     }
     await refresh(box);
@@ -41,7 +45,7 @@ async function accept(box, shown) {
 
 // Set parent: reads the parents Slicer Sync reported for the line's material, then asks in a dialog (03 8.2)
 async function setParent(line, target, box, opener) {
-  const name = SW.t("presets_line_title", { vendor: line.vendor, product: line.product });
+  const name = SW.t("presets_line_title", { vendor: line.vendor, line: line.product });
   working(box, SW.t("common_reading"));
   let p;
   try { p = await api(`presets/parents?material=${encodeURIComponent(line.material)}&target=${target}`); } catch (e) { say(box, e.message, false); return; }
@@ -58,12 +62,13 @@ async function setParent(line, target, box, opener) {
 // ----- the section header (02 2.1): a line under the title and the main action at the right -----
 function drawHead(v) {
   if (!v.on) { pageHead(); return; }
-  const b = v.build;
+  const b = v.build, orca = v.orca_presets;
   pageHead(h("p", { class: "page-head__meta" },
-    h("span", { class: "mono" }, b ? SW.t("presets_meta_build", { stamp: b.stamp, count: v.presets, orca: v.orca_presets == null ? 0 : v.orca_presets }) : SW.t("presets_build_none")),
+    h("span", { class: "mono" }, b ? (orca == null ? SW.t("presets_meta_build_plain", { stamp: b.stamp, count: v.presets })
+      : SW.t("presets_meta_build", { stamp: b.stamp, count: v.presets, orca })) : SW.t("presets_build_none")),
     v.pc ? SW.status("ok", { text: SW.t("presets_meta_sync") }) : null),
     h("div", { class: "page-head__actions" },
-      SW.btn(SW.t("presets_build_now"), { cls: "btn--primary", action: "build", run: () => buildNow() })));
+      SW.btn(SW.t("presets_build_now"), { cls: "btn--primary", action: "build", run: once(() => buildNow()) })));
 }
 const buildNow = () => { const box = boxFor("presets"); return change(box, "presets/build", {}, () => say(box, SW.t("presets_build_asked"), true)); };
 
@@ -71,17 +76,18 @@ const buildNow = () => { const box = boxFor("presets"); return change(box, "pres
 function buildCard(v) {
   const box = boxFor("presets"), a = v.last_attempt, b = v.build;
   return card(SW.t("presets_build_title"),
-    h("p", {}, b ? SW.t("presets_build_summary", { stamp: b.stamp, presets: v.presets, orca: v.orca_presets == null ? 0 : v.orca_presets, count: b.problems || 0 }) : SW.t("presets_build_none")),
+    h("p", {}, b ? (v.orca_presets == null ? SW.t("presets_build_summary_plain", { stamp: b.stamp, presets: v.presets, count: b.problems || 0 })
+      : SW.t("presets_build_summary", { stamp: b.stamp, presets: v.presets, orca: v.orca_presets, count: b.problems || 0 })) : SW.t("presets_build_none")),
     a && !a.ok ? h("p", {}, SW.status("failed", { text: SW.t("presets_build_failed", { error: a.error }) })) : null,
     v.waiting_text ? h("p", {}, SW.status("note", { text: v.waiting_text })) : null,
     v.pc ? h("p", {}, SW.status("ok"), " ", SW.t("presets_sync_ok"))
       : h("p", {}, SW.status("note", { text: SW.t("status_not_configured") }), " ", SW.t("presets_sync_not_set"), " ", h("a", { href: "#devices" }, SW.t("presets_sync_link"))),
-    v.problems.length ? h("ul", {}, ...v.problems.map((p) => h("li", {}, SW.status("failed", { text: p })))) : null,
+    v.problems.length ? h("ul", { class: "problems" }, ...v.problems.map((p) => h("li", {}, SW.status("failed", { text: p })))) : null,
     v.stale.length || v.orca_stale.length ? h("h3", { class: "detail__heading" }, SW.t("presets_stale_title")) : null,
     ...v.stale.map((n) => h("p", { class: "muted" }, SW.t("presets_stale_bambu", { name: n }))),
     ...v.orca_stale.map((n) => h("p", { class: "muted" }, SW.t("presets_stale_orca", { name: n }))),
     h("div", { class: "row" },
-      SW.btn(SW.t("presets_restore_deleted"), { cls: "btn--ghost", action: "restore-deleted", run: () => change(box, "presets/restore_deleted", {}, () => say(box, SW.t("presets_restore_asked"), true)) })),
+      SW.btn(SW.t("presets_restore_deleted"), { cls: "btn--ghost", action: "restore-deleted", run: once(() => change(box, "presets/restore_deleted", {}, () => say(box, SW.t("presets_restore_asked"), true))) })),
     box);
 }
 
@@ -93,7 +99,7 @@ function updatesCard(v) {
       accepted: up.accepted ? SW.t("presets_updates_accepted", { count: up.accepted }) : "" }) : SW.t("presets_updates_none")),
     up.yours ? h("p", { class: "muted" }, SW.t("presets_updates_yours", { count: up.yours })) : null,
     up.count ? h("div", { class: "row" }, SW.btn(SW.t("presets_updates_show"), { action: "show-updates",
-      run: () => change(box, "presets/updates", { all: true, dry_run: true }, (r) => updatesList(box, r)) })) : null,
+      run: once(() => change(box, "presets/updates", { all: true, dry_run: true }, (r) => updatesList(box, r))) })) : null,
     box);
   el.id = "presets-updates";
   return el;
@@ -108,7 +114,7 @@ const cell = (col, prio, key, ...kids) => h("div", { class: "coll__cell", role: 
 
 function lineItem(line, canOrca, cols) {
   const box = boxFor(`line:${line.line_id}`), id = "preset-line-" + line.line_id;       // a message here outlives the redraw a change brings
-  const name = SW.t("presets_line_title", { vendor: line.vendor, product: line.product });
+  const name = SW.t("presets_line_title", { vendor: line.vendor, line: line.product });
   const parentText = (p, source) => (p ? SW.t("presets_parent_value", { name: p, source }) : SW.t("common_none"));
   const bambu = parentText(line.bambu_parent, line.parent_source), orca = parentText(line.orca_parent, line.orca_parent_source);
   const expand = SW.iconBtn("chevron", SW.t("detail_for", { name }), { cls: "coll__expand" });
@@ -152,20 +158,26 @@ function linesCard(v) {
   return card(SW.t("presets_lines_title"), table);
 }
 
-function drawPresets(v) {
+// #presets/updates scrolls to the Updates card once each time the address is opened, not at every redraw
+let scrolled = false;
+window.addEventListener("hashchange", () => { scrolled = false; });
+
+// `body` is the region this read belongs to: one that left the page (another section opened, or a newer drawing took its
+// place) draws nothing, and above all leaves the page header alone
+function drawPresets(body, v) {
+  if (!body.isConnected) return;
   drawHead(v);
-  if (!v.on) { fill(presetsBody, switchedOff(PRESETS)); return; }
-  fill(presetsBody, buildCard(v), updatesCard(v), linesCard(v));
-  if (!presetsBody._seen && location.hash === "#presets/updates") document.getElementById("presets-updates").scrollIntoView();
-  presetsBody._seen = true;
+  if (!v.on) { fill(body, switchedOff(PRESETS)); return; }
+  fill(body, h("div", { class: "presets-pair" }, buildCard(v), updatesCard(v)), linesCard(v));
+  if (!scrolled && location.hash === "#presets/updates") { scrolled = true; document.getElementById("presets-updates").scrollIntoView(); }
 }
 
-function loadPresets() {
-  return readRegion(presetsBody, PRESETS, () => api("presets"), drawPresets);
+function loadPresets(body = presetsBody) {
+  return readRegion(body, PRESETS, () => api("presets"), (v) => drawPresets(body, v));
 }
 
 function presetsTab() {
-  presetsBody = h("div");
-  later(loadPresets());
-  return [presetsBody];
+  const body = presetsBody = h("div");
+  later(loadPresets(body));
+  return [body];
 }

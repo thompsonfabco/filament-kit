@@ -207,6 +207,46 @@ def test_no_text_reaches_the_screen_without_the_catalogue():
     assert not stale, "in strings_allowlist.txt but no longer found, drop the line:\n" + "\n".join(stale)
 
 
+# ---- A reserved name is never a run-time argument ----
+
+T_CALL = re.compile(r"(?<![\w$])t\(\s*([\"'`])([a-z][a-z0-9_]*)\1\s*,\s*\{")
+ARG_NAME = re.compile(r"(?:^|[{,])\s*(product|command)\s*(?=[:,}])")
+
+
+def reserved_arg_problems(text, raw):
+    """[line: text] where a script gives `product` or `command` as an argument of a catalogue text: those two are filled in
+    when the catalogues are generated, so the run-time value would never be used."""
+    out = []
+    for m in T_CALL.finditer(text):
+        key = m.group(2)
+        value = raw.get(key)
+        texts = list(value.values()) if isinstance(value, dict) else [value or ""]
+        if not any("{product}" in t or "{command}" in t for t in texts):
+            continue
+        end = m.end()
+        depth = 1
+        while end < len(text) and depth:
+            depth += {"{": 1, "}": -1}.get(text[end], 0)
+            end += 1
+        args = "{" + text[m.end():end]
+        if ARG_NAME.search(args):
+            out.append(f"{text.count(chr(10), 0, m.start()) + 1}: {key} is called with a reserved name")
+    return out
+
+
+def test_a_reserved_name_is_not_passed_to_a_text_at_run_time():
+    raw = json.loads(SOURCE.read_text(encoding="utf-8"))
+    # the web app passes the product name where the build-time fill already gives the same one: harmless, S3.x drops them
+    same = {("server/filament_kit/web/static/app.js", k) for k in ("recent_public_text", "nav_more_home_screen_summary", "install_title")}
+    same.add(("server/filament_kit/web/static/printers.js", "settings_alerts_unsupported"))
+    problems = [f"{_rel(f)}:{p}" for f in _script_sources() for p in reserved_arg_problems(f.read_text(encoding="utf-8"), raw)
+                if (_rel(f), p.split(": ")[1].split(" ")[0]) not in same]
+    assert not problems, "\n".join(problems)
+    plant = 'SW.t("presets_line_title", { vendor: a, product: b })'
+    assert reserved_arg_problems(plant, {"presets_line_title": "{vendor} {product}"}) == ["1: presets_line_title is called with a reserved name"]
+    assert reserved_arg_problems(plant, {"presets_line_title": "{vendor} {line}"}) == []
+
+
 # ---- Test 8 ----
 
 def test_theme_names_agree():

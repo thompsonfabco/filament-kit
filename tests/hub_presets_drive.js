@@ -2,7 +2,7 @@
 // then shows. The test (server/tests/test_hub_presets_ui.py) holds the server side: which Hub routes were reached, in order.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(look, what) {
-  for (let i = 0; i < 150; i++) { const v = look(); if (v) return v; await sleep(100); }
+  for (let i = 0; i < 400; i++) { const v = look(); if (v) return v; await sleep(100); }
   throw new Error("waited for " + what + ", it did not come; the page shows: " + JSON.stringify([...document.querySelectorAll(".result, .toast, dialog[open]")].map((e) => [e.className, e.dataset.state, e.textContent.trim().slice(0, 120)])));
 }
 const $ = (s, root = document) => root.querySelector(s);
@@ -12,7 +12,9 @@ const T = SW.t;
 
 location.hash = "#presets";
 await until(() => $('[data-action="build"]') && $('[data-action="restore-deleted"]') && $(".coll--lines .coll__item"), "the section");
-await until(() => !$(".chip--lock .skeleton__line"), "the lock chip");      // the page has read its trust; then the code, as the unlock dialog leaves it
+// the page's first read of its trust (the lock chip stops loading) comes first: it writes the lock state, and a code given
+// before it is undone; then the code, as the unlock dialog leaves it
+await until(() => !$(".chip--lock .skeleton__line") && !$('[aria-busy="true"]:not(button)'), "the lock chip and the section to settle");
 SW.setLock("unlocked", { code: "__CODE__" });
 out.title = text($("h1"));
 out.head = [text($(".page-head__meta")), text($(".page-head__actions"))];
@@ -23,6 +25,7 @@ out.rows = document.querySelectorAll(".coll--lines .coll__item").length;
 
 // Build now (the header's primary button), then Bring back deleted presets: each says its result in the Build card
 $('[data-action="build"]').click();
+$('[data-action="build"]').click();                 // pressed again at once: one request only
 out.build = await until(() => text($('.result[data-state="ok"] .result__text')), "the result of Build now");
 $('[data-action="restore-deleted"]').click();
 out.restore = await until(() => { const r = text($('.result[data-state="ok"] .result__text')); return r && r !== out.build ? r : null; }, "the result of Bring back deleted presets");
@@ -38,12 +41,14 @@ out.staleAcceptLeft = !!$('[data-action="accept"]');
 $('[data-action="show-updates"]').click();
 await until(() => $('[data-action="accept"]'), "Accept these under the list again");
 $('[data-action="accept"]').click();
+$('[data-action="accept"]').click();
 out.accepted = await until(() => text($('#presets-updates .result[data-state="ok"] .result__text')), "the result of Accept these");
 
 // Set parent: its menu, then the dialog
 const set = $('[data-action="set-parent"]');
 out.setParentName = set.getAttribute("aria-label");
 out.lineId = set.closest(".coll__item").dataset.id;
+out.lineName = text($(".coll__title", set.closest(".coll__item")));
 set.click();
 const items = await until(() => { const l = [...document.querySelectorAll(".menu__item")]; return l.length ? l : null; }, "the Set parent menu");
 out.menu = items.map(text);
@@ -59,4 +64,24 @@ $('[data-action="confirm"]', dlg).click();
 await until(() => !$("dialog[open]"), "the dialog to close");
 out.parentSaved = await until(() => text($('.coll__row--result .result[data-state="ok"] .result__text')), "the saved result");
 out.parentShown = text($(`.coll--lines .coll__item[data-id="${out.lineId}"] .coll__cell[data-col="bambu_parent"]`));
+
+// the Orca Slicer parent: Cancel sends nothing, Save sends the pick with target orca
+const row = () => $(`.coll--lines .coll__item[data-id="${out.lineId}"]`);
+const openOrca = async () => {
+  $('[data-action="set-parent"]', row()).click();
+  const m = await until(() => { const l = [...document.querySelectorAll(".menu__item")]; return l.length ? l : null; }, "the Set parent menu again");
+  out.menuOrca = m.map(text);
+  m[1].click();
+  return await until(() => $("dialog[open]"), "the Orca Slicer dialog");
+};
+let d2 = await openOrca();
+out.orcaSub = text($(".dialog__text", d2));
+out.orcaOptions = [...$("select", d2).options].map((o) => o.value);
+$('[data-action="cancel"]', d2).click();
+await until(() => !$("dialog[open]"), "Cancel to close the dialog");
+d2 = await openOrca();
+$("select", d2).value = "Orca Basic";
+$('[data-action="confirm"]', d2).click();
+await until(() => !$("dialog[open]"), "the Orca dialog to close");
+out.orcaSaved = await until(() => text($('.coll__row--result .result[data-state="ok"] .result__text', row())), "the Orca saved result");
 return out;

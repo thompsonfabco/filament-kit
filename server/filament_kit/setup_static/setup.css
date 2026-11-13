@@ -81,6 +81,9 @@ img.qr { display: block; width: var(--qr); height: var(--qr); max-width: 100%; p
 .coll--lines-one { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) max-content minmax(0, 1.5fr) max-content; }
 .coll--lines .coll__cell[data-col="expand"] { display: none; }
 .coll--lines .coll__sort { min-width: calc(var(--s7) - var(--s1)); }
+.presets-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--s7) * 8)), 1fr)); column-gap: var(--s4); align-items: start; }
+.card ul.problems { list-style: none; padding-left: 0; }
+.coll--lines .btn[aria-haspopup="menu"] .icon { transform: rotate(90deg); }
 /* a line led by a status mark carries a Hub text (a problem names a file): it wraps inside its card */
 .card .status { white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 1024px) {
