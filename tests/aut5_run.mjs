@@ -3,10 +3,11 @@
 // tests/page_audit.js in it and prints the findings as JSON. Test-only: never shipped, never run on a Hub.
 //
 //   node tests/aut5_run.mjs --url http://127.0.0.1:8799/intake --views "#add,#spools" [--widths 1280,320]
-//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/aut5_allowlist.txt] [--wide-font] [--font-dir <dir>]
+//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/aut5_allowlist.txt] [--wide-font] [--font-dir <dir>] [--ready "<js>"]
 //
 // Besides the audit's own checks, each pass fails on: sideways scroll (content wider than the layout viewport), a view
 // that did not open (the address or title is not the one asked for), and an uncaught error in the page.
+// --ready: JavaScript run in the page after each load, before the views (it may return a promise).
 // --allow: findings of today's markup that a later step removes, one per line "<check> | <where> | <count> | <reason>";
 // <count> is how many times that finding appears in the whole run (every view, width and appearance). A run that finds
 // it more often fails (a new finding hides behind no line), and a line found less often is stale and fails too, so a
@@ -223,6 +224,10 @@ async function main() {
         await send("Page.navigate", { url: url.href + VIEWS[0] });
         await loaded();
         if (args["font-dir"]) await send("Runtime.evaluate", { expression: "window.__fonts", awaitPromise: true });
+        if (args.ready) {      // --ready: an expression (it may be async) that sets the page up once it has loaded, e.g. unlocks it
+          const r = await send("Runtime.evaluate", { expression: args.ready, awaitPromise: true, returnByValue: true });
+          if (r.exceptionDetails) throw new Error("--ready failed: " + ((r.exceptionDetails.exception && r.exceptionDetails.exception.description) || r.exceptionDetails.text));
+        }
         for (const view of VIEWS) {
           // errors are taken when the view is reported: what the page threw while loading is the first view's, and
           // what arrives later belongs to the view open at that time

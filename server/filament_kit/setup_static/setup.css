@@ -41,6 +41,12 @@
 .row > button { flex: 0 1 auto; max-width: 100%; white-space: normal; }
 /* the bold names and addresses in a sentence (the web app address, printer names) break instead of widening the page */
 :where(.page) p > b { overflow-wrap: anywhere; }
+/* Logs (03 13): the controls wrap on a tablet and stack full width on a phone; the log scrolls sideways inside its block */
+.logs__controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); margin: var(--s2) 0; }
+.logs__out { display: grid; gap: var(--s2); min-width: 0; }
+.logs__out > .code { max-width: 100%; }
+.logs__out .code__text { max-height: calc(var(--s7) * 8); }
+@media (max-width: 600px) { .logs__controls { display: grid; align-items: stretch; } .logs__controls .btn { width: 100%; } }
 /* cards (the group look) */
 .card { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r); padding: var(--s3) var(--s4);
         margin: var(--s3) 0; }

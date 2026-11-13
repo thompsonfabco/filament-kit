@@ -691,6 +691,7 @@ window.SW_TEXT = Object.freeze({
   "logs_lines": "Lines",
   "logs_locked": "Logs hold addresses and serial numbers, so reading them needs the setup code.",
   "logs_none": "No services are switched on.",
+  "logs_read_error": "Could not read the log.",
   "logs_service": "Service",
   "logs_show_again": "Show again",
   "logs_truncated": "Only the end is shown: the rest is too long for this page.",
