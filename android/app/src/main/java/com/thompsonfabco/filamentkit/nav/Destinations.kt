@@ -7,8 +7,10 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.toRoute
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.add.AddReplace
+import com.thompsonfabco.filamentkit.ui.add.AddStep
 import com.thompsonfabco.filamentkit.ui.spool.SpoolCache
 import kotlinx.serialization.Serializable
 
@@ -28,7 +30,13 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object HomeGraph
 @Serializable data object HomeRoute
-@Serializable data class AddRoute(val tag: String? = null, val draft: String? = null, val manual: Boolean = false)
+
+// The four steps of Add spools (05-android-app 2.5, 6): each a destination of its own, all of one draft.
+@Serializable data class AddPhotosRoute(val draftId: String)
+@Serializable data class AddReviewRoute(val draftId: String)
+@Serializable data class AddPreviewRoute(val draftId: String)
+@Serializable data class AddDoneRoute(val draftId: String)
+
 @Serializable data object AddProfileRoute
 
 /** The top bar's title on [AddProfileRoute] (05-android-app 8); the shell and the AUT-8 test both read it. */
@@ -124,6 +132,29 @@ fun NavController.selectTab(tab: Tab) = navigate(tab.graph) {
     restoreState = true
 }
 
+/** The destination of a step of the draft [draftId]. */
+internal fun addRoute(step: AddStep, draftId: String): Any = when (step) {
+    AddStep.Photos -> AddPhotosRoute(draftId)
+    AddStep.Check -> AddReviewRoute(draftId)
+    AddStep.Preview -> AddPreviewRoute(draftId)
+    AddStep.Done -> AddDoneRoute(draftId)
+}
+
+/** The screen is one of the four steps of Add spools. */
+fun NavDestination?.inAdd(): Boolean = this != null && (
+    hasRoute(AddPhotosRoute::class) || hasRoute(AddReviewRoute::class) ||
+        hasRoute(AddPreviewRoute::class) || hasRoute(AddDoneRoute::class)
+    )
+
+/** The draft an Add spools entry belongs to; null for any other entry. */
+fun NavBackStackEntry.addDraftId(): String? = when {
+    destination.hasRoute(AddPhotosRoute::class) -> toRoute<AddPhotosRoute>().draftId
+    destination.hasRoute(AddReviewRoute::class) -> toRoute<AddReviewRoute>().draftId
+    destination.hasRoute(AddPreviewRoute::class) -> toRoute<AddPreviewRoute>().draftId
+    destination.hasRoute(AddDoneRoute::class) -> toRoute<AddDoneRoute>().draftId
+    else -> null
+}
+
 /** What [openAdd] did. */
 enum class AddOpened {
     /** The new add is open. */
@@ -131,34 +162,46 @@ enum class AddOpened {
 
     /** The add that was open is writing: it is showing and the request is dropped. */
     KeptWriting,
-
-    /** The add that was open holds typed fields that are not saved: it is showing; the caller asks, then [replaceAdd]. */
-    NeedsLeave,
 }
 
 /**
- * Opens a NEW add flow on the Home stack, whichever tab is showing, so the bar and the stacks stay right. An add already
- * open on that stack is replaced as leaving it would be ([decide] gives the Back rule); a saved draft stays in the store
- * and is listed under Drafts on Home.
+ * Opens a NEW add on the Home stack, whichever tab is showing, so the bar and the stacks stay right. An add already
+ * open on that stack is replaced as leaving it would be ([decide] gives the Back rule for its draft); its draft stays in
+ * the store and is listed under Drafts on Home. [first] makes the new add's first destination (and its draft) only when
+ * the request goes ahead.
  */
-fun NavController.openAdd(route: AddRoute, decide: (NavBackStackEntry) -> AddReplace = { AddReplace.Replace }): AddOpened {
+fun NavController.openAdd(first: () -> Any, decide: (draftId: String) -> AddReplace = { AddReplace.Replace }): AddOpened {
     if (currentDestination.tab() != Tab.Home) selectTab(Tab.Home)
-    val open = currentBackStackEntry
-    if (open != null && currentDestination?.hasRoute(AddRoute::class) == true) {
-        when (decide(open)) {
-            AddReplace.KeepWriting -> return AddOpened.KeptWriting
-            AddReplace.AskLeave -> return AddOpened.NeedsLeave
-            AddReplace.Replace -> popBackStack()
-        }
-    }
-    navigate(route)
+    val open = currentBackStackEntry?.addDraftId()
+    if (open != null && decide(open) == AddReplace.KeepWriting) return AddOpened.KeptWriting
+    closeAdd()
+    navigate(first())
     return AddOpened.Opened
 }
 
-/** The person chose to leave the add that holds typed fields: a new one takes its place. */
-fun NavController.replaceAdd(route: AddRoute) {
-    if (currentDestination?.hasRoute(AddRoute::class) == true) popBackStack()
-    navigate(route)
+/** Takes every step of the add that is open off the stack (the stack is back where the add began). */
+fun NavController.closeAdd() {
+    repeat(MAX_STACK_DEPTH) { if (currentDestination.inAdd()) popBackStack() else return }
+}
+
+/**
+ * The screen of step [mine] follows the flow: when the draft is on step [desired] the stack goes there. Forward pushes
+ * the step; backward pops to it (or replaces this one when the stack under it is not that step, as after the app was
+ * stopped and the stack came back with the flow reset to an earlier step).
+ */
+internal fun NavController.followStep(draftId: String, mine: AddStep, desired: AddStep) {
+    if (desired == mine) return
+    if (desired.ordinal > mine.ordinal) {
+        navigate(addRoute(desired, draftId))
+        return
+    }
+    val below = previousBackStackEntry
+    val target = addRoute(desired, draftId)
+    if (below != null && below.addDraftId() == draftId && below.destination.hasRoute(target::class)) {
+        popBackStack()
+    } else {
+        navigate(target) { popUpTo(addRoute(mine, draftId)) { inclusive = true } }
+    }
 }
 
 /**

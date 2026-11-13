@@ -160,8 +160,8 @@ private fun PreviewRow(item: JsonObject) {
 @Composable
 fun DoneScreen(
     state: AddUiState,
-    vm: AddViewModel,
     onDone: () -> Unit,
+    onAddMore: () -> Unit,
     onOpenRecord: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -170,7 +170,7 @@ fun DoneScreen(
         AddStep.Done, state, modifier,
         bar = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
-                SwButton(stringResource(R.string.add_done_more), vm::startOver, Modifier.weight(1f))
+                SwButton(stringResource(R.string.add_done_more), onAddMore, Modifier.weight(1f))
                 SwButton(stringResource(R.string.common_done), onDone, Modifier.weight(1f), kind = SwButtonKind.Main)
             }
             state.historyId?.let { hid ->

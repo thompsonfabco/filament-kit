@@ -23,7 +23,12 @@ data class Draft(
     /** Set after a real add that may have written spools (partial Spoolman failure, or the reply was lost): the ids
      * already created (possibly none known). The next real add needs an explicit "I checked". */
     val addedBefore: List<Long>? = null,
-)
+    /** An add by hand: no photos, the typed spools are the content. */
+    val manual: Boolean = false,
+) {
+    /** Something worth keeping: photos, or a hand add with spools typed in (Home lists these; start-up keeps them). */
+    val hasContent: Boolean get() = photos.isNotEmpty() || (manual && editedItems?.isNotEmpty() == true)
+}
 
 @Serializable
 private data class DraftJson(
@@ -35,6 +40,7 @@ private data class DraftJson(
     val editedItems: JsonArray? = null,
     val created: Long = 0,
     val addedBefore: List<Long>? = null,
+    val manual: Boolean = false,
 )
 
 /**
@@ -44,9 +50,9 @@ private data class DraftJson(
 class DraftStore(private val dir: File) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun create(): Draft {
+    fun create(manual: Boolean = false): Draft {
         val id = UUID.randomUUID().toString()
-        val draft = Draft(id, emptyList(), "", null, null, false, null, null, System.currentTimeMillis())
+        val draft = Draft(id, emptyList(), "", null, null, false, null, null, System.currentTimeMillis(), manual = manual)
         folder(id).mkdirs()
         write(draft)
         return draft
@@ -80,7 +86,7 @@ class DraftStore(private val dir: File) {
         if (!file.isFile) return null
         return try {
             val d = json.decodeFromString<DraftJson>(file.readText())
-            Draft(id, photoFiles(folder), d.hint, d.tag, d.weightGrams, d.sealed, d.readResult, d.editedItems, d.created, d.addedBefore)
+            Draft(id, photoFiles(folder), d.hint, d.tag, d.weightGrams, d.sealed, d.readResult, d.editedItems, d.created, d.addedBefore, d.manual)
         } catch (e: Exception) {
             null
         }
@@ -98,7 +104,7 @@ class DraftStore(private val dir: File) {
             val drop = when {
                 d == null -> true
                 d.addedBefore != null -> false
-                else -> d.photos.isEmpty() || now - d.created > maxAgeMs
+                else -> !d.hasContent || now - d.created > maxAgeMs
             }
             if (drop && folder.deleteRecursively()) n++
         }
@@ -120,7 +126,7 @@ class DraftStore(private val dir: File) {
             // JSON has no NaN/Infinity: such a weight would make every later write of this draft fail.
             DraftJson(
                 draft.hint, draft.tag, draft.weightGrams?.takeIf { it.isFinite() }, draft.sealed, draft.readResult,
-                draft.editedItems, draft.created, draft.addedBefore,
+                draft.editedItems, draft.created, draft.addedBefore, draft.manual,
             ),
         )
         val tmp = File(folder, "$DRAFT_FILE.tmp")

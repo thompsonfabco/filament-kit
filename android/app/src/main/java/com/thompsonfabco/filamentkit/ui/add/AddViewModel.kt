@@ -2,6 +2,9 @@ package com.thompsonfabco.filamentkit.ui.add
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.drafts.DraftStore
@@ -228,7 +231,11 @@ class AddViewModel(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Add by hand (no photos, no draft): starts at Review with the filament picker. */
     private val manual: Boolean = false,
+    /** Where the flow's work runs; the app's [AddFlows] pass theirs, so a read or an add outlives the screen. */
+    private val ownScope: CoroutineScope? = null,
 ) : ViewModel() {
+    private val scope: CoroutineScope get() = ownScope ?: viewModelScope
+
     private val _state = MutableStateFlow(
         if (manual) AddUiState(stage = Stage.Review, tag = initialTag, manual = true, filamentsLoading = true)
         else AddUiState(tag = initialTag),
@@ -260,11 +267,19 @@ class AddViewModel(
 
     /** What the screen answers with a snackbar: a removed photo or spool, each with its "Undo". */
     val events: Flow<AddEvent> = _events.receiveAsFlow()
+    private val _readDone = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+
+    /** A read ended with items: the shell says so (with "Check") when the person is not on the Photos step. */
+    val readDone: SharedFlow<Unit> = _readDone
+    private val _finished = MutableSharedFlow<Boolean>(extraBufferCapacity = 4)
+
+    /** A real add ended: true when the spools were added, false when it failed. */
+    val finished: SharedFlow<Boolean> = _finished
     private var removedPhoto: ByteArray? = null
     private var removedItem: Pair<Int, JsonObject>? = null
 
     init {
-        viewModelScope.launch(io) {
+        scope.launch(io) {
             saves.filterNotNull().collect { d ->
                 try {
                     store.update(d)
@@ -272,8 +287,8 @@ class AddViewModel(
                 }
             }
         }
-        viewModelScope.launch { taps.collect { setTag(it) } }
-        viewModelScope.launch {
+        scope.launch { taps.collect { setTag(it) } }
+        scope.launch {
             try {
                 val names = api.locations()
                 _state.update { it.copy(locations = names) }
@@ -283,7 +298,7 @@ class AddViewModel(
             } catch (_: Exception) { // suggestions only; the location field still takes free text
             }
         }
-        viewModelScope.launch {
+        scope.launch {
             try {
                 val list = api.vendors()
                 _state.update { it.copy(vendors = list) }
@@ -293,11 +308,11 @@ class AddViewModel(
             } catch (_: Exception) { // suggestions only; the brand field still takes free text
             }
         }
-        if (manual) {
-            findFilaments("")
-        } else if (draftId != null) {
-            viewModelScope.launch { restore(draftId) }
+        if (draftId != null) {
+            store.get(draftId)?.let(::applyDraft)
+            if (initialTag != null) save() // a tapped tag is part of the draft from the start
         }
+        if (manual) findFilaments("")
     }
 
     // ---------- manual add: filament picker ----------
@@ -311,7 +326,7 @@ class AddViewModel(
 
     private fun findFilaments(q: String, wait: Long = 0) {
         filamentJob?.cancel()
-        filamentJob = viewModelScope.launch {
+        filamentJob = scope.launch {
             if (wait > 0) delay(wait)
             _state.update { it.copy(filamentsLoading = true, filamentsError = null) }
             try {
@@ -381,7 +396,7 @@ class AddViewModel(
     // ---------- capture ----------
 
     fun addPhoto(raw: ByteArray) {
-        viewModelScope.launch {
+        scope.launch {
             photoLock.withLock {
                 if (_state.value.photos.size >= MAX_PHOTOS) {
                     showError(AddError(AddText.of(R.string.field_file_error_photo_limit, MAX_PHOTOS)))
@@ -411,7 +426,7 @@ class AddViewModel(
     /** Removes a photo; [AddEvent.PhotoRemoved] offers "Undo" ([undoPhoto]) for the latest one. */
     fun removePhoto(index: Int) {
         val file = _state.value.photos.getOrNull(index) ?: return
-        viewModelScope.launch {
+        scope.launch {
             val photos = photoLock.withLock {
                 withContext(io) {
                     removedPhoto = runCatching { file.readBytes() }.getOrNull()
@@ -429,7 +444,7 @@ class AddViewModel(
     fun undoPhoto() {
         val bytes = removedPhoto ?: return
         removedPhoto = null
-        viewModelScope.launch {
+        scope.launch {
             photoLock.withLock {
                 val d = draft ?: return@withLock
                 try {
@@ -496,7 +511,7 @@ class AddViewModel(
 
     private fun runRead(call: suspend () -> ReadResult) {
         _state.update { it.copy(stage = Stage.Reading, error = null) }
-        readJob = viewModelScope.launch {
+        readJob = scope.launch {
             try {
                 val res = call()
                 failedReadId = null
@@ -541,6 +556,7 @@ class AddViewModel(
         }
         save()
         loadParentsForItems()
+        _readDone.tryEmit(Unit)
     }
 
     /** Not in a manual add (it has no photos; the screen offers Cancel instead). */
@@ -611,7 +627,7 @@ class AddViewModel(
      */
     private fun scheduleProposal(index: Int) {
         proposalJobs.remove(index)?.cancel()
-        proposalJobs[index] = viewModelScope.launch {
+        proposalJobs[index] = scope.launch {
             delay(PROPOSE_DEBOUNCE_MS)
             val asked = _state.value.items.getOrNull(index) ?: return@launch
             val material = asked.text("material")
@@ -639,7 +655,7 @@ class AddViewModel(
 
     private fun loadParentsForItems() {
         _state.value.items.mapNotNull { it.text("material")?.takeIf(String::isNotBlank) }.distinct().forEach { m ->
-            viewModelScope.launch { loadParents(m) }
+            scope.launch { loadParents(m) }
         }
     }
 
@@ -810,7 +826,7 @@ class AddViewModel(
                 previewFailed = false, problems = emptyList(),
             )
         }
-        addJob = viewModelScope.launch {
+        addJob = scope.launch {
             try {
                 val readId = if (s.manual) null else (readResult?.get("read_id") as? JsonPrimitive)?.contentOrNull
                 val res = api.add(JsonArray(s.items.map(::forAdd)), dryRun, s.tag, readId)
@@ -827,6 +843,7 @@ class AddViewModel(
                             historyId = res.historyId, doneTag = it.tag, addedBefore = null,
                         )
                     }
+                    _finished.tryEmit(true)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -871,6 +888,7 @@ class AddViewModel(
                 // A refusal that names a field is shown at the field and as a line of the preview, a wrong parent at its
                 // field and a partial write by the "may have been added" notice: none of them needs a second line.
                 if (problem.isEmpty() && !badParent && !(warn && created.isNotEmpty())) showError(err)
+                if (!dryRun) _finished.tryEmit(false)
             }
         }
     }
@@ -942,8 +960,8 @@ class AddViewModel(
         saves.value = next
     }
 
-    private suspend fun restore(id: String) {
-        val d = withContext(io) { store.get(id) } ?: return
+    /** The saved draft: its photos, choices, read result and edited items come back as they were. */
+    private fun applyDraft(d: Draft) {
         draft = d
         readResult = d.readResult
         val res = d.readResult?.let {
@@ -956,7 +974,7 @@ class AddViewModel(
         val items = (d.editedItems ?: res?.items)?.mapNotNull { it as? JsonObject }
         _state.update {
             it.copy(
-                stage = if (items != null) Stage.Review else Stage.Capture,
+                stage = if (manual || items != null) Stage.Review else Stage.Capture,
                 draftId = d.id, photos = d.photos, hint = d.hint, tag = d.tag ?: it.tag, weight = d.weightGrams,
                 sealed = d.sealed, questions = res?.questions.orEmpty(), items = items.orEmpty(),
                 readInfo = res?.let(ReaderTexts::info),

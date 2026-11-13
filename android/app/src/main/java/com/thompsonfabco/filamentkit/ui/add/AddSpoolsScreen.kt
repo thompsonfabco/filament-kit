@@ -13,18 +13,22 @@ import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import kotlinx.coroutines.launch
 
 /**
- * The whole add-spools flow (05-android-app 6): [CaptureScreen] (Photos), [ReviewScreen] (Check the spools), [PreviewScreen]
- * and [DoneScreen]; a hand add starts at Check. [onClose] leaves the flow (the draft stays on the phone); [onDone] follows
- * "Done" and Back from the last step; [onPairAgain] is offered when the Hub no longer accepts this phone or its
- * certificate changed; [onAddByHand] leaves this add for one by hand; [onAddCatalogLine] opens the Filament Catalog form
- * filled from a panel; [onOpenRecord] opens the Hub's record of the add. Back goes one step back (2.5); while the Hub is
- * writing it does nothing but say why.
+ * One step of the add-spools flow (05-android-app 6), a destination of its own: [CaptureScreen] (Photos), [ReviewScreen]
+ * (Check the spools), [PreviewScreen] or [DoneScreen]; a hand add starts at Check. [step] is the step this destination
+ * is; [onStep] says where the draft is now, so the stack follows it (forward pushes, back pops). [onClose] leaves the
+ * flow (the draft stays on the phone; a read or an add goes on); [onDone] follows "Done" and Back from the last step;
+ * [onAddMore] starts a new draft on the same path; [onPairAgain] is offered when the Hub no longer accepts this phone or
+ * its certificate changed; [onAddByHand] leaves this add for one by hand; [onAddCatalogLine] opens the Filament Catalog
+ * form filled from a panel; [onOpenRecord] opens the Hub's record of the add. Back goes one step back (2.5).
  */
 @Composable
 fun AddSpoolsScreen(
     vm: AddViewModel,
+    step: AddStep,
+    onStep: (desired: AddStep) -> Unit,
     onClose: () -> Unit,
     onDone: () -> Unit,
+    onAddMore: () -> Unit,
     onPairAgain: () -> Unit,
     onAddByHand: () -> Unit,
     onAddCatalogLine: (vendor: String, line: String, material: String) -> Unit,
@@ -38,7 +42,6 @@ fun AddSpoolsScreen(
     val removedPhoto = stringResource(R.string.add_photos_removed)
     val removedSpool = stringResource(R.string.add_review_removed)
     val undo = stringResource(R.string.common_undo)
-    val waiting = stringResource(R.string.add_preview_adding_wait)
     // a removed photo or spool is answered with a snackbar that can put it back
     LaunchedEffect(vm, toast) {
         vm.events.collect { event ->
@@ -51,18 +54,20 @@ fun AddSpoolsScreen(
             }
         }
     }
-    when (state.stage) {
-        Stage.Capture -> BackHandler(onBack = onClose)
-        Stage.Reading -> BackHandler(onBack = vm::cancelRead)
-        Stage.Review -> BackHandler(onBack = if (state.manual) onClose else vm::backToPhotos)
-        Stage.Previewing, Stage.Preview -> BackHandler(onBack = vm::backToCheck)
-        Stage.Adding -> BackHandler { scope.launch { toast?.show(waiting) } }
-        Stage.Done -> BackHandler(onBack = onDone)
+    // the stack follows the draft: a step that is reached pushes its destination, a step back pops this one
+    val where = stepOf(state.stage)
+    LaunchedEffect(where) { onStep(where) }
+    when (step) {
+        AddStep.Photos -> BackHandler(onBack = onClose)
+        AddStep.Check -> BackHandler(onBack = if (state.manual) onClose else vm::backToPhotos)
+        // an add that is under way goes on when the person leaves; its result arrives as a snackbar
+        AddStep.Preview -> BackHandler(onBack = if (state.stage == Stage.Adding) onClose else vm::backToCheck)
+        AddStep.Done -> BackHandler(onBack = onDone)
     }
-    when (stepOf(state.stage)) {
+    when (step) {
         AddStep.Photos -> CaptureScreen(state, vm, onPairAgain, onAddByHand, modifier, camera)
         AddStep.Check -> ReviewScreen(state, vm, onPairAgain, onAddByHand, onAddCatalogLine, modifier)
         AddStep.Preview -> PreviewScreen(state, vm, onPairAgain, onAddByHand, modifier)
-        AddStep.Done -> DoneScreen(state, vm, onDone, onOpenRecord, modifier)
+        AddStep.Done -> DoneScreen(state, onDone, onAddMore, onOpenRecord, modifier)
     }
 }

@@ -1,6 +1,9 @@
 package com.thompsonfabco.filamentkit.ui.add
 
 import android.Manifest
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -62,9 +65,11 @@ class AddFlowTest {
         val vm = AddViewModel(api, store, taps = taps, prepare = { it })
         var done = false
         compose.setContent {
+            // the destination follows the draft, as the app's stack does
+            var step by mutableStateOf(AddStep.Photos)
             AddSpoolsScreen(
-                vm, onClose = {}, onDone = { done = true }, onPairAgain = {}, onAddByHand = {},
-                onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {},
+                vm, step, onStep = { step = it }, onClose = {}, onDone = { done = true }, onAddMore = {},
+                onPairAgain = {}, onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {},
             )
         }
 

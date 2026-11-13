@@ -125,4 +125,20 @@ class DraftStoreTest {
         assertEquals(0, store.purge(30 * day, now = 100 * day))
         assertEquals(1, store.purge(30 * day, now = 100 * day + 1))
     }
+
+    @Test fun aHandDraftIsKeptWhileItHoldsTypedSpoolsAndDroppedWhenEmpty() {
+        val store = DraftStore(dir)
+        val empty = store.create(manual = true)
+        val typed = store.create(manual = true)
+        store.update(
+            store.get(typed.id)!!.copy(
+                editedItems = kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.JsonObject(emptyMap()))),
+            ),
+        )
+        assertTrue(store.get(typed.id)!!.manual)
+        assertTrue(store.get(typed.id)!!.hasContent)
+        assertFalse(store.get(empty.id)!!.hasContent)
+        assertEquals(1, store.purge(30 * day))
+        assertEquals(setOf(typed.id), dir.list()!!.toSet())
+    }
 }

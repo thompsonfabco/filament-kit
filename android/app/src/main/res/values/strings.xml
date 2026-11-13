@@ -2241,7 +2241,6 @@
         <item quantity="other">Add %1$d spools</item>
     </plurals>
     <string name="add_preview_adding">Adding to Spoolman…</string>
-    <string name="add_preview_adding_wait">Adding to Spoolman… wait for the Hub\'s answer.</string>
     <!-- 1=note -->
     <string name="add_preview_again_body">%1$s Adding again can create duplicate spools. Check Spoolman first and only continue if they are missing.</string>
     <string name="add_preview_again_confirm">Add again</string>

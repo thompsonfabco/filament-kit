@@ -10,7 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavHostController
-import com.thompsonfabco.filamentkit.nav.AddRoute
+import com.thompsonfabco.filamentkit.nav.AddPhotosRoute
 import com.thompsonfabco.filamentkit.nav.HomeGraph
 import com.thompsonfabco.filamentkit.nav.HomeRoute
 import com.thompsonfabco.filamentkit.nav.PrintersGraph
@@ -39,7 +39,7 @@ class TagTapsTest {
             NavHost(nav, startDestination = HomeGraph) {
                 navigation<HomeGraph>(startDestination = HomeRoute) {
                     composable<HomeRoute> { Text("home") }
-                    composable<AddRoute> {
+                    composable<AddPhotosRoute> {
                         TagTaps { taken += it }
                         Text("add")
                     }
@@ -47,7 +47,7 @@ class TagTapsTest {
                 navigation<PrintersGraph>(startDestination = PrintersRoute) { composable<PrintersRoute> { Text("printers") } }
             }
         }
-        rule.runOnIdle { nav.navigate(AddRoute(draft = "d")) }
+        rule.runOnIdle { nav.navigate(AddPhotosRoute("d")) }
         rule.waitForIdle()
         TagEvents.emit("04:aa")
         rule.waitForIdle()

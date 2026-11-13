@@ -46,7 +46,7 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 
 /** The four steps of the add flow (05-android-app 6.1); each is a page of its own under the top bar "Add spools". */
-internal enum class AddStep(@StringRes val title: Int) {
+enum class AddStep(@StringRes val title: Int) {
     Photos(R.string.add_photos_title),
     Check(R.string.add_review_title),
     Preview(R.string.add_preview_title),

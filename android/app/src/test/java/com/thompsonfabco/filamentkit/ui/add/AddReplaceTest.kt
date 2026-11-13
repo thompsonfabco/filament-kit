@@ -13,15 +13,12 @@ class AddReplaceTest {
         assertEquals(AddReplace.KeepWriting, addReplace(AddUiState(stage = Stage.Previewing, manual = true, items = listOf(item))))
     }
 
-    @Test fun aHandAddWithFieldsAsksBeforeLeaving() {
-        assertEquals(AddReplace.AskLeave, addReplace(AddUiState(stage = Stage.Review, manual = true, items = listOf(item))))
-        assertEquals(AddReplace.AskLeave, addReplace(AddUiState(stage = Stage.Preview, manual = true, items = listOf(item))))
-    }
-
     @Test fun savedOrEmptyOrFinishedIsReplaced() {
         assertEquals("photo path: the draft is saved", AddReplace.Replace, addReplace(AddUiState(stage = Stage.Review, items = listOf(item))))
         assertEquals(AddReplace.Replace, addReplace(AddUiState(stage = Stage.Capture)))
-        assertEquals("a hand add with nothing typed", AddReplace.Replace, addReplace(AddUiState(stage = Stage.Review, manual = true)))
+        assertEquals("a hand add is saved too: Add spools never asks", AddReplace.Replace,
+            addReplace(AddUiState(stage = Stage.Review, manual = true, items = listOf(item))))
+        assertEquals(AddReplace.Replace, addReplace(AddUiState(stage = Stage.Review, manual = true)))
         assertEquals(AddReplace.Replace, addReplace(AddUiState(stage = Stage.Done, manual = true, items = listOf(item))))
     }
 }

@@ -1635,7 +1635,6 @@ window.SW_TEXT = Object.freeze({
   "add_picker_title": "Find the filament",
   "add_preview_add": { "one": "Add {count} spool", "other": "Add {count} spools" },
   "add_preview_adding": "Adding to Spoolman…",
-  "add_preview_adding_wait": "Adding to Spoolman… wait for the Hub's answer.",
   "add_preview_again_body": "{note} Adding again can create duplicate spools. Check Spoolman first and only continue if they are missing.",
   "add_preview_again_confirm": "Add again",
   "add_preview_again_title": "Add these spools again?",

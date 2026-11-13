@@ -22,6 +22,7 @@ import com.thompsonfabco.filamentkit.net.FilamentChoice
 import com.thompsonfabco.filamentkit.net.ReadResult
 import com.thompsonfabco.filamentkit.net.VendorChoice
 import com.thompsonfabco.filamentkit.ui.add.AddSpoolsScreen
+import com.thompsonfabco.filamentkit.ui.add.AddStep
 import com.thompsonfabco.filamentkit.ui.add.AddViewModel
 import com.thompsonfabco.filamentkit.ui.add.FakeIntakeApi
 import kotlinx.coroutines.Dispatchers
@@ -528,13 +529,18 @@ class ScreenSemanticsTest {
             put("estimates", JsonArray(if (estimated) listOf(JsonPrimitive("tare")) else emptyList()))
         }
 
-    private fun addHost(vm: AddViewModel, camera: @Composable (Int, (ByteArray) -> Unit) -> Unit = { _, _ -> Text("camera") }) =
+    /** The step the add's destination shows: the stack follows the draft, as the app's does. */
+    private var addStep by mutableStateOf(AddStep.Photos)
+
+    private fun addHost(vm: AddViewModel, camera: @Composable (Int, (ByteArray) -> Unit) -> Unit = { _, _ -> Text("camera") }) {
+        addStep = AddStep.Photos
         host(RuntimeEnvironment.getApplication().getString(R.string.home_add_title)) {
             AddSpoolsScreen(
-                vm, onClose = {}, onDone = {}, onPairAgain = {}, onAddByHand = {}, onAddCatalogLine = { _, _, _ -> },
-                onOpenRecord = {}, camera = camera,
+                vm, addStep, onStep = { addStep = it }, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
+                onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {}, camera = camera,
             )
         }
+    }
 
     /** Takes [photos] photos and reads [items]: the view model ends on Check the spools. */
     private fun AddViewModel.readItems(vararg items: JsonObject, photos: Int = 1) {
@@ -555,10 +561,11 @@ class ScreenSemanticsTest {
 
     @Test fun addPhotosWithoutTheCameraPermissionOffersToAllowIt() {
         val vm = addVm()
+        addStep = AddStep.Photos
         host(RuntimeEnvironment.getApplication().getString(R.string.home_add_title)) {
             AddSpoolsScreen(
-                vm, onClose = {}, onDone = {}, onPairAgain = {}, onAddByHand = {}, onAddCatalogLine = { _, _, _ -> },
-                onOpenRecord = {},
+                vm, addStep, onStep = { addStep = it }, onClose = {}, onDone = {}, onAddMore = {}, onPairAgain = {},
+                onAddByHand = {}, onAddCatalogLine = { _, _, _ -> }, onOpenRecord = {},
             )
         }
         rule.waitForIdle()
