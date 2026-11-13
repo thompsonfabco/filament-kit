@@ -36,7 +36,7 @@ fails validation is kept as it is, saved back unchanged, and reported in `proble
 stays in the first (file order); the later membership is reported and dropped on the next save.
 
 Concurrency: every load -> change -> save must run inside `locked()` (or `transaction()`, which loads and saves
-in it); `ensure_saved`, `set_parent_saved` and `group_saved` do. The pure `ensure`/`set_parent`/`group` work on
+in it); `set_parent_saved` does. The pure `ensure`/`set_parent`/`group` work on
 a set the caller loaded under the lock.
 """
 from __future__ import annotations
@@ -618,20 +618,6 @@ def transaction():
         save(ls)
 
 
-def ensure_saved(vendor: str, product: str, material: str, *, bambu_parent: str | None, library: Library,
-                 store: Store | None) -> Line:
-    with transaction() as ls:
-        return ensure(ls, vendor, product, material, bambu_parent=bambu_parent, library=library, store=store,
-                      used_fids=set())
-
-
 def set_parent_saved(line_id: str, parent: str, *, target: str = "bambu") -> Line:
     with transaction() as ls:
         return set_parent(ls, line_id, parent, target=target)
-
-
-def group_saved(filaments: list[dict], *, library: Library,
-                store: Store | None) -> tuple[dict[str, list[dict]], LineSet]:
-    """`group` on the saved set, saved back; returns the groups and the set (its `problems` include the moves)."""
-    with transaction() as ls:
-        return group(filaments, ls, library=library, store=store, used_fids=set()), ls

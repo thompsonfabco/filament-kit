@@ -111,9 +111,20 @@ def is_reset(snapshot: set[str], live: set[str]) -> bool:
 def deleted(name: str, *, snapshot: set[str], live: set[str], before: set[str], reset: bool, restore: bool) -> bool:
     """True if this generated preset was deleted in the app (port of gen.gone): it was deleted before, or it was
     installed and is gone from the app now. Never during an app reset or a restore. Names match casefolded."""
-    if restore or reset:
-        return False
-    key = name.casefold()
-    was_installed = key in {n.casefold() for n in snapshot}
-    in_app = key in {n.casefold() for n in live}
-    return key in {n.casefold() for n in before} or (was_installed and not in_app)
+    return Deleted(snapshot=snapshot, live=live, before=before, reset=reset)(name, restore=restore)
+
+
+class Deleted:
+    """`deleted` with the three name sets casefolded once per line (FA-055); call it per preset: `gone(name, restore=...)`."""
+
+    def __init__(self, *, snapshot: set[str], live: set[str], before: set[str], reset: bool):
+        self.reset = reset
+        self._snapshot = {n.casefold() for n in snapshot}
+        self._live = {n.casefold() for n in live}
+        self._before = {n.casefold() for n in before}
+
+    def __call__(self, name: str, *, restore: bool) -> bool:
+        if restore or self.reset:
+            return False
+        key = name.casefold()
+        return key in self._before or (key in self._snapshot and key not in self._live)

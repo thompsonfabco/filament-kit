@@ -36,7 +36,8 @@ ABRASIVE = re.compile(r"-(CF|GF)\b|CF\d|GF\d")
 FAN_OFF = {"0", "0%", "0 (off)"}
 MERGE_DICTS = ("fields", "published_ranges")
 MERGE_VALUES = ("bambu_parent", "orca_parent", "material")
-_COLOR_WORDS = r"^.*?(PLA\+? 2\.0|PETG|PLA\+?|TPU|ABS|ASA|PC|PA|CF|GF|72D|HS|Silk|Matte|Wood|Glow|Metal|Marble|Meta)\s*"
+_COLOR_WORDS = (r"^.*?\b(PLA\+? 2\.0|PETG|PLA\+?|TPU|ABS|ASA|PC|PA|CF|GF|72D|HS|Silk|Matte|Wood|Glow|Metal|Marble|Meta)"
+                r"(?![A-Za-z0-9])\s*")
 _RANGE = re.compile(r"\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*")
 NOTE_LABELS = (("bed_all_plates", "bed"), ("hot_plate_temp", "smooth PEI"), ("textured_plate_temp", "textured PEI"),
                ("cool_plate_temp", "cool plate"), ("chamber_temperatures", "chamber"), ("_nozzle_by_speed", "by speed"),

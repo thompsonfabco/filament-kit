@@ -77,14 +77,13 @@ def test_base_name(store):
     assert store.base_name("fdm_filament_pla") == "fdm_filament_pla"
 
 
-def test_variants(store):
-    assert store.variants("Generic PLA @BBL H2D") == [bbl.STD, bbl.HF]
-    assert store.variants("Generic PLA @BBL X1C") == [bbl.STD]
-    assert bbl.STD == "Direct Drive Standard" and bbl.HF == "Direct Drive High Flow"
-
-
-def test_gcode_values(store):
-    assert json.dumps(["; filament start gcode\n"], sort_keys=True) in store.gcode_values()
+def test_with_base_uses_one_index_and_keeps_resolving_lazily(store):
+    """FA-054: the base -> names index is built once; presets are still resolved (and reported) only when asked."""
+    first = store._with_base("Generic PLA")
+    assert first and all(store.base_name(n) == "Generic PLA" for n, _cfg in first)
+    index = store._names_by_base
+    assert store._with_base("Generic PLA") == first and store._names_by_base is index
+    assert store._with_base("no such base") == []
 
 
 def test_merge_nil_keeps_parent_value():

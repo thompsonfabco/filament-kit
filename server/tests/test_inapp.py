@@ -135,6 +135,18 @@ def test_deleted():
     assert inapp.deleted("C @H2D 0.4", snapshot=snap, live=live, before=set(), reset=False, restore=False) is False
 
 
+def test_deleted_class_folds_the_sets_and_restore_is_chosen_per_call():
+    """FA-055: `Deleted` casefolds the three sets itself; expected answers are written out, not taken from `deleted`."""
+    snap, live, before = {"A @H2D 0.4", "B @H2D 0.4"}, {"B @H2D 0.4"}, {"c @h2d 0.4"}
+    gone = inapp.Deleted(snapshot=snap, live=live, before=before, reset=False)
+    assert gone("a @h2d 0.4", restore=False) is True      # installed, now gone from the app (case differs)
+    assert gone("b @H2D 0.4", restore=False) is False     # still in the app
+    assert gone("C @H2D 0.4", restore=False) is True      # deleted before (case differs)
+    assert gone("D @H2D 0.4", restore=False) is False     # unknown
+    assert gone("a @h2d 0.4", restore=True) is False and gone("C @H2D 0.4", restore=True) is False
+    assert inapp.Deleted(snapshot=snap, live=live, before=before, reset=True)("a @h2d 0.4", restore=False) is False
+
+
 def test_app_reset_keeps_note_lines_below_mark():
     """Final review C1: the live preset is gone (app reset): the owner's lines below MARK come from the installed
     copy (filament_notes is in IGNORE, so the edit record never carries them)."""

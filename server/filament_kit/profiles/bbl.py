@@ -15,7 +15,6 @@ import re
 from pathlib import Path
 
 STD = "Direct Drive Standard"
-HF = "Direct Drive High Flow"
 MAX_DEPTH = 32  # presets in one inherits/include chain; real Bambu chains are under 10
 
 
@@ -45,6 +44,7 @@ class Store:
         self.problems: list[str] = list(problems or [])
         self._cache: dict[str, dict] = {}
         self._bad: set[str] = set()  # presets already reported in `problems` by `_try`
+        self._names_by_base: dict[str, list[str]] | None = None  # base -> its instantiable names, sorted (FA-054)
 
     @classmethod
     def load(cls, folder: Path) -> "Store":
@@ -166,12 +166,16 @@ class Store:
         return sorted(out)
 
     def _with_base(self, base: str) -> list[tuple[str, dict]]:
+        if self._names_by_base is None:         # `_raw` never changes after __init__; names only, so `_try` stays lazy
+            index: dict[str, list[str]] = {}
+            for n in self._instantiable():
+                index.setdefault(self.base_name(n), []).append(n)
+            self._names_by_base = index
         out = []
-        for n in self._instantiable():
-            if self.base_name(n) == base:
-                cfg = self._try(n)
-                if cfg is not None:
-                    out.append((n, cfg))
+        for n in self._names_by_base.get(base, ()):
+            cfg = self._try(n)
+            if cfg is not None:
+                out.append((n, cfg))
         return out
 
     @staticmethod
@@ -210,17 +214,3 @@ class Store:
                 if m:
                     sizes.setdefault(float(m.group(1)), m.group(1))
         return [sizes[k] for k in sorted(sizes)]
-
-    def variants(self, name: str) -> list[str]:
-        v = self.resolve(name).get("filament_extruder_variant")
-        if isinstance(v, list) and v:
-            return [str(x) for x in v]
-        return [STD]
-
-    def gcode_values(self) -> set[str]:
-        out = set()
-        for j in self._raw.values():
-            for k, v in j.items():
-                if "gcode" in k:
-                    out.add(json.dumps(v, sort_keys=True))
-        return out

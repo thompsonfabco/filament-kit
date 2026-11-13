@@ -19,6 +19,17 @@ def env(tmp_path, monkeypatch):
     return tmp_path
 
 
+def _ensure_saved(vendor, product, material, *, bambu_parent, library, store):
+    with lines.transaction() as ls:
+        return lines.ensure(ls, vendor, product, material, bambu_parent=bambu_parent, library=library, store=store,
+                            used_fids=set())
+
+
+def _group_saved(filaments, *, library, store):
+    with lines.transaction() as ls:
+        return lines.group(filaments, ls, library=library, store=store, used_fids=set()), ls
+
+
 def _local(vendor, product, material, parent=None) -> dict:
     e = {"schema_version": 1, "vendor": vendor, "product": product, "material": material, "fields": {}}
     if parent is not None:
@@ -359,7 +370,7 @@ def test_locked_uses_flock_on_lines_lock_and_is_reentrant(monkeypatch, lib, stor
         assert fake.calls == [fake.LOCK_EX]
     assert fake.calls == [fake.LOCK_EX, fake.LOCK_UN]
     fake.calls.clear()
-    lines.ensure_saved("XZN", "PETG", "PETG", bambu_parent=None, library=lib, store=store)
+    _ensure_saved("XZN", "PETG", "PETG", bambu_parent=None, library=lib, store=store)
     assert fake.calls == [fake.LOCK_EX, fake.LOCK_UN]
 
 
@@ -369,7 +380,7 @@ def test_saved_helpers_serialize_threads(lib, store):
 
     def work(i):
         try:
-            lines.ensure_saved("Vend", f"Line {i}", "PLA", bambu_parent=None, library=lib, store=store)
+            _ensure_saved("Vend", f"Line {i}", "PLA", bambu_parent=None, library=lib, store=store)
         except Exception as e:  # pragma: no cover - reported below
             errs.append(e)
 
@@ -393,11 +404,11 @@ def test_saved_helpers_serialize_threads(lib, store):
 def test_group_records_members_and_library_update_does_not_move(store):
     lib_a = make_lib(_local("Acme", "PLA", "PLA"))
     f1 = _fil(1, "PLA Matte Black", vendor="Acme")
-    g, ls = lines.group_saved([f1], library=lib_a, store=store)
+    g, ls = _group_saved([f1], library=lib_a, store=store)
     assert list(g) == ["acme--pla"] and ls["acme--pla"].filaments == [1]
     lib_b = make_lib(_local("Acme", "PLA", "PLA"), _local("Acme", "PLA Matte", "PLA"))
     f2 = _fil(2, "PLA Matte Red", vendor="Acme")
-    g, ls = lines.group_saved([f1, f2], library=lib_b, store=store)
+    g, ls = _group_saved([f1, f2], library=lib_b, store=store)
     assert [f["id"] for f in g["acme--pla"]] == [1]          # the longer prefix does not move filament 1
     assert [f["id"] for f in g["acme--pla-matte"]] == [2]    # a new filament takes the longer one
     assert not any("moved" in s for s in lines.problems(ls))
@@ -406,10 +417,10 @@ def test_group_records_members_and_library_update_does_not_move(store):
 def test_explicit_extra_line_moves_and_reports(store):
     lib_a = make_lib(_local("Acme", "PLA", "PLA"))
     f1 = _fil(1, "PLA Matte Black", vendor="Acme")
-    lines.group_saved([f1], library=lib_a, store=store)
+    _group_saved([f1], library=lib_a, store=store)
     fid = lines.load()["acme--pla"].filament_id
     f1 = _fil(1, "PLA Matte Black", vendor="Acme", line="PLA Matte")
-    g, ls = lines.group_saved([f1], library=lib_a, store=store)
+    g, ls = _group_saved([f1], library=lib_a, store=store)
     assert list(g) == ["acme--pla-matte"]
     assert ls["acme--pla-matte"].filaments == [1]
     assert ls["acme--pla"].filaments == [] and ls["acme--pla"].filament_id == fid   # kept, never deleted
@@ -417,15 +428,15 @@ def test_explicit_extra_line_moves_and_reports(store):
     saved = lines.load()
     assert saved["acme--pla"].filaments == [] and saved["acme--pla-matte"].filaments == [1]
     # the same extra.line as the recorded line is no move
-    g, ls = lines.group_saved([f1], library=lib_a, store=store)
+    g, ls = _group_saved([f1], library=lib_a, store=store)
     assert list(g) == ["acme--pla-matte"] and not any("moved" in s for s in lines.problems(ls))
 
 
 def test_archived_member_stays_recorded(lib, store):
     f1 = _fil(1, "PETG Black", vendor="XZN", material="PETG", line="PETG")
-    lines.group_saved([f1], library=lib, store=store)
+    _group_saved([f1], library=lib, store=store)
     f1["archived"] = True
-    g, ls = lines.group_saved([f1], library=lib, store=store)
+    g, ls = _group_saved([f1], library=lib, store=store)
     assert g == {} and ls["xzn--petg"].filaments == [1]
 
 
