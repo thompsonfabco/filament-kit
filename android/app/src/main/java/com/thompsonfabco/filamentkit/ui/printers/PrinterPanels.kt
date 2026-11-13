@@ -1,6 +1,8 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,19 +18,23 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import kotlinx.coroutines.launch
 
 /**
  * A panel of the printer screens (05-android-app 3.1): `surface` ground, 1 dp `border`, `r` corners, no shadow. The
@@ -115,4 +121,23 @@ internal fun mapShapeLook(shape: MapShape): Triple<Int, Color, Boolean> {
         MapShape.Triangle -> Triple(R.drawable.sw_st_triangle, colors.warn, true)
         MapShape.Octagon -> Triple(R.drawable.sw_st_octagon, colors.bad, true)
     }
+}
+
+/**
+ * A write the person cannot safely abandon is in flight (05-android-app 2.5 rule 2): Back, the scrim and a swipe do
+ * nothing, and the snackbar [words] says why. Returns what to run instead of leaving; compose [BusyBack] inside the
+ * dialog so its Back button is caught.
+ */
+@Composable
+internal fun rememberBusySay(@StringRes words: Int = R.string.common_working): () -> Unit {
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val text = stringResource(words)
+    return { scope.launch { toast?.show(text) } }
+}
+
+/** Catches Back while [busy] and runs [say]; call it inside the dialog or sheet body. */
+@Composable
+internal fun BusyBack(busy: Boolean, say: () -> Unit) {
+    BackHandler(enabled = busy, onBack = say)
 }

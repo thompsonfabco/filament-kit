@@ -102,7 +102,7 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
                             listOf("left" to R.string.printer_mbl_left_nozzle, "right" to R.string.printer_mbl_right_nozzle)
                                 .forEach { (n, label) ->
                                     FilterChip(
-                                        selected = s.nozzle == n, onClick = { viewModel.chooseNozzle(n) },
+                                        modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row), selected = s.nozzle == n, onClick = { viewModel.chooseNozzle(n) },
                                         label = { Text(stringResource(label)) }, shape = SpoolwardenTheme.shapes.rS,
                                     )
                                 }

@@ -105,6 +105,7 @@ class PickSpoolViewModel(
     val state: StateFlow<PickUiState> = _state.asStateFlow()
     private var job: Job? = null
     private var typing: Job? = null
+    private var dryRun: Job? = null
 
     /** A pause in typing searches by itself; clearing the box clears the results. */
     fun setQuery(q: String) {
@@ -152,22 +153,34 @@ class PickSpoolViewModel(
     /** Picks [spool]: asks the Hub what loading it here would do (a dry run) and shows the preview. */
     fun pick(spool: SpoolSummary) {
         if (_state.value.preview?.writing == true) return
+        // an earlier pick's dry run is over: its late answer must not fill this spool's preview
+        dryRun?.cancel()
         _state.update { it.copy(preview = LoadPreview(spool)) }
-        viewModelScope.launch {
+        dryRun = viewModelScope.launch {
             try {
                 val r = backend.load(printerId, slot, spool.id, dryRun = true)
-                _state.update { it.copy(preview = it.preview?.copy(result = r, problem = null, hubNotice = null)) }
+                _state.update {
+                    if (it.preview?.spool?.id != spool.id) it
+                    else it.copy(preview = it.preview.copy(result = r, problem = null, hubNotice = null))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 val p = previewProblem(e)
-                _state.update { it.copy(preview = it.preview?.copy(problem = p.first, hubNotice = p.second)) }
+                _state.update {
+                    if (it.preview?.spool?.id != spool.id) it
+                    else it.copy(preview = it.preview.copy(problem = p.first, hubNotice = p.second))
+                }
             }
         }
     }
 
     /** Back from the preview to the results; refused while the real load is being written. */
-    fun back() = _state.update { if (it.preview?.writing == true) it else it.copy(preview = null) }
+    fun back() {
+        if (_state.value.preview?.writing == true) return
+        dryRun?.cancel()
+        _state.update { it.copy(preview = null) }
+    }
 
     val writing: Boolean get() = _state.value.preview?.writing == true
 
@@ -247,7 +260,7 @@ fun PickSpoolScreen(
         )
         FormField(s.query, viewModel::setQuery, stringResource(R.string.spools_search_label))
         FilterChip(
-            selected = s.sealedOnly, onClick = { viewModel.setSealedOnly(!s.sealedOnly) },
+            modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row), selected = s.sealedOnly, onClick = { viewModel.setSealedOnly(!s.sealedOnly) },
             label = { Text(stringResource(R.string.spools_sealed_only)) }, shape = SpoolwardenTheme.shapes.rS,
         )
         if (s.query.isBlank()) {
@@ -315,9 +328,10 @@ private fun SpoolRow(spool: SpoolSummary, onClick: () -> Unit) {
 @Composable
 private fun PreviewDialog(p: LoadPreview, printerName: String, slot: String, viewModel: PickSpoolViewModel, onPairAgain: () -> Unit) {
     val r = p.result
+    val say = rememberBusySay(R.string.common_load_wait)
     SwDialog(
         title = stringResource(R.string.spool_load_confirm_title, printerName, slot),
-        onClose = viewModel::back,
+        onClose = { if (p.writing) say() else viewModel.back() },
         confirm = SwDialogButton(
             stringResource(if (p.writing) R.string.spool_load_loading else R.string.spool_load_button),
             viewModel::confirm, kind = SwButtonKind.Main, enabled = r != null && !p.writing, busy = p.writing,
@@ -325,6 +339,7 @@ private fun PreviewDialog(p: LoadPreview, printerName: String, slot: String, vie
         cancel = SwAction(stringResource(R.string.common_back), viewModel::back),
         cancelEnabled = !p.writing,
     ) {
+        BusyBack(p.writing, say)
         if (r == null && p.problem == null && p.hubNotice == null) {
             SwProgress(null)
             Text(stringResource(R.string.common_checking), style = MaterialTheme.typography.bodyMedium)

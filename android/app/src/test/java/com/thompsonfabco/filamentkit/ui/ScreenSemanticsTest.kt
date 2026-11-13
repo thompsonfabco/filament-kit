@@ -123,6 +123,12 @@ import com.thompsonfabco.filamentkit.net.ManualStep
 import com.thompsonfabco.filamentkit.net.ManualStepPosition
 import com.thompsonfabco.filamentkit.net.PrinterEditResult
 import com.thompsonfabco.filamentkit.net.SlotSpool
+import com.thompsonfabco.filamentkit.net.LoadResult
+import com.thompsonfabco.filamentkit.ui.pair.PairTopBarOverflow
+import com.thompsonfabco.filamentkit.ui.printers.PickBackend
+import com.thompsonfabco.filamentkit.ui.printers.PickSpoolScreen
+import com.thompsonfabco.filamentkit.ui.printers.PickSpoolViewModel
+import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
 import com.thompsonfabco.filamentkit.ui.printers.CameraSource
 import com.thompsonfabco.filamentkit.ui.printers.EditField
 import com.thompsonfabco.filamentkit.ui.printers.ManualMapBackend
@@ -159,6 +165,7 @@ import kotlinx.serialization.json.put
 import java.io.File
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -491,12 +498,88 @@ class ScreenSemanticsTest {
         auditWindowsAllFour("Unload from A1?")
     }
 
-    private fun showSettings(family: String = "bambu"): PrinterEditViewModel {
+    private fun showSettings(family: String = "bambu", openAccessCode: Boolean = false): PrinterEditViewModel {
         val backend = FakePrinters()
         val vm = PrinterViewModel(backend, "ABC123", pollMs = 600_000)
         val edit = PrinterEditViewModel(FakeEdit(), "ABC123", family)
-        host("Printer settings") { PrinterSettingsScreen(vm, edit, onPairAgain = {}, onForgotten = {}) }
+        host("Printer settings") {
+            PrinterSettingsScreen(vm, edit, onPairAgain = {}, onForgotten = {}, openAccessCode = openAccessCode)
+        }
         return edit
+    }
+
+    @Test fun aRefusedAccessCodeOpensSettingsWithReplaceAccessCodeAlreadyOpen() {
+        showSettings(openAccessCode = true)
+        auditWindowsAllFour("Replace Access Code: Workshop X1")
+    }
+
+    @Test fun aWrongCodeRowOpensItsPrinterToReplaceTheCode() {
+        var replaced: String? = null
+        var opened: String? = null
+        val vm = PrintersViewModel(FakePrinters())
+        host("Printers") { PrintersScreen(vm, onOpen = { opened = it }, onPairAgain = {}, onReplaceCode = { replaced = it }) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Study A1 mini").performClick()
+        assertEquals("GHI789", replaced)
+        assertNull(opened)
+        rule.onNodeWithText("Workshop X1").performClick()
+        assertEquals("ABC123", opened)
+    }
+
+    private class FakePick : PickBackend {
+        override suspend fun search(query: String, sealedOnly: Boolean) = listOf(
+            buildJsonObject {
+                put("id", 214)
+                put("filament", buildJsonObject {
+                    put("name", "PolyTerra Charcoal")
+                    put("material", "PLA")
+                    put("color_hex", "2B2B2E")
+                    put("vendor", buildJsonObject { put("name", "Example Filaments") })
+                })
+                put("remaining_weight", 620.0)
+            },
+        )
+        override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean) =
+            LoadResult(slot = com.thompsonfabco.filamentkit.net.LoadSlot(label, 0, 0), nozzleMm = 0.4)
+    }
+
+    private fun showPick(): PickSpoolViewModel {
+        val vm = PickSpoolViewModel(FakePick(), "ABC123", "A4")
+        host("Printers") { PickSpoolScreen(vm, "Workshop X1", "A4", onLoaded = {}, onPairAgain = {}) }
+        return vm
+    }
+
+    @Test fun pickASpoolForASlotBeforeASearch() {
+        showPick()
+        auditAllFour("Or hold the spool's tag to the back of the phone.")
+        rule.onNodeWithText("Load into Workshop X1, slot A4").assertExists()
+    }
+
+    @Test fun pickASpoolForASlotWithResults() {
+        val vm = showPick()
+        rule.waitForIdle()
+        vm.setQuery("poly")
+        vm.search()
+        rule.waitForIdle()
+        auditAllFour("Example Filaments PolyTerra Charcoal")
+    }
+
+    @Test fun thePreviewOfALoadIntoTheSlot() {
+        val vm = showPick()
+        rule.waitForIdle()
+        vm.pick(SpoolSummary(214, "Example Filaments", "PolyTerra Charcoal", "PLA", "2B2B2E", null, 620.0))
+        rule.waitForIdle()
+        auditWindowsAllFour("Load into Workshop X1, slot A4?")
+    }
+
+    @Test fun thePairingOverflowOffersSettings() {
+        var opened = false
+        host("Pair with your Hub") { PairTopBarOverflow { opened = true } }
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("More actions").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Settings").performClick()
+        assertTrue(opened)
     }
 
     @Test fun printerSettings() {

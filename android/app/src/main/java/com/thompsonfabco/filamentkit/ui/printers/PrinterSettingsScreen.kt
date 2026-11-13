@@ -49,15 +49,29 @@ fun PrinterSettingsScreen(
     edit: PrinterEditViewModel?,
     onPairAgain: () -> Unit,
     onForgotten: (name: String) -> Unit,
+    /** Open the Replace Access Code dialog on arrival (a row whose code was refused). */
+    openAccessCode: Boolean = false,
 ) {
     val state by printerVm.state.collectAsState()
     val editState = edit?.state?.collectAsState()?.value
     LifecycleStartEffect(printerVm) {
-        printerVm.onHubOk = { edit?.clearHubNotice() }
         printerVm.retry()
         onStopOrDispose { }
     }
-    edit?.onHubOk = printerVm::clearHubNotice
+    // the two view models tell each other when a request succeeded; the edit one exists only once the family is known
+    LaunchedEffect(printerVm, edit) {
+        printerVm.onHubOk = { edit?.clearHubNotice() }
+        edit?.onHubOk = printerVm::clearHubNotice
+    }
+    // a refused Access Code opens here with Replace Access Code already open (05 9.1), once
+    var asked by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(edit, state.printer, openAccessCode) {
+        val p = state.printer
+        if (openAccessCode && !asked && edit != null && p != null) {
+            asked = true
+            if (EditField.ACCESS_CODE in edit.fields(p)) edit.open(EditField.ACCESS_CODE)
+        }
+    }
     val printer = state.printer
     LaunchedEffect(editState?.forgotten) {
         if (editState?.forgotten == true && printer != null) onForgotten(printer.name)
@@ -116,10 +130,15 @@ private fun settingLabel(field: EditField): String = stringResource(
 private fun settingValue(field: EditField, p: Printer): String? = when (field) {
     EditField.NAME -> p.name
     EditField.ADDRESS -> (if (p.family == "klipper") p.host else null) ?: p.ip
-    EditField.ACCESS_CODE -> stringResource(R.string.printer_set_value_set)
+    EditField.ACCESS_CODE -> stringResource(accessCodeValue(p))
     EditField.TRUST_CERT -> stringResource(R.string.printer_set_value_pinned)
     EditField.API_KEY -> null
 }
+
+/** "Set" once the Hub holds an Access Code for the printer, "Not set" until then (05 9.9). */
+@androidx.annotation.StringRes
+internal fun accessCodeValue(p: Printer): Int =
+    if (p.configured) R.string.printer_set_value_set else R.string.printer_set_value_not_set
 
 @Composable
 private fun SettingRow(field: EditField, printer: Printer, onClick: () -> Unit) {
@@ -176,9 +195,10 @@ private fun EditFieldDialog(printer: Printer, d: EditDialog, edit: PrinterEditVi
         EditField.API_KEY -> stringResource(R.string.printer_set_key_title, printer.name)
         EditField.TRUST_CERT -> stringResource(R.string.printer_set_cert_title, printer.name)
     }
+    val say = rememberBusySay()
     SwDialog(
         title = title,
-        onClose = edit::close,
+        onClose = { if (d.busy) say() else edit.close() },
         confirm = SwDialogButton(
             label = stringResource(if (d.busy) busyWords else action),
             onClick = { edit.submit(value, port, second) },
@@ -188,6 +208,7 @@ private fun EditFieldDialog(printer: Printer, d: EditDialog, edit: PrinterEditVi
         cancel = SwAction(stringResource(R.string.common_cancel), edit::close),
         cancelEnabled = !d.busy,
     ) {
+        BusyBack(d.busy, say)
         @Composable fun error(which: FieldError, @androidx.annotation.StringRes words: Int) =
             if (d.error == which) stringResource(words) else null
         when (d.field) {
@@ -245,15 +266,17 @@ private const val MAX_PORT_DIGITS = 5
 
 @Composable
 private fun ForgetDialog(printer: Printer, s: PrinterEditUiState, edit: PrinterEditViewModel) {
+    val say = rememberBusySay()
     SwDialog(
         title = stringResource(R.string.printer_forget_question, printer.name),
-        onClose = edit::cancelForget,
+        onClose = { if (s.busy) say() else edit.cancelForget() },
         confirm = SwDialogButton(
             stringResource(R.string.printer_forget), edit::confirmForget, kind = SwButtonKind.DestructiveFilled, busy = s.busy,
         ),
         cancel = SwAction(stringResource(R.string.common_cancel), edit::cancelForget),
         cancelEnabled = !s.busy,
     ) {
+        BusyBack(s.busy, say)
         Text(
             stringResource(
                 if (printer.family == "klipper") R.string.printer_forget_body_klipper else R.string.printer_forget_body_bambu,

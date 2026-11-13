@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -458,16 +459,23 @@ private fun CameraPlayer(printer: Printer, camera: CameraSource, onPairAgain: ()
     }
 }
 
-/** The full-screen picture is shown in landscape; the phone's orientation is given back when it closes. */
+/**
+ * The full-screen picture is shown in landscape; the phone's orientation is given back when it really closes. Turning
+ * the phone restarts the activity (the effect is disposed and made again), so the orientation from before is kept in
+ * saved state and is not restored then, or the two would fight each other in a loop.
+ */
 @Composable
-private fun Landscape() {
+internal fun Landscape() {
     val activity = LocalContext.current as? Activity ?: return
+    var before by rememberSaveable { mutableIntStateOf(NOT_SAVED) }
     DisposableEffect(activity) {
-        val before = activity.requestedOrientation
+        if (before == NOT_SAVED) before = activity.requestedOrientation
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        onDispose { activity.requestedOrientation = before }
+        onDispose { if (!activity.isChangingConfigurations) activity.requestedOrientation = before }
     }
 }
+
+private const val NOT_SAVED = Int.MIN_VALUE
 
 // --- slots ---
 
@@ -596,15 +604,17 @@ private fun SlotSheet(
 
 @Composable
 private fun UnloadDialog(ask: UnloadAsk, state: PrinterUiState, viewModel: PrinterViewModel) {
+    val say = rememberBusySay()
     SwDialog(
         title = stringResource(R.string.printer_unload_title, ask.label),
-        onClose = viewModel::cancelUnload,
+        onClose = { if (state.unloading) say() else viewModel.cancelUnload() },
         confirm = SwDialogButton(
             stringResource(R.string.printer_slot_unload), viewModel::confirmUnload, kind = SwButtonKind.Main, busy = state.unloading,
         ),
         cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelUnload),
         cancelEnabled = !state.unloading,
     ) {
+        BusyBack(state.unloading, say)
         Text(
             stringResource(
                 R.string.printer_unload_body, ask.spool, ask.label,
@@ -704,13 +714,15 @@ private fun CollectReport(s: ToolsUiState, tools: PrinterToolsViewModel, filled:
 
 @Composable
 private fun MapDialog(printer: Printer, s: ToolsUiState, tools: PrinterToolsViewModel) {
+    val say = rememberBusySay()
     SwDialog(
         title = stringResource(R.string.printer_map_dialog_title, printer.name),
-        onClose = tools::cancelMap,
+        onClose = { if (s.mapBusy) say() else tools.cancelMap() },
         confirm = SwDialogButton(stringResource(R.string.printer_map_slots), tools::confirmMap, kind = SwButtonKind.Main, busy = s.mapBusy),
         cancel = SwAction(stringResource(R.string.common_cancel), tools::cancelMap),
         cancelEnabled = !s.mapBusy,
     ) {
+        BusyBack(s.mapBusy, say)
         Text(stringResource(R.string.printer_map_dialog_body), style = MaterialTheme.typography.bodyMedium)
     }
 }
@@ -762,15 +774,17 @@ private fun UsagePanel(s: ToolsUiState, tools: PrinterToolsViewModel) {
 
 @Composable
 private fun UndoDialog(e: com.thompsonfabco.filamentkit.net.UsageEntry, s: ToolsUiState, tools: PrinterToolsViewModel) {
+    val say = rememberBusySay()
     SwDialog(
         title = stringResource(R.string.printer_usage_undo_title),
-        onClose = tools::cancelUndo,
+        onClose = { if (s.undoBusy) say() else tools.cancelUndo() },
         confirm = SwDialogButton(
             stringResource(R.string.printer_usage_undo_confirm), tools::confirmUndo, kind = SwButtonKind.Main, busy = s.undoBusy,
         ),
         cancel = SwAction(stringResource(R.string.common_keep), tools::cancelUndo),
         cancelEnabled = !s.undoBusy,
     ) {
+        BusyBack(s.undoBusy, say)
         Text(
             stringResource(
                 R.string.printer_usage_undo_body, grams(e.grams), e.job?.ifBlank { null } ?: "–", e.slot?.ifBlank { null } ?: "–",

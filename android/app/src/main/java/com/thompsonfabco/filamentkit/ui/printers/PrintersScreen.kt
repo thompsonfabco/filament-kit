@@ -85,6 +85,8 @@ fun PrintersScreen(
     onOpen: (id: String) -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
+    onReplaceCode: (id: String) -> Unit = onOpen,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleStartEffect(viewModel) {
@@ -130,7 +132,7 @@ fun PrintersScreen(
                 offline = offline,
                 loadedSecondsAgo = (System.currentTimeMillis() - state.loadedAt).coerceAtLeast(0) / MS_PER_S,
             ) {
-                PrinterLists(state, offline, onOpen, onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper)
+                PrinterLists(state, offline, onOpen, onReplaceCode, onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper)
             }
         }
     }
@@ -165,6 +167,7 @@ private fun ColumnScope.PrinterLists(
     state: PrintersUiState,
     offline: Boolean,
     onOpen: (String) -> Unit,
+    onReplaceCode: (String) -> Unit,
     onAdd: (Printer) -> Unit,
     onAddKlipper: (host: String, port: Int) -> Unit,
 ) {
@@ -174,7 +177,7 @@ private fun ColumnScope.PrinterLists(
         Panel {
             configured.forEachIndexed { i, p ->
                 if (i > 0) Divider()
-                PrinterRow(p, state.swatches[p.id].orEmpty()) { onOpen(p.id) }
+                PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
             }
         }
     }

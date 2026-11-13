@@ -23,9 +23,9 @@ import kotlinx.serialization.json.put
 
 /** The printers list; its calls go to whatever client [currentApi] returns at that moment. */
 @Composable
-fun PrintersListEntry(currentApi: () -> Api, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+fun PrintersListEntry(currentApi: () -> Api, onOpen: (String) -> Unit, onReplaceCode: (String) -> Unit, onPairAgain: () -> Unit) {
     val vm = viewModel { PrintersViewModel(ApiPrinterBackend(currentApi)) }
-    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain)
+    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain, onReplaceCode = onReplaceCode)
 }
 
 /** One printer's screen. [api] gives the camera its client and stream addresses. */
@@ -68,13 +68,13 @@ private const val CAMERA_PREFS = "printer_camera"
 
 /** Printer settings; [onForgotten] runs after the printer is forgotten, with its name (for the toast). */
 @Composable
-fun PrinterSettingsEntry(currentApi: () -> Api, id: String, onPairAgain: () -> Unit, onForgotten: (String) -> Unit) {
+fun PrinterSettingsEntry(currentApi: () -> Api, id: String, replaceCode: Boolean, onPairAgain: () -> Unit, onForgotten: (String) -> Unit) {
     val backend = remember { ApiPrinterBackend(currentApi) }
     val vm = viewModel { PrinterViewModel(backend, id) }
     val family = vm.state.collectAsState().value.printer?.family
     // made once the printer's family is known (it decides the rows); kept for the visit
     val edit = family?.let { f -> viewModel(key = f) { PrinterEditViewModel(backend, id, f, vm::showPrinter) } }
-    PrinterSettingsScreen(vm, edit, onPairAgain, onForgotten)
+    PrinterSettingsScreen(vm, edit, onPairAgain, onForgotten, openAccessCode = replaceCode)
 }
 
 /** Map a printer's slots by loading filament by hand. */
