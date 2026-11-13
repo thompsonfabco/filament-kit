@@ -2843,7 +2843,6 @@
     <string name="printer_find_network">Network to search (optional)</string>
     <!-- 1=network -->
     <string name="printer_find_none">No Klipper printers answered on %1$s.</string>
-    <string name="printer_find_none_own">No Klipper printers answered on the Hub\'s own network.</string>
     <string name="printer_find_placeholder">e.g. 192.0.2.0/24</string>
     <string name="printer_find_search">Search</string>
     <string name="printer_find_searching">Searching…</string>
@@ -2952,6 +2951,8 @@
     <!-- 1=name -->
     <string name="printer_set_cert_title">Forget the certificate of %1$s?</string>
     <string name="printer_set_code_button">Replace Access Code</string>
+    <!-- 1=name -->
+    <string name="printer_set_code_done">Access Code replaced for %1$s.</string>
     <!-- 1=name -->
     <string name="printer_set_code_title">Replace Access Code: %1$s</string>
     <string name="printer_set_connecting">Saving and connecting…</string>

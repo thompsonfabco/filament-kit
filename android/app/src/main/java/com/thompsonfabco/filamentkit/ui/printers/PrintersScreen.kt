@@ -91,7 +91,8 @@ fun PrintersScreen(
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
     val addedText = state.added?.let { stringResource(R.string.printer_add_done, it) }
-    LaunchedEffect(state.added) {
+        ?: state.replaced?.let { stringResource(R.string.printer_set_code_done, it) }
+    LaunchedEffect(state.added, state.replaced) {
         if (addedText != null) {
             viewModel.addedShown()
             scope.launch { toast?.show(addedText) }
@@ -99,7 +100,7 @@ fun PrintersScreen(
     }
     val space = SpoolwardenTheme.space
     val offline = state.problem is Problem.Unreachable
-    ScreenTopBarActions { Overflow(viewModel::refresh, viewModel::openFind, { viewModel.openAddKlipper() }) }
+    ScreenTopBarActions { Overflow(!offline, viewModel::refresh, viewModel::openFind, { viewModel.openAddKlipper() }) }
     // the progress line shows a refresh, so the pull gesture only starts one
     PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = modifier.fillMaxSize()) {
         Column(
@@ -118,7 +119,7 @@ fun PrintersScreen(
                         title = stringResource(R.string.printers_empty_title),
                         text = stringResource(R.string.printer_list_empty_text),
                         primary = SwAction(stringResource(R.string.common_refresh), viewModel::refresh),
-                        secondary = SwAction(stringResource(R.string.printers_add_klipper)) { viewModel.openAddKlipper() },
+                        secondary = if (offline) null else SwAction(stringResource(R.string.printers_add_klipper)) { viewModel.openAddKlipper() },
                     )
                 },
                 error = state.problem?.takeUnless { offline }?.let { problemText(it) },
@@ -130,22 +131,28 @@ fun PrintersScreen(
             }
         }
     }
-    state.dialog?.let { AddBambuDialog(it, viewModel) }
-    state.klipper?.let { AddKlipperDialog(it, viewModel) }
-    state.find?.let { FindSheetContent(it, viewModel) }
+    state.dialog?.let { AddBambuDialog(it, onPairAgain, viewModel) }
+    state.klipper?.let { AddKlipperDialog(it, onPairAgain, viewModel) }
+    state.find?.let { FindSheetContent(it, onPairAgain, viewModel) }
 }
 
 private const val MS_PER_S = 1000L
 
 @Composable
-private fun Overflow(onRefresh: () -> Unit, onFind: () -> Unit, onAddKlipper: () -> Unit) {
+private fun Overflow(online: Boolean, onRefresh: () -> Unit, onFind: () -> Unit, onAddKlipper: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
         SwMenu(open, { open = false }) {
             SwMenuItem(stringResource(R.string.common_refresh), { open = false; onRefresh() }, icon = R.drawable.sw_ic_refresh)
-            SwMenuItem(stringResource(R.string.printers_find_klipper), { open = false; onFind() }, icon = R.drawable.sw_ic_search)
-            SwMenuItem(stringResource(R.string.printers_add_klipper), { open = false; onAddKlipper() }, icon = R.drawable.sw_ic_plus)
+            SwMenuItem(
+                stringResource(R.string.printers_find_klipper), { open = false; onFind() }, icon = R.drawable.sw_ic_search,
+                enabled = online,
+            )
+            SwMenuItem(
+                stringResource(R.string.printers_add_klipper), { open = false; onAddKlipper() }, icon = R.drawable.sw_ic_plus,
+                enabled = online,
+            )
         }
     }
 }
@@ -179,7 +186,7 @@ private fun ColumnScope.PrinterLists(
         Panel(ground = SpoolwardenTheme.colors.accentSoft) {
             found.forEachIndexed { i, p ->
                 if (i > 0) Divider()
-                FoundRow(p, enabled = !offline) {
+                FoundRow(p, enabled = !offline, reason = offline && i == 0) {
                     if (p.family == "klipper") {
                         onAddKlipper(p.host ?: p.ip.orEmpty(), PrintersViewModel.DEFAULT_KLIPPER_PORT)
                     } else {
@@ -194,7 +201,7 @@ private fun ColumnScope.PrinterLists(
             stringResource(R.string.printers_add_klipper), { onAddKlipper("", PrintersViewModel.DEFAULT_KLIPPER_PORT) },
             kind = SwButtonKind.Plain, enabled = !offline,
         )
-        if (offline) NeedsHubReason()
+        if (offline && found.isEmpty()) NeedsHubReason()
     }
 }
 
@@ -300,14 +307,15 @@ private fun Swatches(slots: List<SlotLook>) {
 }
 
 @Composable
-private fun FoundRow(p: Printer, enabled: Boolean, onAdd: () -> Unit) {
+private fun FoundRow(p: Printer, enabled: Boolean, reason: Boolean, onAdd: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val address = (if (p.family == "klipper") p.host else null) ?: p.ip
     val model = modelLine(p)
-    val addFor = stringResource(R.string.printer_find_add_for, model)
+    // one node for TalkBack: the model, the status, the address and the Add action
     Row(
-        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).padding(space.s3),
+        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).semantics(mergeDescendants = true) { }
+            .padding(space.s3),
         horizontalArrangement = Arrangement.spacedBy(space.s3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -321,31 +329,39 @@ private fun FoundRow(p: Printer, enabled: Boolean, onAdd: () -> Unit) {
                 }
             }
         }
-        SwButton(
-            stringResource(R.string.common_add), onAdd, Modifier.semantics { contentDescription = addFor },
-            kind = SwButtonKind.Plain, enabled = enabled,
-        )
+        Column {
+            SwButton(stringResource(R.string.common_add), onAdd, kind = SwButtonKind.Plain, enabled = enabled)
+            if (reason) NeedsHubReason()
+        }
     }
 }
 
-/** 9.2: asks for the Access Code. The code lives only in this form's memory and goes straight to the Hub. */
+/**
+ * 9.2: asks for the Access Code of a printer the Hub found. For a printer that is set up and was refused its code
+ * (9.9, "Replace Access Code") it asks again, with no name field. The code lives only in this form's memory.
+ */
 @Composable
-private fun AddBambuDialog(d: AddDialog, viewModel: PrintersViewModel) {
+private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
     var code by remember(d.serial) { mutableStateOf("") }
     var name by remember(d.serial) { mutableStateOf(d.name) }
-    val title = if (d.rekey) {
-        stringResource(R.string.printers_access_code_title, d.model)
+    val model = if (d.model == null) {
+        stringResource(R.string.common_bambu_lab)
     } else {
-        stringResource(R.string.printer_add_title, d.model)
+        stringResource(R.string.printer_list_model_bambu, d.model)
     }
+    val busyWords = if (d.rekey) R.string.printer_set_connecting else R.string.printer_add_connecting
     SwDialog(
-        title = title,
+        title = if (d.rekey) {
+            stringResource(R.string.printer_set_code_title, d.printerName)
+        } else {
+            stringResource(R.string.printer_add_title, model)
+        },
         onClose = { if (!d.busy) viewModel.cancelAdd() },
         confirm = SwDialogButton(
             label = stringResource(
                 when {
-                    d.busy -> R.string.printer_add_connecting
-                    d.rekey -> R.string.printers_replace_access_code
+                    d.busy -> busyWords
+                    d.rekey -> R.string.printer_set_code_button
                     else -> R.string.printer_add_button
                 },
             ),
@@ -354,30 +370,36 @@ private fun AddBambuDialog(d: AddDialog, viewModel: PrintersViewModel) {
             enabled = code.isNotBlank(),
             busy = d.busy,
         ),
-        cancel = if (d.busy) null else SwAction(stringResource(R.string.common_cancel), viewModel::cancelAdd),
+        cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelAdd),
     ) {
-        val facts = stringResource(R.string.printer_add_facts, d.model, d.serial)
-        Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
+        if (!d.rekey) {
+            val facts = stringResource(R.string.printer_add_facts, model, d.serial)
+            Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
+        }
         FormField(
             code, { code = it }, stringResource(R.string.common_access_code), secret = true, enabled = !d.busy,
             hint = stringResource(R.string.common_access_code_help),
             error = if (d.codeMissing) stringResource(R.string.printer_error_access_code) else null,
         )
-        FormField(
-            name, { name = it }, stringResource(R.string.common_name_optional), enabled = !d.busy,
-            placeholder = stringResource(R.string.printer_add_name_placeholder),
-        )
-        d.problem?.let { NoticeCard(NoticeKind.Bad, problemText(it)) }
+        if (!d.rekey) {
+            FormField(
+                name, { name = it }, stringResource(R.string.common_name_optional), enabled = !d.busy,
+                placeholder = stringResource(R.string.printer_add_name_placeholder),
+            )
+        }
+        d.problem?.let { ProblemNotice(it, onPairAgain) }
     }
 }
 
 /** 9.3: the address and port of a Klipper printer's Moonraker, its name and, if Moonraker asks for one, its API key. */
 @Composable
-private fun AddKlipperDialog(d: KlipperDialog, viewModel: PrintersViewModel) {
+private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
     var host by remember(d.host, d.port) { mutableStateOf(d.host) }
     var port by remember(d.host, d.port) { mutableStateOf(d.port.toString()) }
     var name by remember(d.host, d.port) { mutableStateOf("") }
     var key by remember(d.host, d.port) { mutableStateOf("") }
+    // once the printer is added only the key is left to set
+    val fixed = d.busy || d.createdId != null
     SwDialog(
         title = stringResource(R.string.printers_add_klipper),
         onClose = { if (!d.busy) viewModel.cancelAddKlipper() },
@@ -387,30 +409,31 @@ private fun AddKlipperDialog(d: KlipperDialog, viewModel: PrintersViewModel) {
             kind = SwButtonKind.Main,
             busy = d.busy,
         ),
-        cancel = if (d.busy) null else SwAction(stringResource(R.string.common_cancel), viewModel::cancelAddKlipper),
+        cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelAddKlipper),
     ) {
         FormField(
-            host, { host = it }, stringResource(R.string.printer_field_address), enabled = !d.busy, mono = true,
+            host, { host = it }, stringResource(R.string.printer_field_address), enabled = !fixed, mono = true,
             placeholder = stringResource(R.string.printer_klipper_address_placeholder), keyboard = KeyboardType.Uri,
             error = if (d.addressMissing) stringResource(R.string.printer_error_address) else null,
         )
         FormField(
-            port, { port = it }, stringResource(R.string.printer_field_port), enabled = !d.busy, mono = true,
+            port, { port = it }, stringResource(R.string.printer_field_port), enabled = !fixed, mono = true,
             keyboard = KeyboardType.Number,
             error = if (d.portInvalid) stringResource(R.string.printer_error_port) else null,
         )
-        FormField(name, { name = it }, stringResource(R.string.common_name_optional), enabled = !d.busy)
+        FormField(name, { name = it }, stringResource(R.string.common_name_optional), enabled = !fixed)
         FormField(
             key, { key = it }, stringResource(R.string.printer_field_moonraker_key_optional), secret = true,
             enabled = !d.busy, hint = stringResource(R.string.printer_moonraker_key_hint),
+            error = d.keyProblem?.let { problemText(it) },
         )
-        d.problem?.let { NoticeCard(NoticeKind.Bad, problemText(it)) }
+        d.problem?.let { ProblemNotice(it, onPairAgain) }
     }
 }
 
 /** 9.3: "Find Klipper printers", a sheet with the network to search and what answered. */
 @Composable
-private fun FindSheetContent(f: FindSheet, viewModel: PrintersViewModel) {
+private fun FindSheetContent(f: FindSheet, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
     val space = SpoolwardenTheme.space
     var network by remember { mutableStateOf("") }
     SwSheet(onDismiss = viewModel::closeFind) {
@@ -432,14 +455,14 @@ private fun FindSheetContent(f: FindSheet, viewModel: PrintersViewModel) {
                 stringResource(if (f.searching) R.string.printer_find_searching else R.string.printer_find_search),
                 { viewModel.search(network) }, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = f.searching,
             )
-            f.problem?.let { FindProblem(it) }
+            f.problem?.let { FindProblem(it, onPairAgain) }
             f.results?.let { results -> FindResults(results, f.network, viewModel) }
         }
     }
 }
 
 @Composable
-private fun FindProblem(problem: Problem) {
+private fun FindProblem(problem: Problem, onPairAgain: () -> Unit) {
     if (problem is Problem.FeatureOff) {
         val feature = if (problem.module == "klipper") stringResource(R.string.common_klipper) else problem.module
         NoticeCard(
@@ -447,7 +470,7 @@ private fun FindProblem(problem: Problem) {
             title = stringResource(R.string.common_feature_off_title, feature),
         )
     } else {
-        NoticeCard(NoticeKind.Bad, problemText(problem))
+        ProblemNotice(problem, onPairAgain)
     }
 }
 
@@ -456,7 +479,7 @@ private fun FindResults(results: List<KlipperFound>, network: String, viewModel:
     val space = SpoolwardenTheme.space
     if (results.isEmpty()) {
         Text(
-            if (network.isEmpty()) stringResource(R.string.printer_find_none_own) else stringResource(R.string.printer_find_none, network),
+            stringResource(R.string.printer_find_none, network.ifEmpty { stringResource(R.string.printer_find_placeholder).substringAfter(' ') }),
             style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted,
         )
         return

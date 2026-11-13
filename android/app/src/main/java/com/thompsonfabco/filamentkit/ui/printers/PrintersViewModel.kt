@@ -32,7 +32,14 @@ sealed interface Problem {
 
     /** The printer was added but is in [state] (`wrong_code`, ...): the screen says what to do about it. */
     data class PrinterState(val state: String) : Problem
+
+    /** The Hub no longer knows this phone, or its certificate changed: the screen shows the Hub notice (05-android-app 3.4). */
+    data object NoLongerPaired : Problem
+    data object CertificateChanged : Problem
 }
+
+/** The two Hub notices; a screen shows them as the notice, not as a text of its own. */
+internal val Problem.isHubNotice: Boolean get() = this == Problem.NoLongerPaired || this == Problem.CertificateChanged
 
 internal fun problemOf(e: ApiError): Problem = when (e.code) {
     "offline", "local_network" -> Problem.Unreachable
@@ -47,8 +54,10 @@ data class SlotLook(val hex: String, val empty: Boolean)
 /** "Add Bambu Lab <model>": the form for a printer the Hub found. */
 data class AddDialog(
     val serial: String,
-    /** The model, or the printer's name when the Hub does not know the model. */
-    val model: String,
+    /** The model's name; null when the Hub does not know it. */
+    val model: String?,
+    /** The printer's name, for the re-key form's title. */
+    val printerName: String,
     val name: String,
     /** The Access Code of a printer that is set up is entered again (it was refused), not a new printer added. */
     val rekey: Boolean = false,
@@ -65,6 +74,10 @@ data class KlipperDialog(
     val addressMissing: Boolean = false,
     val portInvalid: Boolean = false,
     val problem: Problem? = null,
+    /** The printer is added but its API key was refused: the form stays for the key only. */
+    val createdId: String? = null,
+    val createdName: String = "",
+    val keyProblem: Problem? = null,
 )
 
 /** The "Find Klipper printers" sheet: [results] is null until a search has answered. */
@@ -89,6 +102,9 @@ data class PrintersUiState(
     val find: FindSheet? = null,
     /** The name of a printer just added: the screen says so once. */
     val added: String? = null,
+
+    /** The name of a printer whose Access Code was just replaced: the screen says so once. */
+    val replaced: String? = null,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
 ) {
@@ -113,9 +129,11 @@ class PrintersViewModel(
     }
 
     private suspend fun load() {
-        guard(onError = { p -> _state.update { it.copy(problem = p) } }) {
+        guard(onError = { p -> if (!p.isHubNotice) _state.update { it.copy(problem = p) } }) {
             val list = backend.printers()
-            _state.update { it.copy(printers = list, problem = null, loaded = true, loadedAt = now()) }
+            _state.update {
+                it.copy(printers = list, problem = null, loaded = true, loadedAt = now(), unauthorized = false, mismatch = null)
+            }
             _state.update { it.copy(loading = false) }
             val looks = slotLooks(list)
             _state.update { it.copy(swatches = looks) }
@@ -144,7 +162,7 @@ class PrintersViewModel(
     fun openAdd(p: Printer) = _state.update {
         it.copy(
             dialog = AddDialog(
-                serial = p.serial, model = p.shownModel ?: p.name,
+                serial = p.serial, model = p.shownModel, printerName = p.name,
                 name = if (p.name == p.serial) "" else p.name,
                 rekey = p.configured,
             ),
@@ -170,7 +188,9 @@ class PrintersViewModel(
             guard(onError = { p -> _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, problem = p)) } }) {
                 val p = backend.addPrinter(d.serial, code, name.trim().ifBlank { null })
                 if (p.state == "connected") {
-                    _state.update { it.copy(dialog = null, added = p.name) }
+                    _state.update {
+                        if (d.rekey) it.copy(dialog = null, replaced = p.name) else it.copy(dialog = null, added = p.name)
+                    }
                     load()
                 } else {
                     _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, problem = Problem.PrinterState(p.state))) }
@@ -185,7 +205,9 @@ class PrintersViewModel(
     }
 
     fun cancelAddKlipper() {
+        val created = _state.value.klipper?.createdId != null
         _state.update { it.copy(klipper = null) }
+        if (created) refresh()
     }
 
     /**
@@ -195,32 +217,47 @@ class PrintersViewModel(
     fun submitAddKlipper(host: String, port: String, name: String, apiKey: String = "") {
         val d = _state.value.klipper ?: return
         if (d.busy) return
+        val key = apiKey.trim()
         val address = host.trim()
         val portNumber = port.trim().ifEmpty { DEFAULT_KLIPPER_PORT.toString() }.toIntOrNull()?.takeIf { it in 1..65535 }
-        if (address.isEmpty() || portNumber == null) {
+        // once the printer is added only its key is left to set, so the address and port are no longer checked
+        if (d.createdId == null && (address.isEmpty() || portNumber == null)) {
             _state.update {
                 it.copy(klipper = d.copy(addressMissing = address.isEmpty(), portInvalid = portNumber == null, problem = null))
             }
             return
         }
         _state.update {
-            it.copy(klipper = d.copy(busy = true, addressMissing = false, portInvalid = false, problem = null))
+            it.copy(
+                klipper = d.copy(busy = true, addressMissing = false, portInvalid = false, problem = null, keyProblem = null),
+            )
         }
         viewModelScope.launch {
             guard(onError = { p -> _state.update { s -> s.copy(klipper = s.klipper?.copy(busy = false, problem = p)) } }) {
-                val p = backend.addKlipperPrinter(address, portNumber, name.trim().ifBlank { null })
-                // the printer exists now, so a key that is refused is a result on the list, not on a form to retry
-                val keyProblem = apiKey.trim().takeIf { it.isNotEmpty() }?.let { key ->
+                val id: String
+                val shown: String
+                if (d.createdId != null) {
+                    id = d.createdId
+                    shown = d.createdName
+                } else {
+                    val p = backend.addKlipperPrinter(address, portNumber!!, name.trim().ifBlank { null })
+                    id = p.id
+                    shown = p.name
+                    _state.update { it.copy(klipper = it.klipper?.copy(createdId = p.id, createdName = p.name)) }
+                }
+                if (key.isNotEmpty()) {
                     try {
-                        backend.setApiKey(p.id, key)
-                        null
+                        backend.setApiKey(id, key)
                     } catch (e: ApiError) {
-                        if (e.code == "unauthorized") throw e else problemOf(e)
+                        if (e.code == "unauthorized") throw e
+                        // the printer exists now: the form stays for the key, with the Hub's reason under it
+                        _state.update { it.copy(klipper = it.klipper?.copy(busy = false, keyProblem = problemOf(e))) }
+                        load()
+                        return@guard
                     }
                 }
-                _state.update { it.copy(klipper = null, added = p.name) }
+                _state.update { it.copy(klipper = null, added = shown) }
                 load()
-                if (keyProblem != null) _state.update { it.copy(problem = keyProblem) }
             }
         }
     }
@@ -246,7 +283,7 @@ class PrintersViewModel(
     }
 
     /** The screen showed the "Added" message. */
-    fun addedShown() = _state.update { it.copy(added = null) }
+    fun addedShown() = _state.update { it.copy(added = null, replaced = null) }
 
     private suspend fun guard(onError: (Problem) -> Unit, block: suspend () -> Unit) {
         try {
@@ -255,8 +292,14 @@ class PrintersViewModel(
             throw e
         } catch (e: FingerprintMismatch) {
             _state.update { it.copy(mismatch = e.expected to e.actual) }
+            onError(Problem.CertificateChanged)
         } catch (e: ApiError) {
-            if (e.code == "unauthorized") _state.update { it.copy(unauthorized = true) } else onError(problemOf(e))
+            if (e.code == "unauthorized") {
+                _state.update { it.copy(unauthorized = true) }
+                onError(Problem.NoLongerPaired)
+            } else {
+                onError(problemOf(e))
+            }
         } catch (e: Exception) {
             onError(Problem.Unexpected)
         }

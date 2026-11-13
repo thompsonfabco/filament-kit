@@ -5,6 +5,7 @@ import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.CommandResult
+import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.KlipperFound
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
@@ -55,7 +56,12 @@ class PrintersListTest {
             listError?.let { throw it }
             return list
         }
-        override suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer = error("not used")
+        val addedBambu = mutableListOf<String>()
+        override suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer {
+            addedBambu += serial
+            addError?.let { throw it }
+            return addResult!!
+        }
         override suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
             added += Triple(host, port, name)
             addError?.let { throw it }
@@ -239,15 +245,107 @@ class PrintersListTest {
         assertEquals(Triple("voron.example", 7125, null as String?), backend.added.single())
     }
 
-    @Test fun aRefusedKeyIsAResultOnTheListSinceThePrinterExistsNow() = runTest(dispatcher) {
+    @Test fun aRefusedKeyKeepsTheFormOpenWithTheReasonUnderTheKey() = runTest(dispatcher) {
         backend.addResult = printer("K1", family = "klipper")
         backend.keyError = ApiError(400, "bad_request", "That API key is not valid")
         val vm = PrintersViewModel(backend)
         vm.openAddKlipper()
         vm.submitAddKlipper("voron.example", "7125", "", "bad key")
         runCurrent()
-        assertNull("the form is gone: a retry would find the printer already added", vm.state.value.klipper)
-        assertEquals(Problem.HubSaid("That API key is not valid"), vm.state.value.problem)
+        val d = vm.state.value.klipper!!
+        assertEquals("K1", d.createdId)
+        assertEquals(Problem.HubSaid("That API key is not valid"), d.keyProblem)
+        assertFalse(d.busy)
+        // the retry sets the key only: the printer is not added twice
+        backend.keyError = null
+        vm.submitAddKlipper("voron.example", "7125", "", "good key")
+        runCurrent()
+        assertEquals(1, backend.added.size)
+        assertEquals(listOf("K1" to "bad key", "K1" to "good key"), backend.keys)
+        assertNull(vm.state.value.klipper)
+        assertEquals("Workshop X1", vm.state.value.added)
+    }
+
+    @Test fun cancellingAfterTheAddReloadsTheList() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        backend.keyError = ApiError(400, "bad_request", "no")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "", "k")
+        runCurrent()
+        backend.list = listOf(printer("K1", family = "klipper"))
+        vm.cancelAddKlipper(); runCurrent()
+        assertNull(vm.state.value.klipper)
+        assertEquals(listOf("K1"), vm.state.value.printers.map { it.id })
+    }
+
+    // --- the Hub problems (05-android-app 2.7, 3.4) ---
+
+    @Test fun unauthorizedClearsAfterRepair() = runTest(dispatcher) {
+        backend.listError = ApiError(401, "unauthorized", "x")
+        val vm = PrintersViewModel(backend)
+        vm.refresh(); runCurrent()
+        assertTrue(vm.state.value.unauthorized)
+        backend.listError = null
+        backend.list = listOf(printer("A"))
+        vm.refresh(); runCurrent()
+        assertFalse(vm.state.value.unauthorized)
+    }
+
+    @Test fun mismatchClearsAfterTrust() = runTest(dispatcher) {
+        backend.listError = FingerprintMismatch("old", "new")
+        val vm = PrintersViewModel(backend)
+        vm.refresh(); runCurrent()
+        assertEquals("old" to "new", vm.state.value.mismatch)
+        backend.listError = null
+        vm.refresh(); runCurrent()
+        assertNull(vm.state.value.mismatch)
+    }
+
+    @Test fun aHubProblemInsideTheAddFormFreesItAndIsTheHubNotice() = runTest(dispatcher) {
+        backend.addError = ApiError(401, "unauthorized", "x")
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(printer("B", state = "not_configured", configured = false))
+        vm.submitAdd("12345678", "")
+        runCurrent()
+        val d = vm.state.value.dialog!!
+        assertFalse("Cancel and Back work again", d.busy)
+        assertEquals(Problem.NoLongerPaired, d.problem)
+        assertTrue(vm.state.value.unauthorized)
+        backend.addError = FingerprintMismatch("a", "b")
+        vm.submitAdd("12345678", "")
+        runCurrent()
+        assertEquals(Problem.CertificateChanged, vm.state.value.dialog!!.problem)
+        assertFalse(vm.state.value.dialog!!.busy)
+    }
+
+    @Test fun aHubProblemInsideTheKlipperFormAndTheSearchFreesThem() = runTest(dispatcher) {
+        backend.addError = ApiError(401, "unauthorized", "x")
+        backend.scanError = FingerprintMismatch("a", "b")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "")
+        runCurrent()
+        assertEquals(Problem.NoLongerPaired, vm.state.value.klipper!!.problem)
+        assertFalse(vm.state.value.klipper!!.busy)
+        vm.openFind()
+        vm.search(""); runCurrent()
+        assertEquals(Problem.CertificateChanged, vm.state.value.find!!.problem)
+        assertFalse(vm.state.value.find!!.searching)
+    }
+
+    @Test fun replacingTheCodeSaysSoOnceAndSkipsTheAddedMessage() = runTest(dispatcher) {
+        val p = printer("A", state = "wrong_code")
+        backend.addResult = printer("A")
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(p)
+        vm.submitAdd("12345678", "")
+        runCurrent()
+        assertNull(vm.state.value.dialog)
+        assertEquals("Workshop X1", vm.state.value.replaced)
+        assertNull(vm.state.value.added)
+        vm.addedShown()
+        assertNull(vm.state.value.replaced)
     }
 
     @Test fun theKlipperFeatureBeingOffIsNamedByItsModule() = runTest(dispatcher) {

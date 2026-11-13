@@ -28,6 +28,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.components.HubNotice
+import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
@@ -136,6 +139,18 @@ internal fun problemText(problem: Problem): String = when (problem) {
         },
     )
     is Problem.PrinterState -> stringResource(fixLine(problem.state) ?: R.string.common_hub_answer_unknown)
+    Problem.NoLongerPaired -> stringResource(R.string.common_not_paired_notice)
+    Problem.CertificateChanged -> stringResource(R.string.common_cert_changed_notice)
+}
+
+/** A `Bad` notice for [problem]; the two Hub problems are the Hub notice with its button (05-android-app 3.4). */
+@Composable
+internal fun ProblemNotice(problem: Problem, onPairAgain: () -> Unit) {
+    when (problem) {
+        Problem.NoLongerPaired -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+        Problem.CertificateChanged -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+        else -> NoticeCard(NoticeKind.Bad, problemText(problem))
+    }
 }
 
 /** [text] with the first [part] in the mono face (serials and addresses, 05-android-app 15). */

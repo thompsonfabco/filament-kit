@@ -326,7 +326,7 @@ class ScreenSemanticsTest {
         vm.cancelAdd()
         rule.waitForIdle()
         vm.openAdd(vm.state.value.printers.first { it.state == "wrong_code" })
-        auditWindowsAllFour("Replace Access Code: A1 mini")
+        auditWindowsAllFour("Replace Access Code: Study A1 mini")
     }
 
     @Test fun theAddKlipperFormOnPhone() {
