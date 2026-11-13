@@ -576,7 +576,7 @@ function toggle(o) {
   const el = E("div", "toggle" + (o.security ? " toggle--security" : ""), o.heading ? E("h3", "toggle__heading", o.heading) : null,
     E("label", "toggle__row", input, E("span", "toggle__label", o.label), word, badge),
     o.hint ? h("p", { class: "toggle__hint", id: hintId, text: o.hint }) : null, res);
-  const paint = () => { word.textContent = t(input.checked ? "common_on" : "common_off"); if (badge) badge.hidden = input.checked; };
+  const paint = () => { word.textContent = t(input.checked ? "status_on" : "status_off"); if (badge) badge.hidden = input.checked; };
   paint();
   on(input, "click", (e) => { if (input.getAttribute("aria-busy") === "true") e.preventDefault(); });
   on(input, "change", async () => {
@@ -707,7 +707,7 @@ function formGroup(form, o = {}) {
             : t("form_saved_restarts"));
           if (conf.waitHub) await conf.waitHub();
         } else if (reply && reply.applies) {
-          result(res, "run", t("form_saved_applies"));
+          result(res, "run", t("common_saved_applying"));
           const end = conf.waitJob && await conf.waitJob();
           if (end && end.state === "failed") { failed = {}; break; }
         }

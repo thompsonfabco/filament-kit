@@ -375,7 +375,6 @@ def generate_window(data, night):
         "<resources>\n"
         f'    <color name="sw_window_bg">{xml_color(c["dark" if night else "light"]["bg"])}</color>\n'
         f'    <color name="sw_launcher_bg">{xml_color(c["light"]["accent"])}</color>\n'
-        f'    <color name="sw_launcher_bg_nightly">{xml_color(c["light"]["warn"])}</color>\n'
         "</resources>\n"
     )
 
