@@ -73,4 +73,36 @@ class ColorSchemeTest {
             }
         }
     }
+
+    @Test fun everyRoleIsTheExactTokenOfTheMappingTable() {
+        for (look in Look.entries) {
+            val t = SpoolwardenTokens.of(look)
+            for ((name, c, other) in listOf(Triple("light", t.light, t.dark), Triple("dark", t.dark, t.light))) {
+                val s = c.toColorScheme(inversePrimary = other.accentText)
+                val expected = mapOf(
+                    "background" to c.bg, "surfaceDim" to c.bg,
+                    "surface" to c.surface, "surfaceBright" to c.surface, "surfaceContainerLowest" to c.surface,
+                    "surfaceContainerLow" to c.surface, "surfaceContainer" to c.surface, "surfaceContainerHigh" to c.surface,
+                    "surfaceTint" to c.surface, "inverseOnSurface" to c.surface,
+                    "onPrimary" to c.surface, "onSecondary" to c.surface, "onTertiary" to c.surface,
+                    "surfaceVariant" to c.surface2, "surfaceContainerHighest" to c.surface2,
+                    "onBackground" to c.text, "onSurface" to c.text, "inverseSurface" to c.text,
+                    "onSurfaceVariant" to c.muted, "outlineVariant" to c.border, "outline" to c.borderStrong,
+                    "primaryContainer" to c.accentSoft, "secondaryContainer" to c.accentSoft, "tertiaryContainer" to c.accentSoft,
+                    "primary" to c.accentText, "secondary" to c.accentText, "tertiary" to c.accentText,
+                    "onPrimaryContainer" to c.accentText, "onSecondaryContainer" to c.accentText, "onTertiaryContainer" to c.accentText,
+                    "error" to c.bad, "onErrorContainer" to c.bad, "errorContainer" to c.badSoft, "onError" to c.onBad,
+                    "primaryFixed" to c.accentSoft, "primaryFixedDim" to c.accentSoft,
+                    "secondaryFixed" to c.accentSoft, "secondaryFixedDim" to c.accentSoft,
+                    "tertiaryFixed" to c.accentSoft, "tertiaryFixedDim" to c.accentSoft,
+                    "onPrimaryFixed" to c.accentText, "onPrimaryFixedVariant" to c.accentText,
+                    "onSecondaryFixed" to c.accentText, "onSecondaryFixedVariant" to c.accentText,
+                    "onTertiaryFixed" to c.accentText, "onTertiaryFixedVariant" to c.accentText,
+                )
+                val actual = roles(s)
+                assertEquals("$look $name: roles not covered by the table", actual.keys, expected.keys)
+                for ((role, colour) in expected) assertEquals("$look $name: $role", colour, actual.getValue(role))
+            }
+        }
+    }
 }

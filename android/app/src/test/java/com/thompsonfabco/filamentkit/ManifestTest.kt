@@ -22,6 +22,17 @@ class ManifestTest {
         assertEquals(R.string.app_name, context.applicationInfo.labelRes)
     }
 
+    @Test fun theLauncherIconAndRoundIconAreTheAdaptiveMipmaps() {
+        assertEquals(R.mipmap.ic_launcher, context.applicationInfo.icon)
+        val manifest = context.assets.openXmlResourceParser("AndroidManifest.xml")
+        while (manifest.next() != XmlPullParser.END_DOCUMENT) {
+            if (manifest.eventType == XmlPullParser.START_TAG && manifest.name == "application") break
+        }
+        val ns = "http://schemas.android.com/apk/res/android"
+        assertEquals(R.mipmap.ic_launcher, manifest.getAttributeResourceValue(ns, "icon", 0))
+        assertEquals(R.mipmap.ic_launcher_round, manifest.getAttributeResourceValue(ns, "roundIcon", 0))
+    }
+
     @Test fun backupIsOff() {
         assertEquals(0, context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_ALLOW_BACKUP)
     }
