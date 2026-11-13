@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.annotation.DrawableRes
@@ -106,7 +107,7 @@ internal fun SettingsRow(
             .clickable(role = Role.Button, onClick = onClick)
             .heightIn(min = maxOf(SpoolwardenTheme.sizes.row, SpoolwardenTheme.density.control))
             .padding(horizontal = space.s4, vertical = space.s2)
-            .semantics(mergeDescendants = true) { },
+            .semantics(mergeDescendants = true) { this.selected = selected },
         horizontalArrangement = Arrangement.spacedBy(space.s3),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -68,6 +68,8 @@ class UpdaterTest {
         var infoError: Exception? = null
         val downloads = mutableListOf<File>()
         var downloadError: Exception? = null
+        /** Called with the number of the download (1, 2, ...); may suspend to keep a download running. */
+        var downloadHook: (suspend (Int) -> Unit)? = null
         override suspend fun info(): ServerInfo {
             infoCalls++
             infoError?.let { throw it }
@@ -79,6 +81,7 @@ class UpdaterTest {
         override suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit) {
             downloads += to
             downloadError?.let { throw it }
+            downloadHook?.invoke(downloads.size)
             steps.forEach { (d, t) -> onProgress(d, t); seen += watch?.invoke() }
             to.writeText("apk")
         }
@@ -89,7 +92,8 @@ class UpdaterTest {
         val installed = mutableListOf<File>()
         override fun canInstall() = allowed
         override fun requestPermission() { permissionRequests++ }
-        override suspend fun install(apk: File) { installed += apk }
+        var installGate: (suspend () -> Unit)? = null
+        override suspend fun install(apk: File) { installGate?.invoke(); installed += apk }
         val pending = MutableStateFlow(false)
         var confirmsShown = 0
         override val confirmPending: Flow<Boolean> = pending
@@ -363,5 +367,116 @@ class UpdaterTest {
         scheduler.runCurrent()
         assertFalse(u.state.value.installing)
         assertEquals(UpdateFailure.Storage, u.state.value.failure)
+    }
+
+    @Test fun cancelStopsADownloadThatIsRunning() {
+        val events = mutableListOf<String>()
+        val source = FakeSource("7").apply {
+            downloadHook = { n ->
+                events += "start$n"
+                try { kotlinx.coroutines.awaitCancellation() } finally { events += "end$n" }
+            }
+        }
+        val u = updater(source)
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        assertEquals(listOf("start1"), events)
+        assertTrue(u.state.value.busy)
+        u.cancel()
+        scheduler.runCurrent()
+        assertEquals(listOf("start1", "end1"), events)
+        assertFalse(u.state.value.busy)
+    }
+
+    @Test fun installWhileACancelledDownloadUnwindsWaitsForIt() {
+        val events = mutableListOf<String>()
+        val source = FakeSource("7").apply {
+            downloadHook = { n ->
+                events += "start$n"
+                if (n == 1) {
+                    try { kotlinx.coroutines.awaitCancellation() } finally {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { kotlinx.coroutines.yield() }
+                        events += "end$n"
+                    }
+                }
+            }
+        }
+        val u = updater(source)
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        u.cancel()
+        u.install() // before the first one has finished unwinding
+        scheduler.runCurrent()
+        assertEquals(listOf("start1", "end1", "start2"), events)
+        assertEquals(2, source.downloads.size)
+    }
+
+    @Test fun cancelIsRefusedWhileTheApkIsHandedToAndroid() {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val installer = FakeInstaller(true).apply { installGate = { gate.await() } }
+        val u = updater(FakeSource("7"), installer)
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        assertTrue(u.state.value.writing)
+        u.cancel()
+        scheduler.runCurrent()
+        assertTrue("the commit goes on", u.state.value.busy)
+        gate.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(1, installer.installed.size)
+        assertFalse(u.state.value.writing)
+        assertTrue(u.state.value.installing)
+    }
+
+    @Test fun theLocalNetworkPermissionHasItsOwnLine() {
+        val source = FakeSource("7").apply { downloadError = ApiError(0, "local_network", "x") }
+        val u = updater(source)
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        assertEquals(UpdateFailure.LocalNetwork, u.state.value.failure)
+    }
+
+    @Test fun aCheckThatFailsSaysTheCheckFailedNotTheInstall() {
+        val source = FakeSource("7")
+        val u = updater(source)
+        scheduler.runCurrent()
+        source.infoError = ApiError(500, "boom", "x")
+        u.checkNow()
+        scheduler.runCurrent()
+        assertEquals(UpdateFailure.CheckFailed, u.state.value.failure)
+        source.infoError = ApiError(0, "local_network", "x")
+        u.checkNow()
+        scheduler.runCurrent()
+        assertEquals(UpdateFailure.LocalNetwork, u.state.value.failure)
+    }
+
+    @Test fun aCheckThatReachesTheHubClearsAFailureOfReachingIt() {
+        val source = FakeSource("7")
+        val u = updater(source)
+        scheduler.runCurrent()
+        source.infoError = ApiError(0, "offline", "gone")
+        u.checkNow()
+        scheduler.runCurrent()
+        assertEquals(UpdateFailure.HubUnreachable, u.state.value.failure)
+        source.infoError = null
+        u.checkNow()
+        scheduler.runCurrent()
+        assertNull(u.state.value.failure)
+        assertNull(u.state.value.error)
+    }
+
+    @Test fun anInstallFailureSurvivesALaterCheck() {
+        val installer = FakeInstaller(true)
+        val u = updater(FakeSource("7"), installer)
+        scheduler.runCurrent()
+        installer.failure.value = UpdateFailure.Signature
+        scheduler.runCurrent()
+        u.checkNow()
+        scheduler.runCurrent()
+        assertEquals(UpdateFailure.Signature, u.state.value.failure)
     }
 }

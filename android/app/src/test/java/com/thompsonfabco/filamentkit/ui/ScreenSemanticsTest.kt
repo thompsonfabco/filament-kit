@@ -22,7 +22,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
@@ -194,8 +199,8 @@ class ScreenSemanticsTest {
         appearance = Appearance.System, hub = hub.takeIf { paired }, hubState = HubState.Connected, update = update,
         appVersion = "0.5.2", developer = true,
     )
-    private fun actions() = SettingsActions(
-        onAppearance = {}, skipFingerprintCheck = false, onSkipFingerprintCheck = {}, onPairAgain = {}, onForget = {},
+    private fun actions(skip: Boolean = false) = SettingsActions(
+        onAppearance = {}, skipFingerprintCheck = skip, onSkipFingerprintCheck = {}, onPairAgain = {}, onForget = {},
         setupUrl = { "https://192.0.2.10:8443/setup" },
         update = UpdateActions(install = {}, cancel = {}, openSettings = {}, tapToInstall = {}, tryAgain = {}),
         onCheckForUpdates = {}, onSimulateTag = {},
@@ -213,6 +218,7 @@ class ScreenSemanticsTest {
         val facts = facts()
         host("Settings") { SettingsScreen(facts, onOpen = {}, detail = { SettingsGroupPage(it, facts, actions()) }) }
         auditAllFour("These choices are kept on this phone only.")
+        rule.onNode(hasText("Appearance") and hasClickAction() and isSelected()).assertExists()
     }
 
     @Test fun settingsAppearance() {
@@ -261,6 +267,71 @@ class ScreenSemanticsTest {
     @Test fun settingsUpdatesFailed() {
         group("App updates", SettingsGroup.Updates, facts(UpdateUi(available = 7, failure = UpdateFailure.Storage, error = "storage")))
         auditAllFour("Try again")
+    }
+
+    @Test fun settingsUpdatesNeedsPermission() {
+        group("App updates", SettingsGroup.Updates, facts(UpdateUi(available = 7, needsPermission = true)))
+        auditAllFour("Open settings")
+    }
+
+    @Test fun settingsUpdatesInstalling() {
+        group("App updates", SettingsGroup.Updates, facts(UpdateUi(available = 7, installing = true, confirmPending = true)))
+        auditAllFour("Tap Install in the window Android shows.")
+    }
+
+    @Test fun settingsUpdatesHubNewer() {
+        group(
+            "App updates", SettingsGroup.Updates,
+            facts(UpdateUi(available = 7, serverTooNew = true, checked = true, offeredVersion = "0.5.3")),
+        )
+        auditAllFour("Install update")
+    }
+
+    @Test fun settingsUpdatesWritingCannotBeCancelled() {
+        group("App updates", SettingsGroup.Updates, facts(UpdateUi(available = 7, busy = true, writing = true)))
+        auditAllFour("Handing the update to Android. This can't be cancelled.")
+    }
+
+    @Test fun settingsUpdatesNotPaired() {
+        group("App updates", SettingsGroup.Updates, facts(paired = false))
+        auditAllFour("Pair with a Hub first: updates come from the Hub.")
+    }
+
+    @Test fun settingsHubWithTheFingerprintCheckOff() {
+        host("Hub connection") { SettingsGroupPage(SettingsGroup.Hub, facts(), actions(skip = true)) }
+        auditAllFour("Needs a look")
+    }
+
+    /** A dialog opened from a Settings page, in light and dark at font scale 1 and 2: its words and buttons are there and reachable. */
+    private fun dialogShows(open: String, vararg shown: String) {
+        rule.waitForIdle()
+        rule.onNodeWithText(open).performClick()
+        rule.waitForIdle()
+        for (isDark in listOf(false, true)) for (scale in listOf(1f, 2f)) {
+            dark = isDark
+            fontScale = scale
+            rule.waitForIdle()
+            for (text in shown) rule.onNodeWithText(text).assertExists()
+            for (button in shown.takeLast(2).filter { it.length < 24 }) rule.onNodeWithText(button).assertHeightIsAtLeast(44.dp) // Material grows the touch slot to 48
+        }
+    }
+
+    @Test fun skipTheFingerprintCheckDialog() {
+        group("Hub connection", SettingsGroup.Hub)
+        dialogShows("Check the fingerprint when pairing by address", "Skip the fingerprint check?", "Only do this on a network you trust.", "Cancel", "Skip the check")
+    }
+
+    @Test fun forgetTheHubDialog() {
+        group("Hub connection", SettingsGroup.Hub)
+        dialogShows("Forget this Hub", "Forget Workshop Hub?", "Cancel", "Forget")
+    }
+
+    @Test fun whatThisMeansDialog() {
+        group(
+            "App updates", SettingsGroup.Updates,
+            facts(UpdateUi(available = 7, failure = UpdateFailure.Signature, error = "refused")),
+        )
+        dialogShows("What this means", "An update signed with a different key", "Close")
     }
 
     @Test fun settingsLicences() {

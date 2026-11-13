@@ -87,6 +87,8 @@ data class UpdateUi(
     val checked: Boolean = false,
     /** The install was handed to Android and its window has not been left yet: "Tap Install in the window Android shows." */
     val installing: Boolean = false,
+    /** The download is done and the APK is being handed to Android: it cannot be cancelled any more. */
+    val writing: Boolean = false,
 )
 
 /** The server API version (`/api/info` `api`) this app understands. */
@@ -138,7 +140,10 @@ class Updater(
     /** "Check for updates": like [check], and the screen shows "Checking…" and a failure of the check itself. */
     fun checkNow() {
         if (checkJob?.isActive == true) return
-        _state.update { it.copy(checking = true, error = null, failure = null) }
+        _state.update {
+            val keep = it.failure != null && it.failure !in CHECK_FAILURES
+            it.copy(checking = true, error = if (keep) it.error else null, failure = it.failure.takeIf { keep })
+        }
         checkJob = viewModelScope.launch {
             try {
                 runCheck(asked = true)
@@ -148,8 +153,9 @@ class Updater(
         }
     }
 
-    /** "Cancel" while downloading. */
+    /** "Cancel" while downloading; not once the APK is being handed to Android ([UpdateUi.writing]). */
     fun cancel() {
+        if (_state.value.writing) return
         installJob?.cancel()
         _state.update { it.copy(busy = false, progress = null) }
     }
@@ -185,20 +191,24 @@ class Updater(
         _state.update {
             it.copy(busy = true, progress = null, needsPermission = false, error = null, failure = null, installing = false)
         }
+        // a cancelled download may still be unwinding; this one starts when it has finished with the files
+        val previous = installJob
         installJob = viewModelScope.launch {
+            previous?.join()
             try {
                 apkFile.parentFile?.mkdirs()
                 source.downloadApk(apkFile) { done, total ->
                     val pct = percent(done, total)
                     if (pct != _state.value.progress) _state.update { it.copy(progress = pct) }
                 }
+                _state.update { it.copy(writing = true) }
                 installer.install(apkFile)
-                _state.update { it.copy(busy = false, progress = null, installing = true) }
+                _state.update { it.copy(busy = false, progress = null, installing = true, writing = false) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 onProblem(e)
-                _state.update { it.failed(failureFor(e)).copy(busy = false, progress = null) }
+                _state.update { it.failed(failureFor(e, checking = false)).copy(busy = false, progress = null, writing = false) }
             } finally {
                 // the session holds its own copy once committed; a partial or failed download is no use either
                 apkFile.delete()
@@ -216,6 +226,9 @@ class Updater(
                     offeredVersion = info.version,
                     serverTooNew = info.api > SUPPORTED_API,
                     checked = true,
+                    // the Hub answered: a failure of reaching it is over (an install failure stays until the next try)
+                    failure = it.failure?.takeUnless { f -> f in CHECK_FAILURES },
+                    error = if (it.failure in CHECK_FAILURES) null else it.error,
                 )
             }
             lastCheckOk = true
@@ -224,21 +237,28 @@ class Updater(
         } catch (e: Exception) {
             lastCheckOk = false
             onProblem(e)
-            if (asked) _state.update { it.failed(failureFor(e)) }
+            if (asked) _state.update { it.failed(failureFor(e, checking = true)) }
         }
     }
 
     private fun UpdateUi.failed(why: UpdateFailure) = copy(failure = why, error = words(why), installing = false)
 
-    private fun failureFor(e: Exception): UpdateFailure = when {
+    private fun failureFor(e: Exception, checking: Boolean): UpdateFailure = when {
+        e is ApiError && e.code == "local_network" -> UpdateFailure.LocalNetwork
         e is ApiError && e.code == "offline" -> UpdateFailure.HubUnreachable
         e is ApiError && e.code == "not_found" -> UpdateFailure.NoUpdate
         e is ApiError && e.code == "storage" -> UpdateFailure.Storage
         e is FingerprintMismatch -> UpdateFailure.CertificateChanged
+        checking -> UpdateFailure.CheckFailed
         else -> UpdateFailure.Generic
     }
 
     private companion object {
+        /** The failures a later check that reaches the Hub puts right. */
+        val CHECK_FAILURES = setOf(
+            UpdateFailure.HubUnreachable, UpdateFailure.LocalNetwork, UpdateFailure.CheckFailed, UpdateFailure.CertificateChanged,
+        )
+
         const val DAY_MS = 24L * 60 * 60 * 1000
     }
 }

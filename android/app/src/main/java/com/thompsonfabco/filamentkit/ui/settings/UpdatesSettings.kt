@@ -49,6 +49,8 @@ internal fun UpdatesSettings(
     actions: UpdateActions,
     onCheck: () -> Unit,
     modifier: Modifier = Modifier,
+    /** False: no Hub is paired, so there is nobody to ask. */
+    paired: Boolean = true,
 ) {
     SettingsPage(modifier) {
         SettingsPanel {
@@ -58,8 +60,14 @@ internal fun UpdatesSettings(
         UpdatePanel(update, appVersion, actions)
         SwButton(
             stringResource(if (update.checking) R.string.common_checking else R.string.settings_updates_check), onCheck,
-            Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = !update.checking && !update.busy,
+            Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = paired && !update.checking && !update.busy,
         )
+        if (!paired) {
+            Text(
+                stringResource(R.string.settings_updates_check_unpaired), color = SpoolwardenTheme.colors.muted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 
@@ -91,16 +99,25 @@ internal fun UpdatePanel(update: UpdateUi, appVersion: String, actions: UpdateAc
                     words, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                SwButton(stringResource(R.string.common_cancel), actions.cancel, kind = SwButtonKind.Quiet)
+                SwButton(stringResource(R.string.common_cancel), actions.cancel, kind = SwButtonKind.Quiet, enabled = !panel.writing)
+                if (panel.writing) {
+                    Text(
+                        stringResource(R.string.app_update_cancel_writing), color = SpoolwardenTheme.colors.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
             UpdatePanelState.NeedsPermission -> {
                 NoticeCard(NoticeKind.Warn, stringResource(R.string.app_update_permission))
                 SwButton(stringResource(R.string.common_open_settings), actions.openSettings)
             }
-            UpdatePanelState.Installing -> Text(
-                stringResource(R.string.app_update_installing), Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            is UpdatePanelState.Installing -> {
+                Text(
+                    stringResource(R.string.app_update_installing), Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (panel.canReopen) SwButton(stringResource(R.string.app_update_tap_install), actions.tapToInstall)
+            }
             UpdatePanelState.Waiting -> {
                 NoticeCard(NoticeKind.Info, stringResource(R.string.app_update_downloaded))
                 SwButton(stringResource(R.string.app_update_tap_install), actions.tapToInstall, kind = SwButtonKind.Main)

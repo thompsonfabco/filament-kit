@@ -194,6 +194,8 @@
     <string name="settings_hub_page_error_address">The Hub\'s address isn\'t known yet.</string>
     <string name="settings_hub_security_title">Security</string>
     <string name="settings_hub_check_title">Check the fingerprint when pairing by address</string>
+    <string name="settings_hub_check_on">On</string>
+    <string name="settings_hub_check_off">Off</string>
     <string name="settings_hub_check_help">When this is off, the app trusts the certificate a Hub presents when you pair by typing its address. A scanned QR code is always checked.</string>
     <string name="settings_hub_skip_title">Skip the fingerprint check?</string>
     <string name="settings_hub_skip_body">Only do this on a network you trust.</string>
@@ -205,6 +207,7 @@
     <string name="settings_updates_this_app">This app</string>
     <string name="settings_updates_on_hub">On the Hub</string>
     <string name="settings_updates_check">Check for updates</string>
+    <string name="settings_updates_check_unpaired">Pair with a Hub first: updates come from the Hub.</string>
     <string name="settings_updates_up_to_date">This app is up to date.</string>
     <string name="settings_licences_line">filament-kit is free software under GPL-3.0-or-later. It comes with no warranty.</string>
     <string name="settings_licences_show">Show the GPL-3.0 text</string>
@@ -2686,6 +2689,9 @@
     <string name="app_update_fail_none">The Hub has no app update to download.</string>
     <string name="app_update_fail_storage">Not enough storage on this phone.</string>
     <string name="app_update_fail_timeout">The download timed out. Try again.</string>
+    <string name="app_update_cancel_writing">Handing the update to Android. This can\'t be cancelled.</string>
+    <string name="app_update_fail_network">Android needs your permission before the app can reach the Hub on your network.</string>
+    <string name="app_update_fail_check">Could not check for updates. Try again.</string>
     <string name="app_update_hub_newer">Update the app: the Hub is newer than this app, so some things may not work.</string>
     <string name="app_update_install">Install update</string>
     <!-- 1=version -->

@@ -38,6 +38,7 @@ internal fun SettingsGroupPage(group: SettingsGroup, facts: SettingsFacts, actio
             update = facts.update,
             actions = actions.update,
             onCheck = actions.onCheckForUpdates,
+            paired = facts.hub != null,
             modifier = modifier,
         )
         SettingsGroup.Licences -> LicencesScreen(modifier)

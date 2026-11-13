@@ -47,7 +47,15 @@ class SettingsModelTest {
         assertEquals(UpdatePanelState.Downloading(42), updatePanel(UpdateUi(available = 7, busy = true, progress = 42)))
         assertEquals(UpdatePanelState.Downloading(null), updatePanel(UpdateUi(available = 7, busy = true)))
         assertEquals(UpdatePanelState.NeedsPermission, updatePanel(UpdateUi(available = 7, needsPermission = true)))
-        assertEquals(UpdatePanelState.Installing, updatePanel(UpdateUi(available = 7, installing = true, confirmPending = true)))
+        assertEquals(
+            UpdatePanelState.Installing(canReopen = true),
+            updatePanel(UpdateUi(available = 7, installing = true, confirmPending = true)),
+        )
+        assertEquals(UpdatePanelState.Installing(canReopen = false), updatePanel(UpdateUi(available = 7, installing = true)))
+        assertEquals(
+            UpdatePanelState.Downloading(null, writing = true),
+            updatePanel(UpdateUi(available = 7, busy = true, writing = true)),
+        )
         assertEquals(UpdatePanelState.Waiting, updatePanel(UpdateUi(available = 7, confirmPending = true)))
     }
 

@@ -27,6 +27,13 @@ enum class UpdateFailure(@StringRes val text: Int, val english: String) {
         "This update does not work on this Android version."),
     TimedOut(R.string.app_update_fail_timeout,
         "The download timed out. Try again."),
+    LocalNetwork(
+        R.string.app_update_fail_network,
+        "Android needs your permission before the app can reach the Hub on your network.",
+    ),
+
+    /** The check for an update failed for a reason that is none of the others. */
+    CheckFailed(R.string.app_update_fail_check, "Could not check for updates. Try again."),
     Generic(R.string.app_update_fail_install,
         "The update could not be installed."),
 

@@ -27,6 +27,7 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.nav.HubState
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.components.StatusKind
 import com.thompsonfabco.filamentkit.ui.components.StatusLabel
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
@@ -114,6 +115,7 @@ internal fun HubSettings(
             onClose = { confirmSkip = false },
             confirm = SwDialogButton(
                 stringResource(R.string.settings_hub_skip_confirm), { confirmSkip = false; onSkipFingerprintCheck(true) },
+                kind = SwButtonKind.DestructiveFilled,
             ),
             cancel = SwAction(stringResource(R.string.common_cancel)) { confirmSkip = false },
             returnFocusTo = skipSwitch,
@@ -132,28 +134,35 @@ internal fun HubSettings(
     }
 }
 
-/** The switch row: toggles on the whole row; on by default; the supporting text says what off means. */
+/**
+ * The switch row of 02-components 5.6 for a toggle that guards security: the label, the switch, the state word after it
+ * ("On" is the safe position) and, while it is off, the Needs a look badge; the hint under it at body size.
+ */
 @Composable
 private fun FingerprintCheckRow(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     val colors = SpoolwardenTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s1)) {
+    val space = SpoolwardenTheme.space
+    Column(verticalArrangement = Arrangement.spacedBy(space.s1)) {
         Row(
             modifier.fillMaxWidth().defaultMinSize(minHeight = SpoolwardenTheme.sizes.row)
                 .toggleable(value = on, role = Role.Switch, onValueChange = onChange),
+            horizontalArrangement = Arrangement.spacedBy(space.s3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                stringResource(R.string.settings_hub_check_title),
-                Modifier.weight(1f).padding(end = SpoolwardenTheme.space.s3), style = MaterialTheme.typography.bodyLarge,
-            )
+            Text(stringResource(R.string.settings_hub_check_title), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
             Switch(
                 checked = on, onCheckedChange = null,
                 colors = SwitchDefaults.colors(
-                    checkedTrackColor = colors.accent, checkedThumbColor = colors.onAccent, checkedBorderColor = colors.accent,
+                    checkedTrackColor = colors.accentText, checkedThumbColor = colors.surface, checkedBorderColor = colors.accentText,
                     uncheckedTrackColor = colors.surface3, uncheckedThumbColor = colors.muted, uncheckedBorderColor = colors.borderStrong,
                 ),
             )
+            Text(
+                stringResource(if (on) R.string.settings_hub_check_on else R.string.settings_hub_check_off),
+                color = if (on) colors.accentText else colors.muted, style = SpoolwardenTheme.type.dataSmall,
+            )
+            if (!on) StatusLabel(StatusKind.NeedsLook, small = true)
         }
-        Text(stringResource(R.string.settings_hub_check_help), color = colors.muted, style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.settings_hub_check_help), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
     }
 }

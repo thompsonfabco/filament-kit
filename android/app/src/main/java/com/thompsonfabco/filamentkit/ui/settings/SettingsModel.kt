@@ -62,19 +62,21 @@ internal sealed interface UpdatePanelState {
 
     /** The Hub speaks a newer API than the app understands. */
     data class HubNewer(val canInstall: Boolean) : UpdatePanelState
-    data class Downloading(val percent: Int?) : UpdatePanelState
+    /** [writing]: the APK is being handed to Android, so Cancel is off. */
+    data class Downloading(val percent: Int?, val writing: Boolean = false) : UpdatePanelState
     data object NeedsPermission : UpdatePanelState
-    data object Installing : UpdatePanelState
+    /** [canReopen]: Android's window is waiting for an answer, so it can be opened again (it may not have opened). */
+    data class Installing(val canReopen: Boolean) : UpdatePanelState
     data object Waiting : UpdatePanelState
     data class Failed(val failure: UpdateFailure, val canInstall: Boolean) : UpdatePanelState
 }
 
 /** The panel for [ui]; a download under way wins, then a failure, then the install steps, then the offer. */
 internal fun updatePanel(ui: UpdateUi): UpdatePanelState = when {
-    ui.busy -> UpdatePanelState.Downloading(ui.progress)
+    ui.busy -> UpdatePanelState.Downloading(ui.progress, ui.writing)
     ui.failure != null -> UpdatePanelState.Failed(ui.failure, canInstall = ui.available != null)
     ui.needsPermission -> UpdatePanelState.NeedsPermission
-    ui.installing -> UpdatePanelState.Installing
+    ui.installing -> UpdatePanelState.Installing(canReopen = ui.confirmPending)
     ui.confirmPending -> UpdatePanelState.Waiting
     ui.serverTooNew -> UpdatePanelState.HubNewer(canInstall = ui.available != null)
     ui.available != null -> UpdatePanelState.Offered
