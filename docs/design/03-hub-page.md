@@ -1480,7 +1480,7 @@ Phone:  steps stacked. A phone browser cannot write to USB: "This computer" is d
 | Password again | Secret field | Tag Reader | "The two passwords do not match." |
 | Buzzer | Radio: "High-triggered (the build in the parts list)" (default), "Older 3-pin module" | Tag Reader | |
 | Name (optional) | Text | Tag Reader | The name the Hub gives the reader's token |
-| **Connect and write** | Primary | This computer | Asks for the code if Locked, then (Tag Reader) `P flash/provision` (code) for a token the page never shows; then the browser's port picker; then writes `G firmware/<id>.bin` at 0x0, restarts the board, finds it again, sends the settings and waits up to 60 s for the reader's own report. Any failure revokes the new token (`P readers/<id>/revoke`). |
+| **Connect and write** | Primary | This computer | Asks for the code if Locked, then the browser's port picker (it needs the press's user activation, and no token is made when no board is chosen); then (Tag Reader) `P flash/provision` (code) for a token the page never shows; then writes `G firmware/<id>.bin` at 0x0, restarts the board, finds it again, sends the settings and waits up to 60 s for the reader's own report. Any failure revokes the new token (`P readers/<id>/revoke`). |
 | **Write on the Hub** | Primary | The Hub, Tag Reader | `P flash/server` (code) with the answers and the port; the Hub starts job `reader_setup`, which the job strip and the step list follow |
 | **Stop** | Default, while writing from this computer | | Stops before the next step; a half-written board is reported as such |
 

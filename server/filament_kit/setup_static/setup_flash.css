@@ -1,0 +1,8 @@
+/* flash a device (S2.16) */
+/* the device and buzzer choices are the segmented choice with options that wrap, as cards of equal width */
+.flash-choice.segmented { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--s7) * 3)), 1fr)); min-width: 0; margin: var(--s1) 0; }
+.flash-choice .segmented__option { flex-direction: column; align-items: flex-start; justify-content: flex-start; min-width: 0; padding: var(--s2) var(--s3);
+                                   white-space: normal; overflow-wrap: anywhere; text-align: start; }
+.flash-choice .segmented__input:disabled:checked + .segmented__option { background: var(--accent-soft); color: var(--text); }   /* the choice made stays seen while a write runs */
+.flash-form { display: grid; gap: var(--s3); min-width: 0; }
+.flash-steps { margin: var(--s2) 0; padding: 0; }
