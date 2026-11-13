@@ -351,7 +351,12 @@ def test_job_progress_follows_the_newest_complete_step_line(app):
     write_log(head + "==> step 1 of 3 a\n==> step 2 of 3 b\n")
     assert c.get("/setup/api/job").json()["progress"] == 0.333                    # (K - 1) / N: step 2 of 3 is running
     write_log(head + "==> step 9 of 3 too far\n")
-    assert c.get("/setup/api/job").json()["progress"] == 1.0                      # clamped
+    assert c.get("/setup/api/job").json()["progress"] is None                     # K past N is not a step line
+    write_log(head + "==> step 1 of 3 a\n==> step 2 of 3 b\n==> step 5 of 4 x\n==> step 0 of 3 y\n")
+    assert c.get("/setup/api/job").json()["step"]["index"] == 2                   # K > N and K = 0 are skipped
+    write_log(head + "==> step 3 of 4 a\n==> step 1 of 6 inner\n\n==> finished (exit 1)\n")
+    r = c.get("/setup/api/job").json()
+    assert r["progress"] == 0.5 and r["step"]["count"] == 4                       # a later, other N is ignored
     write_log(head + "==> step 1 of 3 a\n\n==> finished (exit 0)\n")
     assert c.get("/setup/api/job").json()["progress"] == 1.0                      # done counts as all steps
     write_log(head + "==> step 2 of 4 a\n\n==> finished (exit 2)\n")

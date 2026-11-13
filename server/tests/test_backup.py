@@ -626,5 +626,19 @@ def test_the_apply_inside_a_restore_writes_no_step_lines_of_its_own(kit, monkeyp
     steps.Steps(2, out=lines.append).next("Anything")
     assert lines == []
     monkeypatch.setenv(steps.ENV, "4242")       # this process is the one
+    monkeypatch.setattr(steps, "_made_here", False)
     steps.Steps(2, out=lines.append).next("Anything")
     assert lines == ["==> step 1 of 2 Anything"]
+
+
+def test_a_second_steps_in_the_same_process_stays_quiet_and_k_stops_at_n(monkeypatch):
+    """02 8.4 rule 1: one N per job log, and K never passes N (drift J1, J2)."""
+    from filament_kit import steps
+    lines = []
+    first = steps.Steps(2, out=lines.append)
+    for text in ("a", "b", "c"):
+        first.next(text)
+    steps.Steps(5, out=lines.append).next("inner")      # e.g. restore calling the apply code directly
+    assert lines == ["==> step 1 of 2 a", "==> step 2 of 2 b"]
+    with pytest.raises(ValueError):
+        steps.Steps(0)

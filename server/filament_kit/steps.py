@@ -16,18 +16,25 @@ import os
 ENV = "FK_STEPS_OWNER"
 
 
+_made_here = False        # a Steps already counts this process's job: a second one stays quiet (one N per log)
+
+
 class Steps:
     def __init__(self, count: int, out=None):
+        global _made_here
+        if count < 1:
+            raise ValueError("a job counts at least one step")
         self.count, self.index, self._out = count, 0, out
         owner = os.environ.get(ENV)
-        self.quiet = owner is not None and owner != str(os.getpid())
+        self.quiet = (owner is not None and owner != str(os.getpid())) or _made_here
         if owner is None:
             os.environ[ENV] = str(os.getpid())
+        _made_here = True
 
     def next(self, text: str) -> None:
-        """Step K + 1 starts."""
+        """Step K + 1 starts. Past N nothing is written: the bar never shows full while work remains."""
         self.index += 1
-        if not self.quiet:
+        if not self.quiet and self.index <= self.count:
             line = f"==> step {self.index} of {self.count} {text}"
             if self._out is None:
                 print(line, flush=True)
