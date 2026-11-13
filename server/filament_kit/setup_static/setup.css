@@ -105,3 +105,35 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .updates__foot > p { margin: 0; }
 @media (max-width: 1024px) { .updates__cards { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .updates__actions > .btn--primary { order: -1; } .updates__actions > .btn { flex: 1 1 100%; } }
+
+/* Features (S2.12) */
+/* the setup choice cards (02 5.7, cards variant): the radio is the card's own marker */
+.segmented--cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(calc(var(--s7) * 5),1fr));gap:var(--s2);padding:0;border:0;margin:0 0 var(--s3)}
+.segmented--cards .segmented__option{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:var(--s1);
+  min-height:0;padding:var(--s3);border:var(--hairline) solid var(--border-strong);border-radius:var(--r);white-space:normal;text-align:left}
+.segmented--cards .segmented__name{display:flex;align-items:center;gap:var(--s2);color:var(--text);font-weight:var(--fw-title)}
+.segmented--cards .segmented__name::before{content:"";flex:none;box-sizing:border-box;width:var(--s3);height:var(--s3);border:2px solid currentColor;border-radius:50%}
+.segmented--cards .segmented__input:checked+.segmented__option{box-shadow:inset 0 0 0 var(--hairline) var(--accent-text)}
+.segmented--cards .segmented__input:checked+.segmented__option .segmented__name{color:var(--accent-text)}
+.segmented--cards .segmented__input:checked+.segmented__option .segmented__name::before{background:radial-gradient(circle,currentColor 40%,transparent 45%)}
+.segmented--cards .segmented__input:checked+.segmented__option .segmented__line{color:var(--accent-text)}
+.segmented--cards .segmented__input:disabled+.segmented__option .segmented__name{color:var(--muted)}
+.segmented--cards .segmented__line{font-size:var(--fs-s);font-weight:var(--fw-text)}
+.features__meta{margin:0 0 var(--s3)}
+.features__after{font-weight:var(--fw-label)}
+.features__preview{display:flex;flex-direction:column;gap:var(--s3)}
+.features__preview p{margin:0}
+.features__filter{margin-left:auto}
+.features__apply{margin:var(--s3) 0}
+.features__tag{display:inline-flex;align-items:center;padding:0 var(--s2);border:var(--hairline) solid var(--border-strong);border-radius:var(--r-s);
+  color:var(--muted);font-size:var(--fs-xs);font-weight:var(--fw-label);line-height:var(--lh-title);white-space:nowrap}
+.coll__name{font-weight:var(--fw-title);color:var(--text);margin-right:var(--s1)}
+/* the collection: the line under the name stands in for "What it does" and "Needs" where those columns are not shown */
+.coll--features{grid-template-columns:minmax(0,1.6fr) max-content minmax(0,2.4fr) minmax(0,1.2fr) max-content}
+.coll--features .coll__sub{display:none}
+.coll--features .coll__cell[data-col="needs"] .muted{font-size:var(--fs-s)}
+@media (max-width:1024px){
+  .coll--features{grid-template-columns:minmax(0,1fr) max-content max-content}
+  .coll--features .coll__cell[data-col="what"]{display:none}
+  .coll--features .coll__sub{display:block}
+}

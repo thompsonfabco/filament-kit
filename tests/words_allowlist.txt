@@ -52,11 +52,10 @@ server/filament_kit/setup_static/setup_devices.js | intake station | 1 | today's
 server/filament_kit/setup_static/setup_devices.js | module | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_devices.js | pc sync | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_devices.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_features.js | filament-kit | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_features.js | module | 8 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_features.js | setup page | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_features.js | the kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_features.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+server/filament_kit/setup_static/setup_features.js | "server" | 4 | Hub code name or route of the Features section (a setup, a feature or an API route); never shown; S7.2 reviews it
+server/filament_kit/setup_static/setup_features.js | "station" | 2 | Hub code name or route of the Features section (a setup, a feature or an API route); never shown; S7.2 reviews it
+server/filament_kit/setup_static/setup_features.js | all-in-one | 1 | Hub code name or route of the Features section (a setup, a feature or an API route); never shown; S7.2 reviews it
+server/filament_kit/setup_static/setup_features.js | module | 4 | Hub code name or route of the Features section (a setup, a feature or an API route); never shown; S7.2 reviews it
 server/filament_kit/setup_static/setup_flash.js | "here" | 5 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_flash.js | "server" | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_flash.js | intake | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
