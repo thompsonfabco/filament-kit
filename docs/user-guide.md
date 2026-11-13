@@ -811,17 +811,7 @@ A reader that does not answer is skipped for a minute.
 ### Printer slots for the Claude connector
 
 The connector's `printer_slots` and `printer_set_slot` tools show and set what is loaded in a printer's AMS
-slots. With the `printers` module on, they use the kit's own printer connection. If another service of yours
-already talks to the printer, point the tools at it instead, so the kit never connects to that printer:
-
-```
-"slot_service": {"state_url": "http://127.0.0.1:8105/api/state", "set_url": "http://127.0.0.1:8104/set-slot",
-                 "token_file": "/etc/filament-kit/slot_token"}
-```
-
-The token file holds the bearer token for `set_url` (copy it with `sudo install -m 640 -o root -g filament-kit
-<file> /etc/filament-kit/slot_token`; never paste it into config.json). `sudo filament-kit web status` shows which
-one is in use.
+slots, using the kit's own printer connection (the `printers` module must be on).
 
 ## Claude connector and phone web app
 
@@ -1155,8 +1145,7 @@ cannot change it: edit it by hand if a range needs adding, then restart Spoolman
   rm -f /etc/filament-kit/setup_code /etc/filament-kit/setup_code.plain /etc/filament-kit/setup_lockout.xml
   ```
 
-  Remove the user's file permissions (the two `setfacl` lines) before the user itself. If `slot_service.token_file` in
-  `config.json` names a token file, remove that user's permission on it the same way. If you upgrade to v0.4.0 again
+  Remove the user's file permissions (the two `setfacl` lines) before the user itself. If you upgrade to v0.4.0 again
   later, removing `/var/lib/filament-kit-web` first makes the upgrade copy the web app's current files again.
 
 **Upgrading a station from v0.2.0 to v0.3.0:** the station's button flow now needs pairing once. On the kit server run
