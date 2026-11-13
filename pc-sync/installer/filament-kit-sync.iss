@@ -158,8 +158,8 @@ begin
     IDNO) = IDYES;
   if Wipe then
     DelTree(Data, True, True, True);
-  SuppressibleMsgBox('This PC is still paired on the server. To free its place for another PC, run on the server:' +
-    #13#10 + 'sudo filament-kit unpair <id>' + #13#10 + '(the id is the "Device id" line of "filament-kit-sync status", run before uninstalling).', mbInformation, MB_OK, IDOK);
+  SuppressibleMsgBox('This PC is still paired on the server. To free its place for another PC, run on the server:' + #13#10 +
+    'sudo filament-kit unpair <id>' + #13#10 + '(the id is the "Device id" line of "filament-kit-sync status", run before uninstalling).', mbInformation, MB_OK, IDOK);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
