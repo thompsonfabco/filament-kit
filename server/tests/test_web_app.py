@@ -18,7 +18,7 @@ from mcp.client.client import Client  # noqa: E402
 from mcp.client.streamable_http import streamable_http_client  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
-from filament_kit import config, modules, tags, tagsources  # noqa: E402
+from filament_kit import config, inventory, modules, tags, tagsources  # noqa: E402
 from filament_kit.spoolman import Spoolman  # noqa: E402
 from filament_kit.web import __main__ as web_main  # noqa: E402
 from filament_kit.web import app as web_app, auth  # noqa: E402
@@ -738,3 +738,74 @@ def test_the_print_alert_controls_moved_to_settings():
         assert call in panel, call                                                     # what a subscription does is unchanged
     assert "SW.toggle(" in panel and "alertsPanel(" in _app_js() and "PUSH &&" in _app_js()   # only when alerts are offered
     assert 'localStorage.getItem("spoolwarden.printer")' in printers
+
+
+# ---------- S3.7: the add preview per item, colour in find, search paging ----------
+
+def _stock(sm) -> str:
+    return json.dumps({k: sm.get(k) for k in ("vendor", "filament", "spool")}, sort_keys=True)
+
+
+def _preview_items(sm):
+    """One item for a filament Spoolman has, one for a new filament (opened, so each spool gets its own box)."""
+    base = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
+            "count": 2, "color_hex": "8A8C8E"}
+    inventory.add_spools(sm, [{**base, "count": 1}], RULES, dry=False)
+    return base, {**base, "name": "PETG Blue", "sealed": False, "color_hex": "0000FF"}
+
+
+def test_add_preview_answers_per_item_and_writes_nothing(app, sm):
+    ok, new = _preview_items(sm)
+    before = _stock(sm)
+    with _client(app) as c:
+        r = c.post("/intake/api/add", json={"items": [ok, new], "dry_run": True}, headers={"Origin": ORIGIN})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["dry"] is True and body["spool_ids"] == [] and "Would add" in body["output"]     # today's fields
+        first, second = body["items"]
+        (grey,) = [f for f in sm.get("filament") if f["name"] == "PETG Grey"]
+        assert (first["index"], first["filament"], first["filament_id"], first["new_vendor"]) == (
+            0, "existing", grey["id"], False)
+        assert (first["spools"], first["location"], first["problems"]) == (2, "Sealed stock", [])
+        assert (second["index"], second["filament"], second["filament_id"], second["new_vendor"]) == (
+            1, "new", None, False)
+        assert second["spools"] == 2 and second["location"] == "Storage box 01" and second["problems"] == []
+        assert [(p["location"], p["spools"]) for p in second["placements"]] == [("Storage box 01", 1),
+                                                                             ("Storage box 02", 1)]
+        assert _stock(sm) == before                                                                 # nothing written
+        r = c.post("/intake/api/add", json={"items": [ok, new], "dry_run": False}, headers={"Origin": ORIGIN})
+        first, second = r.json()["items"]
+        assert len(first["spool_ids"]) == 2 and len(second["spool_ids"]) == 2 and second["filament"] == "new"
+
+
+def test_add_preview_problems_name_their_item_and_field(app, sm):
+    ok, new = _preview_items(sm)
+    before = _stock(sm)
+    with _client(app) as c:
+        r = c.post("/intake/api/add", json={"items": [ok, {**new, "net": 0, "color_hex": "blue"}], "dry_run": True},
+                   headers={"Origin": ORIGIN})
+    body = r.json()
+    assert r.status_code == 400 and body["field"] == "items"
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(1, "net"), (1, "color_hex")]
+    assert "net must be a positive number" in body["error"] and body["problems"][0]["message"] == body["error"]
+    assert _stock(sm) == before
+
+
+def test_find_results_carry_the_filament_colour_and_page(app, sm):
+    for n in range(3):
+        inventory.add_spools(sm, [{"vendor": "SUNLU", "name": f"PETG Grey {n}", "material": "PETG", "net": 1000,
+                                   "tare": 213, "density": 1.27, "count": 1, "color_hex": "8A8C8E"}],
+                             RULES, dry=False)
+    with _client(app) as c:
+        found = c.get("/intake/api/find", params={"q": "grey"}).json()
+        assert [f["color_hex"] for f in found["filaments"]] == ["8A8C8E"] * 3
+        assert (found["matches"], found["total"], found["offset"], found["has_more"]) == (3, 3, 0, False)
+        page = c.get("/intake/api/find", params={"q": "grey", "limit": 2}).json()
+        rest = c.get("/intake/api/find", params={"q": "grey", "limit": 2, "offset": 2}).json()
+        assert [f["name"] for f in page["filaments"]] == ["PETG Grey 0", "PETG Grey 1"] and page["has_more"] is True
+        assert [f["name"] for f in rest["filaments"]] == ["PETG Grey 2"] and rest["has_more"] is False
+        fils = c.get("/intake/api/filaments", params={"limit": 2, "offset": 1}).json()
+        assert [f["name"] for f in fils["filaments"]] == ["PETG Grey 1", "PETG Grey 2"]
+        assert (fils["total"], fils["offset"], fils["has_more"]) == (3, 1, False)
+        r = c.get("/intake/api/find", params={"offset": "x"})
+        assert r.status_code == 400 and r.json()["field"] == "offset"

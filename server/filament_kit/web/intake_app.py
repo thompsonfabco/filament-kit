@@ -451,7 +451,9 @@ class IntakeApp:
                     return JSONResponse({"error": "internal error (see the server log)"}, 500)
                 status = 409 if type(e).__name__ == "TagConflict" else 400
                 field = getattr(e, "field", None)           # the body key a refusal is about, when it is about one
-                return JSONResponse({"error": text, **({"field": field} if isinstance(field, str) else {})}, status)
+                problems = getattr(e, "problems", None)     # a refused add: every problem, with its item and field
+                return JSONResponse({"error": text, **({"field": field} if isinstance(field, str) else {}),
+                                     **({"problems": problems} if isinstance(problems, list) else {})}, status)
         return route
 
     async def _body(self, request: Request) -> dict:
@@ -576,11 +578,15 @@ class IntakeApp:
 
     async def find(self, request: Request):
         q = request.query_params
-        return await anyio.to_thread.run_sync(self.tools.find_spools, q.get("q", ""), q.get("sealed") == "1", None)
+        offset, limit = inventory.page_args(q)
+        return await anyio.to_thread.run_sync(self.tools.find_spools, q.get("q", ""), q.get("sealed") == "1", None,
+                                              offset, limit if limit is not None else mcp_tools.MAX_FILAMENTS)
 
     async def filaments(self, request: Request):  # the manual add's existing-filament picker
-        return {"filaments": await anyio.to_thread.run_sync(inventory.filaments, self.tools.sm,
-                                                            request.query_params.get("q", ""))}
+        offset, limit = inventory.page_args(request.query_params)
+        rows = await anyio.to_thread.run_sync(inventory.filaments, self.tools.sm, request.query_params.get("q", ""))
+        rows, paging = inventory.page(rows, offset, limit)
+        return {"filaments": rows, **paging}
 
     async def vendors(self, request: Request):
         return {"vendors": await anyio.to_thread.run_sync(inventory.vendors, self.tools.sm)}

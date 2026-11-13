@@ -96,8 +96,10 @@ class Tools:
 
     # ---------- inventory ----------
 
-    def find_spools(self, query: str = "", sealed_only: bool = False, location: str | None = None) -> dict:
-        """Filaments matching every word of `query` (vendor, name, material), with their spools."""
+    def find_spools(self, query: str = "", sealed_only: bool = False, location: str | None = None,
+                    offset: int = 0, limit: int = MAX_FILAMENTS) -> dict:
+        """Filaments matching every word of `query` (vendor, name, material), with their spools; `offset` and
+        `limit` page through them (`total`, `offset` and `has_more` in the reply say what is left)."""
         words = (query or "").lower().split()
         out: dict[int, dict] = {}
         for s in self.sm.get("spool"):
@@ -111,14 +113,16 @@ class Tools:
                 continue
             e = out.setdefault(f.get("id"), {"filament_id": f.get("id"), "vendor": vendor, "name": f.get("name"),
                                              "material": f.get("material"), "net_g": f.get("weight"),
-                                             "tare_g": f.get("spool_weight"), "spools": []})
+                                             "tare_g": f.get("spool_weight"), "color_hex": f.get("color_hex"),
+                                             "spools": []})
             e["spools"].append({"spool_id": s["id"], "location": s.get("location"),
                                 "remaining_g": s.get("remaining_weight"), "sealed": sealed, "lot": s.get("lot_nr"),
                                 "tagged": bool(tags.stored(s))})
         res = sorted(out.values(), key=lambda e: (e["vendor"].lower(), (e["name"] or "").lower()))
         for e in res:
             e["spools"].sort(key=lambda s: s["spool_id"])
-        return {"matches": len(res), "filaments": res[:MAX_FILAMENTS], "truncated": len(res) > MAX_FILAMENTS}
+        rows, paging = inventory.page(res, offset, limit)
+        return {"matches": len(res), "filaments": rows, "truncated": paging["has_more"], **paging}
 
     def add_spools(self, items: list[dict], dry_run: bool = True, link_tag: str | None = None, *,
                    new_filaments_only_lines: bool = False, with_saved: bool = False) -> dict:
@@ -142,7 +146,8 @@ class Tools:
         r = inventory.add_and_link(self.sm, items, self._rules(), bool(dry_run), uid)
         if r.dry:
             notes.append("dry run: nothing written. Show the user, then call again with dry_run=false.")
-        out = {"output": "\n".join(r.lines + notes), "exit_code": 0, "spool_ids": r.spool_ids, "dry": r.dry}
+        out = {"output": "\n".join(r.lines + notes), "exit_code": 0, "spool_ids": r.spool_ids, "dry": r.dry,
+               "items": r.items}
         if with_saved:                  # the kit's own page records the save in the intake history
             out.update(saved=r.saved, tag=uid)
         return out

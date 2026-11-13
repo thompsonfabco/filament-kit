@@ -43,6 +43,7 @@ class AddResult:
     dry: bool = False
     added: list[dict] = field(default_factory=list, repr=False)   # items that got at least one spool
     saved: list[dict] = field(default_factory=list, repr=False)   # [{values, spool_ids, filament_id}] (intake history)
+    items: list[dict] = field(default_factory=list)               # one result per item given, in order (_item_result)
 
 
 @dataclass
@@ -61,6 +62,24 @@ class AddFailed(Exception):
     def __init__(self, message: str, partial: AddResult):
         super().__init__(message)
         self.partial = partial
+
+
+class ItemsInvalid(ValueError):
+    """The items are refused. `field` is the body key ("items"); `problems` lists every refusal as
+    {item, field, message}: `item` is the item's index, `field` the item's own key."""
+
+    def __init__(self, message: str, problems: list[dict]):
+        super().__init__(message)
+        self.field = "items"
+        self.problems = problems
+
+
+class PageError(ValueError):
+    """`offset` or `limit` is not a whole number in range; `field` names it."""
+
+    def __init__(self, message: str, field: str):
+        super().__init__(message)
+        self.field = field
 
 
 class TagConflict(Exception):
@@ -115,36 +134,51 @@ def _validate(items: list[dict]) -> None:
     for it in items:
         if not isinstance(it, dict):
             raise ValueError("each item must be an object")
-        label = f"{it.get('vendor')} {it.get('name')}"
-        for k in ("vendor", "name", "material"):
-            if not isinstance(it.get(k), str) or not it[k].strip():
-                raise ValueError(f"{label}: {k} must be a non-empty string")
-        for k in ("net", "tare", "density", "count"):
-            if it.get(k) is None:
-                raise ValueError(f"{label}: missing {k}")
-        if not _is_int(it["count"]) or it["count"] < 1:
-            raise ValueError(f"{label}: count must be a whole number of at least 1")
-        for k in ("net", "tare", "density"):
-            if not _is_num(it[k]) or it[k] <= 0:
-                raise ValueError(f"{label}: {k} must be a positive number")
-        for k in _OPT_NUM:
-            if it.get(k) is not None and not _is_num(it[k]):
-                raise ValueError(f"{label}: {k} must be a number")
-        for k in _OPT_STR:
-            if it.get(k) is not None and not isinstance(it[k], str):
-                raise ValueError(f"{label}: {k} must be text")
-        hx = it.get("color_hex")
-        if hx and not _HEX.fullmatch(hx):       # Spoolman refuses the filament after the vendor was made: a part-way add
-            raise ValueError(f"{label}: color_hex must be 6 or 8 hex digits, like 8A8C8E")
-        for k, (lo, hi) in _TEMP_RANGE.items():
-            if it.get(k) and not (float(it[k]).is_integer() and lo <= it[k] <= hi):     # 0 is left out, as before
-                raise ValueError(f"{label}: {k} must be a whole number between {lo} and {hi} degrees")
-        if it.get("sealed") is not None and not isinstance(it["sealed"], bool):
-            raise ValueError(f"{label}: sealed must be true or false")
-        if it.get("gross") is not None and (it["count"] != 1 or it["gross"] <= it["tare"]):
-            raise ValueError(f"{label}: gross {it['gross']} g needs count 1 and a weight above the spool")
-        for k in ("line", "bambu_parent"):
+    problems = [{"item": i, "field": f, "message": m} for i, it in enumerate(items) for f, m in _item_problems(it)]
+    if problems:
+        raise ItemsInvalid(problems[0]["message"], problems)
+
+
+def _item_problems(it: dict) -> list[tuple[str, str]]:
+    """(the item's key, message) for each thing wrong with one item, in the order `_validate` always checked."""
+    out: list[tuple[str, str]] = []
+    label = f"{it.get('vendor')} {it.get('name')}"
+
+    def bad(key: str, text: str) -> None:
+        out.append((key, f"{label}: {text}"))
+    for k in ("vendor", "name", "material"):
+        if not isinstance(it.get(k), str) or not it[k].strip():
+            bad(k, f"{k} must be a non-empty string")
+    for k in ("net", "tare", "density", "count"):
+        if it.get(k) is None:
+            bad(k, f"missing {k}")
+    if it.get("count") is not None and (not _is_int(it["count"]) or it["count"] < 1):
+        bad("count", "count must be a whole number of at least 1")
+    for k in ("net", "tare", "density"):
+        if it.get(k) is not None and (not _is_num(it[k]) or it[k] <= 0):
+            bad(k, f"{k} must be a positive number")
+    for k in _OPT_NUM:
+        if it.get(k) is not None and not _is_num(it[k]):
+            bad(k, f"{k} must be a number")
+    for k in _OPT_STR:
+        if it.get(k) is not None and not isinstance(it[k], str):
+            bad(k, f"{k} must be text")
+    hx = it.get("color_hex")
+    if hx and not (isinstance(hx, str) and _HEX.fullmatch(hx)):     # Spoolman refuses the filament after the vendor was made: a part-way add
+        bad("color_hex", "color_hex must be 6 or 8 hex digits, like 8A8C8E")
+    for k, (lo, hi) in _TEMP_RANGE.items():
+        if it.get(k) and _is_num(it[k]) and not (float(it[k]).is_integer() and lo <= it[k] <= hi):     # 0 is left out, as before
+            bad(k, f"{k} must be a whole number between {lo} and {hi} degrees")
+    if it.get("sealed") is not None and not isinstance(it["sealed"], bool):
+        bad("sealed", "sealed must be true or false")
+    if _is_num(it.get("gross")) and (it.get("count") != 1 or not _is_num(it.get("tare")) or it["gross"] <= it["tare"]):
+        bad("gross", f"gross {it['gross']} g needs count 1 and a weight above the spool")
+    for k in ("line", "bambu_parent"):
+        try:
             check_line_text(label, k, it.get(k))
+        except ValueError as e:
+            out.append((k, str(e)))
+    return out
 
 
 def _parent(it: dict) -> str | None:
@@ -171,7 +205,7 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, paren
         _check_parents(items)                   # before _LOCK: it may wait on the build's live.lock
     result = AddResult(dry=dry)
     with _LOCK:
-        placed = placement.place(items, _used_locations(sm), rules)
+        placed = placement.place([{**it, "_i": i} for i, it in enumerate(items)], _used_locations(sm), rules)
         vendors = {v["name"].lower(): v for v in sm.get("vendor")}
         fils = {((f.get("vendor") or {}).get("name", "").lower(), f["name"].lower()): f for f in sm.get("filament")}
         # re-check gross against the tare that will really be used (an existing filament's, else the item's)
@@ -197,10 +231,14 @@ PLACED_BY = {"sealed": "where sealed spools go", "pla": "where opened PLA goes",
 
 
 def _write_items(sm, placed, vendors, fils, result, dry) -> None:
+    made: set[tuple[str, str]] = set()      # filaments this add creates: "new" for every item that uses them
+    new_vendors: set[str] = set()
     for it in placed:
+        index = it.pop("_i", None)
         vn = it["vendor"]
         v = vendors.get(vn.lower())
         if v is None:
+            new_vendors.add(vn.lower())
             v = ({"id": None, "name": vn} if dry
                  else sm.post("vendor", {"name": vn, "empty_spool_weight": it["tare"]}))
             vendors[vn.lower()] = v
@@ -210,6 +248,7 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
         if f is None:
             f = _new_filament(sm, it, v, dry)
             fils[key] = f
+            made.add(key)
             state = "new filament"
         else:
             state = "existing filament"
@@ -236,6 +275,7 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
         if not dry and any(ids):
             result.saved.append({"values": dict(it), "spool_ids": [i for i in ids if i is not None],
                                  "filament_id": f.get("id")})
+        _item_result(result, index, it, f, key in made, vn.lower() in new_vendors, [i for i in ids if i is not None])
         # a sentence a person reads (the app shows these lines as the result of Add), not a log line
         n = it["count"]
         gross_note = f" (weighed {it['gross']} g, the spool itself {tare} g)" if it.get("gross") is not None else ""
@@ -251,6 +291,27 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
         result.lines.append(
             f"{'Would add' if dry else 'Added'} {n} spool{'' if n == 1 else 's'} of {vn} {it['name']} ({which}){id_note} "
             f"at {where}{', opened' if opened else ''}, {remaining} g{' each' if n > 1 else ''}{gross_note}")
+
+
+def _item_result(result: AddResult, index: int | None, it: dict, f: dict, new_filament: bool, new_vendor: bool,
+                 spool_ids: list[int]) -> None:
+    """Add what one placed item does to `result.items` (an item the placement split over boxes is one entry with
+    several `placements`). In a preview `spool_ids` is empty; the counts and places are what an add would do."""
+    where = {"location": it["location"], "spools": it["count"], "placed_by": it.get("placed_by")}
+    if result.items and result.items[-1]["index"] == index:
+        r = result.items[-1]
+        r["spools"] += it["count"]
+        r["spool_ids"].extend(spool_ids)
+        r["placements"].append(where)
+        return
+    tare = f.get("spool_weight") or it["tare"]
+    result.items.append({
+        "index": index, "vendor": it["vendor"], "name": it["name"],
+        "filament": "new" if new_filament else "existing", "filament_id": f.get("id"), "new_vendor": new_vendor,
+        "spools": it["count"], "spool_ids": spool_ids, "location": it["location"], "placements": [where],
+        "opened": it.get("sealed") is False,
+        "remaining_g": round(it["gross"] - tare, 1) if it.get("gross") is not None else it["net"],
+        "problems": []})
 
 
 def _join_line(sm: Spoolman, f: dict, it: dict, result: AddResult, dry: bool) -> None:
@@ -536,6 +597,31 @@ def find(sm: Spoolman, q: str, sealed_only: bool) -> list[dict]:
         if all(w in hay for w in words):
             out.append(s)
     return out
+
+
+def page_args(params) -> tuple[int, int | None]:
+    """`offset` (default 0) and `limit` (default none: all the rest) from query parameters."""
+    out = []
+    for key, low, default in (("offset", 0, 0), ("limit", 1, None)):
+        raw = params.get(key)
+        if raw in (None, ""):
+            out.append(default)
+            continue
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            n = None
+        if n is None or n < low:
+            raise PageError(f"{key} must be a whole number of at least {low}", key)
+        out.append(n)
+    return out[0], out[1]
+
+
+def page(rows: list, offset: int, limit: int | None) -> tuple[list, dict]:
+    """The rows from `offset` (at most `limit`), and the paging fields of the reply: `total` (all matches),
+    `offset`, and `has_more` (more rows after this page)."""
+    end = len(rows) if limit is None else offset + limit
+    return rows[offset:end], {"total": len(rows), "offset": offset, "has_more": end < len(rows)}
 
 
 def filaments(sm: Spoolman, q: str = "") -> list[dict]:
