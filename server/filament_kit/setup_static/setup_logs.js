@@ -39,11 +39,12 @@ function logsView(units) {
     const sent = { unit: unit._control.value, lines: Number(lines.querySelector("input:checked").value) };
     try {
       const r = await api("logs", { ...sent, code: theCode() });
+      if (SW.lock.state === "locked") return;      // locked while it was read: the reply is dropped, not written back
       seen = true;
       out.replaceChildren(block(sent.unit, r.text),
         r.truncated ? h("p", { class: "muted", textContent: SW.t("logs_truncated") }) : null);
     } catch (e) {
-      if (e.locked) throw e;
+      if (e.locked) { again = false; throw e; }
       out.replaceChildren(h("div", { class: "code" }, SW.errorState({ title: SW.t("logs_read_error"), text: hubText(e.message), level: 3,
         onTry: () => read() })));
     } finally {

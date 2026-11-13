@@ -204,20 +204,49 @@ def test_devices_and_flash_do_not_scroll_sideways_at_320_px_in_a_wide_font(monke
     assert not found, found
 
 
-LOGS_UNLOCKED = """(async () => {
-  const until = async (what, f) => {
-    for (let i = 0; i < 100 && !f(); i++) await new Promise((r) => setTimeout(r, 100));
-    if (!f()) throw new Error("Logs: " + what);
+LOGS_PRELUDE = """
+  const until = async (what, f, ms = 8000) => {
+    for (let t = 0; t < ms && !f(); t += 100) await new Promise((r) => setTimeout(r, 100));
+    if (!f()) throw new Error("Logs: " + what + " :: lock=" + SW.lock.state + " out=" + ((document.querySelector(".logs__out") || {}).innerText || "").slice(0, 150));
   };
-  SW.setLock("unlocked", { code: %r });
-  await until("no Show button", () => document.querySelector(".logs__controls .btn--primary"));
-  await until("page still busy", () => !document.querySelector('[aria-busy="true"]:not(button)'));
-  document.querySelector(".logs__controls .btn--primary").click();
-  await until("no log block after Show", () => document.querySelector(".logs__out .code .code__text"));
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const show = () => document.querySelector(".logs__controls .btn--primary");
+  // the page reads the Hub's trust once after it opens and sets the lock from that answer: a code entered before the
+  // answer arrives is dropped by it (the chip's loading line is gone when it has), so the test unlocks after it
+  const unlocked = async () => {
+    await until("the page did not finish its first reads", () => !document.querySelector(".chip--lock .skeleton__line")
+      && !document.querySelector('[aria-busy="true"]:not(button)'));
+    SW.setLock("unlocked", { code: %r });
+    await until("no Show button", () => show());
+  };
+""" % CODE
+
+# It waits on the outcome of Show (the log block, or the error state in its block), not on a fixed time.
+LOGS_UNLOCKED = """(async () => {""" + LOGS_PRELUDE + """
+  await unlocked();
+  show().click();
+  await until("no outcome after Show", () => document.querySelector(".logs__out .code"), 20000);
+  if (document.querySelector(".logs__out .error-state")) throw new Error("Logs: the read failed: " + document.querySelector(".logs__out").innerText);
   if (!document.querySelector('.logs__out .code [data-action="copy"]')) throw new Error("Logs: no Copy button");
   if (document.querySelectorAll(".logs__controls .segmented__input").length !== 3) throw new Error("Logs: Lines is not 50 | 100 | 200");
   if (!document.querySelector(".logs__out .code__text").textContent.includes("backup started")) throw new Error("Logs: the log text is not shown");
-})()""" % CODE
+})()"""
+
+# a read still on its way when the page locks is dropped: the log is not written back onto the locked page
+LOGS_LOCKED_MIDWAY = """(async () => {""" + LOGS_PRELUDE + """
+  const real = window.fetch;
+  let release = null;
+  window.fetch = (u, o) => (String(u).endsWith("/api/logs") && o && o.method === "POST"
+    ? real(u, o).then((r) => new Promise((res) => { release = () => res(r); })) : real(u, o));
+  await unlocked();
+  show().click();
+  await until("the read was not sent", () => release, 20000);
+  SW.setLock("locked");
+  release();
+  await until("no locked line", () => document.querySelector(".logs .banner"));      // the locked page is drawn
+  await pause(1000);
+  if (document.querySelector(".logs__out .code")) throw new Error("Logs: the reply was written onto the locked page");
+})()"""
 
 
 def test_the_logs_section_passes_the_audit_unlocked_with_a_log_shown(hub_change, monkeypatch):
@@ -233,6 +262,19 @@ def test_the_logs_section_passes_the_audit_unlocked_with_a_log_shown(hub_change,
     run = _run("--url", hub_change, "--views", "#logs", "--ready", LOGS_UNLOCKED)
     assert run.returncode == 0, run.stdout + run.stderr      # no allow-list: nothing of Logs is allowed any more
     assert json.loads(run.stdout)["views"] == 4
+
+
+def test_a_log_that_arrives_after_the_page_locked_is_not_shown(hub_change, monkeypatch):
+    monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
+    real = subprocess.run
+
+    def journal(cmd, **kw):
+        if cmd[0] != "journalctl":
+            return real(cmd, **kw)
+        return subprocess.CompletedProcess(cmd, 0, stdout=b"2026-11-12T03:00:02 backup started" + bytes([10]), stderr=b"")
+    monkeypatch.setattr(setup_helper.subprocess, "run", journal)
+    run = _run("--url", hub_change, "--views", "#logs", "--ready", LOGS_LOCKED_MIDWAY)
+    assert run.returncode == 0, run.stdout + run.stderr
 
 
 def test_an_unlabelled_button_added_to_the_served_page_fails_the_audit(planted):
