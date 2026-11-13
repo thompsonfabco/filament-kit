@@ -190,7 +190,7 @@ def migrate(web_uid: int, web_gid: int, chown=None) -> list[str]:
                 os.close(ofd)
         if not done:
             _mark(wfd, p.web / MARKER, copied, web_uid, web_gid, chown)
-        # what was copied, and what a root CLI (migrate-ops) put here before the user existed
+        # what was copied, and what a root CLI put here before the user existed
         _own_tree(wfd, p.web, web_uid, web_gid, chown)
     finally:
         os.close(wfd)

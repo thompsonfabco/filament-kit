@@ -559,10 +559,11 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     assert len(list(root.glob(f"filament_kit-{version}-*.whl"))) == 1
     assert (root / "LICENSE").is_file() and (root / "THIRD-PARTY.md").is_file()
     for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/filament-kit-cli.sh",
-                "install/spoolman.sh", "install/export_ops.sh", "install/avahi/filament-kit.service",
+                "install/spoolman.sh", "install/avahi/filament-kit.service",
                 "install/remote/route.template", "install/remote/mcp-proxy.conf", "install/panel/VERSION",
                 "install/panel/intake-panel.bin"):
         assert (root / rel).is_file(), rel
+    assert not (root / "install" / "export_ops.sh").exists()     # the filament-ops export is gone (no ops installs)
     units = {p.name for p in (ROOT / "install/systemd").iterdir()}
     assert {p.name for p in (root / "install/systemd").iterdir()} == units
     assert b"\r\n" not in (root / "install.sh").read_bytes()

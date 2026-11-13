@@ -248,7 +248,7 @@ def _fit_variants(cfg: dict, mine: dict, variants: list[str], src_variants, log:
 def _variant_source(live_cfg: dict | None, installed: dict | None, live_fresh: bool):
     """The extruder variant names the carried values were written for: the live preset's, except that a stale
     live folder (Ruling Z) never counts when an installed copy stands in for it. With no installed copy at all
-    (a first install after `migrate-ops`) the live upload is the only copy, and the record came from it."""
+    (a first install, before any build was kept) the live upload is the only copy, and the record came from it."""
     src = live_cfg if (live_fresh or installed is None) else installed
     return (src or {}).get("filament_extruder_variant")
 

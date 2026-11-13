@@ -589,5 +589,5 @@ def test_a_short_list_says_so(fake_ftp, x2d):
 def test_the_map_view_says_which_kit_ran_the_job():
     from filament_kit import __version__
     assert mapping.Mapper(_NoManager()).view(SERIAL)["kit"] is None
-    mapping.record_seeded(SERIAL, "done")
+    mapping._save_status(SERIAL, mapping._Job(id="j1", state="done", step="done", problems=[], finished=1.0))
     assert mapping.Mapper(_NoManager()).view(SERIAL)["kit"] == __version__

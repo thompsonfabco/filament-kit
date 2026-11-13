@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from filament_kit import api, config, intake, migrate, modules, pairing, web_access
+from filament_kit import api, config, intake, modules, pairing, web_access
 from filament_kit.spoolman import Spoolman
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -367,22 +367,6 @@ def test_keep_does_not_follow_a_planted_link(kit, monkeypatch, tmp_path):
     with pytest.raises(OSError):
         intake._keep("r1", [b"jpeg"], "hint", None)
     assert target.read_text(encoding="utf-8") == "{}"
-
-
-def test_migrate_ops_stops_the_web_unit_for_its_whole_run(kit, monkeypatch):
-    calls = []
-    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
-    monkeypatch.setattr(migrate, "_is_root", lambda: True)
-
-    def run(cmd, **kw):
-        calls.append(cmd)
-        import subprocess
-        return subprocess.CompletedProcess(cmd, 0, stdout="active\n", stderr="")
-    monkeypatch.setattr(migrate.subprocess, "run", run)
-    with migrate._web_paused():
-        calls.append("work")
-    assert calls[-3:] == [["systemctl", "stop", "filament-kit-web.service"], "work",
-                          ["systemctl", "start", "filament-kit-web.service"]]
 
 
 # ---------- minors ----------

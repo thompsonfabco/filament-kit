@@ -171,18 +171,6 @@ def test_peek_leaves_a_changed_old_file_for_the_next_real_read(env):
     assert "S2" in registry.load()
 
 
-def test_the_migrate_dry_run_only_peeks(env):
-    from types import SimpleNamespace
-
-    from filament_kit import migrate
-    (env / "state").mkdir(exist_ok=True)
-    (env / "state" / "printers.json").write_text(json.dumps({"S1": {"name": "One"}}))
-    before = sorted(x.name for x in (env / "state").iterdir())
-    ctx = SimpleNamespace(apply=False, say=lambda *a: None, verb=lambda dry, done: dry)
-    migrate._h2d_entry(ctx, "printers")
-    assert sorted(x.name for x in (env / "state").iterdir()) == before
-
-
 # --- one printer, one entry ---------------------------------------------------------------------------------------
 @pytest.mark.parametrize("again", ["voron.home.arpa", "VORON.home.arpa", "voron.home.arpa.", " voron.home.arpa "])
 def test_add_klipper_refuses_a_host_and_port_already_added(again):

@@ -672,7 +672,7 @@ def test_profiles_help_mentions_orca(capsys):
 
 # ---------- C-M7: a root-only file read as another user ----------
 
-@pytest.mark.parametrize("argv", [["modules", "list"], ["remote", "firewall"], ["migrate-ops", "bundle.tar.gz"]])
+@pytest.mark.parametrize("argv", [["modules", "list"], ["remote", "firewall"]])
 def test_unreadable_config_says_run_with_sudo(argv, monkeypatch, capsys):
     def denied(*a, **k):
         raise PermissionError(13, "Permission denied", "/etc/filament-kit/config.json")

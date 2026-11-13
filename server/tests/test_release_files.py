@@ -168,10 +168,10 @@ def test_release_copies_spoolman_script():
     assert '"$stage/install/spoolman.sh"' in text  # made executable in the stage
 
 
-def test_release_ships_the_ops_export_script():
-    text = _read("tools/make_release.sh")
-    assert 'cp tools/export_ops.sh "$stage/install/"' in text
-    assert '"$stage/install/export_ops.sh"' in text  # made executable in the stage
+def test_release_ships_no_ops_export_script():
+    """filament-ops never went public: no install migrates from it, so the release carries no export script."""
+    assert "export_ops" not in _read("tools/make_release.sh")
+    assert not (ROOT / "tools" / "export_ops.sh").exists()
 
 
 def test_install_hands_over_to_modules_apply():
@@ -217,7 +217,7 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops \| migrate-scanner \| update \| uninstall \| station \| setup-code\)\s*$",
+    assert re.search(r"^\s+config \| cert \| modules \| remote \| update \| uninstall \| station \| setup-code\)\s*$",
                      text, re.M)
 
 
@@ -838,14 +838,6 @@ def test_inline_python_survives_shell_single_quotes(rel):
         compile(code, f"{rel} python -c block", "exec")
         blocks += 1
     assert blocks >= 1, f"{rel}: no python -c block left; update PYTHON_C_SCRIPTS"
-
-
-@pytest.mark.skipif(not _bash(), reason="needs bash")
-def test_wrapper_runs_migrate_scanner_as_root(tmp_path):
-    """`migrate-scanner --apply` refuses unless root and reads the old calibration from /root: the wrapper must not
-    drop it to the service user (final review I1)."""
-    assert (_wrapper_run(tmp_path, "migrate-scanner", "/root/calibration.json", "--apply")
-            == "as-root migrate-scanner /root/calibration.json --apply")
 
 
 # --- final review I3 (Ruling BU): CI builds, signs and publishes library.tar.gz ----------------------------------
