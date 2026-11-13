@@ -411,7 +411,7 @@ class AddViewModel(
         scope.launch {
             photoLock.withLock {
                 if (_state.value.photos.size >= MAX_PHOTOS) {
-                    showError(AddError(AddText.of(R.string.field_file_error_photo_limit, MAX_PHOTOS)))
+                    showError(AddError(AddText.plural(R.plurals.field_file_error_photo_limit, MAX_PHOTOS, MAX_PHOTOS)))
                     return@withLock
                 }
                 try {
