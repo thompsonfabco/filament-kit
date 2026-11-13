@@ -267,3 +267,44 @@ def test_stale_orca_pins_warn_and_fall_back(srv, paths, capsys):
     out = capsys.readouterr().out
     assert "Ignoring the Orca Slicer pin" in out
     assert "Orca Slicer:     user " + orca_fixture.USER_ID in out and "(pinned in the config)" not in out
+
+
+class _Tty(io.StringIO):
+    def isatty(self):
+        return True
+
+
+def _tty_pair(paths, monkeypatch, hidden, typed="", env=None):
+    """pair at a terminal: `hidden` is what getpass returns, `typed` the visible stdin; returns (code, prompts)."""
+    appdata, local, _ = paths
+    prompts = []
+
+    def fake_getpass(prompt=""):
+        prompts.append(prompt)
+        return hidden
+    monkeypatch.setattr("getpass.getpass", fake_getpass)
+    monkeypatch.delenv("FKSYNC_SHOW_LINK", raising=False)
+    for k, v in (env or {}).items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(sys, "stdin", _Tty(typed))
+    rc = cli.main(["--appdata", str(appdata), "--localappdata", str(local), "pair"])
+    return rc, prompts
+
+
+def test_pair_link_is_read_without_echo_at_a_terminal(paths, srv, monkeypatch, capsys):  # FA-086
+    rc, prompts = _tty_pair(paths, monkeypatch, _link(srv) + "\n")
+    assert rc == 0
+    assert len(prompts) == 1 and "not shown" in prompts[0]
+    assert LINK_TOKEN not in capsys.readouterr().out
+
+
+def test_pair_at_a_terminal_empty_link_asks_for_the_address_visibly(paths, srv, monkeypatch):
+    rc, prompts = _tty_pair(paths, monkeypatch, "", typed=f"127.0.0.1:{srv.port}\ny\n123456\n")
+    assert rc == 0
+    assert len(prompts) == 1
+
+
+def test_pair_show_link_switch_keeps_the_visible_prompt(paths, srv, monkeypatch):
+    rc, prompts = _tty_pair(paths, monkeypatch, "unused", typed=_link(srv) + "\n", env={"FKSYNC_SHOW_LINK": "1"})
+    assert rc == 0
+    assert prompts == []

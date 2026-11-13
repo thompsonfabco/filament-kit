@@ -10,6 +10,7 @@ command line, and is never printed or logged.
 """
 import argparse
 import contextlib
+import getpass
 import ipaddress
 import json
 import os
@@ -35,6 +36,19 @@ def _ask(prompt: str) -> str:
     _out(prompt + " ", end="")
     line = sys.stdin.readline() if sys.stdin is not None else ""
     return line.strip()
+
+
+def _ask_link() -> str:
+    """The pairing link carries the token, so at a terminal it is read without echo (not left in the scrollback);
+    empty means "type the server address instead". Piped stdin (tests, scripts) keeps the one visible line, and
+    FKSYNC_SHOW_LINK=1 switches the hiding off."""
+    if os.environ.get("FKSYNC_SHOW_LINK") == "1" or sys.stdin is None or not sys.stdin.isatty():
+        return _ask("Paste the pairing link, or type the server address:")
+    try:
+        text = getpass.getpass("Paste the pairing link (it is not shown), or press Enter to type the server address: ")
+    except (EOFError, OSError):
+        return ""
+    return text.strip() or _ask("Server address:")
 
 
 def _grouped(fp: str) -> str:
@@ -155,7 +169,7 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | Non
 
 
 def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.LinuxLayout | None = None) -> int:
-    text = _ask("Paste the pairing link, or type the server address:")
+    text = _ask_link()
     if not text:
         _out("Nothing entered.")
         return 1
