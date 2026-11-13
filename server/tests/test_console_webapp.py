@@ -64,7 +64,7 @@ def test_without_the_code_the_public_address_stays_hidden(app, monkeypatch):
     assert post(client(app), "webapp", code=None).status_code == 403
 
 
-def test_no_qrencode_gives_the_addresses_alone(app, monkeypatch):
+def test_an_address_that_does_not_fit_a_code_is_given_alone(app, monkeypatch):
     _web(public="https://fk.example.org/filament")
     monkeypatch.setattr(setup_page, "qr_svg", lambda url: None)
     r = post(client(app), "webapp").json()

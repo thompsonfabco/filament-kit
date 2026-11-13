@@ -21,6 +21,7 @@ This page lists the components a filament-kit release contains or the installer 
 | [esptool-js](https://github.com/espressif/esptool-js) 0.7.0, its published `bundle.js` unchanged as `setup_static/esptool.bundle.js` (SHA-256 `00ebe6fb0b202976d3e2a3c6b9a6bd438c26a81d2af6739c95ac276a64c1a84e`), which the setup page's Flash a device tab loads to write firmware over Web Serial; licences in `setup_static/esptool.bundle.LICENSES.txt` | Apache-2.0 |
 | pako 2.1.0, inside that bundle | MIT AND Zlib |
 | atob-lite 2.0.0, inside that bundle | MIT |
+| [segno](https://pypi.org/project/segno/1.6.6/) 1.6.6 (Lars Heuer), the wheel's `segno/` files unchanged as `server/filament_kit/_vendor/segno/` (SHA-256 of the wheel `28c7d081ed0cf935e0411293a465efd4d500704072cdb039778a2ab8736190c7`; each file's hash in `_vendor/VENDORED.txt`), which draws the QR codes the Hub shows and prints; licence in `_vendor/segno-LICENSE` | BSD-3-Clause |
 | The Android app `app/filament-kit.apk` | see [The Android app](#the-android-app) |
 
 ## Installed on the server by the installer
@@ -32,7 +33,6 @@ Ubuntu packages, from Ubuntu's archive (`apt`):
 | python3-venv, curl, unzip | PSF-2.0; curl licence (MIT-style); Info-ZIP |
 | avahi-daemon | LGPL-2.1-or-later |
 | libnss-mdns | LGPL-2.1-or-later |
-| qrencode | LGPL-2.1-or-later |
 | ffmpeg | GPL-2.0-or-later (Ubuntu's build) |
 | alsa-utils (`aplay`) | GPL-2.0-or-later |
 | espeak-ng | GPL-3.0-or-later |

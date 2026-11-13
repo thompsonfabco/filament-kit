@@ -52,9 +52,7 @@ import json
 import logging
 import os
 import re
-import shutil
 import socket
-import subprocess
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -64,7 +62,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import __version__, config, hostaddr, lan, modules, pairing, reader_tokens, setup_code, shared_files, trusted
+from . import __version__, config, hostaddr, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
 from .bridge import registry
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
 
@@ -927,17 +925,8 @@ def setup_serial(ip: str, timeout: float = 5) -> str | None:   # `ip`: an addres
 
 
 def qr_svg(payload: str) -> str | None:
-    """The pairing link as an SVG QR code (qrencode, the server module's package; the link goes in on stdin, never
-    on a command line), or None without qrencode."""
-    exe = shutil.which("qrencode")
-    if not exe:
-        return None
-    try:
-        r = subprocess.run([exe, "-t", "SVG", "-o", "-"], input=payload, capture_output=True, text=True, timeout=10,
-                           check=True)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return r.stdout if r.stdout.lstrip().startswith(("<?xml", "<svg")) else None
+    """The pairing link as an SVG QR code, drawn by the Hub (qr.py); None only when the link does not fit one."""
+    return qr.svg(payload)
 
 
 def routes(printers=None, **kw) -> list[Route]:

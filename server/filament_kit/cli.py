@@ -19,7 +19,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import hostaddr, apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, secret_input, steps
+from . import hostaddr, apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, qr, secret_input, steps
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -111,15 +111,9 @@ def _attempt_failed(st: dict) -> str | None:
 # ---------- pair / unpair ----------
 
 def _qr_text(payload: str) -> str:
-    if shutil.which("qrencode"):
-        try:
-            # -m 4: the 4-module quiet zone QR readers expect (qrencode's default, kept explicit)
-            r = subprocess.run(["qrencode", "-t", "ansiutf8", "-m", "4", payload], capture_output=True,
-                               text=True, timeout=10, check=True)
-            return r.stdout
-        except (OSError, subprocess.SubprocessError):
-            pass
-    return payload
+    """The QR code as block characters with its 4-module quiet zone (drawn by the Hub: qr.py); the link itself when it
+    does not fit one."""
+    return qr.text(payload) or payload
 
 
 def _station_server(cfg: dict) -> str:
