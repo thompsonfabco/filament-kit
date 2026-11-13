@@ -287,6 +287,39 @@ function addressCard() {
     box);
 }
 
+// ----- appearance (02 3.3, F5): the three choices on this device, applied at once, kept in localStorage -----
+const APPEARANCE_KEY = "spoolwarden.appearance";
+const txt = (key) => (window.SW_TEXT || {})[key] || key;
+const keepAppearance = (v) => {
+  try { if (v === "system") localStorage.removeItem(APPEARANCE_KEY); else localStorage.setItem(APPEARANCE_KEY, v); } catch (e) { /* blocked: applies for this visit only */ }
+};
+function showAppearance(v) {
+  const root = document.documentElement;
+  if (v === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", v);
+  for (const i of document.querySelectorAll(".appearance .segmented__input")) i.checked = i.value === v;
+}
+function appearanceControl() {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const now = cur === "light" || cur === "dark" ? cur : "system";
+  const fs = h("fieldset", { class: "appearance segmented" }, h("legend", { class: "sr", textContent: txt("appearance_title") }));
+  for (const [v, icon] of [["light", "sun"], ["dark", "moon"], ["system", "half-circle"]]) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "icon icon--s"); svg.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#i-" + icon); svg.append(use);
+    fs.append(
+      h("input", { class: "segmented__input", type: "radio", name: "appearance", id: "ap-" + v, value: v, checked: v === now,
+        on: { change: () => { showAppearance(v); keepAppearance(v); } } }),
+      h("label", { class: "segmented__option", htmlFor: "ap-" + v }, svg, txt("appearance_" + v)));
+  }
+  return fs;
+}
+window.addEventListener("storage", (e) => {                   // another tab chose: follow it
+  if (e.key !== APPEARANCE_KEY && e.key !== null) return;
+  const v = e.key === null ? null : e.newValue;
+  showAppearance(v === "light" || v === "dark" ? v : "system");
+});
+
 // ----- applying again (the job's own panel is in setup_tabs.js) -----
 function applyCard() {
   const box = boxFor("apply");
@@ -300,7 +333,7 @@ function applyCard() {
 window.addEventListener("hashchange", () => { if (S) render(); });
 document.addEventListener("DOMContentLoaded", () => {
   app.append(
-    h("h1", { textContent: "filament-kit" }),
+    h("div", { class: "titlebar" }, h("h1", { textContent: "filament-kit" }), appearanceControl()),
     h("p", { class: "muted", textContent: "Everything after the install is here; the command line is the fallback. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code), unless this computer is trusted (Devices)." }),
     h("div", { class: "sticky" }, codeCard, nav),
     jobPanel, sections);

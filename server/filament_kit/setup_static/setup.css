@@ -2,6 +2,7 @@
    rules of today's markup are here; every colour, size and duration is a token. Light or dark follows the device
    (tokens.css) unless the owner chose one (theme-init.js). */
 main { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--s4) var(--s6); width: 100%; }
+.titlebar { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
 h1 { font-size: var(--fs-xl); line-height: var(--lh-title); margin: var(--s4) 0 var(--s1); }
 h2 { font-size: var(--fs-l); line-height: var(--lh-title); margin: 0 0 var(--s2); display: flex; gap: var(--s2); align-items: center; }
 p { margin: var(--s1) 0; }

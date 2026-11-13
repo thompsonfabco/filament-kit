@@ -154,7 +154,10 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
     head = r.text.split("<body>")[0]                                            # S1.1: theme first, then tokens, components, own
     links = ["/setup/shared/theme-init.js", "/setup/shared/tokens.css", "/setup/shared/components.css", "/setup/setup.css"]
     assert [head.index(x) for x in links] == sorted(head.index(x) for x in links)
-    assert "/setup/shared/strings.js" not in r.text and "/setup/shared/components.js" not in r.text   # S1.3 and later
+    assert head.index("/setup/shared/theme-init.js") < head.index("/setup/shared/strings.js") < head.index("/setup/shared/tokens.css")
+    assert "/setup/shared/components.js" not in r.text                         # S1.3 and later
+    js = c.get("/setup/setup.js").text                                         # S1.2: the appearance control, texts from the catalogue
+    assert "spoolwarden.appearance" in js and "segmented__input" in js and "Light" not in js and "Dark" not in js
 
 
 def test_page_and_api_answer_only_the_home_network(app):
