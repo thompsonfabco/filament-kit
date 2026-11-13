@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.drafts.Draft
@@ -35,6 +34,7 @@ import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.update.UpdateTexts
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import java.text.DateFormat
 import java.util.Date
@@ -128,13 +128,14 @@ fun HomeScreen(
 
 @Composable
 private fun ConnectionRow(name: String, connection: Connection, onRetry: () -> Unit, onReview: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
     val (color, label) = when (connection) {
-        is Connection.Online -> Color(0xFF2E7D32) to "Connected"
-        Connection.Checking -> Color(0xFFF9A825) to "Connecting…"
-        Connection.Offline -> Color(0xFFC62828) to "Can't reach the server"
-        is Connection.CertChanged -> Color(0xFFC62828) to "The server's certificate changed"
-        Connection.Unpaired -> Color.Gray to "Not paired"
-        Connection.NeedsLocalNetwork -> Color(0xFFF9A825) to "Needs local network access"
+        is Connection.Online -> colors.ok to "Connected"
+        Connection.Checking -> colors.warn to "Connecting…"
+        Connection.Offline -> colors.bad to "Can't reach the server"
+        is Connection.CertChanged -> colors.bad to "The server's certificate changed"
+        Connection.Unpaired -> colors.muted to "Not paired"
+        Connection.NeedsLocalNetwork -> colors.warn to "Needs local network access"
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.size(12.dp).background(color, CircleShape))

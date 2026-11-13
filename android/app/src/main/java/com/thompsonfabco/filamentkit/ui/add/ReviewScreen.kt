@@ -46,6 +46,7 @@ import com.thompsonfabco.filamentkit.ui.TARE_PROBLEM
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.tareProblem
 import com.thompsonfabco.filamentkit.ui.profile.ParentField
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -84,7 +85,8 @@ fun ReviewScreen(
         val editable = state.stage == Stage.Review || state.stage == Stage.Preview
         if (state.manual) FilamentPicker(state, vm, editable)
         if (state.questions.isNotEmpty()) {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+                containerColor = SpoolwardenTheme.colors.infoSoft, contentColor = SpoolwardenTheme.colors.info)) {
                 Column(Modifier.padding(12.dp)) {
                     Text("${state.readInfo?.name ?: "Claude"} asks", fontWeight = FontWeight.Bold)
                     state.questions.forEach { Text("• $it") }
