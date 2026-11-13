@@ -10,6 +10,7 @@ import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.LocalEntryResult
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.ProfileLine
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -28,6 +29,8 @@ import kotlinx.serialization.json.contentOrNull
 interface ProfileApi {
     suspend fun parents(material: String): ParentList
     suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult
+    suspend fun profileLines(): List<ProfileLine>
+    suspend fun setLineParent(lineId: String, parent: String): ProfileLine
 
     companion object {
         /** Calls go to whatever [current] returns at that moment (see `IntakeApi.of`). */
@@ -35,11 +38,15 @@ interface ProfileApi {
             private fun api() = current()
             override suspend fun parents(material: String) = api().parents(material)
             override suspend fun addLocalProfile(entry: JsonObject) = api().addLocalProfile(entry)
+            override suspend fun profileLines() = api().profileLines()
+            override suspend fun setLineParent(lineId: String, parent: String) = api().setLineParent(lineId, parent)
         }
 
         fun of(api: Api): ProfileApi = object : ProfileApi {
             override suspend fun parents(material: String) = api.parents(material)
             override suspend fun addLocalProfile(entry: JsonObject) = api.addLocalProfile(entry)
+            override suspend fun profileLines() = api.profileLines()
+            override suspend fun setLineParent(lineId: String, parent: String) = api.setLineParent(lineId, parent)
         }
     }
 }
@@ -76,6 +83,13 @@ data class AddProfileUiState(
     val badRange: Set<ProfileField> = emptySet(),
     val failure: SaveFailure? = null,
     val message: String? = null,
+    /** The lines the Hub already has (null until loaded; a failed load leaves it empty). */
+    val lines: List<ProfileLine>? = null,
+    val editing: LineParentEdit? = null,
+    /** The line whose parent was just saved (its row says so), or the failure of a parent call. */
+    val parentSavedFor: String? = null,
+    val lineFailure: SaveFailure? = null,
+    val lineMessage: String? = null,
 ) {
     /** The required fields are filled. */
     val filled: Boolean
@@ -88,11 +102,79 @@ data class AddProfileUiState(
     val dirty: Boolean get() = !saved && values.values.any { it.isNotBlank() }
 }
 
+/** The parent choice open for [lineId]: the Bambu Studio parents for its material (null while loading). */
+data class LineParentEdit(val lineId: String, val parents: ParentList? = null)
+
 /** The catalog line form: the owner's own library entry for a product line, posted to `/api/library/local`. */
 class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
     private val _state = MutableStateFlow(AddProfileUiState())
     val state: StateFlow<AddProfileUiState> = _state.asStateFlow()
     private var parentsJob: Job? = null
+
+    init {
+        loadLines()
+    }
+
+    /** The product lines already on the Hub. A failure just leaves the list empty (the form still works). */
+    private fun loadLines() {
+        viewModelScope.launch {
+            try {
+                val lines = api.profileLines()
+                _state.update { it.copy(lines = lines) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _state.update { it.copy(lines = emptyList()) }
+            }
+        }
+    }
+
+    /** Opens the parent choice for [line], with the parents for its material. */
+    fun editParent(line: ProfileLine) {
+        _state.update { it.copy(editing = LineParentEdit(line.lineId), parentSavedFor = null, lineFailure = null) }
+        viewModelScope.launch {
+            try {
+                val list = api.parents(line.material)
+                _state.update { s -> s.copy(editing = s.editing?.takeIf { it.lineId == line.lineId }?.copy(parents = list)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { lineFailed(it.copy(editing = null), e) }
+            }
+        }
+    }
+
+    fun cancelEditParent() = _state.update { it.copy(editing = null) }
+
+    /** Sets [parent] on the line being edited (the Hub refuses a blank one, so nothing is sent for it). */
+    fun setLineParent(parent: String) {
+        val lineId = _state.value.editing?.lineId ?: return
+        if (parent.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val updated = api.setLineParent(lineId, parent)
+                _state.update { s ->
+                    s.copy(
+                        lines = s.lines?.map { if (it.lineId == lineId) updated else it }, editing = null,
+                        parentSavedFor = lineId, lineFailure = null, lineMessage = null,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { lineFailed(it.copy(editing = null), e) }
+            }
+        }
+    }
+
+    private fun lineFailed(s: AddProfileUiState, e: Exception): AddProfileUiState = when {
+        e is FingerprintMismatch -> s.copy(lineFailure = SaveFailure.CertificateChanged)
+        e !is ApiError -> s.copy(lineFailure = SaveFailure.Unknown)
+        e.code == "offline" -> s.copy(lineFailure = SaveFailure.Unreachable)
+        e.code == "local_network" -> s.copy(lineFailure = SaveFailure.Message, lineMessage = LOCAL_NETWORK_MESSAGE)
+        e.code == "unauthorized" -> s.copy(lineFailure = SaveFailure.NotPaired)
+        else -> s.copy(lineFailure = SaveFailure.Message, lineMessage = e.message)
+    }
 
     fun set(field: ProfileField, value: String) {
         _state.update {

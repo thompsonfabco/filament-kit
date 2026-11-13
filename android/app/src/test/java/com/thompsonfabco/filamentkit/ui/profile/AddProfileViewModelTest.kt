@@ -4,6 +4,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LocalEntryResult
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.ProfileLine
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Bed
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Density
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Line
@@ -246,6 +247,57 @@ class AddProfileViewModelTest {
         assertTrue(vm.state.value.saved)
     }
 
+    @Test fun listsTheHubsLinesAndReparentsOne() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Bambu PLA Basic"), synced = true)
+        val vm = AddProfileViewModel(api)
+        assertNull("loading until the Hub answers", vm.state.value.lines)
+        advanceUntilIdle()
+        assertEquals(listOf("example--pla"), vm.state.value.lines?.map { it.lineId })
+
+        vm.editParent(vm.state.value.lines!!.single())
+        advanceUntilIdle()
+        assertEquals(listOf("Bambu PLA Basic"), vm.state.value.editing?.parents?.parents)
+
+        vm.setLineParent("Bambu PLA Basic")
+        advanceUntilIdle()
+
+        assertEquals(listOf("example--pla" to "Bambu PLA Basic"), api.reparented)
+        assertEquals("Bambu PLA Basic", vm.state.value.lines?.single()?.bambuParent)
+        assertEquals("example--pla", vm.state.value.parentSavedFor)
+        assertNull(vm.state.value.editing)
+    }
+
+    @Test fun aBlankParentIsNeverSent() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        vm.editParent(vm.state.value.lines!!.single())
+        advanceUntilIdle()
+        vm.setLineParent(" ")
+        advanceUntilIdle()
+        assertTrue(api.reparented.isEmpty())
+    }
+
+    @Test fun aRefusedParentShowsTheHubsMessageAndKeepsTheLine() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        vm.editParent(vm.state.value.lines!!.single())
+        advanceUntilIdle()
+        api.failure = ApiError(400, "unknown_parent", "Bambu Studio has no such preset")
+        vm.setLineParent("Nope")
+        advanceUntilIdle()
+        assertEquals(SaveFailure.Message, vm.state.value.lineFailure)
+        assertEquals("Bambu Studio has no such preset", vm.state.value.lineMessage)
+        assertNull(vm.state.value.lines?.single()?.bambuParent)
+        assertNull(vm.state.value.parentSavedFor)
+    }
+
+    @Test fun aFailedLoadLeavesAnEmptyList() = runTest(dispatcher) {
+        api.linesFailure = ApiError(0, "offline", "socket")
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        assertEquals(emptyList<ProfileLine>(), vm.state.value.lines)
+    }
+
     @Test fun parentsAreLoadedForTheMaterialAfterAPause() = runTest(dispatcher) {
         api.parentLists["PETG"] = ParentList(listOf("Generic PETG", "SUNLU PETG"), synced = true)
         val vm = AddProfileViewModel(api)
@@ -267,6 +319,21 @@ private class FakeProfileApi : ProfileApi {
     override suspend fun parents(material: String): ParentList {
         parentCalls += material
         return parentLists[material] ?: ParentList(emptyList(), synced = false)
+    }
+
+    var linesFailure: Exception? = null
+    var lines = listOf(ProfileLine(lineId = "example--pla", vendor = "Example", product = "PLA", material = "PLA"))
+    val reparented = mutableListOf<Pair<String, String>>()
+
+    override suspend fun profileLines(): List<ProfileLine> {
+        linesFailure?.let { throw it }
+        return lines
+    }
+
+    override suspend fun setLineParent(lineId: String, parent: String): ProfileLine {
+        reparented += lineId to parent
+        failure?.let { throw it }
+        return lines.first { it.lineId == lineId }.copy(bambuParent = parent, parentSource = "user")
     }
 
     override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {

@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.LocalEntryResult
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.ProfileLine
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
@@ -221,6 +222,9 @@ class ScreenSemanticsTest {
     @Test fun catalogLine() {
         val vm = AddProfileViewModel(FakeCatalog(refuse = false))
         host("New catalog line") { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Existing lines").assertExists()
+        rule.onNodeWithText("Bambu Studio parent: none").assertExists()
         auditAllFour("Save to the catalog")
     }
 
@@ -460,6 +464,11 @@ class ScreenSemanticsTest {
 
     private class FakeCatalog(private val refuse: Boolean) : ProfileApi {
         override suspend fun parents(material: String) = ParentList(listOf("Generic PLA", "Example PLA Basic"), synced = true)
+        override suspend fun profileLines() = listOf(
+            ProfileLine(lineId = "example--polyterra", vendor = "Example Filaments", product = "PolyTerra", material = "PLA", presets = 4, bambuParent = "Generic PLA"),
+            ProfileLine(lineId = "example--silk", vendor = "Example Filaments", product = "Silk", material = "PLA"),
+        )
+        override suspend fun setLineParent(lineId: String, parent: String) = profileLines().first { it.lineId == lineId }
         override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {
             if (refuse) {
                 throw ApiError(

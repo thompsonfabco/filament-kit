@@ -2707,7 +2707,8 @@
     <string name="app_update_tap_install">Tap to install</string>
     <string name="catalog_add_line">Add a line to the Filament Catalog</string>
     <string name="catalog_bed_placeholder">e.g. 55-65</string>
-    <string name="catalog_error_range">Enter a range like 190-220.</string>
+    <string name="catalog_change_parent">Change parent</string>
+    <string name="catalog_error_range">Enter a range like 190-230.</string>
     <string name="catalog_field_bed_range">Bed range</string>
     <string name="catalog_field_brand">Brand *</string>
     <string name="catalog_field_density">Density</string>
@@ -2722,7 +2723,18 @@
     <string name="catalog_group_slicer">Slicer</string>
     <string name="catalog_intro">Values from the maker\'s label or data sheet for one product line. They apply to every colour of the line.</string>
     <string name="catalog_leave_thing">the new catalog line</string>
+    <!-- 1=material 2=presets -->
+    <string name="catalog_line_material">%1$s · %2$s</string>
+    <!-- 1=brand 2=line -->
+    <string name="catalog_line_name">%1$s %2$s</string>
+    <!-- 1=name -->
+    <string name="catalog_line_parent">Bambu Studio parent: %1$s</string>
+    <string name="catalog_line_parent_none">Bambu Studio parent: none</string>
+    <string name="catalog_lines_title">Existing lines</string>
     <string name="catalog_nozzle_placeholder">e.g. 190-220</string>
+    <string name="catalog_parent_loading">Loading…</string>
+    <string name="catalog_parent_saved">Saved. A preset build was asked for.</string>
+    <string name="catalog_parent_unsynced">Slicer Sync has not reported any parents yet. It reports them when it runs.</string>
     <string name="catalog_refused">The Hub could not use these values:</string>
     <string name="catalog_required_note">Fields marked * are needed.</string>
     <string name="catalog_save">Save to the catalog</string>
