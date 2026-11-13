@@ -574,6 +574,27 @@ void test_retry_backs_off_and_caps() {
   TEST_ASSERT_EQUAL(60000, listRetryMs(50));
 }
 
+// ---- tag gate ----------------------------------------------------------------------
+
+void test_tag_gate_cooldown_for_same_tag() {
+  TagGate g;
+  TEST_ASSERT_TRUE(g.accept("a", 0, 2500));
+  TEST_ASSERT_FALSE(g.accept("a", 2500, 2500));
+  TEST_ASSERT_TRUE(g.accept("a", 2501, 2500));
+  TEST_ASSERT_TRUE(g.accept("b", 2502, 2500));      // another tag counts at once
+}
+
+void test_tag_gate_held_tag_does_not_post_after_refused_tap() {
+  TagGate g;
+  TEST_ASSERT_TRUE(g.accept("a", 0, 2500));
+  g.requireLift();                                   // "tap again" is showing
+  TEST_ASSERT_FALSE(g.accept("a", 3000, 2500));      // held past the cooldown
+  TEST_ASSERT_FALSE(g.accept("a", 60000, 2500));     // however long it stays
+  TEST_ASSERT_FALSE(g.accept("b", 60001, 2500));     // a different tag needs a lift too
+  g.noTag();                                         // lifted
+  TEST_ASSERT_TRUE(g.accept("a", 60100, 2500));      // presented again: counts
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_parse_printers_basic);
@@ -622,6 +643,8 @@ int main(int, char**) {
   RUN_TEST(test_lists_due_survives_millis_wrap);
   RUN_TEST(test_dead_server_leaves_loop_responsive);
   RUN_TEST(test_retry_backs_off_and_caps);
+  RUN_TEST(test_tag_gate_cooldown_for_same_tag);
+  RUN_TEST(test_tag_gate_held_tag_does_not_post_after_refused_tap);
   RUN_TEST(test_wanted_label_prefers_saved);
   RUN_TEST(test_unit_dropping_out_briefly_keeps_selection);
   return UNITY_END();

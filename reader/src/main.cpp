@@ -160,7 +160,7 @@ Menu   menu;
 Button button;
 bool   serverOk = false;              // the last list fetch worked
 
-uint32_t lastScanMs = 0;
+TagGate  tagGate;                     // which tag reads count as a new scan
 String   lastUid = "";
 uint32_t resultUntil = 0;
 
@@ -480,9 +480,11 @@ void sendScan(const String& uid) {
       if (curPrinter() && curSlot()) {
         showResult("Server back", "check printer and slot,\ntap again", false);
         buzzTick();
+        tagGate.requireLift();            // a tag left on the reader must not post
         return;
       }
     }
+    tagGate.requireLift();                // no repeat refusals from a held tag
     showResult("Scan", "No slot", true); buzzError(); return;
   }
   // copy: a refresh after this call must not pull the strings out from under us
@@ -947,13 +949,15 @@ void loop() {
   if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 80)) {
     String u = formatUid(uid, uidLen);
     uint32_t t = millis();
-    if (u != lastUid || t - lastScanMs > SCAN_COOLDOWN_MS) {
-      lastUid = u; lastScanMs = t;
+    if (tagGate.accept(u.c_str(), t, SCAN_COOLDOWN_MS)) {
+      lastUid = u;
       wake();
       if (menu.mode == MODE_PRINTERS) { menu.mode = MODE_SLOTS; }   // a tap closes the list
       Serial.printf("tag %s -> %s / %s\n", u.c_str(),
                     curPrinter() ? curPrinter()->id.c_str() : "-", curSlot() ? curSlot()->label.c_str() : "-");
       sendScan(u);
     }
+  } else {
+    tagGate.noTag();
   }
 }

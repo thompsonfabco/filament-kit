@@ -71,6 +71,24 @@ std::string wantedLabel(const std::string& saved, const std::string& current, bo
 bool listsDue(uint32_t now, uint32_t lastAt, bool serverOk, bool screenOn,
               uint32_t refreshMs, uint32_t retryMs);
 
+// Decides whether a tag read counts as a new scan: the same tag is ignored for
+// cooldownMs after it counted, and after requireLift() (a refused or refreshed tap)
+// no read counts until a poll saw no tag at all, so a spool left on the reader is
+// not posted to a slot the user has not confirmed.
+struct TagGate {
+  std::string uid;
+  uint32_t at = 0;
+  bool needLift = false;
+  bool accept(const std::string& u, uint32_t now, uint32_t cooldownMs) {
+    if (needLift) return false;
+    if (u == uid && now - at <= cooldownMs) return false;
+    uid = u; at = now;
+    return true;
+  }
+  void noTag() { needLift = false; }          // a poll found no tag: it was lifted
+  void requireLift() { needLift = true; }
+};
+
 // Retry delay after `failures` failed refreshes in a row: 10 s, 20 s, 40 s, then 60 s.
 uint32_t listRetryMs(int failures);
 
