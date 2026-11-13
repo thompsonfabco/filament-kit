@@ -1,5 +1,5 @@
 """Checks of the shared component files of design step S0.11 (docs/design/09-implementation-order.md):
-web-shared/components.css and web-shared/components.js.
+web-shared/components.css and web-shared/components.js, and the additions components-jobs.css and components-media.css.
 
 The size limits of foundations 12 rule 7, every class the script uses is drawn by the stylesheet, every catalogue key
 the script names is in strings/en.json, and the page audit (AUT-5, tests/page_audit.js) is a script that parses. The
@@ -18,12 +18,14 @@ from test_design_sources import ROOT
 SHARED = ROOT / "web-shared"
 CSS = SHARED / "components.css"
 JS = SHARED / "components.js"
+ADDITIONS = [SHARED / "components-jobs.css", SHARED / "components-media.css"]
 AUDIT = ROOT / "tests" / "page_audit.js"
 SAMPLE = ROOT / "tests" / "components-sample.html"
 CATALOGUE = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
 
-# foundations 12 rule 7: "under 40 KB" and "under 60 KB", uncompressed; read as thousands of bytes (the stricter reading)
-LIMITS = {CSS: 40_000, JS: 60_000}
+# foundations 12 rule 7: "under 40 KB" and "under 60 KB", uncompressed, and each addition "at most 30 KB"; read as
+# thousands of bytes (the stricter reading)
+LIMITS = {CSS: 40_000, JS: 60_000, **{a: 30_000 for a in ADDITIONS}}
 
 CLASS = r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:__[a-z0-9]+(?:-[a-z0-9]+)*)?(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?"
 CLASS_TOKEN = re.compile(rf"^{CLASS}$")
@@ -64,11 +66,11 @@ def test_size_limits(path):
 
 
 def test_every_class_of_the_script_is_drawn():
-    css = CSS.read_text(encoding="utf-8")
+    css = "\n".join(p.read_text(encoding="utf-8") for p in [CSS] + ADDITIONS)
     used = script_classes(JS.read_text(encoding="utf-8"))
     assert {"btn", "result", "dialog__title", "field__control", "coll__sort"} <= used
     missing = sorted(c for c in used if not css_has(c, css))
-    assert not missing, "classes the script uses that components.css does not draw: " + ", ".join(missing)
+    assert not missing, "classes the script uses that the shared stylesheets do not draw: " + ", ".join(missing)
 
 
 def test_every_key_of_the_script_is_in_the_catalogue():
@@ -94,7 +96,8 @@ def test_page_audit_and_sample_exist():
         assert check in text, check
     sample = SAMPLE.read_text(encoding="utf-8")
     assert "<script>" not in sample and " style=" not in sample        # no inline script or style (strict CSP)
-    for src in ("../tokens/theme-init.js", "../tokens/tokens.css", "../web-shared/components.css", "../strings/strings.js",
+    for src in ("../tokens/theme-init.js", "../tokens/tokens.css", "../web-shared/components.css", "../web-shared/components-jobs.css",
+                "../web-shared/components-media.css", "../strings/strings.js",
                 "../web-shared/components.js", "components-sample.js"):
         assert src in sample, src
 

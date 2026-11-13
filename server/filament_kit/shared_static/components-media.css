@@ -1,0 +1,17 @@
+/* Spoolwarden shared components, the media addition (02-components.md 1.5, 7.6, 7.8): photo thumbnails and the QR block,
+loaded after components.css, only by the pages that show them. */
+.thumb{position:relative;display:inline-grid;flex:none;place-items:center;width:calc(var(--s7) - var(--s1));height:calc(var(--s7) - var(--s1));padding:0;border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface-2);color:var(--muted);cursor:zoom-in}
+.thumb--m{width:calc(var(--s7) * 2);height:calc(var(--s7) * 2)}
+.thumb:hover{border-color:var(--border-strong)}
+.thumb--none{border-style:dashed;border-color:var(--border-strong);cursor:default}
+.thumb__img{display:block;width:100%;height:100%;border-radius:inherit;object-fit:cover}
+.thumb__count{position:absolute;right:calc(var(--s1) * -1);bottom:calc(var(--s1) * -1);padding:0 var(--s1);border:var(--hairline) solid var(--border-strong);border-radius:var(--s3);background:var(--surface);color:var(--text);font-size:var(--fs-xs)}
+.qr{display:flex;align-items:flex-start;gap:var(--s4);padding:var(--s4);border-radius:var(--r);background:var(--surface)}
+.qr__image{flex:none;width:var(--qr);min-width:calc(var(--s7) * 3 + var(--s6));height:auto}
+.qr__text{display:grid;gap:var(--s2);min-width:0;font-size:var(--fs-m)}
+.qr__code{font-size:var(--fs-2xl);font-weight:var(--fw-title)}
+.qr__expiry{color:var(--muted)}
+.qr__fingerprint{overflow-wrap:anywhere}
+@media (max-width:600px){
+  .qr{flex-direction:column}
+}
