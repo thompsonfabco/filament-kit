@@ -144,8 +144,8 @@ that destination, pops back to its root. Every destination root is one tap away 
 
 A Feature switched off on the Hub never removes a destination (F8): the destination stays in the bar or rail,
 dimmed (icon and label drawn like a disabled control, but still selectable; content description "Printers, switched
-off on this Hub"). Printers with the printers Feature off opens a page that says "Printers is switched off on this
-Hub. Switch it on on the Hub page under Features." with the
+off"). Printers with the printers Feature off opens a page that says "Printers is switched
+off. Switch it on in Features on the Hub page." with the
 button "Open the Hub page" (opens the Hub page in the browser, as 12.3).
 
 ### 2.4 Hub connection state
@@ -535,7 +535,7 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 | Top bar | Title "Home", the Hub's name under it, connection chip, appearance icon (2.2). | `GET api/info` | `TopAppBar` |
 | Local network notice | 3.3, at the top, only in that state. | | Panel |
 | Update notice | Only when an app update is offered or the Hub is newer than the app (13). Notice line of kind `info` "Update ready: Spoolwarden 0.5.3." or of kind `warn` "Update the app: the Hub is newer, so some things may not work." Trailing chevron; tapping opens `settings/updates`. | `GET api/info` | Notice line |
-| Add spools panel | Title "Add spools". Text "Photograph each label, check what was read, then add. Nothing is saved until you add." Main button "Add from label photos" (camera icon) starts a new draft at `add/{id}/photos`. Other button "Add by hand" starts a new draft at `add/{id}/review` with the filament picker (6.4). When the Label Reader is off on the Hub, "Add by hand" is the main button, the photo button is absent, and one line says "The Label Reader is switched off on this Hub. Add the spool by hand, or switch it on on the Hub page under Features." | `GET api/info` (`labelReading`) | Panel, `Button`, `OutlinedButton` |
+| Add spools panel | Title "Add spools". Text "Photograph each label, check what was read, then add. Nothing is saved until you add." Main button "Add from label photos" (camera icon) starts a new draft at `add/{id}/photos`. Other button "Add by hand" starts a new draft at `add/{id}/review` with the filament picker (6.4). When the Label Reader is off on the Hub, "Add by hand" is the main button, the photo button is absent, and one line says "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." | `GET api/info` (`labelReading`) | Panel, `Button`, `OutlinedButton` |
 | Drafts panel | Only when drafts exist. Title "Drafts" with the count. One row per draft, newest first: headline the relative time ("3 minutes ago"; exact time on long-press), supporting line "2 photos · note: 3 of the grey ones · tag <tag ID>" (only the parts that exist), trailing chevron. Tapping resumes the draft where it stopped. The row's overflow offers "Discard": dialog "Discard this add?" / "Its photos and edits are removed from this phone." / "Keep" / "Discard" (danger); then the snackbar "Add discarded." | none (drafts live on the phone) | Panel, `ListItem`, `DropdownMenu` |
 | Printers panel | Title "Printers" with the count; header action "All printers" selects the Printers destination. One row per configured printer, at most 4, then "and 2 more": status shape and word, name, and the job when printing ("Printing · 42 % · 1 h 12 min left"). Tapping a row opens `printers/{id}` in the Printers destination. Empty: "No printers yet." with the text button "Add a printer" (selects Printers). Absent when the printers Feature is off. | `GET api/printers` (with each connection check) | Panel, `ListItem` |
 | Slicer presets panel | 11.1 | `GET api/profiles/status` | Panel |
@@ -640,7 +640,7 @@ id, else a new read), "Add without the tag", "Pair again", "Add by hand".
 | Photos gone on the Hub | "The Hub no longer has these photos. Read the labels again." |
 | A photo unusable | "One photo could not be used. Remove it and take it again." |
 | Tag already linked | "This tag is already linked to another spool. Add without the tag, or open that spool first." |
-| Label Reader off | "The Label Reader is switched off on this Hub. Add the spool by hand, or switch it on on the Hub page under Features." |
+| Label Reader off | "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." |
 | Spoolman unreachable | 3.5 |
 | Offline | "Needs the Hub. Your photos are kept; read them when the Hub is back." |
 
@@ -1424,7 +1424,7 @@ A panel on 10.2, titled "Ask the Label Reader to correct it".
 | No change | "The Label Reader changed nothing." |
 | Accepted | `ok` line "Accepted. 2 fields changed; revision 2 keeps the old values." |
 | Discarded | Hollow-circle line "Proposal discarded. Nothing changed." |
-| Label Reader off | Field and button disabled, line "The Label Reader is switched off on this Hub. Edit by hand, or switch it on on the Hub page under Features." |
+| Label Reader off | Field and button disabled, line "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page." |
 | Failure | `bad` notice with the reason (texts of 6.2 where they apply) and "Try again". |
 
 ### 10.5 Photo viewer (`recent/{hid}/photos/{n}`)

@@ -334,8 +334,7 @@ States: "Searching…" (working shape in the field's trailing slot); empty: "No 
 ### 4.3 From label photos
 
 Shown when the Label Reader is on (`data-ai`). When it is off the group stays, collapsed to one line: info circle
-and "The Label Reader is switched off on this Hub. Add the spool by hand, or switch it on on the Hub page under
-Features."
+and "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page."
 
 | Control | Label and text | Behaviour |
 |---|---|---|
@@ -542,7 +541,7 @@ The add is a long form with drafts as in 02-components 5.11 (`data-draft="add"`)
 |---|---|
 | Intro | "Nothing is saved until you preview and press Add." |
 | Empty list | "No spools yet. Photograph the labels, or find a filament you already have." |
-| Label Reader off | "The Label Reader is off on this Hub. Add by hand, or switch it on on the Hub page under Features." |
+| Label Reader off | "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." |
 | Reading | "The Label Reader is reading <n> photos… (up to a minute)" |
 | Daily limit (429) | the Hub's text, then "Add by hand, or try again tomorrow." |
 | Read failed (502) | the Hub's text, then "Your photos and edits are kept." with "Try again" |
@@ -992,7 +991,7 @@ While the Hub connects: "Connecting to the printer…". On success the sheet clo
 ### 6.10 Printers switched off
 
 When the Printers Feature is off, the destination is dimmed and the page shows: printer icon, "Printers is switched
-off on this Hub." and "Switch it on on the Hub page under Features." with "Open the Hub page" (home address only).
+off" and "Switch it on in Features on the Hub page." with "Open the Hub page" (home address only).
 
 ---
 
@@ -1185,7 +1184,7 @@ More (and from the Add result). Code today: `presetsTab` in `app.js`.
 Empty: filled circle "Every filament has a preset line." Errors per card in a line under its buttons.
 
 When the Slicer presets Feature is off, the More row and the page are dimmed and the page shows "Slicer presets is
-switched off on this Hub." and "Switch it on on the Hub page under Features." with "Open the Hub page" (home address
+switched off" and "Switch it on in Features on the Hub page." with "Open the Hub page" (home address
 only).
 
 ---
@@ -1633,7 +1632,7 @@ this design.
 | "Asking the AI… (up to a minute)" | "The Label Reader is reading it again… (up to a minute)" (7.2) |
 | "The AI suggests:" / "The AI changed nothing." / no-photo note | "The Label Reader suggests:" / "The Label Reader changed nothing." / same note (7.2) |
 | "Accept", "Discard" | Same (7.2) |
-| "Label reading is off on this server: edit by hand." | "The Label Reader is off on this Hub: edit by hand." (7.2) |
+| "Label reading is off on this server: edit by hand." | "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page." (7.2) |
 | Revision log lines | Revisions group (7.2) |
 | "Undo revision <n>", "Undone." | Same, "Revision <n> undone." (7.2) |
 | "The spools now use filament <id> (new)", "Filament <ids> has no spools left; it was not deleted." | Same lines (7.2) |

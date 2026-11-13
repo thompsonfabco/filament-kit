@@ -1109,7 +1109,7 @@ cannot drift apart; the words lint (`07-accessibility.md` AUT-7) lists the words
 
 | Thing | Term | Never |
 |---|---|---|
-| What a spool weighs on a scale, filament and empty spool together | "Weight with spool" (field label "Weight with spool (g)") | "Gross weight", "Weight on the scale", "scale weight" |
+| What a spool weighs on a scale, filament and empty spool together | "Weight with spool" (also the field's label; the unit g is shown inside the field) | "Gross weight", "Weight on the scale", "scale weight" |
 | Repeating a request that failed | "Try again" | "Retry" |
 | Hint under an optional field that the Hub fills in by itself when it is left empty (location, Bambu Studio parent, density) | "Leave empty to choose automatically." | "Blank = automatic", "Empty = chosen automatically", "Blank = <value>" |
 | Hint under Weight with spool | "Leave empty for a full spool." | "Blank = full" |
