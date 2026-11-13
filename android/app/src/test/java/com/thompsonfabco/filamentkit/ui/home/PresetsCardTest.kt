@@ -96,13 +96,14 @@ class PresetsCardTest {
         assertEquals(listOf("To build now, $SETUP_PAGE_HINT."), withPc.hints)
     }
 
-    @Test fun waitingUpdatesPointToTheSetupPageAndAcceptedOnesAreNotCounted() {
+    @Test fun waitingUpdatesAreReviewedOnThePhoneAndAcceptedOnesAreNotCounted() {
         val a = presetActions(ProfileStatus(updates = UpdatesInfo(count = 3, lines = 2, accepted = 1)))
-        assertEquals(
-            listOf("2 presets in your slicers can be updated. To see what would change and accept it, $SETUP_PAGE_HINT."),
-            a.hints,
-        )
-        assertEquals(emptyList<String>(), presetActions(ProfileStatus(updates = UpdatesInfo(count = 2, lines = 1, accepted = 2))).hints)
-        assertEquals(1, presetActions(ProfileStatus(updates = UpdatesInfo(count = 1))).hints.size)
+        assertEquals(listOf("2 presets in your slicers can be updated."), a.hints)
+        assertEquals(2, a.waiting)
+        assertEquals("Review 2 updates", updatesButton(a))
+        val none = presetActions(ProfileStatus(updates = UpdatesInfo(count = 2, lines = 1, accepted = 2)))
+        assertEquals(emptyList<String>(), none.hints)
+        assertEquals("Updates", updatesButton(none))
+        assertEquals("Review 1 update", updatesButton(presetActions(ProfileStatus(updates = UpdatesInfo(count = 1)))))
     }
 }

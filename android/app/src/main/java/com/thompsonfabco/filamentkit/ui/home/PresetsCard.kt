@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -54,20 +55,21 @@ internal const val SETUP_PAGE_HINT = "open the setup page (Settings, Open the se
 /**
  * What the card offers beyond the status. [canBuild]: the phone may ask for a build, which the server refuses while
  * another paired PC is the sync PC (`other_pc`), so it is offered only while no PC sync is set up. [hints] say where to
- * do the rest: accepting updates has no route for a paired phone, only the setup page and the command line have it.
+ * do the rest. [waiting]: updates not accepted yet; the card's Updates button opens the list (accept, restore deleted).
  */
-data class PresetActions(val canBuild: Boolean, val hints: List<String>)
+data class PresetActions(val canBuild: Boolean, val hints: List<String>, val waiting: Int = 0)
 
 fun presetActions(s: ProfileStatus): PresetActions {
     val hints = mutableListOf<String>()
-    val waiting = s.updates?.let { it.count - it.accepted } ?: 0
-    if (waiting > 0) {
-        hints += "${plural(waiting, "preset")} in your slicers can be updated. To see what would change and accept it, $SETUP_PAGE_HINT."
-    }
+    val waiting = (s.updates?.let { it.count - it.accepted } ?: 0).coerceAtLeast(0)
+    if (waiting > 0) hints += "${plural(waiting, "preset")} in your slicers can be updated."
     val canBuild = s.pc == null
     if (!canBuild) hints += "To build now, $SETUP_PAGE_HINT."
-    return PresetActions(canBuild, hints)
+    return PresetActions(canBuild, hints, waiting)
 }
+
+/** The card's button that opens the Updates dialog. */
+fun updatesButton(a: PresetActions): String = if (a.waiting > 0) "Review ${plural(a.waiting, "update")}" else "Updates"
 
 private fun plural(n: Int, word: String) = "$n $word${if (n == 1) "" else "s"}"
 
@@ -102,6 +104,8 @@ fun PresetsCard(
     building: Boolean = false,
     buildNote: String? = null,
     buildFailed: Boolean = false,
+    /** Opens the Updates dialog (accept updates, restore deleted presets); null: not offered. */
+    onUpdates: (() -> Unit)? = null,
 ) {
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -121,6 +125,7 @@ fun PresetsCard(
                 if (actions.canBuild) {
                     Button(onClick = onBuild, enabled = !building) { Text(if (building) "Asking…" else "Build now") }
                 }
+                onUpdates?.let { OutlinedButton(onClick = it) { Text(updatesButton(actions)) } }
                 buildNote?.let {
                     Text(
                         it,

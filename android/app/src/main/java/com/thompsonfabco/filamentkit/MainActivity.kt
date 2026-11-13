@@ -290,6 +290,13 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                     null
                 }
             }
+            val presetUpdates = api?.let { a ->
+                viewModel(key = "preset-updates-${System.identityHashCode(a)}") {
+                    com.thompsonfabco.filamentkit.ui.home.PresetUpdatesViewModel(
+                        com.thompsonfabco.filamentkit.ui.home.PresetUpdatesBackend.of(a),
+                    )
+                }
+            }
             HomeScreen(
                 serverName = config?.name.orEmpty(),
                 connection = connection,
@@ -337,6 +344,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 buildingPresets = buildingPresets,
                 presetsNote = presetsNote,
                 presetsNoteIsError = presetsNoteIsError,
+                presetUpdates = presetUpdates,
+                onPresetsChanged = { presetsReload++ },
                 localNetworkPanel = { LocalNetworkPanel(localNetwork) },
                 extra = { if (BuildConfig.DEBUG) SimulateTag() },
             )
