@@ -2,44 +2,34 @@
 // textContent, as there. The token is in an HttpOnly cookie: this script never sees it.
 "use strict";
 
-let T = { enabled: false, trusted: false, id: null, name: null };
-let offered = false;              // the offer comes once per visit, after the code worked: it doesn't nag
+let T = { enabled: false, trusted: false, id: null, name: null, expires: null };
+const day = (t) => { const d = new Date(t * 1000), p = (n) => String(n).padStart(2, "0"); return t ? `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` : ""; };
 
-function codeArea() {
-  if (!T.trusted) {
-    fill(codeCard, h("label", {}, "Setup code", codeIn), offerBox);
+// The lock chip follows `GET trust` (02 3.1): Trusted computer while the cookie holds; otherwise Locked, or Unlocked while
+// this tab holds the code. "Trust this computer" is offered in the unlock dialog only while the feature is on. Until the
+// first answer the chip shows Locked with a loading hint; if the Hub does not answer, it stays Locked and works.
+let trustKnown = false;
+async function loadTrust() {
+  const was = SW.lock.state;
+  try { T = await api("trust"); } catch {
+    T = { ...T, trusted: was === "trusted" };       // as it was: nothing changes on a failed read
+    SW.setLock(was, { quiet: true });
     return;
   }
-  fill(codeCard, h("p", {}, `This computer is trusted (${T.name}): no setup code needed here. `, link("devices", "Trusted computers")));
+  SW.lock.trustOffered = !!T.enabled;
+  SW.setLock(T.trusted ? "trusted" : was === "trusted" ? "locked" : was, { trustId: T.id, until: day(T.expires), quiet: !trustKnown });
+  trustKnown = true;
 }
+// trusted or no longer trusted from the unlock dialog or the chip: the Devices card and the expiry follow
+document.addEventListener("sw:lock", (e) => { if (trustKnown && (e.detail === "trusted") !== !!T.trusted) loadTrust().then(() => { if (S) render(); }); });
 
-async function loadTrust() {
-  try { T = await api("trust"); } catch { T = { enabled: false, trusted: false, id: null, name: null }; }
-  codeArea();
-}
-
-// the server refused the cookie (revoked, run out, or the feature turned off): back to the code
+// the server refused the cookie (revoked, run out, or the feature turned off): Locked, and the change that was refused
+// asks for the code (SW.guard)
 function trustGone() {
   T = { ...T, trusted: false, id: null, name: null };
-  codeArea();
-}
-
-const offerBox = h("div");
-function offerTrust() {
-  if (offered || !T.enabled || T.trusted || !codeIn.value) return;
-  offered = true;
-  const box = h("div");
-  fill(offerBox, h("p", { class: "muted", textContent: "Trust this computer? This browser then needs no setup code for 90 days after its last use, so anyone using it can change the kit." }),
-    h("div", { class: "row" },
-      h("button", { textContent: "Trust this computer", on: { click: async () => {
-        const r = await change(box, "trust", {}, () => {});
-        if (!r) return;
-        offerBox.replaceChildren();
-        codeIn.value = "";
-        loadTrust();
-      } } }),
-      h("button", { class: "secondary", textContent: "Not now", on: { click: () => offerBox.replaceChildren() } })),
-    box);
+  if (SW.lock.state !== "trusted") return;
+  SW.setLock("locked");
+  SW.toast(SW.t("lock_trust_gone"), "warn");
 }
 
 function trustCard() {
@@ -47,7 +37,7 @@ function trustCard() {
   async function show() {
     list.replaceChildren(h("p", { class: "muted", textContent: "Reading…" }));
     let r;
-    try { r = await api("trust/list", { code: codeIn.value }); } catch (e) { say(list, e.message, false); return; }
+    try { r = await api("trust/list", { code: theCode() }); } catch (e) { if (e.locked) throw e; say(list, e.message, false); return; }
     fill(list,
       ...r.devices.map((d) => h("div", { class: "row item" },
         h("span", { textContent: `${d.name}${d.id === r.this ? " (this computer)" : ""} · made ${fmtDate(d.created)} · last seen ${fmtDate(d.last_seen)} at ${d.last_address === "loopback" ? "the server itself" : d.last_address} · runs out ${fmtDate(d.expires)}` }),
@@ -67,14 +57,17 @@ function trustCard() {
     h("p", { class: "muted", textContent: "After the setup code works, a browser can be trusted so it isn't asked again; it can be revoked here at any time, and it never skips a question like \"Roll back?\". A new setup code (sudo filament-kit setup-code --new) keeps trusted computers trusted; revoke them here, or add --revoke-trusted." }),
     T.trusted ? h("p", {}, `This computer is trusted (${T.name}).`) : null,
     h("div", { class: "row" },
-      T.enabled ? h("button", { class: "secondary", textContent: "Show the list", on: { click: show } }) : null,
       T.trusted ? h("button", { class: "secondary", textContent: "Stop trusting this computer", on: { click: async () => {
-        if (await change(box, `trust/${T.id}/revoke`, {})) { trustGone(); list.replaceChildren(); }
+        if (await change(box, `trust/${T.id}/revoke`, {})) {
+          T = { ...T, trusted: false, id: null, name: null };
+          SW.setLock("locked");
+          SW.toast(SW.t("lock_toast_untrusted"));
+        }
       } } }) : null,
       h("button", { class: "secondary", textContent: T.enabled ? "Turn trusted computers off" : "Turn trusted computers on", on: { click: async () => {
         if (T.enabled && !window.confirm("Turn trusted computers off? Every computer is forgotten, and each change needs the setup code.")) return;
         const r = await change(box, "trust/enabled", { enabled: !T.enabled });
-        if (r) { await loadTrust(); render(); list.replaceChildren(); }
+        if (r) { await loadTrust(); render(); }
       } } })),
-    list, box);
+    T.enabled ? codeRead("common_list_locked", list, show) : null, box);
 }

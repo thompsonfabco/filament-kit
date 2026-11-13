@@ -188,7 +188,7 @@ def _check_code(text, client) -> None:
     ticket = lock.attempt(client)
     if ticket is None:
         _, again = lock.standing(client)
-        raise Refused(429, LOCKED, **({"retry_at": setup_code.local_minute(again)} if again else {}))
+        raise Refused(429, LOCKED, field="code", **({"retry_at": setup_code.local_minute(again)} if again else {}))
     ok = setup_code.check(text)
     if ok is None:
         lock.release(ticket)
@@ -196,7 +196,7 @@ def _check_code(text, client) -> None:
     if not ok:
         left, again = lock.standing(client)
         # a try that set off the global backoff leaves this client with nothing to count: it waits for that
-        raise Refused(403, WRONG, tries_left=left, **({"retry_at": setup_code.local_minute(again)} if again else {}))
+        raise Refused(403, WRONG, tries_left=left, field="code", **({"retry_at": setup_code.local_minute(again)} if again else {}))
     lock.release(ticket, ok=True)
 
 

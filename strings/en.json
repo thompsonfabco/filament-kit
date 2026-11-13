@@ -454,6 +454,8 @@
   "unlock_continue": "Unlock and continue",
   "unlock_error_empty": "Enter the 8-digit setup code.",
   "unlock_error_length": "The setup code has 8 digits; this has {count}. Check it and try again.",
+  "unlock_error_lockout": "Too many wrong setup codes. Try again at {time}, or see the code at the Hub: `sudo {command} setup-code`.",
+  "unlock_error_tries": { "one": "This is not the setup code; {count} try left before a wait. Check it at the Hub: `sudo {command} setup-code`.", "other": "This is not the setup code; {count} tries left before a wait. Check it at the Hub: `sudo {command} setup-code`." },
   "unlock_error_unreachable": "Cannot reach the Hub. Check that it is on, then try again.",
   "unlock_error_wrong": "This is not the setup code. Check it at the Hub: `sudo {command} setup-code`.",
   "unlock_field_hint": "Shown when {product} was installed. At the Hub: `sudo {command} setup-code`.",

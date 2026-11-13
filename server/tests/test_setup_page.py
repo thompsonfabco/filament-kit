@@ -157,6 +157,7 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
     assert head.index("/setup/shared/theme-init.js") < head.index("/setup/shared/strings.js") < head.index("/setup/shared/tokens.css")
     assert head.index("/setup/shared/strings.js") < head.index("/setup/shared/components.js")   # S1.3: the shared shell
     assert re.search(r"<script defer src='/setup/shared/components\.js'>", head)
+    assert re.search(r"components\.js'></script><script defer src='/setup/shared/components-lock\.js'>", head)   # S1.5: the lock
     assert re.search(r"<title>[^<]+</title>", head) and "filament-kit setup" not in head   # the Hub name; the script adds the page
     js = c.get("/setup/setup.js").text                                         # S1.2/S1.3: the shared appearance control in the top bar
     assert "spoolwarden.appearance" in js and "SW.segmented" in js and "appearance--menu" in js

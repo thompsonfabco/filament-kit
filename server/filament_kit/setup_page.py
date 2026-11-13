@@ -394,7 +394,7 @@ class SetupPage:
         """The root helper checks the code (op `check`); a missing one is refused here and counts nowhere."""
         code = body.get("code")
         if not isinstance(code, str) or not code.strip():
-            raise Refused(403, NEED_CODE)
+            raise Refused(403, NEED_CODE, field="code")
         await self._helper({"op": "check", "code": code, "client": self._client_key(request)})
 
     @staticmethod
@@ -439,7 +439,7 @@ class SetupPage:
                         token = self._trusted_token(request, body)
                     if write == "helper":
                         if not isinstance(body.get("code"), str) or not body["code"].strip():
-                            raise Refused(403, NEED_CODE)
+                            raise Refused(403, NEED_CODE, field="code")
                     elif write:
                         await self._code_ok(request, body)
                 res = await fn(request, body)
@@ -494,7 +494,7 @@ class SetupPage:
             "<!doctype html><html lang=en><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
             "<script src='/setup/shared/theme-init.js'></script><script defer src='/setup/shared/strings.js'></script>"
-            "<script defer src='/setup/shared/components.js'></script>"
+            "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
             # the shell turns the title into "<Page title> · <Hub name>" (03 1.2); the Hub name is all it needs from here
             f"<title>{name}</title><link rel=stylesheet href='/setup/shared/tokens.css'>"
             "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/setup.css'>"

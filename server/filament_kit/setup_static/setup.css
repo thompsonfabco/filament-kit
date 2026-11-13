@@ -41,7 +41,6 @@
 /* cards (the group look) */
 .card { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r); padding: var(--s3) var(--s4);
         margin: var(--s3) 0; }
-.card.code { border-color: var(--accent-text); background: var(--surface); }
 :where(.page) ul { margin: var(--s1) 0; padding-left: var(--s5); }
 .indent { margin-left: var(--s4); }
 /* the background job card: the shared .job is the app's floating panel, here it stays a card in the page */

@@ -157,8 +157,7 @@ async function flashHere(dev, a, box) {
   try {
     if (dev.settings) {         // its token first: with none, nothing is written
       say(box, "Making the Printer Station's token…", true);
-      tok = await api("flash/provision", { code: codeIn.value, name: a.name || undefined });
-      offerTrust();
+      tok = await api("flash/provision", { code: theCode(), name: a.name || undefined });
     }
     say(box, "Getting the firmware from this kit…", true);
     const r = await fetch(`/setup/api/firmware/${dev.id}.bin`, { credentials: "same-origin" });
@@ -193,7 +192,7 @@ async function flashHere(dev, a, box) {
   } catch (e) {
     let note = "";
     if (tok) {
-      try { await api(`readers/${tok.id}/revoke`, { code: codeIn.value }); note = " The new reader token was removed."; } catch { note = ` Remove the reader token ${tok.id} on the Devices tab.`; }
+      try { await api(`readers/${tok.id}/revoke`, { code: theCode() }); note = " The new reader token was removed."; } catch { note = ` Remove the reader token ${tok.id} on the Devices tab.`; }
     }
     say(box, (e.message || String(e)) + note, false);
   }
@@ -252,7 +251,7 @@ function flashTab() {
           h("div", { class: "row" }, h("label", {}, "Buzzer: ", buzzer), name));
         if (flashPick.where === "here") {
           kids.push(h("div", { class: "row" }, h("button", { textContent: "Connect and write", disabled: !webSerialOk() || !F.settings_ok,
-            on: { click: () => { const a = answers(); if (!a) return; pass.value = again.value = ""; flashHere(dev, a, box); } } })));
+            on: { click: () => { const a = answers(); if (!a) return; needCode(() => { pass.value = again.value = ""; return flashHere(dev, a, box); }); } } })));
         } else if (!boards.length) {
           kids.push(h("p", { class: "muted", textContent: "No ESP32 board on the server's USB right now. Plug the Printer Station in, then look again." }),
             h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Look again", on: { click: () => render() } })));

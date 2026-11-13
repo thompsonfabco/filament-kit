@@ -62,18 +62,18 @@ async function collectReport(p, box) {
   if (r) listReports(p, box, `Collected ${r.name}.${r.note ? " " + r.note : ""}`);
 }
 
-async function listReports(p, box, done) {
-  let v;
-  try { v = await api(printerPath(p, "reports"), { code: codeIn.value }); } catch (e) { say(box, e.message, false); return; }
-  fill(box,
-    done ? h("p", { class: "ok", textContent: done }) : null,
-    v.reports.length ? null : h("p", { class: "muted", textContent: "No report kept for this printer yet." }),
-    ...v.reports.map((r) => h("div", { class: "row item" },
-      h("span", { textContent: `${r.name} · ${Math.max(1, Math.round(r.size / 1024))} KiB` }),
-      h("button", { class: "secondary", textContent: "Download", on: { click: async () => {
-        try { await download(printerPath(p, `reports/${encodeURIComponent(r.name)}`), { code: codeIn.value }, r.name); } catch (e) { say(box, e.message, false); }
-      } } }))),
-    h("p", { class: "muted", textContent: v.never }));
+function listReports(p, box, done) {
+  return coded(box, async () => {
+    const v = await api(printerPath(p, "reports"), { code: theCode() });
+    fill(box,
+      done ? h("p", { class: "ok", textContent: done }) : null,
+      v.reports.length ? null : h("p", { class: "muted", textContent: "No report kept for this printer yet." }),
+      ...v.reports.map((r) => h("div", { class: "row item" },
+        h("span", { textContent: `${r.name} · ${Math.max(1, Math.round(r.size / 1024))} KiB` }),
+        h("button", { class: "secondary", textContent: "Download", on: { click: () => coded(box, () =>
+          download(printerPath(p, `reports/${encodeURIComponent(r.name)}`), { code: theCode() }, r.name)) } }))),
+      h("p", { class: "muted", textContent: v.never }));
+  });
 }
 
 // ----- slot mapping: the server's own connection does it, and this follows it -----
@@ -115,17 +115,16 @@ function followMap(p, box) {
 const manualOn = {};
 async function manualMap(p, box) {
   const base = printerPath(p, "manual-map");
-  let v;
-  try { v = await api(base + "/start", { code: codeIn.value }); offerTrust(); } catch (e) { say(box, e.message, false); return; }
-  if (manualOn[p.serial]) return;
+  let v = null;
+  await coded(box, async () => { v = await api(base + "/start", { code: theCode() }); });
+  if (!v || manualOn[p.serial]) return;
   manualOn[p.serial] = true;
-  const send = async (what, body) => {
-    try { v = await api(`${base}/${what}`, { session: v.session, code: codeIn.value, ...body }); draw(); } catch (e) { say(note, e.message, false); }
-  };
-  const offer = async (share) => {      // its answer is a line, not the session: the card is redrawn from v
-    try { const r = await api(`${base}/offer`, { session: v.session, code: codeIn.value, share }); v.offer_report = false; draw(); say(note, r.message, true); }
-    catch (e) { say(note, e.message, false); }
-  };
+  const send = (what, body) => coded(note, async () => {
+    v = await api(`${base}/${what}`, { session: v.session, code: theCode(), ...body }); draw();
+  });
+  const offer = (share) => coded(note, async () => {      // its answer is a line, not the session: the card is redrawn from v
+    const r = await api(`${base}/offer`, { session: v.session, code: theCode(), share }); v.offer_report = false; draw(); say(note, r.message, true);
+  });
   const note = h("div");
   // a redraw rebuilds the selects: a choice the owner is making survives it while the same position is asked
   let shown, picks = {};

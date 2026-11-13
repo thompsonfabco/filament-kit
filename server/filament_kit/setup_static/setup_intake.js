@@ -12,13 +12,11 @@ const histPath = (id, what) => `intake/history/${encodeURIComponent(id)}${what ?
 
 // A change on this tab: the setup code as every write, but no page re-render (change() reloads every tab, which would
 // close the record being edited); the record redraws itself from the answer.
-async function intakePost(box, path, body, done) {
-  box.replaceChildren(h("p", { class: "muted", textContent: path.endsWith("/revise") ? "Asking the AI… (up to a minute)" : "Saving…" }));
-  try {
-    const r = await api(path, { ...body, code: codeIn.value });
-    offerTrust();
-    done(r);
-  } catch (e) { say(box, e.message, false); }
+function intakePost(box, path, body, done) {
+  return coded(box, async () => {
+    box.replaceChildren(h("p", { class: "muted", textContent: path.endsWith("/revise") ? "Asking the AI… (up to a minute)" : "Saving…" }));
+    try { done(await api(path, { ...body, code: theCode() })); } catch (e) { if (e.locked) box.replaceChildren(); throw e; }
+  });
 }
 
 function intakeTab() {

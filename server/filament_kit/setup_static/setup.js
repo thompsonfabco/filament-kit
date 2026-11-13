@@ -1,7 +1,7 @@
 // The kit server's setup console: everything after the install, by tab, without the command line. This file is the
 // shell and the tabs that were the setup page's; setup_tabs.js has the console's own.
-// Talks only to /setup/api/* on the same origin. Every change sends the setup code typed at the top; secret fields
-// are write-only (the server says "set" / "not set", never a value) and are cleared once sent.
+// Talks only to /setup/api/* on the same origin. Every change sends the setup code typed in the unlock dialog (or
+// none, on a trusted computer: its cookie stands in); secret fields are write-only (the server says "set" / "not set", never a value) and are cleared once sent.
 // Everything from the server goes in through textContent / element properties, never innerHTML.
 "use strict";
 const app = document.getElementById("app");
@@ -26,30 +26,81 @@ async function api(path, body) {
   const r = await fetch("/setup/api/" + path, init);
   let data;
   try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
-  if (data.trust_gone) trustGone();
-  if (!r.ok || data.error) { const e = new Error(data.error || `HTTP ${r.status}`); e.data = data; e.status = r.status; throw e; }
+  if (!r.ok || data.error) throw hubError(r.status, data);
   return data;
 }
+// an error reply; `locked`: refused for its setup code (none, wrong, too many tries, trust gone), so the lock asks again
+function hubError(status, data) {
+  if (data.trust_gone) trustGone();
+  const e = new Error(data.error || `HTTP ${status}`);
+  Object.assign(e, { data, status, locked: !!data.trust_gone || ((status === 403 || status === 429) && data.field === "code") });
+  return e;
+}
 
-// ----- the setup code (sent with every change) -----
-const codeIn = h("input", { type: "password", inputMode: "numeric", autocomplete: "off", placeholder: "1234-5678",
-                            ariaLabel: "Setup code" });
-const codeCard = h("div", { class: "card code" });
+// ----- the lock (02 3.1, 3.2; 03 2.1): the code typed in the unlock dialog is held by the shared script in a variable,
+// for this tab only, never stored; Lock now, reloading or closing the tab locks again. It goes as `code` in the body.
+const theCode = () => SW.lock.code || "";
+// the unlock dialog names the change in the words of the control that asked ("To revoke, enter …")
+function asked() {
+  const b = document.activeElement, w = b && b.matches("main button") ? b.textContent.trim() : "";
+  return w ? w[0].toLowerCase() + w.slice(1) : null;
+}
+// a change or a read that needs the code: while Locked the unlock dialog opens in place first, and a refusal for the code
+// opens it again; after a right code it carries on. Cancel drops it (onCancel).
+const needCode = (run, onCancel) => SW.guard(asked(), run, onCancel);
+// the same for a request outside change(): run() may throw; any other error is said in `box`
+const coded = (box, run, onCancel) => needCode(async () => {
+  try { await run(); } catch (e) { if (e.locked) throw e; say(box, e.message, false); }
+}, onCancel);
+// reads that need the code (02 1.4; 03 2.1): paint(open) runs now and each time the page opens (Unlocked or Trusted) or
+// locks; `el` stays registered while it is on the page. A refusal for the code locks the page.
+const places = new Set();
+function whenOpen(el, paint) {
+  for (const p of places) if (!p.el.isConnected) places.delete(p);
+  const p = { el, open: null, paint() {
+    const open = SW.lock.state !== "locked";
+    if (open === p.open) return;
+    p.open = open;
+    Promise.resolve(paint(open)).catch((e) => (e.locked ? SW.setLock("locked") : say(el, e.message, false)));
+  } };
+  places.add(p);
+  p.paint();
+}
+document.addEventListener("sw:lock", () => { for (const p of places) if (p.el.isConnected) p.paint(); else places.delete(p); });
+// Unlock to show: the unlock dialog as the chip opens it; the places then read by themselves
+const unlockToShow = () => SW.btn(SW.t("common_unlock_to_show"), { run: (e) => SW_LOCK.unlock(null, null, null, e.currentTarget) });
+// the locked placeholder (`key`: its sentence) and the hidden-values note ("lock_hidden_note")
+const lockNote = (key) => h("div", { class: "banner banner--info banner--inline" }, SW.icon("lock", "icon--s"),
+  h("p", { class: "banner__text" }, SW.t(key)), h("div", { class: "actions" }, unlockToShow()));
+// a code-only read: loaded once open; while Locked removed and replaced by the locked placeholder
+function codeRead(key, body, load) {
+  const note = h("div", { role: "status" });
+  whenOpen(body, (open) => {
+    if (open) { note.replaceChildren(); return load(); }
+    body.replaceChildren();
+    note.replaceChildren(lockNote(key));
+  });
+  return h("div", {}, note, body);
+}
 const say = (box, text, ok) => box.replaceChildren(h("pre", { class: ok ? "ok" : "err", textContent: text }));
 function secret(placeholder) {
   return h("input", { type: "password", autocomplete: "new-password", placeholder });
 }
 // A change: sends the code (and `body`), says the result in `box`, clears the secret inputs, reloads the page's state.
+// Resolves with the reply, or null when it failed or the unlock dialog was cancelled.
 async function change(box, path, body, done, clear) {
-  box.replaceChildren(h("p", { class: "muted", textContent: "Saving…" }));
-  try {
-    const r = await api(path, { ...body, code: codeIn.value });
-    for (const inp of clear || []) inp.value = "";
-    if (done) done(r); else say(box, "Saved.", true);
-    offerTrust();
-    refresh();
-    return r;
-  } catch (e) { say(box, e.message, false); return null; }
+  let out = null;
+  await needCode(async () => {
+    box.replaceChildren(h("p", { class: "muted", textContent: "Saving…" }));
+    try {
+      const r = await api(path, { ...body, code: theCode() });
+      for (const inp of clear || []) inp.value = "";
+      if (done) done(r); else say(box, "Saved.", true);
+      refresh();
+      out = r;
+    } catch (e) { if (e.locked) { box.replaceChildren(); throw e; } say(box, e.message, false); }
+  });
+  return out;
 }
 // replaceChildren would print a null as the word "null" (h() skips it, this one does not)
 const fill = (el, ...kids) => el.replaceChildren(...kids.filter(Boolean));
@@ -97,7 +148,7 @@ async function refresh() {
   }
   hubName.replaceChildren(S.server_name);
   hubVersion.replaceChildren(SW.h("span", { class: "sr", text: SW.t("topbar_version_prefix") }), S.version);
-  SW.configure({ hub: S.server_name });
+  SW.configure({ hub: S.server_name, noCode: !S.code_set });
   render();
   if (shellView) shellView.paint(false);
   if (S.apply.running) followApply();
@@ -117,7 +168,7 @@ function topBar() {
     h("a", { class: "topbar__brand", href: "#overview" }, SW.h("svg", { class: "topbar__mark", "aria-hidden": "true", focusable: "false" }, SW.h("use", { href: "#i-spoolwarden" })),
       h("span", { class: "topbar__name" }, SW.t("app_name")), " ", hub),
     hubVersion,
-    h("div", { class: "topbar__tools" }, appearanceControl(), appearanceButton()));
+    h("div", { class: "topbar__tools" }, SW_LOCK.lockChip({ loading: true }), appearanceControl(), appearanceButton()));
 }
 
 function navigation() {
@@ -258,8 +309,7 @@ function stationAsksCard() {
   const body = h("div"), box = boxFor("stationAsks");
   const show = async () => {
     try {
-      const r = await api("stations/requests", { code: codeIn.value });
-      offerTrust();
+      const r = await api("stations/requests", { code: theCode() });
       fill(body,
         r.requests.length ? null : h("p", { class: "muted", textContent: "No station is asking to pair." }),
         ...r.requests.map((q) => h("div", { class: "item" },
@@ -268,10 +318,10 @@ function stationAsksCard() {
           h("div", { class: "row" },
             h("button", { textContent: "Pair", on: { click: () => change(box, `stations/requests/${q.id}/pair`, {}, () => { say(box, `Paired ${q.name}. It picks up its pairing within a few seconds.`, true); show(); }) } }),
             h("button", { class: "secondary", textContent: "Refuse", on: { click: () => change(box, `stations/requests/${q.id}/refuse`, {}, () => { box.replaceChildren(); show(); }) } })))));
-    } catch (e) { say(body, e.message, false); }
+    } catch (e) { if (e.locked) throw e; say(body, e.message, false); }
   };
   return card("Stations asking to pair", h("p", { class: "muted", textContent: "An intake station on another computer asks from its own screen." }),
-    h("button", { class: "secondary", textContent: "Show requests", on: { click: show } }), body, box);
+    codeRead("devices_requests_locked", body, show), box);
 }
 
 let webQrUrls = [];
@@ -279,10 +329,10 @@ let webQrUrls = [];
 // module at its public address, when that is on).
 function webAppCard() {
   const body = h("div");
-  const err = h("div");               // a wrong code says so here: the card (home address, QR) stays
-  const el = card("iPhone: the web app", body, err);
-  const load = (whole) => (whole ? api("webapp", { code: codeIn.value }) : api("webapp")).then((r) => {
-    err.replaceChildren();
+  const note = h("div", { role: "status" });     // the hidden-values note; the card (home address, QR) stays
+  const el = card("iPhone: the web app", body, note);
+  const load = (whole) => (whole ? api("webapp", { code: theCode() }) : api("webapp")).then((r) => {
+    note.replaceChildren(...(r.public_hidden ? [lockNote("lock_hidden_note")] : []));
     webQrUrls.forEach((u) => URL.revokeObjectURL(u));
     webQrUrls = [];
     const qr = (svg, alt) => {
@@ -297,11 +347,9 @@ function webAppCard() {
       h("p", { class: "muted", textContent: "Safari warns once about the server's own certificate: accept it to go on. It works on the home network only." }),
       r.public_url ? h("p", {}, "Away from home too (the web module): ", h("b", { textContent: r.public_url })) : null,
       r.public_url ? qr(r.public_qr_svg, "QR code of the web app's public address") : null,
-      r.public_hidden ? h("p", { class: "muted", textContent: "The public address is hidden until the setup code is given." }) : null,
-      r.public_hidden ? h("button", { class: "secondary", textContent: "Show the public address", on: { click: () => load(true).catch((e) => say(err, e.message, false)) } }) : null,
       h("p", { textContent: "To keep it on the iPhone: tap Share, then Add to Home Screen." }));
   });
-  load(false).catch((e) => say(body, e.message, false));
+  whenOpen(body, load);
   return el;
 }
 
@@ -382,13 +430,12 @@ function applyCard() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  SW.configure({ base: "/setup/api/", checkPath: "code/check" });
   settleAddress();
   const skip = h("a", { class: "skip", href: "#main" }, SW.t("common_skip_to_content"));
   const main = h("main", { class: "shell__main", id: "main", tabindex: "-1" }, page);
   skip.addEventListener("click", (e) => { e.preventDefault(); main.focus(); });   // the address keeps the section
-  // the setup-code card stays the first card, and the line that says how to get the code stays above it (until S1.5)
-  page.append(h("p", { class: "muted", textContent: "Everything after the install is here; the command line is the fallback. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code), unless this computer is trusted (Devices)." }),
-    codeCard, jobPanel, sections);
+  page.append(jobPanel, sections);
   app.replaceWith(skip, h("div", { class: "shell" }, topBar(), navigation(), main),
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   pageTitle.textContent = SW.t(TABS[tabNow()][0]);
@@ -397,6 +444,5 @@ document.addEventListener("DOMContentLoaded", () => {
     window.scrollTo(0, 0);
     if (S) render(); else pageTitle.textContent = SW.t(TABS[tabNow()][0]);
   } });
-  codeArea();
   loadTrust().then(refresh);
 });

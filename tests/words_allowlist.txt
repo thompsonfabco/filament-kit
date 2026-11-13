@@ -82,7 +82,6 @@ server/filament_kit/setup_static/setup_tabs.js | setup page | today's string, ro
 server/filament_kit/setup_static/setup_tabs.js | the kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_trust.js | filament-kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_trust.js | the kit | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_trust.js | the server | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | blank = | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | color | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
