@@ -3,7 +3,7 @@
 #
 #   bash tools/testenv.sh [--root] [--klipper] [--lint] [--no-retry] [--only server,pc-sync,other,get] [--workers N] [-- PYTEST-ARGS]
 #
-# Default: the server suite and pc-sync in parallel, then printer-pack + orca-spool-sync + the reader's tools and the get.sh end
+# Default: the server suite and pc-sync in parallel, then printer-pack + orca-spool-sync + the reader's tools, the design tokens and the get.sh end
 # to end. --root adds the tests that need root (sudo without a password), --klipper the Klipper end to end (tools/e2e/klipper.sh),
 # --lint shellcheck. PYTEST-ARGS go to the server suite (for example --durations=30). Every suite runs even after a failure, and
 # the last lines are each suite's counts and wall time; the exit code is non-zero if any of them failed.
@@ -160,7 +160,7 @@ if wanted pc-sync; then
     parallel pc-sync "$ROOT/pc-sync"
 fi
 if wanted other; then
-    run other "$ROOT" "${PYTEST[@]}" --basetemp="$RUN/t-other" printer-pack/tests integrations/orca-spool-sync/tests reader/tools
+    run other "$ROOT" "${PYTEST[@]}" --basetemp="$RUN/t-other" printer-pack/tests integrations/orca-spool-sync/tests reader/tools tests
 fi
 if wanted get; then
     run get "$ROOT" "$VENV/bin/python" tools/test_get_e2e.py
