@@ -278,3 +278,80 @@ def test_root_state_write_gives_file_to_state_dir_owner(tmp_path, monkeypatch):
         calls.clear()
         pairing.devices()
         assert any(_os.path.basename(c[0]) == "pairing.lock" for c in calls), calls
+
+
+def _wrong(p):
+    return "000000" if p.code != "000000" else "111111"
+
+
+def test_expired_code_is_spent(monkeypatch):
+    p = pairing.issue()
+    monkeypatch.setattr(pairing.time, "time", lambda: p.expires + 1)
+    with pytest.raises(pairing.CodeSpent):
+        pairing.redeem_code(p.code)
+
+
+def test_redeemed_code_reused_is_spent():
+    p = pairing.issue()
+    pairing.redeem_code(p.code)
+    with pytest.raises(pairing.CodeSpent):
+        pairing.redeem_code(p.code)
+
+
+def test_qr_claimed_code_is_spent():
+    p = pairing.issue()
+    assert pairing.check(p.token) is not None
+    with pytest.raises(pairing.CodeSpent):
+        pairing.redeem_code(p.code)
+
+
+def test_code_dropped_at_attempt_limit_is_spent():
+    p = pairing.issue()
+    for _ in range(pairing.MAX_ATTEMPTS):
+        with pytest.raises(pairing.PairingError) as e:
+            pairing.redeem_code(_wrong(p))
+        assert not isinstance(e.value, pairing.CodeSpent)
+    with pytest.raises(pairing.CodeSpent):
+        pairing.redeem_code(p.code)
+
+
+def test_never_issued_code_is_not_spent():
+    p = pairing.issue()
+    with pytest.raises(pairing.PairingError) as e:
+        pairing.redeem_code(_wrong(p))
+    assert not isinstance(e.value, pairing.CodeSpent)
+
+
+def test_spent_code_still_counts_as_a_wrong_guess():
+    p = pairing.issue()
+    pairing.redeem_code(p.code)
+    q = pairing.issue()
+    for _ in range(pairing.MAX_ATTEMPTS):
+        with pytest.raises(pairing.PairingError):
+            pairing.redeem_code(p.code)
+    with pytest.raises(pairing.CodeSpent):
+        pairing.redeem_code(q.code)
+
+
+def test_spent_entry_is_pruned_after_the_window(monkeypatch):
+    p = pairing.issue()
+    pairing.redeem_code(p.code)
+    now = pairing.time.time()
+    monkeypatch.setattr(pairing.time, "time", lambda: now + pairing.SPENT_KEEP + 1)
+    with pytest.raises(pairing.PairingError) as e:
+        pairing.redeem_code(p.code)
+    assert not isinstance(e.value, pairing.CodeSpent)
+    assert json.loads((config.paths().state / "spent.json").read_text()) == []
+
+
+def test_spent_file_holds_no_plain_code():
+    a, b, c = pairing.issue(), pairing.issue(), pairing.issue()
+    pairing.redeem_code(a.code)
+    for _ in range(pairing.MAX_ATTEMPTS):
+        with pytest.raises(pairing.PairingError):
+            pairing.redeem_code("abc")
+    pairing.check(c.token)
+    text = (config.paths().state / "spent.json").read_text()
+    assert len(json.loads(text)) == 3
+    for code in (a.code, b.code, c.code):
+        assert f'"{code}"' not in text
