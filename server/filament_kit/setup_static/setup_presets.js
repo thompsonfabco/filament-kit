@@ -2,9 +2,8 @@
 // Add or accept only: the one thing here that replaces a preset in a slicer is Accept, and the PC sync does that.
 "use strict";
 
-// the tab's one region. When a change draws it again, the last reply draws it at once (so its result slots stay in the
-// page), then it is read again.
-let presetsBody = null, presetsSeen = null;
+// the tab's one region; a change draws it again and waits for its read (later) before it says the result
+let presetsBody = null;
 
 function updatesList(box, r) {
   const what = r.chosen.map((u) => h("li", { textContent:
@@ -80,12 +79,11 @@ function drawPresets(v) {
 }
 
 async function loadPresets() {
-  try { drawPresets(presetsSeen = await api("presets")); } catch (e) { say(presetsBody, e.message, false); }
+  try { drawPresets(await api("presets")); } catch (e) { say(presetsBody, e.message, false); }
 }
 
 function presetsTab() {
   presetsBody = h("div");
-  if (presetsSeen) drawPresets(presetsSeen);
-  loadPresets();
+  later(loadPresets());
   return [presetsBody];
 }

@@ -46,13 +46,13 @@ function addressButton(p, box, now) {
 
 function bambuRow(p) {
   const box = boxFor("printer:" + p.serial), code = secret("Access Code (printer: Settings > Network/LAN)");
-  const mapBox = boxFor("map:" + p.serial), reportBox = boxFor("report:" + p.serial);
+  const mapBox = boxFor("map:" + p.serial), reportBox = boxFor("report:" + p.serial), codeBox = boxFor("code:" + p.serial);
   if (p.mapping) followMap(p, mapBox);      // a job already running (a reload, another browser): progress and Stop again
   return h("div", { class: "item", "data-key": p.serial },
     h("p", {}, h("b", { textContent: p.name }), S.printers.klipper ? " Bambu" : "", `${dotted(p.model, p.ip || "no address yet", `serial ${p.serial}`)} `,
       pill(p.state === "connected", "connected", nice(p.state))),
     h("div", { class: "row" }, code,
-      h("button", { textContent: p.configured ? "Replace code" : "Connect", on: { click: () => change(box, printerPath(p, "code"), { access_code: code.value }, null, [code]) } })),
+      h("button", { textContent: p.configured ? "Replace code" : "Connect", on: { click: () => change(codeBox, printerPath(p, "code"), { access_code: code.value }, null, [code]) } }), codeBox),
     h("div", { class: "row" },
       testButton(p, box), renameButton(p, box), addressButton(p, box, p.ip || ""),
       p.configured ? h("button", { class: "secondary", textContent: "Map slots", on: { click: () => startMap(p, mapBox) } }) : null,
@@ -81,7 +81,7 @@ function listReports(p, box, done) {
     say(box, [
       done ? h("p", { textContent: done }) : null,
       v.reports.length ? null : h("p", { class: "muted", textContent: "No report kept for this printer yet." }),
-      ...v.reports.map((r) => h("div", { class: "row item" },
+      ...v.reports.map((r) => h("div", { class: "row item", "data-key": r.name },
         h("span", { textContent: `${r.name} · ${Math.max(1, Math.round(r.size / 1024))} KiB` }),
         h("button", { class: "secondary", textContent: "Download", on: { click: () => coded(box, () =>
           download(printerPath(p, `reports/${encodeURIComponent(r.name)}`), { code: theCode() }, r.name)) } }))),
@@ -198,23 +198,23 @@ async function manualMap(p, box) {
 }
 
 function klipperRow(p) {
-  const box = boxFor("printer:" + p.serial), key = secret("Moonraker API key (optional)");
+  const box = boxFor("printer:" + p.serial), key = secret("Moonraker API key (optional)"), keyBox = boxFor("key:" + p.serial);
   if (!p.configured) return h("div", { class: "item", "data-key": p.serial },
     h("p", {}, h("b", { textContent: p.name }), ` · found at ${hostPort(p)}`),
     h("div", { class: "row" }, key,
       h("button", { textContent: "Use this printer", on: { click: () => change(box, printerPath(p, "connect"), { api_key: key.value }, null, [key]) } }),
       testButton(p, box), forgetButton(p, box, "dismiss")),
     box);
-  const lane = h("select", { ariaLabel: "Publish slots to Moonraker's lane data", on: { change: () => change(box, printerPath(p, "lane_data"), { mode: lane.value }) } },
+  const lane = h("select", { ariaLabel: "Publish slots to Moonraker's lane data", on: { change: () => change(keyBox, printerPath(p, "lane_data"), { mode: lane.value }) } },
     ...["auto", "on", "off"].map((m) => h("option", { value: m, textContent: `Lane data: ${m}`, selected: m === p.lane_data })));
   return h("div", { class: "item", "data-key": p.serial },
     h("p", {}, h("b", { textContent: p.name }), S.printers.bambu ? " Klipper" : "", `${dotted(p.model, hostPort(p))} `,
       pill(p.state === "connected", "connected", nice(p.state)), " ", pill(p.api_key, "API key set", "no API key")),
     h("div", { class: "row" }, key,
-      h("button", { textContent: p.api_key ? "Replace key" : "Set key", on: { click: () => change(box, printerPath(p, "api_key"), { key: key.value }, null, [key]) } }),
-      h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: () => manualMap(p, box) } }),
-      p.api_key ? h("button", { class: "secondary", textContent: "Clear key", on: { click: () => asking(box, printerPath(p, "api_key"),
-        destroy("printers_clear_key_title", "printers_clear_key_body", "printers_clear_key_confirm", { name: p.name }), () => ({ key: "" })) } }) : null, lane),
+      h("button", { textContent: p.api_key ? "Replace key" : "Set key", on: { click: () => change(keyBox, printerPath(p, "api_key"), { key: key.value }, null, [key]) } }),
+      h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: () => manualMap(p, keyBox) } }),
+      p.api_key ? h("button", { class: "secondary", textContent: "Clear key", on: { click: () => asking(keyBox, printerPath(p, "api_key"),
+        destroy("printers_clear_key_title", "printers_clear_key_body", "printers_clear_key_confirm", { name: p.name }), () => ({ key: "" })) } }) : null, lane, keyBox),
     h("div", { class: "row" },
       testButton(p, box),
       h("button", { class: "secondary", textContent: "Detect", on: { click: async () => {

@@ -61,7 +61,7 @@ function whenOpen(el, paint) {
     const open = SW.lock.state !== "locked";
     if (open === p.open) return;
     p.open = open;
-    Promise.resolve(paint(open)).catch((e) => (e.locked ? SW.setLock("locked") : say(el, e.message, false)));
+    later(Promise.resolve(paint(open)).catch((e) => (e.locked ? SW.setLock("locked") : say(el, e.message, false))));
   } };
   places.add(p);
   p.paint();
@@ -180,6 +180,10 @@ const sections = h("div");
 // A change reads the state again and draws only its own region (and the one its builder names in `also`). What is
 // typed there and not sent, and the focus, go to the new drawing by each control's place: its row (data-key), its kind
 // and words, and how many like it come before. A part a region reads later gets them when it is filled.
+// A region's own reads (later()) are awaited before its change says the result, so a slot in a part drawn from such a
+// read is back in the page first (or gone with its row: a toast).
+let reads = null;
+const later = (p) => { if (reads) reads.push(Promise.resolve(p).catch(() => {})); return p; };
 const CONTROLS = "button, a[href], input, select, textarea";
 const TYPED = "input:not([type=checkbox], [type=radio], [type=file]), select, textarea";
 function spots(root) {
@@ -222,21 +226,25 @@ function carry(root) {
   }
 }
 function draw(make, key) {
-  let el = make();
+  const mine = reads = [];
+  let el;
+  try { el = make(); } finally { reads = null; }
   if (Array.isArray(el)) el = h("div", {}, el);
   if (!el) return null;
-  Object.assign(el, { _make: make, _key: key });
+  Object.assign(el, { _make: make, _key: key, _reads: Promise.all(mine) });
   stamp(el);
   return el;
 }
 const regionOf = (el) => { while (el && !el._make) el = el.parentElement; return el; };
-// draws one region again from the new state, in its place; `sent`: see sentWith
+// draws one region again from the new state, in its place; `sent`: see sentWith. Resolves once its reads are in (at
+// most 5 s).
 function redraw(r, sent) {
   const keep = capture(r, sent), fresh = draw(r._make, r._key);
-  if (!fresh) { r.remove(); return; }
+  if (!fresh) { r.remove(); return Promise.resolve(); }
   r.replaceWith(fresh);
   fresh._keep = keep;
   carry(fresh);
+  return Promise.race([fresh._reads, new Promise((done) => setTimeout(done, 5000))]);
 }
 
 // ----- the sections (F8), at the page's own addresses (03 1.2): #<section>[/<place>]; Back and Forward move between them -----
@@ -290,9 +298,9 @@ async function refresh(at, sent) {
   if (!at) render();
   else if (r && r.isConnected) {
     const also = r._make.also && [...sections.children].find((x) => x._make === r._make.also);
-    redraw(r, sent);
-    if (also) redraw(also);
+    const drawn = [redraw(r, sent), also && redraw(also)];
     summaries();
+    await Promise.all(drawn);
   }
   if (shellView) shellView.paint(false);
   if (S.apply.running) followApply();
@@ -455,22 +463,22 @@ function pairCard() {
 
 // Stations on other computers that ask to pair: Pair only when the station's screen shows the same six digits.
 function stationAsksCard() {
-  const body = h("div"), box = boxFor("stationAsks");
+  const body = h("div");
   const show = async () => {
     try {
       const r = await api("stations/requests", { code: theCode() });
       fill(body,
         r.requests.length ? null : h("p", { class: "muted", textContent: "No station is asking to pair." }),
-        ...r.requests.map((q) => h("div", { class: "item" },
+        ...r.requests.map((q) => { const box = boxFor("request:" + q.id); return h("div", { class: "item", "data-key": q.id },
           h("p", {}, `${q.name} at ${q.address} asks to pair. Its screen shows `, h("b", { textContent: `${q.code.slice(0, 3)} ${q.code.slice(3)}` }), "."),
           h("p", { class: "muted", textContent: "Pair only if the station shows the same six digits. If not, refuse: someone else asked." }),
           h("div", { class: "row" },
             h("button", { textContent: "Pair", on: { click: () => change(box, `stations/requests/${q.id}/pair`, {}, () => say(box, `Paired ${q.name}. It picks up its pairing within a few seconds.`, true)) } }),
-            h("button", { class: "secondary", textContent: "Refuse", on: { click: () => change(box, `stations/requests/${q.id}/refuse`, {}, () => fill(box)) } })))));
+            h("button", { class: "secondary", textContent: "Refuse", on: { click: () => change(box, `stations/requests/${q.id}/refuse`, {}, () => fill(box)) } })), box); }));
     } catch (e) { if (e.locked) throw e; say(body, e.message, false); }
   };
   return card("Stations asking to pair", h("p", { class: "muted", textContent: "An intake station on another computer asks from its own screen." }),
-    codeRead("devices_requests_locked", body, show), box);
+    codeRead("devices_requests_locked", body, show));
 }
 
 let webQrUrls = [];
@@ -504,8 +512,8 @@ function webAppCard() {
 
 // ----- modules -----
 function modulesCard() {
-  const box = boxFor("modules");
-  async function ask(m) {
+  // the preview and its result open under the module's own row
+  async function ask(m, box) {
     working(box, "…");
     let p;
     try { p = await api(`modules/preview?name=${encodeURIComponent(m.name)}`); } catch (e) { say(box, e.message, false); return; }
@@ -525,28 +533,27 @@ function modulesCard() {
         h("button", { class: "secondary", textContent: "Cancel", on: { click: () => fill(box) } })));
   }
   return card(`Modules (mode: ${S.mode})`,
-    ...S.modules.map((m) => h("div", { class: "row item", "data-key": m.name },
+    ...S.modules.map((m) => { const box = boxFor("module:" + m.name); return h("div", { class: "row item", "data-key": m.name },
       h("span", {}, pill(m.on, "on", "off"), ` ${m.name}: ${m.description}`, m.needs.length ? h("span", { class: "muted", textContent: ` · needs: ${m.needs.join(", ")}` }) : null,
         m.optional_ai ? h("span", { class: "muted", textContent: " · OPTIONAL AI" }) : null),
-      h("button", { class: "secondary", textContent: m.on ? "Turn off" : "Turn on", on: { click: () => ask(m) } }))),
-    box);
+      h("button", { class: "secondary", textContent: m.on ? "Turn off" : "Turn on", on: { click: () => ask(m, box) } }), box); }));
 }
 
 // ----- addresses -----
 function addressCard() {
-  const box = boxFor("address");
+  // each address has its own Save and its result under it
+  const box = { "web.public_url": boxFor("address:web"), "station.url": boxFor("address:station") };
   // the state leaves the address out (owner data): a set one shows as a blank box that a blank Save does not clear
   const web = h("input", { placeholder: S.web.public_set ? "set (hidden); type a new address to replace it" : "https://mcp.example.com/filament" });
   const st = h("input", { value: S.station.url || "", placeholder: "http://station.local:5003 (blank: none)" });
   const save = (key, inp) => key === "web.public_url" && S.web.public_set && !inp.value.trim()
-    ? say(box, "The address is hidden here: type the new one to replace it.", false)
-    : change(box, "settings", { key, value: inp.value.trim() }, () => { say(box, "Saved; applying…", true); followApply(); });
+    ? say(box[key], "The address is hidden here: type the new one to replace it.", false)
+    : change(box[key], "settings", { key, value: inp.value.trim() }, () => { say(box[key], "Saved; applying…", true); followApply(); });
   return card("Addresses",
     h("p", { class: "muted", textContent: "Web public address: the https address of the web app and Claude's connector." }),
-    h("div", { class: "row" }, web, h("button", { textContent: "Save", on: { click: () => save("web.public_url", web) } })),
+    h("div", { class: "row" }, web, h("button", { textContent: "Save", on: { click: () => save("web.public_url", web) } }), box["web.public_url"]),
     h("p", { class: "muted", textContent: "Station address: where this server reads the intake station." }),
-    h("div", { class: "row" }, st, h("button", { textContent: "Save", on: { click: () => save("station.url", st) } })),
-    box);
+    h("div", { class: "row" }, st, h("button", { textContent: "Save", on: { click: () => save("station.url", st) } }), box["station.url"]));
 }
 
 // ----- appearance (02 3.3, F5): the three choices on this device, applied at once and kept by the shared script -----
