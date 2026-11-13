@@ -3,6 +3,8 @@ import hashlib
 from fksync.treehash import tree_hash
 
 FILES = {"a.json": b"{}", "base/b.info": b"x", "c.txt": b"y"}
+# sha256 of the contract formula over {"a.json": b"{}", "base/b.info": b"x"} (c.txt is not .json/.info)
+FIXED_VECTOR = "d4b6cceb14a5ca9c7aa614bd8c3aa58962ce081d8e8230bdd1c40bacee8af6ed"
 
 
 def _formula(entries: dict[str, bytes]) -> str:
@@ -25,8 +27,9 @@ def test_tree_hash_contract(tmp_path):
     _write(root, FILES)
     expected = _formula({"a.json": b"{}", "base/b.info": b"x"})
     assert tree_hash(root) == expected
-    # fixed vector, so a change to the formula on either side shows up
-    assert expected == _formula({"a.json": b"{}", "base/b.info": b"x"})
+    # fixed vector, a literal, so a change to the formula on either side shows up (the server pins the same value)
+    assert expected == FIXED_VECTOR
+    assert tree_hash(root) == FIXED_VECTOR
     assert tree_hash(tmp_path / "missing") == hashlib.sha256(b"").hexdigest()
 
 
