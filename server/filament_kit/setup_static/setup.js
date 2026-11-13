@@ -62,32 +62,97 @@ const boxes = {};
 const boxFor = (key) => boxes[key] || (boxes[key] = h("div", { role: "status" }));   // a live region: "Saving…" and the result are read out
 const sections = h("div");
 
-// ----- the tabs: the page's own anchors (/setup#printers) -----
+// ----- the sections (F8), at the page's own addresses (03 1.2): #<section>[/<place>]; Back and Forward move between them -----
+// [catalogue key of the name, icon, the view]; the first five are the Everyday group, the rest the System group
 const TABS = {
-  overview: ["Overview", () => overviewTab()],
-  modules: ["Modules", () => [modesCard(), modulesCard(), applyCard()]],
-  printers: ["Printers", () => printersTab()],
-  devices: ["Devices", () => [pairCard(), stationAsksCard(), webAppCard(), readersCard(), trustCard()]],
-  presets: ["Presets", () => presetsTab()],
-  intake: ["Intake", () => intakeTab()],
-  settings: ["Settings", () => [generalCard(), readerCard(), backupCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
-  flash: ["Flash a device", () => flashTab()],
-  updates: ["Updates", () => updatesTab()],
-  logs: ["Logs", () => logsTab()],
+  overview: ["nav_overview", "overview", () => overviewTab()],
+  printers: ["nav_printers", "printer", () => printersTab()],
+  recent: ["nav_recently_added", "recent", () => intakeTab()],
+  devices: ["nav_devices", "devices", () => [pairCard(), stationAsksCard(), webAppCard(), readersCard(), trustCard()]],
+  presets: ["nav_slicer_presets", "presets", () => presetsTab()],
+  features: ["nav_features", "features", () => [modesCard(), modulesCard(), applyCard()]],
+  settings: ["nav_settings", "settings", () => [generalCard(), readerCard(), backupCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
+  flash: ["nav_flash_device", "flash", () => flashTab()],
+  updates: ["nav_updates", "updates", () => updatesTab()],
+  logs: ["nav_logs", "logs", () => logsTab()],
 };
-const tabNow = () => { const t = location.hash.slice(1); return t in TABS ? t : "overview"; };
-const nav = h("nav", { class: "tabs", ariaLabel: "Console sections" });
+const GROUPS = [["everyday", "nav_everyday", 0, 5], ["system", "nav_system", 5, 10]];
+const BAR = new Set(["overview", "printers", "recent", "settings"]);   // the phone bottom bar (02 2.4); the rest are in More
+const MOVED = { modules: "features", intake: "recent" };              // the tabs' old addresses
+const tabNow = () => { const t = location.hash.slice(1).split(/[/?]/)[0]; return Object.hasOwn(TABS, t) ? t : "overview"; };
 
 function render() {
   const now = tabNow();
-  nav.replaceChildren(...Object.entries(TABS).map(([k, [title]]) => h("a", { href: "#" + k, textContent: title, "aria-current": k === now ? "page" : undefined })));
-  sections.replaceChildren(...TABS[now][1]().filter(Boolean));
+  page.dataset.section = now;
+  pageTitle.textContent = SW.t(TABS[now][0]);
+  sections.replaceChildren(...TABS[now][2]().filter(Boolean));
+  summaries();
 }
 
 async function refresh() {
-  try { S = await api("state"); } catch (e) { sections.replaceChildren(h("p", { class: "err", textContent: e.message })); return; }
+  try { S = await api("state"); } catch (e) {
+    if (!S) { hubName.parentElement.dataset.state = "error"; hubName.replaceChildren(SW.shape("s-octagon"), SW.t("topbar_hub_unreachable")); }
+    sections.replaceChildren(h("p", { class: "err", textContent: e.message }));
+    return;
+  }
+  hubName.replaceChildren(S.server_name);
+  hubVersion.replaceChildren(SW.h("span", { class: "sr", text: SW.t("topbar_version_prefix") }), S.version);
+  SW.configure({ hub: S.server_name });
   render();
+  if (shellView) shellView.paint(false);
   if (S.apply.running) followApply();
+}
+
+// ----- the shell (02 2.1-2.6; 03 3.1, 3.2, 3.8): top bar, navigation (a rail; on phones the bottom bar and the More
+// sheet), the page frame. Its behaviour (current section, title, More, the bar hiding over the keyboard) is SW.shell's.
+const hubName = h("span", {}, h("span", { class: "skeleton__line", "aria-hidden": "true" })), hubVersion = h("span", { class: "topbar__version mono" });
+const pageTitle = h("h1", { class: "page-head__title", tabindex: "-1" });
+const page = h("section", { class: "page" }, h("header", { class: "page-head" }, h("div", { class: "page-head__text" }, pageTitle)));
+const navEl = h("nav", { class: "nav" });
+let shellView = null;
+
+function topBar() {
+  const hub = h("span", { class: "topbar__hub" }, h("span", { "aria-hidden": "true" }, "/"), " ", hubName);
+  return h("header", { class: "topbar" },
+    h("a", { class: "topbar__brand", href: "#overview" }, SW.h("svg", { class: "topbar__mark", "aria-hidden": "true", focusable: "false" }, SW.h("use", { href: "#i-spoolwarden" })),
+      h("span", { class: "topbar__name" }, SW.t("app_name")), " ", hub),
+    hubVersion,
+    h("div", { class: "topbar__tools" }, appearanceControl(), appearanceButton()));
+}
+
+function navigation() {
+  navEl.setAttribute("aria-label", SW.t("nav_label"));
+  const names = Object.keys(TABS);
+  for (const [group, key, from, to] of GROUPS) {
+    navEl.append(h("h2", { class: "nav__heading", id: "nav-" + group }, SW.t(key)),
+      h("ul", { class: "nav__group", "data-group": group, "aria-labelledby": "nav-" + group }, names.slice(from, to).map((s) => h("li", {}, navItem(s)))));
+  }
+  navEl.append(h("button", { class: "nav__more", type: "button", "aria-haspopup": "dialog", "aria-expanded": "false" },
+    SW.icon("more", "nav__icon"), h("span", { class: "nav__label" }, SW.t("nav_more")), h("span", { class: "sr nav__more-current" })));
+  return navEl;
+}
+function navItem(s) {
+  const [key, icon] = TABS[s];
+  const label = s === "recent"          // the bottom bar shows the short name; the full one is read (02 2.4)
+    ? h("span", { class: "nav__label" }, h("span", { class: "nav__label-full" }, SW.t(key)), h("span", { class: "nav__label-short", "aria-hidden": "true" }, SW.t("nav_recent")))
+    : h("span", { class: "nav__label" }, SW.t(key));
+  const a = h("a", { class: "nav__item", href: "#" + s }, SW.icon(icon, "nav__icon"), label, h("span", { class: "nav__summary" }),
+    SW.icon("chevron", "icon--s nav__chevron"));
+  if (BAR.has(s)) a.setAttribute("data-tab", "");
+  return a;
+}
+// the live summaries of the More sheet, from the replies the page already has (02 12: a section without data shows none)
+function summaries() {
+  const put = (s, text) => { const el = navEl.querySelector(`a[href="#${s}"] .nav__summary`); if (el) el.textContent = text || ""; };
+  const P = S.printers.on ? S.printers.list.filter((p) => p.configured) : [];
+  const up = P.filter((p) => p.state === "connected").length;
+  put("printers", P.length ? SW.t("nav_summary_printers", { connected: up, offline: P.length - up }) : "");
+  put("devices", SW.t("nav_summary_devices", { paired: S.devices.length, count: S.readers.list.length }));
+}
+// an old or unknown address opens Overview (03 1.2); the address says so, so the navigation marks it
+function settleAddress() {
+  const t = location.hash.slice(1).split(/[/?]/)[0];
+  if (t && !Object.hasOwn(TABS, t)) history.replaceState(null, "", MOVED[t] ? "#" + MOVED[t] + location.hash.slice(1 + t.length) : "#overview");
 }
 
 // ----- Anthropic key -----
@@ -287,37 +352,23 @@ function addressCard() {
     box);
 }
 
-// ----- appearance (02 3.3, F5): the three choices on this device, applied at once, kept in localStorage -----
+// ----- appearance (02 3.3, F5): the three choices on this device, applied at once and kept by the shared script -----
 const APPEARANCE_KEY = "spoolwarden.appearance";
-const txt = (key) => (window.SW_TEXT || {})[key] || key;
-const keepAppearance = (v) => {
-  try { if (v === "system") localStorage.removeItem(APPEARANCE_KEY); else localStorage.setItem(APPEARANCE_KEY, v); } catch (e) { /* blocked: applies for this visit only */ }
-};
-function showAppearance(v) {
-  const root = document.documentElement;
-  if (v === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", v);
-  for (const i of document.querySelectorAll(".appearance .segmented__input")) i.checked = i.value === v;
-}
-function appearanceControl() {
-  const cur = document.documentElement.getAttribute("data-theme");
-  const now = cur === "light" || cur === "dark" ? cur : "system";
-  const fs = h("fieldset", { class: "appearance segmented" }, h("legend", { class: "sr", textContent: txt("appearance_title") }));
-  for (const [v, icon] of [["light", "sun"], ["dark", "moon"], ["system", "half-circle"]]) {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "icon icon--s"); svg.setAttribute("aria-hidden", "true");
-    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-    use.setAttribute("href", "#i-" + icon); svg.append(use);
-    fs.append(
-      h("input", { class: "segmented__input", type: "radio", name: "appearance", id: "ap-" + v, value: v, checked: v === now,
-        on: { change: () => { showAppearance(v); keepAppearance(v); } } }),
-      h("label", { class: "segmented__option", htmlFor: "ap-" + v }, svg, txt("appearance_" + v)));
-  }
-  return fs;
+const APPEARANCE = [["light", "sun"], ["dark", "moon"], ["system", "half-circle"]];
+const appearanceNow = () => { const v = document.documentElement.getAttribute("data-theme"); return v === "light" || v === "dark" ? v : "system"; };
+// the wide form: the shared segmented choice (its change is handled by the shared script)
+const appearanceControl = () => SW.segmented({ legend: SW.t("appearance_title"), legendSr: true, cls: "appearance", name: "appearance",
+  value: appearanceNow(), options: APPEARANCE.map(([value, icon]) => ({ value, icon, label: SW.t("appearance_" + value) })) });
+// the phone form: an icon button; SW.shell gives it its menu
+function appearanceButton() {
+  const [v, icon] = APPEARANCE.find(([x]) => x === appearanceNow());
+  return h("button", { class: "btn btn--ghost btn--icon appearance appearance--menu", type: "button",
+    "aria-label": SW.t("appearance_name", { choice: SW.t("appearance_" + v) }) }, SW.icon(icon));
 }
 window.addEventListener("storage", (e) => {                   // another tab chose: follow it
   if (e.key !== APPEARANCE_KEY && e.key !== null) return;
   const v = e.key === null ? null : e.newValue;
-  showAppearance(v === "light" || v === "dark" ? v : "system");
+  SW.setAppearance(v === "light" || v === "dark" ? v : "system");
 });
 
 // ----- applying again (the job's own panel is in setup_tabs.js) -----
@@ -330,13 +381,22 @@ function applyCard() {
     } } })), box);
 }
 
-window.addEventListener("hashchange", () => { if (S) render(); });
 document.addEventListener("DOMContentLoaded", () => {
-  app.append(
-    h("div", { class: "titlebar" }, h("h1", { textContent: "filament-kit" }), appearanceControl()),
-    h("p", { class: "muted", textContent: "Everything after the install is here; the command line is the fallback. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code), unless this computer is trusted (Devices)." }),
-    h("div", { class: "sticky" }, codeCard, nav),
-    jobPanel, sections);
+  settleAddress();
+  const skip = h("a", { class: "skip", href: "#main" }, SW.t("shell_skip"));
+  const main = h("main", { class: "shell__main", id: "main", tabindex: "-1" }, page);
+  skip.addEventListener("click", (e) => { e.preventDefault(); main.focus(); });   // the address keeps the section
+  // the setup-code card stays the first card, and the line that says how to get the code stays above it (until S1.5)
+  page.append(h("p", { class: "muted", textContent: "Everything after the install is here; the command line is the fallback. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code), unless this computer is trusted (Devices)." }),
+    codeCard, jobPanel, sections);
+  app.replaceWith(skip, h("div", { class: "shell" }, topBar(), navigation(), main),
+    h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
+  pageTitle.textContent = SW.t(TABS[tabNow()][0]);
+  shellView = SW.shell({ hub: document.title, home: "overview", titleOf: () => SW.t(TABS[tabNow()][0]), onSection: () => {
+    settleAddress();
+    window.scrollTo(0, 0);
+    if (S) render(); else pageTitle.textContent = SW.t(TABS[tabNow()][0]);
+  } });
   codeArea();
   loadTrust().then(refresh);
 });

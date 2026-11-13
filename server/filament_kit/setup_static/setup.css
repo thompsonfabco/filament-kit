@@ -1,50 +1,62 @@
-/* The Hub page, on the shared tokens and components (tokens.css, components.css load first; 03-hub-page.md). Only the
-   rules of today's markup are here; every colour, size and duration is a token. Light or dark follows the device
-   (tokens.css) unless the owner chose one (theme-init.js). */
-main { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--s4) var(--s6); width: 100%; }
-.titlebar { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
-h1 { font-size: var(--fs-xl); line-height: var(--lh-title); margin: var(--s4) 0 var(--s1); }
-h2 { font-size: var(--fs-l); line-height: var(--lh-title); margin: 0 0 var(--s2); display: flex; gap: var(--s2); align-items: center; }
-p { margin: var(--s1) 0; }
+/* The Hub page, on the shared tokens and components (tokens.css, components.css load first; 03-hub-page.md). The
+   shell (top bar, navigation, page header) is the shared one; the rules below are for today's section contents, kept
+   inside the page (`:where(.page)` adds no weight) so they never reach the shell, its sheets or dialogs. Every colour,
+   size and duration is a token. Light or dark follows the device (tokens.css) unless the owner chose one (theme-init.js). */
+/* the top bar on phones (02 2.2, 03 3.1): the product name above the Hub name, without the slash */
+.topbar__hub .skeleton__line { width: calc(var(--s7) * 2); height: var(--s3); }
+@media (max-width: 600px) {
+  .topbar__brand { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--s2); row-gap: 0; }
+  .topbar__mark { grid-row: 1 / span 2; }
+  .topbar__name { line-height: var(--lh-title); }
+  .topbar__hub > [aria-hidden="true"] { display: none; }
+  /* the More sheet (02 2.5): its list is also a .nav, so the bottom-bar rules of components.css (fixed, one row, only
+     the data-tab items) are undone here; components.css has no room left for them (F12 rule 7) */
+  .nav.nav--sheet { position: static; z-index: auto; display: grid; flex-direction: column; gap: var(--s2); height: auto;
+                    padding: var(--s2) var(--s4) var(--s4); overflow-y: auto; border: 0; background: none; }
+  .nav.nav--sheet .nav__group, .nav.nav--sheet .nav__group + .nav__heading + .nav__group { display: grid; gap: var(--s1); }
+  .nav.nav--sheet .nav__group > li { display: block; }
+  .nav.nav--sheet .nav__item { align-content: center; min-height: calc(var(--s7) + var(--s1)); padding: 0 var(--s3);
+                               color: var(--text); text-align: start; }
+  .nav.nav--sheet .nav__item[aria-current="page"] { background: var(--accent-soft); color: var(--accent-text); }
+  .nav.nav--sheet .nav__item::before { display: none; }
+  .nav.nav--sheet .nav__icon { padding: 0; background: none; }
+  .nav.nav--sheet .nav__label { font-size: var(--fs-b); }
+  .nav.nav--sheet .nav__label-full { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .nav.nav--sheet .nav__label-short { display: none; }
+}
+:where(.page) h2 { font-size: var(--fs-l); line-height: var(--lh-title); margin: 0 0 var(--s2); display: flex; gap: var(--s2); align-items: center; }
+:where(.page) p { margin: var(--s1) 0; }
 .muted { font-size: var(--fs-m); }
-input, button { font: inherit; color: inherit; }
 /* fields (the field control look) */
-input, select, textarea { width: 100%; min-height: var(--ctl); padding: 0 var(--s3); border: 1px solid var(--border-strong);
-                          border-radius: var(--r); background: var(--surface); color: var(--text); font-size: var(--fs-b); }
-textarea { padding: var(--s2) var(--s3); }
-input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
-input:hover, select:hover, textarea:hover { border-color: var(--text); }
-input:focus, select:focus, textarea:focus { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 0; }
-input:disabled, select:disabled, textarea:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); }
-input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; accent-color: var(--accent-text); }
+:where(.page) :is(input, select, textarea) { width: 100%; min-height: var(--ctl); padding: 0 var(--s3); border: 1px solid var(--border-strong);
+                                               border-radius: var(--r); background: var(--surface); color: var(--text); font-size: var(--fs-b); }
+:where(.page) textarea { padding: var(--s2) var(--s3); }
+:where(.page) :is(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
+:where(.page) :is(input, select, textarea):hover { border-color: var(--text); }
+:where(.page) :is(input, select, textarea):focus { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 0; }
+:where(.page) :is(input, select, textarea):disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); }
+:where(.page) input:is([type="checkbox"], [type="radio"]) { width: auto; min-height: 0; accent-color: var(--accent-text); }
 /* buttons: the plain one is the primary button, .secondary the neutral one, .danger the danger one */
-button { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0 var(--s4);
-         min-height: var(--ctl); border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface);
-         color: var(--text); font-size: var(--fs-m); font-weight: var(--fw-label); line-height: var(--lh-title);
-         cursor: pointer; }
+:where(.page) button { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0 var(--s4);
+                       min-height: var(--ctl); border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface);
+                       color: var(--text); font-size: var(--fs-m); font-weight: var(--fw-label); line-height: var(--lh-title);
+                       cursor: pointer; }
 /* the page script gives every button without a class the main-button class (CON-9: --accent fills a labelled part) */
-button.btn--primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
-button.btn--primary:hover, button.btn--primary:active { border-color: var(--accent-hover); background: var(--accent-hover); }
-button.secondary { border-color: var(--border-strong); background: var(--surface); color: var(--text); }
-button.secondary:hover, button.secondary:active { border-color: var(--text); background: var(--surface); }
-button.danger { border-color: var(--bad); background: transparent; color: var(--bad); }
-button.danger:hover, button.danger:active { border-color: var(--bad); background: var(--bad-soft); }
-button:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
+:where(.page) button.btn--primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+:where(.page) :is(button.btn--primary:hover, button.btn--primary:active) { border-color: var(--accent-hover); background: var(--accent-hover); }
+:where(.page) button.secondary { border-color: var(--border-strong); background: var(--surface); color: var(--text); }
+:where(.page) :is(button.secondary:hover, button.secondary:active) { border-color: var(--text); background: var(--surface); }
+:where(.page) button.danger { border-color: var(--bad); background: transparent; color: var(--bad); }
+:where(.page) :is(button.danger:hover, button.danger:active) { border-color: var(--bad); background: var(--bad-soft); }
+:where(.page) button:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
 .row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin: var(--s1) 0; }
 .row > input, .row > select { flex: 1 1 calc(var(--s7) * 3); min-width: 0; width: auto; }
 .row > button { flex: 0 0 auto; }
 /* cards (the group look) */
 .card { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r); padding: var(--s3) var(--s4);
         margin: var(--s3) 0; }
-.sticky { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: var(--s1); }
-.card.code { margin-bottom: var(--s1); border-color: var(--accent-text); background: var(--surface); }
-.tabs { display: flex; gap: var(--s1); overflow-x: auto; border-bottom: 1px solid var(--border); }
-.tabs a { flex: 0 0 auto; display: inline-flex; align-items: center; min-height: var(--ctl); padding: 0 var(--s3);
-          color: var(--muted); text-decoration: none; border-bottom: 3px solid transparent; font-size: var(--fs-m);
-          font-weight: var(--fw-label); }
-.tabs a:hover { color: var(--text); }
-.tabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent-text); }
-ul { margin: var(--s1) 0; padding-left: var(--s5); }
+.card.code { border-color: var(--accent-text); background: var(--surface); }
+:where(.page) ul { margin: var(--s1) 0; padding-left: var(--s5); }
 .indent { margin-left: var(--s4); }
 /* the background job card: the shared .job is the app's floating panel, here it stays a card in the page */
 .card.job { position: static; width: auto; overflow: visible; box-shadow: none; border-color: var(--accent-text); }
@@ -57,13 +69,13 @@ ul { margin: var(--s1) 0; padding-left: var(--s5); }
 .pill.bad { color: var(--bad); }
 .item { border-top: 1px solid var(--border); padding: var(--s2) 0; }
 .item:first-of-type { border-top: 0; }
-pre { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: var(--r); padding: var(--s3); font-family: var(--mono); font-size: var(--fs-s); margin: var(--s2) 0;
-      max-height: calc(var(--s7) * 8); overflow: auto; }
+:where(.page) pre { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border: 1px solid var(--border);
+                    border-radius: var(--r); padding: var(--s3); font-family: var(--mono); font-size: var(--fs-s); margin: var(--s2) 0;
+                    max-height: calc(var(--s7) * 8); overflow: auto; }
 pre.err, p.err { border-color: var(--bad); color: var(--bad); }
 pre.ok { border-color: var(--ok); }
 img.qr { display: block; width: var(--qr); height: var(--qr); max-width: 100%; padding: 0; }
 .hidden { display: none; }
 
-/* the icon sprite is inline at the top of <body> (S0.10); it takes no room until the page moves onto components.css */
+/* the icon sprite is inline at the top of <body> (S0.10); taken out of the flow here too, in case components.css loads late */
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
