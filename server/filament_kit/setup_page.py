@@ -495,9 +495,11 @@ class SetupPage:
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
             "<script src='/setup/shared/theme-init.js'></script><script defer src='/setup/shared/strings.js'></script>"
             "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
+            "<script defer src='/setup/shared/components-jobs.js'></script>"
             # the shell turns the title into "<Page title> · <Hub name>" (03 1.2); the Hub name is all it needs from here
             f"<title>{name}</title><link rel=stylesheet href='/setup/shared/tokens.css'>"
-            "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/setup.css'>"
+            "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/shared/components-jobs.css'>"
+            "<link rel=stylesheet href='/setup/setup.css'>"
             f"<body>{shared_files.sprite_inline(self.shared)}<div id=app></div><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
             "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",

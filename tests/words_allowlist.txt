@@ -90,15 +90,14 @@ server/filament_kit/setup_static/setup_printers.js | printer pack | 1 | today's 
 server/filament_kit/setup_static/setup_printers.js | the kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | "OK" | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | filament library | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_tabs.js | filament-kit | 6 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+server/filament_kit/setup_static/setup_tabs.js | filament-kit | 5 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | intake | 18 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | intake history | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | module | 9 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | phone web app | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_tabs.js | printer station | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | setup page | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_tabs.js | the kit | 4 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/setup_static/setup_tabs.js | the server | 8 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+server/filament_kit/setup_static/setup_tabs.js | the server | 5 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_trust.js | filament-kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup_trust.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | "station" | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

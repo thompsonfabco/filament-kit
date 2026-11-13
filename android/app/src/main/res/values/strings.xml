@@ -433,7 +433,13 @@
     <string name="job_started">%1$s started.</string>
     <!-- 1=step 2=total 3=text -->
     <string name="job_step">Step %1$s of %2$s: %3$s</string>
+    <!-- 1=line 2=time -->
+    <string name="job_step_elapsed">%1$s (%2$s)</string>
     <string name="job_stopped">It stopped without finishing.</string>
+    <!-- 1=minutes 2=seconds -->
+    <string name="job_time_minutes">%1$s min %2$s s</string>
+    <!-- 1=seconds -->
+    <string name="job_time_seconds">%1$s s</string>
     <string name="job_title_apply">Applying the changes</string>
     <string name="job_title_backup">Backup</string>
     <string name="job_title_check">Checking for updates</string>
@@ -567,7 +573,7 @@
     <string name="subnav_phone">Group: %1$s</string>
     <string name="topbar_hub_unreachable">Hub not reachable</string>
     <!-- 1=title 2=state -->
-    <string name="topbar_job_name">Background job: %1$s, %2$s. Show the job panel.</string>
+    <string name="topbar_job_name">%1$s, %2$s, background job. Show the job panel.</string>
     <string name="topbar_version_prefix">"version "</string>
     <string name="unlock_button">Unlock</string>
     <string name="unlock_continue">Unlock and continue</string>

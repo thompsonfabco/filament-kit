@@ -102,4 +102,6 @@ def test_there_is_no_channel_option_job_or_switch():
 def test_the_page_shows_version_text_and_still_compares_the_version():
     """r.version decides whether the page reloads for a new release: it must stay what S.version is."""
     js = (ROOT / "server/filament_kit/setup_static/setup_tabs.js").read_text(encoding="utf-8")
-    assert "${r.version_text || r.version}" in js and "r.version !== S.version" in js
+    jobs = (ROOT / "web-shared/components-jobs.js").read_text(encoding="utf-8")   # the job strip reloads on a new release
+    assert "${r.version_text || r.version}" in js and "version: () => (S ? S.version : null)" in js
+    assert "r.version !== o.version()" in jobs and "version_text" not in jobs

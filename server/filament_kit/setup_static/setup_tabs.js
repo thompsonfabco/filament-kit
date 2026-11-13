@@ -1,4 +1,4 @@
-// The console's own tabs: Overview, the mode presets, Updates, and the panel that follows a background job.
+// The console's own tabs: Overview, the mode presets, Updates, and the wiring of the background job strip.
 // Loaded after setup.js; everything from the server goes in through textContent, as there.
 "use strict";
 
@@ -6,70 +6,33 @@ const fmtDate = (t) => (t ? new Date(t * 1000).toLocaleString() : null);
 const link = (tab, text) => h("a", { href: "#" + tab, textContent: text });
 
 // ----- a background job (apply, update, rollback, check): it outlives the server, so the page waits for it -----
-const jobState = h("p", { class: "muted" });
-const jobOut = h("pre");
-const jobNote = h("div");
-const jobPanel = h("section", { class: "card job hidden" }, h("h2", { textContent: "Background job" }), jobState, jobOut, jobNote);
-const JOB_TITLE = { apply: "Applying the changes", update: "Updating", rollback: "Rolling back", check: "Checking for updates",
-                    reader_setup: "Setting up the Printer Station" };
-let jobFrom = 0, jobName = null, jobLive = false;     // jobLive: one poll loop at a time, or lines would come twice
-
-function followApply(fresh) {
-  if (fresh) { jobFrom = 0; jobName = null; jobOut.textContent = ""; }
-  jobPanel.classList.remove("hidden");
-  if (jobLive) return;
-  jobLive = true;
-  jobTick();
-}
-
-async function jobTick() {
-  let r;
-  try {
-    r = await api(`job?from=${jobFrom}`);
-  } catch (e) {
-    // the server restarts during an apply, an update or a rollback. A release without this route answers 404: reload.
-    if (e.status === 404) { location.reload(); return; }
-    jobState.textContent = "The server is restarting; waiting for it to come back…";
-    setTimeout(jobTick, 2000);
-    return;
-  }
-  if (S && r.version !== S.version) { location.reload(); return; }        // the new release's own page
-  if (r.next < jobFrom || (jobName && r.name && r.name !== jobName)) {    // another job started over
-    jobFrom = 0; jobOut.textContent = ""; jobName = r.name;
-    setTimeout(jobTick, 200);
-    return;
-  }
-  jobName = r.name;
-  jobOut.textContent += r.text; jobFrom = r.next;
-  jobOut.scrollTop = jobOut.scrollHeight;
-  const title = JOB_TITLE[r.name] || "Working";
-  jobState.textContent = r.running ? `${title}…` :
-    r.lost ? `${title}: it stopped without finishing. See the log, or at the server: sudo journalctl -u filament-kit-setup-job` :
-    r.exit === 0 ? `${title}: done.` : r.exit == null ? "" : `${title}: failed (exit ${r.exit}). See the lines above.`;
-  // the whole log counts in bytes and this view in its own text, so they don't mix: offered once the job has ended
-  if (!r.running) jobNote.replaceChildren(
-    h("p", { class: "muted", textContent: "Addresses and serials are hidden here." }),
-    h("button", { class: "secondary", textContent: "Show the whole log", on: { click: showWholeLog } }));
-  if (r.running || r.text) { setTimeout(jobTick, 1000); return; }
-  jobLive = false;
-  refresh();
-}
-
-// read only when pressed, it can be long (03 2.1); while Locked it asks for the code in place
-function showWholeLog() {
-  const box = slot();
-  return coded(box, async () => {
-    jobNote.replaceChildren(box);
-    let at = 0, text = "";
-    for (;;) {
-      const r = await api("job/log", { from: at, code: theCode() });
-      text += r.text;
-      if (r.next === at) break;
-      at = r.next;
-    }
-    jobOut.textContent = text;
-  });
-}
+// The strip, the top-bar indicator, the restarting state and the not-answering banner are SW_JOBS' (02 8.4, 8.5; 03 3.5 to
+// 3.7); this is the page's part: its requests, the whole log behind the lock, and what is read again when a job ends.
+let hubJobsMade = null;
+const hubJobs = () => hubJobsMade || (hubJobsMade = SW_JOBS.create({
+  job: (from) => api(`job?from=${from}`),
+  state: () => api("state"),
+  version: () => (S ? S.version : null),
+  banners: () => document.querySelector("main"),
+  onEnd: () => refresh(),
+  onBack: () => refresh(),
+  // read only when pressed, it can be long (03 2.1); while Locked it asks for the code in place
+  wholeLog: async (box) => {
+    let text = null;
+    await coded(box, async () => {
+      let at = 0, all = "";
+      for (;;) {
+        const r = await api("job/log", { from: at, code: theCode() });
+        all += r.text;
+        if (r.next === at) break;
+        at = r.next;
+      }
+      text = all;
+    });
+    return text;
+  },
+}));
+const followApply = (fresh) => hubJobs().follow(fresh);
 
 // ----- Overview -----
 const ROW_MARK = { ok: ["ok", "OK"], fail: ["bad", "needs a look"], info: ["", "note"] };
@@ -180,7 +143,9 @@ function generalCard() {
   const body = h("div"), at = (key) => boxFor("general:" + key);
   const save = (key, value) => change(at(key), "settings/general", { key, value }, (r) => {
     if (r.applies) { fill(at(key)); followApply(true); return; }
-    say(at(key), r.restarts ? "Saved. The server restarts now; this page comes back by itself." : "Saved.", true);
+    if (!r.restarts) { say(at(key), "Saved.", true); return; }
+    say(at(key), SW.t("form_saved_restarts"), "run");
+    hubJobs().restart(() => say(at(key), SW.t("restart_saved"), true));
   });
   const text = (label, key, v) => {
     const inp = h("input", { value: v == null ? "" : String(v), ariaLabel: label });
