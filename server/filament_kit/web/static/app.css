@@ -1,88 +1,122 @@
-:root {
-  --bg: #f4f5f7; --card: #fff; --ink: #1b1f27; --muted: #667085; --line: #d9dde4;
-  --accent: #2e8cd6; --ok: #1f8a4c; --warn: #b54708; --bad: #c4320a;
-  color-scheme: light dark;
+/* The web app, on the shared tokens and components (theme-init.js, tokens.css and components.css load first;
+   04-web-app.md). Only the rules of today's markup are here; every colour, size and duration is a token. Light or dark
+   follows the phone (tokens.css) unless a choice is stored (theme-init.js). */
+main { width: 100%; max-width: var(--column-max); margin: 0 auto;
+       padding: 0 max(var(--s4), env(safe-area-inset-right)) calc(var(--s5) + env(safe-area-inset-bottom))
+                max(var(--s4), env(safe-area-inset-left)); }
+main.login { padding-top: calc(var(--s7) + var(--s4)); }
+h1 { font-size: var(--fs-xl); line-height: var(--lh-title); margin: var(--s4) 0; }
+h2 { font-size: var(--fs-l); line-height: var(--lh-title); margin: var(--s5) 0 var(--s2); }
+p { margin: var(--s1) 0; }
+a { color: var(--accent-text); }
+.muted { font-size: var(--fs-m); }
+
+/* fields (the field control look); 16 px on phones so Safari does not zoom the page (08 13) */
+input, select, textarea { width: 100%; min-height: var(--ctl); padding: 0 var(--s3); border: 1px solid var(--border-strong);
+                          border-radius: var(--r); background: var(--surface); color: var(--text); font-size: var(--fs-b); }
+textarea { min-height: calc(var(--s7) + var(--s4)); padding: var(--s2) var(--s3); resize: vertical; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+input:focus, select:focus, textarea:focus { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 0; }
+input:disabled, select:disabled, textarea:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); }
+@media (hover: hover) { input:hover, select:hover, textarea:hover { border-color: var(--text); } }
+@media (max-width: 600px) { input, select, textarea { font-size: var(--fs-l); } }
+
+/* buttons: a button without a class is the main button (app.js gives it btn--primary, CON-9), .secondary the neutral
+   one, .danger the danger one */
+button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+         min-height: var(--ctl); padding: 0 var(--s4); border: 1px solid var(--border-strong); border-radius: var(--r);
+         background: var(--surface); color: var(--text); font-size: var(--fs-m); font-weight: var(--fw-label);
+         line-height: var(--lh-title); cursor: pointer; touch-action: manipulation; }
+button.btn--primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+button.secondary { border-color: var(--border-strong); background: var(--surface); color: var(--text); }
+button.danger { border-color: var(--bad); background: transparent; color: var(--bad); }
+@media (hover: hover) {
+  button.btn--primary:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+  button.secondary:hover { border-color: var(--text); }
+  button.danger:hover { background: var(--bad-soft); }
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #12151b; --card: #1c212b; --ink: #e8eaee; --muted: #98a2b3; --line: #2f3644;
-          --accent: #4ba8f0; --ok: #47c37c; --warn: #f0a24b; --bad: #f2704c; }
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 system-ui, -apple-system, sans-serif;
-             -webkit-text-size-adjust: 100%; }
-main { max-width: 40rem; margin: 0 auto; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
-main.login { padding-top: 4rem; }
-h1 { font-size: 1.4rem; margin: 1rem 0; }
-h2 { font-size: 1.1rem; margin: 1.2rem 0 .5rem; }
-p { margin: .4rem 0; }
-a { color: var(--accent); }
-.muted { color: var(--muted); font-size: .9rem; }
-input, select, textarea, button { font: inherit; color: inherit; }
-input, select, textarea { width: 100%; padding: .55rem .6rem; border: 1px solid var(--line); border-radius: 8px;
-                          background: var(--card); min-height: 2.6rem; }
-textarea { min-height: 4rem; resize: vertical; }
-button { padding: .65rem 1rem; border: 0; border-radius: 10px; background: var(--accent); color: #fff;
-         font-weight: 600; min-height: 2.8rem; cursor: pointer; }
-button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); }
-button.danger { background: var(--bad); }
-button:disabled { opacity: .45; }
-.row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+button:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
+
+/* layout */
+.row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
 .row > * { flex: 1 1 auto; }
 .row > input { flex: 1 1 0; min-width: 0; }
 .row > button.fit { flex: 0 0 auto; }
-label.check { display: flex; gap: .5rem; align-items: center; margin: .5rem 0; font-size: .95rem; color: var(--ink); }
-label.check input { width: 1.3rem; height: 1.3rem; min-height: 0; margin: 0; padding: 0; flex: none; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem .6rem; }
+label.check { margin: var(--s2) 0; font-size: var(--fs-m); color: var(--text); }
+label.check input { width: calc(var(--s4) + var(--s1)); height: calc(var(--s4) + var(--s1)); min-height: 0; margin: 0;
+                    padding: 0; accent-color: var(--accent-text); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2) var(--s3); }
 .grid .wide { grid-column: 1 / -1; }
-label { display: block; font-size: .8rem; color: var(--muted); }
-label > input, label > select, label > textarea { margin-top: .15rem; color: var(--ink); font-size: 1rem; }
-.tabs { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 4px;
-        padding: calc(8px + env(safe-area-inset-top)) 0 8px; background: var(--bg); }
-/* Up to five tabs: one row while they fit, a second row on a narrow phone; never wider than the page. */
-.tabs button { flex: 1 1 auto; min-width: 0; padding: .65rem .6rem; white-space: nowrap;
-               background: var(--card); color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
-.tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 10px 0; }
-.card h3 { margin: 0 0 .4rem; font-size: 1rem; display: flex; gap: .5rem; align-items: center; }
-.swatch { width: 1.2rem; height: 1.2rem; border-radius: 50%; border: 1px solid var(--line); flex: none; }
-.badge { display: inline-block; font-size: .75rem; padding: .1rem .45rem; border-radius: 999px; border: 1px solid var(--line);
-         color: var(--muted); }
-.badge.new { color: var(--warn); border-color: var(--warn); }
-.badge.ok { color: var(--ok); border-color: var(--ok); }
-.thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin: .5rem 0; }
+label { display: block; font-size: var(--fs-s); color: var(--muted); }
+label > input, label > select, label > textarea { margin-top: var(--s1); color: var(--text); }
+
+/* today's tab bar (replaced by the shell in S3.3): up to five tabs, one row while they fit, never wider than the page */
+.tabs { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: var(--s1);
+        padding: calc(var(--s2) + env(safe-area-inset-top)) 0 var(--s2); background: var(--bg); }
+.tabs button { flex: 1 1 auto; min-width: 0; padding: 0 var(--s2); white-space: nowrap; font-weight: var(--fw-text); }
+.tabs button.on { border-color: var(--accent-text); background: var(--accent-soft); color: var(--accent-text);
+                  font-weight: var(--fw-label); }
+
+/* cards (the group look), badges and pills (status: a mark and the word, the word carrying the meaning) */
+.card { margin: var(--s3) 0; padding: var(--s3) var(--s4); border: 1px solid var(--border-strong); border-radius: var(--r);
+        background: var(--surface); }
+.card h3 { display: flex; gap: var(--s2); align-items: center; margin: 0 0 var(--s1); font-size: var(--fs-b);
+           line-height: var(--lh-title); }
+.swatch { border: 1px solid var(--border-strong); }
+.badge, .pill { display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--fs-s); font-weight: var(--fw-label);
+                line-height: var(--lh-title); white-space: nowrap; color: var(--muted); }
+.badge::before, .pill::before { content: ""; flex: none; width: var(--s2); height: var(--s2); border-radius: 50%;
+                                background: currentColor; }
+.badge.new { color: var(--warn); }
+.badge.ok { color: var(--ok); }
+
+/* label photos before a read */
+.thumbs { display: flex; gap: var(--s2); flex-wrap: wrap; margin: var(--s2) 0; }
 .thumbs figure { position: relative; margin: 0; }
-.thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
-.thumbs figcaption { position: absolute; left: 4px; top: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: .7rem;
-                     padding: 0 .3rem; border-radius: 4px; }
-.thumbs button { position: absolute; right: 0; top: 0; min-height: 0; width: 44px; height: 44px; padding: 0;
-                 border-radius: 0 8px 0 50%; background: var(--bad); font-size: 1rem; line-height: 44px; }
-pre { white-space: pre-wrap; word-break: break-word; background: var(--card); border: 1px solid var(--line); border-radius: 8px;
-      padding: 10px; font-size: .82rem; margin: .5rem 0; }
-pre.err { border-color: var(--bad); color: var(--bad); }
+.thumbs img { display: block; width: calc(var(--s7) * 2 - var(--s3)); height: calc(var(--s7) * 2 - var(--s3)); object-fit: cover;
+              border: 1px solid var(--border); border-radius: var(--r-s); }
+.thumbs figcaption { position: absolute; left: var(--s1); top: var(--s1); padding: 0 var(--s1); border-radius: var(--r-s);
+                     background: var(--text); color: var(--surface); font-size: var(--fs-xs); }
+.thumbs button { position: absolute; right: 0; top: 0; width: calc(var(--s7) - var(--s1)); height: calc(var(--s7) - var(--s1)); min-height: 0; padding: 0;
+                 border-color: var(--bad); border-radius: 0 var(--r-s) 0 50%; background: var(--surface); color: var(--bad);
+                 font-size: var(--fs-b); }
+
+/* results (replaced by the inline result in S3.6) */
+pre { margin: var(--s2) 0; padding: var(--s3); border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2);
+      font-family: var(--mono); font-size: var(--fs-s); white-space: pre-wrap; word-break: break-word; }
+pre.err, p.err { border-color: var(--bad); color: var(--bad); }
 pre.ok { border-color: var(--ok); }
-.list button.pick { width: 100%; text-align: left; background: var(--card); color: var(--ink); border: 1px solid var(--line);
-                    font-weight: 400; margin: 4px 0; }
-.list button.pick.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.spin { display: inline-block; width: 1rem; height: 1rem; border: 2px solid var(--line); border-top-color: var(--accent);
-        border-radius: 50%; animation: s 1s linear infinite; vertical-align: -3px; margin-right: .4rem; }
+
+/* filament picks */
+.list button.pick { width: 100%; justify-content: flex-start; margin: var(--s1) 0; text-align: left; font-weight: var(--fw-text); }
+.list button.pick.on { border-color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent-text); }
+
+/* the spinner (replaced by the shared one in S3.6) */
+.spin { display: inline-block; width: var(--s4); height: var(--s4); margin-right: var(--s2); vertical-align: middle;
+        border: 2px solid var(--border); border-top-color: var(--accent-text); border-radius: 50%;
+        animation: s calc(var(--t-slow) * 4) linear infinite; }
 @keyframes s { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 .hidden { display: none; }
 .filebtn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; }
-.filebtn input { position: absolute; inset: 0; opacity: 0; min-height: 0; }
+.filebtn input { position: absolute; inset: 0; min-height: 0; opacity: 0; }
 
 /* Printers tab */
-.pill { font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
-progress { width: 100%; height: .7rem; accent-color: var(--accent); }
-.cam { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; min-height: 6rem; }
-.slot { display: flex; gap: .5rem; align-items: center; padding: 4px 0; }
+progress { width: 100%; height: var(--s3); accent-color: var(--accent-text); }
+.cam { display: block; width: 100%; height: auto; min-height: calc(var(--s7) * 2); border-radius: var(--r); background: var(--surface-3); }
+.slot { display: flex; gap: var(--s2); align-items: center; padding: var(--s1) 0; }
 .slot > :nth-child(3) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.slot.active { font-weight: 600; }
-.sw { width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 1px solid var(--line); flex: none; }
-p.err { color: var(--bad); }
-.slot button { min-height: 2.75rem; padding: .3rem .7rem; flex: none; }
+.slot.active { font-weight: var(--fw-label); }
+.sw { flex: none; width: calc(var(--s4) + var(--s1) / 2); height: calc(var(--s4) + var(--s1) / 2); border: 1px solid var(--border-strong);
+      border-radius: 50%; }
+.slot button { flex: none; min-height: calc(var(--s7) - var(--s1)); padding: 0 var(--s3); }
 
-.thumb { max-width: 8rem; cursor: zoom-in; border-radius: 6px; }
-.thumb.big { max-width: 100%; cursor: zoom-out; }
+/* history photos: a small photo that opens full width */
+img.thumb { width: auto; height: auto; max-width: calc(var(--thumb) + var(--s6)); border: 1px solid var(--border);
+            border-radius: var(--r-s); background: var(--surface-2); }
+img.thumb.big { max-width: 100%; cursor: zoom-out; }
 
-/* the icon sprite is inline at the top of <body> (S0.10); it takes no room until the page moves onto components.css */
-svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+/* were inline styles, which the Content-Security-Policy blocks */
+label.filebtn.wide { display: flex; }
+label.filebtn.wide > button { flex: 1 1 auto; }
+.row.spaced { margin-top: var(--s2); }

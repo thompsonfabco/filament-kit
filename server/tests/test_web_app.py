@@ -257,7 +257,13 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
         check_sprite_first(r.text)
         assert r.headers["content-security-policy"] in (INTAKE_CSP, INTAKE_CSP_PRINTERS)
         check_files(c.get, "/intake")
-        assert "/intake/shared/" not in r.text                                  # not linked yet
+        head = r.text.split("<body")[0]                                         # S3.2: theme first, then tokens, components, own
+        links = ["/intake/manifest-light.webmanifest", "/intake/shared/theme-init.js", "/intake/shared/tokens.css",
+                 "/intake/shared/components.css", "/intake/app.css"]
+        assert [head.index(x) for x in links] == sorted(head.index(x) for x in links)
+        assert "/intake/shared/strings.js" not in r.text and "/intake/shared/components.js" not in r.text   # S3.3 and later
+        for name in ("theme-init.js", "tokens.css", "components.css"):
+            assert c.get(f"/intake/shared/{name}").status_code == 200
     assert _client(app, AWAY).get("/intake/shared/tokens.css").status_code == 403   # no lifespan: the app ran once above
 
 
