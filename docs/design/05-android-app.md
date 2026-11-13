@@ -1458,9 +1458,21 @@ The panel is absent until the app is paired.
 Top bar title "Slicer presets", back arrow. The status lines of 11.1 as field rows (Built, Last build, On your PC).
 An `info` line: "Presets are built on the Hub and installed on your PC by Slicer Sync the next time the slicers are
 closed." A panel "Missing a product line?" with the text "If a filament's line is not in the Filament Catalog, add
-it so presets can be built for it." and the outlined button "Add a line to the Filament Catalog" (opens 8). A last
-line: "Attach filaments to lines and build presets now on the Hub page or in the web app." with the text button
-"Open the Hub page".
+it so presets can be built for it." and the outlined button "Add a line to the Filament Catalog" (opens 8).
+
+A panel "Product lines" lists the lines the Hub knows, as on the Hub page and in the web app (request: the
+app's existing product-lines route). One row per line: headline "<brand> <product line>", supporting
+"<material> · <n> presets", and a second supporting line "Bambu Studio parent: <name>" or "Bambu Studio parent:
+none" with the triangle (a line without a parent builds no presets). The row's action is the text button "Change
+parent"; it opens a sheet titled "Bambu Studio parent of <line>" with the field "Find a parent" (a search over the
+parents Slicer Sync has reported), the list of matches as radio rows, and the buttons "Save" (main) and "Cancel".
+Saving shows the inline result "Saved. A preset build was asked for." on the row; the Hub's refusal is shown as
+given. No parents reported yet: the sheet says "Slicer Sync has not reported any parents yet. It reports them
+when it runs." and has only "Close". Empty list: "No lines yet. They are made from the filaments in Spoolman at the
+next build or when a spool is added." Loading: three skeleton rows. The list is paged at 50.
+
+A last line: "Attach filaments to lines and build presets now on the Hub page or in the web app." with the text
+button "Open the Hub page".
 
 ---
 
@@ -1717,6 +1729,7 @@ Every route, screen, dialog and flow of today's app (`filament-kit` Android app)
 | "Add spool" | Home "Add by hand" 5 |
 | "Add from label photos" | Home "Add from label photos" 5 |
 | "Add profile" | Slicer presets screen 11.2 and spool panel overflow 6.3, opening `catalog/new` 8 |
+| "Existing lines" list on the Add profile screen, with "Change parent" on each line | Product lines panel of the Slicer presets screen 11.2 ("Change parent" opens a sheet) |
 | "Search" | Bottom bar "Spools" 2.3 |
 | "Printers" | Bottom bar "Printers" 2.3; Home Printers panel 5 |
 | "Settings" | Bottom bar "Settings" 2.3 |

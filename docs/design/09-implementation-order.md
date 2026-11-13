@@ -839,7 +839,8 @@ app · L · Depends on: S4.4, S3.9 · Beside: S4.9, S4.15 (not S4.5: both edit `
 app · S · Depends on: S4.4 · Beside: S4.5 to S4.8
 - **Files today:** `<app>/ui/profile/AddProfileScreen.kt`, `AddProfileViewModel.kt`.
 - **Change:** 05 8 (was Add profile).
-- **Keep:** what is saved.
+- **Keep:** what is saved; the list of existing lines with "Change parent" stays on this screen, in the new look,
+  until S4.14 moves it to the Slicer presets screen (no working control goes away between two steps).
 - **Other interfaces:** Hub page Settings > Filament Catalog, Add entry (S2.19); command line `catalog add` (S5.8).
   The web app has none yet (feature idea B8).
 - **Check:** AUT-8 on the screen.
@@ -884,7 +885,8 @@ Hub · M · Depends on: S1.4 · Beside: any step that does not edit `api.py`
 ### S4.14 Slicer presets
 app · M · Depends on: S4.6, S4.13 · Beside: S4.5, S4.9
 - **Files today:** the presets panel in `<app>/ui/home/HomeScreen.kt`.
-- **Change:** 05 11: the Home panel and the Slicer presets screen.
+- **Change:** 05 11: the Home panel and the Slicer presets screen, with the Product lines panel and its "Change
+  parent" sheet (11.2); the list of existing lines leaves the catalog screen (S4.9) in this step.
 - **Keep:** the other panels of Home.
 - **Other interfaces:** Hub page S2.10; web app S3.13; command line S5.7.
 - **Check:** AUT-8 on the screen.
