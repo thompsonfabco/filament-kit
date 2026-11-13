@@ -194,6 +194,7 @@ def test_offline_keeps_last_values(moonraker, fam):
     pid = add(moonraker)
     fam.start()
     assert wait_for(lambda: fam.state(pid) == "connected")
+    fam.offline_after = 0.3                     # a short grace: the loss shows within the wait, not after 10 s
     moonraker.subscribe_refused = True          # the reconnect does not get back to "connected" while we look
     moonraker.drop()
     assert wait_for(lambda: fam.state(pid) != "connected")      # the status below is read after the loss, not before
