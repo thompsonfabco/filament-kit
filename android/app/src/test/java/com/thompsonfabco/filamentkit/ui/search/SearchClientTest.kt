@@ -28,14 +28,13 @@ class SearchClientTest {
             listOf<JsonObject>(answers.getValue(client))
         }
         vm.setQuery("grey petg")
-        vm.setSealedOnly(true)
-        vm.search()
-        assertEquals(listOf(answers["old"]), vm.state.value.results)
+        vm.setSealedOnly(true) // the chip searches at once
+        assertEquals(listOf(1), vm.state.value.results.map { it.id })
 
         client = "new"
         vm.search()
         assertEquals(listOf("old", "new"), seen)
-        assertEquals(listOf(answers["new"]), vm.state.value.results)
+        assertEquals(listOf(2), vm.state.value.results.map { it.id })
         assertEquals("grey petg", vm.state.value.query)
         assertEquals(true, vm.state.value.sealedOnly)
     }

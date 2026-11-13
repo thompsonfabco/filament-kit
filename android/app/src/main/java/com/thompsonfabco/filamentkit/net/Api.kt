@@ -181,6 +181,9 @@ class Api(
         return spool(call(request("api", "spools", spoolId.toString()).patch(body.toBody())))
     }
 
+    /** One spool by its number (`GET api/spools/{id}`); 404 `not_found` when the Hub has none. */
+    suspend fun spoolById(id: Int): JsonObject = spool(call(request("api", "spools", id.toString()).get()))
+
     suspend fun search(q: String, sealedOnly: Boolean): List<JsonObject> {
         val req = request("api", "spools") {
             addQueryParameter("q", q)

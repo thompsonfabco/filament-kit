@@ -54,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -64,8 +63,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.createSavedStateHandle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -103,6 +105,13 @@ import com.thompsonfabco.filamentkit.nav.SettingsGraph
 import com.thompsonfabco.filamentkit.nav.SettingsHubRoute
 import com.thompsonfabco.filamentkit.nav.SettingsRoute
 import com.thompsonfabco.filamentkit.nav.SettingsUpdatesRoute
+import com.thompsonfabco.filamentkit.nav.SpoolLoadPreviewRoute
+import com.thompsonfabco.filamentkit.nav.SpoolLoadRoute
+import com.thompsonfabco.filamentkit.nav.SpoolLoadSlotRoute
+import com.thompsonfabco.filamentkit.nav.SpoolRoute
+import com.thompsonfabco.filamentkit.nav.TagLinkPreviewRoute
+import com.thompsonfabco.filamentkit.nav.TagLinkRoute
+import com.thompsonfabco.filamentkit.nav.TagRoute
 import com.thompsonfabco.filamentkit.nav.SpoolsGraph
 import com.thompsonfabco.filamentkit.nav.SpoolsRoute
 import com.thompsonfabco.filamentkit.nav.Tab
@@ -121,6 +130,7 @@ import com.thompsonfabco.filamentkit.nav.selectTab
 import com.thompsonfabco.filamentkit.nav.showsBackArrow
 import com.thompsonfabco.filamentkit.nav.tab
 import com.thompsonfabco.filamentkit.nav.tabTap
+import com.thompsonfabco.filamentkit.nav.tapIsForTheOpenTag
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.ProfileStatus
@@ -198,9 +208,27 @@ import com.thompsonfabco.filamentkit.ui.settings.SettingsGroupPage
 import com.thompsonfabco.filamentkit.ui.settings.SettingsHub
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
 import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
-import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
-import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
-import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
+import com.thompsonfabco.filamentkit.ui.spool.LinkFindScreen
+import com.thompsonfabco.filamentkit.ui.spool.LinkFindViewModel
+import com.thompsonfabco.filamentkit.ui.spool.LinkPreviewScreen
+import com.thompsonfabco.filamentkit.ui.spool.LinkPreviewViewModel
+import com.thompsonfabco.filamentkit.ui.spool.LoadBackend
+import com.thompsonfabco.filamentkit.ui.spool.LoadPreviewScreen
+import com.thompsonfabco.filamentkit.ui.spool.LoadPreviewViewModel
+import com.thompsonfabco.filamentkit.ui.spool.LoadPrintersScreen
+import com.thompsonfabco.filamentkit.ui.spool.LoadPrintersViewModel
+import com.thompsonfabco.filamentkit.ui.spool.LoadSlotsScreen
+import com.thompsonfabco.filamentkit.ui.spool.LoadSlotsViewModel
+import com.thompsonfabco.filamentkit.ui.spool.SpoolBackend
+import com.thompsonfabco.filamentkit.ui.spool.SpoolResult
+import com.thompsonfabco.filamentkit.ui.spool.SpoolCache
+import com.thompsonfabco.filamentkit.ui.spool.SpoolScreen
+import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
+import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
+import com.thompsonfabco.filamentkit.ui.spool.TagScreen
+import com.thompsonfabco.filamentkit.ui.spool.TagViewModel
+import com.thompsonfabco.filamentkit.ui.spool.toSpoolSummary
+import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -278,8 +306,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     val notice by app.router.notice.collectAsStateWithLifecycle()
 
     // App-wide, one per Api (owned by AppViewModel; replaced when the pinned client changes).
-    val spoolVm by app.spool.current.collectAsStateWithLifecycle()
-    val loadVm by app.load.current.collectAsStateWithLifecycle()
     val updater by app.updater.current.collectAsStateWithLifecycle()
     val online = connection is Connection.Online
     LaunchedEffect(updater, online) {
@@ -331,8 +357,6 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     LaunchedEffect(pairAgainRequests) {
         if (pairAgainRequests > app.handledPairRequests) {
             app.handledPairRequests = pairAgainRequests
-            // a load being written keeps its card: it shows the result once pairing is done
-            closeSpoolCard(loadVm) { spoolVm?.dismiss() }
             if (!nav.currentDestination.inPairing()) pushPairing()
         }
     }
@@ -372,16 +396,51 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         )
     }
 
-    // Tag taps open the spool card anywhere except pairing and the add flow (AddViewModel takes taps itself).
-    val tapVm = spoolVm
+    // A tag tap opens tag/{uid} on the stack of the selected tab (05 2.6), anywhere except pairing and the add flow (which
+    // takes taps itself). While a load is being written it waits: the toast says so and the tag opens when the write ends.
     val adding = destination?.hasRoute(AddRoute::class) == true
-    val tapsOn = tapVm != null && destination != null && !inPairing && !adding
-    LaunchedEffect(tapVm, loadVm, tapsOn) {
-        if (tapsOn) TagEvents.taps.collect {
-            // a new tap replaces the open card and any load flow on it, except while a load is being written:
-            // then the tap is ignored so the user sees that write's result
-            closeSpoolCard(loadVm) { tapVm.onTag(it) }
+    val tapsOn = destination != null && !inPairing && !adding
+    val loadWriting by app.loadGate.writing.collectAsStateWithLifecycle()
+    var queuedTag by rememberSaveable { mutableStateOf<String?>(null) }
+    val tagWaits = stringResource(R.string.tag_read_wait)
+    val tagWaitsLink = stringResource(R.string.tag_read_wait_link)
+    fun openTag(uid: String) {
+        val here = nav.currentBackStackEntry
+        val tagScreen = here?.let(::tagUidOf)
+        // the tag whose spool screen is open: a tap of it does nothing (05 2.6)
+        val spoolsTag = here?.takeIf { it.destination.hasRoute(SpoolRoute::class) }?.let {
+            val route = it.toRoute<SpoolRoute>()
+            route.tag ?: SpoolCache.get(route.id)?.tag
         }
+        if (tapIsForTheOpenTag(uid, tagScreen, spoolsTag)) return
+        // a different tag replaces the tag screen (and the link steps on it)
+        if (tagScreen != null) nav.popBackStack<TagRoute>(inclusive = true)
+        nav.navigate(TagRoute(uid))
+    }
+    // the tag that waited for a write to end opens now; once
+    fun openQueued() {
+        val uid = queuedTag ?: return
+        queuedTag = null
+        openTag(uid)
+    }
+    // a load or a link is being written, or its screen is still showing its answer
+    val onWriteStep = destination?.hasRoute(SpoolLoadPreviewRoute::class) == true || destination?.hasRoute(TagLinkPreviewRoute::class) == true
+    LaunchedEffect(tapsOn, lifecycle) {
+        if (!tapsOn) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            TagEvents.taps.collect { uid ->
+                if (app.loadGate.writing.value) {
+                    queuedTag = uid
+                    pairScope.launch { toast.show(if (app.loadGate.forLink) tagWaitsLink else tagWaits) }
+                } else {
+                    openTag(uid)
+                }
+            }
+        }
+    }
+    // off the write's screen (its own result handling goes first), the waiting tag opens
+    LaunchedEffect(loadWriting, tapsOn, onWriteStep) {
+        if (!loadWriting && tapsOn && !onWriteStep) openQueued()
     }
 
     // The Hub connection chip and its sheet.
@@ -413,6 +472,192 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         }
     }
 
+    // The spool screens and the tag screens (05 2.5, "Shared"): declared in the graph of every tab, so they open on the stack of
+    // the tab that is selected and the bar keeps showing it.
+    val sharedRoutes: NavGraphBuilder.() -> Unit = {
+        composable<SpoolRoute> { e ->
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            val route = e.toRoute<SpoolRoute>()
+            val spoolVm: SpoolViewModel = viewModel(factory = viewModelFactory {
+                initializer {
+                    SpoolViewModel(
+                        route.id, SpoolBackend.of(::currentApi), SpoolCache.get(route.id), route.tag,
+                        route.result?.let(SpoolResult::decode), createSavedStateHandle(),
+                    )
+                }
+            })
+            SpoolScreen(
+                vm = spoolVm,
+                onLoad = { nav.navigate(SpoolLoadRoute(route.id)) },
+                onPairAgain = app.router::pairAgain,
+                online = online,
+                printersOn = info?.printersOn != false,
+            )
+        }
+
+        composable<SpoolLoadRoute> { e ->
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            val route = e.toRoute<SpoolLoadRoute>()
+            val vm: LoadPrintersViewModel = viewModel(factory = viewModelFactory {
+                initializer { LoadPrintersViewModel(LoadBackend.of(::currentApi)) }
+            })
+            LoadPrintersScreen(
+                vm = vm,
+                spool = SpoolCache.get(route.id),
+                onPick = { printer, skipped ->
+                    nav.navigate(SpoolLoadSlotRoute(route.id, printer.id, skipped)) {
+                        // a skipped step is not a step back: Back from the slots goes to the spool
+                        if (skipped) popUpTo<SpoolLoadRoute> { inclusive = true }
+                    }
+                },
+                onOpenPrinters = { tabTapped(Tab.Printers) },
+                onPairAgain = app.router::pairAgain,
+                online = online,
+            )
+        }
+
+        composable<SpoolLoadSlotRoute> { e ->
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            val route = e.toRoute<SpoolLoadSlotRoute>()
+            val vm: LoadSlotsViewModel = viewModel(factory = viewModelFactory {
+                initializer { LoadSlotsViewModel(route.printerId, LoadBackend.of(::currentApi)) }
+            })
+            LoadSlotsScreen(
+                vm = vm,
+                spool = SpoolCache.get(route.id),
+                skipped = route.skipped,
+                onPick = { label -> nav.navigate(SpoolLoadPreviewRoute(route.id, route.printerId, label)) },
+                onPairAgain = app.router::pairAgain,
+                online = online,
+            )
+        }
+
+        composable<SpoolLoadPreviewRoute> { e ->
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            val route = e.toRoute<SpoolLoadPreviewRoute>()
+            val vm: LoadPreviewViewModel = viewModel(factory = viewModelFactory {
+                initializer {
+                    LoadPreviewViewModel(
+                        SpoolCache.get(route.id) ?: SpoolSummary(route.id, "", "", "", null, null, null),
+                        route.printerId, route.slot, LoadBackend.of(::currentApi), app.loadGate,
+                    )
+                }
+            })
+            LoadPreviewScreen(
+                vm = vm,
+                spool = SpoolCache.get(route.id),
+                slot = route.slot,
+                onBack = { nav.popBackStack() },
+                onFinished = { result ->
+                    // the spool screen under the load steps shows the result; it is put into that entry's saved state
+                    runCatching { nav.getBackStackEntry<SpoolRoute>() }.getOrNull()?.savedStateHandle
+                        ?.set(SpoolViewModel.RESULT_KEY, result.encode())
+                    nav.popBackStack<SpoolRoute>(inclusive = false)
+                    // a tag that waited for the load opens on top of the spool screen, after the steps have gone
+                    openQueued()
+                },
+                onDone = { nav.popBackStack<SpoolRoute>(inclusive = false) },
+                onOpenPrinter = {
+                    // the Printers stack goes back to its root first, so Back from the printer lands on the list
+                    nav.selectTab(Tab.Printers)
+                    nav.popBackStack<PrintersRoute>(inclusive = false)
+                    nav.navigate(PrinterRoute(route.printerId))
+                },
+                onPairAgain = app.router::pairAgain,
+                online = online,
+            )
+        }
+
+        composable<TagRoute> { e ->
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            val uid = e.toRoute<TagRoute>().uid
+            val vm: TagViewModel = viewModel(factory = viewModelFactory {
+                initializer { TagViewModel(uid, SpoolBackend.of(::currentApi)) }
+            })
+            TagScreen(
+                vm = vm,
+                uid = uid,
+                // the tag screen is replaced by the spool it is linked to
+                onLinked = { spool ->
+                    nav.navigate(SpoolRoute(spool.id, tag = uid)) { popUpTo<TagRoute> { inclusive = true } }
+                },
+                onLink = { nav.navigate(TagLinkRoute(uid)) },
+                onAddNew = {
+                    nav.popBackStack<TagRoute>(inclusive = true)
+                    // without label reading on the Hub the new spool is added by hand
+                    val request = AddRoute(tag = uid, manual = !labelPhotos)
+                    // an add already open follows the Back rules before a new one replaces it
+                    if (nav.openAdd(request, ::addReplaceOf) == AddOpened.NeedsLeave) leaveAddFor = request
+                },
+                onPairAgain = app.router::pairAgain,
+                online = online,
+            )
+        }
+
+        composable<TagLinkRoute> { e ->
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            val uid = e.toRoute<TagLinkRoute>().uid
+            val vm: LinkFindViewModel = viewModel(factory = viewModelFactory {
+                initializer { LinkFindViewModel(SpoolBackend.of(::currentApi)) }
+            })
+            LinkFindScreen(
+                vm = vm,
+                uid = uid,
+                onPick = { spool, gross ->
+                    SpoolCache.put(spool)
+                    nav.navigate(TagLinkPreviewRoute(uid, spool.id, gross))
+                },
+                onPairAgain = app.router::pairAgain,
+                online = online,
+            )
+        }
+
+        composable<TagLinkPreviewRoute> { e ->
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            val route = e.toRoute<TagLinkPreviewRoute>()
+            val vm: LinkPreviewViewModel = viewModel(factory = viewModelFactory {
+                initializer {
+                    LinkPreviewViewModel(route.uid, route.spoolId, route.gross?.let(::parseWeight), SpoolBackend.of(::currentApi), app.loadGate)
+                }
+            })
+            LinkPreviewScreen(
+                vm = vm,
+                uid = route.uid,
+                onBack = { nav.popBackStack() },
+                // the tag screens are replaced by the spool, which shows the result
+                onDone = { result ->
+                    nav.navigate(SpoolRoute(route.spoolId, tag = route.uid, result = result.encode())) {
+                        popUpTo<TagRoute> { inclusive = true }
+                    }
+                    openQueued()
+                },
+                onPairAgain = app.router::pairAgain,
+                online = online,
+            )
+        }
+    }
+
     SwNav(
         selected = tab,
         visible = navVisible,
@@ -423,7 +668,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
             topBar = {
                 if (!scanning) SwTopBar(
-                    title = placeTitle(destination, storedCertificate),
+                    title = placeTitle(destination, entry, storedCertificate),
                     subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
                     onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                     scrollBehavior = scroll,
@@ -646,6 +891,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             paired = api != null,
                         )
                     }
+                    sharedRoutes()
                 }
 
                 navigation<SpoolsGraph>(startDestination = SpoolsRoute) {
@@ -664,10 +910,15 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         })
                         SearchScreen(
                             vm = searchVm,
-                            onOpenSpool = { spoolVm?.open(it) },
+                            onOpenSpool = { spool ->
+                                SpoolCache.put(spool)
+                                nav.navigate(SpoolRoute(spool.id))
+                            },
                             onPairAgain = app.router::pairAgain,
+                            online = online,
                         )
                     }
+                    sharedRoutes()
                 }
 
                 navigation<PrintersGraph>(startDestination = PrintersRoute) {
@@ -706,6 +957,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         }
                         ManualMapEntry(a, e.toRoute<PrinterMapRoute>().id, onBack = { nav.popBackStack() }, onPairAgain = app.router::pairAgain)
                     }
+                    sharedRoutes()
                 }
 
                 navigation<RecentGraph>(startDestination = RecentRoute) {
@@ -736,7 +988,11 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onOpenRecord = { hid -> nav.navigate(RecordRoute(hid)) { popUpTo<RecordRoute> { inclusive = true } } },
                             onEdit = { item -> nav.navigate(RecordEditRoute(e.toRoute<RecordRoute>().hid, item)) },
                             onOpenPhoto = { n -> nav.navigate(RecordPhotoRoute(e.toRoute<RecordRoute>().hid, n)) },
-                            onOpenSpool = { spoolVm?.open(it) },
+                            onOpenSpool = { json ->
+                                val spool = json.toSpoolSummary()
+                                SpoolCache.put(spool)
+                                nav.navigate(SpoolRoute(spool.id))
+                            },
                             onPairAgain = app.router::pairAgain,
                         )
                     }
@@ -771,6 +1027,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onClose = { if (nav.currentBackStackEntry?.id == e.id) nav.popBackStack() },
                         )
                     }
+
+                    sharedRoutes()
                 }
 
                 navigation<SettingsGraph>(startDestination = SettingsRoute) {
@@ -829,6 +1087,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<SettingsUpdatesRoute> { SettingsGroupPage(SettingsGroup.Updates, settingsFacts, settingsActions) }
                     composable<LicencesRoute> { SettingsGroupPage(SettingsGroup.Licences, settingsFacts, settingsActions) }
                     composable<SettingsDeveloperRoute> { SettingsGroupPage(SettingsGroup.Developer, settingsFacts, settingsActions) }
+                    sharedRoutes()
                 }
             }
         }
@@ -878,44 +1137,23 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             Text(stringResource(R.string.common_leave_body, stringResource(R.string.add_card_new_spool)))
         }
     }
-
-    // The spool card, over whatever screen is open (not over pairing or the add flow).
-    spoolVm?.let { vm ->
-        val spoolState by vm.state.collectAsStateWithLifecycle()
-        if (spoolState != SpoolUiState.Idle && destination != null && !adding && !inPairing) {
-            // Not while a load is being written: the dialog stays until the user has seen the result.
-            val close = { closeSpoolCard(loadVm, vm::dismiss) }
-            Dialog(onDismissRequest = close) {
-                Surface(shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
-                        SpoolHost(
-                            viewModel = vm,
-                            onStartAdd = { tag ->
-                                close()
-                                // without label reading on the server the new spool is added by hand
-                                val request = AddRoute(tag = tag, manual = !labelPhotos)
-                                // an add already open follows the Back rules before a new one replaces it
-                                val opened = nav.openAdd(request, ::addReplaceOf)
-                                if (opened == AddOpened.NeedsLeave) leaveAddFor = request
-                            },
-                            onPairAgain = {
-                                close()
-                                app.router.pairAgain()
-                            },
-                            onClose = close,
-                            loadVm = loadVm,
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 /** The place the top bar names (05-android-app 2.2): the screen, not the product. */
 @Composable
-private fun placeTitle(destination: NavDestination?, storedCertificate: Boolean): String = stringResource(
+private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, storedCertificate: Boolean): String {
+    // the thing's name: the spool's, or the tag's (05 2.2)
     when {
+        destination?.hasRoute(SpoolRoute::class) == true -> {
+            val id = entry!!.toRoute<SpoolRoute>().id
+            return SpoolCache.title(id) ?: stringResource(R.string.spool_title, id.toString())
+        }
+        entry != null && tagUidOf(entry) != null -> return stringResource(R.string.common_tag, tagUidOf(entry).orEmpty())
+    }
+    return stringResource(
+    when {
+        destination?.hasRoute(SpoolLoadRoute::class) == true || destination?.hasRoute(SpoolLoadSlotRoute::class) == true ||
+            destination?.hasRoute(SpoolLoadPreviewRoute::class) == true -> R.string.spool_load
         destination == null -> R.string.nav_home
         storedCertificate -> R.string.pair_cert_top_title
         destination.inPairing() -> R.string.pair_title
@@ -929,7 +1167,19 @@ private fun placeTitle(destination: NavDestination?, storedCertificate: Boolean)
         destination.tab() == Tab.Recent -> R.string.nav_recently_added
         else -> (destination.tab() ?: Tab.Home).label
     },
-)
+    )
+}
+
+/** The tag a tag screen (the lookup or a link step) is about; null on any other screen. */
+private fun tagUidOf(entry: NavBackStackEntry): String? {
+    val d = entry.destination
+    return when {
+        d.hasRoute(TagRoute::class) -> entry.toRoute<TagRoute>().uid
+        d.hasRoute(TagLinkRoute::class) -> entry.toRoute<TagLinkRoute>().uid
+        d.hasRoute(TagLinkPreviewRoute::class) -> entry.toRoute<TagLinkPreviewRoute>().uid
+        else -> null
+    }
+}
 
 /**
  * Android draws apps edge to edge (target SDK 35+). The status and navigation bars stay transparent over the app's own

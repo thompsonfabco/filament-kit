@@ -10,285 +10,220 @@ import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LoadResult
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
-import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonObject
-import java.math.BigDecimal
 
-/** The calls "Load into printer" needs; [ApiLoadBackend] adapts [Api], tests pass a fake. */
+/** The calls "Load into a printer" needs; [of] adapts the real [Api] at each call, tests pass a fake. */
 interface LoadBackend {
     suspend fun printers(): List<Printer>
     suspend fun printer(id: String): PrinterDetail
     suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult
-}
 
-class ApiLoadBackend(private val api: Api) : LoadBackend {
-    override suspend fun printers() = api.printers()
-    override suspend fun printer(id: String) = api.printer(id)
-    override suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean) = api.load(id, label, spoolId, dryRun)
-}
-
-sealed interface LoadUiState {
-    data object Closed : LoadUiState
-
-    /** [printers] is null while loading. */
-    data class PickPrinter(val spool: SpoolSummary, val printers: List<Printer>? = null, val error: String? = null) : LoadUiState
-
-    /** [slots] (every AMS slot the printer reports) is null while loading. */
-    data class PickSlot(
-        val spool: SpoolSummary,
-        val printer: Printer,
-        val slots: List<AmsSlot>? = null,
-        val error: String? = null,
-        val busy: Boolean = false,
-        /** The printer's units, to name its external holders. */
-        val units: List<AmsUnit> = emptyList(),
-    ) : LoadUiState
-
-    /** The dry run's answer, as [lines]; confirm sends the real load. */
-    data class Preview(
-        val spool: SpoolSummary,
-        val printer: Printer,
-        val label: String,
-        val result: LoadResult,
-        val lines: List<String>,
-        val busy: Boolean = false,
-        val error: String? = null,
-    ) : LoadUiState
-
-    /** [spool]/[spoolJson] are the spool as the server now has it (null if it did not say). */
-    data class Done(
-        val printer: Printer,
-        val label: String,
-        val lines: List<String>,
-        val spool: SpoolSummary?,
-        val spoolJson: JsonObject?,
-    ) : LoadUiState
-
-    data object Unauthorized : LoadUiState
-    data class Mismatch(val expected: String, val actual: String) : LoadUiState
+    companion object {
+        fun of(current: () -> Api): LoadBackend = object : LoadBackend {
+            override suspend fun printers() = current().printers()
+            override suspend fun printer(id: String) = current().printer(id)
+            override suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean) =
+                current().load(id, label, spoolId, dryRun)
+        }
+    }
 }
 
 /**
- * Closing the spool card (its Done, a new tag tap, a trip to the Pair screen): closes the load flow [load] and then
- * calls [dismissCard], except while a real load is being written; then both stay so the user sees its result (also
- * when coming back from pairing again).
+ * Whether a load is being written, for the whole app: a tag tapped meanwhile waits (05 2.6) and the load screen ignores
+ * Back (2.5 rule 2). The load's own screen sets it; it is one value because only one load runs at a time.
  */
-fun closeSpoolCard(load: LoadViewModel?, dismissCard: () -> Unit) {
-    if (load?.close() != false) dismissCard()
+class LoadGate {
+    private val _writing = MutableStateFlow(false)
+    val writing: StateFlow<Boolean> = _writing.asStateFlow()
+
+    /** True while the write is a tag link, not a load: the wait text of a tapped tag says which. */
+    var forLink: Boolean = false
+        private set
+
+    internal fun set(on: Boolean, link: Boolean = false) {
+        forLink = on && link
+        _writing.value = on
+    }
 }
 
-/** Texts of the load flow. */
-object LoadHelp {
-    const val NOT_CONFIRMED = "The printer accepted it but hasn't shown the change yet"
+/** The printers that can take a load now: set up and connected (05 7.6). */
+internal fun canTakeLoad(p: Printer): Boolean = p.configured && p.state == Printer.STATE_CONNECTED
 
-    /** The real load failed in a way that says nothing about whether it reached the printer. */
-    const val CHECK_PRINTER = "The connection dropped while loading, so the app can't tell if it worked. Check the " +
-        "printer's slot and the spool's location before trying again."
-
-    /** A 401 to the real load: the server refused it before doing anything (e.g. the pairing changed meanwhile). */
-    const val NOT_SENT_PAIRING = "Not loaded: the server did not accept this phone's pairing at that moment. " +
-        "Nothing was changed. If you have paired again, tap Load to try again."
-
-    /** [units] are the printer's units (they name its external holders). */
-    fun previewLines(
-        spool: SpoolSummary,
-        printer: Printer,
-        r: LoadResult,
-        units: List<AmsUnit> = emptyList(),
-    ): List<String> = buildList {
-        add("Load ${spool.title()} into ${printer.name}, ${PrinterHelp.slotName(r.slot.label, units)}")
-        add(r.preset?.name?.ifBlank { null }?.let { "Preset: $it" } ?: "Preset: none")
-        val mm = r.nozzleMm?.let(::mm)
-        when {
-            r.nozzleAssumed -> add("Nozzle size not reported by the printer; assuming ${mm ?: "0.4"} mm")
-            mm != null -> add("Nozzle: $mm mm")
-        }
-        r.movedBack.filter { it.id != spool.id }.forEach { m ->
-            add("Spool #${m.id ?: "?"} now in ${r.slot.label} goes back to ${m.location.ifBlank { "its previous place" }}")
-        }
-        addAll(r.problems)
-    }
-
-    /**
-     * The result. [loadedId] is the spool just loaded (never listed as moved back); [names] are spool names by id
-     * (from the printer's slots) for the spools that went back to their previous place.
-     */
-    fun doneLines(
-        printer: Printer,
-        r: LoadResult,
-        loadedId: Int? = null,
-        names: Map<Int, String> = emptyMap(),
-        units: List<AmsUnit> = emptyList(),
-    ) =
-        buildList {
-            val where = PrinterHelp.slotName(r.slot.label, units)
-            if (r.confirmed) {
-                add("Loaded into ${printer.name}, $where")
-            } else {
-                add("Sent to ${printer.name}, $where")
-                add(NOT_CONFIRMED)
-            }
-            r.movedBack.filter { it.id == null || it.id != loadedId }.forEach { m ->
-                add(PrinterHelp.movedBackLine(m.id?.let(names::get), m.id, m.location))
-            }
-            addAll(r.problems)
-        }
-
-    fun slotLine(s: AmsSlot, units: List<AmsUnit> = emptyList()): String = listOfNotNull(
-        PrinterHelp.slotLabel(s, units),
-        if (PrinterHelp.slotEmpty(s)) "empty" else s.type.ifBlank { null },
-        s.spool?.name?.ifBlank { null },
-    ).joinToString(" · ")
-
-    private fun SpoolSummary.title() = "$brand $name".trim().ifBlank { "spool #$id" }
-
-    private fun mm(v: Double): String = BigDecimal.valueOf(v).stripTrailingZeros().toPlainString()
+/** Step 1: the printers; [printers] is null while they load. */
+data class LoadPrintersUi(
+    val printers: List<Printer>? = null,
+    val loading: Boolean = true,
+    val failure: HubFailure? = null,
+    val loadedAt: Long? = null,
+) {
+    /** The only printer that can take the load, when there is exactly one: the step is skipped. */
+    val only: Printer? get() = printers?.filter(::canTakeLoad)?.singleOrNull()
 }
 
-/**
- * "Load into printer" from the spool card: [start] → printer list → [pickPrinter] → slot list → [pickSlot] (dry run)
- * → [confirm] (real load). Errors keep the user on the step they were on, with a message.
- */
-class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
-    private val _state = MutableStateFlow<LoadUiState>(LoadUiState.Closed)
-    val state: StateFlow<LoadUiState> = _state.asStateFlow()
+class LoadPrintersViewModel(private val backend: LoadBackend) : ViewModel() {
+    private val _state = MutableStateFlow(LoadPrintersUi())
+    val state: StateFlow<LoadPrintersUi> = _state.asStateFlow()
 
-    private var job: Job? = null
-    private var printers: List<Printer>? = null
-    private var slots: List<AmsSlot>? = null
-    private var units: List<AmsUnit> = emptyList()
-
-    fun start(spool: SpoolSummary) {
-        printers = null
-        slots = null
-        units = emptyList()
-        _state.value = LoadUiState.PickPrinter(spool)
-        op(onError = { LoadUiState.PickPrinter(spool, emptyList(), it) }) {
-            val list = backend.printers().filter { it.configured }
-            printers = list
-            _state.value = LoadUiState.PickPrinter(spool, list)
-            // the only printer: nothing to choose, go to its slots (the next op cancels this one, which has finished)
-            list.singleOrNull()?.let(::pickPrinter)
-        }
+    init {
+        load()
     }
 
-    fun pickPrinter(printer: Printer) {
-        val spool = spoolOf(_state.value) ?: return
-        slots = null
-        units = emptyList()
-        _state.value = LoadUiState.PickSlot(spool, printer)
-        op(onError = { LoadUiState.PickSlot(spool, printer, emptyList(), it) }) {
-            val d = backend.printer(printer.id)
-            val ams = d.status?.ams.orEmpty()
-            val all = ams.flatMap { it.slots }.filter { it.label.isNotBlank() }
-            slots = all
-            units = ams
-            _state.value = LoadUiState.PickSlot(spool, d.printer, all,
-                error = if (d.status == null) "No live status from the printer yet, so its slots aren't known." else null,
-                units = ams)
-        }
-    }
-
-    /** Previews loading into [label] (dry run). */
-    fun pickSlot(label: String) {
-        val s = _state.value as? LoadUiState.PickSlot ?: return
-        if (s.busy) return
-        _state.value = s.copy(busy = true, error = null)
-        op(onError = { s.copy(busy = false, error = it) }) {
-            val r = backend.load(s.printer.id, label, s.spool.id, dryRun = true)
-            _state.value = LoadUiState.Preview(s.spool, s.printer, label, r,
-                LoadHelp.previewLines(s.spool, s.printer, r, s.units))
-        }
-    }
-
-    /**
-     * The real load. It is not cancelled by [close] / [back] or a re-pair: the flow stays open and shows the result.
-     * A 401 here (e.g. the pairing changed meanwhile) stays on the preview with [LoadHelp.NOT_SENT_PAIRING] instead
-     * of the "no longer paired" screen; a dropped connection says to check the printer ([LoadHelp.CHECK_PRINTER]).
-     */
-    fun confirm() {
-        val p = _state.value as? LoadUiState.Preview ?: return
-        if (p.busy) return
-        _state.value = p.copy(busy = true, error = null)
-        val names = slots.orEmpty().mapNotNull { s -> s.spool?.let { sp -> sp.id?.let { it to sp.name } } }.toMap()
-        op(
-            onError = { p.copy(busy = false, error = it) },
-            describe = { e ->
-                when (e.code) {
-                    "unauthorized" -> LoadHelp.NOT_SENT_PAIRING
-                    "offline", "local_network" -> LoadHelp.CHECK_PRINTER
-                    else -> PrinterHelp.actionMessage(e)
-                }
-            },
-            unauthorizedIsError = true,
-        ) {
-            val r = backend.load(p.printer.id, p.label, p.spool.id, dryRun = false)
-            _state.value = LoadUiState.Done(p.printer, p.label, LoadHelp.doneLines(p.printer, r, p.spool.id, names, units),
-                r.spool?.toSpoolSummary(), r.spool)
-        }
-    }
-
-    /** One step back: preview → slots → printers (a one-printer list is skipped, so slots → closed). */
-    fun back() {
-        if (writing) return
-        job?.cancel()
-        when (val s = _state.value) {
-            is LoadUiState.Preview -> _state.value = LoadUiState.PickSlot(s.spool, s.printer, slots ?: emptyList(), units = units)
-            is LoadUiState.PickSlot ->
-                if (printers?.size == 1) close() // the printer step was skipped, so there is no list to go back to
-                else _state.value = LoadUiState.PickPrinter(s.spool, printers ?: emptyList())
-            else -> close()
-        }
-    }
-
-    /**
-     * True while the real (non-dry-run) load is in flight. The POST may already have reached the server, so the
-     * flow is not cancelled then: [close] and [back] are ignored and the user gets to see the result.
-     */
-    val writing: Boolean get() = (_state.value as? LoadUiState.Preview)?.busy == true
-
-    /** Closes the flow; returns false (and does nothing) while [writing]. */
-    fun close(): Boolean {
-        if (writing) return false
-        job?.cancel()
-        _state.value = LoadUiState.Closed
-        return true
-    }
-
-    private fun spoolOf(s: LoadUiState): SpoolSummary? = when (s) {
-        is LoadUiState.PickPrinter -> s.spool
-        is LoadUiState.PickSlot -> s.spool
-        is LoadUiState.Preview -> s.spool
-        else -> null
-    }
-
-    /** [unauthorizedIsError]: a 401 goes to [onError] (with [describe]'s text) instead of [LoadUiState.Unauthorized]. */
-    private fun op(
-        onError: (String) -> LoadUiState,
-        describe: (ApiError) -> String = PrinterHelp::actionMessage,
-        unauthorizedIsError: Boolean = false,
-        block: suspend () -> Unit,
-    ) {
-        job?.cancel()
-        job = viewModelScope.launch {
+    fun load() {
+        _state.update { it.copy(loading = true, failure = null) }
+        viewModelScope.launch {
             try {
-                block()
+                val list = backend.printers().filter { it.configured }
+                _state.update { LoadPrintersUi(list, loading = false, loadedAt = System.currentTimeMillis()) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(loading = false, failure = hubFailure(e)) }
+            }
+        }
+    }
+}
+
+/** Step 2: the slots of one printer, as the printer reports them; [slots] is null while they load. */
+data class LoadSlotsUi(
+    val printer: Printer? = null,
+    val units: List<AmsUnit> = emptyList(),
+    val slots: List<AmsSlot>? = null,
+    val loading: Boolean = true,
+    val failure: HubFailure? = null,
+    val loadedAt: Long? = null,
+)
+
+class LoadSlotsViewModel(private val printerId: String, private val backend: LoadBackend) : ViewModel() {
+    private val _state = MutableStateFlow(LoadSlotsUi())
+    val state: StateFlow<LoadSlotsUi> = _state.asStateFlow()
+
+    init {
+        load()
+    }
+
+    fun load() {
+        _state.update { it.copy(loading = true, failure = null) }
+        viewModelScope.launch {
+            try {
+                val d = backend.printer(printerId)
+                val units = d.status?.ams.orEmpty()
+                val slots = units.flatMap { it.slots }.filter { it.label.isNotBlank() }
+                _state.update { LoadSlotsUi(d.printer, units, slots, loading = false, loadedAt = System.currentTimeMillis()) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(loading = false, failure = hubFailure(e)) }
+            }
+        }
+    }
+}
+
+/**
+ * Step 3 (05 7.6): [plan] is the dry run's answer; while [writing] the load is being sent. [finished] is the result the
+ * spool screen shows once it is back on screen; [dropped] and [pairingRefused] are the two writes that end on this step.
+ */
+data class LoadPreviewUi(
+    val printer: Printer? = null,
+    val units: List<AmsUnit> = emptyList(),
+    val checking: Boolean = true,
+    val plan: LoadResult? = null,
+    val writing: Boolean = false,
+    val failure: HubFailure? = null,
+    val pairingRefused: Boolean = false,
+    val dropped: Boolean = false,
+    /** [failure] came from the write: the Hub refused it, so it is shown with no Try again (05 7.6). */
+    val failedWrite: Boolean = false,
+    val finished: SpoolResult? = null,
+)
+
+/**
+ * The preview of loading [spool] into slot [label] of printer [printerId], asked for when it is made, and the load
+ * itself. The write is not stopped by leaving the screen: Back waits for its answer ([writing], [gate]).
+ */
+class LoadPreviewViewModel(
+    private val spool: SpoolSummary,
+    private val printerId: String,
+    private val label: String,
+    private val backend: LoadBackend,
+    private val gate: LoadGate = LoadGate(),
+) : ViewModel() {
+    private val _state = MutableStateFlow(LoadPreviewUi())
+    val state: StateFlow<LoadPreviewUi> = _state.asStateFlow()
+
+    init {
+        check()
+    }
+
+    fun check() {
+        _state.update { it.copy(checking = true, failure = null, dropped = false, pairingRefused = false) }
+        viewModelScope.launch {
+            try {
+                val d = backend.printer(printerId)
+                val plan = backend.load(printerId, label, spool.id, dryRun = true)
+                _state.update {
+                    it.copy(
+                        printer = d.printer, units = d.status?.ams.orEmpty(), checking = false, plan = plan,
+                        failure = it.failure.afterSuccess(),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(checking = false, failure = hubFailure(e)) }
+            }
+        }
+    }
+
+    /** Sends the load. Once sent it is not cancelled: the screen waits for the answer. */
+    fun load() {
+        val s = _state.value
+        val printer = s.printer ?: return
+        if (s.writing || s.checking || s.plan == null) return
+        gate.set(true)
+        _state.update { it.copy(writing = true, failure = null, failedWrite = false, pairingRefused = false, dropped = false) }
+        viewModelScope.launch {
+            try {
+                val r = backend.load(printerId, label, spool.id, dryRun = false)
+                val result = if (r.confirmed) SpoolResult.Loaded(printer.name, label) else SpoolResult.LoadedUnconfirmed(printer.name, label)
+                // the spool as the Hub has it now, for the spool screen that is shown next
+                r.spool.asSummary()?.let(SpoolCache::put)
+                _state.update { it.copy(writing = false, finished = result) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FingerprintMismatch) {
-                _state.value = LoadUiState.Mismatch(e.expected, e.actual)
+                _state.update { it.copy(writing = false, failure = HubFailure.CertificateChanged) }
             } catch (e: ApiError) {
-                _state.value = if (e.code == "unauthorized" && !unauthorizedIsError) LoadUiState.Unauthorized
-                else onError(describe(e))
+                _state.update {
+                    when {
+                        // the Hub refused the pairing before doing anything
+                        e.code == UNAUTHORIZED -> it.copy(writing = false, pairingRefused = true)
+                        // no route: the request may or may not have reached the printer
+                        e.status == 0 -> it.copy(writing = false, dropped = true)
+                        else -> hubFailure(e).let { f ->
+                            // an answer the app cannot read: nobody knows if it worked, so the load is not offered again
+                            if (f == HubFailure.Unexpected) it.copy(writing = false, dropped = true)
+                            else it.copy(writing = false, failure = f, failedWrite = true)
+                        }
+                    }
+                }
             } catch (e: Exception) {
-                _state.value = onError(PrinterHelp.UNEXPECTED)
+                _state.update { it.copy(writing = false, dropped = true) }
+            } finally {
+                gate.set(false)
             }
         }
+    }
+
+    override fun onCleared() {
+        gate.set(false)
+    }
+
+    private companion object {
+        const val UNAUTHORIZED = "unauthorized"
     }
 }

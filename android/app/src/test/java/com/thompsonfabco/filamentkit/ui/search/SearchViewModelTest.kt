@@ -2,13 +2,13 @@ package com.thompsonfabco.filamentkit.ui.search
 
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.After
@@ -38,31 +38,30 @@ class SearchViewModelTest {
     @Test fun searchPassesQueryAndSealedFlag() {
         vm.setQuery("  grey petg ")
         vm.setSealedOnly(true)
-        vm.search()
-        assertEquals(listOf("grey petg" to true), calls)
-        assertEquals(results, vm.state.value.results)
-        assertTrue(vm.state.value.searched)
+        assertEquals("the chip searches again at once", listOf("grey petg" to true), calls)
+        assertEquals(listOf(4), vm.state.value.results.map { it.id })
+        assertEquals("grey petg", vm.state.value.searched)
         assertFalse(vm.state.value.busy)
     }
 
-    @Test fun aPauseInTypingSearchesOnceForTheLastText() {
+    @Test fun aPauseInTypingSearchesOnceForTheLastTextAfter300ms() {
         vm.setQuery("pe")
         scheduler.advanceTimeBy(200)
         vm.setQuery("petg")
-        scheduler.advanceTimeBy(399)
+        scheduler.advanceTimeBy(299)
         assertTrue(calls.isEmpty())
         scheduler.advanceTimeBy(2)
         assertEquals(listOf("petg" to false), calls)
-        assertEquals(results, vm.state.value.results)
+        assertEquals(listOf(4), vm.state.value.results.map { it.id })
     }
 
-    @Test fun oneTypedLetterDoesNotSearch() {
+    @Test fun oneTypedLetterDoesNotSearchByItself() {
         vm.setQuery("p")
         scheduler.advanceTimeBy(1_000)
         assertTrue(calls.isEmpty())
     }
 
-    @Test fun theSearchButtonDoesNotSearchTwice() {
+    @Test fun theKeyboardsSearchKeySearchesAtOnceAndNotAgainAfterThePause() {
         vm.setQuery("petg")
         vm.search()
         scheduler.advanceTimeBy(1_000)
@@ -75,11 +74,11 @@ class SearchViewModelTest {
         vm.setQuery("")
         scheduler.advanceTimeBy(1_000)
         assertEquals(1, calls.size)
-        assertFalse(vm.state.value.searched)
+        assertNull(vm.state.value.searched)
         assertTrue(vm.state.value.results.isEmpty())
     }
 
-    @Test fun theSealedBoxSearchesAgainOnlyOnceSomethingWasSearched() {
+    @Test fun theChipDoesNotSearchWhileNothingIsTyped() {
         vm.setSealedOnly(true)
         assertTrue(calls.isEmpty())
         vm.setQuery("petg")
@@ -88,37 +87,40 @@ class SearchViewModelTest {
         assertEquals(listOf("petg" to true, "petg" to false), calls)
     }
 
-    @Test fun blankQueryDoesNotCallTheServer() {
+    @Test fun blankQueryDoesNotCallTheHub() {
         vm.setQuery("   ")
         vm.search()
         assertTrue(calls.isEmpty())
     }
 
-    @Test fun errorsBecomePlainMessages() {
-        vm.setQuery("x")
+    @Test fun theRowsOfTheLastAnswerStayUnderAFailure() {
+        vm.setQuery("petg")
+        vm.search()
         error = ApiError(0, "offline", "gone")
         vm.search()
-        assertEquals("Could not reach the server. Check that you are on the same network.", vm.state.value.error)
-        error = IllegalStateException("boom")
-        vm.search()
-        assertEquals("Unexpected response from the server", vm.state.value.error)
+        assertEquals(HubFailure.Unreachable, vm.state.value.failure)
+        assertEquals(1, vm.state.value.results.size)
         error = null
         vm.search()
-        assertNull(vm.state.value.error)
+        assertNull(vm.state.value.failure)
     }
 
-    @Test fun mismatchGetsItsOwnState() {
+    @Test fun failuresAreSortedByTheRealApiErrorShapes() {
         vm.setQuery("x")
+        error = IllegalStateException("boom")
+        vm.search()
+        assertEquals(HubFailure.Unexpected, vm.state.value.failure)
+        error = ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
+        vm.search()
+        assertEquals(HubFailure.Unexpected, vm.state.value.failure)
+        error = ApiError(503, "spoolman_unreachable", "Spoolman is not reachable")
+        vm.search()
+        assertEquals(HubFailure.SpoolmanDown, vm.state.value.failure)
         error = FingerprintMismatch("aa", "bb")
         vm.search()
-        assertEquals("aa" to "bb", vm.state.value.mismatch)
-        assertEquals(emptyList<JsonObject>(), vm.state.value.results)
-    }
-
-    @Test fun unauthorizedIsFlagged() {
-        vm.setQuery("x")
+        assertEquals(HubFailure.CertificateChanged, vm.state.value.failure)
         error = ApiError(401, "unauthorized", "nope")
         vm.search()
-        assertTrue(vm.state.value.unauthorized)
+        assertEquals(HubFailure.NotPaired, vm.state.value.failure)
     }
 }

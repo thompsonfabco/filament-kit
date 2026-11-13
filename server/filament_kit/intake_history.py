@@ -168,9 +168,10 @@ def stash_read(read_id: str, images: list[bytes], result: dict, hint: str = "", 
             for i, data in enumerate(images, 1):
                 _write_atomic(d / f"photo{i}.jpg", data, 0o600, state_owned=True)
             body = {"items": [{k: it.get(k) for k in (*FIELDS, "count", "sealed", "match", "confidence",
-                                                      "confidence_levels")}
+                                                      "confidence_levels", "confidence_filled")}
                               for it in (result.get("items") or []) if isinstance(it, dict)],
-                    "hint": hint or "", "tag": tag, "engine": result.get("engine")}
+                    "hint": hint or "", "tag": tag, "engine": result.get("engine"),
+                    "confidence_rated": result.get("confidence_rated")}
             _write_atomic(d / "read.json", json.dumps(body).encode("utf-8"), 0o600, state_owned=True)
     except Exception:  # noqa: BLE001 - history is a convenience; the read itself succeeded
         log.exception("intake history: cannot keep read %s", read_id)
@@ -203,7 +204,8 @@ def record_save(saved: list[dict], *, source: str, device: str | None = None, re
             rec = {"id": rid, "at": _now(), "source": source if source in SOURCES else "phone",
                    "device": (device or "")[:80], "state": "detected", "read_id": read_id if read else None,
                    "read": ({"items": read.get("items") or [], "hint": read.get("hint") or "",
-                             "engine": read.get("engine")} if read else None),
+                             "engine": read.get("engine"),
+                             "confidence_rated": read.get("confidence_rated")} if read else None),
                    "weight": weight if isinstance(weight, (int, float)) and not isinstance(weight, bool) else None,
                    "tag": tag or (read or {}).get("tag") or None,
                    "saved": [{"item": i, "values": {k: s["values"].get(k) for k in FIELDS},
@@ -242,7 +244,14 @@ def _read_facts(rec: dict) -> dict:
     read = rec.get("read") if isinstance(rec.get("read"), dict) else {}
     items = [it for it in read.get("items") or [] if isinstance(it, dict)]
     eng = read.get("engine") if isinstance(read.get("engine"), dict) else None
-    return {"confidence": read_confidence.summary([it.get("confidence_levels") for it in items]), "engine": eng}
+    # a record kept before the flag: only a reader that is not the Cloud was rated (its "high" was a number's)
+    rated = read.get("confidence_rated")
+    if not isinstance(rated, bool):
+        rated = bool(eng) and eng.get("reader") != "cloud"
+    lv = [it.get("confidence_levels") for it in items]
+    if not rated:                       # a Cloud "high" was never measured
+        lv = [{k: (None if v == "high" else v) for k, v in x.items()} if isinstance(x, dict) else x for x in lv]
+    return {"confidence": read_confidence.summary(lv), "confidence_rated": rated if read else None, "engine": eng}
 
 
 def _size() -> int:

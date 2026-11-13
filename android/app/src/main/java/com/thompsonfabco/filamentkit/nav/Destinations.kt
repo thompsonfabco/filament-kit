@@ -9,6 +9,7 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.add.AddReplace
+import com.thompsonfabco.filamentkit.ui.spool.SpoolCache
 import kotlinx.serialization.Serializable
 
 // The app's routes (05-android-app 2.5), one type per screen. A *Graph is a group: the pairing graph, or one tab's
@@ -36,6 +37,17 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 
 @Serializable data object SpoolsGraph
 @Serializable data object SpoolsRoute
+
+// The spool screens and the tag screens are in the graph of every tab (05-android-app 2.5, "Shared"): they open on the stack
+// of the tab that is selected.
+/** [result] is a [com.thompsonfabco.filamentkit.ui.spool.SpoolResult] already shown by the screen that led here (a link), as its text. */
+@Serializable data class SpoolRoute(val id: Int, val tag: String? = null, val result: String? = null)
+@Serializable data class SpoolLoadRoute(val id: Int)
+@Serializable data class SpoolLoadSlotRoute(val id: Int, val printerId: String, val skipped: Boolean = false)
+@Serializable data class SpoolLoadPreviewRoute(val id: Int, val printerId: String, val slot: String)
+@Serializable data class TagRoute(val uid: String)
+@Serializable data class TagLinkRoute(val uid: String)
+@Serializable data class TagLinkPreviewRoute(val uid: String, val spoolId: Int, val gross: String? = null)
 
 @Serializable data object PrintersGraph
 @Serializable data object PrintersRoute
@@ -149,6 +161,13 @@ fun NavController.replaceAdd(route: AddRoute) {
     navigate(route)
 }
 
+/**
+ * A tag tap that does nothing (05 2.6): the tag of the tag screen that is open ([tagScreen]) or of the spool screen that is
+ * open ([spoolsTag]) is tapped again.
+ */
+fun tapIsForTheOpenTag(uid: String, tagScreen: String?, spoolsTag: String?): Boolean =
+    uid == tagScreen || uid.equals(spoolsTag, ignoreCase = true)
+
 private const val MAX_STACK_DEPTH = 32
 
 /**
@@ -167,4 +186,6 @@ fun NavController.popToRootThrough(back: () -> Unit) {
 /** Drops every stack saved by switching tabs, with its view models (another Hub, or none: nothing of the old one stays). */
 fun NavController.clearSavedStacks() {
     Tab.entries.forEach { tab -> runCatching { clearBackStack(tab.graph) } }
+    // the spools seen belong to the old Hub too
+    SpoolCache.clear()
 }
