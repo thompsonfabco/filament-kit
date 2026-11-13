@@ -42,14 +42,14 @@ function trustCard() {
       ...r.devices.map((d) => h("div", { class: "row item" },
         h("span", { textContent: `${d.name}${d.id === r.this ? " (this computer)" : ""} · made ${fmtDate(d.created)} · last seen ${fmtDate(d.last_seen)} at ${d.last_address === "loopback" ? "the server itself" : d.last_address} · runs out ${fmtDate(d.expires)}` }),
         h("button", { class: "secondary", textContent: "Rename", on: { click: async () => {
-          const name = window.prompt("A name for this computer:", d.name);
-          if (name && name.trim() && await change(box, `trust/${d.id}/rename`, { name: name.trim() })) show();
+          if (await asking(box, `trust/${d.id}/rename`, { kind: "entry", title: SW.t("devices_rename_title", { name: d.name }), confirm: SW.t("common_rename"),
+            fields: [entryField({ label: SW.t("common_field_name"), name: "name", value: d.name }, "common_error_name")] }, ([name]) => ({ name: name.trim() }))) show();
         } } }),
         h("button", { class: "secondary", textContent: "Revoke", on: { click: async () => {
-          if (await change(box, `trust/${d.id}/revoke`, {})) { loadTrust(); show(); }
+          if (await asking(box, `trust/${d.id}/revoke`, destroy("devices_revoke_one_title", "devices_revoke_one_body", "devices_revoke_one_confirm", { name: d.name }))) { loadTrust(); show(); }
         } } }))),
       r.devices.length ? h("div", { class: "row" }, h("button", { class: "danger", textContent: "Revoke all", on: { click: async () => {
-        if (window.confirm("Revoke every trusted computer? Each then needs the setup code again.") && await change(box, "trust/revoke_all", {})) { loadTrust(); show(); }
+        if (await asking(box, "trust/revoke_all", destroy("devices_revoke_all_title", "devices_revoke_all_body", "devices_trusted_revoke_all"))) { loadTrust(); show(); }
       } } })) : h("p", { class: "muted", textContent: "No computer is trusted." }));
   }
   const pills = pill(T.enabled, "on", "off");
@@ -58,15 +58,15 @@ function trustCard() {
     T.trusted ? h("p", {}, `This computer is trusted (${T.name}).`) : null,
     h("div", { class: "row" },
       T.trusted ? h("button", { class: "secondary", textContent: "Stop trusting this computer", on: { click: async () => {
-        if (await change(box, `trust/${T.id}/revoke`, {})) {
+        if (await asking(box, `trust/${T.id}/revoke`, destroy("devices_stop_trusting_title", "devices_stop_trusting_body", "devices_stop_trusting_confirm"))) {
           T = { ...T, trusted: false, id: null, name: null };
           SW.setLock("locked");
           SW.toast(SW.t("lock_toast_untrusted"));
         }
       } } }) : null,
       h("button", { class: "secondary", textContent: T.enabled ? "Turn trusted computers off" : "Turn trusted computers on", on: { click: async () => {
-        if (T.enabled && !window.confirm("Turn trusted computers off? Every computer is forgotten, and each change needs the setup code.")) return;
-        const r = await change(box, "trust/enabled", { enabled: !T.enabled });
+        const r = await (T.enabled ? asking(box, "trust/enabled", destroy("devices_off_title", "devices_off_body", "common_turn_off"), () => ({ enabled: false }))
+          : change(box, "trust/enabled", { enabled: true }));
         if (r) { await loadTrust(); render(); }
       } } })),
     T.enabled ? codeRead("common_list_locked", list, show) : null, box);

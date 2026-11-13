@@ -220,10 +220,15 @@ def routes(page) -> list[tuple]:
         return {"ok": True}
 
     async def change_address(request, body):
+        """`access_code` (Bambu Lab only, optional): saved with the new address, as `PATCH /api/printers` does (03 15):
+        the page, the web app and the app all ask for it, so every interface behaves the same."""
         serial = page._serial(request)
+        access = page._access_code(body) if "access_code" in body else None
 
         def run() -> str | None:
             p = page._entry(serial)
+            if access is not None and p.family == "klipper":
+                raise Refused(400, "a Klipper printer has no Access Code", field="access_code")
             port = port_of({"port": body.get("port", p.port)}) if p.family == "klipper" else None
             host, _, note = address(body)
             if p.family == "klipper":
@@ -231,6 +236,8 @@ def routes(page) -> list[tuple]:
                 if other is not None and other.serial != serial:
                     raise Refused(409, f"{registry.display_name(other)} is already at {host}:{port}", field="address")
             registry.set_address(serial, host, port)
+            if access is not None:
+                registry.set_code(serial, access, replace=True)     # clears the pin, as adding the printer again
             page.printers.sync()
             return note
         note = await anyio.to_thread.run_sync(run)

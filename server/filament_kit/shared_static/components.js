@@ -273,14 +273,16 @@ function ask(o) {
       E("div", "dialog__body", text, o.body, fields, o.after, res), E("div", "dialog__foot", o.extra, cancel, go));
     const dlg = h("dialog", { class: "dialog" + (o.wide ? " dialog--wide" : ""), role: danger ? "alertdialog" : null,
       "aria-labelledby": id + "-title", "aria-describedby": text ? id + "-text" : null }, form);
-    const values = () => fields.map((f) => f._control.value), first = values().join("\n");
+    const values = () => fields.map((f) => f._control.value);
+    // what was typed, the typed word aside: closing asks first when it changed, except in a one-field entry (9.1)
+    const kept = () => fields.filter((f) => f !== word).map((f) => f._control.value).join("\n"), first = kept();
     // a wrong typed word: the button stays focusable, aria-disabled with its reason (07 SR-22)
     const wrong = () => word && word._control.value.trim() !== o.word, sync = () => disable(go, wrong() ? typed : null);
     if (word) { go._refused = () => word._control.focus(); on(word._control, "input", sync); sync(); }
     const ro = (on) => { for (const f of fields) f._control.readOnly = on; };
     on(dlg, "cancel", (e) => {
       if (dlg._busy) return e.preventDefault();
-      if (o.kind === "entry" && fields.length > 1 && values().join("\n") !== first) {
+      if (!(o.kind === "entry" && fields.length < 2) && kept() !== first) {
         e.preventDefault();
         leaveAsk(o.title).then((leave) => { if (leave) close(); });
       }

@@ -14,22 +14,32 @@ function testButton(p, box) {
   } } });
 }
 
-function forgetButton(p, box, words) {
-  return h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${p.name}? ${words}`)) change(box, printerPath(p, "forget"), {}); } } });
+// the dialogs of 03 5.5. `kind`: bambu or klipper (Forget printer), dismiss (a scanned Klipper printer not in use)
+function forgetButton(p, box, kind) {
+  const o = kind === "dismiss" ? destroy("printers_dismiss_title", "printers_dismiss_body", "common_dismiss", { name: p.name })
+    : destroy("printers_forget_title", "printers_forget_body_" + kind, "printers_forget", { name: p.name });
+  return h("button", { class: "secondary", textContent: "Forget", on: { click: () => asking(box, printerPath(p, "forget"), o) } });
 }
 
 function renameButton(p, box) {
-  return h("button", { class: "secondary", textContent: "Rename", on: { click: () => {
-    const name = window.prompt(`A new name for ${p.name}:`, p.name);
-    if (name && name.trim()) change(box, printerPath(p, "rename"), { name: name.trim() });
-  } } });
+  return h("button", { class: "secondary", textContent: "Rename", on: { click: () => asking(box, printerPath(p, "rename"), {
+    kind: "entry", title: SW.t("printers_rename_title"), confirm: SW.t("common_rename"),
+    fields: [entryField({ label: SW.t("common_field_name"), name: "name", value: p.name }, "common_error_name")],
+  }, ([name]) => ({ name: name.trim() })) } });
 }
 
+// Bambu Lab: 03 5.5 asks for the Access Code too (15); the Hub's address change does not take one yet, so it is not asked
 function addressButton(p, box, now) {
-  return h("button", { class: "secondary", textContent: "Change address", on: { click: () => {
-    const address = window.prompt(`The address of ${p.name} (an IP address or a name; a name is kept as you type it):`, now);
-    if (address && address.trim()) change(box, printerPath(p, "address"), { address: address.trim() }, (r) => say(box, r.note ? `Saved. ${r.note}.` : "Saved.", true));
-  } } });
+  const bambu = p.family !== "klipper";
+  return h("button", { class: "secondary", textContent: "Change address", on: { click: () => asking(box, printerPath(p, "address"), {
+    kind: "entry", title: SW.t("printers_change_address_title", { name: p.name }), confirm: SW.t("printers_change_address"),
+    fields: [entryField({ label: SW.t(bambu ? "printers_field_address" : "common_address"), name: "address", value: now, mono: true,
+      hint: bambu ? SW.t("printers_change_address_hint_bambu") : SW.t("printers_change_address_hint_klipper", { port: p.port }) }, "common_error_address"),
+    // 03 15: a Bambu Lab printer's new address takes its Access Code too, as in the web app and the app
+    ...(bambu ? [entryField({ type: "secret", label: SW.t("common_field_access_code"), name: "access_code", mono: true },
+      "common_error_access_code")] : [])],
+  }, ([address, access]) => ({ address: address.trim(), ...(bambu ? { access_code: access } : {}) }),
+  (r) => say(box, r.note ? `Saved. ${r.note}.` : "Saved.", true)) } });
 }
 
 function bambuRow(p) {
@@ -47,11 +57,12 @@ function bambuRow(p) {
       p.configured ? h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: () => manualMap(p, mapBox) } }) : null,
       p.configured ? h("button", { class: p.report_why ? "" : "secondary", textContent: "Collect a report", on: { click: () => collectReport(p, reportBox) } }) : null,
       p.configured ? h("button", { class: "secondary", textContent: "Saved reports", on: { click: () => listReports(p, reportBox) } }) : null,
-      p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => {
-        if (!code.value.trim()) { say(box, "Type the printer's Access Code in the box above first: trusting a new certificate needs it.", false); return; }
-        if (window.confirm(`Forget the certificate pinned for ${p.name}? The next connection trusts whatever answers at its address, and the Access Code you typed is saved.`)) change(box, printerPath(p, "unpin"), { access_code: code.value }, null, [code]);
-      } } }) : null,
-      forgetButton(p, box, "Its Access Code is deleted.")),
+      p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => asking(box, printerPath(p, "unpin"), {
+        ...destroy("printers_forget_cert_title", "printers_forget_cert_body", "printers_forget_cert", { name: p.name, address: p.ip }),
+        fields: [entryField({ type: "secret", label: SW.t("common_field_access_code"), name: "access_code", mono: true,
+          hint: SW.t("printers_forget_cert_hint") }, "common_error_access_code")],
+      }, ([access]) => ({ access_code: access })) } }) : null,
+      forgetButton(p, box, "bambu")),
     p.report_why ? h("p", { class: "err", textContent: `${p.report_why} Collect a report and attach it to an issue.` }) : null,
     box, mapBox, reportBox);
 }
@@ -79,7 +90,7 @@ function listReports(p, box, done) {
 // ----- slot mapping: the server's own connection does it, and this follows it -----
 const mapping = {};
 async function startMap(p, box) {
-  if (!window.confirm(`Map the slots of ${p.name}? It changes their colours briefly and runs a job with no motion; the colours are put back.`)) return;
+  if (!(await SW.ask({ title: SW.t("printers_map_title", { name: p.name }), text: SW.t("printers_map_body"), confirm: SW.t("printers_map_slots") }))) return;
   const r = await change(box, printerPath(p, "map"), {}, () => box.replaceChildren(h("p", { class: "muted", textContent: "Starting…" })));
   if (r) { followMap(p, box); return; }
   try { if ((await api(printerPath(p, "map"))).state === "running") followMap(p, box); } catch (e) { /* the refusal is already in the box */ }
@@ -188,7 +199,7 @@ function klipperRow(p) {
     h("p", {}, h("b", { textContent: p.name }), ` · found at ${hostPort(p)}`),
     h("div", { class: "row" }, key,
       h("button", { textContent: "Use this printer", on: { click: () => change(box, printerPath(p, "connect"), { api_key: key.value }, null, [key]) } }),
-      testButton(p, box), forgetButton(p, box, "A scan may find it again.")),
+      testButton(p, box), forgetButton(p, box, "dismiss")),
     box);
   const lane = h("select", { ariaLabel: "Publish slots to Moonraker's lane data", on: { change: () => change(box, printerPath(p, "lane_data"), { mode: lane.value }) } },
     ...["auto", "on", "off"].map((m) => h("option", { value: m, textContent: `Lane data: ${m}`, selected: m === p.lane_data })));
@@ -198,7 +209,8 @@ function klipperRow(p) {
     h("div", { class: "row" }, key,
       h("button", { textContent: p.api_key ? "Replace key" : "Set key", on: { click: () => change(box, printerPath(p, "api_key"), { key: key.value }, null, [key]) } }),
       h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: () => manualMap(p, box) } }),
-      p.api_key ? h("button", { class: "secondary", textContent: "Clear key", on: { click: () => change(box, printerPath(p, "api_key"), { key: "" }) } }) : null, lane),
+      p.api_key ? h("button", { class: "secondary", textContent: "Clear key", on: { click: () => asking(box, printerPath(p, "api_key"),
+        destroy("printers_clear_key_title", "printers_clear_key_body", "printers_clear_key_confirm", { name: p.name }), () => ({ key: "" })) } }) : null, lane),
     h("div", { class: "row" },
       testButton(p, box),
       h("button", { class: "secondary", textContent: "Detect", on: { click: async () => {
@@ -209,7 +221,7 @@ function klipperRow(p) {
             d.spoolman && d.spoolman.warning].filter(Boolean).map((t) => h("p", { class: d.ok ? "muted" : "err", textContent: t })));
         } catch (e) { say(box, e.message, false); }
       } } }),
-      renameButton(p, box), addressButton(p, box, p.host), forgetButton(p, box, "Its Moonraker API key, if one is saved, is deleted.")),
+      renameButton(p, box), addressButton(p, box, p.host), forgetButton(p, box, "klipper")),
     box);
 }
 
