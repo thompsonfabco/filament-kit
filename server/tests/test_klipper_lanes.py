@@ -203,6 +203,25 @@ def test_publishing_off_removes_the_kits_lanes(env, moonraker, sm):
         fam.stop()
 
 
+def test_turning_publishing_off_removes_the_lanes_at_the_next_sync(env, moonraker, sm):
+    moonraker.objects = ["print_stats", "toolhead", "extruder", "extruder1", "heater_bed", "virtual_sdcard",
+                         "gcode_macro FK_UNVERIFIED_M1D", "gcode_macro _FK_TOOL_SPOOLS"]
+    moonraker.status["gcode_macro _FK_TOOL_SPOOLS"] = {f"t{i}": 0 for i in range(7)}
+    pid = registry.add_klipper("M1D", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        assert fam.wait_settled(pid, 8) == "connected"
+        s = _spool(sm)
+        assert fam.load(sm, pid, "C1", s["id"], False, sealed_location="Sealed stock")["confirmed"] is True
+        assert wait_for(lambda: "lane1" in (moonraker.db.get("lane_data") or {}))
+        registry.set_lane_data(pid, "off")          # as the CLI does, in another process
+        fam.sync()                                  # no load, no unload
+        assert "lane1" not in (moonraker.db.get("lane_data") or {})
+    finally:
+        fam.stop()
+
+
 def test_publishing_reads_only_the_printers_spools(env, moonraker, sm, monkeypatch):
     moonraker.objects = ["print_stats", "toolhead", "extruder", "extruder1", "heater_bed", "virtual_sdcard",
                          "gcode_macro FK_UNVERIFIED_M1D", "gcode_macro _FK_TOOL_SPOOLS"]

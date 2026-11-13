@@ -74,6 +74,7 @@ class _Conn:
         self.fam, self.p = fam, p
         self.client = fam.mr_factory(p.host, p.port, api_key=p.api_key)
         self.target = (p.host, p.port, p.api_key)
+        self.lane_mode = p.lane_data             # the publishing setting last acted on (a change is applied by sync)
         self.state, self.message = "connecting", ""
         self.status: dict = {}
         self.spool_id: int | None = None
@@ -357,12 +358,15 @@ class KlipperFamily(LoadsMixin):
         if not self._started:
             return
         want = {p.serial: p for p in registry.load().values() if p.family == "klipper" and p.configured and p.host}
-        start, stop = [], []
+        start, stop, republish = [], [], []
         with self._lock:
             for pid, c in list(self._conns.items()):
                 p = want.get(pid)
                 if p is None or (p.host, p.port, p.api_key) != c.target:
                     stop.append(self._conns.pop(pid))
+                elif p.lane_data != c.lane_mode:        # the CLI changed lane_data: apply it now, not at the next load
+                    c.lane_mode = p.lane_data
+                    republish.append(pid)
             for pid, p in want.items():
                 if pid not in self._conns:
                     self._conns[pid] = _Conn(self, p)
@@ -371,6 +375,8 @@ class KlipperFamily(LoadsMixin):
             c.stop()
         for c in start:
             c.start()
+        for pid in republish:
+            self._publish(pid)
 
     def _mdns_found(self, host: str, port: int, name: str) -> None:
         registry.detected_klipper(host, port, name, lookups=False)      # the browser's thread: _forget_twins does them
