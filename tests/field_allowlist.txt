@@ -1,21 +1,21 @@
 # Fields created outside the field component (AUT-4). One line each:
-#   <path from the repository root> | <finding> | <reason>
+#   <path from the repository root> | <finding> | <count> | <reason>
 # A line whose finding is gone must be dropped (09 open point 4); a rewritten file removes its lines.
-server/filament_kit/setup_static/setup.js | input | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_backup.js | input | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_flash.js | input | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_flash.js | select | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_intake.js | input | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_intake.js | textarea | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_logs.js | select | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_presets.js | select | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_printers.js | input | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_printers.js | select | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_tabs.js | input | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_tabs.js | select | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_tabs.js | textarea | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/web/static/app.js | input | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/web/static/app.js | select | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/web/static/app.js | textarea | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/web/static/printers.js | input | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/web/static/printers.js | select | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup.js | input | 5 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_backup.js | input | 3 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_flash.js | input | 2 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_flash.js | select | 2 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_intake.js | input | 1 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_intake.js | textarea | 1 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_logs.js | select | 2 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_presets.js | select | 1 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_printers.js | input | 5 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_printers.js | select | 5 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_tabs.js | input | 8 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_tabs.js | select | 2 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_tabs.js | textarea | 1 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/app.js | input | 14 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/app.js | select | 4 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/app.js | textarea | 2 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/printers.js | input | 1 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/printers.js | select | 4 | built inline today; moves into the field component when the view is rebuilt
