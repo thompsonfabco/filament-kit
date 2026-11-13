@@ -481,6 +481,16 @@ def test_backup_keep_op(kit, days, ok):
             setup_helper._backup_keep({"days": days})
 
 
+def test_backup_keep_waits_for_a_running_job_and_runs_under_the_lock(kit, monkeypatch):
+    assert "backup_keep" in setup_helper.LOCKED_OPS
+    monkeypatch.setattr(setup_helper, "_applying", lambda: True)
+    before = config.load()
+    with pytest.raises(setup_helper.Refused) as e:
+        setup_helper._backup_keep({"days": 9})
+    assert e.value.status == 409
+    assert config.load() == before
+
+
 def test_scripts():
     text = (ROOT / "install" / "backup.sh").read_text(encoding="utf-8")
     assert 'chmod 700 "$DEST"' in text and "chgrp" not in text and "chmod 640" not in text

@@ -255,7 +255,6 @@ def bad_host_text() -> str:
 
 from .web.slots import CLI_DEVICE, INTAKE_DEVICE  # noqa: E402
 BUILT_IN_DEVICES = (INTAKE_DEVICE, CLI_DEVICE)     # the server's own pairings: shown as built in, never revoked here
-BUILT_IN_DEVICE = INTAKE_DEVICE
 
 
 def host_ok(request, hosts=None) -> bool:

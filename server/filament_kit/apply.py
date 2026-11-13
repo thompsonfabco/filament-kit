@@ -54,10 +54,8 @@ _COMPANION = {
     "filament-kit-update.timer": "filament-kit-update.service",
     # reverse pairing: the root side that saves a pairing the station received
     "filament-kit-station-pair.path": "filament-kit-station-pair.service",
-    # the setup page's root helper: one instance per request, the page's background jobs, and the name those jobs'
-    # unit had up to 0.4.0 (kept for one release)
-    "filament-kit-setup.socket": ("filament-kit-setup@.service", "filament-kit-setup-job@.service",
-                                  "filament-kit-setup-apply.service"),
+    # the setup page's root helper: one instance per request, and the page's background jobs
+    "filament-kit-setup.socket": ("filament-kit-setup@.service", "filament-kit-setup-job@.service"),
 }
 
 
