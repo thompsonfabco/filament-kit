@@ -1236,7 +1236,7 @@ Undone: revision 2. Record 35 is revised by AI again.
 - A change line is `<Field>: <before> → <after>`; when it does not fit, the after value goes on the next line,
   indented, starting with the arrow.
 - Revise with nothing to change: `The Label Reader changed nothing.` (exit 0). No photo kept:
-  `Note: no photo was kept for this record; it worked from the saved values and your note.`
+  `Note: no photo was kept for this record; the Label Reader worked from the saved values and your note.`
 - Revise when the Label Reader is off: `Error: the Label Reader is off on this Hub, so only edits by hand
   work.` with `Fix: sudo spoolwarden recent edit 35 name="…"`.
 - Edit with values equal to the current ones: `Nothing changed.` (exit 0).
@@ -1307,7 +1307,7 @@ Paired: Shop phone.
 | Command | Output |
 |---|---|
 | `presets status` | Lines in the Hub page's order: `Lines: 14.`; `Last build 2026-11-12 03:05. Presets: 48 (12 for Orca Slicer). Problems: none.` (or `No build yet.`); the last attempt's error, if any; the waiting text; `Installed on the PC: the build of 2026-11-12 03:05, written 2026-11-12 07:30.` or `Installed on the PC: nothing yet.`; `Slicer Sync: last reported 2026-11-12 07:30.` or `▲ needs a look  Slicer Sync: not set up.` with `Fix: sudo spoolwarden pair --slicer-sync`; `Updates: 3 on 2 lines. Presets already in your slicers are never replaced unless you accept them.`; `Delete in Bambu Studio: <name>` and `Delete in Orca Slicer: <name>` lines; problems as `▲ needs a look` lines |
-| `presets build` | Runs the build here and waits for it, as today, with `◐ Building the Slicer presets…` (section 6.6). Then `● done  Built 48 presets, no problems.` or `● done  Built 48 presets, 2 problems:` followed by one `▲ needs a look  <problem>` line per problem (exit 0). Still waiting for the Slicer Sync's first run: `i note  <the Hub's waiting text>` (exit 0). Failed: `× failed  The build failed: <why>. The last good build stays in use.` with `Fix: see what it logged: sudo spoolwarden logs <the build's service>` (exit 1). |
+| `presets build` | Runs the build here and waits for it, as today, with `◐ Building the Slicer presets…` (section 6.6). Then `● done  Presets built: 48. Problems: none.` or `● done  Presets built: 48. Problems: 2:` followed by one `▲ needs a look  <problem>` line per problem (exit 0). Still waiting for the Slicer Sync's first run: `i note  <the Hub's waiting text>` (exit 0). Failed: `× failed  The build failed: <why>. The last good build stays in use.` with `Fix: see what it logged: sudo spoolwarden logs <the build's service>` (exit 1). |
 | `presets lines` | Table `ID`, `LINE` (long column), `MATERIAL`, `PRESETS`; under each row two dim detail lines: `parents: Bambu Studio <name> (<source>) · Orca Slicer <name> (<source>)` and `filaments: 86, 88` (or `filaments: none`). Empty: `No lines yet. They are made from the Spoolman filaments at the next build or addition.` |
 | `presets set-parent` | `Saved. A build was asked for.` When the Slicer Sync has reported no parents: `Error: the Slicer Sync has not reported any parents yet. It reports them when it runs.` |
 | `presets restore-deleted` | `The next build brings back the presets deleted in Bambu Studio. A build was asked for.` |

@@ -748,8 +748,11 @@ app · M · Depends on: S0.4, S0.9 · Beside: Stage 3 steps
   The launcher icon of 05 1 and 08 11 comes with this step: the adaptive icon (foreground mark, `sw_launcher_bg`
   background, monochrome layer).
 - **Keep:** screens, texts, navigation.
-- **Check:** 08 test 5 Kotlin part, with the app's entries removed from `tests/literal_allowlist.txt` in this step
-  (the camera's black ground and the swatch fill stay listed with their reasons); AUT-1 Material roles; the app's
+- **Check:** 08 test 5 Kotlin part. The app's colour entries leave `tests/literal_allowlist.txt` in this step except
+  two reviewed exceptions that stay, each with its reason: the camera view's black ground and the white text drawn
+  over the camera picture (07 CON-6); the swatch's fallback colour literal leaves with the step that rebuilds the
+  swatch (S4.4), after which the swatch holds no colour literal. Size literals (dp) leave with the step that
+  rebuilds their screen; AUT-1 Material roles; the app's
   own `ColorSchemeTest` (08 9), added in this step; manual: release checklist step 7 (Home with TalkBack) in light
   and dark, and a switch of the phone between light and dark while a field holds typed text (the text stays).
 

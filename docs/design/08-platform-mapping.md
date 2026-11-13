@@ -39,8 +39,6 @@ in section 3.4).
 | `tokens/theme-init.js` | Generated (it lists the theme keys) | Proposed | `build_tokens.py`, extended | Hub page and web app (first script in `<head>`) |
 | `icons/sprite.svg` | Generated | Proposed | `build_tokens.py`, extended | The Hub, which places it inline at the top of each page's `<body>` |
 | `strings/strings.js` | Generated | Proposed | `build_tokens.py`, extended | Hub page and web app |
-| `web-shared/components.css` | Hand-written, the shared component stylesheet (`02-components.md`) | Exists | A person | Hub page and web app (after `tokens.css`) |
-| `web-shared/components.js` | Hand-written, the shared component script (`02-components.md` 1.4) | Exists | A person | Hub page and web app (after `strings.js`) |
 | `android/app/src/main/java/<app package>/ui/theme/SpoolwardenTokens.kt` | Generated | Proposed | `build_tokens.py`, extended | `SpoolwardenTheme` |
 | `android/app/src/main/java/<app package>/ui/theme/SpoolwardenTheme.kt` | Hand-written | To write | A person | Every screen |
 | `android/app/src/main/res/drawable/sw_ic_<name>.xml` | Generated, one per icon | Proposed | `build_tokens.py`, extended | `SwIcon` |
@@ -487,7 +485,7 @@ On Android the theme has two layers:
 | `--muted` | `--muted` | `onSurfaceVariant` | `muted` |
 | `--border` | `--border` | `outlineVariant` | `border` |
 | `--border-strong` | `--border-strong` | `outline` | `borderStrong` |
-| `--accent` | `--accent` | none (the fill of the main button and of the chosen segment, through `SwButton` and the segmented choice) | `accent` |
+| `--accent` | `--accent` | none (the fill of the main button, through `SwButton`) | `accent` |
 | `--accent-hover` | `--accent-hover` | none | `accentHover` |
 | `--on-accent` | `--on-accent` | none (the label on `accent`) | `onAccent` |
 | `--accent-soft` | `--accent-soft` | `primaryContainer`, `secondaryContainer`, `tertiaryContainer` | `accentSoft` |
@@ -513,7 +511,7 @@ Rules:
   field, the selected tab. A theme's `accent` may be too light for that (Palette light: 2.20:1 on `surface`), while
   `accent-text` is checked at 4.5:1 on `bg`, `surface` and `surface-2` in every theme. So every stock component is
   readable without being told its colours, and `onPrimary` is `surface`, which has the same ratio against it. Only
-  the filled main button and the chosen segment take `accent` and `onAccent`, from `SpoolwardenColors`
+  the filled main button takes `accent` and `onAccent`, from `SpoolwardenColors`
   (`07-accessibility.md` CON-8 and CON-9).
 - Any role the table does not name (for example the `…Fixed` roles of newer Material versions) is still set
   explicitly by `toColorScheme()`, never left at Material's baseline purple: container-like roles take
@@ -630,8 +628,8 @@ values, as on the web only `var(--s1)` … `var(--s7)` are used.
 
 A theme changes density only through `ctl`, `ctl-phone`, `row` and `gap` (foundations section 4.3).
 
-`SpoolwardenTheme.density` returns a `SwDensity`, built from the theme's `SwSizes` and the window class
-(section 3.4). Both names avoid a bare `Density` because Compose already has a `Density` type for pixel conversion;
+`SpoolwardenTheme.density` returns a `SwDensity`, built from the theme's `SwSizes` alone
+(`control` is `controlPhone` at every window size). Both names avoid a bare `Density` because Compose already has a `Density` type for pixel conversion;
 the "Density object" of foundations section 6.2 is `SwDensity`.
 
 ### 6.3 Radius
@@ -690,7 +688,7 @@ Reduced motion:
   into its phone block. CSS media queries cannot read custom properties, so stylesheets write these two numbers
   literally; proposed test 4 of section 3.4 checks that every width in a media query of the web stylesheets is one
   of them (or one more).
-- Android reads the window size class with `currentWindowAdaptiveInfo().windowSizeClass` (Material 3 adaptive), as
+- Android reads the window size class with `currentWindowAdaptiveInfo()` (or the version of it the Compose release in use provides) and its `windowSizeClass` (Material 3 adaptive), as
   foundations section 7 and `05-android-app.md` section 1 say, and maps it to `WindowClass`: compact to Phone, medium
   to Tablet, expanded and any wider class to Desktop. `WindowClass` is provided by `LocalWindowClass`. The class
   comes from the window, not the screen, so split screen and freeform windows get the layout their width calls for,
@@ -828,7 +826,7 @@ fun SpoolwardenTheme(look: Look, appearance: Appearance, content: @Composable ()
         LocalSwType provides SwType(t.type, window),          // `input` depends on the window class
         LocalSpacing provides t.space,
         LocalSwSizes provides t.sizes,
-        LocalSwDensity provides SwDensity(t.sizes, window),   // `control` depends on the window class
+        LocalSwDensity provides SwDensity(t.sizes),           // `control` is always `controlPhone`
         LocalSwShapes provides SwShapes(t.radius),
         LocalSwElevation provides if (dark) t.elevationDark else t.elevationLight,
         LocalSwMotion provides if (reduceMotion) SwMotion.Off else t.motion,
@@ -838,13 +836,13 @@ fun SpoolwardenTheme(look: Look, appearance: Appearance, content: @Composable ()
         LocalDetailStyle provides t.profile.detail,
     ) {
         MaterialTheme(
-            colorScheme = colors.toColorScheme(dark = dark, inversePrimary = other.accentText),
+            colorScheme = colors.toColorScheme(inversePrimary = other.accentText),
             typography = t.type.toTypography(),
             shapes = t.radius.toShapes(),
         ) {
             CompositionLocalProvider(
                 LocalContentColor provides colors.text,
-                LocalTextSelectionColors provides TextSelectionColors(colors.accent, colors.accentSoft),
+                LocalTextSelectionColors provides TextSelectionColors(handleColor = colors.accentText, backgroundColor = colors.accentSoft),
                 content = content,
             )
         }
@@ -1054,11 +1052,11 @@ snake case; `{count}` is the number a plural depends on.
   "appearance_light": "Light",
   "appearance_dark": "Dark",
   "appearance_system": "System",
-  "printer_forget": "Forget printer",
-  "printer_forget_question": "Forget {printer}?",
+  "printers_forget": "Forget printer",
+  "printers_forget_question": "Forget {printer}?",
   "command_name": "spoolwarden",
-  "printer_forget_body_bambu": "{product} stops connecting to it and deletes its Access Code. To use it again, add it again.",
-  "printer_forget_body_klipper": "{product} stops connecting to it and deletes its Moonraker API key, if one is saved.",
+  "printers_forget_body_bambu": "{product} stops connecting to it and deletes its Access Code. To use it again, add it again.",
+  "printers_forget_body_klipper": "{product} stops connecting to it and deletes its Moonraker API key, if one is saved.",
   "status_fix_run": "Run {command} status on the Hub.",
   "spools_added": { "one": "{count} spool added", "other": "{count} spools added" }
 }

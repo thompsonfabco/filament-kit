@@ -27,9 +27,9 @@ One scheme for every component:
 | Variant (a fixed kind) | Block, two hyphens, variant name; a variant of a part: part, two hyphens, variant name | `btn--primary`, `dialog--drawer`, `coll__row--detail` |
 | Several blocks on one element | Allowed when the element is both things | `class="appearance segmented"`, `class="subnav__dirty status status--warn"` |
 | State | A native or ARIA attribute where one exists (`disabled`, `aria-disabled`, `aria-expanded`, `aria-invalid`, `aria-busy`, `aria-current`, `aria-checked`, `aria-sort`, `:checked`); otherwise `data-state="…"` | `[aria-expanded="true"]`, `[data-state="running"]`, `[data-state="dirty"]` |
-| Theme profile | Never in markup. CSS selects on `:root[data-look="…"]` (foundations §6.2) | `:root[data-look="panes"] .coll` |
+| Theme profile | Never in markup, except on a theme preview tile. CSS selects on `:root[data-look="…"]` (foundations §6.2) | `:root[data-look="panes"] .coll` |
 | Script hook | `data-action`, `data-id`, `data-col`, `data-prio`, `data-tab`, `data-group`, `data-section` (a page's section), `data-draft` (a form group whose input is kept as a draft, 5.11), `data-effect` (a field whose saving restarts the Hub or starts an apply job, 5.11), `data-photo` (a thumbnail's photo id, 7.6), `data-revision` (a revision's id, 7.10); never a class | `data-action="test"` |
-| Theme preview | `data-preview="<look>"` on a theme picker's drawing (3.4): each theme's token blocks also match it | `data-preview="palette"` |
+| Theme preview | `data-look="<look>"` on the root of a theme preview tile (3.4): the generated tile blocks of `tokens.css` are keyed on it | `data-look="palette"` |
 | Utility | Only three: `sr` (visually hidden, still read), `mono` (`--mono`, tabular numbers), `muted` (`--muted`) | `<span class="sr">Connected: </span>` |
 | Icon | `icon` (20 px), `icon--s` (16 px), `icon--l` (28 px); symbol ids in the inline sprite `i-<name>` for icons, `s-<shape>` for status shapes; only the icons of foundations §10. The one chevron, `i-chevron`, points right; CSS turns it (down in a select, up or down by `aria-sort` in a sort button) | `<svg class="icon"><use href="#i-printer"/></svg>` |
 | Icon sprite | `sprite`: the one hidden inline `<svg>` near the top of `body` that holds every `<symbol>` (`i-<name>`, `s-<shape>`); `aria-hidden="true"`, never shown | `<svg class="sprite" aria-hidden="true">…</svg>` |
@@ -49,7 +49,9 @@ Every length is a token of foundations §4.3 or a `calc()` of tokens. Lengths us
 | Icon | `calc(var(--s4) + var(--s1))` = 20 px; small `var(--s4)` = 16 px; large `calc(var(--s5) + var(--s1))` = 28 px |
 | Status shape | `var(--s2)` = 8 px (triangle and octagon `calc(var(--s2) + var(--s1) / 2)` = 10 px) |
 | Spacing (padding, gap, margin) | Only the steps `--s1` to `--s7`, never a sum with a literal (foundations §4.3). Sizes of drawn parts may be a `calc()` of tokens with plain numbers, as in the rows above |
-| Hairline, focus ring, active mark | 1 px, 2 px with 2 px offset, 3 px: the literal values foundations §4.1, §8 and §10 give |
+| Hairline, active mark | `var(--hairline)` and `var(--nav-mark)`, never a bare `1px` or `3px` (foundations §4.3) |
+| Focus ring | 2 px with 2 px offset (foundations §8) |
+| Maximum width of text, a field or a panel | May be written in the component in `rem` or `ch`, because it must grow with the text size. Nothing else is a bare number |
 | Minimum hit area | 44 px (48 dp on Android); a smaller visible control gets an `::after` that reaches 44 px (foundations §4.3) |
 | Sidebar width (`nav` = `sidebar`) | `var(--side-w)`: the theme's `size` entry `side-w` (256 px in every theme) |
 | Section pane width (`nav` = `list`) | `var(--list-w)`: the theme's `size` entry `list-w` (Panes 360 px) |
@@ -649,8 +651,7 @@ footer: Cancel, and **Unlock** or, with a pending change, **Unlock and continue*
 - Loading: the primary button shows a spinner and "Checking…" while the code is checked; the field becomes
   read-only.
 - Error: inline at the field, each with what to do: empty "Enter the 8-digit setup code."; wrong length "The setup
-  code has 8 digits; this has 6. Check it and try again."; refused by the Hub "This is not the setup code. Check it
-  at the Hub: `sudo spoolwarden setup-code`."; too many tries: the Hub's own wording; Hub not reachable "Cannot reach the
+  code has 8 digits; this has 6. Check it and try again."; wrong code "That code is not right." followed, when the Hub's reply gives it, by the Hub's sentence about remaining tries or the wait ("Wait 30 s before trying again."), which is never dropped; Hub not reachable "Cannot reach the
   Hub. Check that it is on, then try again."
 
 **Behaviour and keyboard.** The field accepts digits with or without a dash or spaces; other characters are dropped
@@ -757,7 +758,7 @@ themes and Save (a Hub setting, so it needs the setup code).
 `--s3`, 1 px `--border-strong`, `--r`; preview area aspect 4:3, `--r-s`; name `--fs-b` weight 650; line `--fs-s`
 `--muted`. Checked tile: 2 px `--accent-text` border (1 px border plus 1 px inset), `--accent-soft` ground, check icon
 `--accent-text` in the top right. The preview drawing is plain elements styled by tokens: each theme's token blocks
-also match `[data-preview="<look>"]`, in light and in both dark selectors, so a tile shows its theme in the current
+also match `[data-look="<look>"]` on the tile's root, in light and in both dark selectors, so a tile shows its theme in the current
 appearance.
 
 **States.**
@@ -794,7 +795,7 @@ and expanded widths.
   <label class="theme-picker__tile">
     <input class="theme-picker__input" type="radio" name="look" value="console" checked
            aria-describedby="look-console-line">
-    <span class="theme-picker__preview" data-preview="console" aria-hidden="true">
+    <span class="theme-picker__preview" data-look="console" aria-hidden="true">
       <span class="theme-picker__bar"></span><span class="theme-picker__nav"></span>
       <span class="theme-picker__rows"></span></span>
     <span class="theme-picker__name">Console</span>
@@ -844,8 +845,7 @@ over `--t-fast`. Every button also has an `::after` hit area reaching 44 px.
 - Pressed: default and ghost `--surface-3`; primary `--accent-hover`; danger `--bad-soft`.
 - Disabled: `aria-disabled="true"` (stays focusable), ground `--surface-2`, text `--muted`, border `--border`,
   cursor `not-allowed`; a disabled button **always** has its reason visible next to it and linked by
-  `aria-describedby` ("Check the spools first: any edit needs a new check."). Native `disabled` is used only where
-  the reason is the current step of the dialog it sits in.
+  `aria-describedby` ("Check the spools first: any edit needs a new check."). Native `disabled` is never used on the confirm button of a typed-word dialog (9.1).
 - Loading: `aria-busy="true"` and `aria-disabled="true"`; the icon becomes a spinner (8.1); the label becomes the
   progress form of its verb ("Testing…", "Saving…", "Checking…"); the button keeps the width it had (the script
   sets `--btn-min` from its measured width) so nothing moves.
@@ -955,8 +955,7 @@ toasts), max width 20rem. Offset `--s1` from its target. Appears over `--t-fast`
 - Loading: not applicable.
 - Error: not applicable.
 
-**Behaviour and keyboard.** Escape hides it without moving focus. On touch screens a long press on the target shows
-it for 3 s (relative dates, icon buttons); a short tap does the button's action. Placed above the target, flipped
+**Behaviour and keyboard.** Escape hides it without moving focus. It shows on hover and on keyboard focus only; there is no touch trigger. On touch screens an icon-only control's name is reachable because every icon-only control either sits beside visible text that names it or has a visible label at phone width. Placed above the target, flipped
 below near the top edge; never covers the target.
 
 **Accessibility.** `role="tooltip"` with an id. For an icon button the tooltip repeats the button's `aria-label` and
@@ -965,7 +964,7 @@ and the exact time is linked with `aria-describedby`.
 
 **Theme profiles.** No change.
 
-**Android.** `TooltipBox` with `PlainTooltip` (long press), and `contentDescription` on the icon.
+**Android.** `TooltipBox` with `PlainTooltip` (on keyboard or switch focus), and `contentDescription` on the icon.
 
 **HTML.**
 ```html
@@ -998,7 +997,7 @@ used in Settings).
 | Required and optional | Every field is required unless its label ends in "(optional)". No asterisks, no "required" word. A form whose fields are all optional says so once in its description. The same rule holds in the web app and the Android app. |
 | Hint | One short sentence under the control: where to find the value, its format, or its effect ("On the printer: Settings > Network/LAN"; "Changing this restarts the Hub."). |
 | Error | Says what is wrong and what to do ("Enter the printer's address."; "Use at least 12 characters. This one has 9."). Never only "Invalid". |
-| When checked | On submit or Save. After a field has shown an error it is checked again on every input and the error clears as soon as the value is good. Nothing is flagged while a person is still typing a value for the first time. |
+| When checked | When the field loses focus after its value changed, and again on Save. Never while the person is still typing in it, except that a field already showing an error is re-checked as it is typed in, so the error clears as soon as the value is right. |
 | Errors from the Hub | An error the Hub ties to a field is shown at that field; anything else goes to the form's result area (8.6). Edits are always kept. |
 | Several errors | Focus moves to the first field in error. A form with more than six fields and two or more errors also shows an error summary at its top: "2 fields need a look:" followed by links to them. |
 | Never lose input | Refreshing data never replaces a field that has focus or holds an edited value (foundations §1 principle 4). |
@@ -2979,7 +2978,7 @@ confirming button). Kinds:
 |---|---|---|---|---|
 | Confirm | A question naming the thing: "Map the slots of Workshop X1?" | The consequence: "The printer changes its slot colours briefly and runs a job with no motion; the colours are put back." | Cancel · **Map slots** (primary) | The confirming button |
 | Destructive | "Forget Workshop X1?" | What is lost and whether it can be undone: "Spoolwarden stops connecting to it and deletes its Access Code. To use it again, add it again." | Cancel · **Forget printer** (`btn--danger btn--solid`) | Cancel |
-| Destructive with a typed word | "Restore this backup?" | The consequence ("Backup of <host> made <created>. This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first. The Hub restarts, and afterwards the setup code is the one from the backup.") and a field "Type restore to go on" | Cancel · **Restore** (`btn--danger btn--solid`), disabled until the field holds the word | The field |
+| Destructive with a typed word | "Restore this backup?" | The consequence ("Backup of <host> made <created>. This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first. The Hub restarts, and afterwards the setup code is the one from the backup.") and a field "Type restore to go on" | Cancel · **Restore** (`btn--danger btn--solid`), `aria-disabled` until the field holds the word | The field |
 | Text entry | "Rename printer", "Change address: Workshop X1", "Replace Access Code: Workshop X1" | One or more fields (5.2 to 5.4), prefilled with the current value and selected; a secret field (5.3, "Replace Access Code") is never prefilled and starts empty | Cancel · the verb (**Rename**, **Change address**) as primary | The first field |
 | Information | "Saved reports: Workshop X1" | The content | **Close** (primary) | Close |
 
@@ -2998,8 +2997,7 @@ slides in. **Phones**: every dialog is drawn as a bottom sheet (9.2): full width
 **States.**
 - Default: as the kind.
 - Hover, focus, pressed: as its controls.
-- Disabled: the confirming button while the typed word does not match (reason "Type restore to go on.") and while a
-  request is in flight.
+- Disabled: the confirming button while the typed word does not match and while a request is in flight. It is never natively `disabled`: it stays focusable with `aria-disabled="true"` and `aria-describedby` pointing at the sentence "Type restore to go on." (the word differs per dialog); pressing it while disabled does nothing but move focus to the word field.
 - Loading: the confirming button shows its loading form ("Forgetting…"); fields become read-only; Escape and Close
   wait until the Hub answers.
 - Error: field errors at the fields (5.1); other errors in a result line (8.6) above the foot; the dialog stays open

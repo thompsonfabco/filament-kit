@@ -54,7 +54,7 @@ Status rows, in this order:
 | State | Text | Fix line |
 |---|---|---|
 | OK | Hub service is running. | |
-| OK | Spoolman answers: 64 spools, 23 filaments. | |
+| OK | Spoolman answers. Spools: 64. Filaments: 23. | |
 | OK | Certificate is valid until 2027-10-30. | |
 | OK | Label Reader: Cloud (Claude) key is set; 12 of 40 reads used today. | |
 | Needs a look | Study A1 mini has not answered since 2026-11-12 09:10. | Check that the printer is on and on the home network. |
@@ -64,8 +64,8 @@ Status rows, in this order:
 | Note | Spoolwarden 0.5.3 is available. | |
 
 "Still to do" is absent in this variant (nothing is left to set up). Summaries used by navigation rows and the More
-sheet: Printers "2 connected, 1 offline"; Recently added "5 records, 14.2 MB of photos"; Devices "3 paired, 2 Tag
-Readers"; Slicer presets "58 presets, 3 updates"; Features "10 on, 4 off"; Updates "0.5.3 is available".
+sheet: Printers "2 connected, 1 offline"; Recently added "5 records, 14.2 MB of photos"; Devices "Paired: 3. Tag Readers: 2";
+Slicer presets "Presets: 58. Updates: 3"; Features "10 on, 4 off"; Updates "0.5.3 is available".
 
 ## 4. Printers
 
@@ -264,7 +264,7 @@ Sample of "Hub service", last lines:
 
 ```
 2026-11-12 14:05:12 added spool 214 from a phone photo (Kitchen phone)
-2026-11-12 14:06:01 preset build finished: 58 presets, 1 problem
+2026-11-12 14:06:01 preset build finished. Presets: 58. Problems: 1
 2026-11-12 13:50:44 Slicer Sync reported in (Desk PC)
 2026-11-12 13:20:09 Workshop X1 used 18.4 g from spool 187 (A1)
 2026-11-12 09:10:31 Study A1 mini at 192.0.2.41 stopped answering
@@ -279,7 +279,7 @@ update available.
 
 | Section | What it shows |
 |---|---|
-| Overview | "Still to do": "Printers: none yet" (link to Printers) · "Phone: not paired" (link to Devices) · "Moving from another computer? Restore its backup" (link to Settings) · "Anthropic key: not set" (link to Settings). Status rows: Hub service OK, Spoolman OK with "0 spools, 0 filaments", certificate OK. |
+| Overview | "Still to do": "Printers: none yet" (link to Printers) · "Phone: not paired" (link to Devices) · "Moving from another computer? Restore its backup" (link to Settings) · "Anthropic key: not set" (link to Settings). Status rows: Hub service OK, Spoolman OK with "Spools: 0. Filaments: 0.", certificate OK. |
 | Printers | "No printers yet. Printers on the network appear here once they announce themselves." with Add a printer |
 | Recently added | "No spool has been added since the history started." |
 | Devices | "Nothing paired yet." · "No Tag Readers yet." · "No computer is trusted." |
