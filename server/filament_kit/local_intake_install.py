@@ -37,11 +37,11 @@ from typing import Callable
 
 from . import local_reader, release
 
-# The module's release key: ed25519, the raw 32 bytes in base64, as release.PUBKEY. A PLACEHOLDER until the module's
-# first signed release: empty means no release can be verified, so nothing is installed. Replace it with the key the
-# module's owner prints (its own key pair, never the kit's).
-MODULE_PUBKEY = ""
-MODULE_REPO = "thompsonfabco/filament-kit-image"
+# The module's release key: ed25519, the raw 32 bytes in base64, as release.PUBKEY: the module's own key pair (never
+# the kit's), published by its builder in KIT-INTEGRATION-STATUS.md on 2026-11-12 with the repository name. Empty
+# would mean no release can be verified, so nothing is installed.
+MODULE_PUBKEY = "adkFwUZin7sdhZJ1fdr9sOn8BtFIFuiFHrm2d5O0TPU="
+MODULE_REPO = "thompsonfabco/filament-kit-vision"
 NAME = "filament-kit-image"
 MANIFEST = "manifest.json"
 STORE = Path("/opt/filament-kit/local-intake")

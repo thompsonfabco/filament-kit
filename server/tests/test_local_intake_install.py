@@ -472,3 +472,13 @@ def test_the_uninstallers_version_read_is_digits_only(tmp_path):
         out = subprocess.run([bash, "-c", f"sed -n '{expr}' \"$1\" | head -n 1", "x", f.as_posix()],
                              capture_output=True, text=True).stdout.strip()
         assert out == want, rec
+
+
+def test_the_modules_release_key_and_repo_are_pinned():
+    """The module builder's published key (KIT-INTEGRATION-STATUS.md, 2026-11-12): a valid ed25519 key, used from the
+    code only, and its repository."""
+    from filament_kit import release
+    assert lii.MODULE_PUBKEY == "adkFwUZin7sdhZJ1fdr9sOn8BtFIFuiFHrm2d5O0TPU="
+    assert len(release.public_key(lii.MODULE_PUBKEY)) == 32
+    assert lii.MODULE_REPO == "thompsonfabco/filament-kit-vision"
+    assert lii.settings({"local_intake": {"pubkey": "x"}})["pubkey"] == lii.MODULE_PUBKEY    # never from config
