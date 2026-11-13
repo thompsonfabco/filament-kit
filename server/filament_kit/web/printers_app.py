@@ -49,7 +49,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from .. import __version__
 from .errors import Problem
 from .slots import LABEL, SlotError
 
@@ -158,8 +157,6 @@ class PrintersApp:
                       ("/push/unsubscribe", g(self.push_unsubscribe), ["POST"]),
                       ("/push/test", g(self.push_test), ["POST"])]
         routes = [Route("/intake/api/printers" + p, fn, methods=m) for p, fn, m in table]
-        # the service worker: served from the app's path so its scope is the app (same checks), print alerts on or off
-        routes.append(Route("/intake/sw.js", g(self.service_worker), methods=["GET"]))
         return routes
 
     def guard(self, fn):
@@ -489,11 +486,6 @@ class PrintersApp:
                           + ". If the push service cannot be reached, the web service's network limits may block it "
                           "(user guide, Web Push).")
         return {"ok": True, **r}
-
-    async def service_worker(self, request: Request):
-        body = (STATIC / "sw.js").read_bytes().replace(b"__VERSION__", __version__.encode())
-        return Response(body, media_type="text/javascript",
-                        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
 
 
 class _Relay(StreamingResponse):

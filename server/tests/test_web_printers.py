@@ -721,6 +721,18 @@ def test_service_worker_is_served_with_print_alerts_off(app):
     assert signed(app).get(P + "/push/key").status_code == 404      # the push routes stay absent
 
 
+def test_service_worker_is_served_with_the_printers_module_off(env, kit):
+    cfg = config.load()
+    cfg["modules"]["printers"] = False
+    config.save(cfg)
+    app = make_app(env, kit)                                         # print alerts off too
+    assert "data-printers='1'" not in signed(app).get("/intake").text
+    assert TestClient(app, base_url=ORIGIN, client=AWAY).get("/intake/sw.js").status_code == 403
+    r = signed(app).get("/intake/sw.js")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
+    assert "fk-shell-" in r.text and "__VERSION__" not in r.text
+
+
 def test_service_worker_caches_the_shell_and_never_the_api():
     src = (Path(web_app.__file__).parent / "static" / "sw.js").read_text(encoding="utf-8")
     listed = re.search(r"const SHELL = \[(.*?)\];", src, re.S).group(1)
