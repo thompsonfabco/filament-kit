@@ -592,8 +592,21 @@ void test_tag_gate_held_tag_does_not_post_after_refused_tap() {
   TEST_ASSERT_FALSE(g.accept("a", 3000, 2500));      // held past the cooldown
   TEST_ASSERT_FALSE(g.accept("a", 60000, 2500));     // however long it stays
   TEST_ASSERT_FALSE(g.accept("b", 60001, 2500));     // a different tag needs a lift too
-  g.noTag();                                         // lifted
+  for (int i = 0; i < LIFT_EMPTY_POLLS; i++) g.noTag();   // lifted
   TEST_ASSERT_TRUE(g.accept("a", 60100, 2500));      // presented again: counts
+}
+
+void test_tag_gate_missed_polls_do_not_count_as_lift() {
+  TagGate g;
+  TEST_ASSERT_TRUE(g.accept("a", 0, 2500));
+  g.requireLift();
+  // a tag at the edge of the field: a missed poll now and then, but it keeps coming back
+  for (int round = 0; round < 5; round++) {
+    for (int i = 0; i < LIFT_EMPTY_POLLS - 1; i++) g.noTag();
+    TEST_ASSERT_FALSE(g.accept("a", 3000 + round, 2500));   // read again: run starts over
+  }
+  for (int i = 0; i < LIFT_EMPTY_POLLS; i++) g.noTag();     // really gone
+  TEST_ASSERT_TRUE(g.accept("a", 9000, 2500));
 }
 
 // ---- settings over USB (settings.h) -----------------------------------------------
@@ -734,6 +747,7 @@ int main(int, char**) {
   RUN_TEST(test_retry_backs_off_and_caps);
   RUN_TEST(test_tag_gate_cooldown_for_same_tag);
   RUN_TEST(test_tag_gate_held_tag_does_not_post_after_refused_tap);
+  RUN_TEST(test_tag_gate_missed_polls_do_not_count_as_lift);
   RUN_TEST(test_wanted_label_prefers_saved);
   RUN_TEST(test_unit_dropping_out_briefly_keeps_selection);
   RUN_TEST(test_settings_parse_the_required_ones);
