@@ -565,6 +565,8 @@ def _result(raw: dict, fils, vendors, tag, station_state, notes: list[str]) -> d
     # per-field confidence (read_confidence): on each item, its summary, and the engine that read it
     for it in out["items"]:
         it["confidence_levels"] = read_confidence.levels(it)
+        it["confidence_filled"] = read_confidence.filled(it)
+    out["confidence_rated"] = read_confidence.rated(out["items"])
     out["confidence_summary"] = read_confidence.summary([it["confidence_levels"] for it in out["items"]])
     out["engine"] = read_confidence.engine(raw)
     if notes:

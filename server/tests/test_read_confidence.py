@@ -45,11 +45,13 @@ def save(sm, read_id=None):
 def test_levels_rule_per_engine():
     cloud = {**ITEM, "price_per_kg": None, "estimates": ["tare"]}
     lv = read_confidence.levels(cloud)
-    assert lv["vendor"] == "high" and lv["tare"] == "medium" and lv["price_per_kg"] == "not_on_label"
-    assert "line" not in lv and "low" not in lv.values()
+    assert lv["vendor"] is None and lv["tare"] == "medium" and lv["price_per_kg"] == "not_on_label"
+    assert "line" not in lv and "high" not in lv.values() and "low" not in lv.values()
+    assert not read_confidence.rated([cloud]) and read_confidence.filled(cloud) == ["tare"]
     local = {**ITEM, "confidence": 0.9, "field_confidence": {"vendor": 0.95, "name": 0.6, "material": 0.2}}
     lv = read_confidence.levels(local)
     assert (lv["vendor"], lv["name"], lv["material"], lv["net"]) == ("high", "medium", "low", "high")
+    assert read_confidence.rated([local])
     assert read_confidence.levels({**ITEM, "vendor": "Unknown"})["vendor"] == "not_on_label"
 
 
@@ -58,6 +60,8 @@ def test_summary_names_the_lowest_level_first():
     assert read_confidence.summary([{"vendor": "high"}])["level"] == "high"
     s = read_confidence.summary([{"name": "medium", "net": "low"}, {"net": "low", "bed": "not_on_label"}])
     assert s == {"level": "low", "low": ["net"], "medium": ["name"], "not_on_label": ["bed"]}
+    s = read_confidence.summary([{"vendor": None, "name": "medium", "bed": "not_on_label"}])
+    assert s == {"level": "not_rated", "low": [], "medium": ["name"], "not_on_label": ["bed"]}
 
 
 # ---------------------------------------------------------------- the read reply
@@ -67,8 +71,12 @@ def test_a_cloud_read_has_levels_summary_and_engine(sm):
     reply["items"][0]["estimates"] = ["density"]
     out = intake.read_labels(sm, [JPEG], "", None, client=FakeClaude(reply))
     it = out["items"][0]
-    assert it["confidence_levels"]["density"] == "medium" and it["confidence_levels"]["vendor"] == "high"
-    assert out["confidence_summary"]["level"] == "medium" and "density" in out["confidence_summary"]["medium"]
+    lv = it["confidence_levels"]
+    assert lv["density"] == "medium" and it["confidence_filled"] == ["density"]
+    assert all(v is None for k, v in lv.items() if k not in ("density", "price_per_kg"))   # filled: no level
+    assert lv["price_per_kg"] == "not_on_label"                                         # empty: not on the label
+    assert out["confidence_rated"] is False and "high" not in lv.values()
+    assert out["confidence_summary"]["level"] == "not_rated" and out["confidence_summary"]["medium"] == ["density"]
     assert out["engine"]["reader"] == "cloud" and out["engine"]["model"] == out["usage"]["model"]
     assert out["engine"]["tier"] is None
     assert out["reader"] == "cloud" and out["usage"] and "items" in out        # existing fields stay
@@ -84,6 +92,7 @@ def test_a_local_read_gives_its_own_numbers_and_tier(sm, fake_reader):
     data["read"] = {**lrf.reply(), "items": [{**lrf.ITEM, "confidence": 0.93,
                                               "field_confidence": {"vendor": 0.97, "material": 0.3}}]}
     out = intake.read_labels(sm, [JPEG], "", None, None)
+    assert out["confidence_rated"] is True and out["items"][0]["confidence_filled"] == []
     assert out["items"][0]["confidence_levels"]["material"] == "low"
     assert out["confidence_summary"]["level"] == "low" and out["confidence_summary"]["low"] == ["material"]
     assert out["engine"] == {"reader": "local", "model": out["usage"]["model"], "tier": "cpu"}
@@ -99,8 +108,9 @@ def test_a_record_keeps_levels_summary_and_engine_and_the_count(sm):
     hid = save(sm, out["read_id"])
     rec = intake_history.get(hid)
     assert rec["read"]["items"][0]["confidence_levels"]["tare"] == "medium"
-    assert rec["read"]["engine"]["reader"] == "cloud"
-    assert rec["confidence"]["level"] == "medium" and rec["engine"]["model"]
+    assert rec["read"]["items"][0]["confidence_filled"] == ["tare"]
+    assert rec["read"]["engine"]["reader"] == "cloud" and rec["read"]["confidence_rated"] is False
+    assert rec["confidence"]["level"] == "not_rated" and rec["confidence_rated"] is False and rec["engine"]["model"]
     listed = intake_history.list_records(True)
     assert listed["count"] == 1 and listed["records"][0]["confidence"] == rec["confidence"]
     assert listed["records"][0]["engine"] == rec["engine"] and rec["read"]["items"][0]["vendor"] == "SUNLU"
@@ -125,3 +135,18 @@ def test_an_old_record_without_the_new_fields_still_reads(sm):
     assert got["confidence"] is None and got["engine"] is None
     assert got["read"]["items"][0]["vendor"] == "SUNLU" and got["photos"] == 1
     assert intake_history.list_records(True)["count"] == 1
+
+
+def test_an_old_cloud_record_with_high_levels_is_not_rated(sm):
+    """A record kept by the first S2.6 build: Cloud levels "high", no `confidence_rated`."""
+    out = intake.read_labels(sm, [JPEG], "", None, client=FakeClaude(copy.deepcopy(READ)))
+    hid = save(sm, out["read_id"])
+    p = intake_history._dir(hid) / "record.json"
+    rec = json.loads(p.read_text())
+    rec["read"].pop("confidence_rated")
+    rec["read"]["items"][0]["confidence_levels"] = {**{k: "high" for k in read_confidence.READ_FIELDS},
+                                                    "price_per_kg": "not_on_label"}
+    p.write_text(json.dumps(rec))
+    got = intake_history.get(hid)
+    assert got["confidence_rated"] is False and got["confidence"]["level"] == "not_rated"
+    assert got["confidence"]["not_on_label"] == ["price_per_kg"]
