@@ -86,12 +86,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { settings.setSkipFingerprintCheck(skip) }
     }
 
-    /** Pair → Trust the new certificate; [then] runs only if the pin changed. */
-    fun trustCertificate(expected: String, actual: String, then: () -> Unit) {
+    private val _trustFailed = MutableStateFlow(false)
+
+    /** The last "Trust the new certificate" did not take effect; the notice that offered it says so. */
+    val trustFailed: StateFlow<Boolean> = _trustFailed.asStateFlow()
+
+    /** Pair or a changed-certificate notice → Trust the new certificate; [then] runs only if the pin changed. */
+    fun trustCertificate(expected: String, actual: String, then: () -> Unit = {}) {
+        _trustFailed.value = false
         viewModelScope.launch {
             if (session.trustCertificate(expected, actual)) {
                 router.clear()
                 then()
+            } else {
+                _trustFailed.value = true
             }
         }
     }
