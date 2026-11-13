@@ -455,7 +455,10 @@ class PrintersApp:
         self.last_test = now
         r = await anyio.to_thread.run_sync(lambda: self.push.send_all(
             self.push_store, "Printers test", "Notifications are working.", "test", sender=self.sender,
-            url=self.intake.base + "/"))
+            url=self.intake.base + "/", budget=self.push.TEST_BUDGET))
+        if r["removed"] and not r["sent"] and not r["failed"]:
+            raise Problem(f"the test alert was not delivered: {r['removed']} subscription(s) no longer exist and were "
+                          "removed; turn notifications on again in this browser.")
         if r["failed"] and not r["sent"]:
             raise Problem("the test alert was not delivered: " + "; ".join(r["failed"][:3])
                           + ". If the push service cannot be reached, the web service's network limits may block it "

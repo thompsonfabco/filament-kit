@@ -26,6 +26,7 @@ PUSH_HOSTS = ("push.apple.com", "fcm.googleapis.com", "push.services.mozilla.com
 LIVE = ("RUNNING", "PAUSE", "PREPARE")
 MAX_SUBS = 10
 TEST_EVERY = 30.0       # seconds between "test" alerts
+TEST_BUDGET = 20.0      # seconds the test alert may take in all, however many subscriptions
 NOT_INSTALLED = "pywebpush is not installed on the server (pip install 'filament-kit[push]'); alerts cannot be sent"
 
 
@@ -166,13 +167,19 @@ def webpush_sender(subject: str):
     return send
 
 
-def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str = "") -> dict:
+def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str = "",
+             budget: float | None = None) -> dict:
     """Send one alert to every subscription; the ones the push service says are gone (404 / 410) are dropped.
-    {"sent": how many the push services took, "failed": [what went wrong, one line each]}."""
+    {"sent": how many the push services took, "failed": [what went wrong, one line each], "removed": how many were
+    dropped}. `budget` is the most seconds to spend: the subscriptions left after it are not tried."""
+    deadline = None if budget is None else time.monotonic() + budget
     payload = json.dumps({"title": title, "body": body, "tag": tag, "url": url})
     dead = []
     sent, failed = 0, []
     for ep, sub in store.subs().items():
+        if deadline is not None and time.monotonic() > deadline:
+            failed.append(f"{urlparse(ep).hostname} not tried: out of time")
+            continue
         try:
             code = sender(sub["info"], payload)
         except Exception as e:  # noqa: BLE001 - one dead service must not stop the rest
@@ -188,7 +195,7 @@ def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str 
             sent += 1
     if dead:
         store.remove(*dead)
-    return {"sent": sent, "failed": failed}
+    return {"sent": sent, "failed": failed, "removed": len(dead)}
 
 
 class Watcher(threading.Thread):

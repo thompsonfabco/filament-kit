@@ -10,6 +10,7 @@ import io
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -659,6 +660,30 @@ def test_push_test_says_when_the_push_service_cannot_be_reached(pushapp, monkeyp
     pushapp.push_answer["code"] = 403
     r = c.post(P + "/push/test", headers=H)
     assert r.status_code == 400 and "fcm.googleapis.com answered 403" in r.json()["error"]
+
+
+def test_push_test_says_when_every_subscription_is_gone(pushapp, monkeypatch):
+    from filament_kit.web import push
+    monkeypatch.setattr(push, "TEST_EVERY", 0.0)
+    c = signed(pushapp)
+    assert c.post(P + "/push/subscribe", json=good_sub(), headers=H).status_code == 200
+    pushapp.push_answer["code"] = 410
+    r = c.post(P + "/push/test", headers=H)
+    assert r.status_code == 400 and "1 subscription(s) no longer exist" in r.json()["error"]
+
+
+def test_push_send_all_stops_trying_after_its_budget(env):
+    from filament_kit.web import push
+    store, tried = push.Store(config.paths().web / "push.json"), []
+    for n in "ab":
+        store.add({"endpoint": f"https://fcm.googleapis.com/{n}", "keys": {"p256dh": "k", "auth": "a"}})
+
+    def slow(info, payload):
+        tried.append(info["endpoint"])
+        time.sleep(0.05)
+        return 201
+    r = push.send_all(store, "t", "b", "x", sender=slow, budget=0.01)
+    assert len(tried) == 1 and r["sent"] == 1 and "not tried" in r["failed"][0]
 
 
 def test_service_worker_is_behind_the_lan_guard(pushapp):
