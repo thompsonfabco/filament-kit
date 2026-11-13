@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.nav
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -82,3 +83,36 @@ fun tabTap(current: Tab?, tapped: Tab, atRoot: Boolean): TabTap = when {
  */
 fun showsBackArrow(atTabRoot: Boolean, inPairing: Boolean, pairingOverMain: Boolean): Boolean =
     !atTabRoot && (!inPairing || pairingOverMain)
+
+/** Goes to [tab], keeping every tab's stack as it was left (saved and restored). */
+fun NavController.selectTab(tab: Tab) = navigate(tab.graph) {
+    popUpTo<HomeRoute> { saveState = true }
+    launchSingleTop = true
+    restoreState = true
+}
+
+/** Opens the add flow on the Home stack, whichever tab is showing, so the bar and the stacks stay right. */
+fun NavController.openAdd(route: AddRoute) {
+    if (currentDestination.tab() != Tab.Home) selectTab(Tab.Home)
+    navigate(route)
+}
+
+private const val MAX_STACK_DEPTH = 32
+
+/**
+ * Back to the current tab's root by pressing system Back ([back]) one screen at a time, so each screen's own rules
+ * (unsaved typing, work that must finish) run as they do for Back. It stops as soon as a screen keeps Back.
+ */
+fun NavController.popToRootThrough(back: () -> Unit) {
+    repeat(MAX_STACK_DEPTH) {
+        if (currentDestination.isTabRoot()) return
+        val before = currentBackStackEntry
+        back()
+        if (currentBackStackEntry === before) return
+    }
+}
+
+/** Drops every stack saved by switching tabs, with its view models (another Hub, or none: nothing of the old one stays). */
+fun NavController.clearSavedStacks() {
+    Tab.entries.forEach { tab -> runCatching { clearBackStack(tab.graph) } }
+}

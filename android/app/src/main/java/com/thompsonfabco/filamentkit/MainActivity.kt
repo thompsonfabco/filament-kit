@@ -88,11 +88,15 @@ import com.thompsonfabco.filamentkit.nav.SpoolsGraph
 import com.thompsonfabco.filamentkit.nav.SpoolsRoute
 import com.thompsonfabco.filamentkit.nav.Tab
 import com.thompsonfabco.filamentkit.nav.TabTap
+import com.thompsonfabco.filamentkit.nav.clearSavedStacks
 import com.thompsonfabco.filamentkit.nav.hubAddress
 import com.thompsonfabco.filamentkit.nav.hubState
 import com.thompsonfabco.filamentkit.nav.inPairing
 import com.thompsonfabco.filamentkit.nav.isTabRoot
 import com.thompsonfabco.filamentkit.nav.keepLastKnown
+import com.thompsonfabco.filamentkit.nav.openAdd
+import com.thompsonfabco.filamentkit.nav.popToRootThrough
+import com.thompsonfabco.filamentkit.nav.selectTab
 import com.thompsonfabco.filamentkit.nav.showsBackArrow
 import com.thompsonfabco.filamentkit.nav.tab
 import com.thompsonfabco.filamentkit.nav.tabTap
@@ -153,6 +157,7 @@ import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 import com.thompsonfabco.filamentkit.ui.theme.resolveDark
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -249,7 +254,13 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { updater?.onResumed() }
     }
 
-    fun pushPairing() = nav.navigate(PairGraph) { launchSingleTop = true }
+    // the Hub that was paired when pairing was opened over the main graph
+    val hubBefore = remember { arrayOfNulls<String>(1) }
+    fun pushPairing() {
+        hubBefore[0] = config?.name
+        nav.navigate(PairGraph) { launchSingleTop = true }
+    }
+    val pairScope = rememberCoroutineScope()
 
     // The user asked to pair again (a screen's button, or the Hub sheet). A 401 or a changed certificate on its own
     // only changes the connection state (05 2.7): it never moves the user or clears a screen.
@@ -266,14 +277,20 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     // Pairing or trusting worked: back to the screen pairing was opened over, else (first start) to Home.
     val finishPairing: () -> Unit = {
         app.router.clear()
-        if (nav.previousBackStackEntry != null) {
-            nav.popBackStack<PairGraph>(inclusive = true)
-        } else {
-            nav.navigate(HomeGraph) {
-                popUpTo<PairGraph> { inclusive = true }
-                launchSingleTop = true
+        pairScope.launch {
+            val hubNow = app.settings.server.first()?.name
+            if (nav.previousBackStackEntry == null || hubNow != hubBefore[0]) {
+                // first start, or another Hub: nothing of the old one stays (stacks, saved stacks, their view models)
+                nav.clearSavedStacks()
+                nav.navigate(HomeGraph) {
+                    popUpTo(nav.graph.id) { inclusive = true }
+                    launchSingleTop = true
+                }
+            } else {
+                nav.popBackStack<PairGraph>(inclusive = true)
             }
         }
+        Unit
     }
 
     // Tag taps open the spool card anywhere except pairing and the add flow (AddViewModel takes taps itself).
@@ -290,7 +307,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
 
     // The Hub connection chip and its sheet.
     val live = hubState(connection, notice, config)
-    var shown by remember { mutableStateOf(live) }
+    var shown by remember(config?.name, config?.token, config?.fingerprint) { mutableStateOf(live) }
     LaunchedEffect(live) { shown = keepLastKnown(shown, live) }
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -303,10 +320,19 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     val showBack = showsBackArrow(destination.isTabRoot(), inPairing, pairingOverMain)
     val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
 
+    val tabTapped: (Tab) -> Unit = { tapped ->
+        val here = nav.currentDestination
+        when (tabTap(here.tab(), tapped, here.isTabRoot())) {
+            TabTap.Switch -> nav.selectTab(tapped)
+            TabTap.PopToRoot -> nav.popToRootThrough { backDispatcher?.onBackPressed() }
+            TabTap.Stay -> Unit
+        }
+    }
+
     SwNav(
         selected = tab,
         visible = navVisible,
-        onSelect = nav::onTabTap,
+        onSelect = tabTapped,
         settingsUpdate = update.available != null,
     ) {
         Scaffold(
@@ -417,10 +443,10 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onAddByHand = { nav.navigate(AddRoute(manual = true)) },
                             labelPhotos = labelPhotos,
                             onAddProfile = { nav.navigate(AddProfileRoute) },
-                            onSearch = { nav.onTabTap(Tab.Spools) },
-                            onPrinters = { nav.onTabTap(Tab.Printers) },
-                            onHistory = { nav.onTabTap(Tab.Recent) },
-                            onSettings = { nav.onTabTap(Tab.Settings) },
+                            onSearch = { tabTapped(Tab.Spools) },
+                            onPrinters = { tabTapped(Tab.Printers) },
+                            onHistory = { tabTapped(Tab.Recent) },
+                            onSettings = { tabTapped(Tab.Settings) },
                             onResumeDraft = { id -> nav.navigate(AddRoute(draft = id)) },
                             onDiscardDraft = app::discardDraft,
                             onRetryConnection = app.session::refresh,
@@ -468,7 +494,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             return@composable
                         }
                         val route = e.toRoute<AddRoute>()
-                        val addVm: AddViewModel = viewModel(factory = viewModelFactory {
+                        val addVm: AddViewModel = viewModel(key = System.identityHashCode(a).toString(), factory = viewModelFactory {
                             initializer {
                                 AddViewModel(IntakeApi.of(a), app.drafts, draftId = route.draft, initialTag = route.tag, manual = route.manual)
                             }
@@ -488,7 +514,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             NotPaired(::pushPairing)
                             return@composable
                         }
-                        val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
+                        val profileVm: AddProfileViewModel = viewModel(key = System.identityHashCode(a).toString(), factory = viewModelFactory {
                             initializer { AddProfileViewModel(ProfileApi.of(a)) }
                         })
                         AddProfileScreen(
@@ -506,7 +532,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             NotPaired(::pushPairing)
                             return@composable
                         }
-                        val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
+                        val searchVm: SearchViewModel = viewModel(key = System.identityHashCode(a).toString(), factory = viewModelFactory {
                             initializer { SearchViewModel { q, sealedOnly -> a.search(q, sealedOnly) } }
                         })
                         SearchScreen(
@@ -593,6 +619,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onPairAgain = app.router::pairAgain,
                             onForget = {
                                 app.forget {
+                                    nav.clearSavedStacks()
                                     nav.navigate(PairGraph) {
                                         popUpTo(nav.graph.id) { inclusive = true }
                                         launchSingleTop = true
@@ -632,7 +659,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 openAppSettings = localNetwork.openSettings,
                 hubSettings = {
                     sheetOpen = false
-                    nav.onTabTap(Tab.Settings)
+                    tabTapped(Tab.Settings)
                 },
             ),
             onDismiss = { sheetOpen = false },
@@ -653,7 +680,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onStartAdd = { tag ->
                                 close()
                                 // without label reading on the server the new spool is added by hand
-                                nav.navigate(AddRoute(tag = tag, manual = !labelPhotos))
+                                nav.openAdd(AddRoute(tag = tag, manual = !labelPhotos))
                             },
                             onPairAgain = {
                                 close()
@@ -682,20 +709,6 @@ private fun placeTitle(destination: NavDestination?): String = stringResource(
         else -> (destination.tab() ?: Tab.Home).label
     },
 )
-
-/** Bar and rail taps: another destination keeps each stack as it was left; the current one pops back to its root. */
-private fun NavHostController.onTabTap(tapped: Tab) {
-    val here = currentDestination
-    when (tabTap(here.tab(), tapped, here.isTabRoot())) {
-        TabTap.Switch -> navigate(tapped.graph) {
-            popUpTo<HomeRoute> { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-        TabTap.PopToRoot -> popBackStack(tapped.root, inclusive = false)
-        TabTap.Stay -> Unit
-    }
-}
 
 /**
  * Android draws apps edge to edge (target SDK 35+). The status and navigation bars stay transparent over the app's own

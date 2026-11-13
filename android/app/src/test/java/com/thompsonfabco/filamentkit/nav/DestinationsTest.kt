@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.nav
 
 import android.os.Build
 import androidx.compose.material3.Text
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.ComposeNavigator
 import androidx.navigation.compose.composable
@@ -62,10 +63,12 @@ class DestinationsTest {
                 composable<PrintersRoute> { Text("") }
                 composable<PrinterRoute> { Text("") }
             }
+            navigation<SpoolsGraph>(startDestination = SpoolsRoute) { composable<SpoolsRoute> { Text("") } }
             navigation<RecentGraph>(startDestination = RecentRoute) {
                 composable<RecentRoute> { Text("") }
                 composable<RecordRoute> { Text("") }
             }
+            navigation<SettingsGraph>(startDestination = SettingsRoute) { composable<SettingsRoute> { Text("") } }
         }
         return nav
     }
@@ -104,5 +107,63 @@ class DestinationsTest {
         assertTrue(nav.popBackStack<PairGraph>(inclusive = true))
         assertEquals("closing pairing returns to the printer", Tab.Printers, nav.currentDestination.tab())
         assertFalse(nav.currentDestination.isTabRoot())
+    }
+
+    @Test fun addOpenedFromAnotherTabLandsOnTheHomeStack() {
+        val nav = controller()
+        nav.selectTab(Tab.Printers)
+        nav.navigate(PrinterRoute("p1"))
+        nav.openAdd(AddRoute(tag = "04:aa", manual = true))
+        assertEquals(Tab.Home, nav.currentDestination.tab())
+        assertTrue(nav.currentDestination?.hasRoute(AddRoute::class) == true)
+        val graphs = nav.currentBackStack.value.count { it.destination.hasRoute(HomeGraph::class) }
+        assertEquals("one Home graph on the stack, not two", 1, graphs)
+
+        nav.selectTab(Tab.Printers)
+        assertTrue("the printers stack was kept", nav.currentDestination?.hasRoute(PrinterRoute::class) == true)
+    }
+
+    @Test fun clearingSavedStacksLeavesNothingOfTheOldHub() {
+        val nav = controller()
+        nav.selectTab(Tab.Printers)
+        nav.navigate(PrinterRoute("old-hub-printer"))
+        nav.selectTab(Tab.Home)
+        nav.navigate(AddRoute(draft = "old-draft"))
+        nav.selectTab(Tab.Recent)
+        nav.clearSavedStacks()
+        nav.selectTab(Tab.Printers)
+        assertTrue("Printers opens at its root", nav.currentDestination.isTabRoot())
+        assertEquals(Tab.Printers, nav.currentDestination.tab())
+        nav.selectTab(Tab.Home)
+        assertTrue("Home opens at its root, without the old draft", nav.currentDestination.isTabRoot())
+    }
+
+    @Test fun withoutClearingTheOldStackComesBack() {
+        val nav = controller()
+        nav.selectTab(Tab.Printers)
+        nav.navigate(PrinterRoute("old-hub-printer"))
+        nav.selectTab(Tab.Home)
+        nav.selectTab(Tab.Printers)
+        assertFalse(nav.currentDestination.isTabRoot())
+
+        nav.selectTab(Tab.Home)
+        nav.navigate(AddRoute(draft = "old-draft"))
+        nav.selectTab(Tab.Recent)
+        nav.selectTab(Tab.Home)
+        assertFalse("Home's saved stack comes back too", nav.currentDestination.isTabRoot())
+    }
+
+    @Test fun tappingTheSelectedTabGoesThroughBackSoScreensCanHoldIt() {
+        val nav = controller()
+        nav.selectTab(Tab.Printers)
+        nav.navigate(PrinterRoute("p1"))
+        var presses = 0
+        nav.popToRootThrough { presses++ } // a screen that keeps Back (it asks first)
+        assertEquals(1, presses)
+        assertFalse("still on the printer", nav.currentDestination.isTabRoot())
+
+        nav.popToRootThrough { nav.popBackStack() }
+        assertTrue(nav.currentDestination.isTabRoot())
+        assertEquals(Tab.Printers, nav.currentDestination.tab())
     }
 }

@@ -5,11 +5,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -61,52 +65,73 @@ internal fun SwNav(
         selectedIconColor = colors.accentText, selectedTextColor = colors.accentText, indicatorColor = colors.accentSoft,
         unselectedIconColor = colors.muted, unselectedTextColor = colors.muted,
     )
-    val itemColors = NavigationSuiteDefaults.itemColors(navigationBarItemColors = barColors, navigationRailItemColors = railColors)
     val dotSize = SpoolwardenTheme.space.s2
-    val dot: @Composable () -> Unit = { Box(Modifier.size(dotSize).background(colors.accentText, CircleShape)) }
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            Tab.entries.forEachIndexed { i, tab ->
-                val current = tab == selected
-                val marked = rail && current
-                val withDot = tab == Tab.Settings && settingsUpdate
-                item(
-                    selected = current,
-                    onClick = { onSelect(tab) },
-                    icon = { SwIcon(tab.icon, null) },
-                    modifier = Modifier
-                        .drawWithContent {
-                            drawContent()
-                            // the rail's current item: a mark at the outer edge (08-platform-mapping 10.1)
-                            if (marked) {
-                                val width = sizes.navMark.toPx()
-                                val x = if (layoutDirection == LayoutDirection.Ltr) 0f else size.width - width
-                                drawRect(colors.accentText, Offset(x, 0f), Size(width, size.height))
-                            }
-                        }
-                        .semantics { if (withDot) contentDescription = updateName },
-                    label = {
-                        Text(
-                            labels[i], style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (current) MaterialTheme.typography.titleMedium.fontWeight else null,
+    val labelWeight = MaterialTheme.typography.titleMedium.fontWeight
+    val labelStyle = MaterialTheme.typography.labelSmall
+    // The icon, with the update dot on Settings; the item carries the name "Settings, update available".
+    fun Modifier.named(tab: Tab): Modifier =
+        if (tab == Tab.Settings && settingsUpdate) semantics { contentDescription = updateName } else this
+    @Composable
+    fun Icon(tab: Tab) {
+        val withDot = tab == Tab.Settings && settingsUpdate
+        if (withDot) {
+            BadgedBox(badge = { Box(Modifier.size(dotSize).background(colors.accentText, CircleShape)) }) {
+                SwIcon(tab.icon, null)
+            }
+        } else {
+            SwIcon(tab.icon, null)
+        }
+    }
+    NavigationSuiteScaffoldLayout(
+        navigationSuite = {
+            when (layout) {
+                NavigationSuiteType.NavigationRail -> NavigationRail(
+                    containerColor = colors.surface,
+                    contentColor = colors.muted,
+                    // the product mark tops the rail (05-android-app 2.1)
+                    header = { SwIcon(R.drawable.sw_ic_spoolwarden, null, size = SwIconSize.Large, tint = colors.accentText) },
+                ) {
+                    Tab.entries.forEachIndexed { i, tab ->
+                        val current = tab == selected
+                        NavigationRailItem(
+                            selected = current,
+                            onClick = { onSelect(tab) },
+                            icon = { Icon(tab) },
+                            modifier = Modifier.named(tab).drawWithContent {
+                                drawContent()
+                                // the current item: a mark at the outer edge (08-platform-mapping 10.1)
+                                if (current) {
+                                    val width = sizes.navMark.toPx()
+                                    val x = if (layoutDirection == LayoutDirection.Ltr) 0f else size.width - width
+                                    drawRect(colors.accentText, Offset(x, 0f), Size(width, size.height))
+                                }
+                            },
+                            label = { Text(labels[i], style = labelStyle, fontWeight = if (current) labelWeight else null) },
+                            alwaysShowLabel = true,
+                            colors = railColors,
                         )
-                    },
-                    badge = if (withDot) dot else null,
-                    alwaysShowLabel = true,
-                    colors = itemColors,
-                )
+                    }
+                }
+                NavigationSuiteType.NavigationBar -> NavigationBar(containerColor = colors.surface, contentColor = colors.muted) {
+                    Tab.entries.forEachIndexed { i, tab ->
+                        val current = tab == selected
+                        NavigationBarItem(
+                            selected = current,
+                            onClick = { onSelect(tab) },
+                            icon = { Icon(tab) },
+                            modifier = Modifier.named(tab),
+                            label = { Text(labels[i], style = labelStyle, fontWeight = if (current) labelWeight else null) },
+                            alwaysShowLabel = true,
+                            colors = barColors,
+                        )
+                    }
+                }
+                else -> Unit
             }
         },
-        modifier = modifier,
         layoutType = layout,
-        navigationSuiteColors = NavigationSuiteDefaults.colors(
-            navigationBarContainerColor = colors.surface, navigationBarContentColor = colors.muted,
-            navigationRailContainerColor = colors.surface, navigationRailContentColor = colors.muted,
-        ),
-        containerColor = colors.bg,
-        contentColor = colors.text,
     ) {
-        Box(Modifier.hairlineToward(layout, colors.border, sizes.hairline.value)) { content() }
+        Box(modifier.background(colors.bg).hairlineToward(layout, colors.border, sizes.hairline.value)) { content() }
     }
 }
 
