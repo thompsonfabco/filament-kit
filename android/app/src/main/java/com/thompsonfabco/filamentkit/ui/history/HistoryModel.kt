@@ -1,12 +1,16 @@
 package com.thompsonfabco.filamentkit.ui.history
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.HistoryRecord
 import com.thompsonfabco.filamentkit.net.HistoryRevision
+import com.thompsonfabco.filamentkit.net.HistorySaved
 import com.thompsonfabco.filamentkit.net.HistorySpool
 import com.thompsonfabco.filamentkit.net.IntakeHistory
 import com.thompsonfabco.filamentkit.net.RevisionProposal
@@ -21,13 +25,14 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.put
+import java.text.DecimalFormat
 import java.time.OffsetDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.util.Locale
+import java.time.temporal.ChronoUnit
 
 /** The intake history routes (2026-11-12-1031 handoff); [of] adapts the Api, tests pass a fake. */
 interface HistoryBackend {
@@ -52,144 +57,177 @@ interface HistoryBackend {
     }
 }
 
-/** Words and value formatting of the intake history screens. */
-object HistoryTexts {
-    const val TITLE = "Intake history"
-    const val EMPTY = "No spools added since the server started keeping intake records."
-    const val KEEP_NONE = "This server keeps no intake records (Settings on the setup page: Intake records kept)."
-    const val AI_OFF = "Label reading is off on this server, so the AI can't revise; edit by hand instead."
-    const val NOTE_LABEL = "What's wrong? (e.g. brand is Polymaker)"
-    const val NOTE_HELP = "The AI looks at the photos again with your note and proposes new values; nothing changes " +
-        "until you accept them."
-    const val NO_PHOTO = "This record has no photo: the AI only had the saved values and your note."
-    const val ASK = "Ask the AI"
-    const val ASKING = "Asking…"
-    const val NEED_NOTE = "Write what is wrong first."
-    const val ACCEPT = "Accept"
-    const val DISCARD = "Discard"
-    const val NO_CHANGE = "The AI proposes no change."
-    const val EDIT = "Edit by hand"
-    const val UNDO = "Undo last change"
-    const val STALE = "The record changed since the AI answered. Ask again."
-    const val SAVED = "Saved."
-    const val UNDONE = "Undone."
+/** The four groups of a record's fields (05-android-app 10.2). */
+enum class RecentGroup(@StringRes val title: Int) {
+    Identity(R.string.recent_group_identity),
+    Weights(R.string.recent_group_weights),
+    Temperatures(R.string.recent_group_temperatures),
+    Other(R.string.recent_group_other),
+}
 
-    /** The order fields are shown and edited in (the add's item fields). */
-    val FIELDS = listOf(
-        "vendor", "name", "material", "color_hex", "line", "net", "tare", "density", "nozzle", "bed",
-        "nozzle_range", "bed_range", "price_per_kg",
-    )
+/** How a field's text goes back to JSON: text as it is, a number, two numbers, or six hex digits. */
+enum class FieldKind { Text, Number, Range, Colour }
 
-    private val LABELS = mapOf(
-        "vendor" to "Brand", "name" to "Name", "material" to "Material", "color_hex" to "Colour", "line" to "Line",
-        "net" to "Net weight (g)", "tare" to "Empty spool (g)", "density" to "Density (g/cm³)",
-        "nozzle" to "Nozzle (°C)", "bed" to "Bed (°C)", "nozzle_range" to "Nozzle range (°C)",
-        "bed_range" to "Bed range (°C)", "price_per_kg" to "Price per kg",
-    )
+/** A field of a saved item, in the order the screens show it. [wire] is the Hub's name for it. */
+enum class RecentField(
+    val wire: String,
+    @StringRes val label: Int,
+    val group: RecentGroup,
+    @StringRes val unit: Int? = null,
+    val kind: FieldKind = FieldKind.Text,
+) {
+    Vendor("vendor", R.string.recent_field_brand, RecentGroup.Identity),
+    Name("name", R.string.recent_field_name, RecentGroup.Identity),
+    Material("material", R.string.recent_field_material, RecentGroup.Identity),
+    Colour("color_hex", R.string.recent_field_colour, RecentGroup.Identity, kind = FieldKind.Colour),
+    Net("net", R.string.recent_field_net_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Number),
+    Tare("tare", R.string.recent_field_empty_weight, RecentGroup.Weights, R.string.unit_g, FieldKind.Number),
+    Density("density", R.string.recent_field_density, RecentGroup.Weights, R.string.unit_g_cm3, FieldKind.Number),
+    Nozzle("nozzle", R.string.recent_field_nozzle, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Number),
+    Bed("bed", R.string.recent_field_bed, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Number),
+    NozzleRange("nozzle_range", R.string.recent_field_nozzle_range, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Range),
+    BedRange("bed_range", R.string.recent_field_bed_range, RecentGroup.Temperatures, R.string.unit_c, FieldKind.Range),
+    Price("price_per_kg", R.string.recent_field_price, RecentGroup.Other, kind = FieldKind.Number),
+    Line("line", R.string.recent_field_line, RecentGroup.Other);
 
-    fun label(field: String): String = LABELS[field] ?: field.replace('_', ' ')
+    companion object {
+        fun of(wire: String): RecentField? = entries.firstOrNull { it.wire == wire }
+    }
+}
 
-    fun state(s: String): String = when (s) {
-        "detected" -> "As saved"
-        "revised_ai" -> "Revised by AI"
-        "edited" -> "Edited by hand"
-        else -> s.replace('_', ' ')
+/** What is wrong with a typed value. */
+enum class FieldError { Number, Range, Colour }
+
+/** A typed value turned into JSON, or the reason it can't be. */
+sealed interface Parsed {
+    data class Ok(val value: JsonElement) : Parsed
+    data class Bad(val error: FieldError) : Parsed
+}
+
+/** Values of a record as text, and typed text back to values. */
+object RecentValues {
+    /** One value as text: numbers without a needless ".0", a range as "190–230"; null when there is nothing. */
+    fun text(v: JsonElement?): String? = when (v) {
+        null, JsonNull -> null
+        is JsonArray -> v.map { text(it) }.takeIf { parts -> parts.all { it != null } }?.joinToString("–")
+        is JsonPrimitive -> if (v.isString) v.content.ifBlank { null } else v.doubleOrNull?.let(::number) ?: v.content
+        is JsonObject -> v.toString()
     }
 
-    fun source(s: String): String = when (s) {
-        "phone" -> "Android app"
-        "web" -> "phone web app"
-        "station" -> "intake station"
-        "cli" -> "command line"
-        else -> s
+    /** The form text of a saved value: blank for nothing. */
+    fun formText(v: JsonElement?): String = text(v).orEmpty()
+
+    private fun number(d: Double): String = if (d == Math.floor(d) && kotlin.math.abs(d) < 1e12) d.toLong().toString() else d.toString()
+
+    /** The edit form's text back to JSON for [field]; blank is null (the value is cleared). */
+    fun parse(text: String, field: RecentField): Parsed {
+        val t = text.trim()
+        if (t.isEmpty()) return Parsed.Ok(JsonNull)
+        return when (field.kind) {
+            FieldKind.Text -> Parsed.Ok(JsonPrimitive(t))
+            FieldKind.Number -> t.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { Parsed.Ok(JsonPrimitive(it)) }
+                ?: Parsed.Bad(FieldError.Number)
+            FieldKind.Range -> {
+                val nums = t.split('-', '–', ',').map { it.trim() }.filter { it.isNotEmpty() }.map { it.toDoubleOrNull() }
+                if (nums.size == 2 && nums.all { it != null && it.isFinite() }) {
+                    Parsed.Ok(JsonArray(nums.map { JsonPrimitive(it) }))
+                } else {
+                    Parsed.Bad(FieldError.Range)
+                }
+            }
+            FieldKind.Colour -> {
+                val hex = t.removePrefix("#").uppercase()
+                if (hex.length == HEX_DIGITS && hex.all { it.digitToIntOrNull(HEX_RADIX) != null }) {
+                    Parsed.Ok(JsonPrimitive(hex))
+                } else {
+                    Parsed.Bad(FieldError.Colour)
+                }
+            }
+        }
     }
 
-    /** "SUNLU PLA+ Grey (PLA)", the spool count when there are several. */
-    fun spools(list: List<HistorySpool>): String {
-        val first = list.firstOrNull() ?: return "No spools"
-        val text = listOfNotNull(first.vendor, first.name).joinToString(" ").ifBlank { "Spool #${first.spoolId ?: "?"}" } +
-            (first.material?.let { " ($it)" } ?: "")
-        return if (list.size > 1) "$text · ${list.size} spools" else text
-    }
+    private const val HEX_DIGITS = 6
+    private const val HEX_RADIX = 16
 
-    /** A record's time in the phone's zone, short; the raw text when it can't be read. */
-    fun time(iso: String): String = try {
-        OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault())
-            .format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT).withLocale(Locale.getDefault()))
+    /** "2026-11-12 14:05" in [zone]; the raw text when it can't be read. */
+    fun time(iso: String, zone: ZoneId = ZoneId.systemDefault()): String = try {
+        val t = OffsetDateTime.parse(iso).atZoneSameInstant(zone).toLocalDateTime().truncatedTo(ChronoUnit.MINUTES)
+        t.toLocalDate().toString() + " " + t.toLocalTime().toString()
     } catch (_: Exception) {
         iso
     }
 
-    /** One value as text: numbers without a needless ".0", ranges as "190–230", nothing as "–". */
-    fun value(v: JsonElement?): String = when (v) {
-        null, JsonNull -> "–"
-        is JsonArray -> v.joinToString("–") { value(it) }
-        is JsonPrimitive -> if (v.isString) v.content.ifBlank { "–" } else v.doubleOrNull?.let(::number) ?: v.content
-        is JsonObject -> v.toString()
+    /** Photo bytes as megabytes with one decimal ("14.2"). */
+    fun megabytes(bytes: Long): String = DecimalFormat("0.0").format(bytes / BYTES_PER_MB)
+
+    private const val BYTES_PER_MB = 1_048_576.0
+
+    /** "Polymaker PolyTerra PLA Charcoal Black", the filaments of a record's spools; null when none has a name. */
+    fun filaments(spools: List<HistorySpool>): String? = spools
+        .map { listOfNotNull(it.vendor, it.name).joinToString(" ").trim() }
+        .filter { it.isNotEmpty() }.distinct().joinToString(", ").ifEmpty { null }
+
+    /** The record's spool numbers, each once, in order. */
+    fun spoolIds(spools: List<HistorySpool>): List<Int> = spools.mapNotNull { it.spoolId }.distinct()
+
+    fun idList(ids: List<Int>): String = ids.joinToString(", ")
+}
+
+/** A mark beside a field value the reader was not sure of (05-android-app 6.3, the part that needs no Hub levels). */
+enum class FieldMark(@DrawableRes val shape: Int, @StringRes val word: Int, val warn: Boolean) {
+    Estimated(R.drawable.sw_st_triangle, R.string.recent_mark_estimated, true),
+    NotOnLabel(R.drawable.sw_st_hollow, R.string.confidence_not_on_label, false),
+}
+
+/** The record state vocabulary (05-android-app 10.1): shape, word and tone. */
+enum class IntakeState(val wire: String, @DrawableRes val shape: Int, @StringRes val word: Int, val info: Boolean) {
+    Detected("detected", R.drawable.sw_st_hollow, R.string.status_as_detected, false),
+    RevisedAi("revised_ai", R.drawable.sw_ic_info, R.string.status_revised_ai, true),
+    Edited("edited", R.drawable.sw_ic_pencil, R.string.status_edited, true);
+
+    companion object {
+        fun of(wire: String): IntakeState? = entries.firstOrNull { it.wire == wire }
     }
+}
 
-    private fun number(d: Double): String = if (d == Math.floor(d) && kotlin.math.abs(d) < 1e12) d.toLong().toString() else d.toString()
+/** The source in words: a known word from the catalogue, or the Hub's own value as it is given. */
+class SourceLabel(@StringRes val word: Int?, val raw: String)
 
-    /** "Brand: SUNLU → Polymaker" lines of a revision. */
-    fun changes(r: HistoryRevision): List<String> = r.changes.map {
-        "${label(it.field)}: ${value(it.old)} → ${value(it.new)}" + (it.spoolId?.let { id -> " (spool #$id)" } ?: "")
-    }
+/** Records without photos were added by hand; the others say where the photos came from. */
+fun sourceLabel(source: String, photos: Int): SourceLabel = when {
+    photos == 0 -> SourceLabel(R.string.recent_source_hand, source)
+    source == "phone" -> SourceLabel(R.string.recent_source_phone, source)
+    source == "station" -> SourceLabel(R.string.recent_source_station, source)
+    else -> SourceLabel(null, source)
+}
 
-    /** The revision's heading: "AI, note “brand is X”" or "By hand", with the time and device; "(undone)". */
-    fun revision(r: HistoryRevision): String = listOfNotNull(
-        if (r.by == "ai") "AI" else "By hand",
-        r.note?.ifBlank { null }?.let { "“$it”" },
-        r.device?.ifBlank { null },
-        time(r.at),
-        "(undone)".takeIf { r.undone },
-    ).joinToString(" · ")
+/** The Hub's reason a request failed, before it becomes words (the screen picks the catalogue text). */
+sealed interface RecentFailure {
+    data object Offline : RecentFailure
+    data object Unexpected : RecentFailure
+    data object ReaderOff : RecentFailure
+    data object DailyLimit : RecentFailure
+    data object ReaderBusy : RecentFailure
 
-    /** What a re-link did: a new or other filament, and filaments left with no spools (kept, not deleted). */
-    fun filaments(r: HistoryRevision): String? {
-        val f = r.filaments ?: return null
-        if (f.from == null && f.to == null && f.orphaned.isEmpty()) return null
-        return listOfNotNull(
-            if (f.to != null && f.to != f.from) "Re-linked to ${if (f.created) "a new" else "another"} filament (#${f.to})." else null,
-            if (f.orphaned.isNotEmpty()) "Filament ${f.orphaned.joinToString(", ") { "#$it" }} now has no spools; " +
-                "it was kept (delete it in Spoolman if you don't need it)." else null,
-        ).joinToString(" ").ifBlank { null }
-    }
+    /** A refusal with the Hub's own message, shown as given. */
+    data class Hub(val message: String) : RecentFailure
+}
 
-    /**
-     * The edit form's text back to JSON, shaped like the saved value [old]: a number stays a number, a range is two
-     * numbers ("190-230"), anything else text; blank is null. Null when the text doesn't fit a number or a range.
-     */
-    fun parse(text: String, old: JsonElement?, field: String = ""): JsonElement? {
-        val t = text.trim()
-        if (t.isEmpty()) return JsonNull
-        return when {
-            old is JsonArray || ranged(field) -> {
-                val parts = t.split(Regex("\\s*[-–,]\\s*")).filter { it.isNotEmpty() }
-                val nums = parts.map { it.toDoubleOrNull() ?: return null }
-                if (nums.size != 2) null else JsonArray(nums.map { JsonPrimitive(it) })
-            }
-            numeric(field) || (old is JsonPrimitive && !old.isString && old != JsonNull) -> t.toDoubleOrNull()?.let { JsonPrimitive(it) }
-            else -> JsonPrimitive(t)
-        }
-    }
+internal fun failureOf(e: ApiError): RecentFailure = when (e.code) {
+    "offline" -> RecentFailure.Offline
+    "ai_off" -> RecentFailure.ReaderOff
+    "daily_cap" -> RecentFailure.DailyLimit
+    "local_busy" -> RecentFailure.ReaderBusy
+    else -> RecentFailure.Hub(e.message)
+}
 
-    /** The form text of a saved value (the same as [value], but blank for nothing). */
-    fun formText(v: JsonElement?): String = value(v).let { if (it == "–") "" else it }
-
-    fun numeric(field: String) = field in setOf("net", "tare", "density", "nozzle", "bed", "price_per_kg")
-
-    fun ranged(field: String) = field.endsWith("_range")
-
-    /** What the label reader said about saved item [item] when it read the photos (local reader: colour, how sure,
-     *  least sure fields); null when the read had none or its read item is not known for sure. */
-    fun readLine(r: HistoryRecord, item: Int): String? =
-        readItem(r, item)?.let(com.thompsonfabco.filamentkit.ui.add.ReaderTexts::item)?.let { "When read: $it" }
-
+/** The record's read item that saved item [item] came from, to mark estimated and unread fields. */
+object RecentMarks {
     /**
      * The read item saved item [item] came from. Saved items are numbered in the add's order (only items that wrote
      * spools), not the read's, so a removed card or an item with no spools shifts them: the one read item with the
      * same vendor, name and material; else, when nothing was dropped (as many read as saved), the read item at the
-     * same place if its material matches; else null (no line beats a line under the wrong spool).
+     * same place if its material matches; else null (no mark beats a mark on the wrong spool).
      */
     fun readItem(r: HistoryRecord, item: Int): JsonObject? {
         val read = r.read?.items.orEmpty()
@@ -200,53 +238,81 @@ object HistoryTexts {
         return read.getOrNull(item)?.takeIf { matchKey(it).last() == key.last() }
     }
 
-    private fun matchKey(o: JsonObject): List<String> = listOf("vendor", "name", "material").map {
-        (o[it] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase().orEmpty()
+    private fun matchKey(o: JsonObject): List<String> = listOf(RecentField.Vendor, RecentField.Name, RecentField.Material).map {
+        (o[it.wire] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase().orEmpty()
+    }
+
+    /**
+     * The fields of [saved] to mark: "Estimated" when the read listed the field in its `estimates` and the value is
+     * still what was read, "Not on the label" when the read left it empty and it still is. Without the read (a record
+     * added by hand) there is nothing to mark; a field changed since the read has no mark.
+     */
+    fun of(r: HistoryRecord, saved: HistorySaved): Map<RecentField, FieldMark> {
+        val read = readItem(r, saved.item) ?: return emptyMap()
+        val estimates = (read["estimates"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
+        val marks = mutableMapOf<RecentField, FieldMark>()
+        for (f in RecentField.entries) {
+            val was = RecentValues.text(read[f.wire])
+            val now = RecentValues.text(saved.values[f.wire])
+            when {
+                was != now -> Unit
+                was == null -> marks[f] = FieldMark.NotOnLabel
+                f.wire in estimates -> marks[f] = FieldMark.Estimated
+            }
+        }
+        return marks
     }
 }
 
 data class HistoryListState(
     val history: IntakeHistory? = null,
     val loading: Boolean = false,
-    val message: String? = null,
+    val error: RecentFailure? = null,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
+    /** When [history] was loaded (epoch milliseconds), for the offline notice. */
+    val loadedAt: Long? = null,
 ) {
-    /** Whether the server reads labels with the AI; null while unknown (not loaded yet), which is not "off". */
+    /** Whether the Hub reads labels; null while unknown (not loaded yet), which is not "off". */
     val aiAvailable: Boolean? get() = history?.ai
 }
 
 /** Keeps fetched photos for the visit (a list and a record share them), so a photo is downloaded once. */
 class PhotoCache {
     private val bytes = mutableMapOf<String, ByteArray>()
-    fun get(id: String, n: Int): ByteArray? = synchronized(bytes) { bytes["$id/$n"] }
-    fun put(id: String, n: Int, b: ByteArray) = synchronized(bytes) { bytes["$id/$n"] = b }
+    fun get(id: String, n: Int): ByteArray? = synchronized(bytes) { bytes[key(id, n)] }
+    fun put(id: String, n: Int, b: ByteArray) = synchronized(bytes) { bytes[key(id, n)] = b }
+    private fun key(id: String, n: Int) = id + "/" + n
 }
 
 /** The list (newest first) and the shared photo cache. */
-class HistoryListViewModel(private val backend: HistoryBackend) : ViewModel() {
+class HistoryListViewModel(
+    private val backend: HistoryBackend,
+    private val now: () -> Long = System::currentTimeMillis,
+) : ViewModel() {
     private val _state = MutableStateFlow(HistoryListState())
     val state: StateFlow<HistoryListState> = _state.asStateFlow()
     val photos = PhotoCache()
 
     fun refresh() {
+        if (_state.value.loading) return
         _state.update { it.copy(loading = true) }
         viewModelScope.launch {
-            guard(_state, { msg -> _state.update { it.copy(message = msg) } }, { u, m -> copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch) }) {
+            guard(_state, { f -> _state.update { it.copy(error = f) } }, { u, m -> copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch) }) {
                 val h = backend.list()
-                _state.update { it.copy(history = h, message = null) }
+                _state.update { it.copy(history = h, error = null, loadedAt = now()) }
             }
             _state.update { it.copy(loading = false) }
         }
     }
 
-    /** Loads the list once when nothing is loaded or loading (a record restored on its own needs the AI flag). */
+    /** Loads the list once when nothing is loaded or loading (a record restored on its own needs the Label Reader flag). */
     fun ensureLoaded() {
         val s = _state.value
         if (s.history == null && !s.loading) refresh()
     }
 
-    /** Photo [n] of record [id], from the cache or the server; null when it can't be had. */
+    /** Photo [n] of record [id], from the cache or the Hub; null when it can't be had. */
     suspend fun photo(id: String, n: Int): ByteArray? = photos.get(id, n) ?: try {
         backend.photo(id, n).also { photos.put(id, n, it) }
     } catch (e: CancellationException) {
@@ -256,19 +322,52 @@ class HistoryListViewModel(private val backend: HistoryBackend) : ViewModel() {
     }
 }
 
-/** An edit form open on one saved item. */
-data class EditForm(val item: Int, val busy: Boolean = false, val error: String? = null)
+/** The edit form (05-android-app 10.3): the texts typed so far against the texts it opened with. */
+data class EditUi(
+    val item: Int,
+    val original: Map<RecentField, String>,
+    val texts: Map<RecentField, String>,
+    val busy: Boolean = false,
+    val errors: Map<RecentField, FieldError> = emptyMap(),
+    val failure: RecentFailure? = null,
+    val nothingChanged: Boolean = false,
+) {
+    /** Fields whose text differs from what the form opened with. */
+    val changed: List<RecentField> get() = RecentField.entries.filter { texts[it].orEmpty().trim() != original[it].orEmpty().trim() }
+    val dirty: Boolean get() = changed.isNotEmpty()
+}
+
+/** The Label Reader panel (05-android-app 10.4). */
+sealed interface Ask {
+    data object Idle : Ask
+    data object Waiting : Ask
+    data class Proposal(val proposal: RevisionProposal) : Ask
+    data object NoChange : Ask
+    data class Accepted(val count: Int, val revision: Int) : Ask
+    data object Discarded : Ask
+    data class Failed(val failure: RecentFailure) : Ask
+}
+
+/** A hand edit that the Hub took: the item and the fields that were sent. */
+data class SavedEdit(val item: Int, val fields: List<RecentField>)
 
 data class RecordState(
     val record: HistoryRecord? = null,
-    val message: String? = null,
-    val messageIsError: Boolean = false,
-    val reviseBusy: Boolean = false,
-    val noteError: String? = null,
-    val proposal: RevisionProposal? = null,
+    val loading: Boolean = false,
+    val error: RecentFailure? = null,
+    val loadedAt: Long? = null,
+    val ask: Ask = Ask.Idle,
+    /** The note was empty when it was sent: the field shows its error until the person types. */
+    val noteMissing: Boolean = false,
     val applyBusy: Boolean = false,
-    val edit: EditForm? = null,
+    val edit: EditUi? = null,
+    /** What the last hand edit sent, for the result line of its Fields panel. */
+    val saved: SavedEdit? = null,
+    val undoAsk: Boolean = false,
     val undoBusy: Boolean = false,
+    /** The revision just undone, for the result lines of the Revisions panel. */
+    val undone: HistoryRevision? = null,
+    val undoFailure: RecentFailure? = null,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
 ) {
@@ -276,105 +375,167 @@ data class RecordState(
     val undoTarget: HistoryRevision? get() = record?.takeIf { it.undoable }?.revisions?.lastOrNull { !it.undone }
 }
 
-/** One record: load, AI revise (proposal, then accept or discard), edit by hand, undo. */
-class RecordViewModel(private val backend: HistoryBackend, private val id: String) : ViewModel() {
+/** One record: load, ask the Label Reader (proposal, then accept or discard), edit by hand, undo. */
+class RecordViewModel(
+    private val backend: HistoryBackend,
+    private val id: String,
+    private val now: () -> Long = System::currentTimeMillis,
+) : ViewModel() {
     private val _state = MutableStateFlow(RecordState())
     val state: StateFlow<RecordState> = _state.asStateFlow()
+    private var lastNote = ""
 
-    private val auth: RecordState.(Boolean, Pair<String, String>?) -> RecordState =
-        { u, m -> copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch, edit = null, proposal = null) }
+    private val auth: RecordState.(Boolean, Pair<String, String>?) -> RecordState = { u, m ->
+        copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch, edit = null, ask = Ask.Idle, undoAsk = false)
+    }
+
+    /** Loads the record when it isn't there yet (the edit screen can be the first one restored). */
+    fun ensureLoaded() {
+        val s = _state.value
+        if (s.record == null && !s.loading) load()
+    }
 
     fun load() {
+        if (_state.value.loading) return
+        _state.update { it.copy(loading = true) }
         viewModelScope.launch {
-            guard(_state, ::fail, auth) {
+            guard(_state, { f -> _state.update { it.copy(error = f) } }, auth) {
                 val r = backend.record(id)
-                _state.update { it.copy(record = r) }
+                _state.update { it.copy(record = r, error = null, loadedAt = now()) }
             }
+            _state.update { it.copy(loading = false) }
         }
     }
 
-    /** [item] null: every item of the record. */
-    fun revise(note: String, item: Int? = null) {
+    /** Asks the Label Reader about every item of the record; an empty note is not sent. */
+    fun ask(note: String) {
         val n = note.trim()
-        if (_state.value.reviseBusy) return
+        if (_state.value.ask == Ask.Waiting) return
         if (n.isEmpty()) {
-            _state.update { it.copy(noteError = HistoryTexts.NEED_NOTE) }
+            _state.update { it.copy(noteMissing = true) }
             return
         }
-        _state.update { it.copy(reviseBusy = true, noteError = null, message = null, proposal = null) }
+        lastNote = n
+        _state.update { it.copy(ask = Ask.Waiting, noteMissing = false, saved = null, undone = null) }
         viewModelScope.launch {
-            guard(_state, { msg -> _state.update { it.copy(noteError = msg) } }, auth) {
-                val p = backend.revise(id, n, item)
-                _state.update { it.copy(proposal = p) }
+            guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f)) } }, auth) {
+                val p = backend.revise(id, n, null)
+                _state.update { it.copy(ask = if (p.changes.isEmpty()) Ask.NoChange else Ask.Proposal(p)) }
             }
-            _state.update { it.copy(reviseBusy = false) }
         }
     }
 
-    fun discard() = _state.update { it.copy(proposal = null) }
+    /** "Try again" after a failure: the same note. */
+    fun askAgain() = ask(lastNote)
+
+    fun noteTyped() = _state.update { if (it.noteMissing) it.copy(noteMissing = false) else it }
+
+    fun discard() = _state.update { if (it.ask is Ask.Proposal) it.copy(ask = Ask.Discarded) else it }
 
     fun accept() {
-        val p = _state.value.proposal ?: return
+        val p = (_state.value.ask as? Ask.Proposal)?.proposal ?: return
         if (_state.value.applyBusy) return
         _state.update { it.copy(applyBusy = true) }
         viewModelScope.launch {
-            guard(_state, { msg -> _state.update { it.copy(message = msg, messageIsError = true, proposal = null) } }, auth) {
+            guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f)) } }, auth) {
                 val r = backend.applyProposal(id, p.proposal)
-                _state.update { it.copy(record = r, proposal = null, message = HistoryTexts.SAVED, messageIsError = false) }
+                _state.update { it.copy(record = r, ask = Ask.Accepted(p.changes.size, r.revisions.lastOrNull()?.n ?: 0)) }
             }
             _state.update { it.copy(applyBusy = false) }
         }
     }
 
-    fun openEdit(item: Int) = _state.update { it.copy(edit = EditForm(item), message = null) }
+    // ---- edit by hand ----
 
+    /** Opens the form on saved item [item] once the record is there; a form already open on it stays as typed. */
+    fun startEdit(item: Int) {
+        val s = _state.value
+        if (s.edit?.item == item) return
+        val saved = s.record?.saved?.firstOrNull { it.item == item } ?: return
+        val texts = RecentField.entries.associateWith { RecentValues.formText(saved.values[it.wire]) }
+        _state.update { it.copy(edit = EditUi(item, texts, texts), saved = null, undone = null) }
+    }
+
+    fun setText(field: RecentField, text: String) = _state.update { s ->
+        val e = s.edit ?: return@update s
+        s.copy(edit = e.copy(texts = e.texts + (field to text), errors = e.errors - field, nothingChanged = false, failure = null))
+    }
+
+    /** Leaves the form; nothing happens while it is saving. */
     fun closeEdit() = _state.update { if (it.edit?.busy == true) it else it.copy(edit = null) }
 
-    /** [texts] is the form (field → text); only fields whose value changed are sent. */
-    fun saveEdit(texts: Map<String, String>) {
-        val f = _state.value.edit ?: return
-        if (f.busy) return
-        val old = _state.value.record?.saved?.firstOrNull { it.item == f.item }?.values ?: JsonObject(emptyMap())
-        val changes = mutableMapOf<String, JsonElement>()
-        for ((field, text) in texts) {
-            if (text.trim() == HistoryTexts.formText(old[field]).trim()) continue
-            val v = HistoryTexts.parse(if (field == "color_hex") text.trim().removePrefix("#").uppercase() else text, old[field], field)
-                ?: return _state.update { it.copy(edit = f.copy(error = "${HistoryTexts.label(field)}: not a valid value")) }
-            changes[field] = v
+    /** Sends the changed fields only; [onDone] runs when the Hub has taken them. */
+    fun saveEdit(onDone: () -> Unit) {
+        val e = _state.value.edit ?: return
+        if (e.busy) return
+        val old = _state.value.record?.saved?.firstOrNull { it.item == e.item }?.values ?: JsonObject(emptyMap())
+        val changes = mutableMapOf<RecentField, JsonElement>()
+        val errors = mutableMapOf<RecentField, FieldError>()
+        for (field in e.changed) {
+            when (val p = RecentValues.parse(e.texts.getValue(field), field)) {
+                is Parsed.Ok -> if (p.value != (old[field.wire] ?: JsonNull)) changes[field] = p.value
+                is Parsed.Bad -> errors[field] = p.error
+            }
         }
-        if (changes.isEmpty()) {
-            _state.update { it.copy(edit = null) }
+        if (errors.isNotEmpty()) {
+            _state.update { it.copy(edit = e.copy(errors = errors, nothingChanged = false)) }
             return
         }
-        _state.update { it.copy(edit = f.copy(busy = true, error = null)) }
+        if (changes.isEmpty()) {
+            _state.update { it.copy(edit = e.copy(nothingChanged = true)) }
+            return
+        }
+        _state.update { it.copy(edit = e.copy(busy = true, errors = emptyMap(), failure = null, nothingChanged = false)) }
         viewModelScope.launch {
-            guard(_state, { msg -> _state.update { s -> s.copy(edit = s.edit?.copy(busy = false, error = msg)) } }, auth) {
-                val r = backend.applyValues(id, f.item, JsonObject(changes))
-                _state.update { it.copy(record = r, edit = null, message = HistoryTexts.SAVED, messageIsError = false) }
+            guard(_state, { f -> _state.update { s -> s.copy(edit = s.edit?.copy(busy = false, failure = f)) } }, auth) {
+                val r = backend.applyValues(id, e.item, JsonObject(changes.mapKeys { it.key.wire }))
+                _state.update { it.copy(record = r, edit = null, saved = SavedEdit(e.item, changes.keys.toList()), ask = Ask.Idle) }
+                onDone()
             }
         }
     }
+
+    // ---- undo ----
+
+    fun askUndo() = _state.update { if (it.undoTarget != null && !it.undoBusy) it.copy(undoAsk = true, undoFailure = null) else it }
+
+    fun cancelUndo() = _state.update { if (it.undoBusy) it else it.copy(undoAsk = false) }
 
     fun undo() {
         val target = _state.value.undoTarget ?: return
         if (_state.value.undoBusy) return
-        _state.update { it.copy(undoBusy = true, message = null) }
+        _state.update { it.copy(undoBusy = true, undone = null, saved = null) }
         viewModelScope.launch {
-            guard(_state, ::fail, auth) {
+            guard(_state, { f -> _state.update { it.copy(undoFailure = f) } }, auth) {
                 val r = backend.undo(id, target.n)
-                _state.update { it.copy(record = r, message = HistoryTexts.UNDONE, messageIsError = false) }
+                _state.update { it.copy(record = r, undone = target, ask = Ask.Idle) }
             }
-            _state.update { it.copy(undoBusy = false) }
+            _state.update { it.copy(undoBusy = false, undoAsk = false) }
         }
     }
-
-    private fun fail(msg: String) = _state.update { it.copy(message = msg, messageIsError = true) }
 }
 
-/** The usual error handling: unpaired and certificate changes go to [onAuth], the rest become one line. */
+/**
+ * A spool as the search answers give it, from what the record knows (number, brand, name, material, colour). The Hub
+ * has no call for one spool by number yet (05-android-app 16), so the card opens without location and weight.
+ */
+fun HistorySpool.asSpoolJson(): JsonObject = buildJsonObject {
+    spoolId?.let { put("id", it) }
+    put("filament", buildJsonObject {
+        name?.let { put("name", it) }
+        material?.let { put("material", it) }
+        colorHex?.let { put("color_hex", it) }
+        vendor?.let { v -> put("vendor", buildJsonObject { put("name", v) }) }
+    })
+}
+
+/** The key a record's view model is kept under, in the record's own back stack entry. */
+internal fun recordKey(apiKey: String, id: String): String = listOf(apiKey, id).joinToString("/")
+
+/** The usual error handling: unpaired and certificate changes go to [onAuth], the rest become a [RecentFailure]. */
 private suspend fun <S> guard(
     state: MutableStateFlow<S>,
-    onError: (String) -> Unit,
+    onError: (RecentFailure) -> Unit,
     onAuth: S.(Boolean, Pair<String, String>?) -> S,
     block: suspend () -> Unit,
 ) {
@@ -385,16 +546,8 @@ private suspend fun <S> guard(
     } catch (e: FingerprintMismatch) {
         state.update { it.onAuth(false, e.expected to e.actual) }
     } catch (e: ApiError) {
-        if (e.code == "unauthorized") state.update { it.onAuth(true, null) } else onError(errorText(e))
-    } catch (e: Exception) {
-        onError("Unexpected response from the server")
+        if (e.code == "unauthorized") state.update { it.onAuth(true, null) } else onError(failureOf(e))
+    } catch (_: Exception) {
+        onError(RecentFailure.Unexpected)
     }
-}
-
-internal fun errorText(e: ApiError): String = com.thompsonfabco.filamentkit.ui.add.ReaderTexts.localError(e.code) ?: when (e.code) {
-    "ai_off" -> HistoryTexts.AI_OFF
-    "stale" -> HistoryTexts.STALE
-    "daily_cap" -> "Today's label reading limit is used up (revisions count too). Try again tomorrow, or edit by hand."
-    "offline" -> "Could not reach the server. Check that you are on the same network."
-    else -> e.message
 }

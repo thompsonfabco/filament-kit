@@ -94,6 +94,8 @@ import com.thompsonfabco.filamentkit.nav.PrintersGraph
 import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.RecentGraph
 import com.thompsonfabco.filamentkit.nav.RecentRoute
+import com.thompsonfabco.filamentkit.nav.RecordEditRoute
+import com.thompsonfabco.filamentkit.nav.RecordPhotoRoute
 import com.thompsonfabco.filamentkit.nav.RecordRoute
 import com.thompsonfabco.filamentkit.nav.SettingsAppearanceRoute
 import com.thompsonfabco.filamentkit.nav.SettingsDeveloperRoute
@@ -158,7 +160,9 @@ import com.thompsonfabco.filamentkit.ui.components.SwNav
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
+import com.thompsonfabco.filamentkit.ui.history.HistoryEditEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
+import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
@@ -728,8 +732,40 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         HistoryRecordEntry(
                             a, e.toRoute<RecordRoute>().hid, listOwner = list,
                             onBack = { nav.popBackStack() },
+                            // Newer and Older record step through the list without going back
+                            onOpenRecord = { hid -> nav.navigate(RecordRoute(hid)) { popUpTo<RecordRoute> { inclusive = true } } },
+                            onEdit = { item -> nav.navigate(RecordEditRoute(e.toRoute<RecordRoute>().hid, item)) },
+                            onOpenPhoto = { n -> nav.navigate(RecordPhotoRoute(e.toRoute<RecordRoute>().hid, n)) },
+                            onOpenSpool = { spoolVm?.open(it) },
                             onPairAgain = app.router::pairAgain,
                         )
+                    }
+
+                    composable<RecordEditRoute> { e ->
+                        val a = api
+                        if (a == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        val route = e.toRoute<RecordEditRoute>()
+                        val record = remember(e) { nav.getBackStackEntry<RecordRoute>() }
+                        HistoryEditEntry(
+                            a, route.hid, route.item, recordOwner = record,
+                            onClose = { nav.popBackStack() },
+                            onPairAgain = app.router::pairAgain,
+                        )
+                    }
+
+                    composable<RecordPhotoRoute> { e ->
+                        val a = api
+                        if (a == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        val route = e.toRoute<RecordPhotoRoute>()
+                        val list = remember(e) { nav.getBackStackEntry<RecentRoute>() }
+                        val record = remember(e) { nav.getBackStackEntry<RecordRoute>() }
+                        HistoryPhotoEntry(a, route.hid, route.n, recordOwner = record, listOwner = list, onClose = { nav.popBackStack() })
                     }
                 }
 

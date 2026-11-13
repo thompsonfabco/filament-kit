@@ -68,6 +68,16 @@ import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.DiscoveredServer
 import com.thompsonfabco.filamentkit.net.KlipperFound
+
+import com.thompsonfabco.filamentkit.net.HistoryChange
+import com.thompsonfabco.filamentkit.net.HistoryRead
+import com.thompsonfabco.filamentkit.net.HistoryRecord
+import com.thompsonfabco.filamentkit.net.HistoryRevision
+import com.thompsonfabco.filamentkit.net.HistorySaved
+import com.thompsonfabco.filamentkit.net.HistorySpool
+import com.thompsonfabco.filamentkit.net.HistorySummary
+import com.thompsonfabco.filamentkit.net.IntakeHistory
+import com.thompsonfabco.filamentkit.net.RevisionProposal
 import com.thompsonfabco.filamentkit.net.MapStatus
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
@@ -84,6 +94,12 @@ import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.components.TopBarActions
 import com.thompsonfabco.filamentkit.ui.components.TOP_BAR_TAG
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersState
+import com.thompsonfabco.filamentkit.ui.history.EditScreen
+import com.thompsonfabco.filamentkit.ui.history.HistoryBackend
+import com.thompsonfabco.filamentkit.ui.history.HistoryListScreen
+import com.thompsonfabco.filamentkit.ui.history.HistoryListViewModel
+import com.thompsonfabco.filamentkit.ui.history.RecordScreen
+import com.thompsonfabco.filamentkit.ui.history.RecordViewModel
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.pair.Mismatch
 import com.thompsonfabco.filamentkit.ui.pair.MismatchSource
@@ -124,6 +140,9 @@ import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.update.UpdateFailure
 import com.thompsonfabco.filamentkit.update.UpdateUi
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
@@ -747,6 +766,53 @@ class ScreenSemanticsTest {
     @Test fun theScannerWhoseCameraFailed() {
         host("Pair with your Hub") { ScanProblem(denied = false, onPrimary = {}, onEnterAddress = {}) }
         auditAllFour("Enter the address instead")
+
+    @Test fun recentList() {
+        val history = FakeHistory()
+        val vm = HistoryListViewModel(history)
+        host("Recently added") { HistoryListScreen(vm, onOpen = {}, onPairAgain = {}) }
+        auditAllFour("Polymaker PolyTerra PLA Charcoal Black")
+    }
+
+    @Test fun recentListWhenEmptyAndTheReaderIsOff() {
+        val history = FakeHistory(records = emptyList(), ai = false)
+        val vm = HistoryListViewModel(history)
+        host("Recently added") { HistoryListScreen(vm, onOpen = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Nothing added yet").assertExists()
+        rule.onNodeWithText("The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page.").assertExists()
+        assertEquals(emptyList<String>(), audit())
+    }
+
+    @Test fun recentRecord() {
+        val history = FakeHistory()
+        val list = HistoryListViewModel(history)
+        val vm = RecordViewModel(history, "a1")
+        host("Recently added") {
+            RecordScreen(vm, list, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
+        }
+        auditAllFour("Fields")
+    }
+
+    @Test fun recentRecordWithAProposalToAccept() {
+        val history = FakeHistory()
+        val list = HistoryListViewModel(history)
+        val vm = RecordViewModel(history, "a1")
+        host("Recently added") {
+            RecordScreen(vm, list, onBack = {}, onOpenRecord = {}, onEdit = {}, onOpenPhoto = {}, onOpenSpool = {}, onPairAgain = {})
+        }
+        rule.waitForIdle()
+        vm.ask("brand is Polymaker")
+        rule.waitForIdle()
+        rule.onNodeWithText("Proposal: 1 change").assertExists()
+        auditAllFour("Accept")
+    }
+
+    @Test fun recentEdit() {
+        val history = FakeHistory()
+        val vm = RecordViewModel(history, "a1")
+        host("Recently added") { EditScreen(vm, item = 0, onClose = {}, onPairAgain = {}) }
+        auditAllFour("Save changes")
     }
 
     // The audit itself: each rule fails on a planted violation.
@@ -813,6 +879,60 @@ class ScreenSemanticsTest {
     }
 
     private class FakePrinters(private val list: List<Printer>? = null) : PrinterBackend {
+
+    private class FakeHistory(
+        val records: List<HistorySummary> = listOf(
+            HistorySummary(
+                "a1", "2026-11-12T14:05:00+00:00", "phone", "detected", photos = 2, undoable = true,
+                spools = listOf(HistorySpool(214, 41, "Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "2B2B2E")),
+            ),
+            HistorySummary(
+                "a2", "2026-11-12T09:41:00+00:00", "station", "revised_ai", photos = 1,
+                spools = listOf(
+                    HistorySpool(212, 40, "Bambu Lab", "PETG HF Orange", "PETG", "F2701D"),
+                    HistorySpool(213, 40, "Bambu Lab", "PETG HF Orange", "PETG", "F2701D"),
+                ),
+            ),
+            HistorySummary(
+                "a3", "2026-11-11T18:20:00+00:00", "web", "edited", photos = 0,
+                spools = listOf(HistorySpool(210, 39, "Example Filaments", "Silk Blue", "PLA", "1E50A0")),
+            ),
+        ),
+        val ai: Boolean = true,
+    ) : HistoryBackend {
+        private val values = buildJsonObject {
+            put("vendor", "Polymaker"); put("name", "PolyTerra PLA Charcoal Black"); put("material", "PLA")
+            put("color_hex", "2B2B2E"); put("tare", 140); put("density", 1.24)
+            put("nozzle_range", JsonArray(listOf(JsonPrimitive(190), JsonPrimitive(230))))
+        }
+        private val record = HistoryRecord(
+            id = "a1", at = "2026-11-12T14:05:00+00:00", source = "phone", state = "edited", photos = 2, undoable = true,
+            spools = listOf(HistorySpool(214, 41, "Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "2B2B2E")),
+            read = HistoryRead(listOf(buildJsonObject {
+                put("vendor", "Polymaker"); put("name", "PolyTerra PLA Charcoal Black"); put("material", "PLA")
+                put("density", 1.24); put("estimates", JsonArray(listOf(JsonPrimitive("density"))))
+            })),
+            saved = listOf(HistorySaved(0, listOf(214), values)),
+            revisions = listOf(
+                HistoryRevision(
+                    1, "2026-11-12T14:09:00+00:00", "hand",
+                    changes = listOf(HistoryChange(214, "tare", JsonPrimitive(150), JsonPrimitive(140))),
+                ),
+            ),
+        )
+
+        override suspend fun list() = IntakeHistory(20, records.size, 14_900_000L, ai, records)
+        override suspend fun record(id: String) = record
+        override suspend fun photo(id: String, n: Int) = ByteArray(0)
+        override suspend fun revise(id: String, note: String, item: Int?) = RevisionProposal(
+            "p-1", 0, buildJsonObject { put("vendor", "Polymaker") }, buildJsonObject { put("vendor", "Polymaker Ltd") }, listOf("vendor"),
+        )
+        override suspend fun applyProposal(id: String, proposal: String) = record
+        override suspend fun applyValues(id: String, item: Int, values: JsonObject) = record
+        override suspend fun undo(id: String, revision: Int) = record
+    }
+
+    private class FakePrinters : PrinterBackend {
         private val online = Printer(
             id = "ABC123", name = "Workshop X1", model = "X1C", serial = "ABC123", ip = "192.0.2.40", configured = true,
             state = "connected", summary = PrinterSummary("RUNNING", 42, 31, "Benchy"),

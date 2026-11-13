@@ -263,113 +263,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt |
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | tare | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | vendor | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/ReviewScreen.kt | • $it | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt |  ($it) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt |  (spool #$id) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | #$it | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | $id/$n | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | $text · ${} spools | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | ${}: not a valid value | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | (undone) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | AI | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Accept | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Android app | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | As saved | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Ask the AI | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Asking… | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Bed (°C) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Bed range (°C) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Brand | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | By hand | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Colour | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Could not reach the server. Check that you are on the same network. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Density (g/cm³) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Discard | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Edit by hand | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Edited by hand | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Empty spool (g) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Filament ${} now has no spools;  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Intake history | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Label reading is off on this server, so the AI can't revise; edit by hand instead. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Line | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Material | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Name | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Net weight (g) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | No spools | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | No spools added since the server started keeping intake records. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Nozzle (°C) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Nozzle range (°C) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Price per kg | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Re-linked to ${} filament (#${}). | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Revised by AI | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Saved. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Spool #${} | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | The AI looks at the photos again with your note and proposes new values; nothing changes  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | The AI proposes no change. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | The record changed since the AI answered. Ask again. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | This record has no photo: the AI only had the saved values and your note. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | This server keeps no intake records (Settings on the setup page: Intake records kept). | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Today's label reading limit is used up (revisions count too). Try again tomorrow, or edit by hand. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Undo last change | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Undone. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Unexpected response from the server | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | What's wrong? (e.g. brand is Polymaker) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | When read: $it | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | Write what is wrong first. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | \\\\s*[-–,]\\\\s* | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | _range | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | a new | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | ai | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | ai_off | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | another | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bed_range | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | cli | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color_hex | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | command line | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | daily_cap | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | density | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | detected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | edited | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | intake station | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | it was kept (delete it in Spoolman if you don't need it). | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | line | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | material | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | name | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | net | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | nozzle | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | nozzle_range | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | offline | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | phone | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | phone web app | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | price_per_kg | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | revised_ai | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | stale | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | station | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | tare | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unauthorized | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | until you accept them. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | vendor | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | web | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | “$it” | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt |  (e.g. 190-230) | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | #$it | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | ${} spools:  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Cancel | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Changes | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Intake record | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Loading… | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | No photo: these spools were added by hand. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Photo $n | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Revise with AI | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Save | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Saving… | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Spool #${} | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Tag read | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Takes back:  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Tap a photo to enlarge it. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | The AI proposes | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | The last ${} of up to ${} kept, newest first. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryScreens.kt | Weighed ${} g | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | $n accepted: your PC writes them over the presets at its next sync. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | A newer build would change these presets already in your slicers. Nothing is written over until you accept. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | Accept $n update${} | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -1369,3 +1262,30 @@ server/filament_kit/web/static/printers.js | Yes | today's literal in a page scr
 server/filament_kit/web/static/printers.js | Yes, how do I share it? | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
 server/filament_kit/web/static/printers.js | left nozzle | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
 server/filament_kit/web/static/printers.js | right nozzle | today's literal in a page script; moves to the string catalogue when its page is rebuilt (S1.3, S3.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | ai_off | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bed | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bed_range | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color_hex | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | daily_cap | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | density | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | detected | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | edited | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | estimates | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | line | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | local_busy | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | material | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | name | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | net | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | nozzle | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | nozzle_range | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | offline | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | phone | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | price_per_kg | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | revised_ai | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | station | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | tare | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unauthorized | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | vendor | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/RecordScreen.kt | ai | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | filament | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | id | wire name or value of the Hub's reply, matched as given; not a text
