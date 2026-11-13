@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from test_setup_page import CODE, H, Helper, client, env, make, post  # noqa: F401
 
-from filament_kit import backup, cli, config
+from filament_kit import backup, cli, config, setup_helper
 
 STATIC = Path(cli.__file__).parent / "setup_static"
 
@@ -242,3 +242,17 @@ def test_a_file_that_comes_with_a_broken_reply_is_closed(tmp_path):
     leaked = [fd for fd in set(os.listdir("/proc/self/fd")) - before
               if os.path.realpath(f"/proc/self/fd/{fd}") == str(target)]
     assert leaked == []
+
+
+def test_the_last_backup_time_needs_no_code_and_shows_nothing_else(app):
+    import re
+    assert client(app).get("/setup/api/state").json()["backup"] == {"last": None}
+    z = backup.create()
+    c = client(app)                                   # no code, no cookie
+    s = c.get("/setup/api/state")
+    assert s.status_code == 200 and re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", s.json()["backup"]["last"])
+    assert set(s.json()["backup"]) == {"last"}
+    assert z.name not in s.text and str(z.parent) not in s.text
+    r = setup_helper.handle({"op": "backup_last"})     # the helper: no code either, and only the time
+    assert set(r) == {"ok", "status", "last"}
+    assert post(client(app), "backups/list", {}, code=None).status_code in (401, 403)

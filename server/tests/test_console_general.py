@@ -209,3 +209,59 @@ def test_the_settings_tab_has_the_cards():
     assert "generalCard()" in src and "remoteCard()" in src
     tabs = (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
     assert "function generalCard(" in tabs and "function remoteCard(" in tabs and '"remote_issue"' in tabs
+
+
+# ---------- several keys of one group at once (S2.17, N2) ----------
+
+def _group(app, values, **kw):
+    return post(client(app), "settings/general", {"values": values}, **kw)
+
+
+def test_a_mixed_group_names_each_bad_key_and_changes_nothing(app, restarts, applies):
+    before = config.load()
+    r = _group(app, {"server_name": "Shop", "reads_per_day": 0, "placement.box_count": 1000, "port": 1,
+                     "placement.overflow": "Floor"})
+    assert r.status_code == 400
+    assert set(r.json()["errors"]) == {"reads_per_day", "placement.box_count", "port"}
+    assert "nothing was changed" in r.json()["error"]
+    assert config.load() == before and not restarts and not applies
+
+
+def test_a_good_group_saves_every_key_with_one_answer(app, restarts, applies):
+    r = _group(app, {"server_name": "Shop", "placement.overflow": "Floor", "reads_per_day": 25, "model": "m1"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "keys": ["server_name", "placement.overflow", "reads_per_day", "model"],
+                        "restarts": True, "applies": False}
+    c = config.load()
+    assert c["server_name"] == "Shop" and c["placement"]["overflow"] == "Floor"
+    assert c["reads_per_day"] == 25 and c["model"] == "m1"
+    assert len(restarts) == 1 and not applies
+
+
+def test_a_group_with_nothing_to_restart_says_so(app, restarts, applies):
+    r = _group(app, {"server_name": "Shop", "placement.box_count": 3}).json()
+    assert r["restarts"] is False and r["applies"] is False and not restarts and not applies
+
+
+def test_a_group_with_the_station_voice_applies_once(app, restarts, applies):
+    assert _group(app, {"station.tts": "espeak", "server_name": "Shop"}).json()["applies"] is True
+    assert len(applies) == 1 and not restarts
+
+
+@pytest.mark.parametrize("values", [{}, [], "x", None])
+def test_a_group_needs_values(app, values):
+    assert _group(app, values).status_code == 400
+
+
+def test_a_group_needs_the_code(app):
+    before = config.load()
+    assert _group(app, {"server_name": "x"}, code=None).status_code in (401, 403)
+    assert _group(app, {"server_name": "x"}, code="0000-0000").status_code == 403
+    assert config.load() == before
+
+
+def test_the_one_key_form_is_unchanged(app, restarts, applies):
+    r = _set(app, "reads_per_day", 7).json()
+    assert r == {"ok": True, "restarts": True, "applies": False} and config.load()["reads_per_day"] == 7
+    bad = _set(app, "reads_per_day", 0)
+    assert bad.status_code == 400 and bad.json()["field"] == "value" and "errors" not in bad.json()
