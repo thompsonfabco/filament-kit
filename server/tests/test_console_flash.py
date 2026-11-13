@@ -183,7 +183,7 @@ def usb(env, monkeypatch):  # noqa: F811
     monkeypatch.setattr(rs, "find_readers", lambda: [BOARD, rs.Reader("/dev/ttyACM1", None, "x")])
     got = {}
 
-    def setup(port, settings, reflash=False, run=None):
+    def setup(port, settings, reflash=False, run=None, step=None):
         got.update(port=port, settings=settings)
         return got.get("result", rf.Result(True, "Done. The Printer Station joined 'Home' and reached the kit."))
     monkeypatch.setattr(rf, "setup", setup)

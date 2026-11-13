@@ -19,7 +19,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import hostaddr, apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, secret_input
+from . import hostaddr, apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, secret_input, steps
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -288,7 +288,8 @@ def cmd_station_pair_local() -> int:
               "pair` here", file=sys.stderr)
         return 1
     try:
-        result = server_api.pair_with_link(server_api.parse_link(pairing.issue(device_hint="station", scope="station").qr))
+        result = server_api.pair_with_link(server_api.parse_link(pairing.issue(device_hint="station", scope="station").qr),
+                                           step=steps.Steps(3).next)
     except (pairing.PairingError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -309,7 +310,7 @@ def cmd_backup(action: str, out: str | None) -> int:
             print(f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(e.at))}  {e.kind:<11} {e.size // 1024:>8} KiB  {e.name}")
         return 0
     try:
-        path = backup.create(Path(out) if out else None)
+        path = backup.create(Path(out) if out else None, step=steps.Steps(3).next)
     except (OSError, backup.BackupError) as e:
         print(f"error: the backup was not written: {e}", file=sys.stderr)
         return 1
@@ -334,7 +335,7 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             print(f"error: {zip_path}: no such file", file=sys.stderr)
             return 1
     try:
-        return backup.restore(path, yes=yes)
+        return backup.restore(path, yes=yes, step=steps.Steps(backup.restore_steps()).next)
     finally:
         if uploaded:
             path.unlink(missing_ok=True)
@@ -1348,7 +1349,8 @@ def cmd_library_update(scheduled: bool) -> int:
             if not library.due(cfg, time.time()):
                 print("library update not due yet")
                 return 0
-        r = library.update(cfg["library"].get("url") or None, scheduled=scheduled)
+        job = steps.Steps(4)
+        r = library.update(cfg["library"].get("url") or None, scheduled=scheduled, step=job.next)
     except (library.LibraryError, ValueError) as e:
         _err_line(str(e))
         return 1
@@ -1374,6 +1376,7 @@ def cmd_library_update(scheduled: bool) -> int:
     text = library.skipped_text()
     if text:
         print(text)
+    job.next("Asking for a preset build")
     _request_rebuild(f"library updated to version {r.version}")
     return 0
 
@@ -1390,6 +1393,8 @@ def cmd_library_adopt(folder: str) -> int:
 
 
 def cmd_library_rollback() -> int:
+    job = steps.Steps(2)
+    job.next("Putting the previous Filament Catalog back")
     try:
         v = library.rollback()
     except library.LibraryError as e:
@@ -1400,6 +1405,7 @@ def cmd_library_rollback() -> int:
     if left is not None:
         print(f"scheduled updates will skip version {left} until a newer one is published "
               "(run: sudo filament-kit library update to install it anyway)")
+    job.next("Asking for a preset build")
     _request_rebuild(f"library rolled back to version {v}")
     return 0
 
@@ -1637,10 +1643,12 @@ def _run_apply(*, pairing: bool = True) -> int:
         if a.kind == "install_file" and a.arg[0] == apply.DROPIN:
             allow = next(ln for ln in a.arg[1].splitlines() if ln.startswith("IPAddressAllow="))
             print(f"Station answers: {allow.split('=', 1)[1]}")
+    job = steps.Steps(len(apply.step_names(actions)) + 1)
     try:
-        apply.execute(actions)
+        apply.execute(actions, step=job.next)
     except apply.ApplyError:
         return 1
+    job.next("Checking that everything answers")
     try:
         apply.finish(cfg, pairing=pairing)
     except apply.ApplyError as e:
@@ -2103,6 +2111,8 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         print("error: this kit has no Printer Station firmware bundled (reader/firmware); update the kit, or build "
               "one yourself with --source <checkout>/reader", file=sys.stderr)
         return 1
+    job = steps.Steps(5)
+    job.next("Finding the board")
     found = rs.find_readers()
     if a.port:
         port = a.port
@@ -2177,7 +2187,8 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
                                       "Printer Station; nothing was written. Plug the Printer Station in, or name its "
                                       "port with --port.")
         else:
-            result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run)
+            result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run,
+                              step=job.next)
     finally:
         if was_active:
             run(["systemctl", "start", service], check=False, capture_output=True)

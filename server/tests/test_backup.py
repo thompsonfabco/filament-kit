@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from filament_kit import __version__, backup, cli, config, release, setup_helper
+from step_lines import sentences
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -585,3 +586,45 @@ def test_the_manifest_version_parses_as_a_release_version(kit):
 def test_zip_bytes_are_a_standard_zip(kit):
     data = backup.create().read_bytes()
     assert data[:4] == b"PK\x03\x04" and zipfile.is_zipfile(io.BytesIO(data))
+
+
+# ---------------------------------------------------------------- the job's step lines (docs/design 02 8.4)
+
+def test_the_backup_command_writes_its_three_steps(kit, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    assert cli.main(["backup", "create"]) == 0
+    assert sentences(capsys.readouterr().out, 3) == [
+        "Copying the Spoolman database", "Collecting the settings and pairings", "Writing the zip"]
+
+
+def test_the_restore_command_writes_its_six_steps(kit, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    z = backup.create()
+    monkeypatch.setattr(backup, "default_run", Runner())
+    assert cli.main(["restore", "--yes", str(z)]) == 0
+    assert sentences(capsys.readouterr().out, 6) == [
+        "Checking the backup", "Keeping what is here now as a backup", "Stopping the services",
+        "Putting the backup in place", "Starting the services", "Checking that everything answers"]
+
+
+def test_a_restore_onto_an_empty_machine_has_five_steps(kit, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    z = backup.create()
+    (kit / "etc" / "config.json").unlink()
+    monkeypatch.setattr(backup, "default_run", Runner())
+    assert backup.restore_steps() == 5
+    assert cli.main(["restore", "--yes", str(z)]) == 0
+    assert "Keeping what is here now as a backup" not in sentences(capsys.readouterr().out, 5)
+
+
+def test_the_apply_inside_a_restore_writes_no_step_lines_of_its_own(kit, monkeypatch):
+    """`modules apply` runs as a child of the restore, into the same log: its Steps stay silent."""
+    from filament_kit import steps
+    monkeypatch.setattr(steps.os, "getpid", lambda: 4242)
+    monkeypatch.setenv(steps.ENV, "4141")       # another process holds the job
+    lines = []
+    steps.Steps(2, out=lines.append).next("Anything")
+    assert lines == []
+    monkeypatch.setenv(steps.ENV, "4242")       # this process is the one
+    steps.Steps(2, out=lines.append).next("Anything")
+    assert lines == ["==> step 1 of 2 Anything"]

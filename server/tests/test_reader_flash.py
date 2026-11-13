@@ -10,6 +10,7 @@ import subprocess
 import pytest
 
 from filament_kit import cli, reader_flash as rf, reader_setup as rs, reader_tokens
+from step_lines import sentences
 
 BASE = "https://kit.example.net/filament/reader"
 BUILD = 1794000000
@@ -193,7 +194,7 @@ def usb(env, monkeypatch):
     monkeypatch.setattr(cli, "_answers_as_panel", lambda port: False)    # no real board is asked
     got = {}
 
-    def setup(port, settings, reflash=False, run=None):
+    def setup(port, settings, reflash=False, run=None, step=None):
         got.update(port=port, settings=settings, reflash=reflash)
         return got.get("result", rf.Result(True, "Done. The Printer Station joined 'Home' and reached the kit."))
     monkeypatch.setattr(rf, "setup", setup)
@@ -329,3 +330,54 @@ def test_settings_are_not_sent_to_a_board_that_does_not_answer(env):
     with pytest.raises(rf.FlashError, match="did not answer before the settings"):
         dev.send_settings(dict(SETTINGS))
     assert not any(l.startswith("FK-SET") for l in board.lines)
+
+
+# ---------------------------------------------------------------- the job's step lines (docs/design 02 8.4)
+
+def test_a_blank_board_goes_through_the_five_steps(env):
+    clock = Clock()
+    board = Board(clock)
+    told = []
+    r = rf.setup("/dev/ttyACM0", dict(SETTINGS), device=_device(board, clock), run=_flasher(board)[0],
+                 say=lambda *a: None, step=told.append)
+    assert r.ok
+    assert told == ["Writing the program", "Checking what was written", "Joining the Wi-Fi", "Reaching the Hub"]
+
+
+def test_a_board_on_this_build_keeps_the_count_with_other_words(env):
+    clock = Clock()
+    board = Board(clock, build=BUILD)
+    told = []
+    r = rf.setup("/dev/ttyACM0", dict(SETTINGS), device=_device(board, clock), run=_flasher(board)[0],
+                 say=lambda *a: None, step=told.append)
+    assert r.ok and not r.flashed
+    assert told == ["Keeping the program that is on the board", "Writing the settings", "Joining the Wi-Fi",
+                    "Reaching the Hub"]
+
+
+def test_a_reader_that_cannot_join_the_wifi_never_reaches_the_hub_step(env):
+    clock = Clock()
+    board = Board(clock, build=BUILD, wifi="fail")
+    told = []
+    r = rf.setup("/dev/ttyACM0", dict(SETTINGS), device=_device(board, clock), run=_flasher(board)[0],
+                 say=lambda *a: None, step=told.append)
+    assert not r.ok and told[-1] == "Joining the Wi-Fi" and "Reaching the Hub" not in told
+
+
+def test_the_reader_command_writes_five_numbered_steps(env, monkeypatch, capsys):
+    clock = Clock()
+    board = Board(clock)
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader("/dev/ttyACM0", None, "USB JTAG/serial debug unit")])
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: False)
+    real, flasher = rf.setup, _flasher(board)[0]
+    monkeypatch.setattr(rf, "setup", lambda port, settings, **kw: real(port, settings, device=_device(board, clock), **kw))
+
+    def run(cmd, **kw):         # the station service is not running; esptool is the fake flasher
+        return subprocess.CompletedProcess(cmd, 3, "", "") if cmd[0] == "systemctl" else flasher(cmd, **kw)
+    a = argparse.Namespace(source=None, out=None, secrets=None, pending=False, ssid="Home", port=None, buzzer="high",
+                           name=None, base=BASE, ota_pubkey=None, token_file=None, reflash=False)
+    assert cli._reader_setup_usb(a, lambda q: "", lambda q: "pw", run=run) == 0
+    assert sentences(capsys.readouterr().out, 5) == [
+        "Finding the board", "Writing the program", "Checking what was written", "Joining the Wi-Fi",
+        "Reaching the Hub"]

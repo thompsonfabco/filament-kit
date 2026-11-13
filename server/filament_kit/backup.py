@@ -274,8 +274,11 @@ def zip_name(prefix: str = PREFIX, now: float | None = None) -> str:
     return f"{prefix}-{host()}-{stamp}-v{__version__}.zip"
 
 
-def create(dest: Path | None = None, *, prefix: str = PREFIX, now: float | None = None) -> Path:
-    """Write a backup zip into `dest` (default the backups folder); its path. Root, on an install."""
+def create(dest: Path | None = None, *, prefix: str = PREFIX, now: float | None = None,
+           step: Callable[[str], None] | None = None) -> Path:
+    """Write a backup zip into `dest` (default the backups folder); its path. Root, on an install. `step(sentence)`
+    is told when each of the three steps of the backup job starts (steps.py)."""
+    step = step or (lambda _text: None)
     dest = Path(dest) if dest is not None else backups_dir()
     dest.mkdir(mode=0o700, parents=True, exist_ok=True)
     if dest == backups_dir():
@@ -292,8 +295,11 @@ def create(dest: Path | None = None, *, prefix: str = PREFIX, now: float | None 
         try:
             with os.fdopen(fd, "wb") as fh:
                 w = _Writer(fh)
+                step("Copying the Spoolman database")
                 _spoolman_copy(w, Path(scratch))
+                step("Collecting the settings and pairings")
                 _walk(w)
+                step("Writing the zip")
                 w.finish(kit=__version__, created=time.time() if now is None else now, mods=mods,
                          units=_units(mods), source="made")
             os.replace(part, out)
@@ -630,10 +636,19 @@ def _stop_kit(run: Callable[[list[str]], int]) -> None:
     run(["systemctl", "stop", *units])
 
 
+def restore_steps() -> int:
+    """How many steps `restore` tells `step` about on this machine: the one that keeps what is here only when there is."""
+    return 6 if _has_data() else 5
+
+
 def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = input,
-            run: Callable[[list[str]], int] | None = None, out=print) -> int:
-    """Bring this machine to the state in the backup. 0 when the data is back and the apply worked."""
+            run: Callable[[list[str]], int] | None = None, out=print,
+            step: Callable[[str], None] | None = None) -> int:
+    """Bring this machine to the state in the backup. 0 when the data is back and the apply worked. `step(sentence)` is
+    told when each of the restore_steps() steps starts (steps.py)."""
     run = run or default_run
+    step = step or (lambda _text: None)
+    step("Checking the backup")
     try:
         m = verify(Path(zip_path))
     except BackupError as e:
@@ -659,13 +674,16 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             out("error: no answer (no terminal): run it again with --yes. Nothing was changed.")
             return 1
     if _has_data():
+        step("Keeping what is here now as a backup")
         try:
             kept = create(prefix=PRE_RESTORE)
             out(f"What was here is kept in {kept}.")
         except (OSError, sqlite3.Error) as e:
             out(f"error: could not keep a backup of what is here first ({type(e).__name__}). Nothing was changed.")
             return 1
+    step("Stopping the services")
     _stop_kit(run)
+    step("Putting the backup in place")
     here = dict(roots())
     folders = {}            # each root folder's owner and mode on this install: the restored one keeps them
     for name, target in here.items():
@@ -721,6 +739,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
         out(f"The backup is from {m.host}, this machine is {host()}: the server gets a new certificate. Pair the phones "
             "and the PC sync again (Devices on the setup page).")
     out("The data is back. Setting up the modules it names (this installs their packages and may take a while)...")
+    step("Starting the services")
     rc = run([WRAPPER, "modules", "apply", "--no-pair"])
     # the apply made the users the kit's modules need: the files restored before them get their owners now
     for i in m.items:
@@ -744,6 +763,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
     if db_old is not None:
         db_old.unlink(missing_ok=True)
     out("Restored. The setup code, trusted computers, printers and pairings are the ones in the backup.")
+    step("Checking that everything answers")
     run([WRAPPER, "status"])
     return 0
 
