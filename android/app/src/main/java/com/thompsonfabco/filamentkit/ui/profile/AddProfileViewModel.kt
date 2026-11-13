@@ -131,6 +131,12 @@ class AddProfileViewModel(private val api: ProfileApi) : ViewModel() {
         }
     }
 
+    /** A client appeared (the phone was paired): an old failure goes and a list that did not load is asked for again. */
+    fun onPaired() {
+        _state.update { it.copy(failure = null, message = null) }
+        if (_state.value.linesLoadFailed) retryLines()
+    }
+
     /** Try again after the list did not load. */
     fun retryLines() {
         _state.update { it.copy(lines = null, lineFailure = null, lineMessage = null, linesLoadFailed = false) }

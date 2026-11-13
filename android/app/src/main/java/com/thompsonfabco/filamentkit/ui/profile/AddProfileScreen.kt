@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -89,38 +90,56 @@ fun AddProfileScreen(
     val savedNow by rememberUpdatedState(onSaved)
     LaunchedEffect(s.saved) { if (s.saved) savedNow() }
 
-    Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    LaunchedEffect(paired) { if (paired) vm.onPaired() }
+
+    Column(modifier.fillMaxSize()) {
         Column(
-            Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(space.s3),
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space.s4),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(stringResource(R.string.catalog_intro), style = MaterialTheme.typography.bodyMedium)
-            Text(stringResource(R.string.catalog_required_note), style = MaterialTheme.typography.bodySmall)
-            Group(R.string.catalog_group_line, s, vm, ProfileField.Vendor, ProfileField.Line, ProfileField.Material)
-            Group(R.string.common_group_temperatures, s, vm, ProfileField.Nozzle, ProfileField.Bed)
-            Group(R.string.catalog_group_material, s, vm, ProfileField.Density, ProfileField.MaxVolumetric)
-            Group(R.string.catalog_group_slicer, s, vm, ProfileField.Parent)
-            Group(R.string.catalog_group_notes, s, vm, ProfileField.Notes)
-            // the action bar, and under it whatever the save answered
-            Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
+            Column(
+                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(space.s3),
+            ) {
+                Text(stringResource(R.string.catalog_intro), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.catalog_required_note), style = MaterialTheme.typography.bodySmall)
+                Group(R.string.catalog_group_line, s, vm, ProfileField.Vendor, ProfileField.Line, ProfileField.Material)
+                Group(R.string.common_group_temperatures, s, vm, ProfileField.Nozzle, ProfileField.Bed)
+                Group(R.string.catalog_group_material, s, vm, ProfileField.Density, ProfileField.MaxVolumetric)
+                Group(R.string.catalog_group_slicer, s, vm, ProfileField.Parent)
+                Group(R.string.catalog_group_notes, s, vm, ProfileField.Notes)
+                ExistingLines(s, vm, paired, onPairAgain)
+            }
+        }
+        // the action bar stays in view; what the save answered sits directly above it (05 8, 6.2)
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = space.s4, vertical = space.s3),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Column(
+                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(space.s2),
+            ) {
+                Column(
+                    Modifier.heightIn(max = SpoolwardenTheme.sizes.qr).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(space.s2),
+                ) {
+                    if (s.problems.isNotEmpty()) {
+                        NoticeCard(
+                            NoticeKind.Bad, s.problems.joinToString(System.lineSeparator()) { BULLET + it },
+                            title = stringResource(R.string.catalog_refused),
+                        )
+                    }
+                    FailureNotice(s.failure, s.message, onPairAgain)
+                    // the reason Save is off when the phone is not paired
+                    if (!paired) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+                }
                 if (!s.filled) Text(stringResource(R.string.catalog_fill), style = MaterialTheme.typography.bodySmall)
                 SwButton(
                     stringResource(if (s.saving) R.string.common_saving else R.string.catalog_save), vm::save,
                     Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = s.canSave && paired, busy = s.saving,
                 )
             }
-            if (!paired) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-            if (s.problems.isNotEmpty()) {
-                NoticeCard(
-                    NoticeKind.Bad, s.problems.joinToString(System.lineSeparator()) { BULLET + it },
-                    title = stringResource(R.string.catalog_refused),
-                )
-            }
-            FailureNotice(s.failure, s.message, onPairAgain)
-            ExistingLines(s, vm, paired, onPairAgain)
         }
     }
 
@@ -163,8 +182,8 @@ private fun FailureNotice(failure: SaveFailure?, message: String?, onPairAgain: 
 @Composable
 private fun ExistingLines(s: AddProfileUiState, vm: AddProfileViewModel, paired: Boolean, onPairAgain: () -> Unit) {
     val lines = s.lines
-    // not paired: the notice above already says why there is no list
-    if (!paired && s.linesLoadFailed) return
+    // not paired: the notice above Save says why there is no list
+    if (!paired) return
     if (lines != null && lines.isEmpty() && !s.linesLoadFailed) return
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors

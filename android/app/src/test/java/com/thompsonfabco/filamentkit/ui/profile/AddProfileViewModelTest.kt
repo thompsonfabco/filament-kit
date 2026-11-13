@@ -247,6 +247,26 @@ class AddProfileViewModelTest {
         assertTrue(vm.state.value.saved)
     }
 
+    @Test fun pairingClearsAStaleFailureAndReloadsTheLines() = runTest(dispatcher) {
+        api.linesFailure = ApiError(0, "offline", "No Hub is paired.")
+        val vm = AddProfileViewModel(api)
+        filled(vm)
+        api.failure = ApiError(0, "offline", "No Hub is paired.")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(SaveFailure.Unreachable, vm.state.value.failure)
+        assertTrue(vm.state.value.linesLoadFailed)
+
+        api.linesFailure = null
+        api.failure = null
+        vm.onPaired()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.failure)
+        assertNull(vm.state.value.lineFailure)
+        assertEquals(listOf("example--pla"), vm.state.value.lines?.map { it.lineId })
+    }
+
     @Test fun listsTheHubsLinesAndReparentsOne() = runTest(dispatcher) {
         api.parentLists["PLA"] = ParentList(listOf("Bambu PLA Basic"), synced = true)
         val vm = AddProfileViewModel(api)

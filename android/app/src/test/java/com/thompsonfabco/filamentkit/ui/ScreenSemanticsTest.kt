@@ -1,5 +1,11 @@
 package com.thompsonfabco.filamentkit.ui
 
+import kotlinx.coroutines.CompletableDeferred
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.activity.OnBackPressedDispatcher
 import androidx.compose.ui.test.onAllNodesWithText
 import com.thompsonfabco.filamentkit.nav.AddProfileTitle
 import org.robolectric.RuntimeEnvironment
@@ -234,12 +240,59 @@ class ScreenSemanticsTest {
         auditAllFour("Save to the catalog", CATALOG_SECTIONS)
     }
 
-    @Test fun catalogLineRefused() {
-        val vm = AddProfileViewModel(FakeCatalog(refuse = true))
-        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+    @Test fun catalogLineWhileSavingBlocksBack() {
+        val gate = CompletableDeferred<Unit>()
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false, gate = gate))
+        var left = 0
+        var saved = 0
+        var dispatcher: OnBackPressedDispatcher? = null
+        host(catalogTitle()) {
+            dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+            AddProfileScreen(vm, onBack = { left++ }, onSaved = { saved++ }, onPairAgain = {})
+        }
+        fillCatalog(vm)
+        rule.waitForIdle()
+        // typing asks first
+        rule.runOnUiThread { dispatcher!!.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Leave without saving").assertIsEnabled()
+        // a save starts while the question is open: the leaving button goes off and Back changes nothing
+        vm.save()
+        rule.waitForIdle()
+        rule.onNodeWithText("Leave without saving").assertIsNotEnabled()
+        rule.onNodeWithText("Leave without saving").performClick()
+        assertEquals(0, left)
+        rule.runOnUiThread { dispatcher!!.onBackPressed() }
+        rule.waitForIdle()
+        assertEquals("Back does not leave while saving", 0, left)
+        assertEquals(0, saved)
+        gate.complete(Unit)
+        rule.waitForIdle()
+        assertEquals(1, saved)
+    }
+
+    @Test fun catalogLineWithoutAPairingKeepsTheFormAndShowsTheHubNotice() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false))
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}, paired = false) }
+        fillCatalog(vm)
+        rule.waitForIdle()
+        rule.onNodeWithText("This phone is no longer paired with the Hub.").assertExists()
+        rule.onNodeWithText("Save to the catalog").assertIsNotEnabled()
+        rule.onNodeWithText("Example Filaments").assertExists()
+        rule.onNodeWithText("Existing lines").assertDoesNotExist()
+        auditAllFour("Save to the catalog", CATALOG_SECTIONS - "Existing lines")
+    }
+
+    private fun fillCatalog(vm: AddProfileViewModel) {
         vm.set(ProfileField.Vendor, "Example Filaments")
         vm.set(ProfileField.Line, "PolyTerra")
         vm.set(ProfileField.Material, "PLA")
+    }
+
+    @Test fun catalogLineRefused() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = true))
+        host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+        fillCatalog(vm)
         vm.set(ProfileField.Density, "9")
         vm.save()
         rule.waitForIdle()
@@ -470,7 +523,7 @@ class ScreenSemanticsTest {
         override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult = error("not used")
     }
 
-    private class FakeCatalog(private val refuse: Boolean) : ProfileApi {
+    private class FakeCatalog(private val refuse: Boolean, private val gate: CompletableDeferred<Unit>? = null) : ProfileApi {
         override suspend fun parents(material: String) = ParentList(listOf("Generic PLA", "Example PLA Basic"), synced = true)
         override suspend fun profileLines() = listOf(
             ProfileLine(lineId = "example--polyterra", vendor = "Example Filaments", product = "PolyTerra", material = "PLA", presets = 4, bambuParent = "Generic PLA"),
@@ -478,6 +531,7 @@ class ScreenSemanticsTest {
         )
         override suspend fun setLineParent(lineId: String, parent: String) = profileLines().first { it.lineId == lineId }
         override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {
+            gate?.await()
             if (refuse) {
                 throw ApiError(
                     400, "invalid_entry", "not valid",
