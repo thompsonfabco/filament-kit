@@ -934,6 +934,6 @@ def test_helper_ops_are_the_closed_list():
                                      "trust_revoke_all", "trust_enabled"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
                                       "library_rollback", "remote_issue",
-                                      "backup", "restore"}
+                                      "backup", "restore", "local_intake_plan", "local_intake_install", "local_intake_remove"}
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)
     assert HOME and H     # the shared fixtures' constants are the ones in use
