@@ -376,28 +376,28 @@ dialog .detail__close{display:inline-flex;margin-left:auto}
   .dialog,.sheet--detail{width:100%;height:auto;max-height:92%;margin:auto 0 0;padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:var(--r-l) var(--r-l) 0 0}
   .dialog__foot>.btn{flex:1}
 }
-/* profile: nav=rail */
+/* profile: nav=rail; the bar rules are scoped to the shell, so the More sheet's nav (2.5) keeps its rows */
 .shell{grid-template-columns:var(--rail) minmax(0,1fr);grid-template-areas:"top top" "nav main"}
 .shell__main{grid-area:main}
-.nav{position:sticky;top:calc(var(--top) + env(safe-area-inset-top));grid-area:nav;display:flex;flex-direction:column;height:calc(100vh - var(--top) - env(safe-area-inset-top));overflow-y:auto;padding:var(--s2) 0;border-right:1px solid var(--border);background:var(--surface)}
+.shell>.nav{position:sticky;top:calc(var(--top) + env(safe-area-inset-top));grid-area:nav;display:flex;flex-direction:column;height:calc(100vh - var(--top) - env(safe-area-inset-top));overflow-y:auto;padding:var(--s2) 0;border-right:1px solid var(--border);background:var(--surface)}
 .nav__group+.nav__heading+.nav__group{margin-top:var(--s2);padding-top:var(--s2)}
-.nav__item{flex-direction:column;justify-content:center;gap:var(--s1);min-height:calc(var(--s7) + var(--s2));margin:0 var(--s1);padding:var(--s1);color:var(--muted);text-align:center}
-.nav__item .nav__label{font-size:var(--fs-xs)}
-.nav__item[aria-current="page"]::before{content:"";position:absolute;top:var(--s3);bottom:var(--s3);left:calc(var(--s1) * -1);width:3px;border-radius:0 3px 3px 0;background:var(--accent-text)}
+:where(.shell) .nav__item{flex-direction:column;justify-content:center;gap:var(--s1);min-height:calc(var(--s7) + var(--s2));margin:0 var(--s1);padding:var(--s1);color:var(--muted);text-align:center}
+.shell .nav__item .nav__label{font-size:var(--fs-xs)}
+.shell .nav__item[aria-current="page"]::before{content:"";position:absolute;top:var(--s3);bottom:var(--s3);left:calc(var(--s1) * -1);width:3px;border-radius:0 3px 3px 0;background:var(--accent-text)}
 @media (max-width:600px){
   .shell{grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "main"}
-  .nav{position:fixed;top:auto;right:0;bottom:0;left:0;z-index:25;flex-direction:row;height:calc(var(--tab) + env(safe-area-inset-bottom));padding:0 0 env(safe-area-inset-bottom);overflow:visible;border-top:1px solid var(--border);border-right:0}
-  .nav[data-state="hidden"],.nav__group>li:not(:has(>[data-tab])){display:none}
-  .nav__group,.nav__group+.nav__heading+.nav__group{display:contents}
-  .nav__group>li{display:flex;flex:1}
-  .nav__item,.nav__more{display:flex;flex:1;flex-direction:column;justify-content:center;gap:var(--s1);min-height:calc(var(--s7) + var(--s1));margin:0;padding:var(--s1) 0;color:var(--muted)}
-  .nav__item[aria-current="page"],.nav__more[data-state="current"]{background:none;color:var(--accent-text)}
-  .nav__item[aria-current="page"]::before{top:0;bottom:auto;left:var(--s4);right:var(--s4);width:auto;height:3px;border-radius:0 0 3px 3px}
-  .nav__icon{box-sizing:content-box;padding:var(--s1) calc((var(--s7) + var(--s3) - var(--s4) - var(--s1)) / 2);border-radius:var(--r-l)}
-  :is(.nav__item[aria-current="page"],.nav__more[data-state="current"]) .nav__icon{background:var(--accent-soft)}
-  .nav__label{font-size:var(--fs-xs)}
-  .nav__label-full{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-  .nav__label-short{display:inline}
+  .shell>.nav{position:fixed;top:auto;right:0;bottom:0;left:0;z-index:25;flex-direction:row;height:calc(var(--tab) + env(safe-area-inset-bottom));padding:0 0 env(safe-area-inset-bottom);overflow:visible;border-top:1px solid var(--border);border-right:0}
+  .nav[data-state="hidden"],.shell .nav__group>li:not(:has(>[data-tab])){display:none}
+  .shell .nav__group,.shell .nav__group+.nav__heading+.nav__group{display:contents}
+  .shell .nav__group>li{display:flex;flex:1}
+  .shell .nav__item,.nav__more{display:flex;flex:1;flex-direction:column;justify-content:center;gap:var(--s1);min-height:calc(var(--s7) + var(--s1));margin:0;padding:var(--s1) 0;color:var(--muted)}
+  .shell .nav__item[aria-current="page"],.nav__more[data-state="current"]{background:none;color:var(--accent-text)}
+  .shell .nav__item[aria-current="page"]::before{top:0;bottom:auto;left:var(--s4);right:var(--s4);width:auto;height:3px;border-radius:0 0 3px 3px}
+  .shell .nav__icon{box-sizing:content-box;padding:var(--s1) calc((var(--s7) + var(--s3) - var(--s4) - var(--s1)) / 2);border-radius:var(--r-l)}
+  .shell :is(.nav__item[aria-current="page"],.nav__more[data-state="current"]) .nav__icon{background:var(--accent-soft)}
+  .shell .nav__label{font-size:var(--fs-xs)}
+  .shell .nav__label-full{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .shell .nav__label-short{display:inline}
 }
 /* profile: collection=table */
 .coll{display:grid}
