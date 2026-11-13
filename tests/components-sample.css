@@ -1,0 +1,10 @@
+/* Layout of the component sample page only (tests/components-sample.html); not served by the Hub. */
+.sample-section { display: grid; gap: var(--s4); margin-top: var(--s6); }
+.sample-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s4); }
+.sample-state { display: grid; align-content: start; gap: var(--s2); min-width: 0; }
+.sample-label { color: var(--muted); font-size: var(--fs-s); font-weight: var(--fw-label); }
+.sample-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr)); gap: var(--s4); }
+.sample-settings { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s5); }
+.sample-box { position: relative; min-height: var(--s7); padding: var(--s3); border: 1px dashed var(--border); border-radius: var(--r); }
+.sample .job { position: static; width: min(25rem, 100%); }
+@media (max-width: 1024px) { .sample-settings { grid-template-columns: minmax(0, 1fr); } .sample .subnav { position: static; width: auto; } }

@@ -39,6 +39,8 @@ in section 3.4).
 | `tokens/theme-init.js` | Generated (it lists the theme keys) | Proposed | `build_tokens.py`, extended | Hub page and web app (first script in `<head>`) |
 | `icons/sprite.svg` | Generated | Proposed | `build_tokens.py`, extended | The Hub, which places it inline at the top of each page's `<body>` |
 | `strings/strings.js` | Generated | Proposed | `build_tokens.py`, extended | Hub page and web app |
+| `web-shared/components.css` | Hand-written, the shared component stylesheet (`02-components.md`) | Exists | A person | Hub page and web app (after `tokens.css`) |
+| `web-shared/components.js` | Hand-written, the shared component script (`02-components.md` 1.4) | Exists | A person | Hub page and web app (after `strings.js`) |
 | `android/app/src/main/java/<app package>/ui/theme/SpoolwardenTokens.kt` | Generated | Proposed | `build_tokens.py`, extended | `SpoolwardenTheme` |
 | `android/app/src/main/java/<app package>/ui/theme/SpoolwardenTheme.kt` | Hand-written | To write | A person | Every screen |
 | `android/app/src/main/res/drawable/sw_ic_<name>.xml` | Generated, one per icon | Proposed | `build_tokens.py`, extended | `SwIcon` |

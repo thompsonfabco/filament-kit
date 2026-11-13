@@ -1,7 +1,7 @@
 """Lint checks of docs/design/07-accessibility.md section 15 (AUT-2, AUT-3, AUT-4, AUT-6, AUT-7) and of
 docs/design/08-platform-mapping.md 3.4 test 5, one test function per lint.
 
-They read the web sources (`setup_static/*`, `web/static/*`) and the app's Kotlin (see test_design_sources.py). Today's
+They read the web sources (`setup_static/*`, `web/static/*`, `web-shared/*`) and the app's Kotlin (see test_design_sources.py). Today's
 findings are in the allow-lists next to this file, one line each: `<path> | <finding> | <reason>`. A finding outside
 its allow-list fails, and so does an allow-list line that no longer matches anything (09 open point 4), so a step that
 rewrites a file removes that file's lines.
@@ -19,8 +19,10 @@ PRESS_ALLOWLIST = TESTS / "press_allowlist.txt"
 WORDS_ALLOWLIST = TESTS / "words_allowlist.txt"
 ACCENT_ALLOWLIST = TESTS / "accent_allowlist.txt"
 
-# The field component (07 AUT-4) does not exist yet; the file that holds it goes here when S0.10/S0.11 add it.
-FIELD_COMPONENT_FILES = frozenset()
+# The field component (07 AUT-4): inside this file only the bodies of these builders may create fields; each renders a
+# visible label.
+FIELD_COMPONENT_FILE = "web-shared/components.js"
+FIELD_BUILDERS = ("field", "check", "toggle", "segmented")
 TOKEN_CSS = frozenset({"tokens.css"})       # the generated token block: literals belong there (foundations 12.5)
 
 # ---- Reading the sources ----
@@ -341,6 +343,8 @@ DIALOG_BRACKET = re.compile(r"\b(?:window|self|globalThis)\s*\[\s*['\"`](alert|c
 FIELD_CREATE = re.compile(r"\(\s*['\"`](input|select|textarea)['\"`]")
 FIELD_MARKUP = re.compile(r"<(input|select|textarea)\b", re.I)
 PRESS = re.compile(r"(?<![\w-])(?:on)?(pointerdown|mousedown|touchstart)\b")
+FIELD_BUILDER = re.compile(r"\bfunction\s+(?:%s)\s*\([^)]*\)\s*\{" % "|".join(FIELD_BUILDERS))
+EMPTY_LABEL = re.compile(r"(?<![\w$])(label|legend)\s*:\s*(['\"`])\2")     # a builder's label given as ""
 
 
 def dialog_findings(text):
@@ -348,12 +352,33 @@ def dialog_findings(text):
     return [(m.group(1), _line_of(code, m.start())) for rx in (DIALOG_CALL, DIALOG_BRACKET) for m in rx.finditer(code)]
 
 
-def field_findings(text):
+def _builder_lines(code):
+    """The line ranges of the field builders' bodies."""
+    spans = []
+    for m in FIELD_BUILDER.finditer(code):
+        depth, i = 0, m.end() - 1
+        while i < len(code):
+            depth += {"{": 1, "}": -1}.get(code[i], 0)
+            if depth == 0:
+                break
+            i += 1
+        spans.append((_line_of(code, m.start()), _line_of(code, i)))
+    return spans
+
+
+def field_findings(text, builders=False):
+    """Fields made outside the field component; with builders=True, the builders' bodies are the field component."""
     scan = _Scan(text, js=True)
     code = scan.code_text
     out = [(m.group(1), _line_of(code, m.start())) for m in FIELD_CREATE.finditer(code)]
     out += [(m.group(1).lower(), ln) for content, ln in scan.literals for m in FIELD_MARKUP.finditer(content)]
-    return out
+    spans = _builder_lines(code) if builders else []
+    return [(w, ln) for w, ln in out if not any(a <= ln <= b for a, b in spans)]
+
+
+def empty_label_findings(text):
+    code = _Scan(text, js=True).code_text
+    return [(f"empty {m.group(1)}", _line_of(code, m.start())) for m in EMPTY_LABEL.finditer(code)]
 
 
 def press_findings(text):
@@ -366,8 +391,16 @@ def test_no_native_dialogs():
 
 
 def test_fields_only_through_the_field_component():
-    files = [f for f in _script_sources() if _rel(f) not in FIELD_COMPONENT_FILES]
-    _assert_lint(_collect(files, field_findings), FIELD_ALLOWLIST)
+    found = {}
+    for f in _script_sources():
+        for what, ln in field_findings(f.read_text(encoding="utf-8"), builders=_rel(f) == FIELD_COMPONENT_FILE):
+            found.setdefault((_rel(f), what), ln)
+    _assert_lint(found, FIELD_ALLOWLIST)
+
+
+def test_field_component_never_gets_an_empty_label():
+    found = _collect(_script_sources(), empty_label_findings)
+    assert not found, "a field with an empty label (07 AUT-4):\n" + "\n".join(f"{f}:{ln}: {w}" for (f, w), ln in found.items())
 
 
 def test_no_press_down_handlers():
@@ -435,6 +468,11 @@ def test_plants_are_found():
     assert [w for w, _ in field_findings("document.createElement(\"select\")")] == ["select"]
     assert [w for w, _ in field_findings("el.innerHTML = `<div><textarea></textarea></div>`")] == ["textarea"]
     assert field_findings("h('inputs', {}); const s = 'input';") == []
+    component = "function field(o) {\n  h('input', { x: `${a}` });\n}\nconst x = h('input');\nconst y = '<select>';"
+    assert field_findings(component, builders=True) == [("input", 4), ("select", 5)]
+    assert [w for w, _ in empty_label_findings("SW.field({ label: '' }); SW.segmented({ legend: \"\" })")] == \
+        ["empty label", "empty legend"]
+    assert empty_label_findings("SW.field({ label: 'Name' }); SW.check({ label })") == []
     assert [w for w, _ in press_findings("el.addEventListener('pointerdown', f); b.onmousedown = f;")] == \
         ["pointerdown", "mousedown"]
     assert [w for w, _ in press_findings("h('b', { on: { touchstart: f } })")] == ["touchstart"]
