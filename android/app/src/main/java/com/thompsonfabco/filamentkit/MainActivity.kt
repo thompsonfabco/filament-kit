@@ -407,7 +407,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
     }
 
     // A tag tap opens tag/{uid} on the stack of the selected tab (05 2.6), anywhere except pairing and the add steps that
-    // take taps themselves (photos, check). While a load is being written it waits: the toast says so and the tag opens when the write ends.
+    // take taps themselves (photos, check). While a load is being written it waits: the toast says so and the tag opens
+    // when the write ends.
     val tapsOn = destination != null && !inPairing && !destination.takesTagTaps()
     val loadWriting by app.loadGate.writing.collectAsStateWithLifecycle()
     var queuedTag by rememberSaveable { mutableStateOf<String?>(null) }
