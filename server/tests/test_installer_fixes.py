@@ -2,6 +2,8 @@
 `web status`, quiet probes during an apply, and `filament-kit uninstall`."""
 import io
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -266,6 +268,26 @@ def test_uninstall_is_a_cli_command_run_as_root():
 def test_uninstall_sh_keeps_its_purge_confirmation():
     text = (ROOT / "install" / "uninstall.sh").read_text(encoding="utf-8")
     assert "Type 'purge' to confirm: " in text
+
+
+def test_install_sh_removes_the_040_setup_apply_unit(tmp_path):
+    """0.4.0's filament-kit-setup-apply.service has no apply-run behind it any more: an upgrade deletes the file."""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("needs bash")
+    text = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
+    start = text.index("OLD_APPLY_UNIT=")
+    block = text[start:text.index("\nfi\n", start) + 4]
+    assert "daemon-reload" in block
+    unit = tmp_path / "filament-kit-setup-apply.service"
+    other = tmp_path / "filament-kit-web.service"
+    unit.write_text("[Service]\n")
+    other.write_text("[Service]\n")
+    for _ in range(2):      # the second run: nothing there, nothing fails
+        done = subprocess.run([bash, "-c", "set -eu\n" + block], env={**os.environ, "FK_SYSTEMD_DIR": str(tmp_path),
+                                                                      "FK_NO_SYSTEMD": "1"}, capture_output=True)
+        assert done.returncode == 0, done.stderr
+        assert not unit.exists() and other.exists()
 
 
 def test_passphrase_docstrings_name_only_the_claude_connector():

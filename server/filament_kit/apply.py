@@ -655,7 +655,10 @@ def _remote_install(ex: _Exec, host: str) -> None:
         try:
             ex.write(f"{remote.TLS_DIR}/fullchain.pem", cert_pem, 0o644)
         except BaseException:       # a stop between the two replaces: put the old key back so the pair still matches
-            _put_back(key, old_key)
+            # (not when the new certificate is already in place: an error after its replace, in the chmod, would
+            # leave the old key beside it)
+            if not (cert.exists() and cert.read_bytes() == cert_pem):
+                _put_back(key, old_key)
             raise
         ex.write(remote.PLACEHOLDER_MARK, (new + "\n").encode("ascii"), 0o644)
     try:
@@ -731,6 +734,8 @@ def _remote_off(ex: _Exec, name: str) -> None:
             gone.append(what)
     if not gone:
         return
+    if "the kit's nginx start check" in gone:
+        ex.ok(["systemctl", "daemon-reload"])    # systemd keeps reading the drop-in until told it is gone
     print(f"Remote is off: removed {', '.join(gone)} (nginx, certbot, the certificate and other routes were left).")
     if ex.ok(["nginx", "-t"]):
         ex.ok(["systemctl", "reload", "nginx"])  # a stopped nginx needs nothing

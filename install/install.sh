@@ -222,6 +222,12 @@ fi
 install -d -m 755 "$OPT/resources"
 cp -R "$RES/systemd" "$RES/avahi" "$RES/remote" "$OPT/resources/"
 install -m 755 "$RES/spoolman.sh" "$OPT/resources/spoolman.sh"
+# 0.4.0's setup job unit is gone (apply-run with it): an upgrade removes the file it left behind.
+OLD_APPLY_UNIT=${FK_SYSTEMD_DIR:-/etc/systemd/system}/filament-kit-setup-apply.service
+if [ -e "$OLD_APPLY_UNIT" ]; then
+    rm -f "$OLD_APPLY_UNIT"
+    if [ "${FK_NO_SYSTEMD:-}" != 1 ]; then systemctl daemon-reload || true; fi
+fi
 # The button panel's firmware (a binary and its VERSION): the station reflashes a panel on another version.
 # In a release tarball it is install/panel/, in a source checkout station/panel/firmware/.
 if [ -d "$RES/panel" ]; then PANEL_FW_SRC="$RES/panel"; else PANEL_FW_SRC="$HERE/../station/panel/firmware"; fi
