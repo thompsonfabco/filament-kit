@@ -3,12 +3,16 @@ web-shared/components.css and web-shared/components.js, and the additions compon
 
 The size limits of foundations 12 rule 7, every class the script uses is drawn by the stylesheet, every catalogue key
 the script names is in strings/en.json, and the page audit (AUT-5, tests/page_audit.js) is a script that parses. The
-lints of test_design_lints.py and test 4 of test_design_sources.py read the two files with the page sources.
+lints of test_design_lints.py and test 4 of test_design_sources.py read the two files with the page sources. The audit
+itself runs on the sample page in headless Microsoft Edge (tests/run_page_audit.js) where Edge is installed.
 """
 import json
+import os
 import re
 import shutil
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +24,7 @@ CSS = SHARED / "components.css"
 JS = SHARED / "components.js"
 ADDITIONS = [SHARED / "components-jobs.css", SHARED / "components-media.css"]
 AUDIT = ROOT / "tests" / "page_audit.js"
+RUNNER = ROOT / "tests" / "run_page_audit.js"
 SAMPLE = ROOT / "tests" / "components-sample.html"
 CATALOGUE = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
 
@@ -103,7 +108,47 @@ def test_page_audit_and_sample_exist():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="no JavaScript parser (node) on this machine")
-@pytest.mark.parametrize("path", [AUDIT, JS, ROOT / "tests" / "components-sample.js"], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [AUDIT, RUNNER, JS, ROOT / "tests" / "components-sample.js"], ids=lambda p: p.name)
 def test_scripts_parse(path):
     r = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def edge():
+    """The Microsoft Edge executable: $SW_EDGE, Edge on the PATH, or (Windows) the one the registry names; else None."""
+    if os.environ.get("SW_EDGE"):
+        return os.environ["SW_EDGE"] if Path(os.environ["SW_EDGE"]).is_file() else None
+    for name in ("msedge", "microsoft-edge", "microsoft-edge-stable"):
+        if shutil.which(name):
+            return shutil.which(name)
+    if sys.platform == "win32":
+        import winreg
+        for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            try:
+                with winreg.OpenKey(hive, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe") as key:
+                    path = winreg.QueryValue(key, None)
+            except OSError:
+                continue
+            if Path(path).is_file():
+                return path
+    mac = Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
+    return str(mac) if mac.is_file() else None
+
+
+EDGE = edge()
+
+
+# 09 S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed, so the page audit (AUT-5) did not run")
+@pytest.mark.skipif(EDGE is None, reason="Microsoft Edge is not installed (or set SW_EDGE to its path), so the page "
+                                         "audit (AUT-5) on the sample page did not run")
+def test_page_audit_on_the_sample():
+    r = subprocess.run(["node", str(RUNNER), EDGE], capture_output=True, text=True, encoding="utf-8", timeout=300)
+    assert r.returncode == 0, r.stderr
+    views = json.loads(r.stdout)
+    assert sorted(views) == ["1280 dark", "1280 light", "320 dark", "320 light"]
+    for name, view in views.items():
+        width, scheme = name.split()
+        assert (view["innerWidth"], view["dark"], view["coarse"]) == (int(width), scheme == "dark", width == "320"), name
+    found = {name: view["findings"] for name, view in views.items() if view["findings"]}
+    assert not found, "page audit findings on tests/components-sample.html: " + json.dumps(found, indent=1)

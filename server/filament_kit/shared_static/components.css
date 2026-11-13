@@ -86,7 +86,7 @@ a{color:var(--accent-text)}
 .btn--danger{border-color:var(--bad);background:transparent;color:var(--bad)}
 .btn--danger:hover,.btn--danger:active{background:var(--bad-soft)}
 .btn--danger.btn--solid{background:var(--bad);color:var(--on-bad)}
-.btn--icon{width:var(--ctl);padding:0}
+.btn--icon{flex:none;width:var(--ctl);padding:0}
 .btn:disabled,.btn[aria-disabled="true"]:not([aria-busy="true"]){border-color:var(--border);background:var(--surface-2);color:var(--muted);cursor:not-allowed}
 .actions--list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s1) var(--s2)}
 .actions--list .btn{justify-content:flex-start}
@@ -186,7 +186,7 @@ textarea.field__control{min-height:calc(var(--s7) + var(--s6) + var(--s1));max-h
 .group__body{display:grid;gap:var(--s3);padding:var(--s4)}
 .group__foot{justify-content:flex-end;gap:var(--s2) var(--s3);padding:var(--s3) var(--s4);border-radius:0 0 var(--r) var(--r);background:var(--surface-2)}
 .group__foot>.result,.detail__foot>.result,.code__caption{margin-right:auto}
-.dialog__text,.dialog__result,.toggle--security,.group__dirty{min-width:0}
+.dialog__text,.dialog__result,.toggle--security,.group__dirty,.code{min-width:0}
 .group__summary{display:grid;gap:var(--s1);padding:var(--s3);background:var(--bad-soft)}
 .subnav{position:sticky;top:calc(var(--top) + var(--s4));align-self:start;width:calc(var(--s7) * 4 + var(--s1) * 2)}
 .subnav__list{display:grid;gap:var(--s1)}
