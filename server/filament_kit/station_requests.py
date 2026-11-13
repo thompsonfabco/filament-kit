@@ -142,8 +142,7 @@ def _reveal(request_id, secret, now: float | None = None) -> dict:
             raise RequestError(400, "bad_request", "the secret does not match the commitment")
         if mine.get("state") == "committed":
             mine["secret"], mine["state"] = secret, "pending"
-        elif mine.get("secret") != secret:
-            raise RequestError(409, "conflict", "this request was revealed already")
+        # any other state: the secret was revealed already, and the commitment check above makes this the same secret
         pairing._write(FILE, rows)
     return {"state": "pending", "expires_in": int(mine["expires"] - now)}
 
