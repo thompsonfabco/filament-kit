@@ -15,6 +15,9 @@ by the pages that run background jobs. */
 .job__log,.job__foot{border-top:var(--hairline) solid var(--border)}
 .job__log{max-height:calc(var(--s7) * 4);margin:0;padding:var(--s2) var(--s3);overflow:auto;background:var(--code);font-family:var(--mono);font-size:var(--fs-s);line-height:var(--lh-body);white-space:pre-wrap;overflow-wrap:anywhere}
 .job__foot{flex-wrap:wrap;padding:var(--s2) var(--s3)}
+/* a long line (the restarting and not-back states) wraps; a hidden strip on a phone keeps its head (8.4 "Hide and show") */
+.job[data-state="restarting"] .job__step,.job[data-state="late"] .job__step{white-space:normal}
+.job[data-collapsed] :is(.progress,.job__log,.job__foot,.job__lost,.job__step){display:none}
 @media (max-width:600px){
   .job{right:var(--s2);left:var(--s2);bottom:calc(var(--tab) + env(safe-area-inset-bottom) + var(--s2));width:auto}
 }

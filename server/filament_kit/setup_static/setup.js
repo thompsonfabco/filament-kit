@@ -23,7 +23,12 @@ function h(tag, props, ...kids) {
 async function api(path, body) {
   const init = { method: body === undefined ? "GET" : "POST", credentials: "same-origin", headers: {} };
   if (body !== undefined) { init.body = JSON.stringify(body); init.headers["Content-Type"] = "application/json"; }
-  const r = await fetch("/setup/api/" + path, init);
+  let r;
+  try { r = await fetch("/setup/api/" + path, init); } catch {
+    hubJobs().down();                                       // nothing answered (03 3.7)
+    throw Object.assign(new Error(SW.t("common_hub_no_answer")), { unreachable: true });
+  }
+  hubJobs().up();
   let data;
   try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
   if (!r.ok || data.error) throw hubError(r.status, data);
@@ -32,7 +37,7 @@ async function api(path, body) {
 // an error reply; `locked`: refused for its setup code (none, wrong, too many tries, trust gone), so the lock asks again
 function hubError(status, data) {
   if (data.trust_gone) trustGone();
-  const e = new Error(data.error || `HTTP ${status}`);
+  const e = new Error(data.error === "bad origin" ? SW.t("hub_bad_origin") : data.error || `HTTP ${status}`);
   Object.assign(e, { data, status, locked: !!data.trust_gone || ((status === 403 || status === 429) && data.field === "code") });
   return e;
 }
@@ -320,7 +325,7 @@ function topBar() {
     h("a", { class: "topbar__brand", href: "#overview" }, SW.h("svg", { class: "topbar__mark", "aria-hidden": "true", focusable: "false" }, SW.h("use", { href: "#i-spoolwarden" })),
       h("span", { class: "topbar__name" }, SW.t("app_name")), " ", hub),
     hubVersion,
-    h("div", { class: "topbar__tools" }, SW_LOCK.lockChip({ loading: true }), appearanceControl(), appearanceButton()));
+    h("div", { class: "topbar__tools" }, hubJobs().chip, SW_LOCK.lockChip({ loading: true }), appearanceControl(), appearanceButton()));
 }
 
 function navigation() {
@@ -575,7 +580,7 @@ window.addEventListener("storage", (e) => {                   // another tab cho
   SW.setAppearance(v === "light" || v === "dark" ? v : "system");
 });
 
-// ----- applying again (the job's own panel is in setup_tabs.js) -----
+// ----- applying again (the job strip is SW_JOBS', wired in setup_tabs.js) -----
 function applyCard() {
   const box = boxFor("apply");
   return card("Apply", h("p", { class: "muted", textContent: "Module and address changes are applied in the background (sudo filament-kit modules apply)." }),
@@ -591,8 +596,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const skip = h("a", { class: "skip", href: "#main" }, SW.t("common_skip_to_content"));
   const main = h("main", { class: "shell__main", id: "main", tabindex: "-1" }, page);
   skip.addEventListener("click", (e) => { e.preventDefault(); main.focus(); });   // the address keeps the section
-  page.append(jobPanel, sections);
-  app.replaceWith(skip, h("div", { class: "shell" }, topBar(), navigation(), main),
+  page.append(sections);
+  app.replaceWith(skip, h("div", { class: "shell" }, topBar(), navigation(), main), hubJobs().strip,
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   pageTitle.textContent = SW.t(TABS[tabNow()][0]);
   shellView = SW.shell({ hub: document.title, home: "overview", titleOf: () => SW.t(TABS[tabNow()][0]), onSection: () => {

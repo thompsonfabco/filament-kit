@@ -177,7 +177,8 @@ async function api(path, o = {}) {
   }
   let r, data = null;
   try { r = await conf.fetch(conf.base + path, init); }
-  catch (e) { if (e && e.name === "AbortError") throw e; throw new HubError({ unreachable: true }); }
+  catch (e) { if (e && e.name === "AbortError") throw e; if (conf.down) conf.down(); throw new HubError({ unreachable: true }); }
+  if (conf.up) conf.up();
   try { data = await r.json(); } catch (e) { data = null; }
   if (data && data.trust_gone && lock.state === "trusted") setLock("locked");
   if (!r.ok || !data || data.error) {
