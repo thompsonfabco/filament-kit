@@ -86,6 +86,7 @@ import time
 import zipfile
 import zlib
 from contextlib import contextmanager
+from copy import deepcopy
 from pathlib import Path
 from typing import BinaryIO
 
@@ -1117,8 +1118,38 @@ def _installed_view() -> dict | None:
     return {"stamp": i["stamp"], "at": i.get("at")} if i else None
 
 
+def _stat_key(path: Path):
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
+_items_cache: tuple | None = None    # (key, (stamp, items, new))
+
+
 def _update_items() -> tuple[str | None, list[dict], int]:
-    """(the current build's stamp, its pending updates, how many of its presets are new to the slicers)."""
+    """(the current build's stamp, its pending updates, how many of its presets are new to the slicers).
+    Every PC sync and status view asks; the answer only moves with the pointer, the PC's report, the owner's
+    acceptances or the build's own files, so it is kept while those stay as they were (a build folder is never
+    changed once it is the current one, and it names its stamp)."""
+    global _items_cache
+    d = _dir()
+    stamp = _read_obj(d / "current.json").get("stamp")
+    folder = _builds() / stamp if isinstance(stamp, str) and STAMP_RE.fullmatch(stamp) else None
+    key = (str(d), stamp) + tuple(_stat_key(f) for f in (
+        d / "current.json", _live() / "meta.json", d / "installed.json", d / "updates.json",
+        *((folder / "BUILD.json", folder / updates_mod.SLICER) if folder else ())))
+    cached = _items_cache
+    if cached is not None and cached[0] == key:
+        return deepcopy(cached[1])
+    result = _compute_update_items()
+    _items_cache = (key, deepcopy(result))
+    return result
+
+
+def _compute_update_items() -> tuple[str | None, list[dict], int]:
     c = current()
     if c is None:
         return None, [], 0

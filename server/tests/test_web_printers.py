@@ -349,6 +349,27 @@ def test_event_stream_polls_pings_and_stops(env, kit):
     assert pa.streams == 0
 
 
+def test_streams_on_one_printer_share_one_kit_call_per_tick(env, kit):
+    from filament_kit.web import printers_app
+    pa = printers_app.PrintersApp(None, kit)
+    pa.poll, pa.ping = 0.2, 5
+
+    async def run():
+        n = {"i": 0}
+
+        async def alive():
+            n["i"] += 1
+            return n["i"] <= 6
+        return await asyncio.gather(*[_drain(pa.events(SERIAL, alive)) for _ in range(3)])
+
+    async def _drain(gen):
+        return [c async for c in gen]
+    outs = asyncio.run(run())
+    assert all(o and o[0].startswith("data: ") for o in outs)           # every stream got its data
+    polls = len([x for x in kit.calls if x == ("GET", f"/api/printers/{SERIAL}")])
+    assert polls <= 2, polls                                              # three streams, not three polls per tick
+
+
 def test_event_stream_throttle_is_one_second_by_default(env, kit):
     from filament_kit.web import printers_app
     assert printers_app.POLL_SECONDS >= 1.0 and printers_app.PING_SECONDS == 25.0

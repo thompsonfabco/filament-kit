@@ -49,6 +49,21 @@ def test_orca_system_zip_holds_bbl_json_and_library_index(tmp_path):
     assert zips.orca_system(orca) == (data, h)
 
 
+def test_orca_system_hash_is_taken_while_packing_not_by_unpacking_again(tmp_path, monkeypatch):
+    orca = orca_fixture.make(tmp_path / "appdata", install=tmp_path / "pf" / "OrcaSlicer 2.5.0")
+    real = zipfile.ZipFile
+
+    def only_writing(file, mode="r", *a, **k):
+        assert mode == "w", "the zip was opened again to read it"
+        return real(file, mode, *a, **k)
+    monkeypatch.setattr(zips.zipfile, "ZipFile", only_writing)
+    data, h = zips.orca_system(orca)
+    monkeypatch.undo()
+    out = tmp_path / "unpacked"
+    real(io.BytesIO(data)).extractall(out)
+    assert h == tree_hash(out)
+
+
 def test_orca_system_zip_without_packed_library(tmp_path):
     orca = orca_fixture.make(tmp_path / "appdata")
     data, _ = zips.orca_system(orca)

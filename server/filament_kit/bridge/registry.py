@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import threading
+from copy import deepcopy
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 
@@ -289,14 +290,46 @@ def peek() -> dict[str, Printer]:
     return _read(write=False)
 
 
-def load() -> dict[str, Printer]:
-    """All printers. A corrupt file is logged and read as empty; it is never overwritten by a read."""
-    with _locked():
+_cache: tuple | None = None    # (signature of the two files, the registry read under it)
+
+
+def _signature() -> tuple | None:
+    """Where the registry files stand (path, mtime, size, inode of both), or None when printers.xml is not there:
+    then a read may have to migrate printers.json and nothing is cached."""
+    state = config.paths().state
+    sig: list = [str(state)]
+    for name in (FILE, OLD_FILE):
         try:
-            return _read()
+            st = (state / name).stat()
+        except OSError:
+            if name == FILE:
+                return None
+            sig.append(None)
+            continue
+        sig.append((st.st_mtime_ns, st.st_size, st.st_ino))
+    return tuple(sig)
+
+
+def load() -> dict[str, Printer]:
+    """All printers. A corrupt file is logged and read as empty; it is never overwritten by a read.
+    The parsed registry is kept while both files stay as they were (a write replaces the file, so its inode, mtime
+    or size moves): the phone and the app poll this several times a second, the file changes on an owner's edit.
+    A hit takes no lock and returns a copy, so a caller can change what it gets."""
+    global _cache
+    sig = _signature()
+    cached = _cache
+    if sig is not None and cached is not None and cached[0] == sig:
+        return deepcopy(cached[1])
+    with _locked():
+        sig = _signature()
+        try:
+            printers = _read()
         except RegistryError as e:
             log.error("%s", e)
+            _cache = None
             return {}
+        _cache = (sig, deepcopy(printers)) if sig is not None and sig == _signature() else None
+        return printers
 
 
 def upsert(p: Printer) -> None:

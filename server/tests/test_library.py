@@ -727,3 +727,17 @@ def test_local_entry_with_orca_parent_is_added():
                                            "fields": {}, "orca_parent": "Generic PLA"}).encode())
     assert e["orca_parent"] == "Generic PLA"
     assert library.load().lookup("Acme", "PLA X").local["orca_parent"] == "Generic PLA"
+
+
+
+def test_load_keeps_the_parsed_library_until_a_file_changes(monkeypatch):
+    first = library.load()
+    parsed = []
+    real = library.Library.__init__
+    monkeypatch.setattr(library.Library, "__init__", lambda self, *a, **k: parsed.append(1) or real(self, *a, **k))
+    assert library.load() is first and parsed == []                  # nothing moved: no parse
+    library.add_local(json.dumps({"vendor": "Acme Plastics", "product": "PLA Max", "material": "PLA",
+                                  "fields": {}}).encode())
+    again = library.load()
+    assert again is not first and parsed == [1]                      # an add is seen at once
+    assert again.lookup("Acme Plastics", "PLA Max").local is not None
