@@ -126,7 +126,7 @@ The Console entry as it is in the file; the other three themes have the same key
       "extra": {"colour": {"light": {"accent-2": "#0b7d6d"}, "dark": {"accent-2": "#3bc6a2"}}}
     },
     "workbench": {"...": "same keys"},
-    "spool": {"...": "same keys"},
+    "palette": {"...": "same keys"},
     "panes": {"...": "same keys"}
   }
 }
@@ -137,7 +137,7 @@ The Console entry as it is in the file; the other three themes have the same key
 | Path | Type | Meaning |
 |---|---|---|
 | `version` | integer, `1` | The version of the shape |
-| `themes.<key>` | object | One theme; keys are `console`, `workbench`, `spool`, `panes`, in that order. `build_tokens.py` writes `console` on bare `:root`, so Console is the default theme and the fallback for a missing or unknown `data-look`; every other theme goes under `:root[data-look="<key>"]` |
+| `themes.<key>` | object | One theme; keys are `console`, `workbench`, `palette`, `panes`, in that order. `build_tokens.py` writes `console` on bare `:root`, so Console is the default theme and the fallback for a missing or unknown `data-look`; every other theme goes under `:root[data-look="<key>"]` |
 | `.label` | text | The theme's name, on its preview tile (foundations section 6.2) and in the comment above its CSS blocks |
 | `.profile.nav` / `.collection` / `.detail` | choice | Layout profile (foundations section 6.1) |
 | `.light` / `.dark` | object of 25 colours | Every colour token of foundations section 4.1 |
@@ -148,7 +148,7 @@ The Console entry as it is in the file; the other three themes have the same key
 | `.space.s1` … `.s7` | px | The seven space steps, strictly increasing |
 | `.radius.r-s` / `.r` / `.r-l` | px | The three radii |
 | `.size.ctl` / `.ctl-phone` | px | Control height above 600 px and at or below it |
-| `.size.top` / `.rail` / `.tab` | px | Top bar height, navigation rail width, bottom bar height (without safe-area inset); `rail` is `0px` in a theme whose profile has no rail (Spool, Panes) |
+| `.size.top` / `.rail` / `.tab` | px | Top bar height, navigation rail width, bottom bar height (without safe-area inset); `rail` is `0px` in a theme whose profile has no rail (Palette, Panes) |
 | `.size.row` | px | `--row`: minimum height of one item of a collection (48px in every theme) |
 | `.size.gap` | px | `--gap`: space between separate items of a group (Console `12px`, the value of `--s3`) |
 | `.size.drawer` | px | Width of the side drawer on Desktop (420px) |
@@ -182,13 +182,13 @@ The tokens whose names foundations section 4 gives in its tables rather than as 
 
 ### 2.6 The other three themes, `derived` and `extra`
 
-The Workbench, Spool and Panes entries were transcribed from `mockups/a-workbench.html`, `mockups/b-spool.html` and
+The Workbench, Palette and Panes entries were transcribed from `mockups/a-workbench.html`, `mockups/b-palette.html` and
 `mockups/d-panes.html`; each theme's `derived` list names the values that were not taken from its mockup (for
 example the `size` entries a mockup has no equal for, copied from Console).
 
 `extra` holds what a mockup has with no matching token: Console's `accent-2` gradient stop; Workbench's inverse
 colours, hover tint, swatch line, card border, `lh` / `lh-tight`, `r-xl` / `r-full`, `top-phone` and the
-`e1` / `e3` shadows; Spool's ring, toast and preview colours, `lh`, `fs-3xl`, `s8`, `r-pill`, `tap`, `btn-lg` and
+`e1` / `e3` shadows; Palette's ring, toast and preview colours, `lh`, `fs-3xl`, `s8`, `r-pill`, `tap`, `btn-lg` and
 `e1` / `e3`; Panes' knob and inverse colours.
 
 `build_tokens.py` emits `extra` as custom properties: each group's extras follow that group's tokens in the same
@@ -288,7 +288,7 @@ Console, as written (several declarations per line here, dark repeated blocks sh
   }
 }
 :root[data-theme="dark"] { /* the same declarations as the block above */ }
-/* … Workbench, Spool, Panes … */
+/* … Workbench, Palette, Panes … */
 
 /* Phone: control height and chrome sizes at 600 px and below */
 @media (max-width: 600px) {
@@ -300,7 +300,7 @@ Console, as written (several declarations per line here, dark repeated blocks sh
 
 /* Reduced motion: all durations 0 ms */
 @media (prefers-reduced-motion: reduce) {
-  :root, :root[data-look="workbench"], :root[data-look="spool"], :root[data-look="panes"] {
+  :root, :root[data-look="workbench"], :root[data-look="palette"], :root[data-look="panes"] {
     --t-fast: 0ms; --t: 0ms; --t-slow: 0ms;
   }
 }
@@ -334,7 +334,7 @@ group of every theme with the same values; they no longer sit in `extra.size`.
 |---|---|---|
 | `size.content-max` in every theme | `1400px` | The widest the content column gets on Desktop (foundations section 7; `--content-max`, `sizes.contentMax`) |
 | The `size` entries of `05-android-app.md` section 1 marked "new" (`label-col`, `thumb-s`, `swatch-row-w`, `swatch-row-h`, `swatch-head`, `empty-mark`, `chip`, `slot-label`, `port-field`, `column-max`, `preview-max`, `list-pane`) | per theme, in that table | Fixed dimensions of parts the app draws; one `SwSizes` field each |
-| `type.android.sans` / `.mono` | `default` / `monospace` | Android system family, one of `default`, `monospace`, `serif`, `sans-serif`; `default` and `monospace` in all four themes (Spool's rounded stack has no Android equivalent, section 14) |
+| `type.android.sans` / `.mono` | `default` / `monospace` | Android system family, one of `default`, `monospace`, `serif`, `sans-serif`; `default` and `monospace` in all four themes (Palette's rounded stack has no Android equivalent, section 14) |
 | `elevation.android.e0` / `.e2` | `0px` / `8px` | Shadow depth Android uses for that level; the same in all four themes |
 
 The one-line description of each theme on its preview tile is the string `theme_<key>_line` of the string catalogue
@@ -403,7 +403,7 @@ internal object SpoolwardenTokens {
     val panes = ThemeTokens(/* … */)
 
     fun of(look: Look): ThemeTokens = when (look) {
-        Look.Console -> console; Look.Workbench -> workbench; Look.Spool -> spool; Look.Panes -> panes
+        Look.Console -> console; Look.Workbench -> workbench; Look.Palette -> palette; Look.Panes -> panes
     }
 }
 ```
@@ -504,7 +504,7 @@ Rules:
 - `inversePrimary` has no token of its own: it is the `accent-text` of the other appearance of the same theme.
 - **Why `primary` is `accent-text`, not `accent`.** Material draws `primary` as content on surfaces: the label of
   a text button, a checked box, a switch that is on, a progress indicator, the cursor and the focused label of a
-  field, the selected tab. A theme's `accent` may be too light for that (Spool light: 2.20:1 on `surface`), while
+  field, the selected tab. A theme's `accent` may be too light for that (Palette light: 2.20:1 on `surface`), while
   `accent-text` is checked at 4.5:1 on `bg`, `surface` and `surface-2` in every theme. So every stock component is
   readable without being told its colours, and `onPrimary` is `surface`, which has the same ratio against it. Only
   the filled main button and the chosen segment take `accent` and `onAccent`, from `SpoolwardenColors`
@@ -727,7 +727,7 @@ theme keys always matches `tokens.json`:
   var a = null, l = null;
   try { a = localStorage.getItem("spoolwarden.appearance"); l = localStorage.getItem("spoolwarden.look"); } catch (e) {}
   if (a === "light" || a === "dark") r.setAttribute("data-theme", a);
-  if (["console", "workbench", "spool", "panes"].indexOf(l) >= 0) r.setAttribute("data-look", l);
+  if (["console", "workbench", "palette", "panes"].indexOf(l) >= 0) r.setAttribute("data-look", l);
 })(document.documentElement);
 ```
 
@@ -760,7 +760,7 @@ Which themes exist, what they are made of and where the picker sits are in found
 | | Web | Android |
 |---|---|---|
 | Stored where | `localStorage`, key `spoolwarden.look` | The settings store, key `look` |
-| Values | `console`, `workbench`, `spool`, `panes` | `console`, `workbench`, `spool`, `panes` (the `Look` enum) |
+| Values | `console`, `workbench`, `palette`, `panes` | `console`, `workbench`, `palette`, `panes` (the `Look` enum) |
 | A device that has not chosen | The `data-look` the Hub rendered on `<html>` (its default theme, section 15); if none, the CSS falls through to Console on bare `:root` | The Hub's default theme from `GET api/info` (section 15); if unknown, Console |
 | Applied by | `data-look` on `<html>` | `SpoolwardenTheme(look, appearance)` |
 | Token set | The theme's blocks in `tokens.css` (section 3.2) | `SpoolwardenTokens.of(look)` |
@@ -788,7 +788,7 @@ section 6).
 `SpoolwardenTokens`.
 
 ```kotlin
-enum class Look { Console, Workbench, Spool, Panes }
+enum class Look { Console, Workbench, Palette, Panes }
 enum class Appearance { Light, Dark, System }
 enum class WindowClass { Phone, Tablet, Desktop }
 
@@ -1155,7 +1155,7 @@ difference not listed is a defect.
 |---|---|---|---|
 | System font | The device's own: San Francisco on iPhone and Mac, Segoe UI on Windows, Roboto in browsers on Android | Roboto, or the phone maker's system font | By design: system fonts only, nothing downloaded (foundations sections 1 and 4.2). Sizes, weights and line heights are equal. |
 | Odd weights (650) | Shown at 650 where the font is variable, else the nearest weight | The same rule | The system font decides |
-| Spool's rounded stack | `ui-rounded` and the stack of foundations section 6.3 | `FontFamily.Default` | Android has no system rounded font; downloading one is not allowed |
+| Palette's rounded stack | `ui-rounded` and the stack of foundations section 6.3 | `FontFamily.Default` | Android has no system rounded font; downloading one is not allowed |
 | Monospace font | `ui-monospace` stack | `FontFamily.Monospace` | System fonts only. Tabular figures on both. |
 | Back | The browser's back follows the address (`#printers/<id>`) | System Back (gesture or button) and predictive back (`android:enableOnBackInvokedCallback="true"`): it first closes the topmost menu, tooltip, dialog, sheet or drawer; then returns to the previous place, the same places the web address records; at a bottom-bar destination other than the first it goes to the first; at the first it leaves the app. With unsaved edits it asks first (foundations principle 4). | Each platform's own back control |
 | Breadcrumb | Shown above the page title | An Up button in the top bar named "Back to <parent>" | The Android top bar is where people look for it |

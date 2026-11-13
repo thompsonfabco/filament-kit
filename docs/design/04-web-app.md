@@ -1232,7 +1232,7 @@ A sheet on phones with the address `#settings` (2.4), opened over the last place
 | | technical       | |                 |  |
 | +-----------------+ +-----------------+  |
 | +-----------------+ +-----------------+  |
-| | ( ) Spool       | | ( ) Panes       |  |
+| | ( ) Palette     | | ( ) Panes       |  |
 | | Colourful and   | | Simple lists    |  |
 | | roomy           | |                 |  |
 | +-----------------+ +-----------------+  |
@@ -1256,7 +1256,7 @@ The segmented control takes the full content width; each theme tile is a radio t
 | Group | Content |
 |---|---|
 | Appearance | The wide segmented control "Light / Dark / System" with sun, moon and half-circle icons (F5). Applies at once; line "Saved on this phone." |
-| Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Spool "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this phone." Helper: "New phones start with the Hub's theme for new devices." |
+| Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this phone." Helper: "New phones start with the Hub's theme for new devices." |
 | Print alerts on this phone (only when print alerts are offered, `data-push`) | Status: "Off" (hollow circle), "On: this phone gets print alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive print alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). |
 | This Hub | Hub name; the address this page is using (`--mono`); on the home address "Open the Hub page". |
 

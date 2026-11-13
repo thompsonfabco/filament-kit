@@ -1242,7 +1242,7 @@ Description: "How this page looks on this device." Per device; needs no setup co
 | Field | Type | Does | Stored / endpoint |
 |---|---|---|---|
 | Light, dark or system | Appearance control (segmented choice with icons), hint "System follows this device's light or dark setting." | Applies at once | `localStorage` `spoolwarden.appearance` (foundations section 5) |
-| Theme | Theme picker: four preview tiles Console "Dense and technical", Workbench "Calm cards", Spool "Colourful and roomy", Panes "Simple lists"; the current one checked | Applies at once, no reload | `localStorage` `spoolwarden.look` (foundations section 6.2) |
+| Theme | Theme picker: four preview tiles Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists"; the current one checked | Applies at once, no reload | `localStorage` `spoolwarden.look` (foundations section 6.2) |
 | Theme for new devices | Select of the four themes, hint "Used by browsers and phones that have not chosen a theme." | Saved with the group's Save | Section 15 (no endpoint yet) |
 
 Save: **Save theme for new devices** (only this field needs it; the button is enabled only while it changed).

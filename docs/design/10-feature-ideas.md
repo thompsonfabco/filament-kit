@@ -268,7 +268,7 @@ screen readers' quick navigation; Ctrl+K stays the documented shortcut and `/` c
 **What the person sees.** Settings > Appearance offers four themes with preview tiles; choosing one changes the
 look at once on that device (foundations section 6).
 
-**Why.** Chosen as part of the design: Console is the default and Workbench, Spool and Panes stay available as
+**Why.** Chosen as part of the design: Console is the default and Workbench, Palette and Panes stay available as
 themes. This entry records the cost and the parity only; the behaviour, the order of building and the token rules
 are foundations sections 6.1 to 6.4.
 

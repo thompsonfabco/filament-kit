@@ -29,7 +29,7 @@ One scheme for every component:
 | State | A native or ARIA attribute where one exists (`disabled`, `aria-disabled`, `aria-expanded`, `aria-invalid`, `aria-busy`, `aria-current`, `aria-checked`, `aria-sort`, `:checked`); otherwise `data-state="…"` | `[aria-expanded="true"]`, `[data-state="running"]`, `[data-state="dirty"]` |
 | Theme profile | Never in markup. CSS selects on `:root[data-look="…"]` (foundations §6.2) | `:root[data-look="panes"] .coll` |
 | Script hook | `data-action`, `data-id`, `data-col`, `data-prio`, `data-tab`, `data-group`, `data-section` (a page's section), `data-draft` (a form group whose input is kept as a draft, 5.11), `data-effect` (a field whose saving restarts the Hub or starts an apply job, 5.11), `data-photo` (a thumbnail's photo id, 7.6), `data-revision` (a revision's id, 7.10); never a class | `data-action="test"` |
-| Theme preview | `data-preview="<look>"` on a theme picker's drawing (3.4): each theme's token blocks also match it | `data-preview="spool"` |
+| Theme preview | `data-preview="<look>"` on a theme picker's drawing (3.4): each theme's token blocks also match it | `data-preview="palette"` |
 | Utility | Only three: `sr` (visually hidden, still read), `mono` (`--mono`, tabular numbers), `muted` (`--muted`) | `<span class="sr">Connected: </span>` |
 | Icon | `icon` (20 px), `icon--s` (16 px), `icon--l` (28 px); symbol ids in the inline sprite `i-<name>` for icons, `s-<shape>` for status shapes; only the icons of foundations §10. The one chevron, `i-chevron`, points right; CSS turns it (down in a select, up or down by `aria-sort` in a sort button) | `<svg class="icon"><use href="#i-printer"/></svg>` |
 | Icon sprite | `sprite`: the one hidden inline `<svg>` near the top of `body` that holds every `<symbol>` (`i-<name>`, `s-<shape>`); `aria-hidden="true"`, never shown | `<svg class="sprite" aria-hidden="true">…</svg>` |
@@ -148,7 +148,7 @@ on phones (2.4) · job strip (8.4) · toast region (8.7) · announcer · dialog 
 elements, children of `body`).
 
 ```
-Desktop, nav = rail                        Phone (Console, Workbench, Spool)
+Desktop, nav = rail                        Phone (Console, Workbench, Palette)
 +--------------------------------------+   +--------------------+
 | top bar                              |   | top bar            |
 +----+---------------------------------+   +--------------------+
@@ -282,7 +282,7 @@ in the phone bottom bar carry `data-tab`. A **More** button closes the navigatio
 breakpoints that hide items (pills on wide screens, the bottom bar on phones).
 
 ```
-rail (Console)     sidebar (Workbench)       pills (Spool)                         list (Panes)
+rail (Console)     sidebar (Workbench)       pills (Palette)                       list (Panes)
 +------+           +--------------------+    [Overview][Printers][Recently added]  +--------------------------+
 | [ic] |           | EVERYDAY           |    [Devices][Slicer presets][More v]     | EVERYDAY                 |
 |Overvw|           | [ic] Overview      |                                          | [ic] Overview          > |
@@ -300,7 +300,7 @@ rail (Console)     sidebar (Workbench)       pills (Spool)                      
 | Part | rail | sidebar | pills | list |
 |---|---|---|---|---|
 | Width | `--rail` | `--side-w` | content width | `--list-w` pane |
-| Item | Icon over label, min height 56 px (`calc(var(--s7) + var(--s2))`), margin `0 var(--s1)`, `--r` | Icon left of label, height `--ctl`, padding `0 var(--s3)`, `--r` | Icon left of label, height `--ctl`, padding `0 var(--s4) 0 var(--s3)`, radius `--r-l` (pill shape comes from the Spool token values) | Icon in a `calc(var(--s5) + var(--s1))` tile, label, summary line, chevron; min height `calc(var(--s7) + var(--s1))`; inset hairline `--border` between rows |
+| Item | Icon over label, min height 56 px (`calc(var(--s7) + var(--s2))`), margin `0 var(--s1)`, `--r` | Icon left of label, height `--ctl`, padding `0 var(--s3)`, `--r` | Icon left of label, height `--ctl`, padding `0 var(--s4) 0 var(--s3)`, radius `--r-l` (pill shape comes from the Palette token values) | Icon in a `calc(var(--s5) + var(--s1))` tile, label, summary line, chevron; min height `calc(var(--s7) + var(--s1))`; inset hairline `--border` between rows |
 | Label | `--fs-xs` weight 600 | `--fs-m` weight 600 | `--fs-m` weight 600 | `--fs-b` weight 600 |
 | Summary | hidden | hidden | hidden | `--fs-s` `--muted` |
 | Group heading | visually hidden; groups split by a 1 px `--border` hairline | `--fs-xs` uppercase, 0.05em spacing, `--muted` | hidden (System group lives in More) | `--fs-xs` uppercase, `--muted`, above a grouped `--surface` block with `--r` |
@@ -759,7 +759,7 @@ appearance.
 
 **Behaviour and keyboard.** Arrow keys move and select. Choosing sets `data-look` on `html`, writes
 `spoolwarden.look` (try/catch), and re-lays out the page at once: no reload, no Save. Focus stays on the chosen tile
-even when the layout around it changes. Result area: "Theme: Spool. Saved on this device." The same group exists in
+even when the layout around it changes. Result area: "Theme: Palette. Saved on this device." The same group exists in
 the web app's settings sheet.
 
 **Accessibility.** `fieldset` with `legend` "Theme"; each tile is a `label` wrapping a radio input; the preview is
@@ -784,7 +784,7 @@ and expanded widths.
     <span class="theme-picker__name">Console</span>
     <span class="theme-picker__line" id="look-console-line">Dense and technical</span>
   </label>
-  …Workbench, Spool, Panes…
+  …Workbench, Palette, Panes…
 </fieldset>
 ```
 
@@ -1018,7 +1018,7 @@ error is in the list even while hidden, so it is read once shown); `aria-invalid
 (radios, segments, checkbox lists) use `fieldset` and `legend`. An error summary is a `role="alert"` region whose
 links move focus to the fields.
 
-**Theme profiles.** No change with `nav`, `collection`, `detail`. Spool's larger type and control height come from
+**Theme profiles.** No change with `nav`, `collection`, `detail`. Palette's larger type and control height come from
 its tokens.
 
 **Android.** `OutlinedTextField` with `label`, `supportingText` (hint or error), `isError`, `singleLine`; optional
@@ -1587,7 +1587,7 @@ spools) so they can be scanned, sorted, opened and acted on. One markup renders 
 
 **Sizes and tokens.**
 
-| | `table` (Console) | `cards` (Workbench) | `tiles` (Spool) | `rows` (Panes) |
+| | `table` (Console) | `cards` (Workbench) | `tiles` (Palette) | `rows` (Panes) |
 |---|---|---|---|---|
 | Container | `--surface`, 1 px `--border`, `--r`; CSS grid, every row a `subgrid` of the collection's column template | Grid `repeat(auto-fill, minmax(18rem, 1fr))`, gap `--s4` | Grid `repeat(auto-fill, minmax(14rem, 1fr))`, gap `--s4` | `--surface` block, `--r`, 1 px `--border` hairlines between rows inset by the visual's width |
 | Item | Main row min height `var(--row)` (48 px); 1 px `--border` between items | Card: `--surface`, 1 px `--border`, `--r`, padding `--s4`, gap `--s2` | Tile: `--surface`, 1 px `--border`, `--r`, padding `--s4`; `visual` at the top, `calc(var(--s7) * 2)` | Row min height `var(--row)` (48 px), padding `var(--s3) var(--s4)` |
@@ -1735,7 +1735,7 @@ long forms open in a side **drawer**.
 - **Foot** (forms only): result area, Cancel, the primary button.
 
 ```
-inline (Console)                         sheet (Spool, phone)        pane (Panes, desktop)
+inline (Console)                         sheet (Palette, phone)      pane (Panes, desktop)
 | v Workshop X1  ...   [Test] [...] |    +------------------+       +--------+-------------+--------------+
 |  +---------------------------------+   | < Workshop X1  x |       |Sections| Printers    | Workshop X1  |
 |  | AMS slots        | Actions      |   |------------------|       |        | Workshop X1>| AMS slots    |
@@ -1751,7 +1751,7 @@ inline (Console)                         sheet (Spool, phone)        pane (Panes
 |---|---|---|
 | `inline` (Console) | Under its row, full width of the collection | `--surface-2` ground, 1 px dashed `--border` above, padding `var(--s4) var(--s4) var(--s5)`, left edge aligned with the title column (`calc(var(--s7) + var(--s4))` on desktop, `--s4` below); body two columns `minmax(0, 1.25fr) minmax(0, 1fr)` with gap `--s5` on desktop, one column below |
 | `card` (Workbench) | Inside its card, which grows to the full width of the grid | 1 px `--border` above, padding-top `--s4`, same two columns on desktop |
-| `sheet` (Spool) | A modal sheet: the region is moved into the detail host (below) | Phone: from `--top` below the top edge to the bottom, full width, top corners `--r-l`. Tablet and desktop: full height at the right edge, 420 px wide, 1 px `--border-strong` on its left. `--surface`, `--e2`, `--scrim` behind; rises or slides in over `--t-slow` |
+| `sheet` (Palette) | A modal sheet: the region is moved into the detail host (below) | Phone: from `--top` below the top edge to the bottom, full width, top corners `--r-l`. Tablet and desktop: full height at the right edge, 420 px wide, 1 px `--border-strong` on its left. `--surface`, `--e2`, `--scrim` behind; rises or slides in over `--t-slow` |
 | `pane` (Panes) | The right pane | Desktop: third column, at least 22rem, own scroll, sticky below the top bar, 1 px `--border` on its left. Tablet and phone: covers the list pane (drill in), Back in its head |
 | drawer (form container under `inline`) | The region moved into the drawer host, a `dialog--drawer` (9.1) | Full height at the right edge, 420 px, as the sheet on wide screens; a bottom sheet on phones |
 
@@ -2131,7 +2131,7 @@ dashed ring for empty), kept and fed from the theme.
 ### 7.4 Spool ring
 
 **Purpose.** Show one spool's colour and how much is left as a ring, the way a spool looks from the side. The main
-visual of the Spool theme's tiles, and the spool picture in every detail of a spool.
+visual of the Palette theme's tiles, and the spool picture in every detail of a spool.
 
 **Anatomy.** An inline SVG: a track circle (`--surface-3`), an arc in the filament colour from 12 o'clock clockwise
 for the remaining share, 1 px `--border-strong` rings inside and outside the band (pale colours stay visible), a hub

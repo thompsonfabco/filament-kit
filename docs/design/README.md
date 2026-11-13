@@ -10,7 +10,7 @@ shows and says, how it behaves, how it is checked, and in what order to build it
 |---|---|
 | Name | **Spoolwarden** (was filament-kit) |
 | Default theme | **Console**: dense and technical, hairlines, monospace data, teal accent |
-| Themes | Console, **Workbench** (calm cards), **Spool** (colourful and roomy), **Panes** (simple lists); a per-device choice in Settings > Appearance, plus a theme for new devices held by the Hub |
+| Themes | Console, **Workbench** (calm cards), **Palette** (colourful and roomy), **Panes** (simple lists); a per-device choice in Settings > Appearance, plus a theme for new devices held by the Hub |
 | Appearance switch | **Light / Dark / System**, default System, per device, inside every theme; at the right of the top bar on wide screens |
 | Part names | the Hub · Hub page · web app · app · `spoolwarden` command · Features · Setups (Hub, Weigh Station only, Hub with Weigh Station) · Weigh Station · Weigh Station display · Tag Reader · Label Reader (Cloud (Claude), On this Hub) · Add spools · Recently added · Klipper add-on · Filament Catalog · Slicer presets · Slicer Sync |
 
@@ -48,7 +48,7 @@ The full list of names, with what each was called before, is in `01-foundations.
 | `10-feature-ideas.md` | 38 ideas beyond this design, each with effort, value and what it needs from the Hub |
 | `/tokens/` (top of the repository, not in this folder) | The token files: `tokens.json` (the source of every value, four themes in light and dark), the generated `tokens.css`, `build_tokens.py`, `check_contrast.py`, and `ADJUSTMENTS.md` (colours changed to meet a contrast ratio). They exist only there |
 | `mockups/c-console.html` | Mockup of the Hub page in Console, the default theme |
-| `mockups/a-workbench.html`, `b-spool.html`, `d-panes.html` | The same page in Workbench, Spool and Panes |
+| `mockups/a-workbench.html`, `b-palette.html`, `d-panes.html` | The same page in Workbench, Palette and Panes |
 | `mockups/gallery.html` | The four mockups side by side, with one control for screen, appearance and device size. Open it through a local web server (for example `python -m http.server` in `mockups/`): browsers do not let a page opened from a file show other files in frames |
 | `mockups/CONTENT-SPEC.md` | The fake data and rules every mockup shares |
 

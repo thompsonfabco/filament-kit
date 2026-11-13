@@ -39,12 +39,12 @@ Fixed dimensions that are not steps of the space scale are entries of the `size`
 them through `SpoolwardenTheme.sizes` (`08-platform-mapping.md`); no component writes them inline. "Existing" entries
 are in `tokens.json` today; "new" entries are `size` entries this app needs, added to every theme with the values
 given here (the web reads the same entries where it draws the same part). The other themes scale with their type
-and density: Workbench and Panes one step roomier than Console where a size holds text, Spool larger again, and
+and density: Workbench and Panes one step roomier than Console where a size holds text, Palette larger again, and
 its swatches larger still because the spool colour is that theme's main mark. Collection, settings and slot rows use `ListItem`'s own minimum height (56 dp), the
 accepted difference of `08-platform-mapping.md` for rows; it is not a size entry. Selection outlines (2 dp) are border
 widths, not sizes.
 
-| `size` entry | Console | Workbench | Spool | Panes | Status | Used for |
+| `size` entry | Console | Workbench | Palette | Panes | Status | Used for |
 |---|---|---|---|---|---|---|
 | `hairline` | 1 dp | 1 dp | 1 dp | 1 dp | existing | Hairlines between rows and around panels |
 | `thumb` | 96 dp | 96 dp | 96 dp | 96 dp | existing | Photo thumbnails in strips (6.2, 10.2) |
@@ -63,7 +63,7 @@ widths, not sizes.
 | `list-pane` | 360 dp | 360 dp | 400 dp | 360 dp | new | Minimum width of the list pane of `ListDetailPaneScaffold` (2.1) |
 
 In `tokens.json` the values are written in px (`"label-col": "118px"`); 1 px in the file is 1 dp in the app. In
-Spool the row swatch is drawn as a ring (the spool seen from the side); in the other themes it is a rounded
+Palette the row swatch is drawn as a ring (the spool seen from the side); in the other themes it is a rounded
 rectangle with `--r-s` corners.
 
 ---

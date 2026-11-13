@@ -120,13 +120,13 @@ the lowest of the eight and where it occurs.
 
 | Pair | Where it occurs | Required | Console light | Console dark | Lowest of the eight |
 |---|---|---|---|---|---|
-| `--on-accent` on `--accent-hover` | Main button under the pointer | 4.5 | 6.97 | 9.78 | 6.77 (Spool light) |
+| `--on-accent` on `--accent-hover` | Main button under the pointer | 4.5 | 6.97 | 9.78 | 6.77 (Palette light) |
 | `--accent-text` on `--accent-soft` | Active navigation label, selected chip | 4.5 | 5.91 | 8.75 | 4.59 (Panes light) |
 | `--text` on `--surface-3` | Selected row, pressed control | 4.5 | 14.49 | 11.63 | 10.06 (Workbench dark) |
 | `--muted` on `--surface-3` | Secondary text in a selected row | 4.5 | 5.25 | 5.60 | 5.10 (Panes light) |
-| `--bad` on `--surface-3` | Pressed destructive item of an overflow menu | 4.5 | 5.19 | 5.72 | 5.03 (Spool light) |
+| `--bad` on `--surface-3` | Pressed destructive item of an overflow menu | 4.5 | 5.19 | 5.72 | 5.03 (Palette light) |
 | `--surface` on `--text` | Tooltip (inverse) | 4.5 | 18.22 | 14.74 | 13.35 (Workbench dark) |
-| `--text` on `--code` | Logs, command blocks | 4.5 | 17.10 | 15.27 | 13.64 (Spool light) |
+| `--text` on `--code` | Logs, command blocks | 4.5 | 17.10 | 15.27 | 13.64 (Palette light) |
 | `--muted` on `--code` | Time stamps in logs | 4.5 | 6.20 | 7.35 | 5.83 (Panes light) |
 | `--border-strong` on `--bg` | Control outline on the page ground | 3 | 3.31 | 3.96 | 3.19 (Panes light) |
 | `--border-strong` on `--surface-2` | Control outline in a table header or quiet fill | 3 | 3.19 | 3.39 | 3.19 (Console light) |
@@ -139,11 +139,11 @@ These pairs fail in at least one token set and are therefore **not allowed** in 
 |---|---|---|
 | `--ok` as text directly on `--surface-3` | Console light 4.29 | In a selected row a status badge keeps its `-soft` ground (CON-4). (`--bad` on `--surface-3` passes and is in the table above.) |
 | `--accent-text` on `--surface-3` | Panes light 4.39 | A link inside a selected row is drawn in `--text` and underlined. |
-| `--border-strong` on `--surface-3` | Console light 2.87, Console dark 2.93, Spool dark 2.83, Panes light 2.92 | A control inside a selected row keeps its own `--surface` fill, so its outline sits on `--surface` (CON-5) |
+| `--border-strong` on `--surface-3` | Console light 2.87, Console dark 2.93, Palette dark 2.83, Panes light 2.92 | A control inside a selected row keeps its own `--surface` fill, so its outline sits on `--surface` (CON-5) |
 
 **Not a required pair: the edge of a filled main button** (`--accent` against `--bg` or `--surface`). The button is
 identified by its label, which is checked as `--on-accent` on `--accent` (3.1), so WCAG 1.4.11 asks no ratio of its
-edge. The values vary widely (Spool light 2.04 on `--bg`, 2.20 on `--surface`, because Spool's accent is a light
+edge. The values vary widely (Palette light 2.04 on `--bg`, 2.20 on `--surface`, because Palette's accent is a light
 orange with dark text, foundations 6.3); the test does not check them. A main button therefore never relies on its
 fill alone to be found: it always has a visible label (an icon-only control is never a filled main button).
 
@@ -263,7 +263,7 @@ single-key shortcut would clash with screen reader keys and with typing in field
 | Photo viewer | Previous, Next, Close | Left and Right go to the previous and next photo; Escape closes. |
 | Log, command block, box of a wide table (scrolls inside) | One: the box (`tabindex="0"`, `role="region"`, an `aria-label` such as "Backup log") | Arrow keys and Page Up / Page Down scroll it. Copy is its own button. |
 | Job indicator and job strip | The indicator; inside the strip, "Show log" and the log box | Enter on the indicator opens or closes the strip (`aria-expanded`). |
-| Step-by-step sheet (Spool theme detail) | Its controls; Back and Next | Next moves focus to the new step's heading. |
+| Step-by-step sheet (Palette theme detail) | Its controls; Back and Next | Next moves focus to the new step's heading. |
 
 ### 7.3 Layers: Escape, focus return, focus trap, hover
 
@@ -350,7 +350,7 @@ themes. The rule that achieves this:
 |---|---|---|
 | `table` (Console) | "Workshop X1, row header. Model, X1 Carbon. Address, 192.0.2.40. State, Connected." with column names from the headers | Table keys (NVDA Ctrl+Alt+arrows) and Tab between controls |
 | `cards` (Workbench) | "Workshop X1. Model: X1 Carbon. Address: 192.0.2.40. State: Connected." from the cell labels | Same table keys; rows are read as one card each |
-| `tiles` (Spool) | Same as cards; the spool ring adds "62 % left" (SR-29) | Same |
+| `tiles` (Palette) | Same as cards; the spool ring adds "62 % left" (SR-29) | Same |
 | `rows` (Panes) | "Workshop X1. State: Connected. Open Workshop X1, link." The `rows` profile hides the less important cells with `display: none`, so they are neither drawn nor read; they appear in the item's pane | Same |
 
 | ID | Where | Requirement | Check |
@@ -364,7 +364,7 @@ themes. The rule that achieves this:
 |---|---|---|---|
 | SR-27 | H W | Label photos have alt text that names what they show and where they belong: "Label photo 1 of 2, Polymaker PolyTerra PLA Charcoal Black". A photo with no spool data yet: "Label photo 1 of 3, not read yet". The enlarged viewer is a dialog titled "Photo 1 of 2". A photo that failed to load shows its alt text in a box with the words "The photo could not be loaded". | Auto: AUT-5 fails on an `<img>` without `alt`, or with an `alt` that matches `/^photo \d+$/i`. Manual: NVDA on Recently added. |
 | SR-28 | H W | A QR code is never the only way: next to it, as text, is the same information. Pairing a phone: the pairing code (large, `--mono`, with Copy), the link (with Copy), the certificate fingerprint in groups of four, and the expiry (TIM-1). Web app address: the address as a link with Copy. The QR image's alt says what it is for: "QR code for pairing a phone" (`02-components.md`); what it holds is the text beside it. | Manual: Devices > Pair a phone with the QR image hidden (devtools); pairing still possible by the text. |
-| SR-29 | H W | A filament swatch is decorative when the colour's name or hex is beside it (foundations 4.1 requires that), so it is `aria-hidden`. The spool ring (Spool theme) is `role="img"` with `aria-label="62 % left, 620 g"`, unless the same numbers are visible text next to it, then `aria-hidden`. A slot in a slot strip is read as one phrase: "Slot A1, Polymaker PolyTerra PLA Charcoal Black, 62 % left, in use" or "Slot A4, empty". | Manual: NVDA on a printer's slots. |
+| SR-29 | H W | A filament swatch is decorative when the colour's name or hex is beside it (foundations 4.1 requires that), so it is `aria-hidden`. The spool ring (Palette theme) is `role="img"` with `aria-label="62 % left, 620 g"`, unless the same numbers are visible text next to it, then `aria-hidden`. A slot in a slot strip is read as one phrase: "Slot A1, Polymaker PolyTerra PLA Charcoal Black, 62 % left, in use" or "Slot A4, empty". | Manual: NVDA on a printer's slots. |
 | SR-30 | H W | The printer camera is user-started ("Show camera"), has a name ("Live camera of Workshop X1" as `alt` for the picture stream or `aria-label` for the video), plays muted, and has "Hide camera". Its errors are text next to it. | Manual: show and hide the camera with the keyboard. |
 | SR-31 | H W | Icons next to words are `aria-hidden="true"` (foundations 10). Decorative drawings (the theme picker's preview tiles) are `aria-hidden`; the tile's name and one line are its label. | Auto: AUT-5 fails on an `<svg>` without `aria-hidden` that is not inside a named control or a `role="img"` with a label. |
 
@@ -521,7 +521,7 @@ ships with Spoolwarden; they are tests. A check that did not run is reported as 
 
 | ID | Check | Input | Fails when |
 |---|---|---|---|
-| AUT-1 | **Contrast over tokens.** Reads `tokens/tokens.json`, resolves the eight token sets (Console, Workbench, Spool, Panes; light and dark), and computes the WCAG ratio of every pair in 3.1 and 3.2, comparing the unrounded ratio with the requirement. The existing `tokens/check_contrast.py` already checks the pairs of 3.1 except `--focus` on `--surface-2`; AUT-1 adds that pair and those of 3.2 (where `--accent-text` on `--accent-soft` and `--text` on `--surface-3` are only advisory today and become required). Translucent tokens (`--scrim`) are skipped. Also checks the Android roles of CON-8 from the generated Kotlin theme. | `tokens.json`; the generated Kotlin theme | A pair is below its ratio, or a token of a pair is missing from a set. The message names theme, appearance, pair, ratio and requirement: "spool dark: --muted on --surface-2 is 4.31:1, needs 4.5:1 (CON-1)". |
+| AUT-1 | **Contrast over tokens.** Reads `tokens/tokens.json`, resolves the eight token sets (Console, Workbench, Palette, Panes; light and dark), and computes the WCAG ratio of every pair in 3.1 and 3.2, comparing the unrounded ratio with the requirement. The existing `tokens/check_contrast.py` already checks the pairs of 3.1 except `--focus` on `--surface-2`; AUT-1 adds that pair and those of 3.2 (where `--accent-text` on `--accent-soft` and `--text` on `--surface-3` are only advisory today and become required). Translucent tokens (`--scrim`) are skipped. Also checks the Android roles of CON-8 from the generated Kotlin theme. | `tokens.json`; the generated Kotlin theme | A pair is below its ratio, or a token of a pair is missing from a set. The message names theme, appearance, pair, ratio and requirement: "spool dark: --muted on --surface-2 is 4.31:1, needs 4.5:1 (CON-1)". |
 | AUT-2 | **Literal style lint.** Reads every shipped stylesheet. | `*.css` served by the Hub | A literal colour (hex, `rgb()`, `hsl()`, a colour name other than `transparent`, `currentColor`, `inherit`) appears outside the token blocks (foundations 12.5); a `font-size` is in `px` or is not a type token; a `line-height` is in `px` or is not one of the unitless values of foundations 4.2; a duration is not a motion token; `opacity` below 1 is set on a state of text or a control; `outline: none` or `outline: 0` appears in a rule that draws no other focus ring; `var(--accent)` appears in a rule whose selector is not one of the labelled fills listed in the lint (CON-9). |
 | AUT-3 | **Native dialog lint.** Reads every shipped script. | `*.js` served by the Hub | Any call of `alert`, `confirm` or `prompt`, with or without `window.`, `self.` or `globalThis.`, or through bracket access (`window["confirm"]`) (foundations 12.4). |
 | AUT-4 | **Missing label lint (static).** Fields are created only through the field component, which always renders a visible label. | `*.js` served by the Hub | An `input`, `select` or `textarea` element is created anywhere outside the field component, or the field component is called with an empty label. |
@@ -547,7 +547,7 @@ with TalkBack and Accessibility Scanner; a terminal on the Hub.
 | 1 | 2 | Open the build's results of AUT-1 to AUT-9. | All nine ran and passed. |
 | 2 | 8 | **Keyboard only**, Hub page, Console light, 1280 px. Tab once (skip link), Enter. Go to Printers. On Workshop X1: overflow menu with the keyboard, Rename, type, Escape (the guard "Leave without saving?" appears, focus on Stay), Enter on Stay (back in Rename with the text), Escape again, Leave without saving. Forget printer: Tab ten times, Escape. Settings > General: change Display name, Enter. Settings > Backups and restore: Back up now; open the job strip; scroll its log with the arrow keys. | Every step done without a mouse; ring always visible and never hidden under a bar; focus returns to the trigger each time; nothing announced twice (step 3). |
 | 3 | 10 | **Screen reader**, same browser with NVDA (or VoiceOver). Landmark list and heading list on Printers. Read the first row of the printers table with the table keys. Test connection on Workshop X1 and on Study A1 mini. Repeat Rename and Forget printer from step 2. Back up now. | Landmarks and headings as SR-3 to SR-5; each value read with its name; both test results read without moving focus; dialogs read with title and sentence; exactly two job announcements. |
-| 4 | 6 | **Themes**: switch to Workbench, Spool and Panes, each in light and dark. On Printers, Tab through one row and read its status; in Panes drill into a printer and back. Turn on greyscale emulation once. | Ring visible in all eight; statuses told apart in greyscale; NVDA reads Workbench cards and Spool tiles with field names (SR-25); Panes returns focus to the row. |
+| 4 | 6 | **Themes**: switch to Workbench, Palette and Panes, each in light and dark. On Printers, Tab through one row and read its status; in Panes drill into a printer and back. Turn on greyscale emulation once. | Ring visible in all eight; statuses told apart in greyscale; NVDA reads Workbench cards and Palette tiles with field names (SR-25); Panes returns focus to the row. |
 | 5 | 6 | **Zoom, reflow, motion**: 200 % zoom on Settings; 320 px wide on Printers and Recently added; paste the text-spacing rule (TXT-7); turn on reduced motion and open the More sheet. | Nothing cut off or overlapping; no sideways page scroll; no animation; spinners show "Working…". |
 | 6 | 10 | **iPhone, web app, VoiceOver**: Add spools by hand: focus each field (no page zoom; right keyboard); type "abc" in Net weight; Check, then Add. Open a spool. Printers: Load into slot A4. | Labels read with hints and errors; the reason beside Add is read before Check; results read where they appear; slot read as one phrase. |
 | 7 | 12 | **Android, TalkBack**: Home, first by swiping, then by dragging a finger over it (explore by touch, AND-19); Spools with "Sealed spools only" toggled by its words; open a Spool screen; Printers > Workshop X1: status, slot custom actions, Unload confirmation and Back. Then font scale 200 % with the largest display size: Home, Printer, Add spools. Accessibility Scanner on Home, Printer and Add spools. | One stop per row; touch reads the same units as swiping; headings navigable; dialogs announced and focus returned; nothing cut off at 200 %; Scanner shows no issue. |

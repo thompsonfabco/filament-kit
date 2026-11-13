@@ -1001,7 +1001,7 @@ command line · S · Depends on: S5.8 · Beside: S6.1 to S6.9 · **Waits for the
 
 ## 9. Stage 6: Themes
 
-Built in the order of F6.4: the Hub's default first, then the picker with Console alone, then Workbench, Spool and
+Built in the order of F6.4: the Hub's default first, then the picker with Console alone, then Workbench, Palette and
 Panes one by one, each on the web and then on Android, and last the theme for new devices in every interface. A theme
 changes only how things look and are laid out (F6.2), so no step here changes words, order or actions.
 
@@ -1009,7 +1009,7 @@ changes only how things look and are laid out (F6.2), so no step here changes wo
 Hub · M · Depends on: S2.17 · Beside: any step that does not edit the files below
 - **Files today:** `setup_console/general_tab.py`; `setup_page.py` and `web/intake_app.py` (page shells); `api.py`
   (`GET api/info`).
-- **Change:** the stored setting `appearance.theme` (console, workbench, spool, panes; default console), readable in
+- **Change:** the stored setting `appearance.theme` (console, workbench, palette, panes; default console), readable in
   `G state` and saved through the group save; delivered as `data-look` on `<html>` of both page shells, as the two
   `theme-color` metas and the two manifests of that theme, and as `look` in `GET api/info` (N1).
 - **Keep:** a device that has chosen keeps its choice.
@@ -1047,19 +1047,19 @@ app · M · Depends on: S6.3 · Beside: S6.4
 - **Keep:** screens and routes.
 - **Check:** AUT-8 in Workbench.
 
-### S6.6 Spool on the web
+### S6.6 Palette on the web
 Hub page, web app · L · Depends on: S6.4 · Beside: S6.7
 - **Files today:** `components.css`.
-- **Change:** the `pills`, `tiles` and `sheet` profile groups keyed on Spool; the rounded system stack; the Spool tile.
+- **Change:** the `pills`, `tiles` and `sheet` profile groups keyed on Palette; the rounded system stack; the Palette tile.
 - **Keep:** markup and scripts.
-- **Check:** AUT-5 in Spool light and dark; manual: release checklist step 4 (Spool tiles read with field names).
+- **Check:** AUT-5 in Palette light and dark; manual: release checklist step 4 (Palette tiles read with field names).
 
-### S6.7 Spool on Android
+### S6.7 Palette on Android
 app · M · Depends on: S6.5 · Beside: S6.6
 - **Files today:** the composables that read the profile locals.
 - **Change:** `NavStyle.Pills`, `CollectionStyle.Tiles`, `DetailStyle.Sheet`; `FontFamily.Default` (08 14); the tile.
 - **Keep:** screens and routes.
-- **Check:** AUT-8 in Spool.
+- **Check:** AUT-8 in Palette.
 
 ### S6.8 Panes on the web
 Hub page, web app · L · Depends on: S6.6 · Beside: S6.9
@@ -1260,7 +1260,7 @@ Things the design parts leave open. Each needs a decision before the step named;
    before S1.6 changes its interim, and before S3.11, S4.11 and S5.5 settle their dialogs and prompts.
 2. **Settled: `size.side-w` and `size.list-w`.** They are in `tokens.json` in every theme (256px and 360px); nothing is left to set.
 3. **Settled: the `size` entries of 05 1 in every theme.** 05 1 gives the value of each entry for Console,
-   Workbench, Spool and Panes; `swatch-row` is two entries, `swatch-row-w` and `swatch-row-h`. S0.2 adds them.
+   Workbench, Palette and Panes; `swatch-row` is two entries, `swatch-row-w` and `swatch-row-h`. S0.2 adds them.
 4. **How the checks start on today's code.** S0.6 and S0.7 list today's findings in the allow-lists so the build stays
    green, and each step removes its files' entries. 08 describes the allow-lists only as reviewed exceptions; whether
    they may carry today's findings for a time, or the checks start in a report-only mode, is open.
