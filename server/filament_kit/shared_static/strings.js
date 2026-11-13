@@ -1465,7 +1465,7 @@ window.SW_TEXT = Object.freeze({
   "recent_older_addition": "Older addition",
   "recent_public_text": "Open filament-kit at its home address on the home network to check and correct recent additions.",
   "recent_public_title": "Recently added is on the home address only.",
-  "recent_range_error": "Enter a range like 190-230.",
+  "common_error_range": "Enter a range like 190-230.",
   "recent_revision_ai": "Revision {number}, {time}, by AI: {changes}",
   "recent_revision_value_again": "{field} is {value} again.",
   "recent_saved": { "one": "Saved {count} change: {fields}.", "other": "Saved {count} changes: {fields}." },

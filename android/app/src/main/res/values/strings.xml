@@ -1979,7 +1979,7 @@
     <string name="recent_older_addition">Older addition</string>
     <string name="recent_public_text">Open filament-kit at its home address on the home network to check and correct recent additions.</string>
     <string name="recent_public_title">Recently added is on the home address only.</string>
-    <string name="recent_range_error">Enter a range like 190-230.</string>
+    <string name="common_error_range">Enter a range like 190-230.</string>
     <!-- 1=number 2=time 3=changes -->
     <string name="recent_revision_ai">Revision %1$s, %2$s, by AI: %3$s</string>
     <!-- 1=field 2=value -->
