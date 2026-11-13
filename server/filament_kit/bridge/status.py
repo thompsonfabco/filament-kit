@@ -26,22 +26,24 @@ STAGES = {0: 'Printing', 1: 'Auto bed leveling', 2: 'Heatbed preheating', 3: 'Vi
           34: 'Paused: first layer error', 35: 'Paused: nozzle clog'}
 
 # HMS alert sentences for the common codes, by full code; every other code gets the generic line. Kept small on
-# purpose: the link below is the complete list. (Wording is a paraphrase; check new rows against Bambu's page.)
+# purpose: the index link below is the complete list. Wording is a paraphrase of Bambu's per-code wiki pages,
+# https://wiki.bambulab.com/en/x1/troubleshooting/hmscode/<code with underscores>, checked 2026-11-12 for these four
+# rows (check new rows the same way; that URL pattern is unverified for other printer families, so it is not linked).
 HMS_TEXT = {
     '0300_0100_0001_0001': 'Heatbed temperature is abnormal (heater may be shorted)',
-    '0300_0100_0001_0002': 'Heatbed temperature is abnormal (sensor may be shorted)',
+    '0300_0100_0001_0002': 'Heatbed temperature is abnormal (heater may have an open circuit or an open thermal switch)',
     '0300_0200_0001_0001': 'Nozzle temperature is abnormal (heater may be shorted)',
     '0300_0400_0002_0001': 'Part cooling fan speed is too slow or stopped',
 }
-HMS_URL = 'https://wiki.bambulab.com/en/x1/troubleshooting/hmscode/'
+HMS_URL = 'https://wiki.bambulab.com/en/hms/home'
 
 
 def hms_text(code: str) -> str:
-    """One line for an alert: the sentence for a known code, else a generic line with the code and the lookup link."""
+    """One line for an alert: the sentence for a known code, else a generic line with the code and the link to Bambu's HMS index."""
     known = HMS_TEXT.get(code)
     if known:
         return f"{known} ({code})"
-    return f"Printer alert HMS {code}: see {HMS_URL}{code.lower()}"
+    return f"Printer alert HMS {code}: see {HMS_URL}"
 
 
 # gcode_state values during which a stage, ETA and job are meaningful

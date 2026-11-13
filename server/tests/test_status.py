@@ -162,7 +162,9 @@ def test_hms_text_known_code_is_a_sentence_unknown_gets_the_link():
     assert "http" not in known
     unknown = status.hms_text("0700_8200_0002_0001")
     assert unknown.startswith("Printer alert HMS 0700_8200_0002_0001")
-    assert unknown.endswith(status.HMS_URL + "0700_8200_0002_0001")
+    assert unknown.endswith("https://wiki.bambulab.com/en/hms/home")
+    second = status.hms_text("0300_0100_0001_0002")
+    assert "open circuit" in second and "short" not in second
     s = status.summarize({"hms": [{"attr": 0x03000100, "code": 0x00010001}]}, [], now=NOW)
     assert s["hms"][0]["text"] == known
 
