@@ -19,6 +19,7 @@ KEY = "label_reader.share_corrections"
 @pytest.fixture(autouse=True)
 def fk_env(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_LOCAL_INTAKE_STORE", str(tmp_path / "store"))
+    monkeypatch.setenv("FK_NO_SYSTEMD", "1")        # the commands' root check is off, whoever runs the tests
     monkeypatch.setattr(local_reader, "CONNECT_TIMEOUT", 0.5)
 
 

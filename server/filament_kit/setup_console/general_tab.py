@@ -170,7 +170,9 @@ def routes(page) -> list[tuple]:
             if "local_intake" not in modules.enabled(cfg):
                 raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
             raw = cfg.get("local_intake") if isinstance(cfg.get("local_intake"), dict) else {}
-            return local_reader.health({**cfg, "local_intake": {**raw, "url": url, "tier": tier}})
+            tried = {**cfg, "local_intake": {**raw, "url": url, "tier": tier}}
+            h = local_reader.health(tried)
+            return {**h, "share_corrections": share_corrections.state(tried, h)}
         return await anyio.to_thread.run_sync(check)
 
     async def reader_plan(request, body):
