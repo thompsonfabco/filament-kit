@@ -41,6 +41,7 @@ from starlette.routing import Route
 from . import library as library_mod
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
+from .web.errors import Problem as PresetProblem
 
 log = logging.getLogger(__name__)
 
@@ -539,6 +540,27 @@ def restore_deleted(device, what: str) -> dict:
     return {"ok": True}
 
 
+def _phone_field(field: str, check, body: dict, *key_and_required):
+    """`check(body, ...)` for a phone route, a refusal carrying the `field` the app shows it on."""
+    try:
+        return check(body, *key_and_required)
+    except ProfileError as e:
+        raise ProfileError(e.status, e.code, e.message, **{"field": field, **e.extra}) from None
+
+
+def _problem_field(message: str) -> str | None:
+    """The request field a `web.presets` refusal is about (it sets none; the web routes keep their replies)."""
+    if message.startswith(("name ", "line ")):
+        return "name"
+    if message.startswith("vendor "):
+        return "vendor"
+    if message.startswith(("bs_template ", "orca_parent ")):
+        return "parent"
+    if message.startswith(("filament", "no Spoolman filament")):
+        return "ids"
+    return None
+
+
 def web_routes(authed, sm) -> list[Route]:
     """The MCP tools' and phone web app's preset writes, as the web unit sends them through its kit token:
     `web.presets` runs here, in the kit (the owner of profiles/), so the web unit only reads that folder."""
@@ -588,12 +610,27 @@ def web_routes(authed, sm) -> list[Route]:
     @authed
     async def phone_line_new(request: Request):
         """`POST /api/profiles/lines` {name, vendor, ids, bs_template, orca_parent?}: create a line and put the
-        filaments in it (as `web/line_new`); the reply is that route's (the line, `notes`, `output`)."""
+        filaments in it (as `web/line_new`); the reply is that route's (the line, `notes`, `output`). A refusal is
+        400 `bad_request` with `message`, and `field` ("name", "vendor", "parent" or "ids") when it is about one; an
+        unknown parent keeps its code `unknown_parent` and gains `field: "parent"`."""
         body = await _json(request)
-        args = (_text_field(body, "name"), _text_field(body, "vendor"), _ids(body),
-                _text_field(body, "orca_parent", False), _text_field(body, "bs_template"))
-        return JSONResponse(await run_in_threadpool(
-            _audit, "line new", request.state.device, lambda: presets.add_line(sm, *args)))
+        args = (_phone_field("name", _text_field, body, "name"), _phone_field("vendor", _text_field, body, "vendor"),
+                _phone_field("ids", _ids, body), _phone_field("orca_parent", _text_field, body, "orca_parent", False),
+                _phone_field("parent", _text_field, body, "bs_template"))
+
+        def run() -> dict:
+            try:
+                return presets.add_line(sm, *args)
+            except ProfileError as e:
+                if e.code != "unknown_parent":
+                    raise
+                raise ProfileError(e.status, e.code, e.message, **{"field": "parent", **e.extra}) from None
+            except PresetProblem as e:
+                field = _problem_field(str(e))
+                if field is None:
+                    raise
+                raise ProfileError(400, "bad_request", str(e), field=field) from None
+        return JSONResponse(await run_in_threadpool(_audit, "line new", request.state.device, run))
 
     @authed
     async def phone_line_add(request: Request):

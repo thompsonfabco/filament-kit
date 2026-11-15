@@ -107,3 +107,43 @@ def test_the_web_token_and_the_web_routes_are_unchanged(app):
     assert c.post("/api/profiles/web/generate", headers=web, json={}).status_code == 200      # still the web unit's
     assert c.post("/api/profiles/web/generate", headers=h, json={}).status_code == 403        # and not a phone's
     assert c.get("/api/profiles/lines", headers=h).status_code == 200                         # the list route kept
+
+
+def _new(**kw):
+    return {"name": "SUNLU Silk", "vendor": "SUNLU", "ids": [5], "bs_template": "Generic PLA", **kw}
+
+
+def test_a_refused_new_line_names_its_field(app):
+    c, h, sm = app
+    assert c.post("/api/profiles/lines", headers=h, json=_new()).status_code == 200
+    cases = [(_new(ids=[3]), "name"),                              # the line exists already
+             (_new(name="Bad@Name"), "name"),
+             (_new(name=" "), "name"),
+             (_new(vendor=""), "vendor"),
+             (_new(bs_template=""), "parent"),
+             (_new(ids=["x"]), "ids"),
+             (_new(name="SUNLU Other", ids=[404]), "ids")]
+    for body, field in cases:
+        r = c.post("/api/profiles/lines", headers=h, json=body)
+        assert r.status_code == 400 and r.json()["error"] == "bad_request", (body, r.text)
+        assert r.json()["field"] == field and r.json()["message"], (body, r.text)
+
+
+def test_an_unknown_parent_names_the_parent_field(app):
+    c, h, sm = app
+    TB.synced(sm)                                                   # a system store: the parent is checked
+    r = c.post("/api/profiles/lines", headers=h, json=_new(bs_template="No such preset"))
+    assert r.status_code == 400 and r.json()["error"] == "unknown_parent" and r.json()["field"] == "parent"
+    assert lines_mod.load() == {}
+
+
+def test_the_web_routes_still_send_no_field(app):
+    c, h, sm = app
+    web = {"Authorization": "Bearer " + pairing.redeem_code(
+        pairing.issue(slots.INTAKE_DEVICE, role=web_access.WEB_ROLE).code)}
+    body = {"name": "SUNLU Silk", "vendor": "SUNLU", "ids": [5], "bs_template": "Generic PLA"}
+    assert c.post("/api/profiles/web/line_new", headers=web, json=body).status_code == 200
+    r = c.post("/api/profiles/web/line_new", headers=web, json={**body, "ids": [3]})     # exists already
+    assert r.status_code == 400 and "field" not in r.json(), r.text
+    r = c.post("/api/profiles/web/line_new", headers=web, json={**body, "name": "SUNLU Z", "bs_template": ""})
+    assert r.status_code == 400 and "field" not in r.json(), r.text
