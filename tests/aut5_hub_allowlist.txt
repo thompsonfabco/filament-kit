@@ -13,19 +13,6 @@
 #devices | hit area under 44 x 44 | div > section.card > div.row > button.btn--primary | 4 | Devices (today's markup); removed by S2.9
 #devices | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 14 | Devices (today's markup); removed by S2.9
 #devices | hit area under 44 x 44 | div > section.card > div.row > input | 2 | Devices (today's markup); removed by S2.9
-#settings | field attribute differs from 07 9.1 | div > div.row > label > input | 12 | Settings (today's markup); removed by S2.19
-#settings | field without a label | div > div > div.row > input | 4 | Settings (today's markup); removed by S2.19
-#settings | field without a label | div > section.card > div.row > input | 24 | Settings (today's markup); removed by S2.19
-#settings | field without a label | section.card > div > div.row > input | 4 | Settings (today's markup); removed by S2.19
-#settings | field without a label | section.page > div > section.card > textarea | 4 | Settings (today's markup); removed by S2.19
-#settings | hit area under 44 x 44 | div > div > div.row > button.secondary | 2 | Settings (today's markup); removed by S2.19
-#settings | hit area under 44 x 44 | div > div > div.row > input | 2 | Settings (today's markup); removed by S2.19
-#settings | hit area under 44 x 44 | div > section.card > div.row > button.btn--primary | 12 | Settings (today's markup); removed by S2.19
-#settings | hit area under 44 x 44 | div > section.card > div.row > button.secondary | 6 | Settings (today's markup); removed by S2.19
-#settings | hit area under 44 x 44 | div > section.card > div.row > input | 12 | Settings (today's markup); removed by S2.19
-#settings | hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 2 | Settings (today's markup); removed by S2.19
-#settings | hit area under 44 x 44 | section.card > div > div.row > button.secondary | 24 | Settings (today's markup); removed by S2.19
-#settings | hit area under 44 x 44 | section.card > div > div.row > input | 2 | Settings (today's markup); removed by S2.19
 #flash | field without a label | section.card > div > div.row > input | 16 | Flash a device (today's markup); removed by S2.16
 #flash | hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 4 | Flash a device (today's markup); removed by S2.16
 #flash | hit area under 44 x 44 | section.card > div > div.row > button.secondary | 4 | Flash a device (today's markup); removed by S2.16

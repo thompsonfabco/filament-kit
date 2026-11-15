@@ -260,3 +260,59 @@ dialog > .detail .detail__foot { margin-top: var(--s2); }
 .printers-addon__bar .code__caption { margin-right: auto; min-width: 0; overflow-wrap: anywhere; }
 .printers-addon .code__text { max-height: calc(var(--s7) * 8); }
 @media (min-width: 1025px) { .printers-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Settings (S2.19): the sub-navigation beside the groups; tablet chips; on a phone the list of groups, then one group */
+.settings { display: grid; grid-template-columns: calc(var(--s7) * 4 + var(--s1) * 2) minmax(0, 1fr); gap: var(--s4) var(--s5); align-items: start; }
+.settings__main, .settings__groups { display: grid; gap: var(--s4); min-width: 0; }
+.settings__group { scroll-margin-top: calc(var(--top) + var(--s5)); min-width: 0; }
+.settings .subnav__list { margin: 0; padding: 0; }
+.settings__list, .settings__back { display: none; }
+.settings__list { list-style: none; margin: 0; padding: 0; }
+.settings__badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); margin-left: auto; }
+.settings__badge { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s1); font-size: var(--fs-s); color: var(--muted); }
+.settings__heading { margin: var(--s2) 0 0; padding-top: var(--s3); border-top: var(--hairline) solid var(--border); font-size: var(--fs-s); font-weight: var(--fw-label);
+                     color: var(--muted); }
+.settings__choice, .settings__reader, .settings__remote, .settings__summary { display: grid; gap: var(--s2); min-width: 0; }
+.settings__keyrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); }
+.settings__keyrow > .field__label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin: 0; }
+.settings__entry { display: grid; gap: var(--s2); }
+.settings__withbtn { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s2); align-items: start; }
+.settings__withbtn > .btn { margin-top: var(--s5); }
+.settings__lines { margin: 0; padding: 0; list-style: none; font-size: var(--fs-s); color: var(--muted); }
+.settings .group__body .check { min-width: 0; }
+.settings .group--flat { border: 0; background: none; }
+.settings .group--flat .group__body { padding-left: 0; padding-right: 0; }
+.settings .group--flat .group__foot { padding-left: 0; padding-right: 0; border-radius: var(--r); }
+.settings .coll--backups { grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) max-content max-content; }
+.settings .group__foot > .result { min-width: 0; }
+.settings .steps { margin: 0; padding: 0; }
+.settings .steps__step .progress { max-width: calc(var(--s7) * 5); }
+.settings__row { display: flex; align-items: center; gap: var(--s3); min-height: var(--s7); padding: var(--s2) var(--s3); border: var(--hairline) solid var(--border);
+                 border-radius: var(--r); background: var(--surface); color: var(--text); text-decoration: none; }
+.settings__row .icon { flex: none; color: var(--muted); }
+.settings__name { flex: 0 0 auto; font-weight: var(--fw-title); }
+.settings__state { flex: 1 1 auto; min-width: 0; text-align: right; color: var(--muted); font-size: var(--fs-s); overflow-wrap: anywhere; }
+.settings__row:hover { background: var(--surface-2); }
+.settings__back .icon { transform: rotate(180deg); }
+.subnav__link[aria-current="true"] { color: var(--text); }
+/* tablet: the groups become chips under the title, wrapping onto a second line */
+@media (max-width: 1024px) {
+  .settings { grid-template-columns: minmax(0, 1fr); }
+  .settings .subnav { position: sticky; top: calc(var(--top) + env(safe-area-inset-top)); z-index: 5; width: auto; padding: var(--s2) 0; background: var(--bg);
+                      border-bottom: var(--hairline) solid var(--border); }
+  .settings .subnav__list { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2); }
+  .settings .subnav__link { border: var(--hairline) solid var(--border); }
+  .settings .subnav__link[aria-current="true"] { box-shadow: inset 0 calc(var(--hairline) * -2) 0 var(--accent-text); }
+}
+@media (max-width: 600px) {
+  .settings .subnav { display: none; }
+  .settings__list { display: grid; gap: var(--s2); }
+  .settings:not([data-open]) .settings__main { display: none; }
+  .settings[data-open] .settings__list { display: none; }
+  .settings[data-open] .settings__back { display: inline-flex; justify-self: start; }
+  .settings__group:not([data-shown]) { display: none; }
+  .settings__withbtn { grid-template-columns: minmax(0, 1fr); }
+  .settings__withbtn > .btn { margin-top: 0; justify-self: start; }
+  /* the Save stays at the bottom, above the bottom bar, while the group has unsaved changes */
+  .settings .group[data-state="dirty"] > .group__foot { position: sticky; bottom: calc(var(--tab) + env(safe-area-inset-bottom)); z-index: 4; border-top: var(--hairline) solid var(--border-strong); }
+}

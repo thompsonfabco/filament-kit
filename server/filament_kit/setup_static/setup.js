@@ -305,7 +305,7 @@ const TABS = {
   devices: ["nav_devices", "devices", () => [pairCard, stationAsksCard, webAppCard, readersCard, trustCard]],
   presets: ["nav_slicer_presets", "presets", () => [presetsTab]],
   features: ["nav_features", "features", () => [modesCard, modulesCard, applyCard]],
-  settings: ["nav_settings", "settings", () => [generalCard, readerCard, backupCard, keyCard, passphraseCard, tokenCard, libraryCard, addressCard, remoteCard]],
+  settings: ["nav_settings", "settings", () => [settingsTab]],
   flash: ["nav_flash_device", "flash", () => [flashTab]],
   updates: ["nav_updates", "updates", () => [updatesTab]],
   logs: ["nav_logs", "logs", () => [logsTab]],
@@ -313,6 +313,8 @@ const TABS = {
 const GROUPS = [["everyday", "nav_everyday", 0, 5], ["system", "nav_system", 5, 10]];
 const BAR = new Set(["overview", "printers", "recent", "settings"]);   // the phone bottom bar (02 2.4); the rest are in More
 const MOVED = { modules: "features", intake: "recent" };              // the tabs' old addresses
+// the document title: the section's name, and a place inside it (a Settings group) first
+const documentTitle = () => { const n = SW.t(TABS[tabNow()][0]), p = tabNow() === "settings" ? settingsGroupName() : ""; return p ? p + " · " + n : n; };
 const tabNow = () => { const t = location.hash.slice(1).split(/[/?]/)[0]; return Object.hasOwn(TABS, t) ? t : "overview"; };
 
 // draws every region of the section; drawn again in the same section (a job ended, the lock changed), what is typed
@@ -437,7 +439,7 @@ document.addEventListener("DOMContentLoaded", () => {
   app.replaceWith(skip, h("div", { class: "shell" }, topBar(), navigation(), main), hubJobs().strip,
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   pageTitle.textContent = SW.t(TABS[tabNow()][0]);
-  shellView = SW.shell({ hub: document.title, home: "overview", titleOf: () => SW.t(TABS[tabNow()][0]), onSection: () => {
+  shellView = SW.shell({ hub: document.title, home: "overview", titleOf: documentTitle, onSection: () => {
     settleAddress();
     window.scrollTo(0, 0);
     if (S) render(); else pageTitle.textContent = SW.t(TABS[tabNow()][0]);
