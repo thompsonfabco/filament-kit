@@ -267,8 +267,9 @@ def test_wrapper_runs_web_passphrase_as_root():
     text = _read("install/filament-kit-cli.sh")
     assert re.search(r'^if \[ "\$\{1:-\}" = web \] && \[ "\$\{2:-\}" = passphrase \]; then\s*$', text, re.M)
     i = text.index('= passphrase ]')
-    assert 'exec "$BIN" "$@"' in text[i:i + 120]
-    assert i < text.index("runuser")
+    assert 'run_as_root "$@"' in text[i:i + 120]  # run_as_root is `exec "$BIN"` with the leading switches kept
+    assert 'run_as_root() { exec "$BIN" ' in text
+    assert i < text.index('if [ "$(id -u)" -eq 0 ]')  # before any drop to the service user
 
 
 def test_uninstall_uses_modules_units_and_cleans_station():
