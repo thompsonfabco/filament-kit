@@ -13,6 +13,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -72,6 +73,12 @@ class AddPhotoViewerFollowsTest {
         rule.waitForIdle()
     }
 
+    /** The photo is read and decoded off the UI thread, which waitForIdle does not wait for: wait for it to finish. */
+    private fun awaitPhotoLoaded() {
+        rule.waitForIdle()
+        rule.waitUntil { rule.onAllNodesWithText("Loading photo…").fetchSemanticsNodes().isEmpty() }
+    }
+
     @Test fun removingAnEarlierPhotoKeepsTheShownPhotoAndItsCounter() {
         val vm = show()
         rule.onNodeWithContentDescription("Photo 2").tapThumbnail()
@@ -86,12 +93,12 @@ class AddPhotoViewerFollowsTest {
     @Test fun tryAgainLoadsTheShownPhotoAfterAnEarlierOneIsRemoved() {
         val vm = show()
         rule.onNodeWithContentDescription("Photo 2").tapThumbnail()
-        rule.waitForIdle()
+        awaitPhotoLoaded()
         rule.onNodeWithText("The photo could not be loaded.").assertExists()
         rule.runOnUiThread { vm.removePhoto(0) }
         rule.waitForIdle()
         rule.onNodeWithText("Try again").performClick()
-        rule.waitForIdle()
+        awaitPhotoLoaded()
         // the shown photo is still the unreadable one; the readable photo that moved into its slot is not loaded in its place
         rule.onNodeWithText("The photo could not be loaded.").assertExists()
         rule.onNodeWithText("Photo 1 of 2").assertExists()
