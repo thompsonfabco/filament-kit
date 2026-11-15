@@ -34,7 +34,7 @@ def routes(page) -> list[tuple]:
         try:
             return fn(*a, **k)
         except intake_history.HistoryError as e:
-            raise Refused(e.status, str(e)) from None
+            raise Refused(e.status, str(e), reason=e.code) from None
         except intake.ReadError as e:
             raise Refused(502, str(e)) from None
         except intake.CapReached as e:
