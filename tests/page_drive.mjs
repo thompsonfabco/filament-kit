@@ -6,9 +6,10 @@
 //
 //   node tests/page_drive.mjs --url http://127.0.0.1:8799/setup --script tests/hub_presets_drive.js [--width 1280] [--browser <path>]
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PID_FILE, endTreeWhileRunning, sweepOldProfiles } from "./aut5_run.mjs";      // one process-tree cleanup for both drivers
 
 process.exitCode = 2;      // anything that ends the run early is a failed run, never a pass
 
@@ -33,15 +34,19 @@ async function main() {
   const exe = findBrowser();
   if (!exe) { console.error("AUT-5: no Chrome, Edge or Chromium found (set AUT5_BROWSER)"); return 2; }
   const script = readFileSync(args.script, "utf8");
+  sweepOldProfiles();
   const profile = mkdtempSync(join(tmpdir(), "aut5-"));
   const linux = process.platform === "linux" ? ["--no-sandbox", "--disable-dev-shm-usage"] : [];
   const proc = spawn(exe, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run",
-    "--no-default-browser-check", "--disable-extensions", "--disable-gpu", ...linux, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+    "--no-default-browser-check", "--disable-extensions", "--disable-gpu", ...linux, "about:blank"],
+    { stdio: ["ignore", "ignore", "pipe"], detached: process.platform !== "win32" });      // detached: its own process group
+  try { writeFileSync(join(profile, PID_FILE), JSON.stringify({ browser: proc.pid, runner: process.pid })); } catch { /* a later sweep falls back to age */ }
   let browserErr = "", browserExit = null;
   proc.stderr.on("data", (d) => { browserErr = (browserErr + d).slice(-2000); });
   proc.on("exit", (code, signal) => { browserExit = signal || code; });
   proc.on("error", (e) => { browserExit = e.code || e.message; });
   const cleanup = () => {
+    endTreeWhileRunning(browserExit, proc.pid);
     try { proc.kill(); } catch { /* gone */ }
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
   };

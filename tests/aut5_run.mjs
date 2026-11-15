@@ -27,8 +27,8 @@
 // browser found, the browser closed, a call timed out); 3: a browser was found but could not start headless here
 // (its last error lines are printed). The browser is driven over the DevTools protocol with Node's own
 // WebSocket (Node 22 or later): no npm package.
-import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -110,12 +110,58 @@ function findBrowser() {
   return [...win, ...nix].find((p) => existsSync(p));
 }
 
-// profiles of earlier runs that ended without cleaning up (a killed run): ours by prefix, older than an hour
-function sweepOldProfiles() {
+// The browser is several processes (renderers, GPU, utility), and a killed runner never runs its cleanup. So the runner
+// records its own pid and the browser's in the profile folder (PID_FILE), ends the browser's whole process tree by that
+// pid, and a later run ends what a dead runner left, by the profile folder in the command line (never by image name).
+export const PID_FILE = "aut5-runner.pids";
+
+// [{ pid, cmd }] of the processes whose command line mentions "aut5" (the runners and the browsers on our profiles)
+export function aut5Processes() {
+  const win = process.platform === "win32";
+  const r = win
+    ? spawnSync("powershell", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*aut5*' } | ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"], { encoding: "utf8" })
+    : spawnSync("ps", ["-eo", "pid=,args="], { encoding: "utf8" });
+  const rows = [];
+  for (const line of String(r.stdout || "").split(/\r?\n/)) {
+    const m = (win ? /^(\d+)\t(.*)$/ : /^\s*(\d+)\s+(.*)$/).exec(line);
+    if (m && m[2].includes("aut5")) rows.push({ pid: Number(m[1]), cmd: m[2] });
+  }
+  return rows;
+}
+
+// ends the process and everything it started: Windows by taskkill /T; elsewhere the browser was spawned as the leader of its own group
+export function endTree(pid) {
+  if (!pid) return;
+  if (process.platform === "win32") { spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" }); return; }
+  try { process.kill(-pid, "SIGKILL"); } catch { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
+}
+
+// the cleanup's call: only while the browser has not exited (its pid may be another process's by then); returns whether it ended the tree
+export function endTreeWhileRunning(browserExit, pid, end = endTree) {
+  if (browserExit !== null) return false;
+  end(pid);
+  return true;
+}
+
+// profile folders of earlier runs: a folder whose runner is gone has its browser tree ended (only processes whose
+// command line contains that folder) and is removed; any other folder of ours is removed when older than an hour
+export function sweepOldProfiles() {
   const cutoff = Date.now() - 3600_000;
+  let procs = null;
   for (const name of readdirSync(tmpdir())) {
     if (!name.startsWith(PROFILE_PREFIX)) continue;
     const dir = join(tmpdir(), name);
+    let rec = null;
+    try { rec = JSON.parse(readFileSync(join(dir, PID_FILE), "utf8")); } catch { /* no record: an older run, or a page_drive one */ }
+    if (rec) {
+      procs ||= aut5Processes();
+      if (procs.some((p) => p.pid === rec.runner && /aut5_run|page_drive/.test(p.cmd))) continue;      // its runner still works
+      const mine = procs.filter((p) => p.cmd.includes(dir));
+      for (const p of mine.filter((q) => q.pid === rec.browser)) endTree(p.pid);
+      for (const p of mine) endTree(p.pid);      // what is left of a browser whose first process is gone
+      try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* in use */ }
+      continue;
+    }
     try { if (statSync(dir).mtimeMs < cutoff) rmSync(dir, { recursive: true, force: true }); } catch { /* in use */ }
   }
 }
@@ -164,13 +210,15 @@ async function main() {
   const linux = process.platform === "linux" ? ["--no-sandbox", "--disable-dev-shm-usage"] : [];
   const proc = spawn(exe, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run",
     "--no-default-browser-check", "--disable-extensions", "--disable-gpu", ...linux, "about:blank"],
-    { stdio: ["ignore", "ignore", "pipe"] });
+    { stdio: ["ignore", "ignore", "pipe"], detached: process.platform !== "win32" });      // detached: its own process group
+  try { writeFileSync(join(profile, PID_FILE), JSON.stringify({ browser: proc.pid, runner: process.pid })); } catch { /* a later sweep falls back to age */ }
   let browserErr = "";
   proc.stderr.on("data", (d) => { browserErr = (browserErr + d).slice(-2000); });
   let browserExit = null;
   proc.on("exit", (code, signal) => { browserExit = signal || code; });
   proc.on("error", (e) => { browserExit = e.code || e.message; });     // could not be started at all
   const cleanup = () => {
+    endTreeWhileRunning(browserExit, proc.pid);
     try { proc.kill(); } catch { /* gone */ }
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
   };
