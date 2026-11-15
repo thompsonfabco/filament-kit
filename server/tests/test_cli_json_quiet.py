@@ -277,7 +277,7 @@ def test_a_modules_question_is_not_asked_under_json_at_a_terminal(capsys, monkey
     before = config.load()
     rc, out, err = run(capsys, ["modules", "disable", "server", "--json"])
     got = doc(out)
-    assert rc == 1 and got["ok"] is False and "depend on server" in got["error"] and "[y/N]" not in out + err
+    assert rc == 2 and got["ok"] is False and "needs a yes" in got["error"] and "[y/N]" not in out + err
     assert config.load() == before
 
 
@@ -288,7 +288,7 @@ def test_a_modules_question_is_not_asked_under_json_at_a_terminal(capsys, monkey
     before = config.load()
     rc, out, err = run(capsys, ["modules", "disable", "server", "--json"])
     got = doc(out)
-    assert rc == 1 and got["ok"] is False and "depend on server" in got["error"] and "[y/N]" not in out + err
+    assert rc == 2 and got["ok"] is False and "needs a yes" in got["error"] and "[y/N]" not in out + err
     assert config.load() == before
 
 

@@ -2009,10 +2009,19 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> i
             return 1
     notes: list[str] = []
     tty = apply._tty() and not output.json_mode()         # --json never asks
-    err = _change_module(cfg, name, want_on, confirm=None if output.json_mode() else _tty_confirm, server=server,
+    asked: list[str] = []
+
+    def _json_confirm(text: str) -> bool:       # --json: a question stops the command with exit 2 (06 6.8)
+        asked.append(text)
+        return False
+
+    err = _change_module(cfg, name, want_on, confirm=_json_confirm if output.json_mode() else _tty_confirm, server=server,
                          notes=notes,
                          ask_address=_ask_station_server if tty else None,
                          ask_settings=_ask_module_settings if tty else None)
+    if asked:
+        return output.no_terminal(f"turning {name} {'on' if want_on else 'off'} with the modules it "
+                                  f"{'needs' if want_on else 'carries'}")
     if err:
         _err_line(err)
         return 1
