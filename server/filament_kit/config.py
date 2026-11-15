@@ -109,7 +109,17 @@ DEFAULTS: dict = {
     # the local label reader (local_intake module): its address, here or on another machine, and its tier
     "local_intake": {"url": "http://127.0.0.1:7915", "tier": "auto"},
     "web_instructions": None,
+    "appearance": {"theme": "console"},     # the theme for devices that have not chosen one (design 01 6.2)
 }
+
+LOOKS = ("console", "workbench", "palette", "panes")    # the four themes, Console first (design 01 section 6)
+
+
+def look(cfg: dict) -> str:
+    """The Hub's default theme: `appearance.theme`, Console when it is missing or not one of the four."""
+    a = cfg.get("appearance")
+    v = a.get("theme") if isinstance(a, dict) else None
+    return v if v in LOOKS else "console"
 
 
 def _merge(base: dict, over: dict) -> dict:

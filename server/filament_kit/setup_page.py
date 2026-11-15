@@ -496,10 +496,16 @@ class SetupPage:
         if not self._host_ok(request):
             return HTMLResponse(f"<!doctype html><p>{html.escape(bad_host_text())}</p>",
                                 403, headers=HEADERS)
-        name = html.escape(config.load()["server_name"])
+        cfg = config.load()
+        name = html.escape(cfg["server_name"])
+        from .web.intake_app import _colours
+        look = config.look(cfg)
+        colours = _colours(self.shared)[look]
         return HTMLResponse(
-            "<!doctype html><html lang=en><meta charset=utf-8>"
+            f"<!doctype html><html lang=en data-look={look}><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
+            f"<meta name=theme-color content='{colours['light'][0]}' media='(prefers-color-scheme: light)'>"
+            f"<meta name=theme-color content='{colours['dark'][0]}' media='(prefers-color-scheme: dark)'>"
             "<script src='/setup/shared/theme-init.js'></script><script defer src='/setup/shared/strings.js'></script>"
             "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
             "<script defer src='/setup/shared/components-jobs.js'></script>"
