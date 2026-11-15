@@ -108,7 +108,7 @@ def _station_rows(url: str) -> Iterator[Row]:
         state = cli.StationClient(url, backoff=0).state()
     except cli.StationUnreachable:
         yield Row(FAIL, f"Weigh Station not answering at {url}",
-                  "check the Weigh Station machine: " + output.cmd("sudo systemctl status filament-kit-station")
+                  "check the Weigh Station machine: sudo systemctl status filament-kit-station"
                   + f"  (url {url})")
         return
     yield Row(OK, f"Weigh Station answering at {url}")
@@ -173,7 +173,7 @@ def _library_rows() -> Iterator[Row]:
             source = f"updated {time.strftime('%Y-%m-%d', time.localtime(at))}"
     n = st["local"]
     if source == "none":
-        yield Row(INFO, "Filament Catalog not downloaded (" + output.cmd("filament-kit library update")
+        yield Row(INFO, "Filament Catalog not downloaded (filament-kit library update"
                   + f"), {n} local addition{'' if n == 1 else 's'}")
     else:
         yield Row(INFO, f"Filament Catalog version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
@@ -204,14 +204,14 @@ def _profile_rows() -> Iterator[Row]:
         st = builds.status()
     except Exception as e:  # noqa: BLE001
         yield Row(FAIL, f"Slicer presets: status could not be read ({e.__class__.__name__}: {e})",
-                  output.cmd("sudo journalctl -u filament-kit-build -n 50"))
+                  "sudo journalctl -u filament-kit-build -n 50")
         return
     b = st.get("build")
     error = cli._attempt_failed(st)
     if error is not None:
         yield Row(FAIL, f"Slicer presets: last build failed: {error}; "
                         + (f"using build {b['stamp']}" if b else "no good build yet"),
-                  output.cmd("sudo journalctl -u filament-kit-build -n 50"))
+                  "sudo journalctl -u filament-kit-build -n 50")
     elif b:
         yield Row(OK, f"Slicer presets: build {b['stamp']}, {st.get('presets', 0)} Slicer presets for "
                       f"{st.get('lines', 0)} lines ({b.get('problems', 0)} problems)")
@@ -269,9 +269,9 @@ def _key_lines(client_factory, live_key: bool) -> Iterator[Row]:
     if ok:
         yield Row(OK, text)
     elif text.startswith("Anthropic key missing"):
-        yield Row(FAIL, text, "run: " + output.cmd("sudo filament-kit config") + "  (option 4)")
+        yield Row(FAIL, text, "run: sudo filament-kit config  (option 4)")
     else:
-        yield Row(FAIL, text, "run: " + output.cmd("sudo filament-kit config")
+        yield Row(FAIL, text, "run: sudo filament-kit config"
                   + "  (option 4) or check internet access")
 
 
@@ -294,12 +294,12 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
                 active = r.stdout.strip() == "active"
             except (OSError, subprocess.SubprocessError):
                 active = False
-            yield Row(OK if active else FAIL, f"service {svc} active", output.cmd(f"sudo systemctl start {svc}"),
+            yield Row(OK if active else FAIL, f"service {svc} active", f"sudo systemctl start {svc}",
                       group="Hub")
         if "server" in on:
             ok, url = cli._api_answers(cfg["port"])
             yield Row(OK if ok else FAIL, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
-                      output.cmd("sudo journalctl -u filament-kit -n 50"), group="Hub")
+                      "sudo journalctl -u filament-kit -n 50", group="Hub")
 
     if "server" in on or "spoolman" in on:
         try:
@@ -307,7 +307,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
             yield Row(OK, f"Spoolman reachable at {cfg['spoolman_url']} (v{version})", group="Spoolman")
         except cli.SpoolmanError as e:
             yield Row(FAIL, f"Spoolman not reachable at {cfg['spoolman_url']}: {e}",
-                      output.cmd("sudo systemctl start spoolman") if "spoolman" in on
+                      "sudo systemctl start spoolman" if "spoolman" in on
                       else "check that the remote Spoolman is running and spoolman_url is right",
                       group="Spoolman")
 
@@ -322,7 +322,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
             yield Row(OK, f"certificate present, fingerprint {cli.pairing.fingerprint(cert.read_bytes())}",
                       group="Hub")
         else:
-            yield Row(FAIL, f"certificate missing ({cert})", "run: " + output.cmd("sudo filament-kit cert"),
+            yield Row(FAIL, f"certificate missing ({cert})", "run: sudo filament-kit cert",
                       group="Hub")
 
     station_url = (cfg.get("station") or {}).get("url")
@@ -362,8 +362,8 @@ def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
             yield Row(INFO, f"local label reader: last read {h['last_read_at']}")
     else:
         yield Row(FAIL, f"local label reader at {h['url']}: {h['error']}",
-                  "check that it runs (on its machine: " + output.cmd("systemctl status filament-kit-vision")
-                  + "), or set its address: " + output.cmd("filament-kit config") + ", 9) Label reader")
+                  "check that it runs (on its machine: systemctl status filament-kit-vision"
+                  + "), or set its address: filament-kit config, 9) Label reader")
     order = intake.reader_order(cfg)
     names = {"local": "the local reader", "cloud": "Claude"}
     yield Row(INFO, "label reading: " + (", then ".join(names[r] for r in order) if order else "off"))
@@ -375,7 +375,7 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
     cfg = cfg if cfg is not None else config.load()
     web = cfg.get("web") or {}
     on = modules.enabled(cfg)
-    yield Row(OK if "web" in on else FAIL, "Web access is " + ("on" if "web" in on else "off"), output.cmd("sudo filament-kit modules enable web"))
+    yield Row(OK if "web" in on else FAIL, "Web access is " + ("on" if "web" in on else "off"), "sudo filament-kit modules enable web")
     public = str(web.get("public_url") or "").rstrip("/")
     yield Row(OK if public.startswith("https://") else FAIL, f"public URL {public or '(not set)'}",
               "set web.public_url in config.json (e.g. https://mcp.example.com/filament)")
@@ -385,12 +385,12 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
         yield Row(OK, "sign-in passphrase is set")
     else:   # only Claude's connector signs in with it: not a failure for someone using the phone web app alone
         yield Row(INFO, "sign-in passphrase not set: the Claude connector cannot sign in until "
-                        + output.cmd("sudo filament-kit web passphrase"))
+                        + "sudo filament-kit web passphrase")
     port = int(web.get("port") or config.DEFAULTS["web"]["port"])
     up, why = cli._web_health(port)
     yield Row(OK if up else FAIL, f"web unit answers on 127.0.0.1:{port}" + ("" if up else f" ({why})"),
-              output.cmd("sudo systemctl restart filament-kit-web") + "; "
-              + output.cmd("journalctl -u filament-kit-web"))
+              "sudo systemctl restart filament-kit-web; "
+              + "journalctl -u filament-kit-web")
     if "remote" in on:
         warn = remote.certificate_warning(remote.served_certificate())
         if warn:
@@ -425,7 +425,7 @@ def _fields_rows(cfg: dict) -> Iterator[Row]:
         return              # the row above already says Spoolman does not answer
     if missing:
         yield Row(FAIL, "Spoolman is missing Spoolwarden's extra fields: " + ", ".join(missing),
-                  output.cmd("sudo filament-kit ensure-fields"), action="ensure_fields", group="Spoolman")
+                  "sudo filament-kit ensure-fields", action="ensure_fields", group="Spoolman")
 
 
 def collect(cfg: dict | None = None, client_factory=None, station_pairing: str | None = None) -> list[Row]:

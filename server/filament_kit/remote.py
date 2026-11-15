@@ -141,9 +141,9 @@ def certificate_warning(info: dict | None, now: datetime.datetime | None = None)
         return None
     day = info["not_after"].strftime("%Y-%m-%d")
     kind = "self-signed certificate" if info["self_signed"] else "certificate"
-    fix = ("if it's the kit's placeholder, `sudo filament-kit modules apply` makes a new one, and the phone then asks you to "
+    fix = ("if it's the kit's placeholder, sudo filament-kit modules apply makes a new one, and the phone then asks you to "
            "accept it again; one you placed yourself is yours to replace"
-           if info["self_signed"] else "`sudo certbot renew`; see the remote section of the guide")
+           if info["self_signed"] else "sudo certbot renew; see the remote section of the guide")
     return (left.total_seconds() <= 0, f"the web address's {kind} {'ended' if left.total_seconds() <= 0 else 'ends'} "
                                        f"on {day}", fix)
 
@@ -237,11 +237,11 @@ def firewall_text(s: dict, resources: Path) -> str:
         f"  DNS      {host} must resolve to your public address (and, at home, to this machine)",
         "",
         "Port 80 is only for certbot: it binds :80 itself during the run (nginx steps aside meanwhile).",
-        "Open it, then run:  " + output.cmd("sudo filament-kit remote issue"),
+        "Open it, then run:  sudo filament-kit remote issue",
         "Until that succeeds, nginx serves a self-signed placeholder certificate.",
         "",
         "Optional hardening, save as /etc/systemd/system/nginx.service.d/filament-kit.conf",
-        "then run: " + output.cmd("sudo systemctl daemon-reload && sudo systemctl restart nginx"),
+        "then run: sudo systemctl daemon-reload && sudo systemctl restart nginx",
         "------------------------------------------------------------",
         sandbox_text(resources, s["lan"]).rstrip(),
         "------------------------------------------------------------",
@@ -273,7 +273,7 @@ def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
     cmd += ["--email", s["email"]] if s["email"] else ["--register-unsafely-without-email"]
     cmd += ["--pre-hook", f"{HOOK} pre", "--post-hook", f"{HOOK} post", "--deploy-hook", f"{HOOK} deploy"]
     output.out(f"certbot will bind port 80 on this machine now. The kit does not open it: make sure port 80 "
-               f"reaches this machine (run `filament-kit remote firewall` for the rules).\n"
+               f"reaches this machine (run filament-kit remote firewall for the rules).\n"
                f"nginx stops for the run and starts again after.")
     try:
         run(cmd)
@@ -292,7 +292,7 @@ def firewall(cfg: dict) -> int:
         return output.FAILED
     except OSError as e:
         output.error(f"cannot read the remote files ({e})",
-                     f"run the install command again: `{config.GET_COMMAND}` (they live in "
+                     f"run the install command again: {config.GET_COMMAND} (they live in "
                      "/opt/filament-kit/resources/remote)")
         return output.FAILED
     return 0

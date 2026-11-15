@@ -279,22 +279,22 @@ def test_wrap_never_cuts_a_word_and_keeps_one_too_long_whole_on_its_own_line(mon
                                                                             "       now"]
 
 
-def test_wrap_breaks_only_at_spaces_outside_backtick_spans():
+def test_wrap_breaks_only_at_spaces_outside_a_command():
     from filament_kit import output
-    text = ("this host has no pairing yet, and the next step cannot go on until it has one: run `sudo filament-kit "
-            "station pair` here, then run `sudo filament-kit status` again")
+    text = ("this host has no pairing yet, and the next step cannot go on until it has one: run sudo filament-kit "
+            "station pair here, then run sudo filament-kit status again")
     got = output.wrap(text, indent=5, first=0)
     assert len(got) > 1 and all(len(x) <= 79 for x in got)
     for line in got:
-        assert "`" not in line and chr(2) not in line      # the mark is never printed
+        assert "`" not in line and chr(2) not in line      # nothing is added to a command
     assert "sudo filament-kit station pair" in " ".join(got) and any("sudo filament-kit status" in x for x in got)
-    long_span = "run `" + "sudo filament-kit " * 6 + "end` now"
-    assert [x.strip() for x in output.wrap(long_span, indent=2)] == ["run", long_span[5:-5], "now"]
+    long_span = "run " + "sudo filament-kit " * 6 + "end now"
+    assert [x.strip() for x in output.wrap(long_span, indent=2)] == ["run", long_span[4:-4], "now"]
 
 
 def test_the_no_terminal_error_of_station_pair_keeps_its_command_whole(capsys):
     from filament_kit import output
-    output.error("`sudo filament-kit station pair` needs a terminal: it asks for the link and for you to compare the "
+    output.error("sudo filament-kit station pair needs a terminal: it asks for the link and for you to compare the "
                  "fingerprint. Nothing was saved.")
     err = capsys.readouterr().err
     check_width(err)
@@ -305,8 +305,8 @@ def test_the_no_terminal_error_of_station_pair_keeps_its_command_whole(capsys):
 def test_the_local_pair_error_keeps_both_its_commands_whole(capsys):
     from filament_kit import output
     output.error("--local pairs a station with the kit server on the same machine, and the server module is off "
-                 "here.\nfix: run `sudo filament-kit pair --station` on the kit server, then `sudo filament-kit station "
-                 "pair` here")              # the text of cli.py cmd_station_pair_local: its spans are mid-text
+                 "here.\nfix: run sudo filament-kit pair --station on the kit server, then sudo filament-kit station "
+                 "pair here")              # the text of cli.py cmd_station_pair_local: its spans are mid-text
     err = capsys.readouterr().err
     check_width(err)
     assert "`" not in err
@@ -736,7 +736,7 @@ def test_a_status_fix_that_is_a_command_is_not_split(monkeypatch):
     from filament_kit import output
     monkeypatch.setenv("COLUMNS", "40")
     lines = output.status_row("needs a look", "service filament-kit active",
-                              output.cmd("sudo systemctl start filament-kit"))
+                              "sudo systemctl start filament-kit")
     assert any("sudo systemctl start filament-kit" in x for x in lines), lines
 
 

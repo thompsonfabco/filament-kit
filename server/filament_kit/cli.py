@@ -127,7 +127,7 @@ def _station_server(cfg: dict) -> str:
 
 
 def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int:
-    cmd = output.cmd("sudo filament-kit pair" + (" --pc" if pc else " --station" if station else ""))
+    cmd = "sudo filament-kit pair" + (" --pc" if pc else " --station" if station else "")
     cfg = config.load()                 # unreadable: main() says to run it with sudo
     if "server" not in modules.enabled(cfg):
         # a station (or another machine without the server): no certificate here, and none is needed
@@ -147,7 +147,7 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
     if pc or station:
         # no QR scanner there: the link is pasted (printed by design, never logged)
         output.out("Link for filament-kit-sync (paste it when asked):" if pc else
-                   "Link for the intake station (on the station PC: " + output.cmd("sudo filament-kit station pair")
+                   "Link for the intake station (on the station PC: sudo filament-kit station pair"
                    + ", then paste it):")
         print(pr.qr)
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
@@ -166,7 +166,7 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
     print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "
           f"(in {max(0, int(pr.expires - time.time()) // 60)} min)")
     if station:
-        output.out(f"The link works for {pairing.TOKEN_TTL // 60} minutes: run `sudo filament-kit station pair` on the "
+        output.out(f"The link works for {pairing.TOKEN_TTL // 60} minutes: run sudo filament-kit station pair on the "
                    "station PC before then.")
     return 0
 
@@ -177,10 +177,10 @@ def cmd_station_pair(ask=input) -> int:
     from .station import server_api
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         return output.need_sudo(_sudo_command("sudo filament-kit station pair"))
-    no_terminal = ("`sudo filament-kit station pair` needs a terminal: it asks for the link and for you to "
+    no_terminal = ("sudo filament-kit station pair needs a terminal: it asks for the link and for you to "
                    "compare the fingerprint. Nothing was saved.")
     try:
-        text = ask("Paste the link from " + output.cmd("sudo filament-kit pair --station") + " on the server: ")
+        text = ask("Paste the link from sudo filament-kit pair --station on the server: ")
     except (EOFError, RuntimeError, OSError):  # `< /dev/null`; `<&-` is no stdin (RuntimeError) or a dead one (OSError)
         _err_line(no_terminal)
         return 1
@@ -194,7 +194,7 @@ def cmd_station_pair(ask=input) -> int:
         print("The server's certificate fingerprint:")
         print("  " + " ".join(seen[i:i + 4] for i in range(0, len(seen), 4)))
         try:
-            answer = ask("Does it match the one " + output.cmd("sudo filament-kit pair --station") + " showed? [y/N] ")
+            answer = ask("Does it match the one sudo filament-kit pair --station showed? [y/N] ")
         except (EOFError, RuntimeError, OSError):  # no answer is a no
             _err_line(no_terminal)
             return False
@@ -236,7 +236,7 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run) -> int:
             try:
                 answer = ask(f"Flash the intake panel firmware to {port}? [y/N] ")
             except (EOFError, RuntimeError, OSError):  # no terminal: no answer is a no
-                _err_line("`sudo filament-kit station flash-panel` needs a terminal to ask you. Nothing was "
+                _err_line("sudo filament-kit station flash-panel needs a terminal to ask you. Nothing was "
                           "flashed.")
                 return 1
             except KeyboardInterrupt:
@@ -279,8 +279,8 @@ def cmd_station_pair_local() -> int:
         return output.need_sudo(_sudo_command("sudo filament-kit station pair --local"))
     if "server" not in modules.enabled(config.load()):
         _err_line("--local pairs a station with the kit server on the same machine, and the server module is off "
-                  "here.\nfix: run `sudo filament-kit pair --station` on the kit server, then `sudo filament-kit station "
-                  "pair` here")
+                  "here.\nfix: run sudo filament-kit pair --station on the kit server, then sudo filament-kit station "
+                  "pair here")
         return 1
     try:
         result = server_api.pair_with_link(server_api.parse_link(pairing.issue(device_hint="station", scope="station").qr),
@@ -763,7 +763,7 @@ def cmd_intake(args) -> int:
             cfg = config.load()
             if not intake.reading_on(cfg):
                 _err_line("label reading (ai_intake or local_intake) is off on this server: use "
-                          + output.cmd("filament-kit intake edit"))
+                          + "filament-kit intake edit")
                 return 1
             p = intake_history.revise(sm, args.id, args.note, args.item)
             if p.get("reader"):
@@ -937,7 +937,7 @@ def _print_map_view(serial: str, v: dict, stopped: list) -> int:
         print(f"  note: {note}")
     if v.get("report_wanted"):
         output.out(f"  {v.get('report_why') or 'A printer report would help.'} To collect one: "
-                   + output.cmd(f"sudo filament-kit printer report {serial}"))
+                   + f"sudo filament-kit printer report {serial}")
     if stopped:
         print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "
               "mapping run restores it first.")
@@ -988,10 +988,10 @@ def _map_via_server(api, serial: str) -> int:
         _restore_signals(old)
     return _print_map_view(serial, v, stopped)
 NOT_CONNECTED = {
-    "wrong_code": "the printer refused its Access Code; enter it again (" + output.cmd("sudo filament-kit config")
+    "wrong_code": "the printer refused its Access Code; enter it again (sudo filament-kit config"
                   + ", Printers)",
     "cert_changed": "the printer's certificate changed; add it again with its Access Code ("
-                    + output.cmd("sudo filament-kit config") + ", Printers)",
+                    + "sudo filament-kit config, Printers)",
 }
 
 
@@ -1197,17 +1197,17 @@ def cmd_printer_map(serial: str, manager_factory, manual: bool = False) -> int:
     from .bridge.slottest import PrinterBusy
     p = registry.load().get(serial)
     if p is None or not p.configured:
-        _err_line(f"no printer {serial} is set up (see: `sudo filament-kit config`, Printers)")
+        _err_line(f"no printer {serial} is set up (see: sudo filament-kit config, Printers)")
         return output.USAGE
     if manual:
         api = _server_api()
         if api is None:     # the session lives in the server, shared with the other three interfaces
-            _err_line("map by loading filament needs the running kit server.\nfix: `sudo systemctl start filament-kit`")
+            _err_line("map by loading filament needs the running kit server.\nfix: sudo systemctl start filament-kit")
             return output.HUB_DOWN
         return _manual_map_via_server(api, serial)
     if p.family != "bambu":
         _err_line(f"{registry.display_name(p)} is a Klipper printer; Klipper printers are mapped by loading filament: "
-                  f"`filament-kit printer map --manual {serial}`")
+                  f"filament-kit printer map --manual {serial}")
         return 1
     print(f"Mapping the slots of {registry.display_name(p)}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
@@ -1323,7 +1323,7 @@ def cmd_printer_unpin(serial: str) -> int:
     try:
         code = secret_input.ask("Access Code: ").strip()
     except (EOFError, RuntimeError, OSError):      # no terminal to ask on
-        _err_line("`printer unpin` needs a terminal to ask for the Access Code; nothing changed")
+        _err_line("printer unpin needs a terminal to ask for the Access Code; nothing changed")
         return 1
     if not code:
         _err_line("trusting a new certificate needs the printer's Access Code; nothing changed")
@@ -1348,7 +1348,7 @@ def _request_rebuild(reason: str) -> None:
 def _library_line(st: dict) -> str:
     n = st["local"]
     if st["source"] == "none":
-        return ("library not downloaded (run: " + output.cmd("filament-kit library update") + f"), "
+        return ("library not downloaded (run: filament-kit library update" + f"), "
                 f"{n} local addition{'' if n == 1 else 's'}")
     return (f"library version {st['version']} ({st['source']}), "
             f"{n} local addition{'' if n == 1 else 's'}")
@@ -1396,7 +1396,7 @@ def cmd_library_update(scheduled: bool) -> int:
         return 1
     if r.held_from is not None:
         output.out(f"library version {r.version} kept: version {r.held_from} was rolled back and is the newest published; "
-                   "scheduled updates wait for a newer one (run: " + output.cmd("sudo filament-kit library update")
+                   "scheduled updates wait for a newer one (run: sudo filament-kit library update"
                    + " to install it anyway)")
         return 0
     if not r.changed:
@@ -1435,7 +1435,7 @@ def cmd_library_rollback() -> int:
     left = library.rolled_back_from()
     if left is not None:
         output.out(f"scheduled updates will skip version {left} until a newer one is published "
-                   "(run: " + output.cmd("sudo filament-kit library update") + " to install it anyway)")
+                   "(run: sudo filament-kit library update to install it anyway)")
     job.next("Asking for a preset build")
     _request_rebuild(f"library rolled back to version {v}")
     return 0
@@ -1484,7 +1484,7 @@ def cmd_profiles_build(sm_factory) -> int:
         return 0
     if not r.get("ok"):
         _err_line(f"build failed: {r.get('error')}; the last good build stays in use "
-                  f"(see: `sudo journalctl -u filament-kit-build -n 50`)")
+                  f"(see: sudo journalctl -u filament-kit-build -n 50)")
         return 1
     c = builds.current() or {}
     problems = r.get("problems") or []
@@ -1523,8 +1523,8 @@ def cmd_profiles_status() -> int:
               f"line{'' if up['lines'] == 1 else 's'}){acc}: presets already in your slicers differ from the "
               "generated ones and are never replaced on their own")
         if up["count"] > up.get("accepted", 0):
-            output.out("  see them: " + output.cmd("sudo filament-kit profiles apply-updates --all --dry-run")
-                       + "; apply: " + output.cmd("sudo filament-kit profiles apply-updates --line <id> | --all"))
+            output.out("  see them: sudo filament-kit profiles apply-updates --all --dry-run"
+                       + "; apply: sudo filament-kit profiles apply-updates --line <id> | --all")
     elif b:
         print("updates: none (presets already in your slicers are never replaced)")
     if up.get("yours"):
@@ -1591,7 +1591,7 @@ def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> in
         _err_line(str(e))
         return 1
     except KeyError:
-        _err_line(f"no line {line_id} (see: `sudo filament-kit profiles lines`)")
+        _err_line(f"no line {line_id} (see: sudo filament-kit profiles lines)")
         return output.USAGE
     except lines_mod.LineStoreError as e:
         _err_line(e.message)
@@ -1616,7 +1616,7 @@ def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool) -
         print("no build yet: nothing to update")
         return 0
     if not chosen:
-        output.out(f"no updates for line {line_id} (see: {output.cmd('sudo filament-kit profiles status')})" if line_id
+        output.out(f"no updates for line {line_id} (see: sudo filament-kit profiles status)" if line_id
                    else "no updates available")
         return 1 if line_id else 0
     for u in chosen:
@@ -2023,8 +2023,8 @@ def cmd_uninstall(purge: bool, run=None) -> int:
         ver = updates.current_version()
         _err_line(f"no kept copy of a release in {updates.store()}, so there is no uninstall.sh to run.\n"
                   f"fix: download filament-kit-{ver}.tar.gz from https://github.com/{release.REPO}/releases, unpack it "
-                  f"({output.cmd(f'tar xzf filament-kit-{ver}.tar.gz')}), then in its folder run: "
-                  + output.cmd("sudo ./uninstall.sh" + (" --purge" if purge else "")))
+                  f"(tar xzf filament-kit-{ver}.tar.gz), then in its folder run: "
+                  + "sudo ./uninstall.sh" + (" --purge" if purge else ""))
         return 1
     ver, tarball = kept
     running = updates.current_version()
@@ -2046,7 +2046,7 @@ def cmd_uninstall(purge: bool, run=None) -> int:
 def _port_hint(who) -> str:
     name = who.name if who else "you"
     return (f". If it could not open the serial port: {name} must be in the dialout group "
-            f"({output.cmd('sudo usermod -aG dialout ' + (name if who else '$USER'))}, then log in again)")
+            f"(sudo usermod -aG dialout {name if who else '$USER'}, then log in again)")
 
 
 class _StationBusy(Exception):
@@ -2180,7 +2180,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     try:
         ssid = a.ssid or ask("Wi-Fi name the Printer Station joins: ").strip()
     except (EOFError, RuntimeError, OSError):
-        _err_line("`reader setup` needs a terminal to ask you; nothing was changed")
+        _err_line("reader setup needs a terminal to ask you; nothing was changed")
         return 1
     password = ask_secret("Its Wi-Fi password: ")
     if ask_secret("The password again: ") != password:
@@ -2232,7 +2232,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     print(result.message)
     if tid:
         output.out(f"Reader token {tid} ({a.name or 'printer-station'}). Remove it later with: "
-                   + output.cmd(f"sudo filament-kit reader revoke {tid}"))
+                   + f"sudo filament-kit reader revoke {tid}")
     print(f"Buzzer: {buzzer}-triggered. Unplug it from the server and power it where it lives; it keeps its settings.")
     if not real_key:
         print("Note: without --ota-pubkey it refuses updates over Wi-Fi; running this again with the board plugged in "
@@ -2258,7 +2258,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         whose = f"{who.name}'s" if who else "your"
         _err_line(f"PlatformIO is not installed in {whose} account (no pio in ~/.platformio/penv/bin or "
                   "~/.local/bin, nor in /usr/local/bin or /usr/bin). Install it as that user, not with sudo: "
-                  + output.cmd("python3 -m pip install --user platformio") + ". Or leave out --source, use --out, "
+                  + "python3 -m pip install --user platformio. Or leave out --source, use --out, "
                   "and build on a PC that has it (reader/README.md).")
         return 1
     if flashing and not rs.is_source(Path(a.source)):
@@ -2290,7 +2290,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
             try:
                 answer = ask(f"Flash the reader firmware to {port}? [y/N] ")
             except (EOFError, RuntimeError, OSError):  # no terminal: no answer is a no
-                _err_line("`reader setup --source` needs a terminal to ask which board to flash, or name the "
+                _err_line("reader setup --source needs a terminal to ask which board to flash, or name the "
                           "reader's port with --port. Nothing was flashed.")
                 return 1
             except KeyboardInterrupt:
@@ -2376,8 +2376,8 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
               "flashed.")
         if not flashing:
             output.out("Build and flash with it as reader/README.md says (copy it to reader/src/secrets.h, then "
-                       + output.cmd("pio run -e esp32-c3-supermini -t upload") + "), or here with: "
-                       + output.cmd(f"filament-kit reader setup --secrets {out} --source <checkout>/reader"))
+                       + "pio run -e esp32-c3-supermini -t upload), or here with: "
+                       + f"filament-kit reader setup --secrets {out} --source <checkout>/reader")
     if flashing:
         busy = None
         try:
@@ -2401,7 +2401,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
                  "buzzer module needs --buzzer low."))
     if tid:
         output.out(f"Reader token {tid} ({a.name or 'reader'}). Remove it later with: "
-                   + output.cmd(f"sudo filament-kit reader revoke {tid}"))
+                   + f"sudo filament-kit reader revoke {tid}")
     if not real_key:
         print("Note: without --ota-pubkey this reader refuses every update over Wi-Fi until it is flashed again with "
               "the key (py tools/ota_publish.py --init-key prints it).")
@@ -2466,7 +2466,7 @@ def cmd_web_passphrase() -> int:
     except GroupMissing as e:
         _err_line(f"{e}; nothing was changed\n"
                   "fix: install the kit first (it creates the filament-kit user and group), "
-                  "or: " + output.cmd("sudo groupadd --system filament-kit"))
+                  "or: sudo groupadd --system filament-kit")
         return 1
     except ValueError as e:
         _err_line(f"{e}; nothing was changed")
@@ -2493,7 +2493,7 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False) -> int:
     if apply._tty():
         print(f"Open {url}  (setup code: {setup_code.shown(code)})")
     else:
-        output.out(f"Setup page: {url}  (see its setup code at a terminal: {output.cmd('sudo filament-kit setup-code')})")
+        output.out(f"Setup page: {url}  (see its setup code at a terminal: sudo filament-kit setup-code)")
     if new:
         print("The old setup code no longer works.")
     if revoke_trusted:
@@ -2503,7 +2503,7 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False) -> int:
         n = len(trusted.listing())
         if n:
             output.out(f"Trusted computers stay trusted ({n}): revoke them in Devices on the setup page, or with "
-                       + output.cmd("sudo filament-kit setup-code --revoke-trusted") + ".")
+                       + "sudo filament-kit setup-code --revoke-trusted.")
     return 0
 
 
@@ -2514,7 +2514,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> 
         from .web import reader  # needs the [web] extra
     except ImportError as e:
         _err_line(f"the reader commands need the kit's [web] packages ({e.name or e} is missing); install them "
-                  "into the kit's Python: `<venv>/bin/python -m pip install 'filament-kit[web]'` (or re-run the "
+                  "into the kit's Python: <venv>/bin/python -m pip install 'filament-kit[web]' (or re-run the "
                   "installer, which adds them)")
         return 1
     store = reader.TokenStore()
@@ -2525,13 +2525,13 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> 
             tid, tok = store.issue(name)
             output.out(f"New reader token {tid} ({reader._clean_name(name)}). It is shown only this once:\n\n  {tok}\n\n"
                        "Put it in the reader's src/secrets.h as READER_TOKEN, then build and flash (reader/README.md).\n"
-                       "Remove it later with: " + output.cmd(f"sudo filament-kit reader revoke {tid}"))
+                       "Remove it later with: " + f"sudo filament-kit reader revoke {tid}")
             return 0
         if action == "tokens":
             rows = store.list()
             if not rows:
                 output.out("No reader tokens yet. Make one with:")
-                output.out("  " + output.cmd("sudo filament-kit reader token --name printer-station"))
+                output.out("  sudo filament-kit reader token --name printer-station")
                 return 0
             output.out_lines(output.table(["Id", "Name", "Made"], [[t["id"], t["name"], t["created"]] for t in rows],
                                           long=1, whole=True))   # `reader revoke` takes the id or the name
@@ -2539,7 +2539,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> 
         if store.revoke(ref or ""):
             print(f"revoked {ref}; a reader using it is refused from now on")
             return 0
-        _err_line(f"no single reader token {ref!r} (see: `filament-kit reader tokens`)")
+        _err_line(f"no single reader token {ref!r} (see: filament-kit reader tokens)")
         return output.USAGE
     except reader.TokenFileError as e:
         _err_line(f"{e}; nothing was changed")
@@ -2565,7 +2565,7 @@ def cmd_web_status() -> int:
 def cmd_local_intake_status() -> int:
     cfg = config.load()
     if "local_intake" not in modules.enabled(cfg):
-        _err_line("the local_intake module is off.\nfix: `sudo filament-kit modules enable local_intake`")
+        _err_line("the local_intake module is off.\nfix: sudo filament-kit modules enable local_intake")
         return 1
     return 0 if status_rows.print_rows(status_rows.local_reader_rows(cfg)) else 1
 
@@ -2641,7 +2641,7 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
     h = lii.wait_healthy(config.load())
     if not h["ok"]:
         _err_line(f"installed, but the reader does not answer yet: {h['error']}. Check: "
-                  + output.cmd("filament-kit local-intake status"))
+                  + "filament-kit local-intake status")
         return 1
     print(f"The reader answers: version {h['version'] or '?'}, API {h['api_version']}.")
     return 0
@@ -2701,7 +2701,7 @@ def cmd_local_intake_test(photos: list[str]) -> int:
     from . import intake
     cfg = config.load()
     if "local_intake" not in modules.enabled(cfg):
-        _err_line("the local_intake module is off.\nfix: `sudo filament-kit modules enable local_intake`")
+        _err_line("the local_intake module is off.\nfix: sudo filament-kit modules enable local_intake")
         return 1
     try:
         images = intake.check_photos([(p, Path(p).read_bytes()) for p in photos])

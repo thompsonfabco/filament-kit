@@ -242,7 +242,7 @@ def test_cli_detect_output_is_unchanged(moonraker, capsys):
     moonraker.api_key = "k"
     assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (       # the long line wraps at the width
         0, "SV08 MAX (127.0.0.1:PORT)\n  127.0.0.1:PORT wants a Moonraker API key: run\n"
-           "  `filament-kit klipper api-key sv08-max`\n", "")
+           "       `filament-kit klipper api-key sv08-max`\n", "")
 
 
 def test_cli_detect_offline_output_is_unchanged(capsys):

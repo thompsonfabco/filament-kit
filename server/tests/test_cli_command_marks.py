@@ -1,7 +1,9 @@
-"""S5.1 (06 6.3, 6.5): every command the command line shows in a text is marked (`output.cmd(...)`, which is a pair of
-backticks), so `wrap` never breaks it. The scan reads the modules' own string literals with the syntax tree, joins the
-pieces of each text in order (a value that is filled in stands as `X`) and fails on any command outside a mark. The
-runtime checks wrap the real texts at 80 and at 40 columns."""
+"""S5.1 (06 6.3, 6.5): a text is a plain string; `output.wrap` (what every command prints through) recognises a command
+by pattern, keeps it whole on one line and, when it does not fit the rest of the line, gives it a line of its own five
+spaces in. Nothing marks a command in a text: no control byte or marker is in any text, so the setup page and the
+Hub, which show the same texts, see plain strings. The scan reads the modules' own string literals with the syntax
+tree, joins the pieces of each text in order (a value that is filled in stands as `x`), and wraps each text that holds a
+command at 80 and at 40 columns."""
 from __future__ import annotations
 
 import ast
@@ -15,18 +17,21 @@ from filament_kit import cli, output
 ROOT = Path(cli.__file__).parent
 # the modules whose texts the command line prints (an error, a note, a row, a result); not the setup page's, not the
 # installer's script texts, which no `wrap` lays out
-MODULES = ("cli.py", "klipper_cli.py", "status.py", "output.py", "updates.py", "remote.py", "local_intake_install.py",
+MODULES = ("cli.py", "klipper_cli.py", "status.py", "updates.py", "remote.py", "local_intake_install.py",
            "backup.py", "release.py")
-# a command is a word that is typed: the programs a fix names, and the kit's own commands by their first word
+# a command is a word that is typed: the programs a text names, and the kit's own commands by their first word. This
+# list is written apart from `output`'s, so a program one of them misses is found here
 COMMAND = re.compile(
     r"\bsudo (?!for\b|is\b|to\b)\S|\bsystemctl (?:start|stop|restart|status|enable|disable|mask|daemon-reload|reload)\b|"
     r"\bjournalctl -|\bapt(?:-get)? (?:install|remove)\b|\bpip install|\bpython3? -m\b|\btar xzf|\bcurl -|\busermod\b|"
     r"\bgroupadd\b|\bpio run\b|\./\S+\.sh|\bcertbot (?:certonly|renew)\b|"
-    r"\bfilament-kit backup (?:list|create)\b|"
-    r"\bfilament-kit (?:apply|cert|config|ensure-fields|intake|klipper|library|local-intake|modules|pair|printer|"
-    r"profiles|reader|remote|restore|setup-code|station|status|uninstall|unpair|update|web)\b")
-# text that is no message: what is written into a file, not shown by the command; and the printer-pack lines, which
-# are printed one to a line as a block to copy (`klipper pack`), not as running text
+    r"\bfilament-kit (?:apply|backup|cert|config|ensure-fields|intake|klipper|library|local-intake|modules|pair|"
+    r"printer|profiles|reader|remote|restore|setup-code|station|status|uninstall|unpair|update|web)\b")
+# where a command ends in these texts, written the other way round: at the first of a closing bracket, a comma, a
+# semicolon, a full stop followed by a space, two spaces, the end, or a word of the prose that goes on
+CLAUSE = re.compile(r".*?(?=[),;`]| \(|\.(?: |$)|:(?: |$)|  | (?:on|then|installs|tries|showed|first|again|now|and|or|needs|does|makes|"
+                    r"to|for|is|with|so|in)\b|$)")
+# text that is no message: what is written into a file, not shown by the command
 NOT_SHOWN = ("written by filament-kit mcp-route", "<!-- filament-kit reader tokens", "curl -fsSLo ", 'echo "')
 BARE = ("need_sudo", "_sudo_command")     # the command on a line of its own, nothing around it: it is copied whole as it is
 
@@ -37,23 +42,17 @@ def _call_name(node: ast.Call) -> str:
 
 
 def _render(n: ast.AST) -> str:
-    """The text an expression makes, in order; what is not a literal is `\x01`, a marked command is a span."""
+    """The text an expression makes, in order; what is not a literal is `x`."""
     if isinstance(n, ast.Constant) and isinstance(n.value, str):
         return n.value
     if isinstance(n, ast.JoinedStr):
-        return "".join(_render(v.value) if isinstance(v, ast.FormattedValue) and _is_cmd(v.value)
-                       else _render(v) if isinstance(v, ast.Constant) else "\x01" for v in n.values)
+        return "".join(_render(v) if isinstance(v, ast.Constant) else "x" for v in n.values)
     if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
         return _render(n.left) + _render(n.right)
     if isinstance(n, ast.IfExp):
-        return _render(n.body) + " " + _render(n.orelse)       # either one, side by side
-    if _is_cmd(n):
-        return "`" + (_render(n.args[0]) if n.args else "\x01") + "`"
-    return "\x01"
-
-
-def _is_cmd(n: ast.AST) -> bool:
-    return isinstance(n, ast.Call) and _call_name(n) == "cmd"
+        a, b = _render(n.body), _render(n.orelse)
+        return a + b if not a.strip() or not b.strip() else a + ", " + b        # either one, side by side
+    return "x"
 
 
 def texts(path: Path) -> list[tuple[int, str]]:
@@ -76,162 +75,256 @@ def texts(path: Path) -> list[tuple[int, str]]:
 
     def part(n: ast.AST) -> bool:                    # a piece of a text some node above it builds
         p = parent.get(id(n))
-        return (isinstance(p, (ast.JoinedStr, ast.IfExp)) or isinstance(p, ast.FormattedValue)
-                or (isinstance(p, ast.BinOp) and isinstance(p.op, ast.Add)) or (p is not None and _is_cmd(p)))
+        return (isinstance(p, (ast.JoinedStr, ast.IfExp, ast.FormattedValue))
+                or (isinstance(p, ast.BinOp) and isinstance(p.op, ast.Add)))
     found = []
     for n in ast.walk(tree):
-        if not isinstance(n, (ast.Constant, ast.JoinedStr, ast.BinOp, ast.IfExp, ast.Call)) or part(n):
+        if not isinstance(n, (ast.Constant, ast.JoinedStr, ast.BinOp, ast.IfExp)) or part(n):
             continue
         if id(n) in docs or id(n) in bare:
-            continue
-        if isinstance(n, ast.Call) and not _is_cmd(n):
             continue
         if isinstance(n, ast.BinOp) and not isinstance(n.op, ast.Add):
             continue
         if isinstance(n, ast.Constant) and not isinstance(n.value, str):
             continue
         text = _render(n)
-        if text.strip("\x01") and not text.startswith(NOT_SHOWN):
+        if text.strip("x") and not text.startswith(NOT_SHOWN):
             found.append((n.lineno, text))
     return found
 
 
-def _unmarked(text: str) -> str | None:
-    m = COMMAND.search(re.sub(r"`[^`]*`", "", text))
-    return m[0] if m else None
+def commands(text: str) -> list[str]:
+    """The commands a text holds, each to the end of its clause, as the scan expects them to print."""
+    flat = text.replace("\n", " ")
+    got, at = [], 0
+    for m in COMMAND.finditer(flat):
+        if m.start() < at:
+            continue
+        end = CLAUSE.match(flat, m.start()).end()
+        got.append(" ".join(flat[m.start():end].split()))
+        at = end
+    return got
 
 
-@pytest.mark.parametrize("module", MODULES)
-def test_every_command_in_the_cli_text_is_marked(module):
-    """No string literal, f-string piece or built text of a CLI module holds a command outside a mark."""
-    got = texts(ROOT / module)
-    assert got or module in ("output.py",)
-    bad = [f"{module}:{line}: {m!r} in {text[:100]!r}" for line, text in got if (m := _unmarked(text))]
-    assert not bad, "\n".join(bad)
+def _layouts(text: str) -> list[list[str]]:
+    """A text as an error, as a status row's text and as its fix line."""
+    return [output.wrap("Error: " + text, indent=7, first=0), output.status_row("needs a look", text),
+            output.status_row("needs a look", "x", text)]
 
 
-def test_the_scan_sees_the_texts_and_their_marks():
-    """The scan finds the marks and the unmarked commands in the kinds of expression the modules use (a literal, an
-    f-string, joined pieces, a helper's result, a conditional piece), so a rename cannot make it pass by seeing nothing."""
+def _whole(cmd: str, lines: list[str]) -> bool:
+    return any(cmd in " ".join(x.split()) for x in lines)
+
+
+# ---------- every literal that holds a command, wrapped at 80 and at 40 ----------
+
+def test_the_scan_sees_the_texts_and_the_commands_in_them():
+    """The scan finds the commands in the kinds of expression the modules use (a literal, an f-string, joined pieces, a
+    conditional piece), so a rename cannot make it pass by seeing nothing."""
     src = ('def f(x, ok):\n'
            '    a = "run sudo filament-kit config now"\n'
            '    b = f"see {x}: sudo systemctl start {x}"\n'
-           '    c = "run " + cmd("sudo filament-kit cert") + (" --purge" if ok else "")\n'
-           '    d = "ok `sudo filament-kit cert`, then " + "filament-kit intake edit"\n'
-           '    need_sudo("sudo filament-kit update")\n'
-           '    e = f"run {cmd(x)} and {cmd(\'sudo ls\')}"\n')
+           '    c = "run " + "sudo filament-kit cert" + (" --purge" if ok else "") + ", then go"\n'
+           '    need_sudo("sudo filament-kit update")\n')
     path = Path(__file__).with_name("_scan_probe.py")
     path.write_text(src, encoding="utf-8")
     try:
-        got = {line: _unmarked(text) for line, text in texts(path)}
+        got = {line: commands(text) for line, text in texts(path)}
     finally:
         path.unlink()
-    assert got == {2: "sudo f", 3: "sudo s", 4: None, 5: "filament-kit intake", 7: None}
+    assert got == {2: ["sudo filament-kit config"], 3: ["sudo systemctl start x"],
+                   4: ["sudo filament-kit cert --purge"]}
     assert sum(len(texts(ROOT / m)) for m in MODULES) > 400          # it reads the real modules, not nothing
+    assert sum(len(commands(t)) for m in MODULES for _, t in texts(ROOT / m)) > 60
 
 
 @pytest.mark.parametrize("columns", ["80", "40"])
-def test_every_marked_command_stays_whole_when_its_text_is_wrapped(columns, monkeypatch):
-    """Each text of the CLI modules, laid out as an error, as a status row's text and as its fix line, keeps every mark on one line, and no line
-    is longer than the width unless a single command is."""
+def test_every_command_in_the_cli_texts_stays_whole_when_the_text_is_wrapped(columns, monkeypatch):
+    """Each text of the CLI modules that holds a command, laid out as an error, a status row's text and its fix line,
+    keeps every command on one line, and no line is longer than the width unless a single command is."""
     monkeypatch.setenv("COLUMNS", columns)
     seen = 0
     for module in MODULES:
         for line, text in texts(ROOT / module):
-            spans = re.findall(r"`[^`]*`", text.replace("\n", " "))
-            if not spans:
+            cmds = commands(text)
+            if not cmds:
                 continue
             seen += 1
-            shown = text.replace("\x01", "x")
-            for lines in (output.wrap("Error: " + shown, indent=7, first=0),
-                          output.status_row("needs a look", shown), output.status_row("needs a look", "x", shown)):
-                for span in (s.replace("\x01", "x").strip("`") for s in spans):
-                    assert any(" ".join(span.split()) in " ".join(x.split()) for x in lines), \
-                        f"{module}:{line}: {span!r} split at {columns} columns"
+            for lines in _layouts(text):
+                for c in cmds:
+                    assert _whole(c, lines), f"{module}:{line}: {c!r} split at {columns} columns: {lines}"
                 for x in lines:          # over the width only where one command, at the left, is longer, or one word is
-                    alone = any(" ".join(x.split()).rpartition("needs a look")[2].lstrip(" ([\"'").startswith(" ".join(s.split()))
-                                for s in (s.replace("\x01", "x").strip("`") for s in spans))
+                    alone = any(re.fullmatch(r"\s*(?:! needs a look|Fix:|Error:)?\s*(?:[(\"'`]*<venv>/bin/)?[(\"'`]*", x.partition(c)[0])
+                                for c in cmds if c in " ".join(x.split()) and c in x)
                     assert len(x) <= int(columns) - 1 or alone or " " not in x.strip(), \
                         f"{module}:{line}: {x!r} is over the width"
     assert seen > 60
 
 
-MARK = r"`[^`]*`|\x02[^\x03]*\x03"          # a mark in a text: backticks written out, or what `output.cmd` makes
-
-
-class _Who:
-    name = "alice"
-
-
 def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkeypatch):
-    """The real texts of the review's items: the printer's not-connected hints (`_err_line`), the serial-port hint, the
-    two intake commands and the status rows' fixes, laid out as the commands lay them out."""
-    status = texts(ROOT / "status.py")
-    web_fix = next(t for _, t in status if "filament-kit-web" in t and "journalctl" in t)
-    config_fix = next(t for _, t in status if "option 4" in t and "internet" in t)
-    cli_texts = texts(ROOT / "cli.py")
+    """The real texts of the reviews' items: the printer's not-connected hints, the serial-port hint, the two intake
+    commands and the status rows' fixes."""
+    class Who:
+        name = "alice"
+    cli_texts = [t for _, t in texts(ROOT / "cli.py")]
+    status = [t for _, t in texts(ROOT / "status.py")]
     shown = {
         "wrong_code": cli.NOT_CONNECTED["wrong_code"],
         "cert_changed": cli.NOT_CONNECTED["cert_changed"],
-        "port": "could not flash" + cli._port_hint(_Who()),
-        "intake": next(t for _, t in cli_texts if "intake edit" in t).replace("\x01", "x"),
-        "local-intake": next(t for _, t in cli_texts if "local-intake status" in t).replace("\x01", "x"),
+        "port": "could not flash" + cli._port_hint(Who()),
+        "intake": next(t for t in cli_texts if "intake edit" in t),
+        "local-intake": next(t for t in cli_texts if "local-intake status" in t),
+        "web": next(t for t in status if "filament-kit-web" in t and "journalctl" in t),
+        "config": next(t for t in status if "option 4" in t and "internet" in t),
     }
     for columns in ("80", "40"):
         monkeypatch.setenv("COLUMNS", columns)
         for name, text in shown.items():
-            assert re.findall(MARK, text), f"{name} has no mark"
-            lines = output.wrap("Error: " + text, indent=7, first=0)
-            for span in re.findall(MARK, text):
-                assert any(span.strip("`\x02\x03") in x for x in lines), f"{name}: {span!r} split at {columns} columns: {lines}"
-        for text in (web_fix, config_fix):
-            lines = output.status_row("needs a look", "a row", text.replace("\x01", "x"))
-            for span in re.findall(MARK, text):
-                assert any(span.replace("\x01", "x").strip("`\x02\x03") in x for x in lines), (span, columns, lines)
+            cmds = commands(text)
+            assert cmds, f"{name} has no command"
+            for lines in _layouts(text):
+                for c in cmds:
+                    assert _whole(c, lines), f"{name}: {c!r} split at {columns} columns: {lines}"
     monkeypatch.setenv("COLUMNS", "80")
-    lines = output.status_row("needs a look", "a row", web_fix)       # no 94-character line after a lone `Fix:`
+    lines = output.status_row("needs a look", "a row", shown["web"])       # no 94-character line after a lone `Fix:`
     assert all(len(x) <= 79 for x in lines), lines
 
 
-# ---------- the mark is never printed; a command that does not fit goes on its own line (06 6.5) ----------
+# ---------- a command that does not fit goes on its own line (06 6.5) ----------
 
 def test_06_6_5_example_is_reproduced_at_80_columns(monkeypatch):
     """`Fix: check ... test it:` and the command on a line of its own, five spaces in, no quotes or braces added."""
     monkeypatch.setenv("COLUMNS", "80")
     command = 'sudo spoolwarden printer test "Study A1 mini"'
-    fix = "check that it is switched on and on the network, then test it: " + output.cmd(command)
+    fix = "check that it is switched on and on the network, then test it: " + command
     assert output.wrap("Fix: " + fix, indent=5, first=0) == [
         "Fix: check that it is switched on and on the network, then test it:", "     " + command]
 
 
 def test_a_command_that_fits_stays_on_the_line_and_one_that_does_not_goes_to_its_own(monkeypatch):
     monkeypatch.setenv("COLUMNS", "80")
-    assert output.wrap("Fix: run " + output.cmd("sudo filament-kit update") + " again", indent=5, first=0) == [
+    assert output.wrap("Fix: run sudo filament-kit update again", indent=5, first=0) == [
         "Fix: run sudo filament-kit update again"]
-    got = output.wrap("Error: it failed, so go on and then " + output.cmd("sudo filament-kit profiles apply-updates "
-                                                                          "--all --dry-run") + " now", indent=7, first=0)
+    got = output.wrap("Error: it failed, so go on and then sudo filament-kit profiles apply-updates --all --dry-run now",
+                      indent=7, first=0)
     assert got == ["Error: it failed, so go on and then",
                    "     sudo filament-kit profiles apply-updates --all --dry-run now"]
-    rows = output.status_row("needs a look", "a row", "check it, then: " + output.cmd("sudo journalctl -u filament-kit "
-                                                                                    "-n 50 --no-pager --output cat"))
+    rows = output.status_row("needs a look", "a row",
+                             "check it, then: sudo journalctl -u filament-kit -n 50 --no-pager --output cat")
     assert rows[-1].startswith(" " * 23 + "sudo journalctl") and rows[-2].rstrip().endswith("then:")
 
 
-def test_the_mark_is_never_printed_in_any_form(monkeypatch, capsys):
+@pytest.mark.parametrize("text, command", [
+    ("go on (sudo filament-kit update installs it), then stop", "sudo filament-kit update"),
+    ("Paste the link from sudo filament-kit pair --station on the server: ", "sudo filament-kit pair --station"),
+    ("it is gone; run sudo systemctl daemon-reload && sudo systemctl restart nginx. Then wait",
+     "sudo systemctl daemon-reload && sudo systemctl restart nginx"),
+    ("add it: sudo usermod -aG dialout alice, then log in again", "sudo usermod -aG dialout alice"),
+    ("or: python3 -m pip install --user platformio. Or leave out --source", "python3 -m pip install --user platformio"),
+    ("a clone: curl -fsSL <get.sh url> | sudo bash -s -- --version 1.2.3", "curl -fsSL <get.sh url> | sudo bash -s -- --version 1.2.3"),
+    ("then in its folder run: sudo ./uninstall.sh --purge)", "sudo ./uninstall.sh --purge"),
+])
+def test_where_a_command_ends(text, command, monkeypatch):
+    """Commands are cut at the end of their clause, wherever they sit in a sentence, at two widths."""
+    assert commands(text) == [command]
     for columns in ("80", "40"):
         monkeypatch.setenv("COLUMNS", columns)
-        text = "go on: " + output.cmd("sudo filament-kit update") + ", or `sudo filament-kit status` (written out)"
-        lines = output.wrap(text) + output.status_row("needs a look", text, text)
-        assert not any("`" in x or "\x02" in x or "\x03" in x for x in lines), lines
-    monkeypatch.setenv("COLUMNS", "80")
-    output.error(text, cmd="sudo filament-kit update")
-    output.note(text)
-    output.out(text)
-    got = capsys.readouterr()
-    assert not any(c in got.out + got.err for c in ("`", "\x02", "\x03"))
+        assert _whole(command, output.wrap(text)), output.wrap(text)
 
 
-def test_a_backtick_in_what_a_person_typed_is_printed(monkeypatch):
+def test_a_program_name_in_ordinary_prose_is_no_command(monkeypatch):
+    monkeypatch.setenv("COLUMNS", "20")
+    got = output.wrap("run it with sudo to be sure; the filament-kit server is up")
+    assert got == ["run it with sudo to", "be sure; the", "filament-kit server", "is up"]     # no line of its own
+
+
+# ---------- user text and backticks ----------
+
+def test_a_backtick_in_a_text_is_printed_as_it_is(monkeypatch):
     monkeypatch.setenv("COLUMNS", "80")
     assert output.wrap("no printer named a`b here") == ["no printer named a`b here"]
-    assert output.wrap("name `x here") == ["name `x here"]          # no pair: not a command span
+    assert output.wrap("name `x here") == ["name `x here"]
+    assert output.wrap("Printer Shop `A B` X1, and `odd") == ["Printer Shop `A B` X1, and `odd"]
+    assert output.wrap("see: `sudo filament-kit status` now") == ["see: `sudo filament-kit status` now"]
+    monkeypatch.setenv("COLUMNS", "25")
+    got = output.wrap("a `sudo filament-kit config`, Printers) and more")        # the backticks are part of the words
+    assert got == ["a", "     `sudo filament-kit config`,", "Printers) and more"], got
+
+
+# ---------- no marker in any text ----------
+
+CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f]")        # not tab, newline, carriage return, escape
+
+
+def _plain(text: str, where: str) -> None:
+    assert not CONTROL.search(text), f"{where}: a control byte in {text!r}"
+
+
+@pytest.mark.parametrize("module", MODULES + ("output.py", "setup_console/overview.py"))
+def test_no_module_builds_a_marker_into_a_text(module):
+    src = (ROOT / module).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and len(n.value) > 1:     # a text, not a one-character test
+            _plain(n.value, f"{module}:{n.lineno}")
+        if isinstance(n, ast.Call) and _call_name(n) == "cmd" and isinstance(n.func, ast.Attribute):
+            raise AssertionError(f"{module}:{n.lineno}: a call that marks a command")
+    assert not hasattr(output, "cmd")
+
+
+def test_the_status_rows_and_their_fixes_are_plain_strings(monkeypatch):
+    """The setup page's Overview sends each row's text and fix as they are."""
+    from filament_kit import status
+    for _, text in texts(ROOT / "status.py"):
+        _plain(text, "status.py")
+    for r in (status.Row("fail", "x", "run: sudo filament-kit cert"), ):
+        assert r.fix == "run: sudo filament-kit cert"
+
+
+def test_the_texts_other_places_print_hold_no_marker(monkeypatch, tmp_path):
+    """The firewall text, the library line, the local reader's plan, and the station's pair prompts."""
+    from unittest import mock
+
+    from filament_kit import local_intake_install as lii
+    from filament_kit import remote
+    with mock.patch.object(remote, "sandbox_text", lambda r, lan: "x"):
+        t = remote.firewall_text({"hostname": "h.example.com", "route": "r", "lan": ["192.168.1.0/24"], "email": "",
+                                  "window": ""}, tmp_path)
+    _plain(t, "firewall_text")
+    assert "sudo filament-kit remote issue" in t and "sudo systemctl daemon-reload" in t
+    _plain(cli._library_line({"source": "none", "local": 2}), "library status")
+    assert "(run: filament-kit library update)" in cli._library_line({"source": "none", "local": 2})
+    p = {"version": "1.0", "tier": "cpu", "installed": "2.0", "installed_tier": "cpu", "downgrade": True,
+         "upgrade": False, "same": False, "tiers": {"cpu": {"download_mb": 1, "disk_mb": 2, "minutes": 1, "fetched_at_install": ""}},
+         "asked_tier": None}
+    for line in lii.plan_text(p):
+        _plain(line, "plan")
+    assert any("filament-kit local-intake install --version 1.0" in x for x in lii.plan_text(p))
+    seen: list[str] = []
+
+    def ask(prompt):
+        seen.append(prompt)
+        raise EOFError
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 0, raising=False)
+    cli.cmd_station_pair(ask=ask)
+    assert seen and all("sudo filament-kit pair --station" in s for s in seen)
+    for s in seen:
+        _plain(s, "pair prompt")
+
+
+# the setup page's own pattern (setup_static/setup_overview.js FIX_COMMAND), ported
+FIX_COMMAND = re.compile(r"^(?:run: )?((?:sudo|filament-kit) .+)$")
+
+
+def test_the_setup_pages_pattern_matches_every_status_fix_that_is_a_command():
+    src = (ROOT / "setup_static" / "setup_overview.js").read_text(encoding="utf-8")
+    assert "const FIX_COMMAND = /^(?:run: )?((?:sudo|filament-kit) .+)$/;" in src      # the port is of this one
+    seen = 0
+    for line, text in texts(ROOT / "status.py"):
+        if not (text.startswith("run: ") or re.match(r"(?:sudo|filament-kit|systemctl|journalctl) ", text))                 or not COMMAND.search(text):
+            continue                                   # not a fix that is a command
+        seen += 1
+        m = FIX_COMMAND.match(text)
+        assert m and m[1].startswith(("sudo", "filament-kit")), f"status.py:{line}: {text!r}"
+        _plain(text, f"status.py:{line}")
+    assert seen >= 8

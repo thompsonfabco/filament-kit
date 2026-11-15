@@ -13,8 +13,7 @@ the environment and from what `configure` was given, so a test that sets `NO_COL
     state(word) -> str                        a status word with its glyph and colour (`● OK`)
     status_row(word, text, fix) -> [str]      the lines of one status row (06 9.1)
     table(headers, rows, long=, right=)       a table as lines (06 6.3)
-    wrap(text, indent=, first=) -> [str]      running text at the width
-    cmd(text) -> str                          a command inside running text, marked so `wrap` never breaks it
+    wrap(text, indent=, first=) -> [str]      running text at the width; a command in it is never split
     wait(text)                                a progress line once 2 seconds pass with no other output (06 6.6);
                                               `paused()` holds it while the command asks a question
 """
@@ -188,59 +187,88 @@ def _visible(s: str) -> int:
 _HELD = "\x00"        # a space that wrap does not break at (a fix that is a command); it goes back to a space
 
 
-_OPEN, _CLOSE = "\x02", "\x03"      # a marked command: never printed; `wrap` keeps it whole and may give it a line
-_SPAN = re.compile(r"\x60([^\x60\n]*[^\x60\n ] [^\x60\n]*)\x60")      # a span between backticks with a space inside
+# What `wrap` takes for a command (06 6.3, 6.5): it starts at one of these programs and runs to the end of its clause,
+# so it is never split over two lines. The texts themselves are plain strings; nothing marks a command in them.
+_KIT = frozenset(("apply", "backup", "cert", "config", "ensure-fields", "intake", "klipper", "library", "local-intake",
+                  "modules", "pair", "printer", "profiles", "reader", "remote", "restore", "setup", "setup-code",
+                  "station", "status", "uninstall", "unpair", "update", "web"))
+_AFTER = {"systemctl": frozenset(("start", "stop", "restart", "status", "enable", "disable", "mask", "daemon-reload",
+                                  "reload")),
+          "apt": frozenset(("install", "remove", "update", "upgrade")), "pip": frozenset(("install",)),
+          "pio": frozenset(("run",)), "certbot": frozenset(("certonly", "renew")), "tar": frozenset(("xzf", "xf"))}
+_AFTER["apt-get"], _AFTER["pip3"] = _AFTER["apt"], _AFTER["pip"]
+_DASH = ("journalctl", "curl")                      # these start a command when an option follows
+_PROSE = frozenset(("a", "an", "and", "as", "at", "but", "by", "for", "from", "if", "in", "is", "it", "of", "on", "or",
+                    "so", "the", "then", "to", "when", "which", "while", "with", "again", "now", "first", "installs",
+                    "tries", "showed", "shows", "will", "needs", "does", "makes"))       # the words that follow a command in running text
+_LEAD = "([{\"'`"
+_TRAIL = ",;.:)]}?`"                      # a word that ends with one of these ends its clause
+_SCRIPT = re.compile(r"\./\S+\.sh\S*")
 
 
-def _marked(text: str) -> str:
-    """`text` with its backtick spans that hold a command (a space inside, as every command here has) as marks. A
-    backtick in what a person typed or a file name has no such pair, so it is printed as it is."""
-    return _SPAN.sub(lambda m: _OPEN + m[1] + _CLOSE, text)
+def _bare(word: str) -> str:
+    return word.lstrip(_LEAD).rstrip(_TRAIL + "\"'")
 
 
-def _words(para: str) -> list[str]:
-    """`para` split at its spaces, except those inside a marked command: a command stays whole on a line."""
-    words, cur, inside = [], "", False
-    for ch in para:
-        if ch == _OPEN:
-            inside = True
-        elif ch == _CLOSE:
-            inside = False
-        if ch == " " and not inside:
-            words.append(cur)
-            cur = ""
-        else:
-            cur += ch
-    return words + [cur]
+def _starts(words: list[str], i: int) -> bool:
+    """A command starts at word `i`: one of the programs a text names, with what must follow it."""
+    word = words[i].lstrip(_LEAD)
+    word = word.rpartition("/")[2] if "/bin/" in word else word          # `<venv>/bin/python`
+    nxt = words[i + 1] if i + 1 < len(words) else ""
+    if _SCRIPT.fullmatch(word):
+        return True
+    if not nxt:
+        return False
+    if word in ("sudo", "usermod", "groupadd"):
+        return bool(_bare(nxt)) and _bare(nxt) not in _PROSE
+    if word == "filament-kit":
+        return _bare(nxt) in _KIT
+    if word in _AFTER:
+        return _bare(nxt) in _AFTER[word]
+    if word in _DASH:
+        return nxt.startswith("-")
+    return word in ("python", "python3") and nxt == "-m"
 
 
-def cmd(text: str) -> str:
-    """A command named in running text (`sudo filament-kit update`), marked so `wrap` keeps it whole on one line and,
-    when it does not fit the rest of the line, puts it on a line of its own (06 6.5). The mark is never printed.
-    Every command in the text of a message is marked through this or an equal pair of backticks;
-    `test_every_command_in_the_cli_text_is_marked` scans the modules for any that is not."""
-    return _OPEN + text + _CLOSE
+def _end(words: list[str], i: int) -> int:
+    """The index after the last word of the command that starts at word `i`. Its clause ends at a word that closes it
+    (`)`, `,`, `;`, `.`, `:` last), or before two spaces, a bracket that opens, or a word that goes on in prose."""
+    j = i + 1
+    while j < len(words) and not words[j - 1].endswith(tuple(_TRAIL)) and words[j] and words[j][0] not in "([" \
+            and _bare(words[j]) not in _PROSE:
+        j += 1
+    return j
+
+
+def _units(para: str) -> list[tuple[str, bool]]:
+    """`para` as the pieces `wrap` lays out: each word, and each command as one piece (its words as they were)."""
+    words, units, i = para.split(" "), [], 0
+    while i < len(words):
+        is_cmd = _starts(words, i)
+        j = _end(words, i) if is_cmd else i + 1
+        units.append((" ".join(words[i:j]), is_cmd))
+        i = j
+    return units
 
 
 def wrap(text: str, *, indent: int = 0, first: int | None = None) -> list[str]:
-    """`text` as lines of at most width - 1 characters, wrapped at spaces outside a marked command. The first line
-    starts at column `first` (default `indent`), the others at `indent`, so a continuation lines up with where the
-    text began. Newlines in `text` start a new line. A word, number, address, path or command longer than a line stays
-    whole on a line of its own (06 6.3): a command or address cut in two cannot be copied. A command that does not fit
-    on the rest of the line goes on a line of its own, five spaces in from where the text began (06 6.5). The marks
-    are not in the lines."""
+    """`text` as lines of at most width - 1 characters, wrapped at spaces outside a command. The first line starts at
+    column `first` (default `indent`), the others at `indent`, so a continuation lines up with where the text began.
+    Newlines in `text` start a new line. A word, number, address, path or command longer than a line stays whole on a
+    line of its own (06 6.3): a command or address cut in two cannot be copied. A command (one of the programs a text
+    names, to the end of its clause) that does not fit on the rest of the line goes on a line of its own, five spaces
+    in from where the text began (06 6.5). Backticks are printed as they are."""
     limit = width() - 1
     first = indent if first is None else first
     lines: list[str] = []
-    for para in _marked(text).split("\n"):
+    for para in text.split("\n"):
         lead = len(para) - len(para.lstrip(" "))          # spaces a line starts with stay, and carry to its wrap
         para = para[lead:]
         cur, col = "", (first if not lines else indent) + lead
-        for word in _words(para):
-            shown = word.replace(_OPEN, "").replace(_CLOSE, "")
+        for shown, is_cmd in _units(para):
             if cur and col + len(cur) + 1 + len(shown) > limit:
                 lines.append(" " * col + cur)
-                cur, col = "", (first + 5 if _OPEN in word else indent) + lead
+                cur, col = "", (first + 5 if is_cmd else indent) + lead
             cur = f"{cur} {shown}" if cur else shown
         lines.append(" " * col + cur)
     return lines
