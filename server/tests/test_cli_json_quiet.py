@@ -6,7 +6,11 @@ and the questions. Example names only."""
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -40,6 +44,13 @@ def run(capsys, argv):
     return rc, got.out, got.err
 
 
+class _Fetcher:
+    """The release fetcher of `update --check` with one release and no network."""
+
+    def release(self, repo, version=None):
+        return {"version": "99.0.0", "notes": "New things."}
+
+
 def doc(out: str):
     """The one JSON document in `out`: one line, no escape byte."""
     assert "\x1b" not in out
@@ -67,8 +78,7 @@ COMMANDS = [
 
 @pytest.mark.parametrize("argv", COMMANDS, ids=" ".join)
 def test_every_json_command_gives_one_document_with_no_escape_byte(capsys, monkeypatch, argv):
-    monkeypatch.setattr(updates, "check_info", lambda cfg: {"installed": "0.5.2", "latest": "0.5.3", "newer": True,
-                                                            "held": None, "notes": "", "going_back": ""})
+    monkeypatch.setattr(updates, "default_fetcher", lambda cfg: _Fetcher())
     rc, out, err = run(capsys, ["--color", "always", *argv, "--json"])
     got = doc(out)
     assert isinstance(got, (dict, list))
@@ -139,9 +149,41 @@ def test_the_json_is_indented_at_a_terminal_and_one_line_otherwise(capsys, monke
     assert out.startswith('{\n  "modules": [\n    {\n      "name"') and json.loads(out)["setup"]
 
 
-def test_secrets_are_set_true_or_false(capsys):
+def test_a_stored_secret_is_set_true(capsys):
     got = doc(run(capsys, ["setup-code", "--json"])[1])
-    assert got["code"] == {"set": True} and got["url"]
+    assert got == {"address": got["address"], "code": {"set": True}} and got["address"]
+
+
+def test_a_code_the_command_was_asked_to_make_is_printed(capsys):
+    from filament_kit import setup_code
+    got = doc(run(capsys, ["setup-code", "--new", "--yes", "--json"])[1])
+    assert got == {"ok": True, "address": got["address"], "code": setup_code.shown(setup_code.ensure())}
+    assert doc(run(capsys, ["setup-code", "--json"])[1])["code"] == {"set": True}      # later it is stored: not shown
+
+
+def test_a_new_reader_token_and_a_pairing_link_are_printed(capsys):
+    got = doc(run(capsys, ["reader", "token", "--name", "shop", "--json"])[1])
+    assert got["token"] and "token" not in doc(run(capsys, ["reader", "tokens", "--json"])[1])[0]
+    got = doc(run(capsys, ["pair", "--pc", "--json"])[1])
+    assert set(got) == {"ok", "code", "link", "fingerprint", "expires"} and got["link"] and got["code"]
+
+
+def test_update_check_json_is_the_hubs_updates_view(capsys, monkeypatch):
+    monkeypatch.setattr(updates, "default_fetcher", lambda cfg: _Fetcher())
+    rc, out, _ = run(capsys, ["update", "--check", "--json"])
+    got = doc(out)
+    assert rc == 0 and got == updates.view(config.load())          # GET /setup/api/updates, from what the check saved
+    assert got["latest"] == "99.0.0" and got["notes"] == "New things." and "update_refused" in got
+
+
+def test_web_status_json_has_the_rows_the_overview_has(capsys):
+    cfg = config.load()
+    cfg["modules"] = modules.module_map(modules.enabled(cfg) | {"web"}, cfg)
+    config.save(cfg)
+    assert "web" in modules.enabled(config.load())
+    rows = doc(run(capsys, ["web", "status", "--json"])[1])["rows"]
+    assert rows == status.row_dicts(status.hub_web_rows(cfg)) and rows        # the Overview's Hub rows for the web module
+    assert all(r["group"] == "Hub" for r in rows) and "Web access is on" not in [r["text"] for r in rows]
 
 
 # ---------- errors ----------
@@ -167,9 +209,16 @@ def test_a_wrong_option_is_a_document_and_exit_code_2(capsys):
     assert rc == 2 and doc(out)["ok"] is False and "Error:" in err
 
 
-def test_help_is_not_wrapped_in_json(capsys):
+def test_help_is_a_document_under_json(capsys):
     rc, out, _ = run(capsys, ["--json", "status", "-h"])
-    assert rc == 0 and out.startswith("usage:")
+    got = doc(out)
+    assert rc == 0 and got["ok"] is True and got["help"].startswith("usage:")
+
+
+def test_a_wrong_color_is_a_document_under_json(capsys):
+    rc, out, err = run(capsys, ["--json", "--color", "bogus", "status"])
+    got = doc(out)
+    assert rc == 2 and got["ok"] is False and "--color takes" in got["error"] and "Error:" in err
 
 
 # ---------- --json never asks ----------
@@ -193,6 +242,27 @@ def test_a_question_with_its_own_answers_is_not_asked_under_json(capsys):
     assert output.confirm("Go on?", doing="going on", yes=True, ask=lambda prompt: pytest.fail("asked")) is None
     got = capsys.readouterr()
     assert got.out == "" and "Error: going on needs a yes" in got.err
+
+
+class _Terminal:
+    """Standard input that is a terminal and answers nothing: asking on it is a failure."""
+
+    def isatty(self):
+        return True
+
+    def readline(self, *a):
+        pytest.fail("asked")
+
+    read = readline
+
+
+def test_json_does_not_ask_when_standard_input_is_a_terminal(capsys, monkeypatch):
+    argv = ["restore", "nosuch.zip"]
+    monkeypatch.setattr(sys, "stdin", _Terminal())
+    monkeypatch.setattr("builtins.input", lambda prompt="": pytest.fail("asked"))
+    rc, out, err = run(capsys, [*argv, "--json"])
+    got = json.loads(out)
+    assert rc == 2 and got["ok"] is False and "needs a yes" in got["error"] and "[y/N]" not in out + err
 
 
 def test_a_restore_has_no_word_to_type_under_json(capsys, tmp_path):
@@ -280,6 +350,23 @@ def test_a_question_is_still_asked_and_shown_with_quiet(capsys, monkeypatch, tmp
     assert "Nothing changed." not in out
 
 
+def test_quiet_drops_the_saved_revision_lines(capsys):
+    r = {"revisions": [{"n": 2, "changes": [{"field": "net", "old": 1000, "new": 750}], "spool_ids": [4],
+                        "filaments": {"from": 1, "to": 2, "created": True, "orphaned": 1}}]}
+    output.configure(quiet=True)
+    assert cli._say_revision(r) == 0
+    assert capsys.readouterr() == ("", "")
+    output.configure(quiet=False)
+    assert "Saved as revision 2: net 1000 -> 750" in (cli._say_revision(r), capsys.readouterr().out)[1]
+
+
+def test_quiet_setup_code_new_prints_the_code_and_no_other_line(capsys, monkeypatch):
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
+    full = run(capsys, ["setup-code", "--new", "--yes"])[1]
+    assert "setup code:" in full and "The old setup code no longer works." in full
+    assert run(capsys, ["setup-code", "--new", "--yes", "--quiet"])[1].count("\n") == 1
+
+
 def test_a_note_is_dropped_but_the_old_name_line_is_kept(capsys):
     output.configure(quiet=True)
     output.note("a note")
@@ -297,3 +384,61 @@ def test_a_progress_line_is_not_drawn_with_quiet(capsys, monkeypatch):
             time.sleep(0.4)
         err = capsys.readouterr().err
         assert ("Checking" in err) is (not quiet)
+
+
+# ---------- what a child program prints goes to standard error ----------
+
+_CHILD = """
+import subprocess, sys
+sys.path.insert(0, sys.argv[1])
+from filament_kit import cli, output
+
+def dispatch(args, **k):
+    subprocess.run([sys.executable, "-c", "print('from the child')"], check=True)
+    if output.json_mode():
+        output.emit({"answer": 1})
+    else:
+        with output.shown():
+            print("what was asked for")
+    return 0
+
+cli._dispatch = dispatch
+raise SystemExit(cli.main(sys.argv[2:]))
+"""
+
+
+def _child_run(*argv):
+    root = str(Path(cli.__file__).resolve().parents[1])
+    return subprocess.run([sys.executable, "-c", _CHILD, root, *argv], capture_output=True, text=True, timeout=120)
+
+
+def test_a_child_cannot_put_a_line_before_the_json_document():
+    got = _child_run("ensure-fields", "--json")
+    assert got.returncode == 0 and json.loads(got.stdout) == {"answer": 1} and got.stdout.count("\n") == 1
+    assert "from the child" in got.stderr
+
+
+def test_a_child_cannot_print_on_standard_output_under_quiet():
+    got = _child_run("ensure-fields", "--quiet")
+    assert got.returncode == 0 and got.stdout.strip() == "what was asked for"
+    assert "from the child" in got.stderr
+
+
+def test_a_child_is_not_redirected_without_the_switches():
+    got = _child_run("ensure-fields")
+    assert got.stdout.split() == ["from", "the", "child", "what", "was", "asked", "for"] and "child" not in got.stderr
+
+
+@pytest.mark.parametrize("fails", [None, RuntimeError, KeyboardInterrupt])
+def test_standard_output_is_put_back_on_every_way_out(capfd, fails):
+    output.configure(json=True)
+    try:
+        with output.children_to_stderr():
+            os.write(1, b"inside\n")
+            if fails:
+                raise fails
+    except BaseException as e:
+        assert fails and isinstance(e, fails)
+    os.write(1, b"after\n")
+    got = capfd.readouterr()
+    assert got.out == "after\n" and "inside" in got.err

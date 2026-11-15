@@ -584,7 +584,7 @@ def run_json(fn) -> int:
     """Run `fn()` (a command, which returns its exit code) with `--json`: standard output is held back, and then holds
     one document and a newline, 2-space indented at a terminal and on one line otherwise: what the command gave `emit`,
     else `{"ok": true, "message": ...}` for a command that ended with 0 or `{"ok": false, "error", "fix"}` for one that
-    did not. Standard error, the exit code and `-h` are as without it."""
+    did not; `-h` gives `{"ok": true, "help": <its text>}`. Standard error and the exit code are as without it."""
     real_out, real_err = sys.stdout, sys.stderr
     held = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", newline="\n", write_through=True)
     tee = _Tee(real_err)
@@ -601,10 +601,8 @@ def run_json(fn) -> int:
         text = held.buffer.getvalue().decode("utf-8", "replace")
     finally:
         sys.stdout, sys.stderr = real_out, real_err
-    if exit_ is not None and rc == 0 and not _doc:      # -h: its text is the answer, not a result
-        real_out.write(text)
-        real_out.flush()
-        raise exit_
+    if exit_ is not None and rc == 0 and not _doc:      # -h: its text is the answer, as {"ok": true, "help": ...}
+        _doc[:] = [{"ok": True, "help": text}]
     if _doc:
         doc = _doc[-1]
     elif rc == 0:
@@ -616,6 +614,42 @@ def run_json(fn) -> int:
     if exit_ is not None:
         raise exit_
     return rc
+
+
+@contextlib.contextmanager
+def children_to_stderr():
+    """With `--json` or `--quiet`, whatever a program this command starts writes to standard output goes to standard
+    error: file descriptor 1 points at 2 for the run (every child inherits it) and `sys.stdout` becomes a writer on the
+    saved real standard output, so the document, an answer or a question still reaches it. Both are put back on every
+    way out, Ctrl-C included. Without either switch nothing changes."""
+    if not (json_mode() or quiet()):
+        yield
+        return
+    old = sys.stdout
+    try:
+        for stream in (sys.stdout, sys.stderr):
+            with contextlib.suppress(Exception):
+                stream.flush()
+        saved = os.dup(1)
+    except OSError:                                     # no standard output at all: nothing to guard
+        yield
+        return
+    swapped = False
+    try:
+        os.dup2(2, 1)
+        with contextlib.suppress(Exception):            # a stand-in for standard output (a test's) is left as it is
+            if old.fileno() == 1:
+                sys.stdout = io.TextIOWrapper(io.FileIO(saved, "w", closefd=False), encoding=old.encoding,
+                                              errors=old.errors, line_buffering=True)
+                swapped = True
+        yield
+    finally:
+        if swapped:
+            with contextlib.suppress(Exception):
+                sys.stdout.flush()
+        sys.stdout = old
+        os.dup2(saved, 1)
+        os.close(saved)
 
 
 @contextlib.contextmanager

@@ -147,9 +147,9 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
         _err_line(f"{e}" + (f"\nfix: run it with sudo: {cmd}" if unreadable else ""))
         return 1
     if output.json_mode():
-        output.emit({"ok": True, "kind": "pc" if pc else "station" if station else "phone", "link": pr.qr,
+        output.emit({"ok": True, "code": pr.code, "link": pr.qr,
                      "fingerprint": pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes()),
-                     "code": pr.code, "expires_at": _iso(pr.expires)})
+                     "expires": _iso(pr.expires)})
         return 0
     if pc or station:
         # no QR scanner there: the link is pasted (printed by design, never logged)
@@ -913,6 +913,8 @@ def _cli_value(k: str, v: str):
 
 def _say_revision(r: dict) -> int:
     output.emit({"ok": True, **r})
+    if output.quiet():                  # `intake revise` is not muted as a whole: its proposal is what was asked for
+        return 0
     rv = r["revisions"][-1]
     print(f"Saved as revision {rv['n']}: " + "; ".join(sorted({f"{c['field']} {c['old']} -> {c['new']}"
                                                                for c in rv["changes"]})))
@@ -2004,7 +2006,8 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> i
             return 1
     notes: list[str] = []
     tty = apply._tty() and not output.json_mode()         # --json never asks
-    err = _change_module(cfg, name, want_on, confirm=_tty_confirm if tty else None, server=server, notes=notes,
+    err = _change_module(cfg, name, want_on, confirm=None if output.json_mode() else _tty_confirm, server=server,
+                         notes=notes,
                          ask_address=_ask_station_server if tty else None,
                          ask_settings=_ask_module_settings if tty else None)
     if err:
@@ -2734,19 +2737,25 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -
         code = setup_code.ensure()
     url = setup_code.page_url(config.load())
     if output.json_mode():
-        output.emit({"ok": True, "url": url, "code": {"set": True}, "new": new,
-                     "trusted_revoked": trusted.revoke_all() if revoke_trusted else 0})
+        if new:                         # a code made now is printed, once; a stored one is not
+            reply = {"ok": True, "address": url, "code": setup_code.shown(code)}
+        else:
+            reply = {"address": url, "code": {"set": True}}
+        if revoke_trusted:
+            reply["trusted_revoked"] = trusted.revoke_all()
+        output.emit(reply)
         return 0
     if apply._tty():
         print(f"Open {url}  (setup code: {setup_code.shown(code)})")
     else:
         output.out(f"Setup page: {url}  (see its setup code at a terminal: sudo filament-kit setup-code)")
-    if new:
+    if new and not output.quiet():
         print("The old setup code no longer works.")
     if revoke_trusted:
         n = trusted.revoke_all()
-        print(f"{n} trusted computer{'' if n == 1 else 's'} revoked: each needs the setup code again.")
-    elif new:
+        if not output.quiet():
+            print(f"{n} trusted computer{'' if n == 1 else 's'} revoked: each needs the setup code again.")
+    elif new and not output.quiet():
         n = len(trusted.listing())
         if n:
             output.out(f"Trusted computers stay trusted ({n}): revoke them in Devices on the setup page, or with "
@@ -2814,9 +2823,7 @@ def _web_health(port: int) -> tuple[bool, str]:
 
 
 def cmd_web_status() -> int:
-    rows = list(status_rows.web_rows())
-    if output.json_mode():
-        rows = list(status_rows._in("Hub", rows))      # the group the Overview files them under
+    rows = status_rows.hub_web_rows() if output.json_mode() else list(status_rows.web_rows())   # --json: the Overview's rows
     return 0 if status_rows.print_rows(rows) else 1
 
 
@@ -3011,14 +3018,14 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     (06 6.2, 6.6: every command accepts them); Ctrl-C ends with `Stopped.` and exit code 130."""
     args, switches = output.extract_switches(list(sys.argv[1:] if argv is None else argv))
     output.reset()
-    if switches.get("color", "auto") not in ("auto", "always", "never"):
-        output.error(f"--color takes always, never or auto, not {switches['color']!r}.",
-                     "use --color auto, --color always or --color never.")
-        return output.USAGE
     output.configure(**switches)
     _invoked[:] = args
 
     def run() -> int:
+        if switches.get("color", "auto") not in ("auto", "always", "never"):   # inside run: --json gives its document
+            output.error(f"--color takes always, never or auto, not {switches['color']!r}.",
+                         "use --color auto, --color always or --color never.")
+            return output.USAGE
         try:
             return _main(args, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
         except PermissionError as e:
@@ -3028,7 +3035,8 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         except KeyboardInterrupt:
             output.out("Stopped.")
             return output.INTERRUPTED
-    return output.run_json(run) if output.json_mode() else run()
+    with output.children_to_stderr():       # --json, --quiet: what a child prints on standard output goes to standard error
+        return output.run_json(run) if output.json_mode() else run()
 
 
 def _add_yes(parser, help: str = "answer yes to the question this command asks (a script has no terminal to ask on)") -> None:
@@ -3404,7 +3412,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             if output.json_mode():
                 from . import release
                 try:
-                    output.emit(updates.check_info(cfg))
+                    updates.check_info(cfg)             # saves what it read, which `view` then reports
+                    output.emit(updates.view(cfg))      # the Hub's GET /setup/api/updates
                 except release.ReleaseError as e:
                     output.error(str(e))
                     return output.FAILED

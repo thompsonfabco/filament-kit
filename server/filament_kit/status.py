@@ -460,6 +460,11 @@ def _fields_rows(cfg: dict) -> Iterator[Row]:
                   "sudo filament-kit ensure-fields", action="ensure_fields", group="Spoolman")
 
 
+def hub_web_rows(cfg: dict | None = None) -> list[Row]:
+    """`web_rows` as the Overview files them: under Hub, without "Web access is on" (design gap: no group for it)."""
+    return [r for r in _in("Hub", web_rows(cfg)) if r.text != "Web access is on"]
+
+
 def collect(cfg: dict | None = None, client_factory=None, station_pairing: str | None = None) -> list[Row]:
     """The console's Overview: `status` without spending an Anthropic call, the Spoolman fields, and `web status` when
     the web module is on."""
@@ -469,5 +474,5 @@ def collect(cfg: dict | None = None, client_factory=None, station_pairing: str |
     if "server" in on or "spoolman" in on:
         out += list(_fields_rows(cfg))
     if "web" in on:
-        out += [r for r in _in("Hub", web_rows(cfg)) if r.text != "Web access is on"]    # design gap: no group for Web access
+        out += hub_web_rows(cfg)
     return out
