@@ -205,7 +205,7 @@ def routes(page) -> list[tuple]:
             try:
                 info = klipper_cli.pack_info(updates.current_version(), config.load())
             except release.ReleaseError as e:       # no command at all, never an unchecked one
-                raise Refused(409, f"no Klipper add-on command: {e}") from None
+                raise Refused(409, f"no Klipper add-on command: {e}", reason=str(e)) from None
             return {"version": info["version"], "lines": info["lines"]}
         return await anyio.to_thread.run_sync(run)
 
