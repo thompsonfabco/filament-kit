@@ -481,7 +481,7 @@ def test_login_without_passphrase_file(store, tmp_path):
         cid = _register(c).json()["client_id"]
         r, _ = _sign_in(c, cid, _pkce()[1])
         assert r.status_code == 503
-        assert "Settings &gt; Web passphrase, or run `sudo spoolwarden web passphrase` on the Hub." in r.text
+        assert "Settings &gt; Web passphrase, or run `sudo filament-kit web passphrase` on the Hub." in r.text
     assert lock.fails == []  # a server problem is not a wrong guess
 
 
