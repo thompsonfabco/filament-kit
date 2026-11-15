@@ -1,3 +1,0 @@
-server/filament_kit/web/static/printers.js | setup page | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/web/static/printers.js | the kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/web/static/printers.js | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

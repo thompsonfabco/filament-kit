@@ -37,7 +37,7 @@ from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
 from . import mcp_tools, pages, printers_app
-from .errors import Problem
+from .errors import Problem, TapChanged
 from .mcp_tools import SpoolItem, Tools
 
 log = logging.getLogger(__name__)
@@ -475,10 +475,11 @@ class IntakeApp:
                 if text is None:
                     log.exception("intake %s", request.url.path)
                     return JSONResponse({"error": "Something went wrong on the Hub. The details are in its log."}, 500)
-                status = 409 if type(e).__name__ == "TagConflict" else 400
+                status = 409 if type(e).__name__ in ("TagConflict", "TapChanged") else 400
                 field = getattr(e, "field", None)           # the body key a refusal is about, when it is about one
                 problems = getattr(e, "problems", None)     # a refused add: every problem, with its item and field
                 return JSONResponse({"error": text, **({"field": field} if isinstance(field, str) else {}),
+                                     **({"code": e.code} if isinstance(e, TapChanged) else {}),
                                      **({"problems": problems} if isinstance(problems, list) else {})}, status)
         return route
 
@@ -628,8 +629,13 @@ class IntakeApp:
         if not isinstance(b.get("spool"), int) or isinstance(b.get("spool"), bool):
             raise Problem("spool must be a spool id", "spool")
         loc = b.get("location")
+        nfc = b.get("nfc_id")
+        if nfc is not None and not isinstance(nfc, str):
+            raise Problem("nfc_id must be text", "nfc_id")
         kw = dict(spool=b["spool"], location=loc if isinstance(loc, str) and loc.strip() else None,
-                  gross=_num(b, "gross"), humidity=_num(b, "humidity"), dry_run=bool(b.get("dry_run", True)))
+                  gross=_num(b, "gross"), humidity=_num(b, "humidity"), dry_run=bool(b.get("dry_run", True)),
+                  nfc_id=nfc or None, read_at=_num(b, "read_at"),      # the tap the page looked at; both optional
+                  check_tap=any(k in b and b[k] is None for k in ("nfc_id", "read_at")))   # a key sent as null: the page saw no tag
         return await anyio.to_thread.run_sync(lambda: self.tools.open_spool(**kw))
 
     @staticmethod

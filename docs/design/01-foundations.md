@@ -206,7 +206,7 @@ Four themes ship; **Console is the default.**
 |---|---|---|---|---|
 | **Console** (default) | Dense, technical, hairlines, monospace data, teal accent, 6 px radius | Icon rail with small labels | Table rows | Row expands in place; long forms open a side drawer |
 | **Workbench** | Calm app shell, cards on a tinted ground, indigo accent, 12 px radius | Labelled sidebar (rail on tablets) | Cards in a grid | Card expands; dialogs for forms |
-| **Palette** | Colour-led and roomy, spool rings, large type and buttons, warm amber accent, 20 px radius | Pill tabs in the top bar | Large tiles with a spool ring | Full-height sheet, one step at a time |
+| **Palette** | Colour-led and roomy, spool rings, large type and buttons, warm amber accent, 20 px radius | Pill tabs in a row under the top bar | Large tiles with a spool ring | Full-height sheet, one step at a time |
 | **Panes** | Flat grouped lists like a phone's settings, green accent, 10 px radius | A list of sections in the left pane | Rows with a chevron | Its own pane (two or three panes side by side) |
 
 On phones Console, Workbench and Palette use a bottom bar; Panes opens on the list of sections and drills in.
@@ -346,7 +346,7 @@ except progress indicators. Everything respects `prefers-reduced-motion`.
    and the detail part: the opener, the hosts and the pane behaviour of `02-components.md` 6.2 that are not in the
    core today) are separate files of at most 30 KB each, a script and a stylesheet where needed, loaded only by
    those pages. The core limits are not raised for them. Totals count everything a page links
-   as it is served, its own files included: the phone web app loads at most 110 KB of styles, the Hub page
+   as it is served, uncompressed, its own files included: the phone web app loads at most 110 KB of styles, the Hub page
    (one page that links every section's stylesheet) at most 140 KB, and no page more than 120 KB of script.
    A test checks the totals. No layout shift after the first paint; lists of more than 50 items are paged or
    virtualised.

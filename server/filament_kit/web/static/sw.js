@@ -9,8 +9,9 @@ const SHELL = [BASE, ...["app.css", "app.js", "printers.js", "icon.png", "icon-5
   "manifest-dark.webmanifest", "shared/theme-init.js", "shared/tokens.css", "shared/components.css", "shared/strings.js",
   "shared/components.js", "shared/sprite.svg"].map((f) => BASE + "/" + f)];
 self.addEventListener("install", (event) => {
-  // a file the Hub does not serve (printers.js without the Printers tab) is skipped, not fatal
-  event.waitUntil(caches.open(CACHE).then((c) => Promise.all(SHELL.map((u) => c.add(u).catch(() => null)))).then(() => self.skipWaiting()));
+  // a file the Hub does not serve (printers.js without the Printers tab) is skipped, not fatal; so is an answer that was
+  // redirected (to the sign-in page): it is not the shell
+  event.waitUntil(caches.open(CACHE).then((c) => Promise.all(SHELL.map((u) => fetch(u).then((resp) => (resp.ok && !resp.redirected ? c.put(u, resp) : null)).catch(() => null)))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", (event) => {
   event.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith("fk-shell-") && k !== CACHE).map((k) => caches.delete(k))))
@@ -21,7 +22,8 @@ self.addEventListener("fetch", (event) => {
   if (r.method !== "GET" || u.origin !== self.location.origin || !SHELL.includes(u.pathname)) return;
   // network first, the copy when the Hub does not answer
   event.respondWith(fetch(r).then((resp) => {
-    if (resp.ok) { const copy = resp.clone(); caches.open(CACHE).then((c) => c.put(u.pathname, copy)); }
+    // only the page itself: an answer redirected (to the sign-in page) is not the shell
+    if (resp.ok && !resp.redirected) { const copy = resp.clone(); caches.open(CACHE).then((c) => c.put(u.pathname, copy)); }
     return resp;
   }).catch(() => caches.match(u.pathname).then((hit) => hit || Response.error())));
 });

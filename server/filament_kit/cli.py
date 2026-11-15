@@ -5791,6 +5791,59 @@ def cmd_local_intake_remove(yes: bool, run=None) -> int:
     return _save_and_apply(cfg, ["The local label reader is removed." if have else "local_intake is off."])
 
 
+def cmd_local_intake_share(value: str | None = None, delete_waiting: bool = False, status: bool = False,
+                           run=None, wait=None) -> int:
+    """Share corrections (`label_reader.share_corrections`) at the terminal and as the setup page's job.
+    `on` / `off`: check what the page checks (on needs the reader installed here), delete the waiting corrections
+    first when `delete_waiting` is given with `off`, save the setting, set the reader. `--status`: the setting and
+    the reader's actual state, no root. Without either: set the reader to the saved value (the page's job).
+    `--json` (06 6.8) is the global switch: the document is `output.emit`'s."""
+    from . import local_reader, share_corrections as sc
+
+    def failed(what: str, **doc) -> int:
+        output.emit({"ok": False, "error": what, "fix": None, **doc})
+        output.error(what)
+        return output.FAILED
+    if status:
+        st = sc.state(config.load())
+        output.emit({"ok": True, **st})
+        output.out(f"Share corrections is {'on' if st['saved'] else 'off'} on this Hub; the reader is "
+                   + ("not known" if st["actual"] is None else "on" if st["actual"] else "off")
+                   + (f" ({st['reason'].replace('_', ' ')})" if st["reason"] else "")
+                   + (": it is set differently." if st["differs"] else "."))
+        return output.SUCCESS
+    if not _require_root():
+        return output.NEEDS_SUDO
+    deleted = None
+    if value is not None:
+        want = value == "on"
+        cfg = config.load()
+        why = sc.refusal(cfg) if want else None
+        if why:
+            return failed(why)
+        if delete_waiting and not want and sc.saved(cfg):
+            try:
+                deleted = sc.delete_waiting(cfg)
+            except sc.DeleteFailed as e:
+                return failed(f"{e}. The setting was NOT changed: run it again to delete the rest.",
+                              deleted=e.done, waiting=e.total - e.done)
+            except local_reader.LocalReaderError as e:
+                return failed(f"nothing was deleted and nothing was changed: the waiting corrections could not be "
+                              f"read ({e})", deleted=0)
+            output.out(f"Deleted {deleted} waiting corrections.")
+        cfg.setdefault("label_reader", {})["share_corrections"] = want
+        config.save(cfg)
+    extra = {"deleted": deleted} if deleted is not None else {}
+    job = steps.Steps(4)
+    try:
+        got = sc.apply(config.load(), run=run, wait=wait, step=job.next, say=output.out)
+    except sc.ShareError as e:
+        return failed((f"{deleted} waiting corrections were deleted and the setting is saved, but " if deleted else "")
+                      + str(e), **extra)
+    output.emit({"ok": True, "share": got["want"], "changed": got["changed"], **extra})
+    return output.SUCCESS
+
+
 def cmd_local_intake_token(remove: bool) -> int:
     """Set (hidden prompt) or remove the local reader's bearer token, <etc>/local_intake_token (root). Never printed."""
     from . import local_reader
@@ -5934,98 +5987,98 @@ _HELP_GROUPS = [('Everyday',
    ('uninstall', 'Remove filament-kit from this machine'),
    ('logs', "The end of a service's log")])]
 
-_COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check', 'Overview'),
- ('`printer list`', 'All printers, set up and found', 'Printers'),
- ('`printer show <printer>`', 'One printer: details and slots', 'Printers, expanded row'),
- ('`printer test <printer>`', 'Test connection', 'Test connection'),
- ('`printer add [--klipper] [options]`', 'Add a printer; asks for what is missing', 'Add a printer'),
- ('`printer use <printer>`', 'Add a Klipper printer that a scan found', 'Use this printer'),
- ('`printer dismiss <printer>`', 'Drop a found printer from the list', 'Dismiss'),
- ('`printer rename <printer> <new name>`', 'Rename', 'Rename'),
- ('`printer address <printer> <address>`', 'Change address', 'Change address'),
- ('`printer access-code <printer>`', 'Replace the Access Code (Bambu)', 'Replace Access Code'),
+_COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check', '{nav_overview}'),
+ ('`printer list`', 'All printers, set up and found', '{nav_printers}'),
+ ('`printer show <printer>`', 'One printer: details and slots', '{nav_printers}, expanded row'),
+ ('`printer test <printer>`', 'Test connection', '{printers_test}'),
+ ('`printer add [--klipper] [options]`', 'Add a printer; asks for what is missing', '{printers_add}'),
+ ('`printer use <printer>`', 'Add a Klipper printer that a scan found', '{printers_use}'),
+ ('`printer dismiss <printer>`', 'Drop a found printer from the list', '{common_dismiss}'),
+ ('`printer rename <printer> <new name>`', 'Rename', '{common_rename}'),
+ ('`printer address <printer> <address>`', 'Change address', '{printers_change_address}'),
+ ('`printer access-code <printer>`', 'Replace the Access Code (Bambu)', '{printers_replace_access_code}'),
  ('`printer api-key <printer> [--clear]`',
   'Set, replace or clear the Moonraker API key (Klipper)',
-  'Set / Replace / Clear key'),
- ('`printer lane-data <printer> auto\\|on\\|off`', 'Klipper lane data', 'Lane data'),
- ('`printer detect <printer>`', 'Detect model and slots (Klipper)', 'Detect model and slots'),
- ('`printer scan [--subnet CIDR]`', 'Find Klipper printers on the network', 'Find Klipper printers'),
+  '{printers_set_key} / {printers_replace_key} / {printers_clear_key}'),
+ ('`printer lane-data <printer> auto\\|on\\|off`', 'Klipper lane data', '{printers_fact_lane_data}'),
+ ('`printer detect <printer>`', 'Detect model and slots (Klipper)', '{printers_detect}'),
+ ('`printer scan [--subnet CIDR]`', 'Find Klipper printers on the network', '{printers_find}'),
  ('`printer map <printer> [--by-loading]`',
   'Map slots, or map by loading filament',
-  'Map slots / Map by loading filament'),
- ('`printer report <printer>`', 'Collect a report', 'Collect a report'),
- ('`printer reports <printer>`', 'List saved reports', 'Saved reports'),
- ('`printer forget-certificate <printer>`', 'Forget certificate (Bambu)', 'Forget certificate'),
- ('`printer forget <printer>`', 'Forget printer', 'Forget printer'),
- ('`printer live <printer>`', 'Prints where the live view is', 'Open the live printer view'),
- ('`printer menu`', 'The Printers screen', 'Printers'),
- ('`klipper add-on`', 'Prints the commands that install the Klipper add-on', 'Klipper add-on'),
- ('`recent` (same as `recent history`)', 'Recently added records', 'Recently added'),
+  '{printers_map_slots} / {printers_map_loading}'),
+ ('`printer report <printer>`', 'Collect a report', '{printers_collect_report}'),
+ ('`printer reports <printer>`', 'List saved reports', '{printers_saved_reports}'),
+ ('`printer forget-certificate <printer>`', 'Forget certificate (Bambu)', '{printers_forget_cert}'),
+ ('`printer forget <printer>`', 'Forget printer', '{printers_forget}'),
+ ('`printer live <printer>`', 'Prints where the live view is', '{printers_live_view}'),
+ ('`printer menu`', 'The Printers screen', '{nav_printers}'),
+ ('`klipper add-on`', 'Prints the commands that install the Klipper add-on', '{printers_addon_title}'),
+ ('`recent` (same as `recent history`)', 'Recently added records', '{nav_recently_added}'),
  ('`recent show <record> [--photos]`', 'One record: fields, confidence, revisions', 'Record detail'),
  ('`recent revise <record> --note TEXT [--item N]`',
   'Ask the Label Reader to correct it',
-  'Ask the Label Reader to correct it'),
- ('`recent edit <record> field=value... [--item N] [--spools 41,42]`', 'Edit by hand', 'Edit by hand, Save changes'),
+  '{recent_ask_title}'),
+ ('`recent edit <record> field=value... [--item N] [--spools 41,42]`', 'Edit by hand', '{recent_edit}, {common_save_changes}'),
  ('`recent undo <record>`', 'Undo the newest revision that is not undone', 'Undo revision N'),
- ('`devices` (same as `devices list`)', 'Paired devices', 'Devices'),
- ('`devices forget <device>`', 'Unpair a device', 'Revoke'),
+ ('`devices` (same as `devices list`)', 'Paired devices', '{nav_devices}'),
+ ('`devices forget <device>`', 'Unpair a device', '{devices_unpair}'),
  ('`pair [--slicer-sync \\| --weigh-station] [--text] [--no-wait]`',
   'Pairing code, QR and fingerprint',
-  'Pair a phone / Link for the Slicer Sync / Link for the Weigh Station'),
+  '{devices_pair_phone} / {devices_link_sync} / {devices_link_station}'),
  ('`weigh-station pair [--local]`',
   'Run on the Weigh Station: pair it with the Hub',
-  'Pair the Weigh Station on this machine'),
- ('`weigh-station flash-display`', 'Write the Weigh Station display firmware over USB', 'Flash a device'),
+  '{devices_pair_station_here}'),
+ ('`weigh-station flash-display`', 'Write the Weigh Station display firmware over USB', '{nav_flash_device}'),
  ('`weigh-station pairing-state`', 'Paired, not paired or not checked yet', '(none)'),
- ('`tag-reader list`', 'Tag Reader tokens', 'Devices, Tag Readers'),
- ('`tag-reader new-token [--name NAME]`', 'Make a token', 'Make a token'),
- ('`tag-reader revoke <reader>`', 'Revoke a token', 'Revoke'),
- ('`tag-reader flash [options]`', "Write a Tag Reader over the Hub's USB", 'Flash a device'),
- ('`presets status`', 'Build, Slicer Sync and update state', 'Slicer presets'),
- ('`presets build`', 'Build now', 'Build now'),
- ('`presets lines`', 'Filament lines and their parents', 'Product lines'),
- ('`presets set-parent <line> <parent> [--orca]`', 'Set the Bambu Studio or Orca Slicer parent', 'Set parent'),
- ('`presets restore-deleted`', 'Bring back presets deleted in Bambu Studio', 'Restore deleted presets'),
+ ('`tag-reader list`', 'Tag Reader tokens', '{nav_devices}, {devices_readers_title}'),
+ ('`tag-reader new-token [--name NAME]`', 'Make a token', '{devices_readers_make}'),
+ ('`tag-reader revoke <reader>`', 'Revoke a token', '{devices_readers_revoke}'),
+ ('`tag-reader flash [options]`', "Write a Tag Reader over the Hub's USB", '{nav_flash_device}'),
+ ('`presets status`', 'Build, Slicer Sync and update state', '{nav_slicer_presets}'),
+ ('`presets build`', 'Build now', '{presets_build_now}'),
+ ('`presets lines`', 'Filament lines and their parents', '{presets_lines_title}'),
+ ('`presets set-parent <line> <parent> [--orca]`', 'Set the Bambu Studio or Orca Slicer parent', '{presets_set_parent}'),
+ ('`presets restore-deleted`', 'Bring back presets deleted in Bambu Studio', '{presets_restore_deleted}'),
  ('`presets updates (--line ID \\| --all)`',
   'Show what would be accepted (changes nothing)',
-  'Show what would be accepted'),
- ('`presets accept-updates (--line ID \\| --all)`', 'Accept updates (asks)', 'Accept these'),
- ('`features` (same as `features list`)', 'Features, on or off', 'Features'),
- ('`features menu [--numbered] [--raw]`', 'The Features checklist', 'Features'),
+  '{presets_updates_show}'),
+ ('`presets accept-updates (--line ID \\| --all)`', 'Accept updates (asks)', '{presets_updates_accept}'),
+ ('`features` (same as `features list`)', 'Features, on or off', '{nav_features}'),
+ ('`features menu [--numbered] [--raw]`', 'The Features checklist', '{nav_features}'),
  ('`features on <feature> [--hub ADDRESS]` / `features off <feature>`',
   'Switch one feature (`--hub` when switching on the Weigh Station without the Hub service)',
-  'Turn on / Turn off'),
- ('`features setup <setup> [--hub ADDRESS]`', 'Choose the setup', 'Setup'),
- ('`features apply [--no-pair]`', 'Apply the features again', 'Apply again'),
+  '{features_turn_on} / {common_turn_off}'),
+ ('`features setup <setup> [--hub ADDRESS]`', 'Choose the setup', '{features_setup_title}'),
+ ('`features apply [--no-pair]`', 'Apply the features again', '{features_apply_again}'),
  ('`features units`', 'The service files the features need, one per line', '(none)'),
- ('`config [--numbered]`', 'The settings menu', 'Settings'),
- ('`config show`', 'All settings, in menu order', 'Settings'),
- ('`config set <key> <value>`', 'Change one setting', 'Settings, one field'),
- ('`label-reader status`', 'Label Reader engines and their health', 'Settings > Label Reader'),
- ('`label-reader test <photo>... [--engine cloud\\|local]`', 'Read label photos without adding anything', 'Test'),
- ('`catalog status`', 'Filament Catalog version and last check', 'Settings > Filament Catalog'),
- ('`catalog update [--scheduled]`', 'Update now', 'Update now'),
- ('`catalog rollback`', 'Go back to the version before', 'Go back to the version before'),
- ('`catalog add <file \\| ->`', 'Add your own entry', 'Add entry'),
+ ('`config [--numbered]`', 'The settings menu', '{nav_settings}'),
+ ('`config show`', 'All settings, in menu order', '{nav_settings}'),
+ ('`config set <key> <value>`', 'Change one setting', '{nav_settings}, one field'),
+ ('`label-reader status`', 'Label Reader engines and their health', '{nav_settings} > {settings_group_label_reader}'),
+ ('`label-reader test <photo>... [--engine cloud\\|local]`', 'Read label photos without adding anything', '{settings_reader_test}'),
+ ('`catalog status`', 'Filament Catalog version and last check', '{nav_settings} > {settings_group_catalog}'),
+ ('`catalog update [--scheduled]`', 'Update now', '{settings_catalog_update}'),
+ ('`catalog rollback`', 'Go back to the version before', '{settings_catalog_back}'),
+ ('`catalog add <file \\| ->`', 'Add your own entry', '{settings_catalog_entry_add}'),
  ('`catalog adopt <folder>`', 'Take over a catalog folder from an older install', '(none)'),
- ('`catalog token [--remove]`', 'Set, replace or remove the catalog token', 'Catalog token'),
- ('`backup create [--out DIR]`', 'Back up now', 'Back up now'),
- ('`backup list`', 'Backups on this Hub', 'Show the backups'),
- ('`backup keep <days>`', 'Keep nightly backups for N days', 'Keep nightly backups for N days'),
- ('`restore <zip> \\| --uploaded`', 'Restore (asks for the typed word)', 'Restore'),
- ('`web status`', 'Access from outside: rows as in `status`', 'Settings > Network and addresses'),
- ('`web passphrase`', 'Set or replace the web passphrase', 'Web passphrase'),
- ('`remote firewall`', 'Print the firewall rules (changes nothing)', 'Show the firewall rules'),
- ('`remote get-certificate`', 'Get the public certificate now', 'Get the certificate'),
- ('`setup-code [--new] [--revoke-trusted]`', 'Hub page address and setup code', 'Setup code, Trusted computers'),
+ ('`catalog token [--remove]`', 'Set, replace or remove the catalog token', '{settings_catalog_token}'),
+ ('`backup create [--out DIR]`', 'Back up now', '{settings_backups_now}'),
+ ('`backup list`', 'Backups on this Hub', '{settings_backups_list}'),
+ ('`backup keep <days>`', 'Keep nightly backups for N days', '{settings_backups_keep}'),
+ ('`restore <zip> \\| --uploaded`', 'Restore (asks for the typed word)', '{settings_restore_heading}'),
+ ('`web status`', 'Access from outside: rows as in `status`', '{nav_settings} > {settings_group_network}'),
+ ('`web passphrase`', 'Set or replace the web passphrase', '{settings_group_passphrase}'),
+ ('`remote firewall`', 'Print the firewall rules (changes nothing)', '{settings_network_firewall}'),
+ ('`remote get-certificate`', 'Get the public certificate now', '{settings_network_certificate}'),
+ ('`setup-code [--new] [--revoke-trusted]`', 'Hub page address and setup code', '{unlock_field_label}, {devices_trusted_title}'),
  ('`certificate`', "Make the Hub's certificate if missing; print its fingerprint", '(none)'),
- ('`spoolman fields`', "Make the kit's extra fields in Spoolman", 'Overview, Make the fields'),
+ ('`spoolman fields`', "Make the kit's extra fields in Spoolman", '{nav_overview}, {overview_make_fields}'),
  ('`spoolman address [<url>]`',
   'Show or change the Spoolman in use (checked before saving)',
-  'Settings > General, Spoolman address'),
- ('`update [--check \\| --rollback] [--scheduled]`', 'Updates', 'Updates'),
- ('`uninstall [--purge]`', 'Remove filament-kit (asks)', 'Updates, footer line'),
- ('`logs [<service>] [--lines 50\\|100\\|200]`', "The end of a service's log", 'Logs'),
+  '{nav_settings} > {settings_group_general}, {settings_general_spoolman}'),
+ ('`update [--check \\| --rollback] [--scheduled]`', 'Updates', '{nav_updates}'),
+ ('`uninstall [--purge]`', 'Remove filament-kit (asks)', '{nav_updates}, footer line'),
+ ('`logs [<service>] [--lines 50\\|100\\|200]`', "The end of a service's log", '{nav_logs}'),
  ('`add`', 'Prints where spools are added', '(none)'),
  ('`spool`', 'Prints where spools are opened, tagged and moved', '(none)'),
  ('`help [<command> \\| aliases \\| --markdown]`',
@@ -6082,9 +6135,22 @@ def _top_help() -> str:
     return "\n".join(lines) + "\n"
 
 
+def _hub_catalogue() -> dict:
+    """The Hub page's string catalogue (shared_static/strings.js, generated from strings/en.json), read without the web extra."""
+    text = (Path(__file__).parent / "shared_static" / "strings.js").read_text(encoding="utf-8")
+    return json.loads(re.sub(r",\s*}$", "}", text[text.index("{"):text.rindex("}") + 1]))
+
+
+def _hub_place(cell: str) -> str:
+    """A place cell of the command table: each {key} is the catalogue text the Hub page shows for that button or section."""
+    cat = _hub_catalogue()
+    return re.sub(r"\{(\w+)\}", lambda m: cat[m.group(1)], cell)
+
+
 def _markdown_table() -> str:
     """`help --markdown`: the command table of 06 3.2 as the user guide holds it."""
-    rows = [("Command", "What it does", "Hub page place"), ("---", "---", "---"), *_COMMAND_TABLE]
+    rows = [("Command", "What it does", "Hub page place"), ("---", "---", "---"),
+            *[(c, w, _hub_place(p)) for c, w, p in _COMMAND_TABLE]]
     return "\n".join("| " + " | ".join(r) + " |" for r in rows) + "\n"
 
 
@@ -6497,6 +6563,13 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_yes(lii, "do not ask (the sizes are still printed)")
     lii.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
                                                             "saved (the setup page's job)")
+    lis = lisub.add_parser("share-corrections", help="Share corrections: `on` / `off` sets it (root); no word sets "
+                                                     "the reader to the saved value (the setup page's job); "
+                                                     "--status shows both")
+    lis.add_argument("value", nargs="?", choices=["on", "off"], help="switch it on or off")
+    lis.add_argument("--delete-waiting", action="store_true", help="with off: first delete the corrections waiting "
+                                                                   "on the reader")
+    lis.add_argument("--status", action="store_true", help="the saved setting and the reader's own state, no root")
     litk = lisub.add_parser("token", help="set the local reader's bearer token (root; asked hidden, never shown)")
     litk.add_argument("--remove", action="store_true", help="remove it instead")
     lisub.add_parser("plan", help="what installing the latest reader release needs, per tier (saved for the setup "
@@ -6743,6 +6816,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return cmd_local_intake_plan()
         if args.li_cmd == "token":
             return cmd_local_intake_token(args.remove)
+        if args.li_cmd == "share-corrections":
+            return cmd_local_intake_share(args.value, args.delete_waiting, args.status)
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)

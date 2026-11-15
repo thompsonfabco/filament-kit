@@ -49,6 +49,80 @@ def _no_real_journal(monkeypatch):
     monkeypatch.setattr(cli, "_journal_address", lambda: None)
 
 
+# The places the server code writes on a real machine. Resolved per OS: on Windows "/etc" is C:\etc, which is where a
+# test once left a real drop-in file.
+SYSTEM_ROOTS = ("/etc", "/var/lib", "/var/backups", "/usr", "/opt", "/run")
+
+
+def _system_path(path) -> bool:
+    try:
+        text = os.path.normcase(os.path.abspath(os.fsdecode(path)))
+    except (TypeError, ValueError):
+        return False
+    for root in SYSTEM_ROOTS:
+        root = os.path.normcase(os.path.abspath(root))
+        if text == root or text.startswith(root + os.sep):
+            return True
+    return False
+
+
+@pytest.fixture(autouse=True)
+def system_writes(request, monkeypatch, tmp_path_factory):
+    """No test writes outside its temp dirs. `apply.execute` and `refresh_station` default to a temp dir as their root
+    (they default to `/`), and every write to a system path (/etc, /var/lib, /usr, /opt, /run ...) is refused and
+    recorded; the test then fails at its end, naming each one. The list is this fixture's value: a test that
+    plants a write on purpose empties it. A root-only test that works on real system paths on purpose (testenv --root)
+    carries `@pytest.mark.real_system_paths("reason")` and is not guarded; the marker fails the test when it is not
+    running as root."""
+    import builtins
+    import io
+    from filament_kit import apply
+    root = tmp_path_factory.mktemp("sysroot")
+    for fn in (apply.execute, apply.refresh_station):
+        monkeypatch.setitem(fn.__kwdefaults__, "root", root)
+    attempts: list[str] = []
+    marker = request.node.get_closest_marker("real_system_paths")
+    if marker is not None:
+        if not (hasattr(os, "geteuid") and os.geteuid() == 0):
+            pytest.fail("real_system_paths is for tests that run as root: " + str(marker.args[:1] or "no reason given"))
+        yield attempts
+        return
+
+    def refuse(what, path):
+        attempts.append(f"{what} {path}")
+        raise PermissionError(f"test guard: a test must not write to the system path {path}")
+
+    real_open, real_replace, real_rename, real_mkdir = io.open, os.replace, os.rename, os.mkdir
+
+    def guarded_open(file, mode="r", *a, **k):
+        if isinstance(file, (str, bytes, os.PathLike)) and any(c in str(mode) for c in "wax+") and _system_path(file):
+            refuse("open", file)
+        return real_open(file, mode, *a, **k)
+
+    def guarded_replace(src, dst, *a, **k):
+        if _system_path(dst):
+            refuse("replace", dst)
+        return real_replace(src, dst, *a, **k)
+
+    def guarded_rename(src, dst, *a, **k):
+        if _system_path(dst):
+            refuse("rename", dst)
+        return real_rename(src, dst, *a, **k)
+
+    def guarded_mkdir(path, *a, **k):
+        if _system_path(path):
+            refuse("mkdir", path)
+        return real_mkdir(path, *a, **k)
+
+    monkeypatch.setattr(builtins, "open", guarded_open)
+    monkeypatch.setattr(io, "open", guarded_open)
+    monkeypatch.setattr(os, "replace", guarded_replace)
+    monkeypatch.setattr(os, "rename", guarded_rename)
+    monkeypatch.setattr(os, "mkdir", guarded_mkdir)
+    yield attempts
+    assert not attempts, "the test wrote to the system path(s): " + "; ".join(attempts)
+
+
 @pytest.fixture(autouse=True)
 def _command_line_output(monkeypatch):
     """What the command line writes (glyphs, colour, width) is the same on every machine: ASCII glyphs, no colour,

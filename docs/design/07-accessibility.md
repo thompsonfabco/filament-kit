@@ -346,8 +346,8 @@ themes. The rule that achieves this:
   rendering the cell label is `display: none` (the column header names the cell). In `cards`, `tiles` and `rows` the
   header row is `display: none` and the cell label is shown (or, where the design shows only the value, visually
   hidden). `display: none` takes an element out of the accessibility tree too, so a name is never read twice.
-- Sorting has two controls with the same effect: the header buttons in the `table` rendering, and a "Sort by" select
-  above the collection in the other three, shown by the same CSS profile switch.
+- Sorting has two controls with the same effect: the header buttons in the `table` rendering, and the same buttons as a
+  row of chips labelled "Sort by" above the collection in the other three, shown by the same CSS profile switch.
 
 | Rendering | A screen reader hears, moving into the first row | Navigation keys |
 |---|---|---|

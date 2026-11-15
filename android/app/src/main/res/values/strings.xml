@@ -2128,7 +2128,7 @@
         <item quantity="other">Add, %1$d spools waiting</item>
     </plurals>
     <string name="nav_printers_look">Printers, needs a look</string>
-    <string name="nav_recent_public">Recent, on the home address only</string>
+    <string name="nav_recent_public">Recently added, on the home address only</string>
     <string name="shell_needs_hub">Needs the Hub.</string>
     <string name="presets_add_button">Add to line</string>
     <string name="presets_add_select">Add to the line</string>
@@ -2204,6 +2204,15 @@
     <string name="printers_slot_sr">%1$s %2$s %3$s, %4$s %% left</string>
     <!-- 1=slot -->
     <string name="printers_slot_sr_empty">%1$s empty</string>
+    <!-- 1=slot 2=name 3=hex 4=grams -->
+    <string name="printers_slot_sr_grams">%1$s %2$s %3$s, %4$s g left</string>
+    <string name="printers_fix_klippy_not_ready">Klipper is not ready on the printer. Check it in Mainsail or Fluidd.</string>
+    <!-- 1=slot -->
+    <string name="printers_map_confirmed">Confirmed (%1$s)</string>
+    <string name="printers_map_loading_intro">Load filament into one slot at a time; the Hub notes where it went.</string>
+    <!-- 1=position 2=status -->
+    <string name="printers_map_position_row">%1$s: %2$s</string>
+    <string name="printers_map_report_wanted">A printer report would help.</string>
     <!-- 1=loaded 2=count -->
     <plurals name="printers_slots_loaded_of">
         <item quantity="one">%1$s of %2$d slot loaded</item>
@@ -2264,6 +2273,7 @@
     <string name="settings_summary_hub">%1$s · %2$s</string>
     <!-- 1=name -->
     <string name="spool_sheet_empty_body">%1$s will be marked as used up.</string>
+    <string name="spool_sheet_humidity">Box humidity</string>
     <string name="spool_sheet_humidity_error">Enter a percentage from 0 to 100.</string>
     <string name="spool_sheet_humidity_optional">Box humidity (optional)</string>
     <string name="spool_sheet_humidity_placeholder">From the box hygrometer</string>
@@ -2277,9 +2287,14 @@
     <!-- 1=id -->
     <string name="spool_sheet_opened_toast">Spool %1$s opened.</string>
     <string name="spool_sheet_other_actions">Other actions</string>
+    <string name="spool_sheet_reason_empty">This spool is marked empty.</string>
     <string name="spool_sheet_reason_preview_first">Preview first: nothing changes until you link.</string>
     <string name="spool_sheet_reason_problem">The Hub found a problem. Fix it and preview again.</string>
+    <string name="spool_sheet_reason_not_read">This spool could not be read yet. Use Try again at the top.</string>
+    <string name="spool_sheet_reason_tag_changed">A new tag was tapped. Preview again.</string>
+    <string name="spool_sheet_reason_tag_again">The tag was tapped again. Preview again.</string>
     <string name="spool_sheet_reason_weight_changed">You changed the weight. Preview again.</string>
+    <string name="spool_sheet_slot_empty">Empty</string>
     <!-- 1=tag 2=age 3=reader -->
     <string name="spool_sheet_tag_line">Tag: %1$s, tapped %2$s on %3$s</string>
     <!-- 1=from 2=to -->
@@ -2345,6 +2360,8 @@
     <string name="printer_unload_line">Unloaded %1$s from %2$s.</string>
     <!-- 1=id 2=location -->
     <string name="printer_unload_moved_back">Moved back: spool %1$s to %2$s.</string>
+    <!-- 1=id -->
+    <string name="printer_unload_moved_back_noplace">Moved back: spool %1$s to its previous place.</string>
     <string name="printer_used_empty">Nothing used in the last 7 days.</string>
     <string name="printer_used_job_default">Print job</string>
     <string name="printer_used_last_days">Last 7 days</string>
@@ -2553,6 +2570,29 @@
     <string name="add_review_weight_unused">The weight (%1$s g) was not filled in: it is only used for one opened spool.</string>
     <!-- 1=step 2=total -->
     <string name="add_step">Step %1$s of %2$s</string>
+    <string name="add_note_label">Note for the Label Reader</string>
+    <string name="add_found_engine_local">On this Hub</string>
+    <!-- 1=engine -->
+    <string name="add_found_reader_only">Label Reader: %1$s</string>
+    <string name="add_found_not_rated">Not rated</string>
+    <string name="add_found_not_rated_hint">This reader does not say how sure it is. Check the values against the label.</string>
+    <!-- 1=seconds -->
+    <string name="add_found_usage_time">Read in %1$s s</string>
+    <!-- 1=name -->
+    <string name="add_read_colour_name">Colour: %1$s</string>
+    <!-- 1=name 2=family -->
+    <string name="add_read_colour_family">Colour: %1$s (%2$s)</string>
+    <string name="add_read_colour_none">Colour: no name found</string>
+    <string name="add_row_no_brand">No brand</string>
+    <string name="add_card_colour_pick">Pick a colour</string>
+    <string name="add_card_price_error">Enter a price above 0.</string>
+    <string name="add_card_grams_plain">Enter grams as a plain number, e.g. 1000.</string>
+    <!-- 1=number 2=field 3=message -->
+    <string name="add_bar_field_error">Spool %1$s, %2$s: %3$s</string>
+    <string name="add_preview_opened">Opened</string>
+    <!-- 1=spools 2=location -->
+    <string name="add_preview_placement">%1$s in %2$s</string>
+    <string name="add_preview_new_vendor">New brand</string>
     <string name="app_update_downloaded">The update is downloaded. Tap to install to open Android\'s install window again.</string>
     <string name="app_update_downloaded_home">Update downloaded: tap to install.</string>
     <!-- 1=percent -->
@@ -2808,6 +2848,19 @@
     <string name="printer_slot_unlinked">This slot holds %1$s that is not linked to a spool.</string>
     <!-- 1=state 2=job -->
     <string name="printer_state_job">%1$s · %2$s</string>
+    <!-- 1=layer 2=total -->
+    <string name="printer_layer">Layer %1$s of %2$s</string>
+    <string name="printer_progress_name">Print progress</string>
+    <!-- 1=action 2=setting -->
+    <string name="printer_set_button_name">%1$s: %2$s</string>
+    <string name="printer_slot_unknown">Filament not identified</string>
+    <string name="printer_unknown_text">This printer is not set up on this Hub. It may have been forgotten.</string>
+    <string name="printer_unknown_title">No such printer</string>
+    <!-- 1=id 2=name -->
+    <string name="printer_used_from_spool">Taken from spool %1$s, %2$s</string>
+    <string name="printer_used_spool_gone">That spool no longer exists.</string>
+    <!-- 1=grams 2=job -->
+    <string name="printer_used_undo_name">Undo %1$s g from %2$s</string>
     <string name="printer_stop">Stop print</string>
     <!-- 1=job 2=printer -->
     <string name="printer_stop_dialog_body">Stop %1$s on %2$s? It cannot be resumed.</string>
@@ -2890,6 +2943,10 @@
     <string name="printer_load_moved_back">Spool %1$s now in %2$s goes back to %3$s</string>
     <!-- 1=id 2=slot -->
     <string name="printer_load_moved_back_noplace">Spool %1$s now in %2$s goes back to its previous place</string>
+    <!-- 1=id -->
+    <string name="printer_load_row_id">S%1$s</string>
+    <!-- 1=location 2=grams -->
+    <string name="printer_load_row_where">%1$s · %2$s g</string>
     <string name="printers_add_klipper">Add a Klipper printer</string>
     <string name="printers_empty_text">The Hub finds Bambu printers on its network by itself. Turn the printer on, then refresh. Klipper printers are added by address.</string>
     <string name="printers_fix_cert_changed">The printer\'s certificate changed. Forget its old certificate in Printer settings.</string>
@@ -2947,9 +3004,13 @@
     <string name="recent_error_colour">Enter 6 hex digits, like 2B2B2E.</string>
     <string name="recent_error_degrees_max">Enter degrees below 500.</string>
     <string name="recent_error_material">Enter a material.</string>
+    <string name="recent_error_number">Enter a number above 0, or leave this empty.</string>
     <string name="recent_error_price">Enter a price above 0.</string>
+    <string name="recent_error_required">This cannot be empty.</string>
     <string name="recent_keep_none">The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page.</string>
     <string name="recent_leave_thing">this record</string>
+    <!-- 1=name 2=count -->
+    <string name="recent_name_many">%1$s x%2$d</string>
     <string name="recent_mark_estimated">Estimated: check this</string>
     <!-- 1=name -->
     <string name="recent_read_colour">Colour: %1$s</string>
@@ -3043,6 +3104,8 @@
     <string name="spool_result_loaded">Loaded into %1$s, slot %2$s.</string>
     <!-- 1=location -->
     <string name="spool_result_moved">Moved to %1$s.</string>
+    <!-- 1=location 2=was -->
+    <string name="spool_result_moved_undo">Moved to %1$s. Undo returns it to %2$s.</string>
     <string name="spool_result_tag_linked">Tag linked.</string>
     <string name="spool_result_tag_moved">Tag moved to this spool.</string>
     <!-- 1=left -->

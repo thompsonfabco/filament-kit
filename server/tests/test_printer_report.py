@@ -461,7 +461,7 @@ def test_every_interface_offers_the_report():
     when a report would help; the command line has `printer report`; the API route is what they all call."""
     root = Path(__file__).resolve().parents[1] / "filament_kit"
     phone = (root / "web" / "static" / "printers.js").read_text(encoding="utf-8")
-    assert 'h("button", { class: m.report_wanted ? "" : "secondary", textContent: "Collect a report"' in phone
+    assert 'SW.btn(t("printers_collect_report"), { action: "report"' in phone and "report_wanted" in phone      # every Bambu printer; filled when the Hub says it would help
     page = (root / "setup_static" / "setup_printers.js").read_text(encoding="utf-8")
     assert 'label: SW.t("printers_collect_report"), run: () => collectReport(p, box)' in page      # the expansion and its menu, for every configured Bambu printer
 # ---------------------------------------------------------------- a real printer takes a moment to connect (live bug)

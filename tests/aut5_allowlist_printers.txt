@@ -1,0 +1,3 @@
+# AUT-5 findings for the run with Printers on (server/tests/test_web_app_audit.py: #printers and #printers/<id>, 2 views x 1280/320 x
+# light/dark = 8 passes). Same format and rules as aut5_allowlist.txt. The Printers views themselves have no finding: what is listed
+# is the other screens' fields, which the audit also reads while they are hidden.

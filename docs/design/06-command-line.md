@@ -64,8 +64,8 @@ Terms used below:
 
 ### 3.1 Top-level help
 
-The groups appear in the order of the Hub page's navigation (foundations section 8): Everyday, then System, then
-the two commands for moving in from older tools. Running `spoolwarden` with no command prints the same text.
+The groups appear in the order of the Hub page's navigation (foundations section 8): Everyday, then System.
+Running `spoolwarden` with no command prints the same text.
 
 ```
 $ spoolwarden -h
@@ -98,10 +98,6 @@ System
   update           Check, install or roll back Spoolwarden
   uninstall        Remove Spoolwarden from this machine
   logs             The end of a service's log
-
-Moving in
-  migrate-ops      Move data in from filament-ops
-  migrate-scanner  Move a printer in from the older scanner tool
 
 Every command: -h  --json  -q/--quiet  -y/--yes  --color auto|always|never
                --plain  --no-progress
@@ -195,8 +191,6 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `update [--check \| --rollback] [--scheduled]` | Updates | Updates |
 | `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
-| `migrate-ops [--apply]` | Move a filament-ops bundle in (a dry run without `--apply`) | (none) |
-| `migrate-scanner` | Move a printer in from the older scanner tool | (none) |
 | `add` | Prints where spools are added (section 10) | (none) |
 | `spool` | Prints where spools are opened, tagged and moved (section 10) | (none) |
 | `help [<command> \| aliases \| --markdown]` | Help; `--markdown` prints the command table for the user guide | (none) |
@@ -247,8 +241,8 @@ old spelling stays as a silent alias (section 2).
 | `local-intake status`, `test` | `label-reader status`, `test` | Label Reader |
 | `status --station-pairing` (hidden) | `status --weigh-station-pairing` (hidden) | Weigh Station |
 
-Unchanged: `status`, `config`, `backup`, `restore`, `web`, `setup-code`, `update`, `uninstall`, `migrate-ops`,
-`migrate-scanner`, `printer map`, `printer report`. Old setup words (`server`, `station`, `all-in-one`) and old
+Unchanged: `status`, `config`, `backup`, `restore`, `web`, `setup-code`, `update`, `uninstall`,
+`printer map`, `printer report`. Old setup words (`server`, `station`, `all-in-one`) and old
 feature keys (section 9.6) are accepted wherever the new ones are.
 
 ## 5. Naming a printer, device or record
@@ -1469,7 +1463,7 @@ Devices that already chose a theme keep theirs.
 
 $ sudo spoolwarden config theme dark
 Error: there is no theme called "dark".
-Fix: choose console, workbench, spool or panes. Light and dark are chosen on
+Fix: choose console, workbench, palette or panes. Light and dark are chosen on
      each device, in Settings > Appearance.
 ```
 
@@ -1661,12 +1655,6 @@ them. The command needs sudo and shows the log in full (addresses and serials in
 them until the setup code is given. Empty: `Nothing logged.` Cut: `Only the last 100 lines are shown.` and
 `Fix: for more, run journalctl -u <service>`.
 
-### 9.15 `migrate-ops` and `migrate-scanner`
-
-Unchanged in behaviour. `migrate-ops` without `--apply` is a dry run and says so on its first line:
-`Dry run: nothing is moved. Add --apply to move it.` Both end with a summary line and use the error and Fix rules
-of section 6.5.
-
 ## 10. What the command line cannot do
 
 Some features need a camera, NFC or a screen for photos. Where a person might look for them on the command line,
@@ -1717,7 +1705,7 @@ this design.
 
 | Feature | app | Hub page | web app | Command line today | Command line in this design | Gap |
 |---|---|---|---|---|---|---|
-| Pair a phone or device (QR and code) | Y | Y | - | Y | Y, and waits for the device | none |
+| Pair a phone or device (QR and code) | Y | Y | - | Y | Y, and waits for the device (`--no-wait` ends at once) | none |
 | List and forget paired devices | P | Y | N | Y (forget without asking) | Y (`devices`; asks) | web app: remains |
 | Hub status and checks | P | Y | N | Y | Y, grouped as Overview, `--json` | web app, app: remain |
 | Add spools by hand | Y | N | Y | N | N (`add` prints where) | remains: needs a phone or the Weigh Station |

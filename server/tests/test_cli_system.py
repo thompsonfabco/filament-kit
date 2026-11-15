@@ -589,6 +589,34 @@ def _design_rows() -> list[str]:
             if re.match(r"\| `", ln) and not ln[3:].startswith(NOT_HERE)]
 
 
+def _cells(row: str) -> list[str]:
+    return re.split(r" \| ", row.strip()[2:-2])      # the escaped pipes of a command (" \| ") do not split
+
+
+def _catalogue_place(cell: str) -> str:
+    en = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
+    return re.sub(r"\{(\w+)\}", lambda m: en[m.group(1)], cell)
+
+
+def test_help_place_names_come_from_the_string_catalogue(capsys):
+    en = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
+    names = {v for v in en.values() if isinstance(v, str)}
+    keyed = 0
+    for command, _what, place in cli._COMMAND_TABLE:
+        if "{" in place:
+            keyed += 1
+            assert all(k in en for k in re.findall(r"\{(\w+)\}", place)), command
+        else:                                       # a description, never a hand-typed Hub name
+            assert place not in names, f"{command}: {place!r} is a catalogue text, write it as {{key}}"
+    assert keyed > 60
+    rc, md, _ = run(capsys, ["help", "--markdown"])
+    assert rc == 0
+    for command, _what, place in cli._COMMAND_TABLE:
+        assert _cells(next(r for r in md.splitlines() if r.startswith(f"| {command} |")))[2] == _catalogue_place(place)
+    assert "| Bring back deleted presets |" in md and "| Show what would change |" in md
+    assert "| Restore deleted presets |" not in md and "| Show what would be accepted |" not in md
+
+
 def test_help_markdown_lists_every_command_of_the_design(capsys):
     rc, md, _ = run(capsys, ["help", "--markdown"])
     wanted = [c for c in _design_commands() if not c.startswith(NOT_HERE)]
@@ -596,8 +624,14 @@ def test_help_markdown_lists_every_command_of_the_design(capsys):
     rows = md.splitlines()
     for command in wanted:
         assert f"| `{command}" in md, command
-    for row in _design_rows():                      # every row whole: the command, what it does, the Hub page place
-        assert _RENAME_STEPS.get(row, row) in rows, row
+    helped = {_cells(r)[0]: _cells(r) for r in rows[2:]}
+    raw = {c: p for c, _w, p in cli._COMMAND_TABLE}
+    for row in _design_rows():                      # every row: the command and what it does whole; the place as below
+        want = _cells(_RENAME_STEPS.get(row, row))
+        got = helped[want[0]]
+        assert got[:2] == want[:2], row
+        # a place that names a Hub button or section is the catalogue text of the key the Hub page uses (design amends 06 3.2)
+        assert got[2] == (_catalogue_place(raw[want[0]]) if "{" in raw[want[0]] else want[2]), row
     assert md.splitlines()[:2] == ["| Command | What it does | Hub page place |", "| --- | --- | --- |"]
     assert not any(f"| `{c}" in md for c in NOT_HERE)
     assert not re.search(r"\((?:section )?\d+(?:\.\d+)?\)", md), "a design section number in the help"

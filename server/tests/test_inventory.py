@@ -807,3 +807,18 @@ def test_problems_name_the_item_and_the_field(sm, spoolman_fake_store):
     with pytest.raises(inventory.ItemsInvalid) as e:        # a line that is not text is one problem, not two
         inventory.add_spools(sm, [item(line=5)], RULES, dry=True)
     assert [(p["item"], p["field"]) for p in e.value.problems] == [(0, "line")]
+
+
+def test_open_spool_refuses_an_archived_spool(sm):
+    s = _spool(sm, material="PETG", name="Z")
+    sm.patch(f"spool/{s['id']}", {"archived": True})
+    with pytest.raises(ValueError, match="marked empty"):
+        inventory.open_spool(sm, s["id"], UID, RULES, dry=False)
+    assert tags.stored(sm.get(f"spool/{s['id']}")) is None
+
+
+def test_open_spool_weight_is_capped_at_a_full_spool_like_the_edit(sm):
+    s = _spool(sm, material="PETG", name="Y")
+    dry = inventory.open_spool(sm, s["id"], UID, RULES, gross=4800, dry=True)
+    assert dry["remaining_weight"] == 1000
+    assert inventory.open_spool(sm, s["id"], UID, RULES, remaining=4000, dry=False)["remaining_weight"] == 1000
