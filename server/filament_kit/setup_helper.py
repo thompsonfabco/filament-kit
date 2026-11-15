@@ -109,6 +109,8 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update", "--yes"
         "local_intake_plan": ("local-intake", "plan"),         # the server cannot reach GitHub: a job, as `check`
         "local_intake_install": ("local-intake", "install", "--yes", "--planned"),
         "local_intake_remove": ("local-intake", "remove", "--yes"),
+        # Share corrections (label_reader.share_corrections): the module's own config command, then its restart
+        "local_intake_share": ("local-intake", "share-corrections"),
         # the "Flash a device" tab, Printer Station plugged into the server: the answers wait in reader_flash.PENDING
         "reader_setup": ("reader", "setup", "--pending")}
 WRAPPER = "/usr/local/bin/filament-kit"
@@ -135,6 +137,7 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "local_intake_plan": "the reader's release is being checked; try again in a moment",
         "local_intake_install": "the local label reader is being installed; wait until it has finished",
         "local_intake_remove": "the local label reader is being removed; wait until it has finished",
+        "local_intake_share": "the Label Reader is being set for sharing corrections; wait until it has finished",
         "reader_setup": "a Tag Reader is being set up; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}
@@ -597,6 +600,8 @@ GENERAL = {
     "intake.reader": (_reader, None),
     "local_intake.url": (_reader_url, None),
     "local_intake.tier": (_reader_tier, None),
+    # read on every correction (V1.3); the job local_intake_share sets the reader the same way
+    "label_reader.share_corrections": (_bool, None),
 }
 
 
@@ -614,6 +619,15 @@ def _restart_kit() -> None:
                        capture_output=True, timeout=30, check=False)
 
 
+SHARE_KEY = "label_reader.share_corrections"
+
+
+def _share_refusal(cfg: dict, value) -> str | None:
+    """Turning Share corrections on needs the reader this Hub installed (the job configures that one)."""
+    from . import share_corrections
+    return share_corrections.refusal(cfg) if value is True else None
+
+
 def _general(req: dict) -> dict:
     key = req.get("key")
     if not isinstance(key, str) or key not in GENERAL:
@@ -625,6 +639,11 @@ def _general(req: dict) -> dict:
         raise Refused(400, f"{key} {e}", field="value") from None
     _not_applying()
     cfg = config.load()
+    if key == SHARE_KEY:
+        why = _share_refusal(cfg, value)
+        if why:
+            raise Refused(400, f"{key} {why}", field="value")
+    before = general_value(cfg, key)
     parts = key.split(".")
     cur = cfg
     for part in parts[:-1]:
@@ -641,7 +660,11 @@ def _general(req: dict) -> dict:
         _start_apply(checked=True)
     elif then == "restart":
         _restart_kit()
-    return {"key": key, "restarts": then == "restart", "applies": then == "apply"}
+    out = {"key": key, "restarts": then == "restart", "applies": then == "apply"}
+    if key == SHARE_KEY and (before is True) != value:
+        _start_job("local_intake_share", checked=True)
+        out["jobs"] = ["local_intake_share"]
+    return out
 
 
 def _general_group(req: dict) -> dict:
@@ -663,6 +686,11 @@ def _general_group(req: dict) -> dict:
         raise Refused(400, "nothing was changed: " + "; ".join(errors.values()), errors=errors)
     _not_applying()
     cfg = config.load()
+    share = SHARE_KEY in checked and (general_value(cfg, SHARE_KEY) is True) != checked[SHARE_KEY]
+    why = _share_refusal(cfg, checked.get(SHARE_KEY))
+    if why:
+        errors = {SHARE_KEY: f"{SHARE_KEY} {why}"}
+        raise Refused(400, f"nothing was changed: {errors[SHARE_KEY]}", errors=errors)
     for key, value in checked.items():
         parts = key.split(".")
         cur = cfg
@@ -682,7 +710,11 @@ def _general_group(req: dict) -> dict:
         _start_apply(checked=True)
     if restarts:
         _restart_kit()
-    return {"keys": list(checked), "restarts": restarts, "applies": applies}
+    out = {"keys": list(checked), "restarts": restarts, "applies": applies}
+    if share:
+        _start_job("local_intake_share", checked=True)
+        out["jobs"] = ["local_intake_share"]
+    return out
 
 
 def _spoolman_url(req: dict) -> dict:

@@ -5388,6 +5388,21 @@ def cmd_local_intake_remove(yes: bool, run=None) -> int:
     return _save_and_apply(cfg, ["The local label reader is removed." if have else "local_intake is off."])
 
 
+def cmd_local_intake_share(run=None, wait=None) -> int:
+    """Set the local reader to the Hub's `label_reader.share_corrections` (the setup page's job): the module's own
+    `config --feedback-opt-in` as its service user, then a restart, when the reader is set differently."""
+    from . import share_corrections
+    if not _require_root():
+        return 1
+    job = steps.Steps(4)
+    try:
+        share_corrections.apply(config.load(), run=run, wait=wait, step=job.next, say=lambda s: print(s, flush=True))
+    except share_corrections.ShareError as e:
+        _err_line(str(e))
+        return 1
+    return 0
+
+
 def cmd_local_intake_token(remove: bool) -> int:
     """Set (hidden prompt) or remove the local reader's bearer token, <etc>/local_intake_token (root). Never printed."""
     from . import local_reader
@@ -5787,6 +5802,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_yes(lii, "do not ask (the sizes are still printed)")
     lii.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
                                                             "saved (the setup page's job)")
+    lisub.add_parser("share-corrections", help="set the local reader to this Hub's Share corrections setting (root; "
+                                               "the setup page's job)")
     litk = lisub.add_parser("token", help="set the local reader's bearer token (root; asked hidden, never shown)")
     litk.add_argument("--remove", action="store_true", help="remove it instead")
     lisub.add_parser("plan", help="what installing the latest reader release needs, per tier (saved for the setup "
@@ -5991,6 +6008,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return cmd_local_intake_plan()
         if args.li_cmd == "token":
             return cmd_local_intake_token(args.remove)
+        if args.li_cmd == "share-corrections":
+            return cmd_local_intake_share()
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)
