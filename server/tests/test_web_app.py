@@ -1196,3 +1196,16 @@ def test_a_redirect_during_install_or_fetch_is_never_cached(tmp_path):
     assert "/intake/shared/components.js" in out["installed"] and "/intake/icon.png" in out["installed"]
     assert "/intake/printers.js" not in out["installed"]       # a file that cannot be fetched is skipped, not fatal
     assert out["fetched"] == []                                 # a redirected answer to a later request is not stored either
+
+
+def test_a_hidden_screen_stays_hidden_whatever_display_its_own_class_sets():
+    """`.add { display: grid }` came after `.hidden { display: none }` with the same specificity, so the Add spools
+    screen showed on every screen (Bug-bash 1, 2026-11-15). The hidden rule must outrank every one-class rule that
+    sets display, wherever that rule sits in the file."""
+    import re as _re
+    css = (STATIC / "app.css").read_text(encoding="utf-8")
+    assert _re.search(r"^body \.hidden \{ display: none; \}", css, _re.M), "the hidden rule needs body .hidden"
+    plain = _re.findall(r"^\.hidden\s*\{", css, _re.M)
+    assert not plain, "a bare .hidden rule loses to a later one-class display rule"
+    one_class = _re.findall(r"^\.([a-z][\w-]*)\s*\{[^}]*\bdisplay:\s*(?!none)", css, _re.M)
+    assert "add" in one_class and "spools" in one_class      # the screens that showed through
