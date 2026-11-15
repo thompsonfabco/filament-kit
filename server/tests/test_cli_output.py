@@ -707,3 +707,23 @@ def test_the_waits_that_run_programs_say_so(cfg, capsys, monkeypatch, tmp_path):
     run(capsys, "restore", str(zip_path), "--yes")
     run(capsys, "status")
     assert seen == {"Backing up…": True, "Restoring…": True, "Checking…": True}
+
+
+def test_the_apply_and_catalog_waits_run_programs_and_say_so(cfg, capsys, monkeypatch):
+    from filament_kit import apply, library, output
+    seen: dict[str, bool] = {}
+    real = output.wait
+
+    def spy(text, **kw):
+        seen[text] = kw.get("programs", False)
+        return real(text, **kw)
+    monkeypatch.setattr(output, "wait", spy)
+    monkeypatch.setattr(cli, "_require_root", lambda: True)
+    monkeypatch.setattr(apply, "plan", lambda c: [])
+    monkeypatch.setattr(apply, "step_names", lambda actions: [])
+    monkeypatch.setattr(apply, "execute", lambda actions, step=None: None)
+    monkeypatch.setattr(apply, "finish", lambda c, pairing=True: None)
+    monkeypatch.setattr(library, "update", lambda *a, **k: library.UpdateResult(False, 7, 0, None))
+    cli._run_apply(pairing=False)
+    run(capsys, "library", "update")
+    assert seen == {"Applying the changes…": True, "Updating the Filament Catalog…": True}

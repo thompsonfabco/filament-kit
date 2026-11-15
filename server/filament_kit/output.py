@@ -411,8 +411,8 @@ class wait:
     """`with output.wait("Checking…"):` shows `◐ Checking… 3 s` on standard error once 2 seconds pass with no other
     output: at a terminal rewritten in place each second, with `(Ctrl-C stops)` after 5. Not at a terminal, or with
     `--no-progress`, one whole line, once. A wait that runs other programs (`programs=True`: their output goes straight
-    to the terminal, past the guard below) never draws in place either: one whole line, as when piped. In plain mode the line has no glyph and comes again every 10 seconds with
-    the time so far. `step(k, n)` adds `step k of n` in place of the seconds. Never on standard output.
+    to the terminal, past the guard below) never draws in place either: one whole line, as when piped. In plain mode the line has no glyph and comes
+    again every 10 seconds with the time so far. `step(k, n)` adds `step k of n` in place of the seconds. Never on standard output.
 
     While it is on, standard output and error are guarded: any write, from anywhere, takes the line off first and
     restarts the 2 seconds, and the line is never drawn after text that has not ended its line. A command that asks a
