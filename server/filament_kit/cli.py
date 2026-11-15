@@ -5388,54 +5388,57 @@ def cmd_local_intake_remove(yes: bool, run=None) -> int:
     return _save_and_apply(cfg, ["The local label reader is removed." if have else "local_intake is off."])
 
 
-def cmd_local_intake_share(value: str | None = None, delete_waiting: bool = False, as_json: bool = False,
-                           status: bool = False, run=None, wait=None) -> int:
+def cmd_local_intake_share(value: str | None = None, delete_waiting: bool = False, status: bool = False,
+                           run=None, wait=None) -> int:
     """Share corrections (`label_reader.share_corrections`) at the terminal and as the setup page's job.
     `on` / `off`: check what the page checks (on needs the reader installed here), delete the waiting corrections
     first when `delete_waiting` is given with `off`, save the setting, set the reader. `--status`: the setting and
     the reader's actual state, no root. Without either: set the reader to the saved value (the page's job).
-    `--json`: one JSON object instead of the progress lines."""
+    `--json` (06 6.8) is the global switch: the document is `output.emit`'s."""
     from . import local_reader, share_corrections as sc
 
-    def finish(rc: int, **out) -> int:
-        if as_json:
-            print(json.dumps({"ok": rc == 0, **out}))
-        elif rc != 0 and out.get("error"):
-            _err_line(out["error"])
-        return rc
+    def failed(what: str, **doc) -> int:
+        output.emit({"ok": False, "error": what, "fix": None, **doc})
+        output.error(what)
+        return output.FAILED
     if status:
-        return finish(0, **sc.state(config.load()))
+        st = sc.state(config.load())
+        output.emit({"ok": True, **st})
+        output.out(f"Share corrections is {'on' if st['saved'] else 'off'} on this Hub; the reader is "
+                   + ("not known" if st["actual"] is None else "on" if st["actual"] else "off")
+                   + (f" ({st['reason'].replace('_', ' ')})" if st["reason"] else "")
+                   + (": it is set differently." if st["differs"] else "."))
+        return output.SUCCESS
     if not _require_root():
-        return 1
+        return output.NEEDS_SUDO
     deleted = None
     if value is not None:
         want = value == "on"
         cfg = config.load()
         why = sc.refusal(cfg) if want else None
         if why:
-            return finish(1, error=why)
+            return failed(why)
         if delete_waiting and not want and sc.saved(cfg):
             try:
                 deleted = sc.delete_waiting(cfg)
             except sc.DeleteFailed as e:
-                return finish(1, error=f"{e}. The setting was NOT changed: run it again to delete the rest.",
+                return failed(f"{e}. The setting was NOT changed: run it again to delete the rest.",
                               deleted=e.done, waiting=e.total - e.done)
             except local_reader.LocalReaderError as e:
-                return finish(1, error=f"nothing was deleted and nothing was changed: the waiting corrections could "
-                                       f"not be read ({e})", deleted=0)
-            if not as_json:
-                print(f"Deleted {deleted} waiting corrections.", flush=True)
+                return failed(f"nothing was deleted and nothing was changed: the waiting corrections could not be "
+                              f"read ({e})", deleted=0)
+            output.out(f"Deleted {deleted} waiting corrections.")
         cfg.setdefault("label_reader", {})["share_corrections"] = want
         config.save(cfg)
-    quiet = (lambda line: None) if as_json else None
-    job = steps.Steps(4, out=quiet)
+    extra = {"deleted": deleted} if deleted is not None else {}
+    job = steps.Steps(4)
     try:
-        got = sc.apply(config.load(), run=run, wait=wait, step=job.next,
-                       say=(lambda s: None) if as_json else (lambda s: print(s, flush=True)))
+        got = sc.apply(config.load(), run=run, wait=wait, step=job.next, say=output.out)
     except sc.ShareError as e:
-        return finish(1, error=(f"{deleted} waiting corrections were deleted and the setting is saved, but " if deleted
-                                else "") + str(e), **({"deleted": deleted} if deleted is not None else {}))
-    return finish(0, share=got["want"], changed=got["changed"], **({"deleted": deleted} if deleted is not None else {}))
+        return failed((f"{deleted} waiting corrections were deleted and the setting is saved, but " if deleted else "")
+                      + str(e), **extra)
+    output.emit({"ok": True, "share": got["want"], "changed": got["changed"], **extra})
+    return output.SUCCESS
 
 
 def cmd_local_intake_token(remove: bool) -> int:
@@ -5844,7 +5847,6 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lis.add_argument("--delete-waiting", action="store_true", help="with off: first delete the corrections waiting "
                                                                    "on the reader")
     lis.add_argument("--status", action="store_true", help="the saved setting and the reader's own state, no root")
-    lis.add_argument("--json", action="store_true", help="one JSON object instead of the progress lines")
     litk = lisub.add_parser("token", help="set the local reader's bearer token (root; asked hidden, never shown)")
     litk.add_argument("--remove", action="store_true", help="remove it instead")
     lisub.add_parser("plan", help="what installing the latest reader release needs, per tier (saved for the setup "
@@ -6050,7 +6052,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         if args.li_cmd == "token":
             return cmd_local_intake_token(args.remove)
         if args.li_cmd == "share-corrections":
-            return cmd_local_intake_share(args.value, args.delete_waiting, args.json, args.status)
+            return cmd_local_intake_share(args.value, args.delete_waiting, args.status)
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)

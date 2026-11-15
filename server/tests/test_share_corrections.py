@@ -11,7 +11,7 @@ from test_setup_page import Helper, client, env, make, post  # noqa: F401
 
 from starlette.testclient import TestClient
 
-from filament_kit import cli, config, pairing, local_intake_install as lii, local_reader, setup_helper, share_corrections as sc
+from filament_kit import cli, config, output, pairing, local_intake_install as lii, local_reader, setup_helper, share_corrections as sc
 
 KEY = "label_reader.share_corrections"
 
@@ -270,16 +270,16 @@ def test_the_command_needs_root(monkeypatch, capsys):
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
     run = Run({})
-    assert cli.cmd_local_intake_share(run=run) == 1 and run.calls == []
+    assert cli.cmd_local_intake_share(run=run) == output.NEEDS_SUDO and run.calls == []
 
 
 def test_cli_parses_the_command(monkeypatch):
     seen = []
     monkeypatch.setattr(cli, "cmd_local_intake_share", lambda *a, **k: seen.append(a) or 0)
     assert cli.main(["local-intake", "share-corrections"]) == 0
-    assert cli.main(["local-intake", "share-corrections", "off", "--delete-waiting", "--json"]) == 0
+    assert cli.main(["local-intake", "share-corrections", "off", "--delete-waiting"]) == 0
     assert cli.main(["local-intake", "share-corrections", "--status"]) == 0
-    assert seen == [(None, False, False, False), ("off", True, True, False), (None, False, False, True)]
+    assert seen == [(None, False, False), ("off", True, False), (None, False, True)]
     with pytest.raises(SystemExit):
         cli.main(["local-intake", "share-corrections", "maybe"])
 
@@ -487,7 +487,12 @@ def test_turning_off_a_reader_without_the_queue_does_nothing(fake_reader, tmp_pa
 # ---------------------------------------------------------------- the command line (parity)
 
 def cli_json(capsys, *args, **kw):
-    rc = cli.cmd_local_intake_share(*args, as_json=True, **kw)
+    """The command under the global --json (06 6.8): the one document on standard output, and the exit code."""
+    output.configure(json=True)
+    try:
+        rc = output.run_json(lambda: cli.cmd_local_intake_share(*args, **kw))
+    finally:
+        output.reset()
     return rc, json.loads(capsys.readouterr().out)
 
 
@@ -555,7 +560,7 @@ def test_cli_on_off_need_root(monkeypatch, capsys):
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
     before = config.load()
-    assert cli.cmd_local_intake_share("on", run=Run({})) == 1 and config.load() == before
+    assert cli.cmd_local_intake_share("on", run=Run({})) == output.NEEDS_SUDO and config.load() == before
 
 
 # ---------------------------------------------------------------- the apps' read
@@ -571,3 +576,11 @@ def test_the_apps_can_read_the_state(fake_reader, tmp_path):
     c.headers["Authorization"] = "Bearer " + pairing.redeem_code(pairing.issue("Pixel").code)
     assert c.get("/api/intake/share-corrections").json() == {"saved": False, "actual": True, "differs": True,
                                                               "count": 0, "reason": None}
+
+
+def test_the_global_json_switch_gives_the_status_document(fake_reader, tmp_path, capsys):
+    url, _ = reader(fake_reader)
+    set_up(url, tmp_path=tmp_path, saved=False)
+    assert cli.main(["local-intake", "share-corrections", "--status", "--json"]) == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["ok"] is True and doc["saved"] is False and doc["actual"] is True and doc["differs"] is True
