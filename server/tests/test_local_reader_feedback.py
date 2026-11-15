@@ -284,3 +284,25 @@ def test_the_kit_never_sends_an_address(rd):
         local_reader._check_body({"images_b64": [], "endpoint": "https://x.example/"})
     with pytest.raises(ValueError):
         local_reader._check_body({"Feedback_Endpoint": "x"})
+
+
+# ---------- review R362 LOWs ----------
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1:99999", "http://127.0.0.1:abc"])
+def test_a_bad_port_is_an_answer_not_an_exception(url):
+    h = local_reader.health(cfg_of(url), timeout=1)
+    assert h["ok"] is False and "port" in h["error"]
+    assert "port" in local_reader.check_url(url)
+    with pytest.raises(local_reader.LocalReaderError):
+        local_reader.feedback_list(cfg_of(url))
+
+
+def test_a_1_1_reader_whose_capabilities_name_no_feedback_still_has_the_queue(fake_reader):
+    url, data = fake_reader
+    data["health"] = {**data["health"], "api_version": "1.1", "capabilities": {"accelerator": "cpu"}}
+    assert caps_of(url)["feedback"] is True
+
+
+def test_the_address_guard_looks_inside_the_body():
+    with pytest.raises(ValueError):
+        local_reader._check_body({"corrected": {"endpoint": "x"}})

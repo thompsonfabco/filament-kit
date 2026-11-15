@@ -89,6 +89,10 @@ def check_url(url: str) -> str | None:
     u = urlparse(str(url or "").strip())
     if u.scheme not in ("http", "https") or not u.hostname:
         return "Give the reader's address, e.g. http://127.0.0.1:7915 or http://gpu-box.example:7915"
+    try:
+        u.port
+    except ValueError:
+        return "The port in the reader's address must be a number from 1 to 65535"
     if u.path not in ("", "/") or u.query or u.fragment:
         return "Give only the reader's address (scheme, host, port), no path"
     return None
@@ -149,6 +153,9 @@ def _reachable(url: str) -> None:
     try:
         socket.create_connection((u.hostname, u.port or (443 if u.scheme == "https" else 80)),
                                  timeout=CONNECT_TIMEOUT).close()
+    except ValueError:      # a port outside 0-65535 or not a number
+        raise LocalReaderError("unreachable", f"the local reader's address {u.netloc!r} is not usable: the port must "
+                                              "be a number from 1 to 65535") from None
     except OSError as e:
         raise LocalReaderError("unreachable", f"the local reader at {u.netloc} does not answer ({e})") from None
 
@@ -331,7 +338,7 @@ def capabilities(h) -> dict:
         if not detail and isinstance(h.get("feedback"), dict):
             detail = h["feedback"]
         has = fb is True or (isinstance(fb, dict) and fb.get("enabled", True) is not False) or (
-            fb is None and bool(detail))
+            fb is None and (bool(detail) or _version_at_least(h.get("api_version"), 1, 1)))
         fields = detail.get("fields")
         both = (detail.get("source") is True and detail.get("record") is True) or (
             isinstance(fields, list) and "source" in fields and "record" in fields)
@@ -551,7 +558,11 @@ def _feedback_base(cfg: dict) -> str:
 
 def _check_body(body: dict) -> dict:
     """The kit never names an upload address to the reader: a bug that did would fail here, not leak."""
-    bad = [k for k in body if str(k).lower() in FORBIDDEN_FIELDS]
+    def keys(v):
+        for k, x in (v.items() if isinstance(v, dict) else ()):
+            yield k
+            yield from keys(x)
+    bad = [k for k in keys(body) if str(k).lower() in FORBIDDEN_FIELDS]
     if bad:
         raise ValueError(f"the kit never sends {bad[0]} to the local reader")
     return body

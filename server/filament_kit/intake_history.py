@@ -8,6 +8,7 @@ station, the CLI). A save that followed a label read names its `read_id`; the re
     <state>/intake-history/<id>/photo<n>.jpg  the photos actually sent to the AI (n from 1)
     <state>/intake-history/pending/<read_id>/ a read not saved yet: read.json + photo<n>.jpg
 
+share.json (share_queue.py): the corrections of this record waiting on the reader, or why one was not queued.
 record.json: {id, at, source, device, state, read_id, read: {items, hint, engine} | null, weight, tag,
               saved: [{item, values, spool_ids, filament_id}], revisions: [...], proposals: {...}}
 
@@ -223,10 +224,17 @@ def record_save(saved: list[dict], *, source: str, device: str | None = None, re
         prune()
         log.info("intake history: record %s (%s, %d spool(s))", rid, rec["source"],
                  sum(len(s["spool_ids"]) for s in rec["saved"]))
+        _share(rid)                     # a field changed before Add: Share corrections (after the save)
         return rid
     except Exception:  # noqa: BLE001 - the spools were written; a missing record must not fail the save
         log.exception("intake history: cannot record a save")
         return None
+
+
+def _share(rid: str) -> None:
+    """Queue the record's correction when Share corrections applies (share_queue.py): in the background, never raises."""
+    from . import share_queue
+    share_queue.schedule(rid)
 
 
 # ---------------------------------------------------------------- reading
@@ -239,8 +247,9 @@ def _summary(rec: dict) -> dict:
         for sid in s.get("spool_ids") or []:
             spools.append({"spool_id": sid, "filament_id": s.get("filament_id"), "vendor": v.get("vendor"),
                            "name": v.get("name"), "material": v.get("material"), "color_hex": v.get("color_hex")})
+    from . import share_queue
     return {"id": rec["id"], "at": rec.get("at"), "source": rec.get("source"), "state": rec.get("state"),
-            "photos": len(_photos(d)), "undoable": any(not r.get("undone") for r in rec.get("revisions") or []),
+            "share": share_queue.state(rec["id"]), "photos": len(_photos(d)), "undoable": any(not r.get("undone") for r in rec.get("revisions") or []),
             "spools": spools, **_read_facts(rec)}
 
 
@@ -583,6 +592,7 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
                  f"; {len(targets)} of {len(targets) + len(it['spool_ids'])} spools" if rev["split_from"] is not None
                  else "")
     _rebuild(changed)
+    _share(rid)                         # a hand edit or an accepted suggestion
     return get(rid)
 
 
@@ -647,4 +657,5 @@ def undo(sm, rid: str, revision) -> dict:
         _save(rec)
         log.info("intake history: record %s revision %d undone", rid, rev["n"])
     _rebuild([])
+    _share(rid)                         # the waiting correction follows the record's values again
     return get(rid)
