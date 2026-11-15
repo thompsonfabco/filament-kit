@@ -8,6 +8,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
+import com.thompsonfabco.filamentkit.ui.theme.lookFromWire
+import com.thompsonfabco.filamentkit.ui.theme.wire
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
@@ -63,7 +66,10 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     override suspend fun clear() {
-        store.edit { it.remove(KEY) }
+        store.edit {
+            it.remove(KEY)
+            it.remove(HUB_LOOK) // the next Hub says its own
+        }
     }
 
     /** Off unless the user turned it on. It belongs to the phone, so forgetting a server leaves it as it is. */
@@ -97,10 +103,37 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
         store.edit { it[APPEARANCE] = appearance.name.lowercase() }
     }
 
+    /** The theme this phone chose in Settings; null until it does (then the Hub's default applies, see `resolveLook`). */
+    val lookChoice: Flow<Look?> = store.data.map { prefs -> lookFromWire(prefs[LOOK]) }.retryOnRead(null)
+
+    suspend fun setLook(look: Look) {
+        store.edit { it[LOOK] = look.wire }
+    }
+
+    /** The Hub's default theme as its last answer said; kept so a start without the Hub still uses it. */
+    val hubLook: Flow<Look?> = store.data.map { prefs -> lookFromWire(prefs[HUB_LOOK]) }.retryOnRead(null)
+
+    suspend fun setHubLook(look: Look) {
+        store.edit { it[HUB_LOOK] = look.wire }
+    }
+
+    /** A read error shows [fallback] for now and tries again, so a later value still arrives. */
+    private fun <T> Flow<T>.retryOnRead(fallback: T): Flow<T> = retryWhen { e, _ ->
+        if (e is IOException) {
+            emit(fallback)
+            delay(RETRY_MS)
+            true
+        } else {
+            false
+        }
+    }
+
     companion object {
         private const val RETRY_MS = 1000L
         private val KEY = stringPreferencesKey("server")
         private val APPEARANCE = stringPreferencesKey("appearance")
+        private val LOOK = stringPreferencesKey("look")
+        private val HUB_LOOK = stringPreferencesKey("hub_look")
         private val SKIP_FINGERPRINT = booleanPreferencesKey("skip_fingerprint_check")
 
         private val Context.dataStore by preferencesDataStore("settings")

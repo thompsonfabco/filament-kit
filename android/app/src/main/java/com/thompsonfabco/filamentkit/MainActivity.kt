@@ -154,6 +154,7 @@ import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.CONNECTION_POLL_MS
 import com.thompsonfabco.filamentkit.session.AppViewModel
+import com.thompsonfabco.filamentkit.session.Startup
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.session.PairNotice
 import com.thompsonfabco.filamentkit.session.canTrust
@@ -252,12 +253,16 @@ import com.thompsonfabco.filamentkit.ui.spool.TagViewModel
 import com.thompsonfabco.filamentkit.ui.spool.toSpoolSummary
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.BUILT_LOOKS
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
+import com.thompsonfabco.filamentkit.ui.theme.lookFromWire
 import com.thompsonfabco.filamentkit.ui.theme.resolveDark
+import com.thompsonfabco.filamentkit.ui.theme.resolveLook
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -286,9 +291,9 @@ class MainActivity : ComponentActivity() {
                 // the shell's toast queue: screens reach it through LocalToast
                 val toast = remember { SwToastState() }
                 val topBarActions = remember { TopBarActions() }
-                AppFrame(appearance, handleInsets = false) {
+                LookedAppFrame(appearance, start, app.settings.lookChoice, app.settings.hubLook) { look ->
                     CompositionLocalProvider(LocalToast provides toast, LocalTopBarActions provides topBarActions) {
-                        FilamentKitApp(app, start.paired, appearance, toast, topBarActions)
+                        FilamentKitApp(app, start.paired, appearance, look, toast, topBarActions)
                     }
                 }
             }
@@ -312,7 +317,9 @@ class MainActivity : ComponentActivity() {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appearance, toast: SwToastState, topBarActions: TopBarActions) {
+private fun FilamentKitApp(
+    app: AppViewModel, paired: Boolean, appearance: Appearance, look: Look, toast: SwToastState, topBarActions: TopBarActions,
+) {
     // API 37: every LAN socket needs ACCESS_LOCAL_NETWORK. Asked once at start; the session waits for it.
     val localNetwork = rememberLocalNetworkAccess(autoRequest = true, onGranted = app.session::refresh)
     val nav = rememberNavController()
@@ -347,6 +354,8 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
             null
         }
     }
+    // The Hub's default theme is kept for the phones that have not chosen (S6.3).
+    RememberHubLook(info?.look, app::rememberHubLook)
     val labelPhotos = showLabelPhotos(info)
     val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
     // On screen: the chip follows the server, and is checked right away on return to the app. Not while pairing,
@@ -1145,6 +1154,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 navigation<SettingsGraph>(startDestination = SettingsRoute) {
                     val settingsFacts = SettingsFacts(
                         appearance = appearance,
+                        look = look,
                         hub = config?.let { SettingsHub(it.name, hubAddress(connection, it), it.fingerprint, info?.version) },
                         hubState = shown,
                         update = update,
@@ -1153,6 +1163,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     )
                     val settingsActions = SettingsActions(
                         onAppearance = app::setAppearance,
+                        onLook = app::setLook,
                         skipFingerprintCheck = skipFingerprintCheck,
                         onSkipFingerprintCheck = app::setSkipFingerprintCheck,
                         onPairAgain = app.router::pairAgain,
@@ -1302,17 +1313,42 @@ internal fun ComponentActivity.applyNightMode(appearance: Appearance) {
 }
 
 /**
- * The app's root: the Console theme in the chosen appearance, the background fills the whole window, behind the bars
+ * The app's root: the theme [look] in the chosen appearance, the background fills the whole window, behind the bars
  * too. With [handleInsets] every screen is kept clear of the status bar, navigation bar, cutouts and keyboard, here
  * once; the app's shell passes false, because its top bar, bar or rail and scaffold each keep clear of them.
  */
 @Composable
-internal fun AppFrame(appearance: Appearance = Appearance.System, handleInsets: Boolean = true, content: @Composable () -> Unit) {
-    SpoolwardenTheme(Look.Console, appearance) {
+internal fun AppFrame(
+    appearance: Appearance = Appearance.System, handleInsets: Boolean = true, look: Look = Look.Console, content: @Composable () -> Unit,
+) {
+    SpoolwardenTheme(look, appearance) {
         Surface(Modifier.fillMaxSize(), color = SpoolwardenTheme.colors.bg) {
             Box(Modifier.fillMaxSize().then(if (handleInsets) Modifier.safeDrawingPadding() else Modifier)) { content() }
         }
     }
+}
+
+/**
+ * The app's root with the theme it resolves: the phone's own choice wins; without one, the Hub's default as last seen;
+ * without that, Console (S6.3). Both come as flows, so a choice made in Settings recomposes the theme at once. [content]
+ * gets the look in use.
+ */
+@Composable
+internal fun LookedAppFrame(
+    appearance: Appearance, start: Startup, lookChoice: Flow<Look?>, hubLook: Flow<Look?>,
+    built: List<Look> = BUILT_LOOKS, content: @Composable (Look) -> Unit,
+) {
+    val chosen by lookChoice.collectAsStateWithLifecycle(initialValue = start.look)
+    val hub by hubLook.collectAsStateWithLifecycle(initialValue = start.hubLook)
+    val look = resolveLook(chosen, hub, built)
+    AppFrame(appearance, handleInsets = false, look = look) { content(look) }
+}
+
+/** The Hub's default theme ([wire], from `GET api/info`) is kept for the phones that have not chosen (S6.3). */
+@Composable
+internal fun RememberHubLook(wire: String?, remember: (Look) -> Unit) {
+    val hubDefaultLook = lookFromWire(wire)
+    LaunchedEffect(hubDefaultLook) { hubDefaultLook?.let(remember) }
 }
 
 /** Shown instead of a screen that needs the Hub when no Hub is paired: the Hub notice of 05-android-app 3.4. */

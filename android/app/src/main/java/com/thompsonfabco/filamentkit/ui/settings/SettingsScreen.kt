@@ -90,7 +90,7 @@ internal val SettingsGroup.title: Int
 @Composable
 private fun summary(group: SettingsGroup, facts: SettingsFacts): String = when (group) {
     SettingsGroup.Appearance -> stringResource(
-        R.string.settings_summary_appearance, stringResource(facts.appearance.label), stringResource(R.string.theme_console_name),
+        R.string.settings_summary_appearance, stringResource(facts.appearance.label), stringResource(facts.look.nameRes),
     )
     SettingsGroup.Hub -> facts.hub?.let { hub ->
         stringResource(R.string.settings_summary_hub, hub.name, stringResource(facts.hubState.word))

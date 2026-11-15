@@ -38,7 +38,8 @@ import androidx.compose.ui.unit.em
 import androidx.window.core.layout.WindowSizeClass
 
 // The token holders SpoolwardenTokens.kt (generated from tokens/tokens.json) fills, and the theme composable that resolves them.
-internal enum class Look { Console, Workbench, Palette, Panes }
+/** The four themes; public like [Appearance] because the startup state carries the stored choice. */
+enum class Look { Console, Workbench, Palette, Panes }
 
 internal enum class NavStyle { Rail, Sidebar, Pills, List }
 

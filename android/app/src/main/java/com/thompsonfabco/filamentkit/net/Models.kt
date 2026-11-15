@@ -32,6 +32,8 @@ data class ServerInfo(
     val api: Int,
     @SerialName("apk_version") val apkVersion: String? = null,
     val modules: List<String>? = null,
+    /** The Hub's default theme for devices that have not chosen (`console`, `workbench`, `palette`, `panes`); null from an older Hub. */
+    val look: String? = null,
 ) {
     /** The label-photo add flow is offered: `ai_intake` is on (or the server is too old to say). */
     val labelReading: Boolean get() = modules == null || AI_INTAKE in modules

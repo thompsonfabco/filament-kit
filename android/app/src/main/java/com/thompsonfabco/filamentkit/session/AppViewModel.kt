@@ -13,6 +13,7 @@ import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.net.Discovery
 import com.thompsonfabco.filamentkit.net.LocalNetwork
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.spool.LoadGate
 import com.thompsonfabco.filamentkit.update.ApkInstaller
 import com.thompsonfabco.filamentkit.update.UpdateSource
@@ -25,8 +26,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** The two things read from the settings store before the first screen: the appearance and whether a Hub is paired. */
-data class Startup(val appearance: Appearance, val paired: Boolean)
+/**
+ * What is read from the settings store before the first screen: the appearance, whether a Hub is paired, the theme this
+ * phone chose (null: none yet) and the Hub's default theme as last seen (null: never).
+ */
+data class Startup(val appearance: Appearance, val paired: Boolean, val look: Look? = null, val hubLook: Look? = null)
 
 /** Activity-wide state: settings, the one [ServerSession], the pairing router and the drafts on disk. */
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -81,13 +85,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             // a server is stored with a usable token: start on Home; none, or a revoked token: start on Pair
-            _startup.value = Startup(settings.appearance.first(), settings.serverOrNull().isPaired())
+            _startup.value = Startup(
+                settings.appearance.first(), settings.serverOrNull().isPaired(), settings.lookChoice.first(), settings.hubLook.first(),
+            )
         }
     }
 
     /** The user's choice from the top bar's appearance menu; applies at once. */
     fun setAppearance(appearance: Appearance) {
         viewModelScope.launch { settings.setAppearance(appearance) }
+    }
+
+    /** The user's choice in Settings > Appearance > Theme; the theme recomposes at once. */
+    fun setLook(look: Look) {
+        viewModelScope.launch { settings.setLook(look) }
+    }
+
+    /** The Hub's default theme from its latest `GET api/info`: what a phone that has not chosen follows. */
+    fun rememberHubLook(look: Look) {
+        viewModelScope.launch { settings.setHubLook(look) }
     }
 
     /** At start: delete expired, photo-less and unreadable drafts ([DraftStore.purge]), then show what is left. */

@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.settings
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
 
 /** What the groups of Settings can do; the app wires each to its owner (05-android-app 12). */
 internal class SettingsActions(
@@ -15,13 +16,14 @@ internal class SettingsActions(
     val update: UpdateActions,
     val onCheckForUpdates: () -> Unit,
     val onSimulateTag: (String) -> Unit,
+    val onLook: (Look) -> Unit = {},
 )
 
 /** The page of one group: the route of a narrow window, and the right pane of a wide one. */
 @Composable
 internal fun SettingsGroupPage(group: SettingsGroup, facts: SettingsFacts, actions: SettingsActions, modifier: Modifier = Modifier) {
     when (group) {
-        SettingsGroup.Appearance -> AppearanceSettings(facts.appearance, actions.onAppearance, modifier)
+        SettingsGroup.Appearance -> AppearanceSettings(facts.appearance, actions.onAppearance, facts.look, actions.onLook, modifier)
         SettingsGroup.Hub -> HubSettings(
             hub = facts.hub,
             state = facts.hubState,

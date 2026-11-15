@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -87,6 +88,43 @@ class SettingsTest {
         assertEquals(changed, s.server.first())
         s.clear()
         assertNull(s.server.first())
+    }
+
+    @Test fun theThemeIsNoneUntilChosenAndKeepsTheChoice() = runBlocking {
+        val s = settings()
+        assertNull(s.lookChoice.first())
+        s.setLook(Look.Workbench)
+        assertEquals(Look.Workbench, s.lookChoice.first())
+        s.setLook(Look.Console)
+        assertEquals(Look.Console, s.lookChoice.first())
+        assertNull("the Hub's default is a separate value", s.hubLook.first())
+    }
+
+    @Test fun anUnknownStoredThemeIsNoChoice() = runBlocking {
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "t.preferences_pb") }
+        val s = Settings(store)
+        for (bad in listOf("sepia", "Console", "")) {
+            store.edit { it[stringPreferencesKey("look")] = bad }
+            assertNull(bad, s.lookChoice.first())
+        }
+    }
+
+    @Test fun theHubsLookIsKeptUntilTheHubIsForgotten() = runBlocking {
+        val s = settings()
+        s.save(config)
+        s.setHubLook(Look.Palette)
+        s.setLook(Look.Panes)
+        assertEquals(Look.Palette, s.hubLook.first())
+        s.clear()
+        assertNull("the next Hub says its own", s.hubLook.first())
+        assertEquals("the phone's own choice stays", Look.Panes, s.lookChoice.first())
+    }
+
+    @Test fun theThemeKeepsEmittingAfterAReadError() = runBlocking {
+        val real = realStore()
+        real.edit { it[stringPreferencesKey("look")] = "palette" }
+        val s = Settings(failingOnce(real))
+        assertEquals(listOf(null, Look.Palette), s.lookChoice.take(2).toList())
     }
 
     @Test fun anUnknownStoredAppearanceIsSystem() = runBlocking {
