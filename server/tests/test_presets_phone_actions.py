@@ -147,3 +147,29 @@ def test_the_web_routes_still_send_no_field(app):
     assert r.status_code == 400 and "field" not in r.json(), r.text
     r = c.post("/api/profiles/web/line_new", headers=web, json={**body, "name": "SUNLU Z", "bs_template": ""})
     assert r.status_code == 400 and "field" not in r.json(), r.text
+
+
+def test_orca_parents_for_a_paired_device(app):
+    import io
+    c, h, sm = app
+    assert c.get("/api/profiles/orca-parents", headers=h).json() == {"orca_parents": []}      # no Orca library yet
+    builds.store_upload("orca_system", io.BytesIO(TB.orca_system_zip()), device_id="a")
+    every = c.get("/api/profiles/orca-parents", headers=h).json()["orca_parents"]
+    assert "Generic PLA" in every and every == sorted(every)
+    r = c.get("/api/profiles/orca-parents", headers=h, params={"material": "  pla  "})
+    assert r.status_code == 200 and r.json()["orca_parents"] == [n for n in every if "pla" in n.casefold()]
+    assert c.get("/api/profiles/orca-parents", headers=h, params={"material": "GENERIC pla"}).json() == {
+        "orca_parents": ["Generic PLA", "Generic PLA Silk"]}
+    assert c.get("/api/profiles/orca-parents", headers=h, params={"material": "zzz"}).json() == {"orca_parents": []}
+    r = c.get("/api/profiles/orca-parents", headers=h, params={"material": "x" * 101})
+    assert r.status_code == 400 and r.json()["error"] == "bad_request"
+
+
+def test_orca_parents_tokens(app):
+    c, h, sm = app
+    assert c.get("/api/profiles/orca-parents").status_code == 401
+    web = {"Authorization": "Bearer " + pairing.redeem_code(
+        pairing.issue(slots.INTAKE_DEVICE, role=web_access.WEB_ROLE).code)}
+    assert c.get("/api/profiles/orca-parents", headers=web).status_code == 403
+    station = {"Authorization": "Bearer " + pairing.redeem_code(pairing.issue("station").code)}
+    assert c.get("/api/profiles/orca-parents", headers=station).status_code == 403
