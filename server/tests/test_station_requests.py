@@ -281,4 +281,4 @@ def test_the_page_lists_and_answers_with_the_code_only(app, env, kit):  # noqa: 
 
 def test_the_devices_tab_has_the_card():
     src = (STATIC / "setup_devices.js").read_text(encoding="utf-8")
-    assert "stationAsksCard()" in src and "Pair only if the station shows the same six digits" in src
+    assert "function stationAsksCard(" in src and "devices_request_hint" in src

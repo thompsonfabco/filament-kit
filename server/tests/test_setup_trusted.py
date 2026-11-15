@@ -303,9 +303,11 @@ def test_a_new_setup_code_keeps_trusted_computers_and_says_so(app, helper, monke
 
 
 def test_the_page_and_the_guide_say_a_new_code_keeps_trusted_computers():
-    trust = (STATIC / "setup_trust.js").read_text(encoding="utf-8")
-    assert "keeps trusted computers trusted" in trust and "--revoke-trusted" in trust
     from pathlib import Path
+    import json
+    # 03 7.6: the card's sentence is in the catalogue (the command line's --revoke-trusted is in the guide)
+    texts = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    assert "keeps trusted computers trusted" in texts["devices_trusted_explain"]
     guide = (Path(__file__).resolve().parents[2] / "docs" / "user-guide.md").read_text(encoding="utf-8")
     assert "Trust this computer" in guide and "--revoke-trusted" in guide and "every change does." not in guide
 
