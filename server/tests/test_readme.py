@@ -33,7 +33,7 @@ def test_readme_opens_with_the_goal_then_the_one_command_install():
 
 def test_module_table_matches_the_registry():
     text = _readme()
-    table = text[text.index("| Module | What it is | Needs |"):]
+    table = text[text.index("| Feature | What it is | Needs |"):]
     rows = [line for line in table.splitlines()[2:] if line.startswith("| `")]
     rows = rows[:len(modules.MODULES)]
     names = [re.match(r"\| `([a-z_]+)` \|", r)[1] for r in rows]
@@ -326,13 +326,80 @@ def test_a_banned_form_is_caught_in_any_case_and_the_bare_word_is_not(text, toke
 
 def test_readme_sections_a_user_needs():
     text = _readme()
-    for h in ("## What you need", "## Install", "## What it does", "## Modules", "## Supported printers",
+    for h in ("## What you need", "## Install", "## What it does", "## Features", "## Supported printers",
               "## The phone app", "## The reader",
-              "## Updates and rollback", "## The filament library", "## Where your data lives", "## Uninstall",
+              "## Updates and rollback", "## The Filament Catalog", "## Where your data lives", "## Uninstall",
               "## Pair your PC"):        # the CLI says "see README: Pair your PC"
         assert h in text, h
     for path in re.findall(r"\]\(((?:docs|reader)/[^)#]+)", text):
         assert (ROOT / path).exists(), path      # a file, or a folder
+
+
+# S7.3: the user documents use the plain names of foundations 2, not the old ones. The word list is the `BANNED` of
+# tests/test_design_lints.py (AUT-7); it is read from that file, not copied.
+PLAIN_NAME_DOCS = ("README.md", "docs/user-guide.md", "docs/install-server.md", "docs/install-iphone-web-app.md",
+                   "docs/install-android-app.md", "docs/android-app.md", "docs/klipper.md", "docs/known-gaps.md")
+# Whole kinds of text that are not checked: the product and command are still written filament-kit (the names table
+# changes them in a later step); code (commands, paths, file names, settings keys, a quoted message) and link targets
+# and anchors stay as they are.
+PLAIN_NAME_SKIPPED = {"filament-kit"}
+# The reviewed lines that keep an old word, at most ten: (file, the old word it excuses, a part of the line, why). Only
+# that one word is excused, and only on a line that holds the part; any other old word on the line still fails.
+PLAIN_NAME_EXCEPTIONS = [
+    ("README.md", "intake", "local_intake.url", "the Needs cell holds the registry's own text, which the registry test pins"),
+    ("docs/install-server.md", "presets", "Bring back deleted presets", "the button's name on the Hub page"),
+    ("docs/android-app.md", "presets", "Bring back deleted presets", "the button's name in the app"),
+    ("docs/user-guide.md", "presets", "`presets restore-deleted`", "a row of the command table, which is the output of `help --markdown`"),
+    ("docs/user-guide.md", "the kit", "`spoolman fields`", "a row of the command table, which is the output of `help --markdown`"),
+    ("docs/user-guide.md", "module", "Module V3 in I2C mode", "the second line of the name of a hardware product (Elechouse NFC Module V3)"),
+]
+
+
+def _banned_words():
+    """The (name, regex) pairs of `BANNED` in tests/test_design_lints.py, read without running that file."""
+    import ast
+    tree = ast.parse((ROOT / "tests" / "test_design_lints.py").read_text(encoding="utf-8"))
+    node = next(n.value for n in tree.body if isinstance(n, ast.Assign) and any(
+        isinstance(t, ast.Name) and t.id == "BANNED" for t in n.targets))
+    return [(name, re.compile(r"(?<![A-Za-z0-9])(?:%s)(?![A-Za-z0-9])" % pat, re.I))
+            for name, pat in ast.literal_eval(node)]
+
+
+def _prose(text: str) -> str:
+    """The text with code blocks, code spans (one line each), link targets, bare addresses and anchor tags blanked (line
+    breaks kept)."""
+    blank = lambda m: re.sub(r"[^\n]", " ", m[0])           # noqa: E731 - same shape, so line numbers stay
+    text = re.sub(r"^[ \t]*```.*?^[ \t]*```", blank, text, flags=re.S | re.M)
+    for pattern in (r"`[^`\n]+`", r"\]\([^)]*\)", r"https?://\S+", r"<a id=\"[^\"]*\"></a>", r"src=\"[^\"]*\""):
+        text = re.sub(pattern, blank, text, flags=re.S)
+    return text
+
+
+def test_user_documents_use_the_plain_names():
+    assert len(PLAIN_NAME_EXCEPTIONS) <= 10
+    words = [(name, rx) for name, rx in _banned_words() if name not in PLAIN_NAME_SKIPPED]
+    assert all(word in {name for name, _ in words} for _, word, _, _ in PLAIN_NAME_EXCEPTIONS)
+    found, used = [], set()
+    for rel in PLAIN_NAME_DOCS:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        lines = text.split("\n")
+        # One paragraph at a time with each line break (and the indent after it) turned into one space, so a name split
+        # over two lines is still one name; `at` holds where each character of `flat` stood in the file.
+        for para in re.finditer(r"[^\n](?:.|\n(?!\s*\n))*", _prose(text)):
+            pieces = list(re.finditer(r"\n[ \t]*|.", para[0], re.S))
+            flat = "".join(" " if k[0][0] == "\n" else k[0] for k in pieces)
+            at = [para.start() + k.start() for k in pieces]
+            for name, rx in words:
+                for m in rx.finditer(flat):
+                    n = text.count("\n", 0, at[m.start()]) + 1
+                    why = next((i for i, (f, word, part, _) in enumerate(PLAIN_NAME_EXCEPTIONS)
+                                if f == rel and word == name and part in lines[n - 1]), None)
+                    if why is None:
+                        found.append(f"{rel}:{n}: {name}: {lines[n - 1].strip()[:100]}")
+                    else:
+                        used.add(why)
+    assert not found, "\n".join(found)
+    assert used == set(range(len(PLAIN_NAME_EXCEPTIONS))), "an exception no longer applies: remove it"
 
 
 # What someone bought, and when: the same patterns as filament-library's tools/scan_owner_data.py. A bare listing id is a

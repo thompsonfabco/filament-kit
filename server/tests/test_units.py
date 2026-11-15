@@ -149,16 +149,17 @@ def test_release_packages_path_units_and_keeps_library_out_of_the_wheel():
 
 def test_readme_final_review_points():
     """Final review: the user guide (moved out of the README by F2) documents restore-deleted, the real pairing
-    order, that unpair covers the PC, and that a library rollback is undone by the next scheduled update unless
+    order, that devices forget covers the PC, and that a catalog rollback is undone by the next scheduled update unless
     updates are off."""
     readme = _text(ROOT / "docs" / "user-guide.md")
-    assert "sudo filament-kit profiles restore-deleted" in readme
+    assert "sudo filament-kit presets restore-deleted" in readme
     pair = readme[readme.index("## Pair your PC"):readme.index("## Everyday commands")]
     assert pair.index("Finish") < pair.index("paste the link")
     assert "Pair this PC with the filament-kit server now" in pair
-    row = next(line for line in readme.splitlines() if line.startswith("| `sudo filament-kit unpair`"))
-    assert "PC" in row and "phones" in row
-    lib = readme[readme.index("## Spec library updates"):readme.index("## Troubleshooting")]
+    row = next(line for line in readme.splitlines() if line.startswith("| `devices forget <device>`"))
+    assert "Unpair a device" in row
+    assert "sudo filament-kit devices forget <device>" in pair  # the PC is removed with the same command
+    lib = readme[readme.index("## Filament Catalog updates"):readme.index("## Troubleshooting")]
     assert '"schedule": "off"' in lib and "rollback" in lib and "next" in lib
 
 
