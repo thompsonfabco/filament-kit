@@ -90,7 +90,7 @@ def test_pair_link_then_run_never_shows_token(srv, paths, capsys):
     assert LINK_TOKEN not in json.dumps(cfg)
     assert _main(paths, "run") == 0
     out = capsys.readouterr()
-    assert "Paste the pairing link, or type the server address:" in out.out
+    assert "Paste the pairing link, or type the Hub address:" in out.out
     assert "uploaded" in out.out
     log = dirs.log_file.read_text(encoding="utf-8")
     assert "uploaded" in log
@@ -106,7 +106,7 @@ def test_pair_address_confirms_fingerprint_then_code(srv, paths, capsys):
     out = capsys.readouterr().out
     grouped = " ".join(srv.fp[i:i + 4] for i in range(0, 64, 4))
     assert grouped in out
-    assert "Does this match the fingerprint shown by 'sudo filament-kit pair'? [y/N]" in out
+    assert "Does this match the fingerprint shown by 'sudo spoolwarden pair'? [y/N]" in out
     assert "6-digit code:" in out
     dirs = _dirs(paths)
     assert store.load_token(dirs) == CODE_TOKEN

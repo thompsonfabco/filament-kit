@@ -1,5 +1,5 @@
 #!/bin/sh
-# filament-kit printer pack for Klipper printers: install | status | uninstall (see fkpack.py --help).
+# Spoolwarden printer pack for Klipper printers: install | status | uninstall (see fkpack.py --help).
 # Run on the printer as its normal user (it asks before every change and uses sudo only for services).
 set -e
 cd "$(dirname "$0")"

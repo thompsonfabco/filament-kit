@@ -239,7 +239,7 @@ def test_a_run_in_progress_means_nothing_is_spent_or_changed(srv, paths, capsys)
 def test_pairing_says_when_another_pairing_owns_the_sync(paths, other, capsys):  # noqa: F811
     s = other(respond_with(state={"owner": "dev7", "you": "dev42"}))
     assert _main(paths, "pair", stdin=_link(s) + "\n") == 0
-    assert "sudo filament-kit unpair dev7" in capsys.readouterr().out
+    assert "sudo spoolwarden unpair dev7" in capsys.readouterr().out
 
 
 def test_pairing_says_nothing_when_it_owns_the_sync_itself(paths, other, capsys):  # noqa: F811
@@ -314,7 +314,7 @@ def test_offline_is_said_as_a_try_and_stays_exit_0(srv, paths, capsys):  # noqa:
     capsys.readouterr()
     _main(paths, "status")
     out = capsys.readouterr().out
-    assert "could not reach the server" in out and "FAILED" not in out
+    assert "could not reach the Hub" in out and "FAILED" not in out
 
 
 def test_status_shows_a_refused_upload_and_a_stopped_install(srv, paths, capsys):  # noqa: F811

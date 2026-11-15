@@ -28,9 +28,9 @@ log = logging.getLogger(__name__)
 DEVICE_NAME = "web (MCP)"
 INTAKE_DEVICE = "phone web app (this server)"     # the kit server's own /intake page (api._intake_web_app)
 CLI_DEVICE = "command line (this server)"         # `filament-kit printer map|report` asking the running server
-UNPAIRED = (f"the kit server no longer accepts this web unit (the device '{DEVICE_NAME}' was unpaired); "
-            "pair it again: sudo filament-kit modules apply")
-NOT_PAIRED = "this web unit is not paired with the kit server yet; pair it: sudo filament-kit modules apply"
+UNPAIRED = (f"the Hub no longer accepts this web unit (the device '{DEVICE_NAME}' was unpaired); "
+            "pair it again: sudo spoolwarden modules apply")
+NOT_PAIRED = "this web unit is not paired with the Hub yet; pair it: sudo spoolwarden modules apply"
 
 
 def pair_token(f: Path, role: str | None = None, name: str = DEVICE_NAME) -> str:
@@ -147,7 +147,7 @@ class KitApi:
                           self._device)
             elif not self._refused:
                 log.error("the kit server refused this web unit's pairing token (the device %r was unpaired?); "
-                          "printer slots are off until it is paired again: sudo filament-kit modules apply",
+                          "printer slots are off until it is paired again: sudo spoolwarden modules apply",
                           DEVICE_NAME)
             self._refused = True
             self._token_file().unlink(missing_ok=True)

@@ -1,8 +1,8 @@
 If you enjoy what I do, consider supporting me! Every little bit means the world! https://ko-fi.com/thompsonfabco
 
-# filament-kit printer pack (Klipper)
+# Spoolwarden printer pack (Klipper)
 
-The part of filament-kit that runs on a Klipper printer. The kit's server talks to Moonraker without it; the pack adds:
+The part of Spoolwarden that runs on a Klipper printer. The Spoolwarden Hub talks to Moonraker without it; the pack adds:
 
 - per-tool spools for multi-tool printers (`FK_SET_TOOL_SPOOL`, `_FK_TOOL_CHANGED`), and `SET_ACTIVE_SPOOL` /
   `CLEAR_ACTIVE_SPOOL` when the printer has none;
