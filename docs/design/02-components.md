@@ -201,8 +201,8 @@ strip. The skip link moves focus to `main`.
 strip is a `section` with `aria-label="Background job"`. The toast region and the announcer are live regions (8.7,
 1.4).
 
-**Theme profiles.** `nav` sets the grid: rail and sidebar add a side column; pills put the navigation inside the top
-bar; list adds the section pane, and on desktop a third pane for details (6.2). `collection` and `detail` do not
+**Theme profiles.** `nav` sets the grid: rail and sidebar add a side column; pills put the navigation in a row of
+its own directly under the top bar; list adds the section pane, and on desktop a third pane for details (6.2). `collection` and `detail` do not
 change the shell.
 
 **Android.** `Scaffold` inside a `NavigationSuiteScaffold` (navigation bar on compact, rail on medium, drawer or rail
@@ -232,7 +232,8 @@ chip, appearance control (foundations §8).
 
 **Anatomy.** Left: product mark (decorative SVG), "Spoolwarden", a slash, the Hub's name, the version tag. Right: job
 indicator (only while a job runs or has just ended), lock chip (3.1), appearance control (3.3). With `nav` = `pills`
-the pill navigation sits between left and right (2.3). In the web app the lock chip is absent.
+the pill navigation is a full-width row directly under the top bar (2.3); the navigation stays a sibling of the
+header, so both landmarks stay. In the web app the lock chip is absent.
 
 **Sizes and tokens.** Height `--top` plus the top safe-area inset; `--surface` ground, 1 px `--border` bottom
 hairline, no shadow (`--e0`). Product name `--fs-l` weight 650; Hub name `--fs-m` `--muted`; version `--fs-xs` `--mono`
@@ -261,8 +262,8 @@ text, not inside it, and reads "version 0.5.2" through a hidden prefix. The job 
 starts with its visible words: "<title>, <state>, background job. Show the job panel." ("Backup, running,
 background job. Show the job panel."); it has `aria-controls` pointing at the job strip.
 
-**Theme profiles.** `nav` = `pills`: on desktop the pill row sits in the top bar; on tablet it forms a second row of
-the top bar, full width. `nav` = `list`: Back button on phones as above. `collection`, `detail`: no change.
+**Theme profiles.** `nav` = `pills`: on tablet and desktop the pill row forms a second row under the top bar, full
+width. `nav` = `list`: Back button on phones as above. `collection`, `detail`: no change.
 
 **Android.** `TopAppBar` (small) whose title names the place, not the product (foundations §9): the screen's place
 name ("Home", "Spools", "Printers", "Settings") or the thing's name; on Home the Hub's name is the subtitle under it.
@@ -343,10 +344,10 @@ Ground of the rail, sidebar and section pane: `--surface` with a 1 px `--border`
 **Behaviour and keyboard.** Items are links (`href="#printers"`); Tab moves between them, Enter follows. The active
 item has `aria-current="page"`, also when the page shown is a detail inside the section (`#printers/p1`).
 **More** collects every item that the current layout hides: the shell lists the items whose `li` is not rendered
-(`offsetParent === null`), clones them in order into the More container and marks the current one. With `pills` on
-wide screens More opens a menu (4.2) below the button; on phones it opens the More sheet (2.5). When the current
-section is in More, the More button shows the active style and its accessible name is "More, current: Logs"; with `pills`
-its visible label becomes the section's name. With `list` on phones the navigation is the root page: `#` with no
+(`offsetParent === null`), clones them in order into the More container and marks the current one. More opens
+the More sheet (2.5) at every width and in every profile that shows it (`aria-haspopup="dialog"`). When the current
+section is in More, the More button shows the active style and its accessible name is "More, current: Logs"; its
+visible label stays "More". With `list` on phones the navigation is the root page: `#` with no
 section shows the list full screen; choosing an item drills in; the top bar's Back returns to the list.
 
 **Accessibility.** `nav aria-label="Sections"`; each group a `ul` labelled by its heading (`aria-labelledby`); in the
@@ -1609,7 +1610,7 @@ spools) so they can be scanned, sorted, opened and acted on. One markup renders 
 |---|---|---|---|---|
 | Container | `--surface`, 1 px `--border`, `--r`; CSS grid, every row a `subgrid` of the collection's column template | Grid `repeat(auto-fill, minmax(18rem, 1fr))`, gap `--s4` | Grid `repeat(auto-fill, minmax(14rem, 1fr))`, gap `--s4` | `--surface` block, `--r`, 1 px `--border` hairlines between rows inset by the visual's width |
 | Item | Main row min height `var(--row)` (48 px); 1 px `--border` between items | Card: `--surface`, 1 px `--border`, `--r`, padding `--s4`, gap `--s2` | Tile: `--surface`, 1 px `--border`, `--r`, padding `--s4`; `visual` at the top, `calc(var(--s7) * 2)` | Row min height `var(--row)` (48 px), padding `var(--s3) var(--s4)` |
-| Cells shown | prio 1 always; prio 2 from tablet up; prio 3 on desktop only | prio 1 and 2, each prio-2 field as "key: value" | prio 1 only | `visual`, `title` with prio-1 fields joined into one sub-line, `status`, `go` |
+| Cells shown | prio 1 always; prio 2 from tablet up; prio 3 on desktop only | prio 1 and 2, each prio-2 field as "key: value" | prio 1 only; prio 2 as well, as "key: value", in a collection whose items have no detail | `visual`, `title` with prio-1 fields joined into one sub-line, `status`, `go` |
 | Head | `--surface-2`, height 44 px, `--fs-xs` uppercase 0.05em `--muted` (foundations §9) | A wrapping row of sort chips labelled "Sort by": the head row holds the label once, in every profile, as `<span class="coll__sortlabel">` (catalogue key `coll_sort_by`), hidden under `table` and shown before the chips here | As cards | As cards |
 | Text | Cells `--fs-m`; title `--fs-b` weight 600; sub-line `--fs-s` `--muted`; data in `mono` | Title `--fs-l` weight 650 | Title `--fs-l` weight 650 | Title `--fs-b` weight 600 |
 | Actions | `actions` cell at the row end, right aligned | Bottom of the card | Bottom of the tile, main action full width | Not on the row: in the detail |
@@ -1620,7 +1621,8 @@ minmax(0, 1fr) max-content; }`. Column widths use `fr`, `auto`, `max-content` an
 
 **Phones.** `table` and `cards` become one column of stacked cards: the title and expand button on the first line,
 `status` at the right, prio-1 and prio-2 fields as "key: value" lines, actions full width at the bottom (the main one
-stretching). `tiles` become one column below 420 px wide and two above. `rows` stay rows.
+stretching). `tiles` keep their grid: as many 14rem columns as fit, which is one on most phones (no width of their own in a
+media query). `rows` stay rows.
 
 **States.**
 - Default: as above.
@@ -1650,7 +1652,8 @@ stretching). `tiles` become one column below 420 px wide and two above. `rows` s
   first). Lists of up to 50 items sort on the device; paged lists offer only the sorts the Hub supports.
 - **Column priority.** `data-prio` 1: the thing's name, state and main action; 2: useful at a glance; 3: reference
   facts. Whatever a profile or width hides is always in the item's detail facts (6.3), so hiding a column never
-  hides information.
+  hides information. A collection whose items have no detail (backups, preset lines, features) therefore never
+  hides prio-2 fields: it shows them as "key: value" in every profile.
 - **Row actions.** At most one primary per item (only when the Hub suggests it, for example "Collect a report" for a
   printer with a problem, or "Use this printer" for a found one), at most one default action ("Test connection"),
   and an overflow menu for the rest. Destructive actions are only in the menu or the detail's Remove zone. The
@@ -1809,6 +1812,10 @@ drawer and form hosts are drawn as bottom sheets (9.1).
 **Behaviour and keyboard.**
 - **Address.** Opening a detail pushes its address (`#printers/p1`, `#recent/214`); loading that address opens it;
   Back closes it. The collection's title links use the same address, so every profile opens in the same way.
+- **Screens that open their own details.** A screen that still toggles its details itself, without the shared
+  opener (Printers and Slicer presets on the Hub page today), shows them in place in every profile; under `sheet`
+  the detail then sits inside its tile, which grows to the full width, as under `card`. Step S6.11 moves those
+  screens onto the shared opener.
 - **How many open.** `inline` and `card`: several at once (an open card grows to the full width of the grid, one
   under another). `sheet` and `pane`: one; opening another closes the first (asking first if it holds a dirty
   form).
