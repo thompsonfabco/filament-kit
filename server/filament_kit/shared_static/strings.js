@@ -1020,7 +1020,7 @@ window.SW_TEXT = Object.freeze({
   "printers_error": "Could not read the printers. {reason}",
   "printers_fix_klippy": "Klipper is not ready on the printer. Check it in Mainsail or Fluidd.",
   "printers_fix_not_configured_klipper": "Use this printer to add it.",
-  "printers_fix_unauthorized": "Moonraker refused the API key. Replace it in Printer settings.",
+  "printers_fix_unauthorized": "Moonraker refused the API key. Replace it in this printer's details.",
   "printers_load_confirmed_plain": "Confirmed ({label})",
   "printers_load_idle": "No mapping by loading filament is running for this printer.",
   "printers_map_state": "Slot mapping: {state}.",

@@ -1294,3 +1294,13 @@ def test_confirmations_and_questions_are_sheets_not_native_dialogs():
     # the address change of a Bambu printer and the certificate forget both ask for the Access Code (staging 2026-11-12)
     assert "...(bambu ? { access_code: rest[0] } : { api_key: rest[0] })" in src
     assert "edit({ unpin: true, access_code: c }" in src
+
+
+def test_every_catalogue_key_is_written_once():
+    """json.loads keeps the last of two equal keys, so a key added twice on two branches silently overrides the
+    other text (R304: printers_fix_unauthorized had two wordings after a rebase)."""
+    import collections
+    repo = Path(__file__).resolve().parents[2]
+    pairs = json.loads((repo / "strings" / "en.json").read_text(encoding="utf-8"), object_pairs_hook=lambda kv: kv)
+    twice = sorted(k for k, n in collections.Counter(k for k, _ in pairs).items() if n > 1)
+    assert not twice, twice
