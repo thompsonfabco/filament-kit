@@ -28,6 +28,7 @@
 // (its last error lines are printed). The browser is driven over the DevTools protocol with Node's own
 // WebSocket (Node 22 or later): no npm package.
 import { spawn } from "node:child_process";
+import { endOwnBrowser } from "./aut5_browser_end.mjs";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -178,7 +179,7 @@ async function main() {
   proc.on("exit", (code, signal) => { browserExit = signal || code; });
   proc.on("error", (e) => { browserExit = e.code || e.message; });     // could not be started at all
   const cleanup = () => {
-    try { proc.kill(); } catch { /* gone */ }
+    endOwnBrowser(proc);
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
   };
   process.once("exit", cleanup);
