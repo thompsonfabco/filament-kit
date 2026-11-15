@@ -333,12 +333,12 @@ UPDATES_READY = """(async () => {
   const text = document.querySelector(".updates__cards .kv").textContent;
   for (const r of rows) if (!text.includes(r)) throw new Error("Updates (" + state + "): the Version list lacks " + r + " :: " + text);
   const label = (b) => [...b.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("");      // not the tooltip of a refused one
-  const head = [...document.querySelectorAll(".updates__actions .btn")];
+  const head = [...document.querySelectorAll(".page-head__actions .btn")];
   if (label(head[0]) !== "Check now" || head[0].classList.contains("btn--primary")) throw new Error("Updates (" + state + "): Check now");
   const update = head.find((b) => b.classList.contains("btn--primary"));
   if (!update || label(update) !== "Update to 0.5.3") throw new Error("Updates (" + state + "): no primary Update to 0.5.3");
   if (!!update.getAttribute("aria-disabled") !== refused) throw new Error("Updates (" + state + "): Update disabled is not " + refused);
-  if (refused && !document.querySelector(".updates__actions + .banner--bad")) throw new Error("Updates (" + state + "): no refusal line");
+  if (refused && !document.querySelector(".updates__cards")?.parentElement.querySelector(":scope > .banner--bad")) throw new Error("Updates (" + state + "): no refusal line");
   if (!document.querySelector(".updates__cards .btn--danger") || label(document.querySelector(".updates__cards .btn--danger")) !== "Roll back to 0.5.1") throw new Error("Updates (" + state + "): no Roll back to 0.5.1");
   if (!document.querySelector(".updates__cards .banner--info .updates__going")) throw new Error("Updates (" + state + "): no going-back note");
   const foot = document.querySelector(".updates__foot .code");
