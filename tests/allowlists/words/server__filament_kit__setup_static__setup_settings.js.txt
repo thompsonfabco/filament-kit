@@ -1,0 +1,1 @@
+server/filament_kit/setup_static/setup_settings.js | intake | 20 | a Hub setting key or route in a request (intake.reader, local_intake.url, settings/local-intake), never shown as text

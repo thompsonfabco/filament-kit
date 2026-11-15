@@ -1,0 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/pair/PairScreen.kt | \\n | an identifier or pattern, not text on the screen; kept while the file holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/pair/PairScreen.kt | sudo \\\\S+ pair | an identifier or pattern, not text on the screen; kept while the file holds it

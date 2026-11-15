@@ -1,0 +1,7 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | color_hex | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | filament | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | id | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | material | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | name | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | printer_camera | an identifier or pattern, not text on the screen; kept while the file holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | remaining_weight | Hub identifier (printer state, job state, error code or field name), never shown

@@ -26,6 +26,7 @@ setup code, which the helper checks again.
 Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the setup code):
     GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup_overview.js  /setup/setup_features.js  /setup/setup_updates.js
          /setup/setup_settings.js  /setup/setup_devices.js  /setup/setup_printers.js  /setup/setup_trust.js  /setup/setup.css
+         /setup/setup_<section>.css (CSS_SECTIONS: one stylesheet per section)
          /setup/setup_flash.js  /setup/esptool.bundle.js (the Flash a device tab; setup_console/flash_tab.py)
     GET  state                          everything the page shows
     GET  modules/preview?name=N         what switching N would do (the checklist's notes and needed settings)
@@ -70,6 +71,9 @@ from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offli
 log = logging.getLogger(__name__)
 
 STATIC = Path(__file__).parent / "setup_static"
+# one stylesheet per section, linked after setup.css (the shell) in this order, which is the cascade order: a section adds
+# its own file here and never appends to another's
+CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings"))
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
                                "connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
@@ -299,7 +303,7 @@ class SetupPage:
                                  # esptool-js 0.7.0 as published (THIRD-PARTY.md): only the Flash a device tab
                                  # loads it, when the owner writes a board from the browser
                                  "esptool.bundle.js",
-                                 "setup.css")}
+                                 "setup.css", *CSS_SECTIONS)}
 
     # ---------- routes ----------
     def routes(self) -> list[Route]:
@@ -341,6 +345,7 @@ class SetupPage:
                  Route("/setup/setup_flash.js", self.asset, methods=["GET"]),
                  Route("/setup/esptool.bundle.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"]),
+                 *[Route(f"/setup/{n}", self.asset, methods=["GET"]) for n in CSS_SECTIONS],
                  Route("/setup/shared/{name}", self.shared_asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
 
@@ -513,6 +518,7 @@ class SetupPage:
             f"<title>{name}</title><link rel=stylesheet href='/setup/shared/tokens.css'>"
             "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/shared/components-jobs.css'>"
             "<link rel=stylesheet href='/setup/setup.css'>"
+            + "".join(f"<link rel=stylesheet href='/setup/{n}'>" for n in CSS_SECTIONS) +
             f"<body>{shared_files.sprite_inline(self.shared)}<div id=app></div><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_overview.js'></script><script src='/setup/setup_features.js'></script><script src='/setup/setup_updates.js'></script><script src='/setup/setup_settings.js'></script><script src='/setup/setup_devices.js'></script><script src='/setup/setup_printers.js'></script>"
             "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",

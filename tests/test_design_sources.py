@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from allowlist_files import text as allowlist_text
+
 ROOT = Path(__file__).resolve().parent.parent
 TOKENS = json.loads((ROOT / "tokens" / "tokens.json").read_text(encoding="utf-8"))
 KNOWN_VERSIONS = (2,)
@@ -151,7 +153,7 @@ def test_profile_choices(name, t):
 SERVER = ROOT / "server" / "filament_kit"
 SHARED = ROOT / "web-shared"
 KOTLIN_DIR = ROOT / "android" / "app" / "src" / "main" / "java"
-ALLOWLIST = ROOT / "tests" / "design_source_allowlist.txt"
+ALLOWLIST = ROOT / "tests" / "allowlists" / "design_source"
 BREAKPOINTS = {600, 601, 1024, 1025}
 DEFAULT_LOOK = "console"
 
@@ -218,7 +220,7 @@ def _kotlin_sources():
 
 def _allowlist():
     entries = {}
-    for line in ALLOWLIST.read_text(encoding="utf-8").splitlines():
+    for line in allowlist_text(ALLOWLIST).splitlines():
         if line.strip() and not line.startswith("#"):
             path, _, reason = (x.strip() for x in line.partition("|"))
             assert path and reason, f"allow-list line needs a file and a reason: {line!r}"

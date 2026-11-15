@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/VersionLine.kt | App $app | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/VersionLine.kt | App $app · Server $server | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/VersionLine.kt | App $app · not paired | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)

@@ -1,9 +1,0 @@
-# Literal colours and values in components (AUT-2; 08 test 5), found by tests/test_design_lints.py. One line each:
-#   <path from the repository root> | <finding> | <count> | <reason>
-# A line whose finding is gone must be dropped (09 open point 4); a rewritten file removes its lines.
-android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | 8.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/ColorSwatch.kt | Color(0xFF000000 | 1 | filament colour from the data
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | 6.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | 16.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | 4.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | 8.dp | 3 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt

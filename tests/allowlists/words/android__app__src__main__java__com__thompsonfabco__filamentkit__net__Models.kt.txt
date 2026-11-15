@@ -1,0 +1,4 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | ai_intake | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | color | 4 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | gcode_state | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | intake | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

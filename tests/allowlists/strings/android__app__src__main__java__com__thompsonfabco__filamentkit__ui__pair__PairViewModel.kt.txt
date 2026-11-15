@@ -1,0 +1,5 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/pair/PairViewModel.kt | No address answered | an identifier or pattern, not text on the screen; kept while the file holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/pair/PairViewModel.kt | bad_response | an identifier or pattern, not text on the screen; kept while the file holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/pair/PairViewModel.kt | local_network | an identifier or pattern, not text on the screen; kept while the file holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/pair/PairViewModel.kt | offline | an identifier or pattern, not text on the screen; kept while the file holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/pair/PairViewModel.kt | unauthorized | an identifier or pattern, not text on the screen; kept while the file holds it

@@ -1,0 +1,1 @@
+server/filament_kit/setup_static/setup.js | input | 1 | built inline today; moves into the field component when the view is rebuilt

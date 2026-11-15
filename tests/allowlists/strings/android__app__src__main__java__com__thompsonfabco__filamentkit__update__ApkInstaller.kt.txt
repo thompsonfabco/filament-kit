@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/ApkInstaller.kt | DEPRECATION | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/ApkInstaller.kt | filament-kit.apk | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/ApkInstaller.kt | package:${} | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps

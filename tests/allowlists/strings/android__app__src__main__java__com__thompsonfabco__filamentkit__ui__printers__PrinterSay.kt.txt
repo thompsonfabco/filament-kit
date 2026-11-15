@@ -1,0 +1,15 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | %.1f | an identifier or pattern, not text on the screen; kept while the file holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | ambiguous_spool | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | camera_unavailable | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | cert_changed | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | file_not_found | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | no_mapping | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | no_slice_info | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | not_configured | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | not_found | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | plate_not_found | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | printer_unreachable | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | spoolman_failed | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | spoolman_unreachable | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | storage | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | unmapped_slot | Hub identifier (printer state, job state, error code or field name), never shown

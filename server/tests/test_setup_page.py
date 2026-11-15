@@ -22,6 +22,7 @@ from starlette.testclient import TestClient
 from filament_kit import (api, apply, cli, config, library, modules, pairing, reader_tokens, setup_code, setup_helper,
                           setup_page)
 from filament_kit.bridge import registry
+from filament_kit.setup_page import CSS_SECTIONS
 from filament_kit.spoolman import Spoolman
 from test_shared_files import SETUP_CSP, check_files, check_sprite_first
 
@@ -154,6 +155,10 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
     head = r.text.split("<body>")[0]                                            # S1.1: theme first, then tokens, components, own
     links = ["/setup/shared/theme-init.js", "/setup/shared/tokens.css", "/setup/shared/components.css", "/setup/setup.css"]
     assert [head.index(x) for x in links] == sorted(head.index(x) for x in links)
+    sections = [f"/setup/{n}" for n in CSS_SECTIONS]                             # one stylesheet per section, after the shell's
+    assert [head.index(f"'{x}'") for x in ["/setup/setup.css"] + sections] == sorted(head.index(f"'{x}'") for x in ["/setup/setup.css"] + sections)
+    assert sorted(p.name for p in STATIC.glob("setup_*.css")) == sorted(CSS_SECTIONS)             # none left unlinked
+    assert all(c.get(x).status_code == 200 and c.get(x).headers["content-type"].startswith("text/css") for x in sections)
     assert head.index("/setup/shared/theme-init.js") < head.index("/setup/shared/strings.js") < head.index("/setup/shared/tokens.css")
     assert head.index("/setup/shared/strings.js") < head.index("/setup/shared/components.js")   # S1.3: the shared shell
     assert re.search(r"<script defer src='/setup/shared/components\.js'>", head)

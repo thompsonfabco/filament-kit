@@ -3,7 +3,7 @@ Hub page (/setup), Console light and dark, at 1280 px and 320 px, through tests/
 or Chromium already on the machine. The page is served with example data only (mockups/CONTENT-SPEC.md: "Workshop hub",
 Workshop X1, Garage Voron, Kitchen phone, rd-01) and the printers and Klipper modules on, with fakes for the managers.
 
-Findings of today's markup that a later step rebuilds are listed in tests/aut5_hub_allowlist.txt, one line per section; a
+Findings of today's markup that a later step rebuilds are listed in tests/allowlists/aut5_hub/, one file per section; a
 line nothing matches fails the run, and so does a finding that moved to another section. The same skip rules as test_web_app_audit.py: no Node 22 or no browser is a skip (a failure with
 AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -28,7 +28,7 @@ from test_setup_page import CODE, Helper, FakeManager
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
-ALLOW = ROOT / "tests" / "aut5_hub_allowlist.txt"
+ALLOW = ROOT / "tests" / "allowlists" / "aut5_hub"      # a folder, one file per section
 SECTIONS = ["overview", "printers", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs"]
 VIEWS = ",".join("#" + s for s in SECTIONS)
 ITEM = {"vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black", "material": "PLA", "color_hex": "2B2B2E",
@@ -298,7 +298,7 @@ def test_an_unlabelled_button_added_to_the_served_page_fails_the_audit(planted):
 
 
 def test_the_allow_list_names_a_later_step_and_a_count_on_every_line():
-    for line in ALLOW.read_text(encoding="utf-8").splitlines():
+    for line in "".join(p.read_text(encoding="utf-8") for p in sorted(ALLOW.glob("*.txt"))).splitlines():
         if line.strip() and not line.startswith("# "):
             view, check, where, count, reason = (x.strip() for x in line.split("|"))
             assert view in ["#" + s for s in SECTIONS] and check and where, line
@@ -448,7 +448,7 @@ def test_features_and_its_preview_drawer_pass_the_audit(hub_change):
     run = _run("--url", hub_change, "--views", "#features", "--ready", FEATURES_DRAWER_OPEN)
     assert run.returncode == 0, run.stdout + run.stderr
     assert json.loads(run.stdout)["views"] == 4
-    assert not [l for l in ALLOW.read_text(encoding="utf-8").splitlines() if l.startswith("#features |")]
+    assert not [l for l in "".join(p.read_text(encoding="utf-8") for p in sorted(ALLOW.glob("*.txt"))).splitlines() if l.startswith("#features |")]
 
 
 def test_features_does_not_scroll_sideways_at_320_px_in_a_wide_font_with_a_long_hostname(monkeypatch, hub):
