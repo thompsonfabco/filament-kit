@@ -1,1 +1,1 @@
-web-shared/components.js | color | 1 | the name of the phone's colour-scheme media query (a CSS name, not a text)
+web-shared/components.js | color | 1 | identifier, not shown

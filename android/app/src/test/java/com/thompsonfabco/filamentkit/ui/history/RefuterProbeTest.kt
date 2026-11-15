@@ -112,7 +112,7 @@ class RefuterProbeTest {
     }
 
     @Test fun badResponseWords() {
-        val f = failureOf(ApiError(200, "bad_response", "The server sent a reply the app could not read"))
+        val f = failureOf(ApiError(200, "bad_response", "The Hub sent a reply the app could not read"))
         println("PROBE bad_response -> $f")
         assertEquals(RecentFailure.Unexpected, f)
     }

@@ -100,7 +100,7 @@ class PresetUpdatesTest {
         assertEquals("A (Bambu Studio): nozzle_temperature, bed_temperature", PresetUpdateTexts.row(a))
         assertEquals("B (OrcaSlicer): changed values", PresetUpdateTexts.row(b))
         assertEquals("Accept 1 update", PresetUpdateTexts.accept(1))
-        assertEquals("The presets module is turned off on this server.",
+        assertEquals("Slicer presets are switched off on this Hub.",
             PresetUpdateTexts.error(ApiError(409, "module_off", "x")))
     }
 }

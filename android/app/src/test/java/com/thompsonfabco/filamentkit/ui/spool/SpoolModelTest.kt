@@ -82,7 +82,7 @@ class SpoolModelTest {
         assertEquals(HubFailure.Unreachable, hubFailure(ApiError(0, "offline", "The connection failed")))
         assertEquals(HubFailure.Unreachable, hubFailure(ApiError(0, "local_network", "Allow local network access")))
         assertEquals(HubFailure.Unreachable, hubFailure(IOException("reset")))
-        assertEquals(HubFailure.Unexpected, hubFailure(ApiError(200, ApiError.BAD_RESPONSE, "The server did not return a token")))
+        assertEquals(HubFailure.Unexpected, hubFailure(ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a token")))
         assertEquals(HubFailure.Unexpected, hubFailure(ApiError(502, "internal", apiStandIn(502), noHubMessage = true)))
         assertEquals(HubFailure.Unexpected, hubFailure(ApiError(500, "internal", "", noHubMessage = true)))
         assertEquals(HubFailure.Unexpected, hubFailure(IllegalStateException("boom")))

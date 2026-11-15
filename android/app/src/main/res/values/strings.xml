@@ -1738,7 +1738,7 @@
         <item quantity="other">Contains %1$d files, and the Spoolman database</item>
     </plurals>
     <string name="common_value_none">none</string>
-    <string name="settings_restore_summary_other_host">The backup is from another computer name: the Hub gets a new certificate, so phones and the PC sync pair again.</string>
+    <string name="settings_restore_summary_other_host">The backup is from another computer name: the Hub gets a new certificate, so phones and Slicer Sync pair again.</string>
     <string name="settings_restore_summary_other_hub">another Hub</string>
     <string name="settings_restore_summary_replaces">This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first.</string>
     <!-- 1=hash -->

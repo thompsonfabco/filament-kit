@@ -246,7 +246,7 @@ class AddStepsTest {
         assertEquals(R.string.common_hub_unreachable, describe(ApiError(0, "offline", "x")).message.res)
         // not the Hub speaking: unreadable, or an error page without the Hub's own message
         assertEquals(R.string.common_hub_answer_unknown, describe(ApiError(502, ApiError.BAD_RESPONSE, "x")).message.res)
-        assertEquals(R.string.common_hub_answer_unknown, describe(ApiError(500, "other", "The server returned an error (500)")).message.res)
+        assertEquals(R.string.common_hub_answer_unknown, describe(ApiError(500, "other", "The Hub returned an error (500)")).message.res)
         // the Hub's own message goes through as given
         val own = describe(ApiError(409, "conflict", "The Hub says no"))
         assertEquals("The Hub says no", own.message.verbatim)
@@ -275,7 +275,7 @@ class AddStepsTest {
     }
 
     @Test fun aBareErrorPageIsNotTheHubSpeakingWhateverItsStatus() {
-        assertEquals(R.string.common_hub_answer_unknown, describe(ApiError(404, "not_found", "The server returned an error (404)")).message.res)
+        assertEquals(R.string.common_hub_answer_unknown, describe(ApiError(404, "not_found", "The Hub returned an error (404)")).message.res)
         assertEquals(R.string.common_hub_answer_unknown, describe(ApiError(404, "not_found", "Not Found", noHubMessage = true)).message.res)
         assertEquals("the Hub's own not_found is the photos", R.string.add_read_photos_gone, describe(ApiError(404, "not_found", "no such read")).message.res)
     }

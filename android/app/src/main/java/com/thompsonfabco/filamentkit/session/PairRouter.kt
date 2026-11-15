@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.update
 import okhttp3.Interceptor
 import okhttp3.Response
 
-const val UNPAIRED_MESSAGE = "This phone was unpaired from the server"
+const val UNPAIRED_MESSAGE = "This phone was unpaired from the Hub"
 
 /** Why the app sent the user to the pairing screen. */
 sealed interface PairNotice {

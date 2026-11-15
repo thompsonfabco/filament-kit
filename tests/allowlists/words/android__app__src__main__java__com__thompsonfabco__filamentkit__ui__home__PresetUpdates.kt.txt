@@ -1,4 +1,1 @@
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | module | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | pc sync | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | presets | 4 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | the server | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | module | 1 | identifier, not shown

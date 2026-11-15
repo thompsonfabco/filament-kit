@@ -39,7 +39,7 @@ class TrustAction(
     val reset: () -> Unit = {},
 )
 
-internal const val TRUST_FAILED = "The new certificate could not be trusted yet. Check that the server is reachable and " +
+internal const val TRUST_FAILED = "The new certificate could not be trusted yet. Check that the Hub is reachable and " +
     "try again, or pair again."
 
 @Composable
@@ -74,7 +74,7 @@ internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () ->
 @Composable
 internal fun UnpairedNotice(onPairAgain: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("This phone is no longer paired with the server.", color = MaterialTheme.colorScheme.error)
+        Text("This phone is no longer paired with the Hub.", color = MaterialTheme.colorScheme.error)
         Button(onClick = onPairAgain) { Text("Pair again") }
     }
 }

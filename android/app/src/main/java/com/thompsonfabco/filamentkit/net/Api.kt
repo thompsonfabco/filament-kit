@@ -31,7 +31,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** What the client says for an error reply that carries no `message` of its own ([ApiError.notFromHub] knows it). */
-internal fun apiStandIn(status: Int) = "The server returned an error ($status)"
+internal fun apiStandIn(status: Int) = "The Hub returned an error ($status)"
 
 /**
  * The filament-kit server's JSON API.
@@ -60,7 +60,7 @@ class Api(
         val body = buildJsonObject { put("code", code) }
         return call(request("api", "pair", auth = false).post(body.toBody()))
             .jsonObject["token"]?.jsonPrimitive?.contentOrNull
-            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return a token")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a token")
     }
 
     /** [photos] must already be prepared JPEGs. A read calls Claude, so it gets a long timeout. */
@@ -107,7 +107,7 @@ class Api(
             try {
                 resp.body.bytes()
             } catch (e: IOException) {
-                throw offline("The connection to the server was lost: ${e.message}")
+                throw offline("The connection to the Hub was lost: ${e.message}")
             }
         }
     }
@@ -253,7 +253,7 @@ class Api(
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
         }
         val printer = call(request("api", "printers").post(body.toBody())).jsonObject["printer"]
-            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return the printer")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return the printer")
         return decode(printer)
     }
 
@@ -266,7 +266,7 @@ class Api(
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
         }
         val printer = call(request("api", "printers").post(body.toBody())).jsonObject["printer"]
-            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return the printer")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return the printer")
         return decode(printer)
     }
 
@@ -313,7 +313,7 @@ class Api(
     suspend fun startMap(id: String): String =
         call(request("api", "printers", id, "map").post(ByteArray(0).toRequestBody(null)))
             .jsonObject["job_id"]?.jsonPrimitive?.contentOrNull
-            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return a job")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a job")
 
     suspend fun mapStatus(id: String): MapStatus = decode(call(request("api", "printers", id, "map").get()))
 
@@ -375,7 +375,7 @@ class Api(
 
     suspend fun undoUsage(entryId: String): UsageEntry {
         val entry = call(request("api", "usage", entryId, "undo").post(ByteArray(0).toRequestBody(null)))
-            .jsonObject["entry"] ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return the entry")
+            .jsonObject["entry"] ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return the entry")
         return decode(entry)
     }
 
@@ -440,7 +440,7 @@ class Api(
     suspend fun setLineParent(lineId: String, parent: String): ProfileLine {
         val body = buildJsonObject { put("bambu_parent", parent) }
         val line = call(request("api", "profiles", "lines", lineId).patch(body.toBody())).jsonObject["line"]
-            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return the line")
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return the line")
         return decode(line)
     }
 
@@ -498,13 +498,13 @@ class Api(
             val text = try {
                 resp.body.string()
             } catch (e: IOException) {
-                throw offline("The connection to the server was lost: ${e.message}")
+                throw offline("The connection to the Hub was lost: ${e.message}")
             }
             if (!resp.isSuccessful) throw errorFor(resp.code, text, request.header("Authorization"))
             try {
                 json.parseToJsonElement(text)
             } catch (_: Exception) {
-                throw ApiError(resp.code, ApiError.BAD_RESPONSE, "The server sent a reply the app could not read")
+                throw ApiError(resp.code, ApiError.BAD_RESPONSE, "The Hub sent a reply the app could not read")
             }
         }
     }
@@ -520,7 +520,7 @@ class Api(
         } catch (e: FingerprintMismatch) {
             throw e
         } catch (e: IOException) {
-            throw offline("Could not reach the server: ${e.message ?: e.javaClass.simpleName}")
+            throw offline("Could not reach the Hub: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 
@@ -542,7 +542,7 @@ class Api(
                     val n = try {
                         src.read(buf)
                     } catch (e: IOException) {
-                        throw offline("The connection to the server was lost: ${e.message}")
+                        throw offline("The connection to the Hub was lost: ${e.message}")
                     }
                     if (n < 0) break
                     out.write(buf, 0, n)
@@ -580,7 +580,7 @@ class Api(
     }
 
     private fun spool(body: JsonElement): JsonObject =
-        body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The server did not return a spool")
+        body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a spool")
 
     private inline fun <reified T> decode(body: JsonElement): T = json.decodeFromJsonElement(body)
 

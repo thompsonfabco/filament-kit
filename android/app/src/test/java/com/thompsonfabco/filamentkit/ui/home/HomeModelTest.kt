@@ -213,19 +213,19 @@ class HomePrintersViewModelTest {
 
     // the shapes `Api` really throws (net/Api.kt)
     @Test fun noRouteIsStatusZero() {
-        val f = printersFailure(ApiError(0, "offline", "Could not reach the server"))
+        val f = printersFailure(ApiError(0, "offline", "Could not reach the Hub"))
         assertNull(f.message)
         assertFalse(f.unexpected)
         assertFalse(printersFailure(ApiError(0, "local_network", "Allow local network access")).unexpected)
     }
 
     @Test fun aReplyTheAppCouldNotReadIsBadResponse() {
-        assertTrue(printersFailure(ApiError(200, "bad_response", "The server did not return the printer")).unexpected)
-        assertTrue(printersFailure(ApiError(200, "bad_response", "The server sent a reply the app could not read")).unexpected)
+        assertTrue(printersFailure(ApiError(200, "bad_response", "The Hub did not return the printer")).unexpected)
+        assertTrue(printersFailure(ApiError(200, "bad_response", "The Hub sent a reply the app could not read")).unexpected)
     }
 
     @Test fun aBadGatewayPageWithoutAHubMessageIsNotTheHubSpeaking() {
-        val f = printersFailure(ApiError(502, "internal", "The server returned an error (502)"))
+        val f = printersFailure(ApiError(502, "internal", "The Hub returned an error (502)"))
         assertNull(f.message)
         assertTrue(f.unexpected)
     }
@@ -237,13 +237,13 @@ class HomePrintersViewModelTest {
     }
 
     @Test fun theViewModelUsesThatClassification() {
-        var boom: Exception = ApiError(502, "internal", "The server returned an error (502)")
+        var boom: Exception = ApiError(502, "internal", "The Hub returned an error (502)")
         val vm = HomePrintersViewModel({ throw boom })
         vm.refresh()
         dispatcher.scheduler.runCurrent()
         assertTrue(vm.state.value.unexpected)
         assertNull(vm.state.value.message)
-        boom = ApiError(0, "offline", "Could not reach the server")
+        boom = ApiError(0, "offline", "Could not reach the Hub")
         vm.refresh()
         dispatcher.scheduler.runCurrent()
         assertFalse(vm.state.value.unexpected)

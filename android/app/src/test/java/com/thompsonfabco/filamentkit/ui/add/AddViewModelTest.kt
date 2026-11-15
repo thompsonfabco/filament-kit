@@ -259,7 +259,7 @@ class AddViewModelTest {
         vm.setText(0, "name", "PLA+ Silver")
         vm.preview()
         advanceUntilIdle()
-        api.addFailures += ApiError(0, "offline", "Could not reach the server")
+        api.addFailures += ApiError(0, "offline", "Could not reach the Hub")
         vm.confirm()
         advanceUntilIdle()
 

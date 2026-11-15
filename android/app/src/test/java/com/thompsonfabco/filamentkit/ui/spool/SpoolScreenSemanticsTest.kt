@@ -845,7 +845,7 @@ class SpoolScreenSemanticsTest {
 
     @Test fun anUnreadableAnswerToTheLoadSaysToCheckThePrinter() {
         val load = FakeLoad(listOf(x1), PrinterDetail(x1, status), plan)
-        load.failure = ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
+        load.failure = ApiError(502, "internal", "The Hub returned an error (502)", noHubMessage = true)
         val vm = previewScreen(load)
         rule.waitForIdle()
         vm.load()

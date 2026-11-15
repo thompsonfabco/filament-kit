@@ -47,16 +47,16 @@ interface PresetUpdatesBackend {
 
 object PresetUpdateTexts {
     const val TITLE = "Preset updates"
-    const val INTRO = "A newer build would change these presets already in your slicers. Nothing is written over until you accept."
+    const val INTRO = "A newer build would change these Slicer presets already in your slicers. Nothing is written over until you accept."
     const val NONE = "No preset in your slicers needs an update."
-    const val RESTORE = "Restore presets deleted in Bambu Studio"
+    const val RESTORE = "Restore Slicer presets deleted in Bambu Studio"
     const val RESTORED = "The next build brings them back; your PC installs it at its next sync."
     const val CHANGED = "The updates changed since this list (a newer build came). Nothing was accepted; check the new list."
     const val LOADING = "Loading updates…"
 
     fun accept(n: Int) = "Accept $n update${if (n == 1) "" else "s"}"
-    fun nothingWaiting(accepted: Int) = "Nothing waiting; $accepted accepted, written at the next PC sync."
-    fun accepted(n: Int) = "$n accepted: your PC writes them over the presets at its next sync."
+    fun nothingWaiting(accepted: Int) = "Nothing waiting; $accepted accepted, written at the next Slicer Sync."
+    fun accepted(n: Int) = "$n accepted: your PC writes them over the Slicer presets at its next Slicer Sync."
     fun slicer(target: String) = when (target) {
         "bambu_studio", "bambu" -> "Bambu Studio"
         "orca_slicer", "orca" -> "OrcaSlicer"
@@ -66,10 +66,10 @@ object PresetUpdateTexts {
     fun yours(names: List<String>) = "Never written over (your own preset of that name): ${names.joinToString(", ")}"
     fun error(e: Exception): String = when {
         e is ApiError && e.code == "updates_changed" -> CHANGED
-        e is ApiError && e.code == "module_off" -> "The presets module is turned off on this server."
-        e is ApiError && e.code == "offline" -> "Could not reach the server. Check that you are on the same network."
+        e is ApiError && e.code == "module_off" -> "Slicer presets are switched off on this Hub."
+        e is ApiError && e.code == "offline" -> "Could not reach the Hub. Check that you are on the same network."
         e is ApiError -> e.message
-        else -> "Unexpected response from the server"
+        else -> "Unexpected response from the Hub"
     }
 }
 

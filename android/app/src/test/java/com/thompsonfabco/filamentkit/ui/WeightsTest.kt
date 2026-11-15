@@ -17,7 +17,7 @@ class WeightsTest {
 
     @Test fun theWeightHintSaysWhyUpdateWeightIsGreyed() {
         assertNull(weightHint("812"))
-        assertEquals("Type the weight on the scale to update it.", weightHint(" "))
+        assertEquals("Type the weight with the spool to update it.", weightHint(" "))
         for (bad in listOf("abc", "0", "-1")) assertEquals("Type a weight in grams, more than 0.", weightHint(bad))
     }
 

@@ -64,7 +64,6 @@ async function api(path, opts = {}) {
   finally { clearTimeout(timer); }
 }
 
-const more = (shown, n) => n > shown ? h("p", { class: "muted", textContent: `Showing ${shown} of ${n}: narrow the search.` }) : null;
 const ago = (s) => s < 60 ? `${s} s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : `${Math.floor(s / 3600)} h ago`;
 
 // ---------- results, errors, reasons and loading in place (04 3.2 to 3.6) ----------
