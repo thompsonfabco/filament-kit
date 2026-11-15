@@ -247,16 +247,16 @@ def test_cli_detect_output_is_unchanged(moonraker, capsys):
            "       `filament-kit klipper api-key sv08-max`\n", "")
 
 
-def test_cli_detect_offline_output_is_unchanged(capsys):
+def test_cli_detect_offline_output_is_unchanged(capsys, monkeypatch):
+    # the OS's connection-error text in the brackets differs per platform (CI's is longer), so give the line room
+    # and check its words exactly; wrapping itself is tested in test_cli_output.py
+    monkeypatch.setenv("COLUMNS", "400")
     registry.add_klipper("Gone", "127.0.0.1", 9)
     rc = klipper_cli.main(["detect", "gone"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert out.startswith("Gone (127.0.0.1:9)\n  Moonraker at 127.0.0.1:9 is not answering (")
-    # the second line wraps at the width: each space after "answering (...);" may be a line break and its indent
-    assert re.fullmatch(r"Gone \(127\.0\.0\.1:9\)\n  Moonraker at 127\.0\.0\.1:9 is not answering \([^)\n]*\); the"
-                        r"(?: |\n  )server(?: |\n  )keeps(?: |\n  )trying(?: |\n  )once(?: |\n  )it(?: |\n  )runs\n",
-                        out), out
+    assert re.fullmatch(r"Gone \(127\.0\.0\.1:9\)\n  Moonraker at 127\.0\.0\.1:9 is not answering \([^\n]*\); the"
+                        r" server keeps trying once it runs\n", out), out
 
 
 def test_detect_returns_what_the_cli_prints(moonraker):
