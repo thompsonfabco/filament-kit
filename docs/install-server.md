@@ -124,8 +124,8 @@ release):
 
 | Option | What it does |
 |---|---|
-| `--mode server`, `--mode station`, `--mode all-in-one` | Installs that Setup (Hub, Weigh Station only, Hub with Weigh Station) without asking. |
-| `--server <name or IP>` | For `--mode station`: the address of the computer the Hub runs on. |
+| `--mode hub`, `--mode weigh-station`, `--mode hub-with-weigh-station` | Installs that Setup (Hub, Weigh Station only, Hub with Weigh Station) without asking. |
+| `--hub <name or IP>` | For `--mode weigh-station`: the address of the computer the Hub runs on. |
 | `--modules a,b` | A custom set of Features, for example `--modules spoolman,server,printers`. What they need is added. |
 | `--set key=value` | A setting a Feature in `--modules` needs, for example `--set web.public_url=https://my-server.local/filament`. |
 | `--version 0.3.0` | `get.sh` only: that release instead of the newest. |
@@ -133,7 +133,7 @@ release):
 For example:
 
 ```bash
-curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh --mode all-in-one
+curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh --mode hub-with-weigh-station
 ```
 
 ## What you see at the end
@@ -171,8 +171,8 @@ Done.   Spoolman: http://my-server.local:7912   Pair another phone: sudo filamen
 Open https://my-server.local:8710/setup  (setup code: 1234-5678)
 ```
 
-- **No line should start with `FAIL`.** Lines starting with `--` are information. On a new install, `library not
-  downloaded`, `no build yet` and `PC sync: not set up` are expected.
+- **No line should start with `FAIL`.** Lines starting with `--` are information. On a new install,
+  `library not downloaded`, `no build yet` and `PC sync: not set up` are expected.
 - The **first QR code** downloads the app to the phone (it only appears when this Hub has the app). Scan
   it with the phone's camera. The installer then waits. Press **Enter** when the app is installed to see the
   **pairing QR code and pairing code**: scan that one **inside the app**, not with the camera. Or type **s** to skip
@@ -222,7 +222,7 @@ you trusted stay trusted (the command says so and how many), unless you add `--r
 | **Printers** | **Add a printer** (v0.4.3): choose the type, then give an IP address or a name. A Bambu Lab printer also needs its Access Code; a Klipper printer (with the Klipper printers Feature on) needs none, only an optional Moonraker API key (see [Klipper printers](klipper.md)). Also change a wrong Access Code, test the connection, forget a printer. Printers on the network that announce themselves are listed. |
 | **Web passphrase** | Set the passphrase that approves Claude's connector at its sign-in page. |
 | **Catalog token** | Optional. A GitHub token that lets the Filament Catalog download from a private repository. |
-| **Phones, PCs and Weigh Stations** | Make the pairing QR code and code for a phone, or the link for Slicer Sync or the Weigh Station, and remove a paired device. |
+| **Paired devices** | Make the pairing QR code and code for a phone, or the link for Slicer Sync or the Weigh Station, and remove a paired device. |
 | **Tag Readers** | Make a token for a Tag Reader (shown once) and revoke one. |
 | **Features** | Switch Features on or off and set the addresses they need (for example the web public address). Changes are applied in the background and the page waits while the Hub restarts. |
 
@@ -238,10 +238,10 @@ From v0.4.3 the page has sections: **Overview**, **Features**, **Printers**, **D
 - **Overview.** The installed version and Setup, with a note and a link to **Updates** when a newer release exists. Under
   it are the same checks as `sudo filament-kit status`, each marked **OK**, **needs a look** or **note**, with a
   `Fix:` line for the ones that need a look and a **Make the fields** button where Spoolman is missing fields the
-  kit needs. **Still to do** lists what is missing: a setup code, printers, a paired phone, the Anthropic key (when the Label Reader's Cloud engine is on), the web passphrase (when the web part is on), each with a link to its tab. Addresses and
+  Hub needs. **Still to do** lists what is missing: a setup code, printers, a paired phone, the Anthropic key (when the Label Reader's Cloud engine is on), the web passphrase (when Web access is on), each with a link to its tab. Addresses and
   serial numbers are hidden. Type the setup code to see them, and the Weigh Station's
   pairing when the Weigh Station is on this computer (without the code it says "not checked").
-- **Devices.** From v0.5.0, with the web part on, it also shows the address of the web app (`<address>/intake`),
+- **Devices.** From v0.5.0, with Web access on, it also shows the address of the web app (`<address>/intake`),
   its QR code and how to add it to an iPhone's home screen. See
   [use the web app on an iPhone](install-iphone-web-app.md) for the setup Safari needs.
 - **Features.** **Setup** buttons set a ready-made set of Features. Pick one to see what will be on afterwards and what it
@@ -310,15 +310,15 @@ A checklist appears. Each line says what the Feature needs:
  [ ] 10 remote     Public https name for the web UI (nginx, certbot)          needs: web
 ```
 
-Move with **Up/Down** (or `k`/`j`; **Home**, **End**, **PgUp**, **PgDn** too) and press **Space** to switch a
-Feature on or off. What it needs is switched on too, and switching one off switches off whatever needs it; the
+Move with **Up/Down** (or `k`/`j`; **Home**, **End**, **PgUp**, **PgDn** too) and press **Space** or **Enter** to
+switch a Feature on or off. What it needs is switched on too, and switching one off switches off whatever needs it; the
 bottom lines show the row's needs, what the last key did, and the keys. The letters `h`, `w` and `b` pick the
-Hub, Weigh Station only or Hub with Weigh Station Setup. Press **Enter** to apply, or `q` or **Esc** to cancel (nothing changes). Then
+Hub, Weigh Station only or Hub with Weigh Station Setup. Press `s` to apply (Enter never applies), or `q` or **Esc** to cancel (nothing changes). Then
 answer any question it asks (for example Web access asks for its https address). filament-kit installs and starts what you turned on. Turning a Feature off never deletes its data.
 
 Without a usable terminal (no terminal, `TERM` unset or `dumb`, or one smaller than 40 by 8) a numbered list
-appears instead: type a Feature's number (or several, like `9 10`) and press Enter to tick or untick it, Enter on an
-empty line to apply, `q` to cancel.
+appears instead: type a Feature's number (or several, like `9 10`) and press Enter to tick or untick it, `s` to apply, `q` to
+cancel.
 
 To use the Label Reader's Cloud engine later: in `sudo filament-kit config`, enter the API key under **Label Reader**, then run `sudo filament-kit features menu` and tick
 Label Reader: Cloud (Claude).

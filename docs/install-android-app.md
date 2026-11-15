@@ -104,7 +104,7 @@ below, which happens when you install a downloaded file over an older copy signe
   copy signed by someone else, for example a test build. Uninstall the old app first (your spools are on the Hub, not the phone), then install again.
 - **The download from your Hub fails** ("no app package is installed on this server"): the Hub's copy
   is only there when it was installed from a release. Use the GitHub download instead.
-- **No servers found, or "Connecting..." never finishes**:
+- **No Hubs found, or "Connecting..." never finishes**:
   - Check that the phone is on the home Wi-Fi, not mobile data or a guest network.
   - On Android 17 or newer, check that **local network access** is allowed (app settings → permissions).
     - Check that the Hub is running: `sudo filament-kit status` on the Hub.

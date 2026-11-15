@@ -65,7 +65,7 @@ Start with the built-in address. Use way A or B only to avoid the warning or to 
    ```
 
 3. A checklist of Features appears. Move with the arrow keys and press Space
-   on **Web access** and on **Remote access** to tick them. Then press Enter to apply.
+   on **Web access** and on **Remote access** to tick them. Then press `s` to apply.
 4. When it asks `web needs its public https address`, type your address, for example
    `https://my-server.local/filament`, and press Enter.
 5. filament-kit installs nginx and sets it up. Among its
@@ -78,7 +78,7 @@ Start with the built-in address. Use way A or B only to avoid the warning or to 
    ```
 
    You should see `OK   web module is on`, `OK   public URL ...` and `OK   web unit answers`. It also shows
-   `--   sign-in passphrase not set`. That passphrase is only for the Claude connector, not for the phone web
+   `--   sign-in passphrase not set`. That passphrase is only for the Claude connector, not for the web
    app, so you can ignore it (or set one with `sudo filament-kit web passphrase`).
 
 nginx now serves the web app with a certificate the Hub made itself. Safari doesn't know that certificate, so

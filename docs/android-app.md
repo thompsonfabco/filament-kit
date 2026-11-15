@@ -270,5 +270,6 @@ With the app open, tap a spool's NFC tag on the back of the phone.
   If the tag is already used by another spool, the app says so and offers to move it here.
 - **Search** on the home screen finds spools by brand, material or colour as you type (**Sealed spools only** narrows
   it) and opens the same card.
-- **Add your own entry** (Filament Catalog, on the Hub page) is for a filament line the Catalog doesn't have: fill in the fields marked `*` (vendor, product
-  line, material) and any numbers from the maker's data sheet, and tap **Save**.
+- **Add a line to the Filament Catalog** (on the Slicer presets screen, under "Missing a product line?") is for a filament line the
+  Catalog doesn't have: fill in the fields marked `*` (Brand, Line, Material) and any numbers from the maker's data sheet, and tap
+  **Save to the catalog**. The Hub page has its own box for the same job, **Add your own entry**, which takes one entry as JSON.

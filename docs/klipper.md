@@ -30,7 +30,7 @@ your home network (the note says how to allow it).
 - **Not sure of the address?** `sudo filament-kit printer scan` looks for Moonraker on the Hub's own network (at
   most 256 addresses, only when you run it); `--subnet <network>` scans another range, up to 256 addresses. A scan asked for through the Hub's API keeps to the private networks the Hub may reach (10.x, 172.16-31.x, 192.168.x), one at a time with 30 seconds between them. Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
   themselves; the Hub keeps at most 32 it has not been told to add, oldest out. A printer can only be added once, in the terminal, the API or the Hub page: a name or address that resolves to one already added on that port is refused, and the message says which.
-- **Moonraker asks for an API key?** `sudo filament-kit printer api-key <printer>` asks for it; it is never shown again. Leaving it empty removes the saved key.
+- **Moonraker asks for an API key?** `sudo filament-kit printer api-key <printer>` asks for it; it is never shown again. Leaving it empty keeps the saved key unchanged; `--clear` removes it.
 - **Changed the printer or its firmware?** `sudo filament-kit printer detect <printer>` reads the model and filament system
   again.
 - The Hub keeps its printer list in `printers.xml`. It also writes the old-format `printers.json` beside it on every
@@ -75,7 +75,7 @@ in `slot-map.xml` in the printer's folder under the Hub's state; delete it to go
 
 Moonraker deducts the filament it uses from the active spool in Spoolman while it prints (its own `[spoolman]`
 support). The Hub only records each finished job in the printer's usage log; those entries cannot be undone from the
-kit (correct the spool in Spoolman instead). The printer status warns when Moonraker reports usage to another
+Hub (correct the spool in Spoolman instead). The printer status warns when Moonraker reports usage to another
 Spoolman, or to none.
 
 On a multi-tool printer Moonraker charges only one spool at a time, so the active spool must follow the tool: the Klipper add-on's `_FK_TOOL_CHANGED T=<n>` does that; add it to the end of your tool-change macro. A tag read by the Tag Reader the add-on installs goes in the active tool. AFC and Happy Hare do

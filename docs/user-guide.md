@@ -31,8 +31,8 @@ Ubuntu computer:
 curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
 ```
 
-Options go after `get.sh` (or after `./install.sh` from an unpacked release): `--mode server|station|all-in-one`,
-`--server <address>` for a Weigh Station, `--modules a,b` with `--set key=value` for the settings a Feature needs
+Options go after `get.sh` (or after `./install.sh` from an unpacked release): `--mode hub|weigh-station|hub-with-weigh-station`,
+`--hub <address>` for a Weigh Station, `--modules a,b` with `--set key=value` for the settings a Feature needs
 (for example `--modules server,web --set web.public_url=https://filament.example.com/filament`), and
 `--version 0.3.0`. Without a terminal it asks nothing and installs the Hub Setup unless told otherwise.
 
@@ -102,9 +102,9 @@ Use either way. Both install what the new Setup needs, start it, and stop what i
 
 - `sudo filament-kit features menu`. Move with Up/Down (or
   `k`/`j`), switch a Feature on or off with Space, press `h`, `w` or `b` for the Hub, Weigh Station only or Hub with Weigh Station Setup,
-  Enter to apply, `q` or Esc to cancel. A Feature's needs are switched on with it, and switching one off switches off
+  `s` to apply (Enter only switches a row), `q` or Esc to cancel. A Feature's needs are switched on with it, and switching one off switches off
   what needs it. Choosing Weigh Station only asks for the Hub's address. Without a usable
-  terminal a numbered list runs instead: type numbers, Enter applies, `q` cancels.
+  terminal a numbered list runs instead: type numbers and Enter to switch rows, `s` applies, `q` cancels.
 - `sudo filament-kit features setup <setup>`, for example `sudo filament-kit features setup hub-with-weigh-station`. For the Weigh Station only
   Setup, add the Hub's address: `sudo filament-kit features setup weigh-station --hub 192.0.2.10`.
   A Setup never turns `web`, `remote` or `orders` on or off: the ones you turned on stay on, unless the new Setup
@@ -334,8 +334,8 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 
 | Command | What it does | Hub page place |
 | --- | --- | --- |
-| `status` | Checks everything and prints one row per check (9.1) | Overview |
-| `printer list` | All printers, set up and found (9.2) | Printers |
+| `status` | Checks everything and prints one row per check | Overview |
+| `printer list` | All printers, set up and found | Printers |
 | `printer show <printer>` | One printer: details and slots | Printers, expanded row |
 | `printer test <printer>` | Test connection | Test connection |
 | `printer add [--klipper] [options]` | Add a printer; asks for what is missing | Add a printer |
@@ -353,15 +353,15 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 | `printer reports <printer>` | List saved reports | Saved reports |
 | `printer forget-certificate <printer>` | Forget certificate (Bambu) | Forget certificate |
 | `printer forget <printer>` | Forget printer | Forget printer |
-| `printer live <printer>` | Prints where the live view is (section 10) | Open the live printer view |
-| `printer menu` | The Printers screen (8.4) | Printers |
+| `printer live <printer>` | Prints where the live view is | Open the live printer view |
+| `printer menu` | The Printers screen | Printers |
 | `klipper add-on` | Prints the commands that install the Klipper add-on | Klipper add-on |
-| `recent` (same as `recent history`) | Recently added records (9.3) | Recently added |
+| `recent` (same as `recent history`) | Recently added records | Recently added |
 | `recent show <record> [--photos]` | One record: fields, confidence, revisions | Record detail |
 | `recent revise <record> --note TEXT [--item N]` | Ask the Label Reader to correct it | Ask the Label Reader to correct it |
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
-| `devices` (same as `devices list`) | Paired devices (9.4) | Devices |
+| `devices` (same as `devices list`) | Paired devices | Devices |
 | `devices forget <device>` | Unpair a device | Revoke |
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this machine |
@@ -371,23 +371,23 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 | `tag-reader new-token [--name NAME]` | Make a token | Make a token |
 | `tag-reader revoke <reader>` | Revoke a token | Revoke |
 | `tag-reader flash [options]` | Write a Tag Reader over the Hub's USB | Flash a device |
-| `presets status` | Build, Slicer Sync and update state (9.5) | Slicer presets |
+| `presets status` | Build, Slicer Sync and update state | Slicer presets |
 | `presets build` | Build now | Build now |
 | `presets lines` | Filament lines and their parents | Product lines |
 | `presets set-parent <line> <parent> [--orca]` | Set the Bambu Studio or Orca Slicer parent | Set parent |
 | `presets restore-deleted` | Bring back presets deleted in Bambu Studio | Restore deleted presets |
 | `presets updates (--line ID \| --all)` | Show what would be accepted (changes nothing) | Show what would be accepted |
 | `presets accept-updates (--line ID \| --all)` | Accept updates (asks) | Accept these |
-| `features` (same as `features list`) | Features, on or off (9.6) | Features |
-| `features menu [--numbered] [--raw]` | The Features checklist (8.5) | Features |
+| `features` (same as `features list`) | Features, on or off | Features |
+| `features menu [--numbered] [--raw]` | The Features checklist | Features |
 | `features on <feature> [--hub ADDRESS]` / `features off <feature>` | Switch one feature (`--hub` when switching on the Weigh Station without the Hub service) | Turn on / Turn off |
 | `features setup <setup> [--hub ADDRESS]` | Choose the setup | Setup |
 | `features apply [--no-pair]` | Apply the features again | Apply again |
 | `features units` | The service files the features need, one per line | (none) |
-| `config [--numbered]` | The settings menu (8.3) | Settings |
+| `config [--numbered]` | The settings menu | Settings |
 | `config show` | All settings, in menu order | Settings |
 | `config set <key> <value>` | Change one setting | Settings, one field |
-| `label-reader status` | Label Reader engines and their health (9.9) | Settings > Label Reader |
+| `label-reader status` | Label Reader engines and their health | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
 | `catalog status` | Filament Catalog version and last check | Settings > Filament Catalog |
 | `catalog update [--scheduled]` | Update now | Update now |
@@ -410,9 +410,25 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 | `update [--check \| --rollback] [--scheduled]` | Updates | Updates |
 | `uninstall [--purge]` | Remove filament-kit (asks) | Updates, footer line |
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
-| `add` | Prints where spools are added (section 10) | (none) |
-| `spool` | Prints where spools are opened, tagged and moved (section 10) | (none) |
+| `add` | Prints where spools are added | (none) |
+| `spool` | Prints where spools are opened, tagged and moved | (none) |
 | `help [<command> \| aliases \| --markdown]` | Help; `--markdown` prints the command table for the user guide | (none) |
+
+### Notes on some commands
+
+- **`printer map <printer> --by-loading`** needs the running Hub: it works on the same session as the Hub page and the
+  apps (see [When mapping fails](#when-mapping-fails-map-by-loading-filament-v050); the usual way is
+  [Map slots](#map-slots)). It names each slot and you load it. At **Answer:** type `y` (or the slot you loaded, for
+  example `A2`), `s` to skip it or `q` to stop; `?` lists the keys. A Klipper printer is mapped only this way.
+- **`printer report <printer>`** makes a short file to attach to an issue when a printer is not known or its mapping
+  failed. It holds no serial number, address, name or account id; read it first. When the printer can't be reached,
+  the report is built from what the Hub saved and says so. **Collect a report** on the Hub page does the same.
+- **`tag-reader flash`** writes the Tag Reader plugged into the Hub's USB (see [Flash a device](#flash-a-device)).
+  `--port <port>` names its USB port. `--source <folder>` builds the firmware from the `reader` folder of a checkout with
+  PlatformIO and flashes it; `--out <file>` only writes its `secrets.h` (mode 600) so you can build elsewhere
+  ([reader/README.md](../reader/README.md)).
+- **`weigh-station pairing-state`** prints one line: `paired with <address>:<port>`, `not paired`, or `not checked yet`
+  (when you are not root, so it can't read the pairing).
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
 `http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type
@@ -619,10 +635,10 @@ then installs them in every Bambu Studio folder on the PC ([Stable and Beta Bamb
   ones back, run `sudo filament-kit presets restore-deleted`; the next build brings them back and Slicer Sync
   installs them.
 - Bambu's cloud keeps about 100 filament Slicer presets. The rest stay on this PC only.
-- A line the Filament Catalog doesn't have: in the app tap **Add your own entry** and fill in the line.
+- A line the Filament Catalog doesn't have: in the app tap **Add a line to the Filament Catalog** (on the Slicer presets screen), fill in the line and tap **Save to the catalog**. The Hub page has its own box for this, **Add your own entry**.
 - To change which Bambu preset a line starts from, change its **Bambu Studio parent**: in the app, on the
   **Check the spools** screen while you add spools (field **Bambu Studio parent**; it applies to every colour of
-  that line), or in **Add your own entry**, or on the Ubuntu computer with `sudo filament-kit presets lines` (lists the
+  that line), or in **Add a line to the Filament Catalog**, or on the Ubuntu computer with `sudo filament-kit presets lines` (lists the
   lines) and `sudo filament-kit presets set-parent <line> <parent>`.
 - To see how the last build went: `sudo filament-kit presets status`. To rebuild now:
   `sudo filament-kit presets build`. (It needs Slicer Sync to have run once.)
@@ -655,8 +671,8 @@ Then run `sudo filament-kit presets build` (or wait for the next sync).
 - Each line also has an **Orca Slicer parent**, the Orca system preset it starts from. The Hub picks one;
   `sudo filament-kit presets lines` shows it and `sudo filament-kit presets set-parent --orca <line> <parent>`
   changes it (give the parent's name without ` @System`).
-- Slicer Sync finds Orca Slicer on the PC by itself (its folder in `%APPDATA%\OrcaSlicer`). It sends the Orca Slicer
-  Slicer presets to the Hub along with the Bambu Studio ones and installs the Orca Slicer presets the Hub builds. It waits
+- Slicer Sync finds Orca Slicer on the PC by itself (its folder in `%APPDATA%\OrcaSlicer`). It sends
+  the Orca Slicer presets to the Hub along with the Bambu Studio ones and installs the Orca Slicer presets the Hub builds. It waits
   while Orca Slicer is open, just like for Bambu Studio. A PC without Orca Slicer only gets the Bambu Studio
   ones. While the Hub makes no Orca Slicer presets (no Orca printers set up as above), Slicer Sync leaves Orca
   Slicer alone: it does not wait for it and sends nothing from it. `filament-kit-sync status` on the PC shows the
@@ -675,7 +691,7 @@ with `sudo filament-kit catalog update`, or switch the **Filament Catalog** Feat
 copy you downloaded earlier keeps being used when filament-kit is upgraded.
 
 - `sudo filament-kit catalog status`: shows the Filament Catalog version (or that none is downloaded), the last check, and any
-  entries and fields left out of it because this kit can't read them.
+  entries and fields left out of it because the Hub can't read them.
 - `sudo filament-kit catalog update`: downloads the Filament Catalog, or a newer version, now.
 - `sudo filament-kit catalog rollback`: goes back to the version before the last update, and says so. The daily
   check then skips the version you left until a newer one is published; `catalog update` by hand still installs it.
@@ -826,8 +842,8 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   tag has been read yet; `station scale not seen` means the scale has sent nothing yet (switch it on and put
   something on it).
 - On the Weigh Station computer: `curl http://127.0.0.1:5003/state` shows the last tag and weight.
-  `sudo journalctl -u filament-kit-station -n 30` shows what the Weigh Station is doing; `NFC reader ...; retrying in
-  5 s` means the reader is not plugged in or not found.
+  `sudo journalctl -u filament-kit-station -n 30` shows what the Weigh Station is doing;
+  `NFC reader ...; retrying in 5 s` means the reader is not plugged in or not found.
 - The Weigh Station answers only its own computer and the Hub's address. Anything else gets no answer.
 - The button flow talks to the Hub with its own pairing (v0.3.0 and newer). On the Hub run
   `sudo filament-kit pair --weigh-station`, then within 10 minutes run `sudo filament-kit weigh-station pair` on the Weigh Station
@@ -1009,8 +1025,8 @@ lock the connector's sign-in for 10 minutes.
 
 ### The home network ranges (web.lan)
 
-The ranges above are IPv4. A phone or computer that reaches the web address over IPv6 is refused with `This device
-reached the server over IPv6` until you add your home network's IPv6 prefix. (The Hub page is IPv4 only.) To do it:
+The ranges above are IPv4. A phone or computer that reaches the web address over IPv6 is refused with
+`This device reached the server over IPv6` until you add your home network's IPv6 prefix. (The Hub page is IPv4 only.) To do it:
 
 1. On the Hub, find your prefix: `ip -6 addr show scope global`. A line such as
    `inet6 2001:db8:1234:5678::abcd/64` has the prefix `2001:db8:1234:5678::/64`: the first four groups of the address,
