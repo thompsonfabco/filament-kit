@@ -1375,7 +1375,9 @@ an open Spoolwarden window forward or opens the web app.
 ```
 
 - **Other browsers that offer installing** (`beforeinstallprompt`): the More row reads "Install app" and calls the
-  browser's own install prompt directly.
+  browser's own install prompt directly. The label says what the press does: when the browser makes the offer
+  after the page has drawn, every "Add to Home Screen" button on screen (the More row, the print-alerts group in
+  Settings) changes to "Install app" at once, and the buttons go when the app is installed (`appinstalled`).
 - Hidden when running installed (`display-mode: standalone`, or `navigator.standalone` on iPhone).
 - Installed name and icon: "Spoolwarden" with the Spoolwarden mark; it opens in standalone mode on the last place.
   The status bar follows the active appearance through two `theme-color` meta tags (one per `prefers-color-scheme`,
@@ -1405,14 +1407,16 @@ When a request gets no answer, or the page was loaded from the copy:
 +------------------------------------------+
 ```
 
-- A banner (02-components 8.8) directly under the top bar on `--warn-soft` with the wifi-off icon and the text (read
+- A banner (02-components 8.8) directly under the top bar, as the first thing in the main area and as wide as it
+  (it scrolls with the page; the "Offline" chip stays), on `--warn-soft` with the wifi-off icon and the text (read
   out as "Needs a look: Cannot reach the Hub. Retrying every 10 s."), and the "Offline" chip in the top bar.
 - When the phone itself has no network (`navigator.onLine` false): "This phone has no network. Your draft is
   kept on this phone."
 - Every group keeps its last data with the line "Last update <age>: the Hub did not answer." Buttons that need the
   Hub get `aria-disabled` and the reason "Needs the Hub." Add spools keeps working for photos, cards and fields
   (4.7); "Read labels" and "Preview" say "The Hub cannot be reached."
-- Retries every 10 s while the page is visible; "Try now" retries at once.
+- Retries every 10 s while the page is visible, at that fixed pace (no growing wait: the banner names the
+  pace); "Try now" retries at once.
 - When the Hub answers again: the banner goes, a toast says "Connected to the Hub again.", and the page reloads its
   data (inputs and drafts are kept).
 

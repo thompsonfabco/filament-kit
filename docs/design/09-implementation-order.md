@@ -708,7 +708,7 @@ Hub · S · Depends on: S1.4 · Beside: S3.2 to S3.8, S3.10 to S3.13, S3.16
 web app · M · Depends on: S3.13, S3.14 · Beside: none
 - **Files today:** `web/static/sw.js`; `web/static/app.js`.
 - **Change:** 04 10: the Add to Home Screen sheet; the shell kept by the service worker so the app opens without the
-  Hub; "Cannot reach the Hub".
+  Hub; "Cannot reach the Hub" (the banner, the chip, the retry and the toast). The marks on each screen are S3.17.
 - **Keep:** API replies are never cached.
 - **Other interfaces:** the app is installed from its package and has its own offline state (S4.4). The Hub page
   is served by the Hub itself and shows "The Hub is not answering" (S1.9); the command line runs on the Hub.
@@ -726,6 +726,17 @@ web app · S · Depends on: S3.2 · Beside: S3.3 to S3.6, S3.8, S3.10, S3.11, S3
 - **Other interfaces:** the Hub page's gate is the lock (S1.5) and the app's is pairing (S4.5); the command line
   runs on the Hub and has no gate of this kind.
 - **Check:** AUT-2 on `auth.py`'s page (no inline style); AUT-5 on both pages.
+
+### S3.17 Offline marks on each screen
+web app · M · Depends on: S3.15 · Beside: none
+- **Files today:** `web/static/app.js` and each screen's script.
+- **Change:** 04 10.3, third point: while the Hub cannot be reached, every group keeps its last data with
+  "Last update <age>: the Hub did not answer.", and each button that needs the Hub gets `aria-disabled` and the
+  reason "Needs the Hub." Each screen marks its own groups and buttons; the shell switches the marks on and off.
+- **Keep:** until this step, a press while offline shows the screen's own error in place, as today.
+- **Other interfaces:** the app has its own offline state (S4.4); the Hub page shows "The Hub is not answering"
+  (S1.9); the command line runs on the Hub.
+- **Check:** AUT-5 with the Hub stopped, on two screens.
 
 ---
 
