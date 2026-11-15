@@ -525,7 +525,7 @@ def test_profiles_status_counts_orca_presets_and_stale(orca_cfg, capsys):
     assert view["orca_presets"] == n_orca and view["orca_stale"] == []
     assert cli.main(["profiles", "status"]) == 0
     out = capsys.readouterr().out
-    assert f"{st['presets']} presets, {n_orca} Orca presets, 0 Orca stale" in out
+    assert f"Presets: {st['presets']} ({n_orca} for Orca Slicer). Problems: none." in out and "Delete in Orca" not in out
 
 
 def test_profiles_status_without_the_orca_target_has_no_orca_count(env, capsys):

@@ -83,13 +83,13 @@ def test_changed_values_are_listed_as_updates_then_accepted_and_cleared(env, cap
     assert {u["line_id"] for u in view["updates"]} == {LID}
     assert builds.state_view("a")["accepted_updates"] == {"stamp": b2, "base": [], "orca": []}
 
-    assert cli.main(["profiles", "status"]) == 0
-    assert f"{len(rows)} updates available (1 line)" in capsys.readouterr().out
+    assert cli.main(["presets", "status"]) == 0
+    assert f"Updates: {len(rows)} on 1 line. Presets already in your slicers" in " ".join(capsys.readouterr().out.split())
 
     # dry run: listed, nothing saved
     assert cli.main(["profiles", "apply-updates", "--all", "--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert "dry run" in out and N04 in out
+    assert "would be accepted; nothing was changed." in out and N04 in out
     assert updates.accepted(TB.profiles_dir()) == {"base": {}, "orca": {}}
     assert builds.state_view("a")["accepted_updates"]["base"] == []
 

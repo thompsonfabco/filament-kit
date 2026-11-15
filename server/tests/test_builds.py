@@ -647,10 +647,9 @@ def test_status_says_the_pc_must_sync_while_waiting_on_live(env, capsys):
     builds.record_installed(b1, "a")
     assert builds.run_build(env, now=TG.NOW + 1)["error"] == builds.WAIT_LIVE
     capsys.readouterr()
-    assert cli.main(["profiles", "status"]) == 0
+    assert cli.main(["presets", "status"]) == 0
     out = capsys.readouterr().out
-    assert "waiting: waiting for the PC's next sync" in out
-    assert "the PC sync has to run once" in out
+    assert "Waiting for the PC's next sync" in out and "the Slicer Sync runs every 10 minutes" in out
 
 
 def test_live_upload_without_a_waiting_build_requests_nothing(env):

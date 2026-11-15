@@ -332,7 +332,7 @@ def test_the_texts_other_places_print_hold_no_marker(monkeypatch, tmp_path):
         raise EOFError
     monkeypatch.setattr(cli.os, "geteuid", lambda: 0, raising=False)
     cli.cmd_station_pair(ask=ask)
-    assert seen and all("sudo filament-kit pair --station" in s for s in seen)
+    assert seen and all("sudo filament-kit pair --weigh-station" in s for s in seen)
     for s in seen:
         _plain(s, "pair prompt")
 
