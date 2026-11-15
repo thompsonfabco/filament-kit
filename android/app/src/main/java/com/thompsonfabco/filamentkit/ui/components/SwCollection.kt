@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -25,6 +26,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -34,6 +36,9 @@ import androidx.compose.ui.unit.sp
 import com.thompsonfabco.filamentkit.ui.theme.CollectionStyle
 import com.thompsonfabco.filamentkit.ui.theme.LocalCollectionStyle
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+
+/** The test tag of the hairline between two rows of `CollectionStyle.Rows`. */
+internal const val ROW_DIVIDER_TAG = "rows-divider"
 
 /** The narrowest a card of the `Cards` grid is at font scale 1: `minmax(18rem, 1fr)` of 02-components 6.1, at 16 dp to the rem. */
 internal val CARD_MIN_WIDTH = 288.dp
@@ -74,7 +79,10 @@ private fun isGrid(style: CollectionStyle) = style == CollectionStyle.Cards || s
  * gives each item its own bordered card in a grid of [CARD_MIN_WIDTH] columns, `density.gap` apart (one column on a
  * phone); `Tiles` (Palette) the same in [TILE_MIN_WIDTH] columns, where an item gives its [tile] (a [SwTile]; without one
  * the item is drawn in a plain card). Both widths are rem: they grow with the font scale. Every other profile keeps the
- * one bordered block with a hairline between the items (the table of Console, on a phone the stacked rows). [ground] is the card's or block's ground; [inset] is the space at each side of an item that
+ * one bordered block with a hairline between the items (the table of Console, on a phone the stacked rows); `Rows` (Panes)
+ * is that block with every row at least `--row` high, its content `--s4` from the edge, and the hairlines inset by the
+ * [visual]'s width (the width of the item's swatch, photo or ring with the gap after it; 0 for an item without one).
+ * [ground] is the card's or block's ground; [inset] is the space at each side of an item that
  * the item does not pad itself. [surface] makes the block a Surface (one traversal group that also stops touches reaching
  * what lies behind it, as a card does); the cards always are.
  *
@@ -88,10 +96,13 @@ internal fun <T> SwCollection(
     ground: Color = SpoolwardenTheme.colors.surface,
     inset: Dp = 0.dp,
     surface: Boolean = false,
+    visual: Dp = 0.dp,
     tile: (@Composable (index: Int, item: T) -> Unit)? = null,
     item: @Composable (index: Int, item: T) -> Unit,
 ) {
     val style = LocalCollectionStyle.current
+    val rows = style == CollectionStyle.Rows
+    val divider = if (rows) rowDividerStart(inset, visual) else 0.dp
     if (isGrid(style)) {
         val gap = SpoolwardenTheme.density.gap
         val cardMin = remWidth(CARD_MIN_WIDTH)
@@ -118,16 +129,16 @@ internal fun <T> SwCollection(
         CollectionCard(modifier, ground, inset) {
             Column {
                 items.forEachIndexed { i, entry ->
-                    if (i > 0) CollectionDivider()
-                    item(i, entry)
+                    if (i > 0) CollectionDivider(divider, rows)
+                    CollectionRow(rows, inset) { item(i, entry) }
                 }
             }
         }
     } else {
         Column(modifier.fillMaxWidth().collectionFrame(ground).padding(horizontal = inset)) {
             items.forEachIndexed { i, entry ->
-                if (i > 0) CollectionDivider()
-                item(i, entry)
+                if (i > 0) CollectionDivider(divider, rows)
+                CollectionRow(rows, inset) { item(i, entry) }
             }
         }
     }
@@ -139,10 +150,12 @@ internal fun <T> SwLazyCollection(
     items: List<T>,
     key: (T) -> Any,
     modifier: Modifier = Modifier,
+    visual: Dp = 0.dp,
     tile: (@Composable (item: T) -> Unit)? = null,
     item: @Composable (item: T) -> Unit,
 ) {
     val style = LocalCollectionStyle.current
+    val rows = style == CollectionStyle.Rows
     if (isGrid(style)) {
         val gap = SpoolwardenTheme.density.gap
         val cells = if (style == CollectionStyle.Tiles) TileCells(gap, remWidth(TILE_MIN_WIDTH)) else GridCells.Adaptive(remWidth(CARD_MIN_WIDTH))
@@ -162,8 +175,8 @@ internal fun <T> SwLazyCollection(
         Box(modifier.fillMaxWidth().collectionFrame(SpoolwardenTheme.colors.surface)) {
             LazyColumn {
                 items(items, key = key) { entry ->
-                    item(entry)
-                    if (entry !== items.last()) CollectionDivider()
+                    CollectionRow(rows, 0.dp) { item(entry) }
+                    if (entry !== items.last()) CollectionDivider(if (rows) rowDividerStart(0.dp, visual) else 0.dp, rows)
                 }
             }
         }
@@ -198,7 +211,28 @@ private fun Modifier.collectionFrame(ground: Color): Modifier {
     return fillMaxWidth().clip(shape).background(ground, shape).border(SpoolwardenTheme.sizes.hairline, SpoolwardenTheme.colors.border, shape)
 }
 
+/** Where the hairlines of `Rows` start, from the edge of the padded area: the content's `--s4` when [inset] gives none, then the [visual]. */
 @Composable
-private fun CollectionDivider() {
-    HorizontalDivider(thickness = SpoolwardenTheme.sizes.hairline, color = SpoolwardenTheme.colors.border)
+private fun rowDividerStart(inset: Dp, visual: Dp): Dp = (if (inset > 0.dp) 0.dp else SpoolwardenTheme.space.s4) + visual
+
+/**
+ * One item of `Rows`: at least `--row` high, its content `--s4` from the block's edge (the items pad `--s3` themselves, so
+ * `--s1` is added unless [inset] already sets the edge). Every other form draws the item as it is.
+ */
+@Composable
+private fun CollectionRow(rows: Boolean, inset: Dp, content: @Composable () -> Unit) {
+    if (!rows) {
+        content()
+        return
+    }
+    val pad = if (inset > 0.dp) 0.dp else SpoolwardenTheme.space.s1
+    Box(Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).padding(horizontal = pad)) { content() }
+}
+
+@Composable
+private fun CollectionDivider(start: Dp = 0.dp, rows: Boolean = false) {
+    HorizontalDivider(
+        (if (rows) Modifier.padding(start = start).testTag(ROW_DIVIDER_TAG) else Modifier),
+        thickness = SpoolwardenTheme.sizes.hairline, color = SpoolwardenTheme.colors.border,
+    )
 }

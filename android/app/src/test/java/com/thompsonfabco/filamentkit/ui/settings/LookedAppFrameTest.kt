@@ -77,6 +77,18 @@ class LookedAppFrameTest {
         assertEquals(Look.Workbench to NavStyle.Sidebar, seen.last())
     }
 
+    @Test fun theHubsPanesApplyWithNothingStoredAndAppliesTheProfile() {
+        // the default `built` list, as MainActivity passes it: the Panes are drawn, not turned into Console
+        val seen = mutableListOf<Pair<Look, NavStyle>>()
+        rule.setContent {
+            LookedAppFrame(Appearance.Light, Startup(Appearance.Light, true, null, Look.Panes), MutableStateFlow(null), MutableStateFlow(Look.Panes)) { look ->
+                seen += look to LocalNavStyle.current
+            }
+        }
+        rule.waitForIdle()
+        assertEquals(Look.Panes to NavStyle.List, seen.last())
+    }
+
     @Test fun neitherChoiceNorHubLookIsConsole() {
         val seen = mutableListOf<Pair<Look, NavStyle>>()
         setUpFrame(Startup(Appearance.Light, true), MutableStateFlow(null), MutableStateFlow(null), seen)

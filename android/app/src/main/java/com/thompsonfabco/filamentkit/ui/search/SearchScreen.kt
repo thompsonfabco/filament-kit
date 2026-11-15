@@ -250,7 +250,7 @@ fun SearchScreen(
                     loadedSecondsAgo = secondsSince(ui.loadedAt),
                 ) {
                     SwCollection(
-                        ui.results, inset = SpoolwardenTheme.space.s4, surface = true,
+                        ui.results, inset = SpoolwardenTheme.space.s4, surface = true, visual = SpoolwardenTheme.sizes.swatchRowW + SpoolwardenTheme.space.s3,
                         tile = { _, spool -> SpoolTile(spool, onClick = { onOpenSpool(spool) }) },
                     ) { _, spool ->
                         SpoolRow(spool, onClick = { onOpenSpool(spool) })

@@ -67,7 +67,9 @@ import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 /**
  * The shell around the main graph (05-android-app 2.1, 2.3): the bottom bar on a phone, the rail on a wider window,
  * the same five [Tab]s in both. The `nav` profile of the look (02-components 2.3) changes only the wide form: `Sidebar`
- * (Workbench) is the rail on a tablet and a permanent drawer `sideW` wide on expanded width; `Pills` (Palette) leaves the wide form to [SwPills]. [selected] is the current destination, null while a screen outside the five is on top
+ * (Workbench) is the rail on a tablet and a permanent drawer `sideW` wide on expanded width; `Pills` (Palette) leaves the wide form to [SwPills]; `List` (Panes) has no bar, rail or drawer: on a tablet or expanded
+ * width the section list is a pane beside [content] ([SwSectionPane], with the [summaries] of the sections), on a phone it is the root page the
+ * shell draws ([SwSectionPage]). [selected] is the current destination, null while a screen outside the five is on top
  * (the bar is then [visible] = false). A dot on Settings tells that an app update is ready ([settingsUpdate]).
  *
  * The bar and the rail keep Material's own geometry (80 dp high, 80 dp wide at least); [content] gets a 1 dp
@@ -80,12 +82,15 @@ internal fun SwNav(
     onSelect: (Tab) -> Unit,
     modifier: Modifier = Modifier,
     settingsUpdate: Boolean = false,
+    summaries: Map<Tab, String> = emptyMap(),
     content: @Composable () -> Unit,
 ) {
     val colors = SpoolwardenTheme.colors
     val sizes = SpoolwardenTheme.sizes
     val window = SpoolwardenTheme.window
-    val layout = navLayout(visible, window, LocalNavStyle.current)
+    val navStyle = LocalNavStyle.current
+    val layout = navLayout(visible, window, navStyle)
+    val listPane = visible && navStyle == NavStyle.List && window != WindowClass.Phone
     val labels = Tab.entries.map { stringResource(it.label) }
     val updateName = stringResource(R.string.nav_settings_update)
     val barColors = NavigationBarItemDefaults.colors(
@@ -200,13 +205,19 @@ internal fun SwNav(
         },
         layoutType = layout,
     ) {
-        Box(modifier.background(colors.bg).hairlineToward(layout, colors.border, sizes.hairline.value)) { content() }
+        Box(modifier.background(colors.bg).hairlineToward(layout, colors.border, sizes.hairline.value)) {
+            if (listPane) SwSectionPane(selected, onSelect, summaries = summaries, settingsUpdate = settingsUpdate, content = content) else content()
+        }
     }
 }
 
-/** The bar on a phone; wider, the rail, or the drawer of `Sidebar` on expanded width; none while [visible] is false. */
+/**
+ * The bar on a phone; wider, the rail, or the drawer of `Sidebar` on expanded width; none while [visible] is false, and none
+ * for `List` at any width (the section list is the navigation, a page on a phone and a pane beside the content wider).
+ */
 internal fun navLayout(visible: Boolean, window: WindowClass, style: NavStyle): NavigationSuiteType = when {
     !visible -> NavigationSuiteType.None
+    style == NavStyle.List -> NavigationSuiteType.None
     window == WindowClass.Phone -> NavigationSuiteType.NavigationBar
     // the pills are a row under the top bar ([SwPills]), so no side navigation is left
     style == NavStyle.Pills -> NavigationSuiteType.None
@@ -244,10 +255,12 @@ internal fun paletteMore(selected: Tab?, settings: String, pages: List<PillMore>
  * The sides of the display the content of the main scaffold keeps clear of (the status bar belongs to the top bar):
  * all of them while the navigation is hidden; on a phone the horizontal ones (the bar below takes the bottom); with
  * `Pills` the pill row under the top bar takes the top, and there is no rail, so the horizontal ones and the bottom; else
- * the end and the bottom (the rail takes the start).
+ * the end and the bottom (the rail takes the start, and with `List` the section pane does). With `List` a phone has no bar
+ * either, so the bottom is the content's own, [list] true.
  */
-internal fun contentInsetSides(navVisible: Boolean, phone: Boolean, pills: Boolean): WindowInsetsSides = when {
+internal fun contentInsetSides(navVisible: Boolean, phone: Boolean, pills: Boolean, list: Boolean = false): WindowInsetsSides = when {
     !navVisible -> WindowInsetsSides.Horizontal + WindowInsetsSides.Vertical
+    phone && list -> WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
     phone -> WindowInsetsSides.Horizontal
     pills -> WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
     else -> WindowInsetsSides.End + WindowInsetsSides.Bottom

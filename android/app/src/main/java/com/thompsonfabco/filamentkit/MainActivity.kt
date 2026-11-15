@@ -189,6 +189,9 @@ import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwNav
 import com.thompsonfabco.filamentkit.ui.components.PillMore
 import com.thompsonfabco.filamentkit.ui.components.SwPills
+import com.thompsonfabco.filamentkit.ui.components.SwSectionDrill
+import com.thompsonfabco.filamentkit.ui.components.rememberSectionDrill
+import com.thompsonfabco.filamentkit.ui.components.underSectionList
 import com.thompsonfabco.filamentkit.ui.components.contentInsetSides
 import com.thompsonfabco.filamentkit.ui.components.paletteMore
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
@@ -330,7 +333,7 @@ class MainActivity : ComponentActivity() {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun FilamentKitApp(
+internal fun FilamentKitApp(
     app: AppViewModel, paired: Boolean, appearance: Appearance, look: Look, toast: SwToastState, topBarActions: TopBarActions,
 ) {
     // API 37: every LAN socket needs ACCESS_LOCAL_NETWORK. Asked once at start; the session waits for it.
@@ -488,17 +491,27 @@ private fun FilamentKitApp(
     val imeVisible = WindowInsets.isImeVisible
     val openSettingsOverPairing: () -> Unit = { nav.navigate(SettingsGraph) { launchSingleTop = true } }
     val navVisible = !inPairing && !settingsOverPairing && destination != null && !(phone && imeVisible)
+    // Panes on a phone (02 2.3, 08 9): the root page is the list of sections, choosing one drills in, and Back at that
+    // section's root returns to the list with focus on its row; a screen deeper in a section keeps its own Back
+    val listNav = LocalNavStyle.current == NavStyle.List
+    val drill = rememberSectionDrill()
+    val drillActive = listNav && phone && navVisible
+    val atTabRoot = destination.isTabRoot()
+    val sectionPage = drill.showsPage(drillActive, atTabRoot)
+    val drilledIn = drill.drilledIn(drillActive, atTabRoot)
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val pairingOverMain = remember(entry) { nav.previousBackStackEntry != null }
     val atPairStart = destination?.hasRoute(PairRoute::class) == true || destination?.hasRoute(PairNetworkAccessRoute::class) == true
-    val showBack = showsBackArrow(destination.isTabRoot(), inPairing, pairingOverMain, atPairStart) || settingsOverPairing
+    val showBack = showsBackArrow(atTabRoot, inPairing, pairingOverMain, atPairStart) || settingsOverPairing || drilledIn
     val scanning = destination?.hasRoute(PairScanRoute::class) == true
     val storedCertificate = destination?.hasRoute(PairCertificateRoute::class) == true &&
         entry?.toRoute<PairCertificateRoute>()?.source == MismatchSource.STORED.routeSource()
     val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
 
     val tabTapped: (Tab) -> Unit = { tapped ->
+        // from the list page, or from a sheet over it (the Hub sheet's Hub settings): the section opens, so the list goes
+        if (drillActive) drill.enter()
         val here = nav.currentDestination
         when (tabTap(here.tab(), tapped, here.isTabRoot())) {
             TabTap.Switch -> nav.selectTab(tapped)
@@ -770,14 +783,15 @@ private fun FilamentKitApp(
                 // the pills of Palette are a row under the top bar on a tablet and wider; nothing on a phone or in another look
                 Column {
                     if (!scanning) SwTopBar(
-                        title = printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
-                        subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
+                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
+                        subtitle = if (destination?.hasRoute(HomeRoute::class) == true && !sectionPage) config?.name?.takeIf { it.isNotBlank() } else null,
                         onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                         scrollBehavior = scroll,
                     ) {
                         if (!inPairing && !settingsOverPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
                         AppearanceMenu(appearance, app::setAppearance)
-                        topBarActions.content?.invoke(this)
+                        // on the list page only the list's own actions show, not the screen's under it
+                        if (!sectionPage) topBarActions.content?.invoke(this)
                     }
                     SwPills(
                         tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
@@ -805,10 +819,13 @@ private fun FilamentKitApp(
             contentWindowInsets = if (scanning) {
                 WindowInsets(0)
             } else {
-                WindowInsets.safeDrawing.only(contentInsetSides(navVisible, phone, LocalNavStyle.current == NavStyle.Pills))
+                WindowInsets.safeDrawing.only(contentInsetSides(navVisible, phone, LocalNavStyle.current == NavStyle.Pills, listNav))
             },
         ) { padding ->
-            NavHost(nav, startDestination = if (paired) HomeGraph else PairGraph, modifier = Modifier.padding(padding)) {
+            NavHost(
+                nav, startDestination = if (paired) HomeGraph else PairGraph,
+                modifier = Modifier.padding(padding).underSectionList(sectionPage),
+            ) {
                 navigation<PairGraph>(startDestination = PairRoute) {
                     composable<PairRoute> {
                         PairTopBarOverflow(onSettings = openSettingsOverPairing)
@@ -1262,6 +1279,11 @@ private fun FilamentKitApp(
                     sharedRoutes()
                 }
             }
+            // composed after the NavHost, so its Back handler goes first; on the list itself Back is left to the system, as at the first screen of the other looks
+            SwSectionDrill(
+                drill, drillActive, atTabRoot, tab, tabTapped, modifier = Modifier.padding(padding),
+                settingsUpdate = update.available != null,
+            )
         }
     }
 

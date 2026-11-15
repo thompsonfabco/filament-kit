@@ -398,7 +398,7 @@ fun PickSpoolScreen(
             )
         }
         if (s.results.isNotEmpty()) {
-            SwCollection(s.results, tile = { _, spool -> SpoolTile(spool) { viewModel.pick(spool) } }) { _, spool ->
+            SwCollection(s.results, visual = SpoolwardenTheme.sizes.swatchRowW + SpoolwardenTheme.space.s3, tile = { _, spool -> SpoolTile(spool) { viewModel.pick(spool) } }) { _, spool ->
                 SpoolRow(spool) { viewModel.pick(spool) }
             }
         }

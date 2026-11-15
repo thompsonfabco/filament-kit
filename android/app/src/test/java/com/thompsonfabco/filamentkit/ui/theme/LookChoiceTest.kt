@@ -25,10 +25,18 @@ class LookChoiceTest {
     }
 
     @Test fun aLookWithNoBuiltLayoutIsNotDrawn() {
-        assertEquals(listOf(Look.Console, Look.Workbench, Look.Palette), BUILT_LOOKS)
-        assertEquals(Look.Console, resolveLook(chosen = null, hub = Look.Panes))
-        assertEquals(Look.Console, resolveLook(chosen = Look.Panes, hub = null))
-        assertEquals("the Hub's look is the fallback of an unbuilt choice", Look.Workbench, resolveLook(Look.Panes, Look.Workbench))
+        val three = listOf(Look.Console, Look.Workbench, Look.Palette)
+        assertEquals(Look.Console, resolveLook(chosen = null, hub = Look.Panes, built = three))
+        assertEquals(Look.Console, resolveLook(chosen = Look.Panes, hub = null, built = three))
+        assertEquals("the Hub's look is the fallback of an unbuilt choice", Look.Workbench, resolveLook(Look.Panes, Look.Workbench, three))
+    }
+
+    @Test fun everyLookIsBuiltSoThePanesAreDrawnWhenChosenOrWhenTheHubNamesThemAndNothingIsStored() {
+        assertEquals(Look.entries, BUILT_LOOKS)
+        assertEquals(Look.Panes, resolveLook(chosen = Look.Panes, hub = null))
+        assertEquals("the phone's own Console wins over the Hub's Panes", Look.Console, resolveLook(Look.Console, Look.Panes))
+        assertEquals("nothing stored: the Hub's look", Look.Panes, resolveLook(chosen = null, hub = lookFromWire("panes")))
+        assertEquals("neither: Console", Look.Console, resolveLook(null, null))
     }
 
     @Test fun theWorkbenchIsDrawnWhenChosenOrWhenTheHubNamesItAndNothingIsStored() {

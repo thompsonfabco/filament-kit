@@ -134,6 +134,7 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (
                     } else {
                         SwLazyCollection(
                             h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
+                            visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
                             tile = { r -> RecordTile(r, vm) { onOpen(r.id) } },
                         ) { r ->
                             RecordRow(r, vm) { onOpen(r.id) }

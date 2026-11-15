@@ -63,7 +63,7 @@ class ThemePickerTest {
     private fun tile(name: String) = hasText(name) or hasContentDescription("$name, ", substring = true)
     private val radio = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
 
-    @Test fun consoleIsTheChosenTileWorkbenchAndPaletteCanBeChosenAndPanesIsNotBuiltYet() {
+    @Test fun consoleIsTheChosenTileAndTheOtherThreeCanBeChosen() {
         rule.setContent {
             SpoolwardenTheme(Look.Console, Appearance.Light) { ThemePicker(Look.Console, dark = false, onChoose = {}) }
         }
@@ -72,8 +72,34 @@ class ThemePickerTest {
         rule.onNode(radio and isSelected()).assertContentDescriptionEquals("Console, Dense and technical, selected")
         rule.onNode(tile("Workbench") and radio).assertIsNotSelected().assertIsEnabled()
         rule.onNode(tile("Palette") and radio).assertIsNotSelected().assertIsEnabled()
+        rule.onNode(tile("Panes") and radio).assertIsNotSelected().assertIsEnabled()
+        assertEquals("every look is built", 0, rule.onAllNodesWithTextCount("Not available yet"))
+    }
+
+    @Test fun aLookNotInTheBuiltListShowsNotAvailableYetAndIsDisabled() {
+        val three = listOf(Look.Console, Look.Workbench, Look.Palette)
+        rule.setContent {
+            SpoolwardenTheme(Look.Console, Appearance.Light) { ThemePicker(Look.Console, dark = false, onChoose = {}, built = three) }
+        }
         rule.onNode(tile("Panes") and radio).assertIsNotSelected().assertIsNotEnabled()
         assertEquals(1, rule.onAllNodesWithTextCount("Not available yet"))
+    }
+
+    @Test fun choosingThePanesTileAppliesItsProfileWithTheDefaultBuiltLooks() {
+        var look by mutableStateOf(Look.Console)
+        var seen: Triple<NavStyle, CollectionStyle, DetailStyle>? = null
+        rule.setContent {
+            SpoolwardenTheme(look, Appearance.Light) {
+                seen = Triple(LocalNavStyle.current, LocalCollectionStyle.current, LocalDetailStyle.current)
+                ThemePicker(look, dark = false, onChoose = { look = it })
+            }
+        }
+        rule.onNode(tile("Panes") and radio).performClick()
+        rule.waitForIdle()
+        assertEquals(Look.Panes, look)
+        assertEquals(Triple(NavStyle.List, CollectionStyle.Rows, DetailStyle.Pane), seen)
+        rule.onNode(tile("Panes") and radio).assertIsSelected()
+        rule.onNode(radio and isSelected()).assertContentDescriptionEquals("Panes, Simple lists, selected")
     }
 
     @Test fun choosingTheWorkbenchTileAppliesItsProfile() {
@@ -134,7 +160,9 @@ class ThemePickerTest {
     @Test fun aTileNotBuiltCannotBeChosen() {
         var chosen: Look? = null
         rule.setContent {
-            SpoolwardenTheme(Look.Console, Appearance.Light) { ThemePicker(Look.Console, dark = false, onChoose = { chosen = it }) }
+            SpoolwardenTheme(Look.Console, Appearance.Light) {
+                ThemePicker(Look.Console, dark = false, onChoose = { chosen = it }, built = listOf(Look.Console, Look.Workbench, Look.Palette))
+            }
         }
         rule.onNode(tile("Panes") and radio).performClick()
         rule.waitForIdle()
