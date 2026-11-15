@@ -715,8 +715,70 @@ class SpoolScreenSemanticsTest {
         )
         val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
         host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}) }
-        auditAllFour(listOf("This spool already has a tag. Linking this one replaces it.", "Move the tag here and replace this spool's tag", "Cancel"))
+        auditAllFour(listOf("This spool already has a tag. Linking this one replaces it.", "Replace this spool's tag", "Cancel"))
         rule.onNodeWithText("This tag is already linked to another spool:").assertDoesNotExist()
+        rule.onNodeWithText("Move the tag here and replace this spool's tag").assertDoesNotExist()
+        rule.onNodeWithText("Move the tag to this spool").assertDoesNotExist()
+    }
+
+    /** The link preview with its result line below it: what the person reads after the button. */
+    private fun linkWithResult(onBack: () -> Unit = {}) {
+        var done by mutableStateOf<SpoolResult?>(null)
+        val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
+        host("Tag 04A1B2") {
+            Column {
+                LinkPreviewScreen(vm, "04A1B2", onBack = onBack, onDone = { done = it }, onPairAgain = {})
+                done?.let { ResultLine(it) }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    @Test fun replacingTheSpoolsOwnTagSaysTagLinked() {
+        SpoolCache.clear()
+        SpoolCache.put(spoolJson(212, sealed = true, tag = "04FFFF").toSpoolSummary())
+        backend.failure = "link" to ApiError(
+            409, "tag_conflict", "has a tag",
+            kotlinx.serialization.json.buildJsonObject { put("reason", kotlinx.serialization.json.JsonPrimitive("spool_has_other_tag")) },
+        )
+        linkWithResult()
+        rule.onNodeWithText("Replace this spool's tag").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Tag linked.").assertExists()
+        rule.onNodeWithText("Tag moved to this spool.").assertDoesNotExist()
+        assertTrue("the Hub is asked to replace", backend.calls.last().contains("force=true:dry=false"))
+    }
+
+    @Test fun movingATagFromAnotherSpoolSaysTagMoved() {
+        SpoolCache.clear()
+        SpoolCache.put(spoolJson(212, sealed = true, tag = "04FFFF").toSpoolSummary())
+        backend.failure = "link" to ApiError(
+            409, "tag_conflict", "in use",
+            kotlinx.serialization.json.buildJsonObject {
+                put("reason", kotlinx.serialization.json.JsonPrimitive("tag_on_other_spool"))
+                put("other_spool", spoolJson(90, tag = "04A1B2"))
+            },
+        )
+        linkWithResult()
+        rule.onNodeWithText("Move the tag here and replace this spool's tag").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Tag moved to this spool.").assertExists()
+        rule.onNodeWithText("Tag linked.").assertDoesNotExist()
+    }
+
+    @Test fun cancelOnTheReplaceStepGoesBackToFind() {
+        SpoolCache.clear()
+        SpoolCache.put(spoolJson(212, sealed = true, tag = "04FFFF").toSpoolSummary())
+        backend.failure = "link" to ApiError(
+            409, "tag_conflict", "has a tag",
+            kotlinx.serialization.json.buildJsonObject { put("reason", kotlinx.serialization.json.JsonPrimitive("spool_has_other_tag")) },
+        )
+        var back = 0
+        linkWithResult(onBack = { back++ })
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitForIdle()
+        assertEquals(1, back)
+        assertTrue("nothing was written", backend.calls.none { it.contains("dry=false") })
     }
 
     // ---- the sheet's own window ----

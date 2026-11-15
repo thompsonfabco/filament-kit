@@ -185,7 +185,7 @@ class LinkPreviewViewModel(
             try {
                 val spool = backend.link(spoolId, uid, force = force, dryRun = false, gross = gross).toSpoolSummary().copy(id = spoolId)
                 SpoolCache.put(spool)
-                _state.update { it.copy(linking = false, finished = if (force) SpoolResult.TagMoved else SpoolResult.TagLinked) }
+                _state.update { it.copy(linking = false, finished = if (force && it.conflict == ConflictReason.TagOnOtherSpool) SpoolResult.TagMoved else SpoolResult.TagLinked) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

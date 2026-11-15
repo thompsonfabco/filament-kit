@@ -135,11 +135,11 @@ import com.thompsonfabco.filamentkit.ui.printers.PickSpoolScreen
 import com.thompsonfabco.filamentkit.ui.printers.PickSpoolViewModel
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
 import com.thompsonfabco.filamentkit.ui.printers.CameraSource
-import com.thompsonfabco.filamentkit.ui.printers.EditField
 import com.thompsonfabco.filamentkit.ui.printers.ManualMapBackend
 import com.thompsonfabco.filamentkit.ui.printers.ManualMapScreen
 import com.thompsonfabco.filamentkit.ui.printers.ManualMapViewModel
 import com.thompsonfabco.filamentkit.ui.printers.PrinterEditBackend
+import com.thompsonfabco.filamentkit.ui.printers.EditField
 import com.thompsonfabco.filamentkit.ui.printers.PrinterEditViewModel
 import com.thompsonfabco.filamentkit.ui.printers.PrinterSettingsScreen
 import com.thompsonfabco.filamentkit.ui.printers.PrinterBackend
@@ -552,6 +552,21 @@ class ScreenSemanticsTest {
         rule.runOnUiThread { ask = true }
         rule.waitForIdle()
         assertNull("not opened a second time", edit.state.value.dialog)
+    }
+
+    @Test fun aReplacedAccessCodeSaysSoInWords() {
+        val printer = Printer(id = "ABC123", name = "Workshop X1", serial = "ABC123", configured = true, state = "connected")
+        val backend = object : PrinterEditBackend {
+            override suspend fun editPrinter(id: String, changes: JsonObject) = PrinterEditResult(printer, changes.keys.toList(), null)
+            override suspend fun removePrinter(id: String) = Unit
+        }
+        val edit = PrinterEditViewModel(backend, "ABC123", "bambu")
+        val vm = PrinterViewModel(FakePrinters(), "ABC123", pollMs = 600_000)
+        host("Printer settings") { PrinterSettingsScreen(vm, edit, onPairAgain = {}, onForgotten = {}) }
+        rule.waitForIdle()
+        rule.runOnUiThread { edit.open(EditField.ACCESS_CODE); edit.submit("12345678") }
+        rule.waitForIdle()
+        rule.onNodeWithText("Access Code replaced.").assertExists()
     }
 
     @Test fun aWrongCodeRowOpensItsPrinterToReplaceTheCode() {

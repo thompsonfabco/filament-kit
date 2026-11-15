@@ -192,11 +192,15 @@ fun LinkPreviewScreen(
             // the tapped tag is free and the chosen spool has a tag of its own: the move replaces it
             if (conflict == ConflictReason.SpoolHasOtherTag && ui.other == null) NoticeCard(NoticeKind.Warn, stringResource(R.string.tag_own_replaced))
             // the chosen spool has a tag of its own: moving the tag here replaces it
-            val replaces = conflict == ConflictReason.SpoolHasOtherTag || ui.spool?.tag != null
+            val ownTag = conflict == ConflictReason.SpoolHasOtherTag
+            val replaces = ui.spool?.tag != null
             Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
                 SwButton(
                     stringResource(
-                        if (ui.linking) R.string.tag_link_linking else if (replaces) R.string.tag_move_replace else R.string.tag_move_here,
+                        if (ui.linking) R.string.tag_link_linking
+                        else if (ownTag) R.string.tag_replace_own
+                        else if (replaces) R.string.tag_move_replace
+                        else R.string.tag_move_here,
                     ),
                     vm::moveHere, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = ui.linking,
                 )

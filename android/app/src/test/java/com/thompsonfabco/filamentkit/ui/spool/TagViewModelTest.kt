@@ -178,6 +178,18 @@ class TagViewModelTest {
         assertNull(vm.state.value.other)
     }
 
+    @Test fun replacingTheSpoolsOwnTagIsALinkNotAMove() = runTest(dispatcher) {
+        backend.failure = "link" to ApiError(
+            409, "tag_conflict", "spool has a tag", buildJsonObject { put("reason", JsonPrimitive("spool_has_other_tag")) },
+        )
+        val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
+        advanceUntilIdle()
+        vm.moveHere()
+        advanceUntilIdle()
+        assertEquals(SpoolResult.TagLinked, vm.state.value.finished)
+        assertTrue(backend.calls.last().contains("force=true:dry=false"))
+    }
+
     @Test fun aFailedLinkStaysAndCanBeTriedAgain() = runTest(dispatcher) {
         val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
         advanceUntilIdle()
