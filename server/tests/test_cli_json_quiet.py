@@ -281,15 +281,58 @@ def test_a_modules_question_is_not_asked_under_json_at_a_terminal(capsys, monkey
     assert config.load() == before
 
 
-def test_a_modules_question_is_not_asked_under_json_at_a_terminal(capsys, monkeypatch):
+def test_a_modules_json_fix_names_a_switch_the_command_has(capsys, monkeypatch):
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
+    monkeypatch.setattr(sys, "stdin", _Terminal())
+    rc, out, err = run(capsys, ["modules", "disable", "server", "--json"])
+    assert rc == 2 and "modules disable server --yes" in doc(out)["fix"]
+    monkeypatch.setattr(cli, "_save_and_apply", lambda cfg, notes: 0)
+    rc, out, err = run(capsys, ["modules", "disable", "server", "--json", "--yes"])
+    assert "unrecognized" not in out + err and rc == 0
+
+
+def test_modules_enable_json_stops_on_a_missing_setting_with_exit_2(capsys, monkeypatch):
     monkeypatch.setattr(cli.apply, "_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", _Terminal())
     monkeypatch.setattr("builtins.input", lambda prompt="": pytest.fail("asked"))
     before = config.load()
-    rc, out, err = run(capsys, ["modules", "disable", "server", "--json"])
+    rc, out, err = run(capsys, ["modules", "enable", "web", "--json", "--yes"])
     got = doc(out)
-    assert rc == 2 and got["ok"] is False and "needs a yes" in got["error"] and "[y/N]" not in out + err
+    assert rc == 2 and got["ok"] is False and "config set web.public_url" in got["fix"]
     assert config.load() == before
+
+
+def _muted_terminal(monkeypatch, answers):
+    """--quiet on a command of results only, with a terminal that answers `answers`."""
+    lines = iter(answers)
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
+    monkeypatch.setattr(sys, "stdin", types.SimpleNamespace(isatty=lambda: True, readline=lambda *a: next(lines, "")))
+    output.configure(quiet=True)
+
+
+def test_quiet_shows_the_app_download_text_before_its_question(capsys, monkeypatch):
+    (config.paths().opt / "app").mkdir(parents=True)
+    (config.paths().opt / "app" / "filament-kit.apk").write_bytes(b"x")
+    _muted_terminal(monkeypatch, ["\n"])
+    try:
+        with output.muted():
+            apply._show_app(config.load(), True)
+    finally:
+        output.configure(quiet=False)
+    out = capsys.readouterr().out
+    assert "scan this code" in out and "app.apk" in out and "Press Enter when the app is installed" in out
+
+
+def test_quiet_shows_the_storage_menu_with_its_question(capsys, monkeypatch):
+    _muted_terminal(monkeypatch, ["0\n"])
+    try:
+        with output.muted():
+            print("dropped")
+            cli._storage_menu(config.load())
+    finally:
+        output.configure(quiet=False)
+    out = capsys.readouterr().out
+    assert "dropped" not in out and "Storage" in out and "1) locations" in out and "> " in out
 
 
 def test_a_restore_has_no_word_to_type_under_json(capsys, tmp_path):

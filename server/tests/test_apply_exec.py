@@ -463,3 +463,19 @@ def test_a_failed_apply_stops_at_the_step_it_was_in(tmp_path, monkeypatch, capsy
     assert cli.main(["modules", "apply", "--no-pair"]) == 1
     out = capsys.readouterr().out
     assert sentences(out, whole=False)[-1] == "Writing the service files and settings" and "Checking that" not in out
+
+
+def test_server_setup_first_run_header_is_shown_with_quiet(tmp_path, monkeypatch, capsys):
+    from filament_kit import output
+    monkeypatch.setattr(cli, "cmd_cert", lambda: 0)
+    monkeypatch.setattr(apply, "_tty", lambda: True)
+    answers = iter(["Workshop\n", "y\n"])
+    monkeypatch.setattr(apply.sys, "stdin", type("S", (), {"readline": lambda self: next(answers)})())
+    output.configure(quiet=True)
+    try:
+        with output.muted():
+            apply.execute([Action("server_setup", "")], run=Recorder(), resources=_res(tmp_path), root=tmp_path / "r")
+    finally:
+        output.configure(quiet=False)
+    out = capsys.readouterr().out
+    assert "==> First-time setup" in out and "Display name" in out and "==> Server certificate" not in out

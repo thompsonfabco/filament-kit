@@ -553,13 +553,14 @@ def write_key(key: str) -> Path:
 def _storage_menu(cfg: dict) -> None:
     pl = cfg["placement"]
     while True:
-        print("\nStorage\n"
-              f"  1) locations          {', '.join(cfg['locations'])}\n"
-              f"  2) PLA rack           {pl['pla_location']}\n"
-              f"  3) box prefix         {pl['box_prefix']!r}\n"
-              f"  4) box count          {pl['box_count']}\n"
-              f"  5) overflow           {pl['overflow']}\n"
-              "  0) back")
+        with output.shown():        # the menu is the context of the question below
+            print("\nStorage\n"
+                  f"  1) locations          {', '.join(cfg['locations'])}\n"
+                  f"  2) PLA rack           {pl['pla_location']}\n"
+                  f"  3) box prefix         {pl['box_prefix']!r}\n"
+                  f"  4) box count          {pl['box_count']}\n"
+                  f"  5) overflow           {pl['overflow']}\n"
+                  "  0) back")
         choice = _ask("> ")
         if choice is None or choice.strip() == "0":
             return
@@ -1998,7 +1999,7 @@ def cmd_modules_set(mode: str, server: str | None = None) -> int:
     return _save_and_apply(cfg)
 
 
-def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> int:
+def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None, yes: bool = False) -> int:
     if not _require_root():
         return output.NEEDS_SUDO
     cfg = config.load()
@@ -2010,18 +2011,38 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> i
     notes: list[str] = []
     tty = apply._tty() and not output.json_mode()         # --json never asks
     asked: list[str] = []
+    unset: list[str] = []                                   # --json: the settings a question would have asked for
 
     def _json_confirm(text: str) -> bool:       # --json: a question stops the command with exit 2 (06 6.8)
         asked.append(text)
         return False
 
-    err = _change_module(cfg, name, want_on, confirm=_json_confirm if output.json_mode() else _tty_confirm, server=server,
-                         notes=notes,
-                         ask_address=_ask_station_server if tty else None,
-                         ask_settings=_ask_module_settings if tty else None)
+    def _json_settings(new_cfg: dict, on) -> None:
+        also = ("spoolman_url",) if modules.needs_spoolman_url(on, new_cfg) else ()
+        unset.extend(k for k in [*modules.missing_settings(on, new_cfg), *also] if k != "station.allow")
+
+    def _json_address() -> None:
+        unset.append("station.allow")
+
+    json_ = output.json_mode()
+    err = _change_module(cfg, name, want_on, confirm=(lambda text: True) if yes else _json_confirm if json_ else _tty_confirm,
+                         server=server, notes=notes,
+                         ask_address=_json_address if json_ else _ask_station_server if tty else None,
+                         ask_settings=_json_settings if json_ else _ask_module_settings if tty else None)
     if asked:
         return output.no_terminal(f"turning {name} {'on' if want_on else 'off'} with the modules it "
-                                  f"{'needs' if want_on else 'carries'}")
+                                  f"{'needs' if want_on else 'carries'}",
+                                  _sudo_command(f"sudo filament-kit modules {'enable' if want_on else 'disable'} {name}")
+                                  + " --yes")
+    if unset:
+        key = unset[0]
+        if key == "station.allow":
+            output.error("station needs the server's address, and there is no terminal to ask.",
+                         "give it with --server:", cmd=_sudo_command(f"sudo filament-kit modules enable {name}") + " --server <address>")
+        else:
+            output.error(f"{name} needs {key}, and there is no terminal to ask.", "set it first, then run this again:",
+                         cmd=f"sudo filament-kit config set {key} <value>")
+        return output.USAGE
     if err:
         _err_line(err)
         return 1
@@ -3173,8 +3194,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     me = mdsub.add_parser("enable", help="turn a module on and apply (root)")
     me.add_argument("name")
     me.add_argument("--server", "--hub", dest="server", help="the kit server's name or IP (when enabling station without a server)")
+    _add_yes(me, "also turn on the modules it needs, without asking (a script has no terminal to ask on)")
     mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
     mx.add_argument("name")
+    _add_yes(mx, "also turn off the modules that depend on it, without asking (a script has no terminal to ask on)")
     mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
     wb = sub.add_parser("web", help="the MCP endpoint and phone web app: passphrase, status")
     wbsub = wb.add_subparsers(dest="web_cmd", required=True)
@@ -3452,7 +3475,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return cmd_modules_set(args.mode, args.server)
         if args.modules_cmd in ("enable", "disable"):
             return cmd_modules_toggle(args.name, args.modules_cmd == "enable",
-                                      getattr(args, "server", None))
+                                      getattr(args, "server", None), yes=args.yes)
         return cmd_modules_apply(pair=not args.no_pair)
     if args.cmd == "setup-code":
         return cmd_setup_code(args.new, args.revoke_trusted, yes=args.yes)

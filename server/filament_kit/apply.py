@@ -524,7 +524,9 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         cfg["server_name"] = socket.gethostname()
         config.save(cfg)
     elif "server_name" not in _raw_config():
-        print("\n==> First-time setup")
+        from . import output
+        with output.shown():        # the context of the questions below
+            print("\n==> First-time setup")
         default_name = socket.gethostname()
         name = _ask(f"Display name shown in the phone app (any text) [{default_name}]: ").strip()
         cfg = config.load()
@@ -1025,10 +1027,12 @@ def _show_app(cfg: dict, tty: bool) -> bool:
     if not tty:
         print(f"\n==> Android app: download it on the phone from {url}")
         return True
-    print("\n==> Android app: scan this code with the phone's camera to download it")
-    print(cli._qr_text(url))
-    print(f"It downloads filament-kit.apk from this server ({url}); the browser warns about the kit's own "
-          "certificate: continue, then open the file to install the app.")
+    from . import output
+    with output.shown():            # the context of the question below: seen even where --quiet drops the results
+        print("\n==> Android app: scan this code with the phone's camera to download it")
+        print(cli._qr_text(url))
+        print(f"It downloads filament-kit.apk from this server ({url}); the browser warns about the kit's own "
+              "certificate: continue, then open the file to install the app.")
     answer = _ask("Press Enter when the app is installed and you're ready to pair (or s to skip) ")
     return answer.strip()[:1] not in ("s", "S")
 
