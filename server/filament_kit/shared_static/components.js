@@ -365,6 +365,8 @@ function setAppearance(v) {
   }
   return kept;
 }
+// in System mode the metas follow the phone's own light/dark switch (08 13); a chosen appearance gives the same colour
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintMetas);
 function setLook(look) {
   attr(root, "data-look", look);
   paintMetas();                                        // the status bar follows the theme at once
@@ -373,7 +375,7 @@ function setLook(look) {
 // the picker (3.4): one entry per theme that is built; a theme built later is one more entry here
 const THEMES = ["console"];
 function themePicker(o = {}) {
-  const now = root.getAttribute("data-look"), chosen = THEMES.includes(now) ? now : "console";
+  const now = root.getAttribute("data-look") || "console", chosen = THEMES.includes(now) ? now : null;   // a theme with no tile: none is checked
   const fs = h("fieldset", { class: "theme-picker" }, h("legend", { class: o.legend ? "theme-picker__legend" : "sr" }, t("appearance_theme_title")));
   for (const look of THEMES) {
     const line = uid("look");

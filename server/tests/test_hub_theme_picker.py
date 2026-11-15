@@ -10,6 +10,8 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from filament_kit import config
 
 from test_hub_page_audit import _run, hub_app, hub_change  # noqa: F401
@@ -48,6 +50,7 @@ const picker = () => { const tiles = [...document.querySelectorAll(".theme-picke
 # the Hub's default look is on the root; a device that chose workbench and dark, light, then system; an unknown stored look
 INIT = PRELUDE + """
 const out = {};
+out.served = { look: root.getAttribute("data-look"), metas: metas() };      // the page the Hub served, before anything runs here
 out.notChosen = await load("__DEFAULT__");
 localStorage.setItem("spoolwarden.look", "workbench"); localStorage.setItem("spoolwarden.appearance", "dark");
 out.chosenDark = await load("__DEFAULT__");
@@ -62,8 +65,10 @@ return out;
 """
 
 
-def _check_init(page, default):
+def _check_init(page, default, served=True):
     (d_l, d_d), (w_l, w_d) = _surfaces(default), _surfaces("workbench")
+    if served:                                                  # the web app's own script then sets both metas to the shown colour
+        assert page["served"] == {"look": default, "metas": [[LIGHT, d_l], [DARK, d_d]]}
     assert page["notChosen"] == {"look": default, "theme": None, "metas": [[LIGHT, d_l], [DARK, d_d]]}
     assert page["chosenDark"] == {"look": "workbench", "theme": "dark", "metas": [[LIGHT, w_d], [DARK, w_d]]}
     assert page["chosenLight"] == {"look": "workbench", "theme": "light", "metas": [[LIGHT, w_l], [DARK, w_l]]}
@@ -79,7 +84,7 @@ def test_theme_init_sets_the_metas_of_the_stored_look_on_the_hub_page(hub, tmp_p
 
 
 def test_theme_init_sets_the_metas_of_the_stored_look_in_the_web_app(served, tmp_path):  # noqa: F811
-    _check_init(_drive(served, tmp_path, INIT.replace("__DEFAULT__", "console")), "console")
+    _check_init(_drive(served, tmp_path, INIT.replace("__DEFAULT__", "console")), "console", served=False)
 
 
 def test_theme_init_carries_the_surface_of_every_theme_in_light_and_dark():
@@ -88,49 +93,97 @@ def test_theme_init_carries_the_surface_of_every_theme_in_light_and_dark():
         assert f'"{look}": {json.dumps(_surfaces(look))}' in text
 
 
-# the picker: one tile, Console, selected; choosing keeps the look on this device and says so; leaving and coming back keeps it
-PICKER = PRELUDE + """
+# the picker, pressed with a real pointer click: one tile, Console, checked only while Console is the look on the page; a click
+# on the tile stores the look and applies it, also when the page showed another look (the Hub's default or a stored one)
+CLICK = PRELUDE + """
 const out = {};
+const clickTile = async () => {                              // the page may still be settling (fonts, a first read): aim again when the click missed
+  for (let i = 0; i < 4 && root.getAttribute("data-look") !== "console"; i++) {
+    const tile = $(".theme-picker__tile"); tile.scrollIntoView({ block: "center" });
+    await sleep(300);
+    const r = tile.getBoundingClientRect();
+    window.__drive(JSON.stringify({ click: [r.left + r.width / 2, r.top + r.height / 2] }));
+    await sleep(600);
+  }
+};
+const open = async () => {
+  location.hash = "__AWAY__"; await until(() => !$(".theme-picker"), "the picker to go");
+  location.hash = "__HASH__"; await until(() => $(".theme-picker"), "the picker");
+};
+const state = () => ({ ...picker(), look: root.getAttribute("data-look"), stored: localStorage.getItem("spoolwarden.look") });
 localStorage.removeItem("spoolwarden.look");
-location.hash = "__HASH__";
-await until(() => $(".theme-picker"), "the picker");
-out.start = picker();
-out.stored = localStorage.getItem("spoolwarden.look");
-$(".theme-picker__input").dispatchEvent(new Event("change", { bubbles: true }));       // the one radio is already on: the change is the shared script's
-await sleep(300);                                                                      // the result shows 30 ms after the change
-out.chose = { stored: localStorage.getItem("spoolwarden.look"), look: root.getAttribute("data-look"),
-  result: text($(".theme-picker").parentElement.querySelector(":scope > .result .result__text")), metas: metas() };
-location.hash = "__AWAY__";
-await until(() => !$(".theme-picker"), "the picker to go");
-location.hash = "__HASH__";
-await until(() => $(".theme-picker"), "the picker again");
-out.again = picker();
-out.legendHidden = $(".theme-picker legend").classList.contains("sr");
+await open();
+out.start = state();                                        // as served: nothing chosen
+await clickTile();
+out.clicked = { ...state(), result: text($(".theme-picker").parentElement.querySelector(":scope > .result .result__text")) };
+localStorage.setItem("spoolwarden.look", "workbench"); root.setAttribute("data-look", "workbench");     // a stored look that has no tile
+await open();
+out.other = state();
+await clickTile();
+out.otherClicked = state();
+await open();
+out.again = state();
 localStorage.removeItem("spoolwarden.look");
 return out;
 """
 
 
-def _check_picker(page, hidden):
-    console = _surfaces("console")
-    assert page["start"]["tiles"] == 1 and page["start"]["checked"] == [T("theme_console_name")]
-    assert page["start"]["line"] == [T("theme_console_line")] and page["start"]["legend"] == T("appearance_theme_title")
-    assert page["stored"] is None                                # nothing is written until the device chooses
-    assert page["chose"]["stored"] == "console" and page["chose"]["look"] == "console"
-    assert page["chose"]["result"] == T("appearance_theme_saved", name=T("theme_console_name"))
-    assert [m[1] for m in page["chose"]["metas"]] in ([console[0]] * 2, [console[1]] * 2)
-    assert page["again"] == page["start"]
-    assert page["legendHidden"] is hidden
+def _check_click(page, served_look):
+    on, off = [T("theme_console_name")], []
+    assert page["start"]["tiles"] == 1 and page["start"]["line"] == [T("theme_console_line")] and page["start"]["legend"] == T("appearance_theme_title")
+    assert page["start"]["look"] == served_look and page["start"]["stored"] is None
+    assert page["start"]["checked"] == (on if served_look == "console" else off)         # checked only when Console is the look shown
+    assert page["clicked"]["look"] == "console" and page["clicked"]["checked"] == on
+    assert page["clicked"]["stored"] == "console" or served_look == "console"             # a click on a tile that is already on changes nothing
+    if served_look != "console":
+        assert page["clicked"]["result"] == T("appearance_theme_saved", name=T("theme_console_name"))
+    assert page["other"]["look"] == "workbench" and page["other"]["checked"] == off
+    assert page["otherClicked"]["look"] == "console" and page["otherClicked"]["stored"] == "console" and page["otherClicked"]["checked"] == on
+    assert page["again"]["checked"] == on and page["again"]["look"] == "console"
 
 
-def test_the_hub_settings_appearance_group_holds_the_picker_with_console_selected(hub, tmp_path):
-    page = _drive(hub, tmp_path, PICKER.replace("__HASH__", "#settings/appearance").replace("__AWAY__", "#overview"))
-    _check_picker(page, hidden=False)
+def _set_default(look):
+    cfg = config.load()
+    cfg["appearance"] = {"theme": look}
+    config.save(cfg)
 
 
-def test_the_web_app_settings_holds_the_picker_with_console_selected(served, tmp_path):  # noqa: F811
-    page = _drive(served, tmp_path, PICKER.replace("__HASH__", "#settings").replace("__AWAY__", "#add"))
-    _check_picker(page, hidden=True)
+@pytest.mark.parametrize("default", ["console", "palette"])
+def test_a_click_on_the_tile_in_the_hub_settings_chooses_console_whatever_the_page_showed(hub, tmp_path, default):
+    _set_default(default)
+    page = _drive(hub, tmp_path, CLICK.replace("__HASH__", "#settings/appearance").replace("__AWAY__", "#overview"))
+    _check_click(page, default)
+
+
+@pytest.mark.parametrize("default", ["console", "palette"])
+def test_a_click_on_the_tile_in_the_web_app_chooses_console_whatever_the_page_showed(served, tmp_path, default):  # noqa: F811
+    _set_default(default)
+    page = _drive(served, tmp_path, CLICK.replace("__HASH__", "#settings").replace("__AWAY__", "#add"))
+    _check_click(page, default)
+
+
+# the Hub page in System mode: the metas follow the phone's light/dark switch, also after a choice on the page
+SCHEME = PRELUDE + """
+const out = {};
+const metaNow = () => metas().map((m) => m[1]);
+const switchTo = async (v) => { window.__drive(JSON.stringify({ scheme: v })); await sleep(500); };
+SW.setAppearance("system");
+await switchTo("light"); out.light = metaNow();
+await switchTo("dark"); out.dark = metaNow();
+SW.setLook("console");                                       // a choice of the look keeps them following
+await switchTo("light"); out.lightAfterLook = metaNow();
+SW.setAppearance("dark");                                    // a chosen appearance wins over the phone's switch
+await switchTo("light"); out.chosenDark = metaNow();
+localStorage.clear();
+return out;
+"""
+
+
+def test_the_hub_page_metas_follow_the_phones_light_and_dark_switch_in_system_mode(hub, tmp_path):
+    page = _drive(hub, tmp_path, SCHEME)
+    light, dark = _surfaces("console")
+    assert page["light"] == [light, light] and page["dark"] == [dark, dark]
+    assert page["lightAfterLook"] == [light, light] and page["chosenDark"] == [dark, dark]
 
 
 def test_the_picker_is_audited_at_320_px_with_a_long_hub_name(hub):
