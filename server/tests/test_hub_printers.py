@@ -564,7 +564,7 @@ return out;
     assert page["stay"] == {"open": True, "address": "192.0.2.78", "code": "87654321"}, page
     assert page["leave"] == {"posts": 0, "hash": "#printers", "left": {"drawers": 0, "typed": 0, "dup": []}}, page
     assert page["second"] == [], page
-    assert page["busy"]["warning"].startswith(T("printers_add_wait")), page      # the result line adds the time
+    assert page["busy"]["warning"].startswith(T("common_busy_wait")), page      # the result line adds the time
     assert (page["busy"]["open"], page["busy"]["asked"], page["busy"]["posts"]) == (True, False, 1), page
     assert page["end"]["left"] == {"drawers": 0, "typed": 0, "dup": []}, page
 

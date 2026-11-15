@@ -319,7 +319,7 @@ function closeDrawerAsync() {
 async function requestClose() {
   const d = drawer;
   if (!d) return;
-  if (d.busy()) { say(d.result, SW.t("printers_add_wait"), "warn"); return; }
+  if (d.busy()) { say(d.result, SW.t("common_busy_wait"), "warn"); return; }
   if (d.running()) {
     const p = (S.printers.list.find((x) => x.serial === d.serial)) || { name: d.serial };
     const stopIt = await SW.ask({ kind: "destructive", title: SW.t("printers_load_stop_title", { name: p.name }), text: SW.t("printers_load_stop_body"),
