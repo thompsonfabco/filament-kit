@@ -184,9 +184,6 @@ def _visible(s: str) -> int:
     return len(re.sub(r"\x1b\[[0-9;]*m", "", s))
 
 
-_HELD = "\x00"        # a space that wrap does not break at (a fix that is a command); it goes back to a space
-
-
 # What `wrap` takes for a command (06 6.3, 6.5): it starts at one of these programs and runs to the end of its clause,
 # so it is never split over two lines. The texts themselves are plain strings; nothing marks a command in them.
 _KIT = frozenset(("apply", "backup", "cert", "config", "ensure-fields", "intake", "klipper", "library", "local-intake",
@@ -201,6 +198,8 @@ _DASH = ("journalctl", "curl")                      # these start a command when
 _PROSE = frozenset(("a", "an", "and", "as", "at", "but", "by", "for", "from", "if", "in", "is", "it", "of", "on", "or",
                     "so", "the", "then", "to", "when", "which", "while", "with", "again", "now", "first", "installs",
                     "tries", "showed", "shows", "will", "needs", "does", "makes"))       # the words that follow a command in running text
+_PROGRAMS = frozenset(("filament-kit", "systemctl", "journalctl", "rm", "apt", "apt-get", "bash", "ufw", "usermod",
+                       "groupadd", "certbot", "pip", "pip3", "python", "python3", "tar", "pio", "curl", "tee", "cp", "mv"))
 _LEAD = "([{\"'`"
 _TRAIL = ",;.:)]}?`"                      # a word that ends with one of these ends its clause
 _SCRIPT = re.compile(r"\./\S+\.sh\S*")
@@ -219,7 +218,9 @@ def _starts(words: list[str], i: int) -> bool:
         return True
     if not nxt:
         return False
-    if word in ("sudo", "usermod", "groupadd"):
+    if word == "sudo":
+        return _bare(nxt) in _PROGRAMS or "/" in _bare(nxt) or nxt.startswith("-")
+    if word in ("usermod", "groupadd"):
         return bool(_bare(nxt)) and _bare(nxt) not in _PROSE
     if word == "filament-kit":
         return _bare(nxt) in _KIT
@@ -230,59 +231,25 @@ def _starts(words: list[str], i: int) -> bool:
     return word in ("python", "python3") and nxt == "-m"
 
 
-_SUBS = frozenset(("add", "adopt", "api-key", "apply", "apply-updates", "build", "create", "detect", "disable",
-                   "edit", "enable", "fetch", "firewall", "flash-panel", "history", "install", "issue", "lines", "list", "map", "menu",
-                   "pack", "pairing-state", "passphrase", "plan", "remove", "report", "restore-deleted", "revise",
-                   "revoke", "rollback", "scan", "set", "set-parent", "show", "status", "test", "token", "tokens",
-                   "undo", "units", "unpin", "pair", "setup", "update", "key", "spoolman", "server", "ai_intake", "printers",
-                   "presets", "orders", "updates", "local_intake", "web", "remote"))      # the words a kit command takes next
-_ARG = re.compile(r"-\S*|<[^<>]*>[^\s]*|\{[^{}]*\}\S*|[A-Z][A-Z0-9_]*|x|[~./]\S*|\S*/\S*|[\d.:]*\d[\d.:]*|\||[a-z0-9_.]*[-_0-9][a-z0-9_.-]*")
-
-
 def _bare_q(word: str, quote: str) -> bool:
     """`word` closes a value quoted with `quote` (a comma or full stop may follow the quote)."""
     return word.rstrip(_TRAIL).endswith(quote)
 
 
-def _kit(words: list[str], i: int) -> int:
-    """The index of the word after a kit command's own words (`sudo filament-kit klipper`), or -1 if it is not one."""
-    k = i + 1 if words[i].lstrip(_LEAD) == "sudo" else i
-    if k + 1 < len(words) and words[k].lstrip(_LEAD) == "filament-kit":
-        return k + 2 if _bare(words[k + 1]) in _KIT else k + 1
-    return -1
-
-
 def _end(words: list[str], i: int) -> int:
-    """The index after the last word of the command that starts at word `i`. A kit command (`filament-kit ...`) takes
-    only arguments: an option, a quoted value, a NAME or <placeholder>, a path, an address, a number, or a subcommand
-    word right after the command word; it ends before any other word. The other programs take words up to the end of
-    their clause (`)`, `,`, `;`, `.`, `:` last), or before two spaces, a bracket that opens, or a word that goes on in
-    prose."""
-    j = _kit(words, i)
-    if j < 0:
-        j = i + 1
-        while j < len(words) and not words[j - 1].endswith(tuple(_TRAIL)) and words[j] and words[j][0] not in "([" \
-                and _bare(words[j]) not in _PROSE:
-            j += 1
-        return j
-    sub = True
-    while j < len(words) and not words[j - 1].endswith(tuple(_TRAIL)) and words[j] and words[j][0] not in "([":
-        w = words[j]
-        if w[0] in "\"'":                                      # a quoted value belongs to the command, spaces and all
+    """The index after the last word of the command that starts at word `i`. Its clause ends at a word that closes it
+    (`)`, `,`, `;`, `.`, `:` last), or before two spaces, a bracket that opens, or a word that goes on in prose. A quoted
+    argument belongs to the command, spaces and commas inside it included."""
+    j = i + 1
+    while j < len(words) and not words[j - 1].endswith(tuple(_TRAIL)) and words[j] and words[j][0] not in "(["             and _bare(words[j]) not in _PROSE:
+        k = j
+        if words[j][0] in "\"'":
             k = j
-            while k < len(words) and not (_bare_q(words[k], w[0]) and (k > j or len(words[k]) > 1)):
+            while k < len(words) and not (_bare_q(words[k], words[j][0]) and (k > j or len(words[k]) > 1)):
                 k += 1
             if k >= len(words):
-                break
-            j, sub = k + 1, False
-            if words[k][-1:] in _TRAIL:
-                break
-            continue
-        if _ARG.fullmatch(_bare(w)) or _ARG.fullmatch(w):
-            sub = False
-        elif not (sub and _bare(w) in _SUBS):
-            break
-        j += 1
+                k = j                                       # never closed: an ordinary word
+        j = k + 1
     return j
 
 
