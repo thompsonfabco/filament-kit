@@ -1,21 +1,35 @@
-// The console's "Flash a device" tab (setup_console/flash_tab.py). Loaded after setup.js; everything from the server goes
-// in through textContent. Two ways to write the kit's own firmware (from this kit, never the internet) to an ESP32-C3:
-//  - into this computer: the browser writes it over Web Serial with esptool-js (esptool.bundle.js, loaded only then),
-//    then, for the Printer Station, sends its settings over the same USB port (FK? / FK-SET, reader settings.h) and
-//    waits for its own report of the Wi-Fi and the kit;
-//  - into the server: the server does the same (`reader setup`) as a background job.
-// The Wi-Fi password and the reader token go only to the board (and, the server way, to the server): never shown,
-// logged, or put in an address; the inputs are cleared once sent.
+// The Hub page's "Flash a device" section (03 11). Loaded after setup.js; everything from the server goes in through
+// textContent, and its words are the catalogue's (flash_*). Two ways to write the Hub's own firmware (it comes with the Hub,
+// never from the internet) to an ESP32-C3:
+//  - into a board plugged into this computer: the browser writes it over Web Serial with esptool-js (esptool.bundle.js,
+//    loaded only then), then, for a Tag Reader, sends its settings over the same USB port (FK? / FK-SET, reader
+//    settings.h) and waits for its own report of the Wi-Fi and the Hub;
+//  - into a board plugged into the Hub: the Hub does the same (`reader setup`) as a background job, which this page
+//    follows with the job strip.
+// The Wi-Fi password and the reader token go only to the board (and, the Hub way, to the Hub): never shown, logged, or put
+// in an address; the password fields are cleared once sent.
 "use strict";
 
 const FLASH_BAUD = 460800;
 const ESPRESSIF_VID = 0x303a;
-const NO_SERIAL = "Writing from this computer needs Chrome or Edge on a desktop or laptop computer (phones and other " +
-  "browsers can't reach USB from a page). Use one of those, or plug the device into the server.";
 const webSerialOk = () => "serial" in navigator && window.isSecureContext;
 const nap = (ms) => new Promise((res) => setTimeout(res, ms));
 const quietTerminal = { clean() {}, writeLine() {}, write() {} };
-let flashPick = { device: "printer-station", where: webSerialOk() ? "here" : "server" };
+// the Hub's two devices: its id for the firmware, the address place (#flash/<place>), the catalogue key of its name, and the
+// steps of a write (flash_step_*; the display has no settings to send and no report to wait for)
+const FLASH_DEVICES = {
+  "printer-station": { place: "tag-reader", name: "common_reader_tag_reader", steps: ["connecting", "writing", "restarting", "sending", "report"] },
+  "intake-panel": { place: "display", name: "flash_device_display", steps: ["connecting", "writing", "restarting"] },
+};
+let flashPick = { device: null, where: null, buzzer: "high" };    // what was chosen on this page; null: the address, then the first device
+let flashRun = null;                              // the write on this page: { id, steps, at, failed, done, running, pct, stop, ssid }
+let flashHost = null;                             // where the step list of that write is drawn
+let flashWatching = false;                        // the Hub's job is being followed
+let flashClear = () => {};                        // empties the password fields of the section on the page now
+let flashSync = () => {};                         // draws the section's buttons again for the run's state
+
+// the Stop button was pressed
+class FlashStopped extends Error {}
 
 // The reader's answer to FK?: FK-READER <build> configured=<0|1> wifi=<ok|fail|-> server=<ok|fail|unauth|->
 function parseHello(line) {
@@ -75,6 +89,7 @@ class SerialLines {
 async function openBoard(info, ms) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
+    stopCheck();
     const ports = (await navigator.serial.getPorts()).filter((p) => {
       const i = p.getInfo();
       return i.usbVendorId === info.usbVendorId && i.usbProductId === info.usbProductId;
@@ -92,6 +107,7 @@ async function askHello(s, ms, done = () => true) {
   const end = Date.now() + ms;
   const ask = new TextEncoder().encode("FK?\n");
   while (Date.now() < end && !s.closed) {
+    stopCheck();
     try { await s.write(ask); } catch { return null; }
     const l = await s.line(Math.min(1000, Math.max(1, end - Date.now())));
     const h = l == null ? null : parseHello(l);
@@ -101,173 +117,368 @@ async function askHello(s, ms, done = () => true) {
   return null;
 }
 
-// The settings to the freshly written Printer Station, then its own report of its first start. Mirrors
-// reader_flash.setup on the server: the same steps and the same plain reasons.
-async function provisionOverSerial(info, settings, say_) {
+// The settings to the freshly written Tag Reader, then its own report of its first start. Mirrors reader_flash.setup on the
+// server: the same steps. `step(name)` says which of the page's steps starts (restarting, sending, report). Resolves with
+// { ok: true } or { ok: false, code, reason }: `code` is the page's text (back, answer, refused, report, wifi, hub_refused,
+// hub_unreachable); the words are the catalogue's, said by the caller.
+async function provisionOverSerial(info, settings, step) {
+  step("restarting");
   let s = await openBoard(info, 20000);
-  if (!s) return { ok: false, message: "The board was written but did not come back on USB. Unplug it, plug it in again, then try again." };
+  if (!s) return { ok: false, code: "back" };
   try {
-    if (!(await askHello(s, 8000))) return { ok: false, message: "The board was written but does not answer as the Printer Station. Unplug it, plug it in again, then try again." };
+    if (!(await askHello(s, 8000))) return { ok: false, code: "answer" };
+    step("sending");
     const line = new TextEncoder().encode("FK-SET " + JSON.stringify(settings) + "\n");
     for (let i = 0; i < line.length; i += 256) { await s.write(line.slice(i, i + 256)); await nap(20); }
     const end = Date.now() + 5000;
     let got = null;
     while (Date.now() < end) {
+      stopCheck();
       const l = await s.line(end - Date.now());
       if (l == null) break;
       if (l === "FK-OK" || l.startsWith("FK-ERR")) { got = l; break; }
     }
-    if (got == null) return { ok: false, message: "The Printer Station did not answer the settings. Unplug it, plug it in again, then try again." };
-    if (got !== "FK-OK") return { ok: false, message: `The Printer Station refused the settings: ${got.slice(6).trim() || "no reason given"}.` };
+    if (got == null) return { ok: false, code: "answer" };
+    if (got !== "FK-OK") return { ok: false, code: "refused", reason: got.slice(6).trim() || "?" };
   } catch (e) {
-    return { ok: false, message: `Sending the settings failed (${e.message}). Unplug the board, plug it in again, then try again.` };
+    if (e instanceof FlashStopped) throw e;
+    return { ok: false, code: "answer" };
   } finally {
     await s.close();
   }
-  say_("Settings written; the Printer Station is restarting and joining the Wi-Fi (up to a minute)…");
-  // done once it has tried: with no Wi-Fi it never tries the kit, so server stays "-"
+  step("report");
+  // done once it has tried: with no Wi-Fi it never tries the Hub, so server stays "-"
   const done = (h) => h.configured && (h.wifi === "fail" || (h.wifi !== "-" && h.server !== "-"));
   const end = Date.now() + 60000;
   let h = null;
   while (!h && Date.now() < end) {
+    stopCheck();
     s = await openBoard(info, end - Date.now());
     if (!s) break;
     try { h = await askHello(s, end - Date.now(), done); } finally { await s.close(); }
   }
-  const ssid = settings.ssid;
-  if (!h) return { ok: false, message: "The Printer Station took its settings but did not report back within a minute. Watch its screen: it says whether it reached the Wi-Fi and the kit." };
-  if (h.wifi !== "ok") return { ok: false, message: `The Printer Station could not join the Wi-Fi network "${ssid}": check the name and the password (and that it is a 2.4 GHz network), then try again.` };
-  if (h.server === "unauth") return { ok: false, message: "The Printer Station reached the kit, but the kit did not accept its token. Try again to give it a new one." };
-  if (h.server !== "ok") return { ok: false, message: `The Printer Station joined "${ssid}" but could not reach the kit at ${settings.base}: check the kit's public address (Settings) and that its network can reach it.` };
-  return { ok: true, message: `Done. The Printer Station joined "${ssid}" and reached the kit. Unplug it and power it where it lives; it keeps its settings.` };
+  if (!h) return { ok: false, code: "report" };
+  if (h.wifi !== "ok") return { ok: false, code: "wifi" };
+  if (h.server === "unauth") return { ok: false, code: "hub_refused" };
+  if (h.server !== "ok") return { ok: false, code: "hub_unreachable" };
+  return { ok: true };
 }
 
-// The browser way, for one device. `a`: the Printer Station's answers (null for the panel).
-async function flashHere(dev, a, box) {
-  if (!webSerialOk()) { say(box, NO_SERIAL, false); return; }
+// ----- the write's step list (02 8.2, 8.3; 03 11.3): kept here, so a redraw of the section shows it again -----
+const flashJobTitle = (name) => { const t = SW.t("job_title_" + name); return t === "job_title_" + name ? SW.t("job_title_other") : t; };
+function flashStepList(dev) {
+  const keys = FLASH_DEVICES[dev].steps, run = flashRun && flashRun.id === dev ? flashRun : null;
+  const items = keys.map((k, i) => {
+    const failed = !!run && run.failed === i, done = !!run && !failed && (run.done || i < run.at);
+    const now = !!run && run.running && !failed && !done && i === run.at;
+    const num = h("span", { class: "steps__num" }, done ? [SW.icon("check", "icon--s"), h("span", { class: "sr", textContent: SW.t("steps_done") })]
+      : failed ? SW.shape("s-octagon") : String(i + 1));
+    const bar = now && k === "writing" && run.pct != null ? run.bar = SW.progress({ label: SW.t("flash_writing_percent", { percent: run.pct }), value: run.pct / 100 }) : null;
+    return h("li", { class: "steps__step", "data-state": failed ? "failed" : done ? "done" : now ? undefined : "later", "aria-current": now ? "step" : undefined },
+      num, h("div", { class: "steps__body" }, h("span", { class: "steps__title", textContent: SW.t("flash_step_" + k) }), bar));
+  });
+  return h("ol", { class: "steps flash-steps", "aria-label": SW.t("flash_step_write") }, ...items);
+}
+function drawRun(dev) {
+  if (!flashHost || !flashHost.isConnected) return;
+  if (flashRun) flashRun.bar = null;
+  flashHost.replaceChildren(flashStepList(dev || (flashRun && flashRun.id)));
+}
+// the percentage of the write: the bar in place, not drawn again for each report
+function runPercent(p) {
+  const r = flashRun;
+  if (!r || r.pct === p) return;
+  r.pct = p;
+  if (r.bar && r.bar.isConnected) {
+    SW.setProgress(r.bar, p / 100);
+    const l = r.bar.querySelector(".progress__label");
+    if (l) l.textContent = SW.t("flash_writing_percent", { percent: p });
+  } else drawRun();
+}
+function runStep(name) {
+  const r = flashRun, i = FLASH_DEVICES[r.id].steps.indexOf(name);
+  if (r.stop) throw new FlashStopped();
+  r.at = i; r.pct = null;
+  drawRun();
+}
+const stopCheck = () => { if (flashRun && flashRun.stop) throw new FlashStopped(); };
+
+// the words of a failure of provisionOverSerial
+function provisionText(r, ssid, base) {
+  const key = { back: "flash_error_back", answer: "flash_error_answer", refused: "flash_error_refused", report: "flash_error_report",
+    wifi: "flash_error_wifi", hub_refused: "flash_error_hub_refused", hub_unreachable: "flash_error_hub_unreachable" }[r.code];
+  return SW.t(key, { reason: r.reason, wifi: ssid, address: base });
+}
+
+// The browser way, for one device. `a`: a Tag Reader's answers (null for the display); `sent()` runs when the password has
+// gone to the board. Resolves with { ok, text } for the result slot, or { stopped, text }, or { note, text } (no board).
+async function flashHere(dev, a, sent) {
+  const info = FLASH_DEVICES[dev.id], tag = !!a;
   let port;
   try {
     port = await navigator.serial.requestPort({ filters: [{ usbVendorId: ESPRESSIF_VID }] });
   } catch {
-    say(box, "No board picked. Plug it in with a data cable (a charge-only cable shows nothing), then press the button again and pick it.", false);
-    return;
+    return { note: true, text: SW.t("flash_no_board") };
   }
-  const info = port.getInfo();
-  let tok = null;
+  const usb = port.getInfo();
+  let tok = null, half = false;
   try {
-    if (dev.settings) {         // its token first: with none, nothing is written
-      working(box, "Making the Printer Station's token…");
+    runStep("connecting");
+    if (tag) {         // its token first: with none, nothing is written
       tok = await api("flash/provision", { code: theCode(), name: a.name || undefined });
     }
-    working(box, "Getting the firmware from this kit…");
+    stopCheck();
     const r = await fetch(`/setup/api/firmware/${dev.id}.bin`, { credentials: "same-origin" });
-    if (!r.ok) throw new Error(`this kit did not give the firmware (HTTP ${r.status})`);
+    if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { writing: true });
     const data = new Uint8Array(await r.arrayBuffer());
     const { ESPLoader, Transport } = await import("/setup/esptool.bundle.js");
     const transport = new Transport(port, false);
     try {
       const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, terminal: quietTerminal });
-      working(box, "Connecting to the board…");
       await loader.main();
+      runStep("writing");
+      runPercent(0);
+      half = true;
       await loader.writeFlash({
         fileArray: [{ data, address: 0 }], flashMode: "keep", flashFreq: "keep", flashSize: "keep",
         eraseAll: false, compress: true,
-        reportProgress: (_i, written, total) => working(box, `Writing the ${dev.title} firmware: ${Math.floor((written * 100) / total)}%`),
+        reportProgress: (_i, written, total) => { if (flashRun.stop) throw new FlashStopped(); runPercent(Math.floor((written * 100) / total)); },
       });
+      half = false;
+      stopCheck();
+      runStep("restarting");
       await loader.after("hard_reset");
     } catch (e) {
-      throw new Error(`writing the firmware failed (${e.message || e}). Unplug the board, plug it in again, then try again`);
+      if (e instanceof FlashStopped) throw e;
+      throw Object.assign(new Error(e.message || String(e)), { writing: true });
     } finally {
       try { await transport.disconnect(); } catch { /* closed already */ }
     }
-    if (!dev.settings) {
-      say(box, `Done: the ${dev.title} firmware (${dev.version}) is written. Plug the panel into the station computer; the station finds it by itself.`, true);
-      return;
+    if (!tag) {
+      flashRun.done = true;
+      return { ok: true, text: SW.t("flash_done_display", { version: dev.version }) };
     }
-    working(box, "Written. Waiting for the Printer Station to start…");
-    const settings = { ssid: a.ssid, pass: a.pass, base: tok.base, token: tok.token, buzzer_low: a.buzzer === "low" };
-    const res = await provisionOverSerial(info, settings, (t) => working(box, t));
-    if (!res.ok) throw new Error(res.message);
-    say(box, `${res.message} (Reader token ${tok.id}; remove it on the Devices tab when the station is retired.)`, true);
+    const settings = { ssid: a.ssid, pass: a.pass, base: tok.base, token: tok.token, buzzer_low: a.buzzer === "older" };
+    const res = await provisionOverSerial(usb, settings, (name) => { runStep(name); if (name === "sending") sent(); });
+    if (!res.ok) throw Object.assign(new Error(provisionText(res, a.ssid, tok.base)), { said: true });
+    flashRun.done = true;
+    return { ok: true, text: SW.t("flash_done_reader", { wifi: a.ssid }) + " " + SW.t("flash_token_made", { id: tok.id }) };
   } catch (e) {
     let note = "";
     if (tok) {
-      try { await api(`readers/${tok.id}/revoke`, { code: theCode() }); note = " The new reader token was removed."; } catch { note = ` Remove the reader token ${tok.id} on the Devices tab.`; }
+      try { await api(`readers/${tok.id}/revoke`, { code: theCode() }); note = " " + SW.t("flash_token_removed"); } catch { note = " " + SW.t("flash_token_kept", { id: tok.id }); }
     }
-    say(box, (e.message || String(e)) + note, false);
+    if (e instanceof FlashStopped) return { stopped: true, text: SW.t(half ? "flash_stopped_half" : "flash_stopped") + note };
+    flashRun.failed = flashRun.at;
+    const text = e.writing ? SW.t("flash_error_write", { reason: e.message }) : e.message || String(e);
+    return { ok: false, text: text + note };
   }
 }
 
-function flashTab() {
-  const body = h("div"), box = boxFor("flash");
-  const el = card("Flash a device", body, box);
-  (async () => {
-    let F;
-    try { F = await api("firmware"); } catch (e) { say(body, e.message, false); return; }
-    const devs = F.devices.filter((d) => d.bundled);
-    if (!devs.length) { say(body, "This kit has no device firmware bundled. Update the kit (Updates).", false); return; }
-    if (!devs.some((d) => d.id === flashPick.device)) flashPick.device = devs[0].id;
-    const draw = () => {
-      const dev = devs.find((d) => d.id === flashPick.device);
-      const choose = (key, value, label) => h("button", {
-        class: flashPick[key] === value ? "" : "secondary", textContent: label,
-        on: { click: () => { flashPick[key] = value; fill(box); draw(); } } });
-      const kids = [
-        h("p", { class: "muted", textContent: "Writes this kit's own firmware to the device's ESP32-C3 over USB, from the files of the installed kit version. Use a data cable (a charge-only one shows nothing)." }),
-        h("div", { class: "row" }, h("span", { textContent: "Device: " }),
-          ...devs.map((d) => choose("device", d.id, `${d.title} (${d.id === "printer-station" ? "build " : ""}${d.version})`))),
-        h("div", { class: "row" }, h("span", { textContent: "Plugged into: " }),
-          choose("where", "here", "This computer"), choose("where", "server", "The kit server")),
-      ];
-      if (flashPick.where === "here" && !webSerialOk()) kids.push(h("p", { class: "err", textContent: NO_SERIAL }));
-      if (dev.id === "intake-panel") {
-        if (flashPick.where === "here") {
-          kids.push(h("p", { class: "muted", textContent: "The panel needs no settings: once written, it goes onto the station computer's USB." }),
-            h("div", { class: "row" }, h("button", { textContent: "Connect and write", disabled: !webSerialOk(),
-              on: { click: () => flashHere(dev, null, box) } })));
-        } else {
-          kids.push(h("p", { textContent: F.station_here
-            ? "Plug the panel into this server: the station writes its firmware to it by itself when it finds the panel (within a minute), and the panel then shows the station's screen."
-            : "The intake panel lives on the station computer, not on this server: plug it in there and the station writes its firmware to it by itself. Or write it from this computer's USB." }));
-        }
-      } else {
-        const ssid = h("input", { ariaLabel: "Wi-Fi name", placeholder: "Wi-Fi name (2.4 GHz)", autocomplete: "off" });
-        const pass = secret("Wi-Fi password"), again = secret("The password again");
-        const buzzer = h("select", { ariaLabel: "Buzzer" },
-          h("option", { value: "high", textContent: "High-triggered (behind a MOSFET, as in the parts list)" }),
-          h("option", { value: "low", textContent: "Low-triggered (the older 3-pin module)" }));
-        const name = h("input", { ariaLabel: "Name", placeholder: "Name (optional, e.g. bench)", autocomplete: "off" });
-        const boards = F.server_boards || [];
-        const portSel = boards.length > 1 ? h("select", { ariaLabel: "Board" },
-          ...boards.map((b) => h("option", { value: b.port, textContent: `${b.port} (${b.product})` }))) : null;
-        const answers = () => {
-          if (!ssid.value.trim()) { say(box, "Type the Wi-Fi name.", false); return null; }
-          if (pass.value !== again.value) { say(box, "The two passwords differ.", false); return null; }
-          return { ssid: ssid.value.trim(), pass: pass.value, buzzer: buzzer.value, name: name.value.trim() };
-        };
-        kids.push(
-          F.settings_ok ? null : h("p", { class: "err", textContent: `The Printer Station can't be set up yet: ${F.settings_why}` }),
-          h("div", { class: "row" }, ssid, pass, again),
-          h("div", { class: "row" }, h("label", {}, "Buzzer: ", buzzer), name));
-        if (flashPick.where === "here") {
-          kids.push(h("div", { class: "row" }, h("button", { textContent: "Connect and write", disabled: !webSerialOk() || !F.settings_ok,
-            on: { click: () => { const a = answers(); if (!a) return; needCode(() => { pass.value = again.value = ""; return flashHere(dev, a, box); }); } } })));
-        } else if (!boards.length) {
-          kids.push(h("p", { class: "muted", textContent: "No ESP32 board on the server's USB right now. Plug the Printer Station in, then look again." }),
-            h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Look again", on: { click: () => render() } })));
-        } else {
-          kids.push(h("div", { class: "row" }, portSel || h("span", { class: "muted", textContent: `Board: ${boards[0].port} (${boards[0].product})` }),
-            h("button", { textContent: "Write and set up", disabled: !F.settings_ok, on: { click: () => {
-              const a = answers();
-              if (!a) return;
-              change(box, "flash/server", { ...a, port: portSel ? portSel.value : boards[0].port, name: a.name || undefined },
-                () => { fill(box); followApply(true); }, [pass, again]);
-            } } })));
-        }
+// The Hub job's own step sentences (`reader setup`: cli.py, reader_flash.setup) and the page's step each belongs to. The
+// settings are sent after "Checking what was written" with no sentence of their own, so a failure there is that step's: it is
+// the page's "Sending the settings" (the restart before it is done by then); "Joining the Wi-Fi" is "Waiting for its report"
+const HUB_STEPS = { "Finding the board": "connecting", "Writing the program": "writing", "Keeping the program that is on the board": "writing",
+  "Checking what was written": "sending", "Writing the settings": "sending", "Joining the Wi-Fi": "report", "Reaching the Hub": "report" };
+
+// A write on this page: `hub` when the Hub does it (then its job is followed), `ssid` for the done text
+const newRun = (id, extra) => (flashRun = { id, at: 0, failed: -1, done: false, running: true, pct: null, stop: false, ...extra });
+
+// The Hub's job (reader_setup) as the page's step list: its numbered steps follow the list in order. Stops when the job has
+// ended or the page left the section; a visit later takes it up again. A job this page just started may not have written its
+// log yet, and one that ended before the first look is told from the log the page saw before it started (`before`: its
+// signature); the log has no start time. When nothing newer shows within 15 s the last job's outcome stands.
+const hubSig = (j) => (j ? [j.name, j.running, j.exit, j.next, j.step && j.step.text].join("|") : "");
+function hubJobEnds(run, r) {
+  const n = FLASH_DEVICES["printer-station"].steps.length;
+  if (r && r.step) {       // by the job's own sentence; a sentence not known keeps the place, never goes back
+    const at = FLASH_DEVICES["printer-station"].steps.indexOf(HUB_STEPS[r.step.text]);
+    if (at >= run.at) run.at = Math.min(n - 1, at);
+  }
+  run.running = false;
+  if (r && r.exit === 0 && !r.lost) run.done = true; else run.failed = run.at;
+  fill(boxFor("flash"));
+  drawRun();
+  if (run.done && run.ssid) say(boxFor("flash"), SW.t("flash_done_reader", { wifi: run.ssid }), true);
+  flashSync();
+}
+async function followHubJob() {
+  if (flashWatching || (flashRun && flashRun.running && !flashRun.hub)) return;      // a write from this computer is not the Hub's
+  flashWatching = true;
+  try {
+    while (tabNow() === "flash") {
+      let r;
+      try { r = await api("job?from=999999999"); } catch { await nap(2000); continue; }
+      if (flashRun && flashRun.running && !flashRun.hub) return;
+      const run = flashRun && flashRun.hub ? flashRun : newRun("printer-station", { hub: true, seen: true, since: Date.now() });
+      const mine = r.name === "reader_setup" && (r.running || run.seen || hubSig(r) !== run.before);
+      if (!mine) {
+        if (Date.now() - run.since > 15000) { hubJobEnds(run, r.name === "reader_setup" && !r.running ? r : null); return; }
+        await nap(1000);
+        continue;
       }
-      fill(body, ...kids);
-    };
-    draw();
-  })();
-  return [el];
+      if (!r.running) { hubJobEnds(run, r); return; }
+      run.seen = true;
+      const n = FLASH_DEVICES["printer-station"].steps.length;
+      if (r.step) {
+        const at = FLASH_DEVICES["printer-station"].steps.indexOf(HUB_STEPS[r.step.text]);
+        if (at >= run.at) run.at = Math.min(n - 1, at);
+      }
+      drawRun();
+      await nap(1000);
+    }
+  } finally { flashWatching = false; }
+}
+
+// radio choices as wrapping cards (device, buzzer): the shared segmented choice, its options allowed to wrap (setup.css); `onPick(value)`
+function flashChoice(name, legend, options, value, onPick, legendSr) {
+  const fs = SW.segmented({ legend, legendSr, name, value, wide: true, cls: "flash-choice", options });
+  fs.addEventListener("change", (e) => onPick(e.target.value));
+  return fs;
+}
+
+function drawFlash(body, F, J) {
+  const devs = F.devices.filter((d) => d.bundled && FLASH_DEVICES[d.id]);
+  if (!devs.length) { fill(body, SW.empty({ icon: "flash", title: SW.t("flash_empty_title"), text: SW.t("flash_empty_text") })); return; }
+  const place = location.hash.slice(1).split("/")[1];
+  const fromAddress = devs.find((d) => FLASH_DEVICES[d.id].place === place);
+  if (fromAddress) flashPick.device = fromAddress.id;
+  else if (!devs.some((d) => d.id === flashPick.device)) flashPick.device = devs[0].id;
+  const phone = SW.phone();
+  if (!flashPick.where || (phone && flashPick.where === "computer")) flashPick.where = webSerialOk() && !phone ? "computer" : "hub";
+  const box = boxFor("flash");
+  const state = () => ({ dev: devs.find((d) => d.id === flashPick.device), here: flashPick.where === "computer" });
+  const running = () => !!flashRun && flashRun.running;
+  const hubBusy = () => !!(J && J.running && J.name !== "reader_setup");
+
+  // 1 device
+  const deviceEl = flashChoice("flash-device", SW.t("flash_step_device"), devs.map((d) => ({ value: d.id, label: SW.t(FLASH_DEVICES[d.id].name),
+    count: SW.t("flash_firmware", { version: d.version }) })), flashPick.device, (v) => {
+    flashPick.device = v;
+    history.replaceState(null, "", "#flash/" + FLASH_DEVICES[v].place);
+    if (!running()) { flashRun = null; fill(box); }
+    sync();
+  }, true);
+  // 2 plugged into
+  const whereEl = SW.segmented({ legend: SW.t("flash_step_plugged"), legendSr: true, name: "flash-where", value: flashPick.where, options: [
+    { value: "computer", label: SW.t("flash_plugged_computer"), disabled: phone }, { value: "hub", label: SW.t("flash_plugged_hub") }] });
+  whereEl.addEventListener("change", (e) => { flashPick.where = e.target.value; if (!running()) { flashRun = null; fill(box); } sync(); });
+  const phoneNote = phone ? h("p", { class: "muted", textContent: SW.t("flash_phone_note") }) : null;
+  // 3 settings (a Tag Reader)
+  const ssid = SW.field({ label: SW.t("flash_wifi_name"), name: "ssid", check: (v) => (v.trim() ? null : SW.t("flash_wifi_name_error")) });
+  const pass = SW.field({ label: SW.t("flash_wifi_password"), type: "secret", name: "pass", hint: SW.t("flash_wifi_password_hint"), optional: true });
+  const again = SW.field({ label: SW.t("flash_wifi_again"), type: "secret", name: "again", optional: true,
+    check: (v) => (v === pass._control.value ? null : SW.t("flash_wifi_mismatch")) });
+  const buzzer = flashChoice("flash-buzzer", SW.t("flash_buzzer"), [{ value: "high", label: SW.t("flash_buzzer_high") }, { value: "older", label: SW.t("flash_buzzer_older") }],
+    flashPick.buzzer, (v) => { flashPick.buzzer = v; });      // kept like the device: radios are not typed values the page carries over a redraw
+  const name = SW.field({ label: SW.t("flash_name"), name: "name", optional: true, hint: SW.t("flash_name_hint") });
+  const boards = () => F.server_boards || [];
+  const board = SW.field({ label: SW.t("flash_board"), type: "select", name: "board", options: boards().map((b) => ({ value: b.port, label: SW.t("flash_board_option", { port: b.port, product_name: b.product }) })) });
+  const settingsEl = h("div", { class: "flash-form" }, ssid, pass, again, buzzer, name, board);
+  // 4 write
+  const goHere = SW.btn(SW.t("flash_connect_write"), { cls: "btn--primary" });
+  const goHub = SW.btn(SW.t("flash_write_hub"), { cls: "btn--primary" });
+  const stop = SW.btn(SW.t("common_stop"));
+  const hint = h("p", { class: "muted", textContent: SW.t("flash_connect_hint") });
+  const displayHub = h("p", { textContent: SW.t("flash_display_hub") });
+  flashHost = h("div", { class: "flash-run" });
+  const writeEl = h("div", { class: "flash-write" }, displayHub, h("div", { class: "row" }, goHere, goHub, stop, hint), flashHost, box);
+
+  const answers = () => {
+    const bad = [[ssid, ssid._check()], [again, again._check()]].filter(([f, e]) => (SW.fieldError(f, e), e));
+    if (bad.length) { bad[0][0]._control.focus(); return null; }
+    return { ssid: ssid._control.value.trim(), pass: pass._control.value, buzzer: flashPick.buzzer, name: name._control.value.trim() };
+  };
+  const noPublic = () => {
+    if (F.settings_ok) return false;
+    say(box, [h("p", { textContent: SW.t("flash_no_public") }), F.settings_why ? h("p", { class: "muted", textContent: hubText(F.settings_why) }) : null, h("a", { href: "#settings/network", textContent: SW.t("nav_settings") })], false);
+    return true;
+  };
+  goHere.addEventListener("click", () => {
+    const { dev, here } = state();
+    if (!here || running() || goHere.getAttribute("aria-disabled") === "true") return;
+    const tag = dev.id === "printer-station", a = tag ? answers() : null;
+    if (tag && (!a || noPublic())) return;
+    needCode(async () => {
+      fill(box);
+      newRun(dev.id, { ssid: a && a.ssid });
+      drawRun(dev.id);
+      sync();
+      const r = await flashHere(dev, a, () => flashClear());      // the section may have been drawn again: the live one is cleared
+      flashRun.running = false;
+      if (r.note || r.stopped) flashRun = r.stopped ? flashRun : null;
+      drawRun(dev.id);
+      say(box, r.text, r.note ? "info" : r.stopped ? "warn" : r.ok);
+      flashSync();
+    });
+  });
+  stop.addEventListener("click", () => { if (flashRun) flashRun.stop = true; stop.disabled = true; });
+  goHub.addEventListener("click", async () => {
+    if (running() || goHub.getAttribute("aria-disabled") === "true") return;
+    const a = answers();
+    if (!a || noPublic()) return;
+    const port = boards().length > 1 ? board._control.value : boards()[0].port;
+    const before = await api("job?from=999999999").then(hubSig, () => "");      // the log as it is before this job starts
+    change(box, "flash/server", { ssid: a.ssid, pass: a.pass, buzzer: a.buzzer === "older" ? "low" : "high", port, name: a.name || undefined }, () => {
+      newRun("printer-station", { hub: true, ssid: a.ssid, since: Date.now(), before });
+      flashSync();
+      say(box, SW.t("flash_hub_started"), "info");
+      followApply(true);
+      followHubJob();
+    }, [pass._control, again._control]);
+  });
+
+  // what shows for the choices made; runs again when a choice, a run or the Hub's boards change
+  const sync = () => {
+    const { dev, here } = state(), tag = dev.id === "printer-station", busy = running();
+    settingsEl.hidden = !tag;
+    settingsStep.hidden = !tag;
+    board.hidden = !(tag && !here && boards().length > 1);
+    for (const i of deviceEl.elements) i.disabled = busy;
+    for (const i of whereEl.elements) i.disabled = busy || (phone && i.value === "computer");
+    for (const i of [...buzzer.elements, ...settingsEl.querySelectorAll(".field__control")]) i.disabled = busy;
+    goHere.hidden = !here;
+    goHub.hidden = here || !tag;
+    stop.hidden = !(here && busy);
+    stop.disabled = !!(flashRun && flashRun.stop);
+    hint.hidden = !here || busy;
+    displayHub.hidden = here || tag;
+    flashHost.hidden = !(here || tag);
+    // a reason stays beside its button only while the button shows
+    SW.disable(goHere, !here ? null : busy ? SW.t("common_busy_wait") : !webSerialOk() ? SW.t("flash_no_serial") : null);
+    SW.disable(goHub, here || !tag ? null : busy || (flashRun && flashRun.hub && flashRun.running) ? SW.t("common_busy_wait")
+      : hubBusy() ? SW.t("flash_wait_job", { title: flashJobTitle(J.name) }) : !boards().length ? SW.t("flash_no_boards") : null);
+    // the steps count what is shown
+    let n = 0;
+    for (const li of stepsEl.children) if (!li.hidden) li.querySelector(".steps__num").textContent = String(++n);
+    drawRun(dev.id);
+  };
+
+  const step = (title, ...kids) => h("li", { class: "steps__step" }, h("span", { class: "steps__num" }),
+    h("div", { class: "steps__body" }, h("span", { class: "steps__title", textContent: title }), ...kids));
+  const settingsStep = step(SW.t("flash_step_settings"), settingsEl);
+  const stepsEl = h("ol", { class: "steps" }, step(SW.t("flash_step_device"), deviceEl),
+    step(SW.t("flash_step_plugged"), whereEl, phoneNote, h("p", { class: "muted", textContent: SW.t("flash_plugged_hint") })),
+    settingsStep, step(SW.t("flash_step_write"), writeEl));
+  flashSync = sync;
+  flashClear = () => { pass._control.value = again._control.value = ""; };
+  fill(body, h("p", { class: "muted", textContent: SW.t("flash_intro") }), stepsEl);
+  sync();
+  // the Hub's boards, read again every 3 s while a Tag Reader on the Hub waits for one
+  const poll = setInterval(async () => {
+    if (!body.isConnected) { clearInterval(poll); return; }
+    const { dev, here } = state();
+    if (here || dev.id !== "printer-station" || boards().length || running()) return;
+    try { const f = await api("firmware"); F.server_boards = f.server_boards; } catch { return; }
+    if (!boards().length) return;
+    board._control.replaceChildren(...boards().map((b) => h("option", { value: b.port, textContent: SW.t("flash_board_option", { port: b.port, product_name: b.product }) })));
+    sync();
+  }, 3000);
+  if (flashRun && flashRun.hub && flashRun.running || J && J.running && J.name === "reader_setup") followHubJob();
+}
+
+function flashTab() {
+  const body = h("div");
+  later(readRegion(body, "flash", () => Promise.all([api("firmware"), api("job?from=999999999")]), ([F, J]) => drawFlash(body, F, J)));
+  return [h("section", { class: "card" }, body)];
 }

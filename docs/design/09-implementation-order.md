@@ -510,7 +510,8 @@ Hub · M · Depends on: S1.4 · Beside: any step that edits only `setup_static/`
 
 ### S2.16 Flash a device
 Hub page · M · Depends on: S1.11, S2.15 · Beside: S2.4, S2.5, S2.7, S2.10
-- **Files today:** none on the released page (the section is new).
+- **Files today:** none on the released page (the section is new); `setup_static/setup_flash.js` holds the unreleased tab
+  (S2.15) that this step rebuilds, and its texts come from the catalogue (`flash_` keys).
 - **Change:** 03 11: device choice (Tag Reader, Weigh Station display), where it is plugged in (this computer, or the
   Hub), **Connect and write**, step progress and results.
 - **Keep:** nothing is written without the setup code.

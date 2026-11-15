@@ -261,7 +261,7 @@ def test_the_vendored_esptool_js_is_the_published_bundle():
 def test_the_page_says_what_to_do_without_web_serial():
     js = (STATIC / "setup_flash.js").read_text(encoding="utf-8")
     assert 'const webSerialOk = () => "serial" in navigator && window.isSecureContext;' in js
-    assert "Use one of those, or plug the device into the server." in js
+    assert '"flash_no_serial"' in js and '"flash_phone_note"' in js
     assert 'import("/setup/esptool.bundle.js")' in js
     assert "innerHTML" not in js
 
@@ -319,26 +319,41 @@ const ctx = { navigator: { serial: { getPorts: async () => [makePort()] } }, win
 vm.createContext(ctx);
 vm.runInContext(src, ctx);
 const settings = { ssid: "Home", pass: "pw", base: "https://kit.example.net/filament/reader", token: "t".repeat(43), buzzer_low: false };
-ctx.provisionOverSerial({ usbVendorId: 0x303a, usbProductId: 0x1001 }, settings, () => {}).then((r) => {
-  console.log(JSON.stringify({ ...r, settings: board.settings, sent: board.lines.filter((l) => l !== "FK?") }));
+const steps = [];
+ctx.provisionOverSerial({ usbVendorId: 0x303a, usbProductId: 0x1001 }, settings, (s) => steps.push(s)).then((r) => {
+  console.log(JSON.stringify({ ...r, steps, settings: board.settings, sent: board.lines.filter((l) => l !== "FK?") }));
 });
 """
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node")
-@pytest.mark.parametrize("scenario, ok, words", [
-    ({"wifi": "ok", "server": "ok"}, True, "Done. The Printer Station joined \"Home\" and reached the kit."),
-    ({"wifi": "fail", "server": "-"}, False, "could not join the Wi-Fi network \"Home\""),
-    ({"wifi": "ok", "server": "unauth"}, False, "did not accept its token"),
-    ({"wifi": "ok", "server": "fail"}, False, "could not reach the kit at https://kit.example.net/filament/reader"),
-    ({"wifi": "ok", "server": "ok", "refuse": "not a JSON object"}, False, "refused the settings: not a JSON object"),
+@pytest.mark.parametrize("scenario, ok, code", [
+    ({"wifi": "ok", "server": "ok"}, True, None),
+    ({"wifi": "fail", "server": "-"}, False, "wifi"),
+    ({"wifi": "ok", "server": "unauth"}, False, "hub_refused"),
+    ({"wifi": "ok", "server": "fail"}, False, "hub_unreachable"),
+    ({"wifi": "ok", "server": "ok", "refuse": "not a JSON object"}, False, "refused"),
 ])
-def test_the_browser_provisioning_against_a_fake_board(tmp_path, scenario, ok, words):
+def test_the_browser_provisioning_against_a_fake_board(tmp_path, scenario, ok, code):
     script = tmp_path / "fake.js"
     script.write_text(FAKE_SERIAL, encoding="utf-8")
     out = subprocess.run([shutil.which("node"), str(script), str(STATIC / "setup_flash.js"), json.dumps(scenario)],
                          capture_output=True, text=True, timeout=120, check=True).stdout
     r = json.loads(out)
-    assert r["ok"] is ok and words in r["message"], r
+    assert r["ok"] is ok and r.get("code") == code and r.get("steps") == (["restarting", "sending", "report"] if ok or code != "refused" else ["restarting", "sending"]), r
+    if code == "refused":
+        assert r["reason"] == "not a JSON object"
     if not scenario.get("refuse"):
         assert r["settings"]["token"] == "t" * 43 and r["sent"] == ["FK-SET "]
+
+
+def test_every_text_the_flash_section_says_is_in_the_catalogue():
+    """The section says nothing of its own (S2.16): each key it asks the catalogue for exists, with the words 03 11 gives."""
+    import re
+    js = (STATIC / "setup_flash.js").read_text(encoding="utf-8")
+    texts = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
+    keys = set(re.findall(r'SW\.t\("([a-z_]+)"', js)) | {"flash_step_" + k for k in re.findall(r'"(connecting|writing|restarting|sending|report)"', js)}
+    keys |= {k for k in re.findall(r'"((?:flash|common)_[a-z_]+)"', js)}
+    keys = {k for k in keys if not k.endswith("_")}      # the two built from a name (flash_step_<step>, job_title_<job>)
+    assert keys and all(k in texts for k in keys), sorted(k for k in keys if k not in texts)
+    assert texts["flash_error_wifi"] == "The Tag Reader could not join '{wifi}'. Check the Wi-Fi name and password (2.4 GHz networks only)."

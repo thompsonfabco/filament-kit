@@ -1,2 +1,0 @@
-server/filament_kit/setup_static/setup_flash.js | input | 2 | built inline today; moves into the field component when the view is rebuilt
-server/filament_kit/setup_static/setup_flash.js | select | 2 | built inline today; moves into the field component when the view is rebuilt
