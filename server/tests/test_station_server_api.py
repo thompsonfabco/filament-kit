@@ -483,7 +483,7 @@ def test_status_on_a_station_says_the_button_flow_is_not_paired(monkeypatch, cap
     _paired(["192.0.2.10"])
     cli.main(["status"])
     out = capsys.readouterr().out
-    assert "station paired with the kit server" in out and PAIR_STEPS[1] not in out
+    assert "station paired with the Hub" in out and PAIR_STEPS[1] not in out
 
 
 def test_finish_on_an_unpaired_station_names_both_pairing_steps(monkeypatch, capsys):
@@ -519,7 +519,7 @@ def test_pairing_lines_show_the_state_root_passed_in(monkeypatch):
     """The state comes from root (the wrapper, the console's helper); the reader needs no access to the pairing."""
     monkeypatch.setattr(server_api, "token_file", _Unreadable)
     assert server_api.pairing_lines("paired 192.0.2.10:8710") == [
-        "OK   station paired with the kit server (192.0.2.10:8710)"]
+        "OK   station paired with the Hub (192.0.2.10:8710)"]
     lines = server_api.pairing_lines("unpaired")
     assert "not paired" in lines[0] and all(c in lines[1] for c in PAIR_STEPS)
     assert "run it with sudo" in server_api.pairing_lines("unchecked")[0]
@@ -535,7 +535,7 @@ def test_status_prints_the_state_passed_in_even_when_the_files_are_closed(monkey
     monkeypatch.setattr(server_api, "token_file", _Unreadable)
     cli.main(["status", "--station-pairing=paired 192.0.2.10:8710"])
     out = old_rows(capsys.readouterr().out)
-    assert "OK   station paired with the kit server (192.0.2.10:8710)" in out and "run it with sudo" not in " ".join(out)
+    assert "OK   station paired with the Hub (192.0.2.10:8710)" in out and "run it with sudo" not in " ".join(out)
     cli.main(["status", "--station-pairing=unpaired"])
     assert PAIR_STEPS[1] in capsys.readouterr().out
     cli.main(["status"])  # no sudo: the wrapper passes nothing, and "run it with sudo" is the true advice
