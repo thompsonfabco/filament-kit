@@ -47,7 +47,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import __version__, config, modules, release, steps
+from . import __version__, config, modules, output, release, steps
 from .release import ReleaseError
 
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
@@ -319,7 +319,8 @@ def _install_older(cfg: dict, version: str, run: Callable[[list[str]], int]) -> 
 
 def _require_root() -> bool:
     if os.environ.get("FK_NO_SYSTEMD") != "1" and hasattr(os, "geteuid") and os.geteuid() != 0:
-        print("error: run as root: sudo filament-kit update", file=sys.stderr)
+        from .cli import _sudo_command
+        output.need_sudo(_sudo_command("sudo filament-kit update"))
         return False
     return True
 
@@ -485,7 +486,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
         print("the updates module is off; nothing to do")
         return 0
     if not _require_root():
-        return 1
+        return output.NEEDS_SUDO
     if not _installed():
         print("error: filament-kit is not installed here (no config.json); install it with get.sh",
               file=sys.stderr)
@@ -804,7 +805,7 @@ def _modules_fit(target: str) -> bool:
 
 def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int:
     if not _require_root():
-        return 1
+        return output.NEEDS_SUDO
     job = steps.Steps(2)
     job.next("Finding the kept version")
     cur = current_version()

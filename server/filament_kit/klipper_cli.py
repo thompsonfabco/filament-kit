@@ -284,7 +284,7 @@ def run(args) -> int:
         for host, port in found:
             p = added.get((host, port)) or registry.detected_klipper(host, port, lookups=False)
             state = (f"added already as {registry.display_name(p)}" if p.configured
-                     else f"add it: filament-kit klipper add NAME {host}")
+                     else f"add it: `filament-kit klipper add NAME {host}`")
             output.out(f"{host}:{port}  ({state})")
         return 0
     p = registry.load().get(getattr(args, "id", "") or "")

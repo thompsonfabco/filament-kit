@@ -282,8 +282,10 @@ def test_status_api_bad_http_answer_fails(capsys, monkeypatch):
 
     monkeypatch.setattr(cli.urllib.request, "urlopen", urlopen)
     assert cli.main(["status"]) == 1
-    out = " ".join(capsys.readouterr().out.split())
-    assert "needs a look filament-kit API not answering" in out and "sudo journalctl -u filament-kit -n 50" in out
+    raw = capsys.readouterr().out
+    out = " ".join(raw.split())
+    assert "needs a look filament-kit API not answering" in out
+    assert any("sudo journalctl -u filament-kit -n 50" in x for x in raw.splitlines()), raw     # the command: one line
 
 
 def test_status_api_check_skipped_without_systemd(capsys):

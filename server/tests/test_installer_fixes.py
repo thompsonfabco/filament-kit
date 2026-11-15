@@ -49,17 +49,16 @@ def test_pair_on_a_station_says_pairing_runs_on_the_server(capsys, args):
     assert cli.main(args) == 1
     err = capsys.readouterr().err
     assert "no server certificate" not in err
-    err = " ".join(err.split())
-    assert "pairing runs on the kit server" in err and "kit.example.lan" in err
-    assert f"sudo filament-kit {' '.join(args)}" in err
+    assert "pairing runs on the kit server" in " ".join(err.split()) and "kit.example.lan" in err
+    assert any(f"sudo filament-kit {' '.join(args)}" in x for x in err.splitlines()), err      # the command: one line
 
 
 def test_pair_on_a_station_without_a_known_server(capsys):
     _save({"station"}, station={"allow": ["127.0.0.1"], "url": None})
     assert cli.main(["pair"]) == 1
     err = capsys.readouterr().err
-    err = " ".join(err.split())
-    assert "pairing runs on the kit server" in err and "station.allow" in err
+    assert "pairing runs on the kit server" in " ".join(err.split())
+    assert any("station.allow" in x for x in err.splitlines()), err
 
 
 # ---------- B3: modules enable web asks for web.public_url at a terminal ----------

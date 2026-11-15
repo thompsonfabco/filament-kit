@@ -303,7 +303,7 @@ def cmd_backup(action: str, out: str | None) -> int:
         output.out_lines(output.table(
             ["When", "Kind", "Size", "Name"],
             [[time.strftime("%Y-%m-%d %H:%M", time.localtime(e.at)), e.kind, f"{e.size // 1024:,} KiB", e.name]
-             for e in rows], long=3, right=(2,)))
+             for e in rows], long=3, right=(2,), whole=True))   # restore needs the whole name
         return 0
     try:
         with output.wait("Backing up…", programs=True):
@@ -313,6 +313,14 @@ def cmd_backup(action: str, out: str | None) -> int:
         return 1
     print(f"backup written: {path}")
     return 0
+
+
+def _restore_out(text: str) -> None:
+    """What `backup.restore` says: its `error: ...` lines are errors (standard error), the rest results."""
+    if text.startswith("error: "):
+        output.error(text[len("error: "):])
+    else:
+        output.out(text)
 
 
 def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = False) -> int:
@@ -337,7 +345,8 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             with waiting.paused():              # the wait starts after the answer, never over the question
                 return input(prompt)
         with waiting:
-            return backup.restore(path, yes=yes, ask=ask, step=steps.Steps(backup.restore_steps()).next)
+            return backup.restore(path, yes=yes, ask=ask, out=_restore_out,
+                                  step=steps.Steps(backup.restore_steps()).next)
     finally:
         if uploaded:
             path.unlink(missing_ok=True)
@@ -1185,17 +1194,17 @@ def cmd_printer_map(serial: str, manager_factory, manual: bool = False) -> int:
     from .bridge.slottest import PrinterBusy
     p = registry.load().get(serial)
     if p is None or not p.configured:
-        _err_line(f"no printer {serial} is set up (see: sudo filament-kit config, Printers)")
+        _err_line(f"no printer {serial} is set up (see: `sudo filament-kit config`, Printers)")
         return output.USAGE
     if manual:
         api = _server_api()
         if api is None:     # the session lives in the server, shared with the other three interfaces
-            _err_line("map by loading filament needs the running kit server.\nfix: sudo systemctl start filament-kit")
+            _err_line("map by loading filament needs the running kit server.\nfix: `sudo systemctl start filament-kit`")
             return output.HUB_DOWN
         return _manual_map_via_server(api, serial)
     if p.family != "bambu":
         _err_line(f"{registry.display_name(p)} is a Klipper printer; Klipper printers are mapped by loading filament: "
-                  f"filament-kit printer map --manual {serial}")
+                  f"`filament-kit printer map --manual {serial}`")
         return 1
     print(f"Mapping the slots of {registry.display_name(p)}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
@@ -1471,7 +1480,7 @@ def cmd_profiles_build(sm_factory) -> int:
         return 0
     if not r.get("ok"):
         _err_line(f"build failed: {r.get('error')}; the last good build stays in use "
-                  f"(see: sudo journalctl -u filament-kit-build -n 50)")
+                  f"(see: `sudo journalctl -u filament-kit-build -n 50`)")
         return 1
     c = builds.current() or {}
     problems = r.get("problems") or []
@@ -1578,7 +1587,7 @@ def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> in
         _err_line(str(e))
         return 1
     except KeyError:
-        _err_line(f"no line {line_id} (see: sudo filament-kit profiles lines)")
+        _err_line(f"no line {line_id} (see: `sudo filament-kit profiles lines`)")
         return output.USAGE
     except lines_mod.LineStoreError as e:
         _err_line(e.message)
@@ -2010,8 +2019,8 @@ def cmd_uninstall(purge: bool, run=None) -> int:
         ver = updates.current_version()
         _err_line(f"no kept copy of a release in {updates.store()}, so there is no uninstall.sh to run.\n"
                   f"fix: download filament-kit-{ver}.tar.gz from https://github.com/{release.REPO}/releases, unpack it "
-                  f"(tar xzf filament-kit-{ver}.tar.gz), then in its folder run: sudo ./uninstall.sh"
-                  + (" --purge" if purge else ""))
+                  f"(`tar xzf filament-kit-{ver}.tar.gz`), then in its folder run: `sudo ./uninstall.sh"
+                  + (" --purge" if purge else "") + "`")
         return 1
     ver, tarball = kept
     running = updates.current_version()
@@ -2245,7 +2254,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         whose = f"{who.name}'s" if who else "your"
         _err_line(f"PlatformIO is not installed in {whose} account (no pio in ~/.platformio/penv/bin or "
                   "~/.local/bin, nor in /usr/local/bin or /usr/bin). Install it as that user, not with sudo: "
-                  "python3 -m pip install --user platformio. Or leave out --source, use --out, and build on a PC that "
+                  "`python3 -m pip install --user platformio`. Or leave out --source, use --out, and build on a PC that "
                   "has it (reader/README.md).")
         return 1
     if flashing and not rs.is_source(Path(a.source)):
@@ -2451,8 +2460,8 @@ def cmd_web_passphrase() -> int:
         dest = write_passphrase(first)
     except GroupMissing as e:
         _err_line(f"{e}; nothing was changed\n"
-                  "     fix: install the kit first (it creates the filament-kit user and group), "
-                  "or: sudo groupadd --system filament-kit")
+                  "fix: install the kit first (it creates the filament-kit user and group), "
+                  "or: `sudo groupadd --system filament-kit`")
         return 1
     except ValueError as e:
         _err_line(f"{e}; nothing was changed")
@@ -2500,7 +2509,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> 
         from .web import reader  # needs the [web] extra
     except ImportError as e:
         _err_line(f"the reader commands need the kit's [web] packages ({e.name or e} is missing); install them "
-                  "into the kit's Python: <venv>/bin/python -m pip install 'filament-kit[web]' (or re-run the "
+                  "into the kit's Python: `<venv>/bin/python -m pip install 'filament-kit[web]'` (or re-run the "
                   "installer, which adds them)")
         return 1
     store = reader.TokenStore()
@@ -2525,7 +2534,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> 
         if store.revoke(ref or ""):
             print(f"revoked {ref}; a reader using it is refused from now on")
             return 0
-        _err_line(f"no single reader token {ref!r} (see: filament-kit reader tokens)")
+        _err_line(f"no single reader token {ref!r} (see: `filament-kit reader tokens`)")
         return output.USAGE
     except reader.TokenFileError as e:
         _err_line(f"{e}; nothing was changed")
@@ -2551,7 +2560,7 @@ def cmd_web_status() -> int:
 def cmd_local_intake_status() -> int:
     cfg = config.load()
     if "local_intake" not in modules.enabled(cfg):
-        _err_line("the local_intake module is off.\nfix: sudo filament-kit modules enable local_intake")
+        _err_line("the local_intake module is off.\nfix: `sudo filament-kit modules enable local_intake`")
         return 1
     return 0 if status_rows.print_rows(status_rows.local_reader_rows(cfg)) else 1
 
@@ -2686,7 +2695,7 @@ def cmd_local_intake_test(photos: list[str]) -> int:
     from . import intake
     cfg = config.load()
     if "local_intake" not in modules.enabled(cfg):
-        _err_line("the local_intake module is off.\nfix: sudo filament-kit modules enable local_intake")
+        _err_line("the local_intake module is off.\nfix: `sudo filament-kit modules enable local_intake`")
         return 1
     try:
         images = intake.check_photos([(p, Path(p).read_bytes()) for p in photos])

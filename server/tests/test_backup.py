@@ -576,7 +576,7 @@ def test_scripts():
     assert 'exec /usr/local/bin/filament-kit restore --yes "$RESTORE"' in inst
     assert inst.index("restore --yes") < inst.index("# ---------- 4. install mode")
     wrap = (ROOT / "install" / "filament-kit-cli.sh").read_text(encoding="utf-8")
-    assert '    backup | restore) exec "$BIN" "$@" ;;' in wrap
+    assert '    backup | restore) run_as_root "$@" ;;' in wrap
 
 
 def test_the_manifest_version_parses_as_a_release_version(kit):

@@ -209,7 +209,7 @@ def test_exit_codes_of_06_6_7(cfg, capsys, monkeypatch):
     monkeypatch.setattr(cli.registry, "load", lambda: {"S1": p})
     rc, out, err = run(capsys, "printer", "map", "S1", "--manual")
     assert (rc, out) == (4, "")                                           # the Hub is not running
-    assert "Fix: sudo systemctl start filament-kit" in err
+    assert "Fix: `sudo systemctl start filament-kit`" in err
 
 
 def test_ctrl_c_ends_with_stopped_and_130(cfg, capsys, monkeypatch):
@@ -579,7 +579,7 @@ def test_restore_asks_before_its_wait_starts_and_its_lines_start_clean(quick, te
         terminal.write("restore\n")
         return "restore"
 
-    def fake_restore(path, *, yes, ask, step):
+    def fake_restore(path, *, yes, ask, step, out=print):
         print("Backup of Workshop made today.")
         assert ask("Type restore to go on: ") == "restore"
         time.sleep(0.4)
@@ -727,3 +727,139 @@ def test_the_apply_and_catalog_waits_run_programs_and_say_so(cfg, capsys, monkey
     cli._run_apply(pairing=False)
     run(capsys, "library", "update")
     assert seen == {"Applying the changes…": True, "Updating the Filament Catalog…": True}
+
+
+# ---------- R348: commands whole, the right stream and exit code, names that can be typed ----------
+
+def _texts_of_errors(path):
+    """The text of every `_err_line(...)`, `output.error(what, fix)` and `output.note(...)` call in a module, the string
+    pieces joined in order and each value that is filled in standing as `X`."""
+    import ast
+    from pathlib import Path
+
+    def leaves(n):
+        if isinstance(n, ast.Constant) and isinstance(n.value, str):
+            return n.value
+        if isinstance(n, ast.JoinedStr):
+            return "".join(leaves(v) if isinstance(v, ast.Constant) else "X" for v in n.values)
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
+            return leaves(n.left) + leaves(n.right)
+        if isinstance(n, ast.IfExp):
+            return leaves(n.body) + leaves(n.orelse)
+        return "X"
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    found = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
+        if name in ("_err_line", "error", "note") and n.args:
+            for a in n.args[:2]:
+                found.append((n.lineno, leaves(a)))
+    return found
+
+
+COMMAND = re.compile(r"\bsudo (?!for\b)\S|\bpip install|\bpython3? -m\b|\btar xzf|\./\S+\.sh|"
+                     r"\bfilament-kit (?:klipper|config|modules|backup|restore|update|web|reader|station|cert|remote|"
+                     r"library|uninstall|status|printer|pair|setup-code)\b")
+
+
+@pytest.mark.parametrize("columns", ["80", "40"])
+def test_no_command_in_an_error_or_fix_text_is_split(columns, monkeypatch):
+    """Every command an Error/Fix/Note text names is marked with backticks, and wrapped at 80 and at 40 columns it
+    stays on one line (06 6.3, 6.5)."""
+    from pathlib import Path
+    from filament_kit import output
+    monkeypatch.setenv("COLUMNS", columns)
+    root = Path(cli.__file__).parent
+    seen = 0
+    for module in ("cli.py", "klipper_cli.py"):
+        for lineno, text in _texts_of_errors(root / module):
+            seen += 1
+            unmarked = COMMAND.search(re.sub(r"`[^`]*`", "", text))
+            assert not unmarked, f"{module}:{lineno}: a command that is not in backticks: {text!r}"
+            lines = output.wrap("Error: " + text.replace("\nfix: ", "\nFix: "), indent=7, first=0)
+            for span in re.findall(r"`[^`]*`", text):
+                assert any(span in x for x in lines), f"{module}:{lineno}: {span!r} split at {columns} columns"
+    assert seen > 40            # the scan found the calls (a rename of them would otherwise pass it)
+
+
+def test_a_status_fix_that_is_a_command_is_not_split(monkeypatch):
+    from filament_kit import output
+    monkeypatch.setenv("COLUMNS", "40")
+    lines = output.status_row("needs a look", "service filament-kit active", "sudo systemctl start filament-kit")
+    assert any("sudo systemctl start filament-kit" in x for x in lines), lines
+
+
+def test_the_groupmissing_fix_is_split_into_a_fix_line(capsys, monkeypatch):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(cli, "write_passphrase", lambda p: (_ for _ in ()).throw(cli.GroupMissing("no group")))
+    answers = iter(["a long enough passphrase", "a long enough passphrase"])
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": next(answers))
+    rc, out, err = run(capsys, "web", "passphrase")
+    assert rc == 1 and out == ""
+    lines = err.splitlines()
+    assert lines[0].startswith("Error: no group; nothing was changed")
+    assert any(x.startswith("Fix: install the kit first") for x in lines), err
+    assert not any(x.lstrip().startswith("fix:") for x in lines), err
+
+
+def test_update_and_remote_issue_without_root_exit_3_with_the_command(cfg, capsys, monkeypatch):
+    from filament_kit import remote, updates
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(updates.os, "geteuid", lambda: 1000, raising=False)
+    cfg_ = config.load()
+    monkeypatch.setattr(cli, "_invoked", ["update"])
+    assert updates.update(cfg_) == 3
+    err = capsys.readouterr().err
+    assert err.startswith("Error: this needs administrator rights.") and "     sudo filament-kit update\n" in err
+    monkeypatch.setattr(cli, "_invoked", ["update", "--rollback"])
+    assert updates.rollback(cfg_) == 3
+    assert "     sudo filament-kit update --rollback\n" in capsys.readouterr().err
+    monkeypatch.setattr(cli, "_invoked", ["remote", "issue"])
+    monkeypatch.setattr(remote, "_is_root", lambda: False)
+    cfg_["modules"]["remote"] = True
+    assert remote.issue(cfg_) == 3
+    got = capsys.readouterr()
+    assert got.out == "" and "Fix: run it with sudo:" in got.err and "sudo filament-kit remote issue" in got.err
+
+
+def test_remote_errors_are_on_standard_error(cfg, capsys, monkeypatch):
+    from filament_kit import remote
+    cfg_ = config.load()
+    cfg_["modules"]["remote"] = False
+    assert remote.issue(cfg_) == 1
+    monkeypatch.setattr(remote, "firewall_text", lambda *a: (_ for _ in ()).throw(OSError("gone")))
+    cfg_["modules"]["remote"] = True
+    cfg_.setdefault("remote", {})["hostname"] = "kit.example.org"
+    assert remote.firewall(cfg_) == 1
+    got = capsys.readouterr()
+    assert got.out == "" and got.err.count("Error: ") == 2 and "error:" not in got.err, got
+    monkeypatch.setattr(remote, "_is_root", lambda: True)
+    monkeypatch.setattr(remote, "settings", lambda c: (_ for _ in ()).throw(remote.ModuleError("bad hostname")))
+    assert remote.issue(cfg_) == 1 and remote.firewall(cfg_) == 1
+    got = capsys.readouterr()
+    assert got.out == "" and got.err.count("Error: bad hostname") == 2 and "error:" not in got.err, got
+
+
+def test_restore_errors_are_on_standard_error(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    bad = tmp_path / "not-a-backup.zip"
+    bad.write_bytes(b"this is not a zip")
+    rc, out, err = run(capsys, "restore", str(bad), "--yes")
+    assert rc == 1 and "rror" not in out and err.startswith("Error: "), (out, err)
+    assert "Nothing was changed." in " ".join(err.split()) and "error:" not in err
+
+
+def test_backup_list_never_cuts_a_file_name_at_80_columns(capsys, monkeypatch):
+    from filament_kit import backup, output
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(output, "_is_tty", lambda stream: True)
+    monkeypatch.setenv("COLUMNS", "80")
+    monkeypatch.setenv("TERM", "xterm")
+    name = "filament-kit-backup-2026-11-14-2311-pre-restore-of-the-old-hub.zip"
+    monkeypatch.setattr(backup, "listing", lambda: [backup.Entry(name, name, 1_234_567, 1.8e9, "pre-restore")])
+    rc, out, err = run(capsys, "backup", "list")
+    assert rc == 0 and name in out and "…" not in out, out
+    assert all(len(x) <= 79 or " " not in x.strip() for x in out.splitlines()), out

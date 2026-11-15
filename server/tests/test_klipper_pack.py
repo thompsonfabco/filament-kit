@@ -93,7 +93,7 @@ def test_bad_local_signature_is_an_error_not_a_fallback(env, srv, key, capsys):
     rc, out, err = _run(env, srv.fetcher(), capsys)    # the network copy would verify: it must not be used
     assert rc == 1
     _no_command(out)
-    assert "signature" in err and str(d) in "".join(err.split())
+    assert "signature" in err and any(str(d) in x for x in err.splitlines()), err
 
 
 def test_network_bad_signature(env, srv, key, capsys):

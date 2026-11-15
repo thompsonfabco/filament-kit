@@ -130,6 +130,6 @@ def test_web_passphrase_without_the_group(monkeypatch, capsys):
     _prompts(monkeypatch, PASS, PASS)
     assert cli.main(["web", "passphrase"]) == 1
     err = capsys.readouterr().err
-    assert "filament-kit" in err and "fix:" in err and "Traceback" not in err
+    assert "filament-kit" in err and "Fix:" in err and "Traceback" not in err
     etc = config.paths().etc
     assert not (etc / "web_passphrase").exists() and not list(etc.glob("web_passphrase*"))

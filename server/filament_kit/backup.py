@@ -731,7 +731,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             out(f"error: the restore stopped ({why}); what was here is back in place and running again.")
         else:
             out(f"error: the restore stopped ({why}); what was here is back in place. Start the kit again with: "
-                "sudo filament-kit modules apply")
+                "`sudo filament-kit modules apply`")
         return 1
     if other_host:
         for n in ("cert.pem", "key.pem"):
@@ -754,7 +754,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
         if services:
             run(["systemctl", "try-restart", *services])
     if rc != 0:
-        out("error: the data is back, but setting up the modules failed. Finish with: sudo filament-kit modules apply"
+        out("error: the data is back, but setting up the modules failed. Finish with: `sudo filament-kit modules apply`"
             + "".join(f"\n  the earlier {t} is in {o}" for t, o in swapped if o is not None))
         return 1
     for _target, old in swapped:

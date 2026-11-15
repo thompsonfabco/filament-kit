@@ -212,7 +212,7 @@ def test_issue_without_email_registers_without_one(monkeypatch):
 def test_issue_needs_root_and_the_module(monkeypatch):
     monkeypatch.setattr(remote, "_is_root", lambda: False)
     run = Rec()
-    assert remote.issue(_cfg(), run=run) == 1 and run.calls == []
+    assert remote.issue(_cfg(), run=run) == 3 and run.calls == []              # needs root: exit code 3
     monkeypatch.setattr(remote, "_is_root", lambda: True)
     cfg = _cfg()
     cfg["modules"]["remote"] = False
@@ -318,8 +318,8 @@ def test_firewall_command_without_resources_prints_a_fix(monkeypatch, capsys):
         raise FileNotFoundError("no remote dir")
     monkeypatch.setattr(remote, "firewall_text", boom)
     assert remote.firewall(_cfg()) == 1
-    out = capsys.readouterr().out
-    assert "error:" in out and "fix:" in out
+    got = capsys.readouterr()
+    assert got.out == "" and got.err.startswith("Error: ") and "\nFix: " in got.err
 
 
 def test_remote_off_removes_the_kits_router_conf_and_deploy_hook(tmp_path, capsys):

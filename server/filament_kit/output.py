@@ -183,6 +183,9 @@ def _visible(s: str) -> int:
     return len(re.sub(r"\x1b\[[0-9;]*m", "", s))
 
 
+_HELD = "\x00"        # a space that wrap does not break at (a fix that is a command); it goes back to a space
+
+
 def _words(para: str) -> list[str]:
     """`para` split at its spaces, except those inside a `backtick span`: a command stays whole on a line."""
     words, cur, inside = [], "", False
@@ -215,23 +218,25 @@ def wrap(text: str, *, indent: int = 0, first: int | None = None) -> list[str]:
                 cur, col = "", indent + lead
             cur = f"{cur} {word}" if cur else word
         lines.append(" " * col + cur)
-    return lines
+    return [x.replace(_HELD, " ") for x in lines]
 
 
-def table(headers: list[str], rows: list[list], *, long: int = 0, right: tuple[int, ...] = (),
+def table(headers: list[str], rows: list[list], *, long: int = 0, right: tuple[int, ...] = (), whole: bool = False,
           stream=None) -> list[str]:
     """A table as lines. Header in upper case (bold with colour), columns two spaces apart, text left, numbers right
     (`right` lists those columns), the `long` column taking the spare room. At a terminal narrower than 60 columns and
     always in plain mode it is blocks: a `Label: value` line per field, a blank line between rows. At a terminal the
-    long column is cut with an ellipsis when the line would be too long; not at a terminal nothing is cut."""
+    long column is cut with an ellipsis when the line would be too long, unless `whole` (it holds what the person types
+    next, a file name): then the table is blocks instead of cutting it. Not at a terminal nothing is cut."""
     stream = stream or sys.stdout
-    if plain() or (_is_tty(stream) and width() < 60):
+    head = [h.upper() for h in headers]
+    cols = [max([len(head[i])] + [len(str(r[i])) for r in rows]) for i in range(len(head))]
+    too_wide = _is_tty(stream) and sum(cols) + 2 * (len(cols) - 1) > width() - 1
+    if plain() or (_is_tty(stream) and width() < 60) or (whole and too_wide):
         lines: list[str] = []
         for r in rows:
             lines += ([""] if lines else []) + [f"{h}: {v}" for h, v in zip(headers, r)]
         return lines
-    head = [h.upper() for h in headers]
-    cols = [max([len(head[i])] + [len(str(r[i])) for r in rows]) for i in range(len(head))]
     cut = _is_tty(stream)
     if cut:
         spare = (width() - 1) - (sum(cols) + 2 * (len(cols) - 1))
@@ -401,6 +406,8 @@ def status_row(word: str, text: str, fix: str = "", stream=None) -> list[str]:
     lines = [lead + body[0][start:]] + body[1:]
     if fix:
         indent = col if not plain() else start
+        if fix.startswith("sudo "):                       # a fix that is a command is never cut (06 6.3)
+            fix = fix.replace(" ", _HELD)
         lines += wrap("Fix: " + fix, indent=indent + 5, first=indent)
     return lines
 

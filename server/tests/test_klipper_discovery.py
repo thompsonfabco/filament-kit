@@ -102,7 +102,7 @@ def test_cli_add_offline_still_adds(capsys):
 def test_cli_add_says_when_the_service_cannot_reach_it(capsys, monkeypatch):
     monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
     assert klipper_cli.main(["add", "Far", "203.0.113.7"]) == 0
-    assert "IPAddressAllow=203.0.113.0/24" in " ".join(capsys.readouterr().err.split())
+    assert any("IPAddressAllow=203.0.113.0/24" in x for x in capsys.readouterr().err.splitlines())
     assert registry.load()["far"].host == "203.0.113.7"
 
 

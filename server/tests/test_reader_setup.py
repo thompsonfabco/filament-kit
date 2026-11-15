@@ -228,8 +228,9 @@ def test_without_platformio_it_says_how_to_add_it(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(rs, "owner", lambda: rs.Owner("someone", 1000, 1000, Path("/home/someone")))
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)))) == 1
     err = capsys.readouterr().err
-    err = " ".join(err.split())
-    assert "pip install --user platformio" in err and "someone's account" in err and "not with sudo" in err
+    joined = " ".join(err.split())
+    assert "someone's account" in joined and "not with sudo" in joined
+    assert any("`python3 -m pip install --user platformio`" in x for x in err.splitlines()), err   # the command: one line
 
 
 def test_main_routes_reader_setup(monkeypatch):
