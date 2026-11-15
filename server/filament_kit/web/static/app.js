@@ -438,7 +438,7 @@ function addToHome(opener) {
 }
 function installSheet(opener, reuse) {                       // the steps for an iPhone (04 10.1)
   const dlg = SW.sheet({ title: SW.t("install_title", { product: PRODUCT }),
-    body: [h("ol", { class: "install" }, [1, 2, 3].map((n) => h("li", {}, SW.t("web_install_step_" + n)))),
+    body: [h("ol", { class: "install" }, [1, 2, 3].map((n) => h("li", {}, SW.t("install_step_" + n)))),
       SW.banner({ kind: "info", text: SW.t("install_note"), inline: true })],
     foot: SW.btn(SW.t("status_done"), { cls: "btn--primary", action: "done", run: () => dlg.close() }) });
   openHere(dlg, opener, reuse);
