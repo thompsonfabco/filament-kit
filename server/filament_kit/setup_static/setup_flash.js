@@ -21,7 +21,7 @@ const FLASH_DEVICES = {
   "printer-station": { place: "tag-reader", name: "common_reader_tag_reader", steps: ["connecting", "writing", "restarting", "sending", "report"] },
   "intake-panel": { place: "display", name: "flash_device_display", steps: ["connecting", "writing", "restarting"] },
 };
-let flashPick = { device: null, where: null };    // what was chosen on this page; null: the address, then the first device
+let flashPick = { device: null, where: null, buzzer: "high" };    // what was chosen on this page; null: the address, then the first device
 let flashRun = null;                              // the write on this page: { id, steps, at, failed, done, running, pct, stop, ssid }
 let flashHost = null;                             // where the step list of that write is drawn
 let flashWatching = false;                        // the Hub's job is being followed
@@ -89,6 +89,7 @@ class SerialLines {
 async function openBoard(info, ms) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
+    stopCheck();
     const ports = (await navigator.serial.getPorts()).filter((p) => {
       const i = p.getInfo();
       return i.usbVendorId === info.usbVendorId && i.usbProductId === info.usbProductId;
@@ -106,6 +107,7 @@ async function askHello(s, ms, done = () => true) {
   const end = Date.now() + ms;
   const ask = new TextEncoder().encode("FK?\n");
   while (Date.now() < end && !s.closed) {
+    stopCheck();
     try { await s.write(ask); } catch { return null; }
     const l = await s.line(Math.min(1000, Math.max(1, end - Date.now())));
     const h = l == null ? null : parseHello(l);
@@ -131,6 +133,7 @@ async function provisionOverSerial(info, settings, step) {
     const end = Date.now() + 5000;
     let got = null;
     while (Date.now() < end) {
+      stopCheck();
       const l = await s.line(end - Date.now());
       if (l == null) break;
       if (l === "FK-OK" || l.startsWith("FK-ERR")) { got = l; break; }
@@ -149,6 +152,7 @@ async function provisionOverSerial(info, settings, step) {
   const end = Date.now() + 60000;
   let h = null;
   while (!h && Date.now() < end) {
+    stopCheck();
     s = await openBoard(info, end - Date.now());
     if (!s) break;
     try { h = await askHello(s, end - Date.now(), done); } finally { await s.close(); }
@@ -258,11 +262,11 @@ async function flashHere(dev, a, sent) {
     const res = await provisionOverSerial(usb, settings, (name) => { runStep(name); if (name === "sending") sent(); });
     if (!res.ok) throw Object.assign(new Error(provisionText(res, a.ssid, tok.base)), { said: true });
     flashRun.done = true;
-    return { ok: true, text: SW.t("flash_done_reader", { wifi: a.ssid }) };
+    return { ok: true, text: SW.t("flash_done_reader", { wifi: a.ssid }) + " " + SW.t("flash_token_made", { id: tok.id }) };
   } catch (e) {
     let note = "";
     if (tok) {
-      try { await api(`readers/${tok.id}/revoke`, { code: theCode() }); } catch { note = " " + SW.t("flash_token_kept", { id: tok.id }); }
+      try { await api(`readers/${tok.id}/revoke`, { code: theCode() }); note = " " + SW.t("flash_token_removed"); } catch { note = " " + SW.t("flash_token_kept", { id: tok.id }); }
     }
     if (e instanceof FlashStopped) return { stopped: true, text: SW.t(half ? "flash_stopped_half" : "flash_stopped") + note };
     flashRun.failed = flashRun.at;
@@ -282,34 +286,43 @@ const newRun = (id, extra) => (flashRun = { id, at: 0, failed: -1, done: false, 
 
 // The Hub's job (reader_setup) as the page's step list: its numbered steps follow the list in order. Stops when the job has
 // ended or the page left the section; a visit later takes it up again. A job this page just started may not have written its
-// log yet: an older or other job is ignored for 15 s.
+// log yet, and one that ended before the first look is told from the log the page saw before it started (`before`: its
+// signature); the log has no start time. When nothing newer shows within 15 s the last job's outcome stands.
+const hubSig = (j) => (j ? [j.name, j.running, j.exit, j.next, j.step && j.step.text].join("|") : "");
+function hubJobEnds(run, r) {
+  const n = FLASH_DEVICES["printer-station"].steps.length;
+  if (r && r.step) {       // by the job's own sentence; a sentence not known keeps the place, never goes back
+    const at = FLASH_DEVICES["printer-station"].steps.indexOf(HUB_STEPS[r.step.text]);
+    if (at >= run.at) run.at = Math.min(n - 1, at);
+  }
+  run.running = false;
+  if (r && r.exit === 0 && !r.lost) run.done = true; else run.failed = run.at;
+  fill(boxFor("flash"));
+  drawRun();
+  if (run.done && run.ssid) say(boxFor("flash"), SW.t("flash_done_reader", { wifi: run.ssid }), true);
+  flashSync();
+}
 async function followHubJob() {
-  if (flashWatching) return;
+  if (flashWatching || (flashRun && flashRun.running && !flashRun.hub)) return;      // a write from this computer is not the Hub's
   flashWatching = true;
   try {
     while (tabNow() === "flash") {
       let r;
       try { r = await api("job?from=999999999"); } catch { await nap(2000); continue; }
+      if (flashRun && flashRun.running && !flashRun.hub) return;
       const run = flashRun && flashRun.hub ? flashRun : newRun("printer-station", { hub: true, seen: true, since: Date.now() });
-      const mine = r.name === "reader_setup" && (r.running || run.seen);
+      const mine = r.name === "reader_setup" && (r.running || run.seen || hubSig(r) !== run.before);
       if (!mine) {
-        if (Date.now() - run.since > 15000) { run.running = false; drawRun(); return; }
+        if (Date.now() - run.since > 15000) { hubJobEnds(run, r.name === "reader_setup" && !r.running ? r : null); return; }
         await nap(1000);
         continue;
       }
+      if (!r.running) { hubJobEnds(run, r); return; }
       run.seen = true;
       const n = FLASH_DEVICES["printer-station"].steps.length;
-      if (r.step) {       // by the job's own sentence; a sentence not known keeps the place, never goes back
+      if (r.step) {
         const at = FLASH_DEVICES["printer-station"].steps.indexOf(HUB_STEPS[r.step.text]);
         if (at >= run.at) run.at = Math.min(n - 1, at);
-      }
-      if (!r.running) {
-        run.running = false;
-        if (r.exit === 0 && !r.lost) run.done = true; else { run.failed = run.at; fill(boxFor("flash")); }
-        drawRun();
-        if (run.done && run.ssid) say(boxFor("flash"), SW.t("flash_done_reader", { wifi: run.ssid }), true);
-        flashSync();
-        return;
       }
       drawRun();
       await nap(1000);
@@ -356,7 +369,8 @@ function drawFlash(body, F, J) {
   const pass = SW.field({ label: SW.t("flash_wifi_password"), type: "secret", name: "pass", hint: SW.t("flash_wifi_password_hint"), optional: true });
   const again = SW.field({ label: SW.t("flash_wifi_again"), type: "secret", name: "again", optional: true,
     check: (v) => (v === pass._control.value ? null : SW.t("flash_wifi_mismatch")) });
-  const buzzer = flashChoice("flash-buzzer", SW.t("flash_buzzer"), [{ value: "high", label: SW.t("flash_buzzer_high") }, { value: "older", label: SW.t("flash_buzzer_older") }], "high", () => {});
+  const buzzer = flashChoice("flash-buzzer", SW.t("flash_buzzer"), [{ value: "high", label: SW.t("flash_buzzer_high") }, { value: "older", label: SW.t("flash_buzzer_older") }],
+    flashPick.buzzer, (v) => { flashPick.buzzer = v; });      // kept like the device: radios are not typed values the page carries over a redraw
   const name = SW.field({ label: SW.t("flash_name"), name: "name", optional: true, hint: SW.t("flash_name_hint") });
   const boards = () => F.server_boards || [];
   const board = SW.field({ label: SW.t("flash_board"), type: "select", name: "board", options: boards().map((b) => ({ value: b.port, label: SW.t("flash_board_option", { port: b.port, product_name: b.product }) })) });
@@ -373,11 +387,11 @@ function drawFlash(body, F, J) {
   const answers = () => {
     const bad = [[ssid, ssid._check()], [again, again._check()]].filter(([f, e]) => (SW.fieldError(f, e), e));
     if (bad.length) { bad[0][0]._control.focus(); return null; }
-    return { ssid: ssid._control.value.trim(), pass: pass._control.value, buzzer: buzzer.querySelector("input:checked").value, name: name._control.value.trim() };
+    return { ssid: ssid._control.value.trim(), pass: pass._control.value, buzzer: flashPick.buzzer, name: name._control.value.trim() };
   };
   const noPublic = () => {
     if (F.settings_ok) return false;
-    say(box, [h("p", { textContent: SW.t("flash_no_public") }), h("a", { href: "#settings/network", textContent: SW.t("nav_settings") })], false);
+    say(box, [h("p", { textContent: SW.t("flash_no_public") }), F.settings_why ? h("p", { class: "muted", textContent: hubText(F.settings_why) }) : null, h("a", { href: "#settings/network", textContent: SW.t("nav_settings") })], false);
     return true;
   };
   goHere.addEventListener("click", () => {
@@ -399,13 +413,14 @@ function drawFlash(body, F, J) {
     });
   });
   stop.addEventListener("click", () => { if (flashRun) flashRun.stop = true; stop.disabled = true; });
-  goHub.addEventListener("click", () => {
+  goHub.addEventListener("click", async () => {
     if (running() || goHub.getAttribute("aria-disabled") === "true") return;
     const a = answers();
     if (!a || noPublic()) return;
     const port = boards().length > 1 ? board._control.value : boards()[0].port;
+    const before = await api("job?from=999999999").then(hubSig, () => "");      // the log as it is before this job starts
     change(box, "flash/server", { ssid: a.ssid, pass: a.pass, buzzer: a.buzzer === "older" ? "low" : "high", port, name: a.name || undefined }, () => {
-      newRun("printer-station", { hub: true, ssid: a.ssid, since: Date.now() });
+      newRun("printer-station", { hub: true, ssid: a.ssid, since: Date.now(), before });
       flashSync();
       say(box, SW.t("flash_hub_started"), "info");
       followApply(true);

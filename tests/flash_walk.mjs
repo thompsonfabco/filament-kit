@@ -31,7 +31,7 @@ const check = (ok, what) => checks.push({ ok: !!ok, what });
 // the fake board speaks the firmware's lines (settings.h) and restarts after FK-SET; the fake esptool "writes" in ten reports
 const FAKE_PAGE = String.raw`(() => {
   const enc = new TextEncoder(), dec = new TextDecoder();
-  const f = window.__fake = { scenario: { wifi: "ok", server: "ok" }, settings: null, picked: true, wdelay: 250, events: [] };
+  const f = window.__fake = { scenario: { wifi: "ok", server: "ok" }, settings: null, picked: true, wdelay: 250, events: [], mute: false };
   const origFetch = window.fetch;
   window.fetch = (u, o) => { const s = String(u); if (/flash\/provision|firmware\/|\/revoke/.test(s)) f.events.push(s.replace(/^.*\/api\//, "")); return origFetch(u, o); };
   const board = { gone: false };
@@ -49,6 +49,7 @@ const FAKE_PAGE = String.raw`(() => {
           while ((i = buf.indexOf("\n")) >= 0) {
             const line = buf.slice(0, i); buf = buf.slice(i + 1);
             if (line === "FK?") {
+              if (f.mute) continue;
               const done = f.settings !== null;
               say("FK-READER 1794501335 configured=" + (done ? 1 : 0) + " wifi=" + (done ? f.scenario.wifi : "-") + " server=" + (done ? f.scenario.server : "-") + "\n");
             } else if (line.startsWith("FK-SET ")) {
@@ -126,6 +127,8 @@ async function unlock() {
   await sleep(300);
 }
 async function openUnlocked(hash) { await open(hash); await unlock(); }
+// the page draws the section again, and its data is read again: wait until the form is back
+async function redraw() { await ev("render()"); await sleep(300); await waitFor(`!!document.querySelector('input[name="flash-buzzer"]') && !document.querySelector('[aria-busy="true"]:not(button)')`, 10000); }
 const result = () => ev(`(document.querySelector(".flash-write .result") || {}).textContent || ""`);
 const states = () => ev(`[...document.querySelectorAll(".flash-steps .steps__step")].map((li) => li.dataset.state || (li.getAttribute("aria-current") ? "current" : ""))`);
 const writeButton = (text) => ev(`(() => { const b = [...document.querySelectorAll(".flash-write button")].find((x) => x.textContent.trim().startsWith(${JSON.stringify(text)})); return b ? { shown: !b.hidden, busy: b.getAttribute("aria-disabled") === "true" } : null; })()`);
@@ -167,6 +170,8 @@ try {
     ctl({ boards: 1, jobfail: false });
     await openUnlocked("#flash/tag-reader"); await radio("flash-where", "hub");
     await fill3(); await radio("flash-buzzer", pick);
+    await redraw();                           // any redraw (a job ended, the lock changed) keeps the choice
+    check(await ev(`document.querySelector('input[name="flash-buzzer"][value="${pick}"]').checked`), `Hub way (${pick}): the buzzer choice survives a redraw`);
     await click(".flash-write button", "Write on the Hub");
     check(await waitFor(`(document.querySelector('.flash-write .result') || {}).textContent?.includes('has started')`, 10000), `Hub way (${pick}): the job starts`);
     check(await waitFor(`!!document.querySelector('.flash-steps .steps__step[aria-current=step]')`, 8000), `Hub way (${pick}): the step list follows the job`);
@@ -187,10 +192,31 @@ try {
   await audited("hub-failed");
   ctl({ jobfail: false });
 
+  // ---- a Hub job that ends before the page looks: the section is not left stuck ----
+  ctl({ jobfail: true, instant: true });
+  await openUnlocked("#flash/tag-reader"); await radio("flash-where", "hub"); await fill3();
+  await click(".flash-write button", "Write on the Hub");
+  check(await waitFor(`document.querySelectorAll('.flash-steps .steps__step[data-state=failed]').length === 1`, 25000), "fast failing Hub job: the failed step is marked");
+  check(!(await writeButton("Write on the Hub")).busy, "fast failing Hub job: the button is free");
+  check(!(await result()).includes("has started"), "fast failing Hub job: no 'has started' text is left");
+  ctl({ jobfail: false, instant: false });
+
+  // ---- Locked: nothing is asked of the Hub or the board before the code ----
+  await sleep(1500);
+  await open("#flash/tag-reader");
+  await ev("window.__fake.events.length = 0"); await fill3();
+  await click(".flash-write button", "Connect and write");
+  check(await waitFor("!!document.querySelector('.dialog input[name=code]')", 8000), "Locked: Connect and write asks for the code");
+  check((await ev("window.__fake.events")).length === 0, "Locked: no request was made before the code");
+  await audited("locked-dialog");
+  await click(".dialog__foot button", "Cancel");
+
   // ---- this computer: the token before the write, a redraw during the run, revoke on failure, Stop ----
   await sleep(1500);
   await openUnlocked("#flash/tag-reader");
-  await fill3();
+  await fill3(); await radio("flash-buzzer", "older");
+  await redraw();
+  check(await ev(`document.querySelector('input[name="flash-buzzer"][value="older"]').checked`), "this computer: the buzzer choice survives a redraw");
   const n0 = await ev("api('state').then((s) => s.readers.list.length)");
   await ev("window.__fake.wdelay = 300");
   await click(".flash-write button", "Connect and write");
@@ -206,6 +232,8 @@ try {
   check(await ev(`[...document.querySelectorAll('.flash-write button')].filter((b) => b.textContent.trim() === 'Stop').every((b) => b.hidden)`), "this computer: Stop is hidden after the run");
   check((await ev(`document.querySelector('input[name=pass]').value + document.querySelector('input[name=again]').value`)) === "", "this computer: the Wi-Fi password is not left in the form");
   check((await ev("window.__fake.settings.token.length")) > 20, "this computer: the settings reached the board with a token");
+  check((await ev("window.__fake.settings.buzzer_low")) === true, "this computer: the older buzzer is written as buzzer_low");
+  check((await result()).includes("Reader token"), "this computer: the done text names the reader token");
   await audited("computer-done");
   const n1 = await ev("api('state').then((s) => s.readers.list.length)");
   check(n1 === n0 + 1, `this computer: a successful run keeps its token (${n0} to ${n1})`);
@@ -217,6 +245,7 @@ try {
   check(await waitFor(`(document.querySelector('.flash-write .result') || {}).textContent?.includes('could not join')`, 40000), "this computer: a Wi-Fi failure is said");
   await sleep(600);
   check((await ev("window.__fake.events")).some((e) => /readers\/.*\/revoke/.test(e)), "this computer: a failed run revokes its token");
+  check((await result()).includes("The new Tag Reader token was removed."), "this computer: the failed run says its token was removed");
   check((await ev("api('state').then((s) => s.readers.list.length)")) === n1, "this computer: and no token is left");
   await audited("computer-failed");
 
@@ -230,6 +259,42 @@ try {
   await sleep(600);
   check((await ev("window.__fake.events")).some((e) => /readers\/.*\/revoke/.test(e)), "Stop: the token is revoked");
   await audited("computer-stopped");
+
+  // Stop works while the page waits for the restarted board to answer
+  await openUnlocked("#flash/tag-reader");
+  await ev(`window.__fake.scenario = { wifi: "ok", server: "ok" }; window.__fake.settings = null; window.__fake.wdelay = 20; window.__fake.mute = true; window.__fake.events.length = 0`);
+  await fill3();
+  await click(".flash-write button", "Connect and write");
+  check(await waitFor(`document.querySelectorAll('.flash-steps .steps__step')[2] && document.querySelectorAll('.flash-steps .steps__step')[2].getAttribute('aria-current') === 'step'`, 15000), "Stop in the wait for the board: the page waits for the restarted board");
+  await sleep(1500);
+  await click(".flash-write button", "Stop");
+  check(await waitFor(`(document.querySelector('.flash-write .result') || {}).textContent?.includes('Stopped before the next step')`, 4500), "Stop in the wait for the board ends the run at once");
+  await ev(`window.__fake.mute = false`);
+
+  // a Hub job running elsewhere does not take over a write from this computer
+  ctl({ boards: 1, jobfail: false });
+  await openUnlocked("#flash/tag-reader");
+  await ev(`window.__fake.scenario = { wifi: "ok", server: "ok" }; window.__fake.settings = null; window.__fake.wdelay = 600; window.__fake.events.length = 0`);
+  await fill3();
+  await click(".flash-write button", "Connect and write");
+  check(await waitFor(`!!document.querySelector('.flash-steps .progress')`, 10000), "Hub job elsewhere: the write from this computer runs");
+  await ev(`api("flash/server", { ssid: "Elsewhere", pass: "x", buzzer: "high", code: theCode() })`);
+  await sleep(1500);
+  await ev("render()");
+  await sleep(1500);
+  check(await ev("!!flashRun && flashRun.running && !flashRun.hub"), "Hub job elsewhere: a redraw leaves the run of this computer in place");
+  check(await waitFor(`(document.querySelector('.flash-write .result') || {}).textContent?.includes('Done.')`, 40000), "Hub job elsewhere: the write from this computer finishes");
+  check(await waitFor(`api("job?from=999999999").then((j) => !j.running)`, 30000), "Hub job elsewhere: the Hub's job ends");
+  await ev(`window.__fake.wdelay = 20`);
+
+  // the display from this computer needs no token and no settings
+  await openUnlocked("#flash/display");
+  await ev("window.__fake.events.length = 0");
+  await click(".flash-write button", "Connect and write");
+  check(await waitFor(`(document.querySelector('.flash-write .result') || {}).textContent?.includes('Weigh Station display firmware')`, 20000), "display from this computer: done text");
+  const evd = await ev("window.__fake.events");
+  check(!evd.some((e) => e.startsWith("flash/provision")) && evd.includes("write"), "display from this computer: no token is made, the firmware is written: " + evd.join(" > "));
+  await audited("display-done");
 
   await openUnlocked("#flash/tag-reader");
   await ev(`window.__fake.picked = false`); await setField("Wi-Fi name", "Workshop");

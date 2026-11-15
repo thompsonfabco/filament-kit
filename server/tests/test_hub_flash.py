@@ -66,7 +66,7 @@ def test_flash_a_device_walk_in_a_browser_with_a_fake_board_and_a_fake_hub_job(m
     from filament_kit import reader_flash, reader_setup
     import filament_kit.setup_page as sp
     ctl = tmp_path / "ctl.json"
-    ctl.write_text(json.dumps({"boards": 0, "jobfail": False}))
+    ctl.write_text(json.dumps({"boards": 0, "jobfail": False, "instant": False}))
     answers = []
     real_pending = reader_flash.write_pending
     monkeypatch.setattr(reader_flash, "write_pending", lambda a: (answers.append(a["buzzer"]), real_pending(a))[1])
@@ -86,7 +86,11 @@ def test_flash_a_device_walk_in_a_browser_with_a_fake_board_and_a_fake_hub_job(m
         log = setup_helper.job_log()
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text(setup_helper.header("reader_setup") + "\n")
-        fail = json.loads(ctl.read_text())["jobfail"]
+        fail, instant = (json.loads(ctl.read_text())[k] for k in ("jobfail", "instant"))
+        if instant:         # a job that is over before the page looks
+            with log.open("a") as f:
+                f.write(f"==> step 1 of 5 {flash_path[0]}\n==> finished (exit 1)\n")
+            return
         for i, text in enumerate(flash_path, 1):
             with log.open("a") as f:
                 f.write(f"==> step {i} of 5 {text}\n")
@@ -116,7 +120,8 @@ def test_flash_a_device_walk_in_a_browser_with_a_fake_board_and_a_fake_hub_job(m
     assert len(out["checks"]) >= 25
     assert not [(a["state"], a["findings"]) for a in out["audit"] if a["findings"]], out["audit"]
     assert len(out["audit"]) >= 14
-    assert answers == ["low", "high", "high"]      # the older module is `low` at the Hub; the failed-job run left the default
+    # the older module is `low` at the Hub, also after a redraw; the other Hub starts (failed job, instant job, one from elsewhere) are the default
+    assert answers == ["low", "high", "high", "high", "high"]
 
 
 def test_flash_a_device_with_no_firmware_is_the_empty_state_and_audits_clean(monkeypatch, hub):

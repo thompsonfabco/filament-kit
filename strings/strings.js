@@ -712,6 +712,8 @@ window.SW_TEXT = Object.freeze({
   "flash_name_hint": "The name the Hub gives this Tag Reader's token.",
   "flash_stopped": "Stopped before the next step. Nothing more was written.",
   "flash_stopped_half": "Stopped while writing. The board is half written: run this again before using it.",
+  "flash_token_made": "Reader token {id}: remove it in Devices when this Tag Reader is retired.",
+  "flash_token_removed": "The new Tag Reader token was removed.",
   "flash_token_kept": "Remove the new Tag Reader token {id} in Devices.",
   "flash_wait_job": "Wait for {title} to finish.",
   "flash_writing_percent": "Writing the firmware… {percent} %",
