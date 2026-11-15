@@ -51,7 +51,7 @@ UPLOAD = "restore-upload"      # in the state folder: what the setup page receiv
 # Relative to their root: left out, as install/backup.sh leaves them out.
 EXCLUDE = {"var/lib/filament-kit": ("profiles/live/system", "library/versions", UPLOAD)}
 EXCLUDE_GLOB = {"var/lib/filament-kit": (re.compile(r"profiles/builds/[^/]+\.tmp(/.*)?"),)}
-NAME = re.compile(r"(filament-kit-backup|pre-restore)-[A-Za-z0-9-]{1,63}-\d{8}-\d{4}(-\d+)?-v\d+\.\d+\.\d+\.zip")
+NAME = re.compile(r"(filament-kit-backup|spoolwarden-backup|pre-restore)-[A-Za-z0-9-]{1,63}-\d{8}-\d{4}(-\d+)?-v\d+\.\d+\.\d+\.zip")
 DAILY = re.compile(r"\d{4}-\d{2}-\d{2}\.tar\.gz")
 
 
@@ -474,7 +474,7 @@ def verify(path: Path) -> Manifest:
             root = SafeET.fromstring(zf.read(info))
         except Exception:  # noqa: BLE001 - defusedxml raises its own and the parser's errors
             raise BackupError("the manifest cannot be read") from None
-        if root.tag != "filament-kit-backup" or root.get("format") != FORMAT:
+        if root.tag not in ("filament-kit-backup", "spoolwarden-backup") or root.get("format") != FORMAT:
             raise BackupError("this backup has a format this kit does not know")
         kit = root.get("kit") or ""
         try:

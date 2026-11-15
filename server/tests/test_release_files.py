@@ -1113,3 +1113,9 @@ def test_get_e2e_final_read_has_a_timeout_when_a_descendant_holds_the_pipe():
                 os.kill(pid, signal.SIGTERM)     # the one this test started, by PID
             except OSError:
                 pass
+
+
+def test_the_avahi_file_announces_the_old_and_the_new_service_type():
+    text = _read("install/avahi/filament-kit.service")
+    assert re.findall(r"<type>([^<]+)</type>", text) == ["_filamentkit._tcp", "_spoolwarden._tcp"]
+    assert text.count("<port>8710</port>") == 2          # apply.py rewrites every one to the configured port

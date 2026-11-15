@@ -38,6 +38,12 @@ def fk_env(tmp_path, monkeypatch):
     monkeypatch.setattr(inventory, "_check_parents", lambda items: None)
 
 
+def test_parse_link_takes_the_new_scheme_and_still_the_old():
+    for scheme in ("fkit", "spoolwarden"):
+        link = server_api.parse_link(f"{scheme}://pair?h=srv.local&p=8710&t={'x' * 43}&fp={FP}&ip=192.0.2.5")
+        assert link.token == "x" * 43 and link.ips == ["192.0.2.5"]
+
+
 def test_parse_link():
     link = server_api.parse_link(f"fkit://pair?h=srv.local&p=8710&t={'x' * 43}&fp={FP}&ip=192.0.2.5&ip=192.0.2.6")
     assert (link.host, link.port, link.fp, link.ips) == ("srv.local", 8710, FP, ["192.0.2.5", "192.0.2.6"])

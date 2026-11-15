@@ -183,6 +183,18 @@ def test_an_entry_the_manifest_does_not_list_is_refused(kit, tmp_path):
         backup.verify(bad)
 
 
+def test_a_backup_under_the_new_name_is_read_and_listed(kit, tmp_path):
+    z = backup.create(now=1762700000.0)
+    new = tmp_path / z.name.replace("filament-kit-backup", "spoolwarden-backup")
+    _rewrite(z, new, lambda n, d: re.sub(rb"<(/?)filament-kit-backup", rb"<\1spoolwarden-backup", d)
+             if n == "manifest.xml" else d)
+    assert backup.verify(z).kit == backup.verify(new).kit == __version__     # old root tag and new root tag
+    assert backup.NAME.fullmatch(z.name) and backup.NAME.fullmatch(new.name)
+    assert not backup.NAME.fullmatch(new.name.replace("spoolwarden", "other"))
+    assert b"<filament-kit-backup" in zipfile.ZipFile(z).read("manifest.xml")      # what the kit writes is unchanged
+    assert b"<spoolwarden-backup" in zipfile.ZipFile(new).read("manifest.xml")
+
+
 def test_not_a_zip(kit, tmp_path):
     (tmp_path / "x.zip").write_bytes(b"nope")
     with pytest.raises(backup.BackupError, match="not a zip"):

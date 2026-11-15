@@ -105,6 +105,12 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **The last old names are gone from the texts.** The Android app's messages and the Hub's own words now say Hub, Hub page, Label Reader, Slicer presets and Slicer Sync.
 - **Theme for new devices:** Settings > Appearance on the Hub page has a "Theme for new devices" field with its own Save button, and `filament-kit config theme [<theme>]` shows or sets the same setting. Devices that already chose a theme keep theirs.
 
+## Ready for the new name
+
+The updater, the backup reader, the pairing link readers, the Klipper lane check and the Bambu calibration check now also
+accept the second set of names a later release will use (update download, backup, link, lane source and calibration
+job), and the Hub announces itself on the network under both service types. Everything the kit makes is named as before.
+
 ## Still to come
 
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the

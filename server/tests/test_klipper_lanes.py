@@ -82,6 +82,19 @@ def test_retract_deletes_only_the_kits_lanes():
     assert deleted == [("lane_data", "lane0"), ("lane_data", "lane1")]
 
 
+def test_the_kit_knows_its_lanes_under_either_source_name():
+    deleted = []
+
+    class C:
+        def db_delete(self, ns, key):
+            deleted.append(key)
+    old, new = {"lane": "0", "source": "filament-kit"}, {"lane": "1", "source": "spoolwarden"}
+    assert lanes.kit_written({"lane0": old}) and lanes.kit_written({"lane0": new, "lane1": old})
+    assert not lanes.kit_written({"lane0": new, "lane1": {"lane": "2", "source": "afc"}})
+    assert lanes.retract(C(), {}, {}, {"lane0": old, "lane1": new, "lane2": {"source": "afc"}}) == ["lane0", "lane1"]
+    assert deleted == ["lane0", "lane1"]
+
+
 def test_db_delete_removes_a_key_and_ignores_a_missing_one(moonraker):
     from filament_kit.bridge.klipper.moonraker import Moonraker
     moonraker.db["lane_data"] = {"lane0": {"source": "filament-kit"}}
