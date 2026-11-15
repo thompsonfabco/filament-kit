@@ -183,8 +183,19 @@ location.hash = "#printers";
 await until(() => rowOf("Workshop X1"), "the row again");
 result.afterReturn = !!(await until(() => stopIn(rowOf("Workshop X1")), "Stop after returning"));
 result.rowShown = !rowOf("Workshop X1").querySelector(".coll__row--note").hidden;
+// Stop checks the setup code through the helper, whose lockout file is not locked between threads on Windows (no flock): a request that
+// meets another one there is refused with "the setup helper failed", and the progress and Stop rightly stay. Press Stop again then.
+result.refusals = 0;
 stopIn(rowOf("Workshop X1")).click();
-await until(() => !stopIn(rowOf("Workshop X1")), "the end of the mapping");
+let pressed = Date.now();
+while (stopIn(rowOf("Workshop X1")) && Date.now() - pressed < 20000) {
+  await sleep(100);
+  if (box().dataset.state === "bad" && Date.now() - pressed > 2500 && stopIn(rowOf("Workshop X1"))) { result.refusals++; pressed = Date.now(); stopIn(rowOf("Workshop X1")).click(); }
+}
+try { await until(() => !stopIn(rowOf("Workshop X1")), "the end of the mapping"); } catch (e) {
+  throw new Error(e.message + " " + JSON.stringify({ lock: SW.lock.state, mapping, dialogs: [...document.querySelectorAll("dialog[open]")].map((d) => text(d).slice(0, 80)),
+    box: text(box()), prog: text($(".coll__row--note .result", rowOf("Workshop X1"))) }));
+}
 await until(() => text(box()).startsWith("Mapped"), "the end said (a result is written a moment after it is set)");
 result.end = text(box());
 result.progressGone = !$(".coll__row--note .result[data-state=run]", rowOf("Workshop X1"));
