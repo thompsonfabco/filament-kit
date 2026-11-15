@@ -301,6 +301,17 @@ def test_the_no_terminal_error_of_station_pair_keeps_its_command_whole(capsys):
     assert "`sudo filament-kit station pair`" in err
 
 
+def test_the_local_pair_error_keeps_both_its_commands_whole(capsys):
+    from filament_kit import output
+    output.error("--local pairs a station with the kit server on the same machine, and the server module is off "
+                 "here.\nfix: run `sudo filament-kit pair --station` on the kit server, then `sudo filament-kit station "
+                 "pair` here")              # the text of cli.py cmd_station_pair_local: its spans are mid-text
+    err = capsys.readouterr().err
+    check_width(err)
+    assert all(x.count("`") % 2 == 0 for x in err.splitlines())
+    assert "`sudo filament-kit pair --station`" in err and "`sudo filament-kit station pair`" in err
+
+
 def test_long_state_word_pushes_its_own_row_only(monkeypatch):
     from filament_kit import output
     rows = output.status_row("certificate changed", "Study A1 mini", "run it again") + \
@@ -579,8 +590,9 @@ def test_restore_asks_before_its_wait_starts_and_its_lines_start_clean(quick, te
     assert cli.cmd_restore(str(zip_path)) == 0
     assert seen[0].endswith("Type restore to go on: ") and "Restoring" not in seen[0]
     assert "Restoring" in terminal.getvalue()              # the wait did start, after the answer
-    assert screen(terminal.getvalue())[:3] == ["Backup of Workshop made today.", "Type restore to go on: restore",
-                                              "==> step 3 of 3 Putting the backup in place"]
+    assert "\r" not in terminal.getvalue()                 # restore runs programs: a whole line, never in place
+    assert screen(terminal.getvalue())[:4] == ["Backup of Workshop made today.", "Type restore to go on: restore",
+                                              "~ Restoring...", "==> step 3 of 3 Putting the backup in place"]
 
 
 def test_the_line_at_a_terminal_is_cut_to_the_width_and_keeps_its_counter(quick, terminal, monkeypatch):
@@ -617,3 +629,81 @@ def test_old_rows_gives_back_the_old_lines_and_refuses_one_it_does_not_know():
                   "Not a group\n"):
         with pytest.raises(AssertionError):
             old_rows(shown + stray)
+
+
+class FileTty(io.TextIOWrapper):
+    """A terminal that is a real file, so a child process can write to it too."""
+    def __init__(self, path):
+        super().__init__(open(path, "ab", buffering=0), encoding="utf-8", write_through=True)
+
+    def isatty(self):
+        return True
+
+
+def _child_line(delay: float) -> list[str]:
+    import sys
+    return [sys.executable, "-I", "-c", f"import time; time.sleep({delay}); print('child output', flush=True)"]
+
+
+def _run_wait_with_child(quick, monkeypatch, tmp_path, **kw):
+    import subprocess
+    monkeypatch.setenv("NO_COLOR", "1")
+    path = tmp_path / "tty.txt"
+    term = FileTty(path)
+    monkeypatch.setattr("sys.stdout", term)
+    monkeypatch.setattr("sys.stderr", term)
+    with quick.wait("Applying…", **kw):
+        subprocess.run(_child_line(0.6), stdout=term.fileno(), check=True)
+    term.flush()
+    return path.read_bytes().decode().replace("\r\n", "\n")      # Windows ends a printed line with CR LF
+
+
+def test_a_wait_that_runs_programs_never_draws_over_a_child_s_output(quick, monkeypatch, tmp_path):
+    got = _run_wait_with_child(quick, monkeypatch, tmp_path, programs=True)
+    assert "\r" not in got and "child output\n" in got
+    assert got in ("~ Applying...\nchild output\n", "child output\n~ Applying...\n")
+
+
+def test_a_wait_without_programs_still_draws_in_place(quick, monkeypatch, tmp_path):
+    got = _run_wait_with_child(quick, monkeypatch, tmp_path)
+    assert "\r~ Applying... 0 s" in got
+
+
+def test_bytes_written_to_the_buffer_take_the_line_off_first(quick, monkeypatch):
+    import sys
+    monkeypatch.setenv("NO_COLOR", "1")
+    term = Tty()
+    seen: list[str] = []
+
+    class Raw(io.BytesIO):
+        def write(self, data):
+            seen.append(term.getvalue())             # what the screen held when the bytes arrived
+            return super().write(data)
+    term.buffer = Raw()
+    monkeypatch.setattr("sys.stderr", term)
+    with quick.wait("Updating…"):
+        time.sleep(0.5)
+        sys.stderr.buffer.write(b"raw bytes\n")
+    assert "~ Updating... 0 s" in seen[0] and screen(seen[0]) == [""]       # up, then taken off before the bytes
+    assert term.buffer.getvalue() == b"raw bytes\n"
+
+
+def test_the_waits_that_run_programs_say_so(cfg, capsys, monkeypatch, tmp_path):
+    from filament_kit import backup, output
+    seen: dict[str, bool] = {}
+    real = output.wait
+
+    def spy(text, **kw):
+        seen[text] = kw.get("programs", False)
+        return real(text, **kw)
+    monkeypatch.setattr(output, "wait", spy)
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(backup, "create", lambda *a, **k: tmp_path / "b.zip")
+    monkeypatch.setattr(backup, "restore", lambda *a, **k: 0)
+    monkeypatch.setattr(backup, "restore_steps", lambda: 1)
+    zip_path = tmp_path / "b.zip"
+    zip_path.write_bytes(b"x")
+    run(capsys, "backup", "create")
+    run(capsys, "restore", str(zip_path), "--yes")
+    run(capsys, "status")
+    assert seen == {"Backing up…": True, "Restoring…": True, "Checking…": True}

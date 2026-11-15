@@ -87,7 +87,6 @@ def test_web_status_lines(cfg, capsys, monkeypatch):
     assert cli.main(["web", "status"]) == 0
     port = cfg["web"]["port"]
     out = capsys.readouterr().out
-    print(repr(out.splitlines()))
     assert out.splitlines() == [                      # no group, so no heading and no summary
         "  + OK            web module is on",
         "  + OK            public URL https://printer.example.com/filament",

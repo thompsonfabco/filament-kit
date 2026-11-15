@@ -282,6 +282,34 @@ class _Guard:
         for line in lines:
             self.write(line)
 
+    @property
+    def buffer(self):
+        """The byte stream under the text one: written to, it takes the line off like `write` (no buffer, no attribute)."""
+        return _GuardBytes(self.real.buffer)
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+class _GuardBytes:
+    """The `.buffer` of a guarded stream: a write of bytes first takes the progress line off, like the text one."""
+
+    def __init__(self, real):
+        self.real = real
+
+    def write(self, data):
+        with _lock:
+            if data:
+                _other_output()
+            n = self.real.write(data)
+            if data:
+                _midline[0] = not bytes(data).endswith(b"\n")
+            return n
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
     def __getattr__(self, name):
         return getattr(self.real, name)
 
@@ -382,16 +410,18 @@ def status_row(word: str, text: str, fix: str = "", stream=None) -> list[str]:
 class wait:
     """`with output.wait("Checking…"):` shows `◐ Checking… 3 s` on standard error once 2 seconds pass with no other
     output: at a terminal rewritten in place each second, with `(Ctrl-C stops)` after 5. Not at a terminal, or with
-    `--no-progress`, one whole line, once. In plain mode the line has no glyph and comes again every 10 seconds with
+    `--no-progress`, one whole line, once. A wait that runs other programs (`programs=True`: their output goes straight
+    to the terminal, past the guard below) never draws in place either: one whole line, as when piped. In plain mode the line has no glyph and comes again every 10 seconds with
     the time so far. `step(k, n)` adds `step k of n` in place of the seconds. Never on standard output.
 
     While it is on, standard output and error are guarded: any write, from anywhere, takes the line off first and
     restarts the 2 seconds, and the line is never drawn after text that has not ended its line. A command that asks a
     question does it inside `with t.paused():`, so its wait begins after the answer."""
 
-    def __init__(self, text: str, *, steps: tuple[int, int] | None = None):
+    def __init__(self, text: str, *, steps: tuple[int, int] | None = None, programs: bool = False):
         self.text = text
         self.steps = steps
+        self.programs = programs
         self._stop = threading.Event()
         self._started = self._since = time.monotonic()
         self._printed = False           # a line is on the screen (in place) or was written (once)
@@ -477,7 +507,7 @@ class wait:
                 err, now = _raw(sys.stderr), time.monotonic()
                 if self._held or _midline[0] or now - self._since < PROGRESS_AFTER:
                     continue
-                if _switches["no_progress"] or (not plain() and not _is_tty(err)):
+                if _switches["no_progress"] or (not plain() and (self.programs or not _is_tty(err))):
                     if not self._printed:                      # once, whole, without the counter
                         err.write(self._line(None) + "\n")
                         err.flush()

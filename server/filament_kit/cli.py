@@ -93,7 +93,7 @@ def _hardware_lines() -> bool:
 def cmd_status(client_factory, station_pairing: str | None = None) -> int:
     """`station_pairing`: the wrapper's answer from root (server_api.pairing_state), for a status run as the service
     user, which can't read the station's pairing."""
-    with output.wait("Checking…"):
+    with output.wait("Checking…", programs=True):
         rows = list(status_rows.rows(client_factory=client_factory, station_pairing=station_pairing))
     output.out(status_rows.header_line())
     output.out()
@@ -306,7 +306,7 @@ def cmd_backup(action: str, out: str | None) -> int:
              for e in rows], long=3, right=(2,)))
         return 0
     try:
-        with output.wait("Backing up…"):
+        with output.wait("Backing up…", programs=True):
             path = backup.create(Path(out) if out else None, step=steps.Steps(3).next)
     except (OSError, backup.BackupError) as e:
         _err_line(f"the backup was not written: {e}")
@@ -331,7 +331,7 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             _err_line(f"{zip_path}: no such file")
             return 1
     try:
-        waiting = output.wait("Restoring…")
+        waiting = output.wait("Restoring…", programs=True)
 
         def ask(prompt: str) -> str:
             with waiting.paused():              # the wait starts after the answer, never over the question
@@ -1367,7 +1367,7 @@ def cmd_library_update(scheduled: bool) -> int:
                 print("library update not due yet")
                 return 0
         job = steps.Steps(4)
-        with output.wait("Updating the Filament Catalog…"):
+        with output.wait("Updating the Filament Catalog…", programs=True):
             r = library.update(cfg["library"].get("url") or None, scheduled=scheduled, step=job.next)
     except (library.LibraryError, ValueError) as e:
         _err_line(str(e))
@@ -1665,7 +1665,7 @@ def _run_apply(*, pairing: bool = True) -> int:
             print(f"Station answers: {allow.split('=', 1)[1]}")
     job = steps.Steps(len(apply.step_names(actions)) + 1)
     try:
-        with output.wait("Applying the changes…"):
+        with output.wait("Applying the changes…", programs=True):
             apply.execute(actions, step=job.next)
     except apply.ApplyError:
         return 1
