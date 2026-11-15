@@ -5865,6 +5865,27 @@ def cmd_local_intake_token(remove: bool) -> int:
     return 0
 
 
+def cmd_local_intake_corrections_send() -> int:
+    """Ask the local reader to send the corrections waiting (the setup page's job `corrections_send`). The reader does
+    the upload to where it sends them itself; nothing waiting is lost when it fails."""
+    from . import reader_corrections
+    cfg = config.load()
+    job = steps.Steps(2)
+    job.next("Checking the corrections waiting.")
+    try:
+        n = reader_corrections.waiting(cfg)["count"]
+        if not n:
+            raise reader_corrections.CorrectionsError(409, "empty", reader_corrections.EMPTY)
+        job.next(f"Sending {n} correction{'s' if n != 1 else ''}.")
+        out = reader_corrections.send(cfg)
+    except reader_corrections.CorrectionsError as e:
+        _err_line(str(e))
+        return 1
+    sent = out["sent"] if out["sent"] is not None else n
+    print(f"Sent {sent} correction{'s' if sent != 1 else ''}. Thank you.")
+    return 0
+
+
 _READ_LEVEL_WORD = {"high": "high", "medium": "medium", "low": "low: check this", "not_on_label": "not on label"}
 _READ_ROWS = (("Brand", "vendor"), ("Name", "name"), ("Material", "material"), ("Colour", "color_hex"),
               ("Net weight", "net"), ("Price per kg", "price_per_kg"))
@@ -6577,6 +6598,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lir = lisub.add_parser("remove", help="uninstall the local reader from this machine and switch local_intake off "
                                           "(root; its settings are kept)")
     _add_yes(lir, "do not ask")
+    lic = lisub.add_parser("corrections", help="the corrections waiting to be shared (the setup page's Send now)")
+    licsub = lic.add_subparsers(dest="lic_cmd", required=True)
+    licsub.add_parser("send", help="ask the local reader to send the corrections waiting (nothing is sent by "
+                                   "itself; the reader does the upload)")
     lit = lisub.add_parser("test", help="read photos with the local reader only and print the result (no Claude, "
                                         "no daily read used, nothing saved)")
     lit.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
@@ -6820,6 +6845,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return cmd_local_intake_share(args.value, args.delete_waiting, args.status)
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
+        if args.li_cmd == "corrections":
+            return cmd_local_intake_corrections_send()
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)
     if args.cmd == "tag-reader" and args.tag_reader_cmd == "flash":
         return cmd_reader_setup(args)

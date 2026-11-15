@@ -21,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import (API_VERSION, __version__, config, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, setup_page,
+from . import (API_VERSION, __version__, config, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, reader_corrections, setup_page,
                station_flow, station_requests, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, family, hardware, loading, mapping, registry, usage
@@ -1121,6 +1121,23 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         body = await _json(request)
         return await run_in_threadpool(intake_history.undo, sm, request.path_params["hid"], body.get("revision"))
 
+    # ---------- the corrections waiting to be shared (reader_corrections.py): the list and Remove only; Send now,
+    # the package and Remove all are on the Hub page ----------
+    def _corr(fn):
+        @_authed
+        async def route(request: Request):
+            try:
+                return JSONResponse(await run_in_threadpool(fn, request))
+            except reader_corrections.CorrectionsError as e:
+                return _err(e.status, e.code, str(e), **e.extra)
+        return route
+
+    def corrections_list(request: Request):
+        return reader_corrections.waiting(config.load())
+
+    def corrections_remove(request: Request):
+        return reader_corrections.remove(config.load(), request.path_params["cid"])
+
     # ---------- the intake station's button flow (station_flow.py) ----------
     def _flow(fn):
         async def route(request: Request):
@@ -1291,6 +1308,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/intake/history/{hid}/revise", _hist(history_revise), methods=["POST"]),
             Route("/api/intake/history/{hid}/apply", _hist(history_apply), methods=["POST"]),
             Route("/api/intake/history/{hid}/undo", _hist(history_undo), methods=["POST"]),
+            Route("/api/label-reader/corrections", _corr(corrections_list)),
+            Route("/api/label-reader/corrections/{cid}/remove", _corr(corrections_remove), methods=["POST"]),
             Route("/api/tags/{uid}", tag_lookup),
             Route("/api/spools", spool_search),
             Route("/api/filaments", filament_list),
