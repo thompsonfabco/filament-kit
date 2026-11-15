@@ -376,6 +376,12 @@ def _tty() -> bool:
         return False
 
 
+def _can_ask() -> bool:
+    """Can a question be asked: a terminal, and not `--json`, which never asks (06 6.8)."""
+    from . import output  # output does not import apply; imported here as cli's imports of apply are
+    return _tty() and not output.json_mode()
+
+
 def _http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=3) as r:
@@ -502,7 +508,9 @@ def _raw_config() -> dict:
 
 
 def _ask(prompt: str) -> str:
-    print(prompt, end="", flush=True)
+    from . import output
+    with output.shown():            # a question is seen even where --quiet drops the results
+        print(prompt, end="", flush=True)
     return (sys.stdin.readline() or "").rstrip("\r\n")
 
 
@@ -510,7 +518,7 @@ def _server_setup(ex: _Exec, arg: str) -> None:
     """install.sh steps 5-6 (Ruling F): first-run questions, key, certificate, avahi file."""
     from . import cli  # cli imports apply; import here, not at module load
     etc = config.paths().etc
-    if "server_name" not in _raw_config() and not _tty():
+    if "server_name" not in _raw_config() and not _can_ask():
         # nobody to ask: keep the default, so a later apply at a keyboard asks no first-run questions
         cfg = config.load()
         cfg["server_name"] = socket.gethostname()
@@ -528,7 +536,7 @@ def _server_setup(ex: _Exec, arg: str) -> None:
 
     key_file = etc / cli.KEY_FILE
     # Asked whenever it is missing and someone is at the keyboard (also on upgrade).
-    if arg == "key" and (not key_file.exists() or key_file.stat().st_size == 0) and _tty():
+    if arg == "key" and (not key_file.exists() or key_file.stat().st_size == 0) and _can_ask():
         key = secret_input.ask("Anthropic API key (shown as *, Enter to skip): ").strip()
         if key:
             cli.write_key(key)
@@ -1058,7 +1066,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         if not ex.ok([WRAPPER, "status"]):
             print("Some checks failed; follow the 'fix:' lines above.")
         if pairing:
-            tty = _tty()
+            tty = _can_ask()
             if not _show_app(cfg, tty):
                 print("\nPairing skipped: pair a phone later with: sudo filament-kit pair")
             elif tty:
@@ -1119,7 +1127,7 @@ def _setup_line(cfg: dict) -> None:
     """The setup page's address, with its code only at a terminal: an install log must not carry the code."""
     from . import setup_code
     url = setup_code.page_url(cfg)
-    code = setup_code.read() if _tty() else None
+    code = setup_code.read() if _can_ask() else None
     if code:
         print(f"\nOpen {url}  (setup code: {setup_code.shown(code)})")
     else:

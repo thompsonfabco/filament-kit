@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import cli, config, modules, output, pairing, status, updates
+from filament_kit import apply, cli, config, modules, output, pairing, status, updates
 from filament_kit.setup_console import overview
 from filament_kit.web import reader as web_reader
 
@@ -182,8 +182,13 @@ def test_web_status_json_has_the_rows_the_overview_has(capsys):
     config.save(cfg)
     assert "web" in modules.enabled(config.load())
     rows = doc(run(capsys, ["web", "status", "--json"])[1])["rows"]
-    assert rows == status.row_dicts(status.hub_web_rows(cfg)) and rows        # the Overview's Hub rows for the web module
+    assert rows and rows == status.row_dicts(status.collect(cfg))[-len(rows):]     # the Overview's own rows for the web module
     assert all(r["group"] == "Hub" for r in rows) and "Web access is on" not in [r["text"] for r in rows]
+
+
+def test_revoking_trusted_computers_gives_ok_with_json(capsys):
+    got = doc(run(capsys, ["setup-code", "--revoke-trusted", "--yes", "--json"])[1])
+    assert got["ok"] is True and got["trusted_revoked"] == 0 and got["code"] == {"set": True}
 
 
 # ---------- errors ----------
@@ -263,6 +268,28 @@ def test_json_does_not_ask_when_standard_input_is_a_terminal(capsys, monkeypatch
     rc, out, err = run(capsys, [*argv, "--json"])
     got = json.loads(out)
     assert rc == 2 and got["ok"] is False and "needs a yes" in got["error"] and "[y/N]" not in out + err
+
+
+def test_a_modules_question_is_not_asked_under_json_at_a_terminal(capsys, monkeypatch):
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
+    monkeypatch.setattr(sys, "stdin", _Terminal())
+    monkeypatch.setattr("builtins.input", lambda prompt="": pytest.fail("asked"))
+    before = config.load()
+    rc, out, err = run(capsys, ["modules", "disable", "server", "--json"])
+    got = doc(out)
+    assert rc == 1 and got["ok"] is False and "depend on server" in got["error"] and "[y/N]" not in out + err
+    assert config.load() == before
+
+
+def test_a_modules_question_is_not_asked_under_json_at_a_terminal(capsys, monkeypatch):
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
+    monkeypatch.setattr(sys, "stdin", _Terminal())
+    monkeypatch.setattr("builtins.input", lambda prompt="": pytest.fail("asked"))
+    before = config.load()
+    rc, out, err = run(capsys, ["modules", "disable", "server", "--json"])
+    got = doc(out)
+    assert rc == 1 and got["ok"] is False and "depend on server" in got["error"] and "[y/N]" not in out + err
+    assert config.load() == before
 
 
 def test_a_restore_has_no_word_to_type_under_json(capsys, tmp_path):
@@ -365,6 +392,80 @@ def test_quiet_setup_code_new_prints_the_code_and_no_other_line(capsys, monkeypa
     full = run(capsys, ["setup-code", "--new", "--yes"])[1]
     assert "setup code:" in full and "The old setup code no longer works." in full
     assert run(capsys, ["setup-code", "--new", "--yes", "--quiet"])[1].count("\n") == 1
+
+
+def test_a_new_setup_code_is_printed_without_a_terminal_too(capsys, monkeypatch):
+    from filament_kit import setup_code
+    monkeypatch.setattr(cli.apply, "_tty", lambda: False)
+    out = run(capsys, ["setup-code", "--new", "--yes"])[1]
+    assert f"setup code: {setup_code.shown(setup_code.ensure())}" in out
+    assert "setup code:" not in run(capsys, ["setup-code"])[1]              # a stored one needs a terminal
+
+
+def test_quiet_drops_the_station_pair_result(capsys, monkeypatch):
+    from filament_kit.station import server_api
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 0, raising=False)
+    monkeypatch.setattr(server_api, "parse_link", lambda text: text)
+    monkeypatch.setattr(server_api, "pair_with_link",
+                        lambda link, confirm: types.SimpleNamespace(status="paired", message="Paired with the kit."))
+    assert cli.cmd_station_pair(ask=lambda p: "link") == 0
+    assert "Paired with the kit." in capsys.readouterr().out
+    output.configure(quiet=True)
+    assert cli.cmd_station_pair(ask=lambda p: "link") == 0
+    assert capsys.readouterr() == ("", "")
+
+
+def test_a_failed_or_stopped_flash_prints_no_result_line_with_quiet(capsys, monkeypatch, tmp_path):
+    from filament_kit import reader_setup as rs
+    monkeypatch.setattr(rs, "find_pio", lambda who=None: "/usr/bin/pio")
+    monkeypatch.setattr(rs, "owner", lambda: None)
+    monkeypatch.setattr(rs, "is_source", lambda p: True)
+    monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader("/dev/ttyACM0", None, "JTAG")])
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: False)
+    monkeypatch.setattr(rs, "flash", lambda *a, **k: 0)
+    secrets = tmp_path / "s.h"
+    secrets.write_text("x", encoding="utf-8")
+    args = types.SimpleNamespace(name="b", ssid="Home", source=str(tmp_path), port=None, out=None, ota_pubkey=None,
+                                 token_file=None, base=None, secrets=str(secrets), buzzer="high", yes=True)
+
+    def stopped(p):
+        raise KeyboardInterrupt
+    for quiet in (False, True):
+        output.configure(quiet=quiet)
+        assert cli.cmd_reader_setup(args, ask=lambda p: "y") == 0
+        flashed = capsys.readouterr().out
+        assert ("Flashed." in flashed) is not quiet
+        args.yes = False
+        assert cli.cmd_reader_setup(args, ask=stopped) == 1
+        assert ("Nothing was flashed." in capsys.readouterr().out) is not quiet
+        args.yes = True
+
+
+def test_an_unhandled_error_under_json_still_gives_the_error_document(capfd, monkeypatch):
+    def boom():
+        print("half an answer")
+        raise RuntimeError("boom")
+    monkeypatch.setattr(cli, "cmd_modules_list", boom)
+    with pytest.raises(RuntimeError):
+        cli.main(["modules", "list", "--json"])
+    got = capfd.readouterr()
+    assert json.loads(got.out) == {"ok": False, "error": "RuntimeError: boom", "fix": None}
+
+
+def test_the_redirect_is_not_made_when_standard_error_is_not_open(monkeypatch):
+    real_fstat, dup2s = os.fstat, []
+
+    def fstat(fd):
+        if fd == 2:
+            raise OSError(9, "Bad file descriptor")       # standard error was closed
+        return real_fstat(fd)
+    output.configure(json=True)
+    with monkeypatch.context() as m:                    # only around the call: pytest's own capture uses dup2 too
+        m.setattr(os, "fstat", fstat)
+        m.setattr(os, "dup2", lambda a, b: dup2s.append((a, b)))
+        with output.children_to_stderr():
+            pass
+    assert dup2s == []
 
 
 def test_a_note_is_dropped_but_the_old_name_line_is_kept(capsys):

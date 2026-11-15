@@ -260,6 +260,53 @@ def test_server_setup_key_question_only_when_missing(tmp_path, monkeypatch):
     assert asked == []
 
 
+class _Terminal:
+    """Standard input that is a terminal and answers nothing: asking on it is a failure."""
+
+    def isatty(self):
+        return True
+
+    def readline(self, *a):
+        pytest.fail("asked")
+
+
+def test_nothing_is_asked_under_json_at_a_terminal(tmp_path, monkeypatch, capsys):
+    from filament_kit import output, setup_code
+    monkeypatch.setattr(cli, "cmd_cert", lambda: 0)
+    monkeypatch.setattr(apply, "_tty", lambda: True)
+    monkeypatch.setattr(apply.sys, "stdin", _Terminal())
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked"))
+    output.configure(json=True)
+    try:
+        apply.execute([Action("server_setup", "key")], run=Recorder(), resources=_res(tmp_path), root=tmp_path / "r")
+        raw = json.loads((config.paths().etc / "config.json").read_text(encoding="utf-8"))
+        assert raw["server_name"] == apply.socket.gethostname()        # the default, as with no terminal
+        app = config.paths().opt / "app"
+        app.mkdir(parents=True)
+        (app / "filament-kit.apk").write_bytes(b"x")
+        monkeypatch.setattr(apply, "_wait_for_server", lambda port: None)
+        monkeypatch.setattr(setup_code, "read", lambda: "123456789012")
+        apply.finish(config.load(), run=Recorder())
+        apply._setup_line(config.load())
+    finally:
+        output.reset()
+    out = capsys.readouterr().out
+    assert "Press Enter" not in out and "Pair a phone at a terminal" in out and "setup code:" not in out
+
+
+def test_a_question_of_the_apply_is_shown_with_quiet(monkeypatch, capsys):
+    from filament_kit import output
+    monkeypatch.setattr(apply.sys, "stdin", type("S", (), {"readline": lambda self: "s\n"})())
+    output.configure(quiet=True)
+    try:
+        with output.muted():
+            print("dropped")
+            assert apply._ask("Press Enter to go on ") == "s"
+    finally:
+        output.reset()
+    assert capsys.readouterr().out == "Press Enter to go on "
+
+
 def test_station_off_notice_once(tmp_path, capsys):
     root = tmp_path / "root"
     rule = root / apply.UDEV_RULE.lstrip("/")

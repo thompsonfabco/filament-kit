@@ -598,10 +598,15 @@ def run_json(fn) -> int:
         except SystemExit as e:                     # a wrong option, or -h
             exit_ = e
             rc = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+        except Exception as e:                      # a bug: the traceback is kept (standard error, once it is raised
+            exit_ = e                               # again below), and the document still says it failed
+            rc = 1
+            _doc.clear()
+            _failure[:] = [(f"{type(e).__name__}: {e}".rstrip(": "), None)]
         text = held.buffer.getvalue().decode("utf-8", "replace")
     finally:
         sys.stdout, sys.stderr = real_out, real_err
-    if exit_ is not None and rc == 0 and not _doc:      # -h: its text is the answer, as {"ok": true, "help": ...}
+    if isinstance(exit_, SystemExit) and rc == 0 and not _doc:      # -h: its text is the answer, as {"ok": true, "help": ...}
         _doc[:] = [{"ok": True, "help": text}]
     if _doc:
         doc = _doc[-1]
@@ -630,8 +635,9 @@ def children_to_stderr():
         for stream in (sys.stdout, sys.stderr):
             with contextlib.suppress(Exception):
                 stream.flush()
+        os.fstat(2)
         saved = os.dup(1)
-    except OSError:                                     # no standard output at all: nothing to guard
+    except OSError:                                     # no standard error or output at all: nothing to guard
         yield
         return
     swapped = False

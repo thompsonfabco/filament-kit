@@ -211,7 +211,10 @@ def cmd_station_pair(ask=input) -> int:
     if result.status == "failed":
         _err_line(result.message)
     else:
-        print(result.message, file=sys.stderr if result.status == "paired_not_restarted" else sys.stdout)
+        if result.status == "paired_not_restarted":
+            print(result.message, file=sys.stderr)
+        else:
+            output.result(result.message)
     return 1 if result.status in ("failed", "declined") else 0
 
 
@@ -274,7 +277,7 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
                 stop = _confirm(f"Write the intake panel firmware to {port}?",
                                 "writing the firmware", yes=yes, ask=None if ask is input else ask)
             except KeyboardInterrupt:
-                print("\nNothing was flashed.")
+                output.result("\nNothing was flashed.")
                 return 1
             if stop is None:
                 return _flash_and_verify(panel, port, version)
@@ -2444,7 +2447,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
             stop = _confirm(f"Write the reader firmware to {port}? What is on the board now is replaced.",
                             "writing the firmware", yes=yes, ask=None if ask is input else ask)
         except KeyboardInterrupt:
-            print("\nNothing was flashed.")
+            output.result("\nNothing was flashed.")
             return 1
         if stop is not None:
             return stop
@@ -2542,7 +2545,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
             stop = _confirm(f"Write the reader firmware to {port}? What is on the board now is replaced.",
                             "writing the firmware", yes=yes, ask=None if ask is input else ask)
         except KeyboardInterrupt:
-            print("\nNothing was flashed.")
+            output.result("\nNothing was flashed.")
             return 1
         if stop is not None:
             return stop
@@ -2561,7 +2564,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         if rc != 0:
             _err_line(f"the build or flash failed (PlatformIO exit {rc}){_port_hint(who)}")
             return 1
-        print("Flashed.")
+        output.result("Flashed.")
         return 0
     try:
         base = a.base.rstrip("/") if a.base else rs.reader_base(config.load())
@@ -2633,7 +2636,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
             if busy and dropped:
                 output.note("The new token was removed, since nothing holds it.")
             return 1
-        print(f"Flashed. The reader joins {ssid} and calls {base}.")
+        output.result(f"Flashed. The reader joins {ssid} and calls {base}.")
     if a.out or flashing:
         print(f"Buzzer: {'low' if low else 'high'}-triggered"
               + (" (the older 3-pin module)." if low else " (a buzzer behind a MOSFET). A reader with the older 3-pin "
@@ -2742,10 +2745,11 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -
         else:
             reply = {"address": url, "code": {"set": True}}
         if revoke_trusted:
+            reply = {"ok": True, **reply}
             reply["trusted_revoked"] = trusted.revoke_all()
         output.emit(reply)
         return 0
-    if apply._tty():
+    if new or apply._tty():             # a code made now is the answer, with or without a terminal; a stored one needs one
         print(f"Open {url}  (setup code: {setup_code.shown(code)})")
     else:
         output.out(f"Setup page: {url}  (see its setup code at a terminal: sudo filament-kit setup-code)")
