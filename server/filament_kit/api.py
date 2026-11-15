@@ -955,7 +955,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     def info_body() -> dict:
         return {"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,
-                "apk_version": _apk_version(), "modules": sorted(on)}
+                "apk_version": _apk_version(), "modules": sorted(on),
+                "look": config.look(config.load())}
 
     @_handle
     async def info(request: Request):

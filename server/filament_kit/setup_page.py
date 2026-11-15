@@ -496,10 +496,16 @@ class SetupPage:
         if not self._host_ok(request):
             return HTMLResponse(f"<!doctype html><p>{html.escape(bad_host_text())}</p>",
                                 403, headers=HEADERS)
-        name = html.escape(config.load()["server_name"])
+        cfg = config.load()
+        name = html.escape(cfg["server_name"])
+        from .web.intake_app import _colours
+        look = config.look(cfg)
+        colours = _colours(self.shared)[look]
         return HTMLResponse(
-            "<!doctype html><html lang=en><meta charset=utf-8>"
+            f"<!doctype html><html lang=en data-look={look}><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
+            f"<meta name=theme-color content='{colours['light'][0]}' media='(prefers-color-scheme: light)'>"
+            f"<meta name=theme-color content='{colours['dark'][0]}' media='(prefers-color-scheme: dark)'>"
             "<script src='/setup/shared/theme-init.js'></script><script defer src='/setup/shared/strings.js'></script>"
             "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
             "<script defer src='/setup/shared/components-jobs.js'></script>"
@@ -566,6 +572,7 @@ class SetupPage:
         from .setup_console import jobs
         return {
             "server_name": cfg["server_name"], "address": setup_code.page_url(cfg), "code_set": setup_code.is_set(),
+            "appearance": {"theme": config.look(cfg)},      # the theme for new devices (S6.1); Console when unknown
             "version": __version__, "mode": modules.mode_of(on),
             "modes": [{"name": n, "modules": sorted(m), "here": "server" in m} for n, m in modules.MODES.items()],
             "modules": [{"name": n, "title": m.title, "description": m.description, "needs": modules.needs_of(n),

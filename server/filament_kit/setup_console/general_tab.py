@@ -36,6 +36,7 @@ def _view() -> dict:
     cfg = config.load()
     on = modules.enabled(cfg)
     values = {k: setup_helper.general_value(cfg, k) for k in setup_helper.GENERAL}
+    values["appearance.theme"] = config.look(cfg)       # an unknown stored value reads as Console, as the shells do
     return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
             "ai_intake_on": "ai_intake" in on, "local_intake_on": "local_intake" in on,
             "local_intake_installed": local_intake_install.installed(),

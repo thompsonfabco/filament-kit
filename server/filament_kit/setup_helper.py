@@ -562,6 +562,12 @@ def _reader_tier(value) -> str:
     return value
 
 
+def _look(value) -> str:
+    if value not in config.LOOKS:
+        raise ValueError("must be one of: " + ", ".join(config.LOOKS))
+    return value
+
+
 def _tts(value) -> str:
     if value not in ("auto", "espeak"):
         raise ValueError("must be auto or espeak")
@@ -582,6 +588,7 @@ GENERAL = {
     "placement.box_count": (lambda v: _whole(v, 0, 999), None),
     "placement.overflow": (lambda v: _one_line(v, 100), None),
     "station.tts": (_tts, "apply"),
+    "appearance.theme": (_look, None),      # read on every page and api/info: no restart
     "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
     "web.printer_changes": (_bool, None),   # read on every request (printers_app.changes_allowed): no restart
     # read on every label read (intake._call): no restart
