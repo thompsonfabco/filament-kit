@@ -1,33 +1,33 @@
 # Use the web app on an iPhone
 
-There is no filament-kit app for iPhone. Instead, the server can run a **phone web app** that works in Safari,
+There is no filament-kit app for iPhone. Instead, the Hub can run a **web app** that works in Safari,
 and you can put it on your home screen so it opens like an app. It also works in any other phone browser,
 Android included.
 
-The web app does most of what the Android app does:
+The web app does most of what the app (Android) does:
 
-- **Add spools**: pick a filament you already have or type a new one in, check it (a dry run), then add it.
-  With AI label reading on at the server, you can also photograph labels.
-- **Open spool**: link a tag you tapped on a reader (the intake station or a printer's reader) to a spool and
+- **Add spools**: pick a filament you already have or type a new one in, check it (a preview, nothing is saved yet), then add it.
+  With the Label Reader's Cloud engine on at the Hub, you can also photograph labels.
+- **Open spool**: link a tag you tapped on a reader (a Weigh Station or a Tag Reader) to a spool and
   record its weight and place. The iPhone itself does not read the tag.
-- **Presets**: see which filaments still need a slicer preset, and build presets.
-- **Printers** (when the `printers` module is on): live status, the camera, pause, resume and stop, the
+- **Slicer presets**: see which filaments still need a Slicer preset, and build Slicer presets.
+- **Printers** (when the Bambu Lab printers Feature is on): live status, the camera, pause, resume and stop, the
   chamber light, what is in each AMS slot and the filament usage log.
 
-It only works **on your home network**. Away from home it says "Spool intake only works on the home network."
+It only works **on your home network**. Away from home it says "filament-kit only works on the home network."
 There is no sign-in: anyone on your home Wi-Fi can use it.
 
-> **At home it needs no setup.** The kit server serves the web app itself at
-> `https://<server name>.local:8710/intake` (the setup page's **Devices** tab shows the address and a QR code).
-> Safari warns once about the server's own certificate: accept it to go on. To avoid the warning, or to reach the
-> app with a name of your own, use one of the two ways below (the `web` module and a web server in front). None of
+> **At home it needs no setup.** The Hub serves the web app itself at
+> `https://<server name>.local:8710/intake` (the Hub page's **Devices** section shows the address and a QR code).
+> Safari warns once about the Hub's own certificate: accept it to go on. To avoid the warning, or to reach the
+> app with a name of your own, use one of the two ways below (the `web` Feature and a web server in front). None of
 > this has been tried on a real iPhone yet; see [Known gaps](known-gaps.md).
 
 ## What you need
 
-- The **filament-kit server installed and running**: [Install the server](install-server.md).
-- An **iPhone with Safari**, on the same Wi-Fi network as the server.
-- For way A or B: access to the server's Terminal.
+- The **Hub installed and running**: [Install the Hub](install-server.md).
+- An **iPhone with Safari**, on the same Wi-Fi network as the Hub.
+- For way A or B: access to the Hub's Terminal.
 - For [way B](#way-b-a-public-name-with-a-real-certificate) only: a domain name you control, and access to your
   router's port forwarding.
 
@@ -36,7 +36,7 @@ There is no sign-in: anyone on your home Wi-Fi can use it.
 | | The built-in address | Way A: home only, nginx | Way B: a public name |
 |---|---|---|---|
 | Address | `https://<server name>.local:8710/intake` | `https://<computer name>.local/filament` | `https://filament.example.com/filament` (your own name) |
-| What you need | nothing: the server serves it | the `web` and `remote` modules (the kit installs nginx) | a domain name, ports 80 and 443 forwarded to the server |
+| What you need | nothing: the Hub serves it | the `web` and `remote` Features (filament-kit installs nginx) | a domain name, ports 80 and 443 forwarded to the Hub |
 | Safari | warns about the certificate (you accept it once) | warns about the certificate (you accept it once) | no warnings |
 | Also gives you | | an address without a port number | the Claude connector from outside |
 
@@ -44,13 +44,13 @@ Start with the built-in address. Use way A or B only to avoid the warning or to 
 
 ## The built-in address: no setup
 
-1. Open the setup page's **Devices** tab: it shows the address and a QR code. Or build it yourself: the server's name
+1. Open the Hub page's **Devices** section: it shows the address and a QR code. Or build it yourself: the Hub's name
    from `hostname`, for example `https://my-server.local:8710/intake`.
 2. Go on to [Open it in Safari](#open-it-in-safari-and-add-it-to-the-home-screen) and use that address.
 
 ## Way A: home only
 
-1. On the server, find the computer's name:
+1. On the Hub, find the computer's name:
 
    ```bash
    hostname
@@ -58,19 +58,19 @@ Start with the built-in address. Use way A or B only to avoid the warning or to 
 
    Say it prints `my-server`. Your address is then `https://my-server.local/filament`.
 
-2. Open the settings menu:
+2. Open the Features checklist:
 
    ```bash
-   sudo filament-kit config
+   sudo filament-kit features menu
    ```
 
-3. Type `6` and press Enter (**Modules**). A checklist of modules appears. Move with the arrow keys and press Space
-   on **web** and on **remote** to tick them. Then press Enter to apply.
+3. A checklist of Features appears. Move with the arrow keys and press Space
+   on **Web access** and on **Remote access** to tick them. Then press Enter to apply.
 4. When it asks `web needs its public https address`, type your address, for example
    `https://my-server.local/filament`, and press Enter.
-5. Back at the settings menu, type `0` and press Enter to save. The kit installs nginx and sets it up. Among its
+5. filament-kit installs nginx and sets it up. Among its
    output it prints a list of firewall and router rules: for home-only use you can **ignore them**. Do not run
-   `sudo filament-kit remote issue`: that only works with a public name.
+   `sudo filament-kit remote get-certificate`: that only works with a public name.
 6. Check it:
 
    ```bash
@@ -81,16 +81,16 @@ Start with the built-in address. Use way A or B only to avoid the warning or to 
    `--   sign-in passphrase not set`. That passphrase is only for the Claude connector, not for the phone web
    app, so you can ignore it (or set one with `sudo filament-kit web passphrase`).
 
-nginx now serves the web app with a certificate the server made itself. Safari doesn't know that certificate, so
+nginx now serves the web app with a certificate the Hub made itself. Safari doesn't know that certificate, so
 it warns the first time (see below).
 
 ## Way B: a public name with a real certificate
 
-Use this if you have a domain name, or want the Claude connector to reach your server from the internet.
+Use this if you have a domain name, or want the Claude connector to reach your Hub from the internet.
 
 1. Pick a name such as `filament.example.com`, and in your domain's DNS point it at your home's public IP address.
-2. **At home, the same name must lead to the server.** Many routers handle this by themselves ("NAT loopback").
-   If yours doesn't, add a local DNS entry for the name on your router pointing at the server's home IP address.
+2. **At home, the same name must lead to the Hub.** Many routers handle this by themselves ("NAT loopback").
+   If yours doesn't, add a local DNS entry for the name on your router pointing at the Hub's home IP address.
 3. Do steps 2 to 5 of way A, with the address `https://filament.example.com/filament`.
 4. Print the rules you need and set them up on your router and firewall:
 
@@ -98,11 +98,11 @@ Use this if you have a domain name, or want the Claude connector to reach your s
    sudo filament-kit remote firewall
    ```
 
-   They are: port 443 to the server, and port 80 to the server while a certificate is issued.
+   They are: port 443 to the Hub, and port 80 to the Hub while a certificate is issued.
 5. Get the certificate:
 
    ```bash
-   sudo filament-kit remote issue
+      sudo filament-kit remote get-certificate
    ```
 
    From then on the certificate renews itself.
@@ -116,8 +116,8 @@ More about this, and keeping port 80 closed most of the time: [user guide, Remot
    to your address, for example `https://my-server.local/filament/intake`.
 3. **The built-in address and way A:** Safari says **This Connection Is Not Private**. Tap **Show Details**, then
    **visit this website**, and confirm with **Visit Website**.
-4. The web app opens on **Add spools**, with the tabs **Add spools**, **Open spool**, **Presets** and (with the
-   printers module) **Printers** at the top.
+4. The web app opens on **Add spools**, with the tabs **Add spools**, **Open spool**, **Slicer presets** and (with the
+   Bambu Lab printers Feature) **Printers** at the top.
 5. Tap the **Share** button (the square with an arrow), scroll down and tap **Add to Home Screen**.
 6. The name is **Spools**. Change it if you like and tap **Add**.
 
@@ -132,16 +132,16 @@ keeps working with an accepted self-signed certificate has not been tried on a r
 2. Fill in the card: at least **Vendor**, **Material** and **Name (with the colour)**, then **Spools** (how
    many), **Net g** and the **Location** (**Auto** picks one for you). Tick **Still sealed** for a spool still
    in its bag.
-3. Tap **Check (dry run)**. It shows what would be added and changes nothing.
+3. Tap **Check**. It shows what would be added and changes nothing (a preview).
 4. If it looks right, tap **Add 1 spool** (or **Add 3 spools**, and so on). Any change after the check needs a new
    check.
 
-**From label photos** (**Take or choose photos**) only appears when AI label reading (the `ai_intake` module)
-is on at the server.
+**From label photos** (**Take or choose photos**) only appears when the Label Reader's Cloud engine (the `ai_intake` Feature)
+is on at the Hub.
 
 ## Load and unload a spool from the Printers tab (v0.4.0)
 
-The **Printers** tab (it needs the `printers` module) shows each printer live: status, camera, controls and the
+The **Printers** tab (it needs the Bambu Lab printers Feature) shows each printer live: status, camera, controls and the
 filament in each slot.
 
 **Load.** Next to a slot, tap **Load**. A picker opens: find the spool and tap it. The page first shows the plan
@@ -153,34 +153,34 @@ does nothing.
 **Unload.** Next to a slot with a spool, tap **Unload**. It asks, for example, "Unload PETG Grey from AMS1-2? It
 goes back to Shelf A." Tap **OK**. Only your inventory changes; the printer's own slot setting stays as it is.
 
-The same rules as the Android app apply: for example, while a print runs, the slot that feeds the job is refused.
-See [Using the Android app](android-app.md#load-and-unload-a-spool). The tab also has the filament usage with undo,
+The same rules as the app (Android) apply: for example, while a print runs, the slot that feeds the job is refused.
+See [Using the app](android-app.md#load-and-unload-a-spool). The tab also has the filament usage with undo,
 re-mapping slots and optional notifications.
 
 ## Common problems
 
-- **"Spool intake only works on the home network"** while you are at home:
+- **"filament-kit only works on the home network"** while you are at home:
   - Check that the iPhone is on your home Wi-Fi, not mobile data.
-  - The kit counts addresses starting with `192.168.` and `10.` as home. If your home network uses addresses
+  - filament-kit counts addresses starting with `192.168.` and `10.` as home. If your home network uses addresses
     starting with `172.16.` to `172.31.`, add your network to `/etc/filament-kit/config.json` under `"web"`, for
-    example `"lan": ["172.20.0.0/16"]`, then run `sudo filament-kit modules apply`. (On iPhone: Settings → Wi-Fi →
+    example `"lan": ["172.20.0.0/16"]`, then run `sudo filament-kit features apply`. (On iPhone: Settings → Wi-Fi →
     the ⓘ next to your network shows the iPhone's address.)
   - Way B: if your router doesn't do NAT loopback, the phone goes out to the internet and back, and looks like it
     is away from home. Add the local DNS entry from way B, step 2.
-- **Safari can't find the server** (way A): `.local` names need the iPhone and the server on the same network.
-  Check `sudo filament-kit status` on the server. If Ubuntu's firewall (`ufw`) is on, allow
+- **Safari can't find the Hub** (way A): `.local` names need the iPhone and the Hub on the same network.
+  Check `sudo filament-kit status` on the Hub. If Ubuntu's firewall (`ufw`) is on, allow
   `sudo ufw allow 443/tcp` and `sudo ufw allow 5353/udp`.
-- **`web needs web.public_url set`** when you run `sudo filament-kit modules enable web` without a terminal: it can
-  only ask for the address at a terminal. Run it in a Terminal, or use `sudo filament-kit config` → **6) Modules**
+- **`web needs web.public_url set`** when you run `sudo filament-kit features on web` without a terminal: it can
+  only ask for the address at a terminal. Run it in a Terminal, or use `sudo filament-kit features menu`
   as above.
-- **The certificate warning comes back** (way A): each time the server's certificate changes (after
+- **The certificate warning comes back** (way A): each time the Hub's certificate changes (after
   reinstalling), Safari asks again. Accept it again. The placeholder certificate lasts 825 days. Running
-  `sudo filament-kit modules apply` makes a new one within 30 days of its end (`sudo filament-kit web status` warns
+  `sudo filament-kit features apply` makes a new one within 30 days of its end (`sudo filament-kit web status` warns
   before that), and Safari asks you to accept it again.
-- **The page says "This device reached the server over IPv6"**: the web address answers only the ranges in `web.lan`,
+- **The page says `This device reached the server over IPv6`**: the web address answers only the ranges in `web.lan`,
   and none of them is an IPv6 range by default. Add your home network's IPv6 prefix:
-  [The home network ranges](user-guide.md#the-home-network-ranges-weblan). The setup page is IPv4 only.
-- **Printer camera doesn't play**: the camera needs the `printers` module and a printer added in the app or in
-  `sudo filament-kit config` → **5) Printers**.
+  [The home network ranges](user-guide.md#the-home-network-ranges-weblan). The Hub page is IPv4 only.
+- **Printer camera doesn't play**: the camera needs the Bambu Lab printers Feature and a printer added in the app or with
+  `sudo filament-kit printer add`.
 
-More about the web app and the Claude connector: [user guide, Claude connector and phone web app](user-guide.md#claude-connector-and-phone-web-app).
+More about the web app and the Claude connector: [user guide, Claude connector and web app](user-guide.md#claude-connector-and-phone-web-app).

@@ -5,20 +5,20 @@ If you enjoy what I do, consider supporting me! Every little bit means the world
 filament-kit keeps track of your 3D printer filament. It runs on a small computer at home, keeps every spool you
 own in [Spoolman](https://github.com/Donkie/Spoolman), and connects those spools to your Bambu Lab printers: add
 a spool from your phone, load it into a printer slot, and the printer gets the right filament setting while the
-filament it uses comes off that spool. It also builds slicer presets for every filament you own.
+filament it uses comes off that spool. It also builds Slicer presets for every filament you own.
 
 The goal is a kit a normal user can set up without being a developer: one command installs it, a menu picks
-the parts you want and says what each one needs, AI is optional, every Bambu Lab printer is supported (Klipper
+the Features you want and says what each one needs, AI is optional, every Bambu Lab printer is supported (Klipper
 printers work through Moonraker; Prusa printers are planned), the facts about printers live in data files you can correct yourself, and it
-can keep itself up to date. The whole kit is free software (GPL-3.0).
+can keep itself up to date. The whole of filament-kit is free software (GPL-3.0).
 
 ## What you need
 
 - A computer running **Ubuntu 24.04 or newer** on your home network that stays on (an old laptop or a mini PC).
 - An **Android phone** (Android 10 or newer), or an **iPhone** for the web app.
-- One or more **Bambu Lab printers** on the same network. The kit works without a printer too, as a spool list.
-- Optional: a Windows PC with Bambu Studio (for the presets), an Anthropic API key (for AI label reading), a USB
-  scale and an NFC reader (for the intake station).
+- One or more **Bambu Lab printers** on the same network. filament-kit works without a printer too, as a spool list.
+- Optional: a Windows PC with Bambu Studio (for Slicer presets), an Anthropic API key (for the Label Reader's Cloud
+  engine), a USB scale and a tag reader (for the Weigh Station).
 
 ## Install
 
@@ -36,87 +36,87 @@ wget -q https://github.com/thompsonfabco/filament-kit/releases/latest/download/g
 
 It downloads the installer (`get.sh`) and runs it. The installer fetches the newest release, checks its
 signature, and asks a few questions (pressing Enter at each one is fine). At the end it shows a QR code for pairing your phone. Step by step, with every question and what you see:
-**[Install the server](docs/install-server.md)**.
+**[Install the Hub](docs/install-server.md)**.
 
 This is a beta: [Known gaps](docs/known-gaps.md) lists what is still rough.
 
 Then, on your phone:
 
-- **Android:** [Install the Android app](docs/install-android-app.md) and pair it with the server, then see [Using the Android app](docs/android-app.md) for printers and adding spools.
+- **Android:** [Install the app](docs/install-android-app.md) and pair it with the Hub, then see [Using the app](docs/android-app.md) for printers and adding spools.
 - **iPhone** (or any phone browser): [Use the web app on an iPhone](docs/install-iphone-web-app.md).
 - **Then, in the app:** set up your printer, map its slots and load a spool:
   [Set up a printer](docs/android-app.md#2-set-up-a-printer).
 
-Optional afterwards: the PC sync for Bambu Studio presets ([Pair your PC](#pair-your-pc)), an intake station with
-a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the
-[Printer Station](#the-reader).
+Optional afterwards: Slicer Sync for Slicer presets in Bambu Studio ([Pair your PC](#pair-your-pc)), a Weigh Station with
+a scale and a tag reader ([Weigh Station](docs/user-guide.md#intake-station)), and a
+[Tag Reader](#the-reader).
 
 Your spool list is also in any web browser at home, at `http://<computer name>.local:7912` (the installer prints
 the address). Spoolman has no sign-in, so it answers only this computer and your home network (by default
 `localhost`, `192.168.0.0/16` and `10.0.0.0/8`): anyone on those can open and edit it. The list is `spoolman.allow` in
 `/etc/filament-kit/config.json` (a list of networks; empty means this computer only). If you use Tailscale or Docker,
-or Spoolman runs on another machine, you may need to add that network, then run `sudo filament-kit modules apply`. If something doesn't work, `sudo filament-kit status` on the server checks everything and says
+or Spoolman runs on another machine, you may need to add that network, then run `sudo filament-kit features apply`. If something doesn't work, `sudo filament-kit status` on the Hub checks everything and says
 what to do about a failing line.
 
-Everything else (every command, printers and slot mapping, presets, the station, the Claude connector, remote
+Everything else (every command, printers and slot mapping, Slicer presets, the Weigh Station, the Claude connector, remote
 access) is in the **[user guide](docs/user-guide.md)**.
 
 ## What it does
 
-- **Add spools** from the Android app or the phone web app: type them in, or pick a filament you already have.
-  Reading the label from a photo is **optional AI** (your own Anthropic API key); everything else works without it.
-- **Load a spool into a printer slot** from the app, or tap its NFC tag on the Printer Station: the printer gets the
+- **Add spools** from the app (Android) or the web app: type them in, or pick a filament you already have.
+  Reading the label from a photo (the **Label Reader**) is **optional AI** (your own Anthropic API key); everything else works without it.
+- **Load a spool into a printer slot** from the app, or tap its NFC tag on a Tag Reader: the printer gets the
   right filament setting and Spoolman the spool's new location. Filament used in a print comes off the right
   spools, after a one-time slot mapping.
-- **Build slicer presets**: a Bambu Studio (and, if you like, Orca Slicer) preset for every filament line you own
+- **Build Slicer presets**: a Bambu Studio (and, if you like, Orca Slicer) preset for every filament line you own
   (a line is a brand's product, without the colour);
-  the PC sync installs them on your Windows PC.
-- **Weigh a spool and read its tag** at an intake station (USB scale and NFC reader), **back up** every night, and
-  **update** from signed releases (by hand, or daily with the `updates` module).
+  Slicer Sync installs them on your Windows PC.
+- **Weigh a spool and read its tag** at a Weigh Station (USB scale and tag reader), **back up** every night, and
+  **update** from signed releases (by hand, or daily with the Automatic updates Feature).
 
-## Modules
+<a id="modules"></a>
+## Features
 
-The kit is made of modules. A **mode** is a ready-made set: `server` (the default) is Spoolman, server, printers,
-presets and backup; `station` is only the station; `all-in-one` is both. AI, the web part, remote access, orders,
-the library and auto-update are off until you turn them on. Change them any time with `sudo filament-kit config`
-(**6) Modules**): a checklist where each module says what it needs. Turning a module off never deletes its data.
+filament-kit is made of Features. A **Setup** is a ready-made set: **Hub** (the default) is Spoolman, the Hub service,
+printers, Slicer presets and backup; **Weigh Station only** is only the Weigh Station; **Hub with Weigh Station** is both. AI, web access,
+remote access, orders, the Filament Catalog and automatic updates are off until you turn them on. Change them any time with
+`sudo filament-kit features menu`: a checklist where each Feature says what it needs. Turning a Feature off never deletes its data.
 
-| Module | What it is | Needs |
+| Feature | What it is | Needs |
 |---|---|---|
 | `spoolman` | Spoolman filament database, run on this machine | nothing |
-| `server` | App server: pairing, inventory, API, avahi announcement | Spoolman (this machine or a remote one) |
-| `ai_intake` | **Optional AI**: Claude reads spool labels from photos | `server`, an Anthropic API key |
-| `printers` | Bambu bridge: discovery, usage, slot mapping, camera | `server` |
-| `presets` | Bambu Studio preset builds and PC sync | `server`, a Windows PC with Bambu Studio |
-| `library` | Filament spec library: downloaded on request, then a daily update | nothing |
+| `server` | Hub service: pairing, inventory, API, Hub page, avahi announcement | Spoolman (this machine or a remote one) |
+| `ai_intake` | **Optional AI**: Label Reader: Cloud (Claude) reads spool labels from photos | `server`, an Anthropic API key |
+| `printers` | Bambu Lab printers: discovery, usage, slot mapping, camera | `server` |
+| `presets` | Slicer presets: builds for Bambu Studio and Orca Slicer, and Slicer Sync | `server`, a Windows PC with Bambu Studio |
+| `library` | Filament Catalog: downloaded on request, then a daily update | nothing |
 | `backup` | Nightly backup of the Spoolman database, settings and state | nothing |
-| `station` | USB scale and PN532 reader, read-only HTTP | a DYMO M10 USB scale and a PN532 NFC reader |
-| `web` | Phone web app and the Claude connector (MCP), on top of the server | `server`, an https address (`web.public_url`) |
-| `remote` | nginx in front of the web part, and a public https name (certbot) | `web`; for a public name: DNS, ports 443 and 80 |
+| `station` | Weigh Station: USB scale and PN532 reader, read-only HTTP | a DYMO M10 USB scale and a PN532 tag reader |
+| `web` | Web access: the web app and the Claude connector (MCP), on top of the Hub service | `server`, an https address (`web.public_url`) |
+| `remote` | Remote access: nginx in front of web access, and a public https name (certbot) | `web`; for a public name: DNS, ports 443 and 80 |
 | `orders` | Order history file for the shop tools | `ai_intake` (order matching needs the Claude reader), an order history file (`orders.file`) |
-| `updates` | Daily check for a new signed release; installs it and keeps the one before | nothing |
+| `updates` | Automatic updates: a daily check for a new signed release; installs it and keeps the one before | nothing |
 | `klipper` | Klipper printers through Moonraker: discovery, spool loads, usage log, camera ([docs/klipper.md](docs/klipper.md)) | `server`, a Klipper printer with Moonraker |
-| `local_intake` | **Optional AI**: a label reader on your own network reads spool photos, no cloud | `server`, the local reader service (local_intake.url) |
+| `local_intake` | **Optional AI**: Label Reader: On this Hub, a label reader on your own network reads spool photos, no cloud | `server`, the local reader service (local_intake.url) |
 
 ## The phone app
 
 On Android, install `filament-kit.apk` from the Releases page (Android 10 or newer), run `sudo filament-kit pair`
-on the server and scan the QR code it prints: [Install the Android app](docs/install-android-app.md), then [Using the Android app](docs/android-app.md) for printers and spools. On an iPhone
-or in any phone browser, the `web` module gives the same tasks as a web app you can put on the home screen:
-[Use the web app on an iPhone](docs/install-iphone-web-app.md). `sudo filament-kit unpair` lists and removes
-paired phones.
+on the Hub and scan the QR code it prints: [Install the app](docs/install-android-app.md), then [Using the app](docs/android-app.md) for printers and spools. On an iPhone
+or in any phone browser, the `web` Feature (Web access) gives the same tasks as a web app you can put on the home screen:
+[Use the web app on an iPhone](docs/install-iphone-web-app.md). `sudo filament-kit devices` lists paired phones, and `sudo filament-kit devices forget <device>` removes one.
 
 ## Pair your PC
 
-For the Bambu Studio presets: install `filament-kit-sync-setup-<version>.exe` from the Releases page on the
-Windows PC with Bambu Studio, run `sudo filament-kit pair --pc` on the server and paste the link it prints into
+For Slicer presets in Bambu Studio: install `filament-kit-sync-setup-<version>.exe` from the Releases page on the
+Windows PC with Bambu Studio, run `sudo filament-kit pair --slicer-sync` on the Hub and paste the link it prints into
 the setup's console. It keeps both stable and Beta Bambu Studio current (v0.4.0). Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide. On Linux, use
-`filament-kit-sync-linux-x86_64-<version>.tar.gz` instead: [PC sync on Linux](docs/user-guide.md#pc-sync-on-linux).
+`filament-kit-sync-linux-x86_64-<version>.tar.gz` instead: [Slicer Sync on Linux](docs/user-guide.md#pc-sync-on-linux).
 
 ## The reader
 
-A small ESP32-C3 box next to the printer: tap a spool's tag, turn the knob to a slot, and the spool is loaded
-there. It talks to the `web` module: make its token with `sudo filament-kit reader token --name bench`. Its API and firmware build are in [reader/README.md](reader/README.md), and its parts and wiring in the
+A Tag Reader is a small ESP32-C3 box next to the printer: tap a spool's tag, turn the knob to a slot, and the spool is loaded
+there. It talks to the `web` Feature: make its token with `sudo filament-kit tag-reader new-token --name bench`. Its API and firmware build are in [reader/README.md](reader/README.md), and its parts and wiring in the
 [hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/printer-station).
 
 ## Supported printers
@@ -132,7 +132,7 @@ bring new versions of it. To correct or add something yourself, see
 [Your own printer data](docs/user-guide.md#your-own-printer-data-override).
 
 Printers are found on the network (the computer must be on the same network segment; allow UDP 2021 and 1990 if
-it runs a firewall). Add one by hand with `sudo filament-kit config` > **Printers** > **add printer**. See
+it runs a firewall). Add one by hand with `sudo filament-kit printer add`. See
 [Bambu Lab printers](docs/user-guide.md#bambu-lab-printers).
 
 ## Updates and rollback
@@ -140,24 +140,25 @@ it runs a firewall). Add one by hand with `sudo filament-kit config` > **Printer
 - `sudo filament-kit update --check`: says whether a newer release is out.
 - `sudo filament-kit update`: downloads it, checks its signature and hash as the installer does, and installs it.
   Your spools, settings and paired phones stay, and the version it replaced is kept. It does nothing while a
-  printer is mapping slots or loading a spool. When the release carries a newer Android app, paired phones
+  printer is mapping slots or loading a spool. When the release carries a newer app (Android), paired phones
   offer it on their home screen.
 - `sudo filament-kit update --rollback`: goes back to that version.
-- `sudo filament-kit modules enable updates`: checks every day and installs on its own. Details:
+- `sudo filament-kit features on updates`: checks every day and installs on its own. Details:
   [Update](docs/user-guide.md#update).
 
-## The filament library
+<a id="the-filament-library"></a>
+## The Filament Catalog
 
-Published filament specs (temperatures, speeds) for the presets. It is optional and nothing needs it: ask for it
-with `sudo filament-kit library update`, or turn on the `library` module to also check daily. See
-[Spec library updates](docs/user-guide.md#spec-library-updates).
+Published filament specs (temperatures, speeds) for Slicer presets. It is optional and nothing needs it: ask for it
+with `sudo filament-kit catalog update`, or turn on the `library` Feature to also check daily. See
+[Filament Catalog updates](docs/user-guide.md#spec-library-updates).
 
 ## Where your data lives
 
 | Path | What |
 |---|---|
-| `/etc/filament-kit` | Settings (`config.json`), the server certificate, the API key, the web passphrase, your hardware file |
-| `/var/lib/filament-kit` | Paired phones, printers, slot maps, usage, presets, the library, reader tokens |
+| `/etc/filament-kit` | Settings (`config.json`), the Hub's certificate, the API key, the web passphrase, your hardware file |
+| `/var/lib/filament-kit` | Paired phones, printers, slot maps, usage, Slicer presets, the Filament Catalog, Tag Reader tokens |
 | `/var/lib/filament-kit-web` | The web app's own state (v0.4.0): Claude connector sign-ins, its token, push keys |
 | `/var/lib/spoolman` | Spoolman's database (your spools) |
 | `/var/backups/filament-kit` | Nightly backups (14 days) |
@@ -166,15 +167,15 @@ with `sudo filament-kit library update`, or turn on the `library` module to also
 ## Uninstall
 
 `sudo filament-kit uninstall` removes the programs and keeps your spools, settings and backups;
-`--purge` deletes those too (it asks you to type `purge`). What stays behind, and what to do if the kit has no kept copy of the release: [Install the server, Uninstall](docs/install-server.md#uninstall).
+`--purge` deletes those too (it asks you to type `purge`). What stays behind, and what to do if there is no kept copy of the release: [Install the Hub, Uninstall](docs/install-server.md#uninstall).
 
 ## More
 
 - [docs/install-server.md](docs/install-server.md), [docs/install-android-app.md](docs/install-android-app.md), [docs/android-app.md](docs/android-app.md),
   [docs/install-iphone-web-app.md](docs/install-iphone-web-app.md): the how-tos.
-- [docs/user-guide.md](docs/user-guide.md): install modes, every command, printers and slot mapping, presets,
-  the intake station, the Claude connector and phone web app, remote access, order history, troubleshooting.
-- [docs/klipper.md](docs/klipper.md): Klipper printers (Moonraker), the printer pack and Spool Sync.
+- [docs/user-guide.md](docs/user-guide.md): Setups, every command, printers and slot mapping, Slicer presets,
+  the Weigh Station, the Claude connector and the web app, remote access, order history, troubleshooting.
+- [docs/klipper.md](docs/klipper.md): Klipper printers (Moonraker), the Klipper add-on and Spool Sync.
 - [docs/known-gaps.md](docs/known-gaps.md): what doesn't work the way the how-tos describe yet.
 - For maintainers and contributors: [docs/maintainer.md](docs/maintainer.md) (releases, signing keys, secrets),
   [docs/testing-e2e.md](docs/testing-e2e.md) and [docs/android-e2e.md](docs/android-e2e.md) (the end-to-end
