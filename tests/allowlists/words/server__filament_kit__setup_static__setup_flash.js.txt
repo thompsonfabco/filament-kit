@@ -1,0 +1,1 @@
+server/filament_kit/setup_static/setup_flash.js | intake | 1 | the Hub's own id of the display firmware (intake-panel); reviewed when the file moves to the string catalogue; S7.2 removes the last

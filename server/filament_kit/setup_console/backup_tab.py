@@ -61,7 +61,7 @@ def routes(page) -> list[tuple]:
         dest = backup.uploaded()
         declared = request.headers.get("content-length")
         if declared and declared.isdigit() and int(declared) > MAX_UPLOAD:
-            raise Refused(413, "the backup is larger than the page takes; copy it to the server and run: "
+            raise Refused(413, "the backup is larger than the page takes; copy it to the Hub and run: "
                                "sudo filament-kit restore <file>")
         await anyio.to_thread.run_sync(lambda: shutil.rmtree(dest.parent, ignore_errors=True))
         await anyio.to_thread.run_sync(lambda: dest.parent.mkdir(mode=0o700, parents=True, exist_ok=True))
@@ -73,7 +73,7 @@ def routes(page) -> list[tuple]:
                 async for chunk in request.stream():
                     n += len(chunk)
                     if n > MAX_UPLOAD:
-                        raise Refused(413, "the backup is larger than the page takes; copy it to the server and run: "
+                        raise Refused(413, "the backup is larger than the page takes; copy it to the Hub and run: "
                                            "sudo filament-kit restore <file>")
                     await anyio.to_thread.run_sync(fh.write, chunk)
             os.replace(part, dest)

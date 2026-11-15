@@ -40,7 +40,7 @@ def test_status_lines_on_a_server(cfg, capsys, monkeypatch):
         "--   display name: Workshop",
         "--   paired devices: 0",
         f"--   reads used today: 0 of {cfg['reads_per_day']}",
-        "--   library version 7 (bundled), 1 local addition",
+        "--   Filament Catalog version 7 (bundled), 1 local addition",
     ]
 
 
@@ -68,12 +68,12 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
         "     fix: run: sudo filament-kit config  (option 4)",
         f"FAIL certificate missing ({config.paths().etc / 'cert.pem'})",
         "     fix: run: sudo filament-kit cert",
-        "FAIL station not answering at http://192.0.2.30:5003",
-        "     fix: check the station machine: sudo systemctl status filament-kit-station  (url http://192.0.2.30:5003)",
+        "FAIL Weigh Station not answering at http://192.0.2.30:5003",
+        "     fix: check the Weigh Station machine: sudo systemctl status filament-kit-station  (url http://192.0.2.30:5003)",
         "--   display name: Workshop",
         "--   paired devices: 0",
         f"--   reads used today: 0 of {cfg['reads_per_day']}",
-        "--   library version 7 (bundled), 1 local addition",
+        "--   Filament Catalog version 7 (bundled), 1 local addition",
     ]
 
 
@@ -85,13 +85,13 @@ def test_web_status_lines(cfg, capsys, monkeypatch):
     assert cli.main(["web", "status"]) == 0
     port = cfg["web"]["port"]
     assert lines(capsys) == [
-        "OK   web module is on",
+        "OK   Web access is on",
         "OK   public URL https://printer.example.com/filament",
-        "     connector: https://printer.example.com/filament/mcp   phone app: https://printer.example.com/filament/intake",
+        "     connector: https://printer.example.com/filament/mcp   web app: https://printer.example.com/filament/intake",
         "--   sign-in passphrase not set: the Claude connector cannot sign in until `sudo filament-kit web passphrase`",
         f"OK   web unit answers on 127.0.0.1:{port}",
         "     connectors: none signed in yet",
-        "     printer slots: none; tag readers: 0 + no station",
+        "     printer slots: none; tag readers: 0 + no Weigh Station",
     ]
 
 

@@ -1,0 +1,42 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | ai_off | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | api_error | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bad_key | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bad_response | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | bed_range | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color_family | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color_hex | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color_name | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | confidence | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | daily_cap | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | density | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | detected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | edited | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | estimates | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | field_confidence | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | filament | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | id | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | line | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | local_busy | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | local_network | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | material | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | name | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | net | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | no_photo | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | nozzle | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | nozzle_range | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | offline | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | phone | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | price_per_kg | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | rate_limited | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | record | key of a view model in its back stack entry; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | refused | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | revised_ai | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | spoolman_unreachable | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | station | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | tare | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | truncated | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unauthorized | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unknown | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unreachable | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | vendor | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)

@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMap.kt | none | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMap.kt | stale | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMap.kt | unauthorized | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)

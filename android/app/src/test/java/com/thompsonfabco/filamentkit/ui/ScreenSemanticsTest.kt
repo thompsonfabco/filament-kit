@@ -407,8 +407,7 @@ class ScreenSemanticsTest {
 
     private val camera = CameraSource(OkHttpClient(), "https://hub.example/hls", "https://hub.example/mjpeg", emptyMap())
 
-    private fun showPrinter(): Triple<PrinterViewModel, PrinterToolsViewModel, FakePrinters> {
-        val backend = FakePrinters()
+    private fun showPrinter(backend: FakePrinters = FakePrinters()): Triple<PrinterViewModel, PrinterToolsViewModel, FakePrinters> {
         val vm = PrinterViewModel(backend, "ABC123", pollMs = 600_000)
         val tools = PrinterToolsViewModel(FakeTools(), "ABC123", pollMs = 600_000)
         host("Workshop X1") { PrinterScreen(vm, tools, camera, onPairAgain = {}) }
@@ -466,6 +465,14 @@ class ScreenSemanticsTest {
         rule.onNodeWithText("Stop benchy.3mf on Workshop X1? It cannot be resumed.").assertExists()
     }
 
+    @Test fun theStopDialogOfAPrinterWithNoJobName() {
+        val (vm) = showPrinter(FakePrinters(job = ""))
+        rule.waitForIdle()
+        vm.askStop()
+        auditWindowsAllFour("Stop the print?")
+        rule.onNodeWithText("Stop the print on Workshop X1? It cannot be resumed.").assertExists()
+    }
+
     @Test fun theMapSlotsDialog() {
         val (_, tools) = showPrinter()
         rule.waitForIdle()
@@ -502,6 +509,15 @@ class ScreenSemanticsTest {
         vm.askUnload(vm.state.value.status!!.ams.first().slots.first { it.spool != null })
         rule.waitForIdle()
         auditWindowsAllFour("Unload from A1?")
+    }
+
+    @Test fun theUnloadDialogOfASpoolWithNoPreviousPlace() {
+        val (vm) = showPrinter(FakePrinters(unloadPlace = ""))
+        rule.waitForIdle()
+        vm.askUnload(vm.state.value.status!!.ams.first().slots.first { it.spool != null })
+        rule.waitForIdle()
+        auditWindowsAllFour("Unload from A1?")
+        rule.onNodeWithText("It goes back to its previous place.", substring = true).assertExists()
     }
 
     private fun showSettings(family: String = "bambu", openAccessCode: Boolean = false): PrinterEditViewModel {
@@ -551,7 +567,8 @@ class ScreenSemanticsTest {
         assertEquals("ABC123", opened)
     }
 
-    private class FakePick : PickBackend {
+    private class FakePick(private val writeError: Exception? = null) : PickBackend {
+        override suspend fun tag(uid: String): JsonObject? = null
         override suspend fun search(query: String, sealedOnly: Boolean) = listOf(
             buildJsonObject {
                 put("id", 214)
@@ -564,12 +581,14 @@ class ScreenSemanticsTest {
                 put("remaining_weight", 620.0)
             },
         )
-        override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean) =
-            LoadResult(slot = com.thompsonfabco.filamentkit.net.LoadSlot(label, 0, 0), nozzleMm = 0.4)
+        override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
+            if (!dryRun) writeError?.let { throw it }
+            return LoadResult(slot = com.thompsonfabco.filamentkit.net.LoadSlot(label, 0, 0), nozzleMm = 0.4)
+        }
     }
 
-    private fun showPick(): PickSpoolViewModel {
-        val vm = PickSpoolViewModel(FakePick(), "ABC123", "A4")
+    private fun showPick(writeError: Exception? = null): PickSpoolViewModel {
+        val vm = PickSpoolViewModel(FakePick(writeError), "ABC123", "A4")
         host("Printers") { PickSpoolScreen(vm, "Workshop X1", "A4", onLoaded = {}, onPairAgain = {}) }
         return vm
     }
@@ -587,6 +606,28 @@ class ScreenSemanticsTest {
         vm.search()
         rule.waitForIdle()
         auditAllFour("Example Filaments PolyTerra Charcoal")
+    }
+
+    @Test fun aTagLinkedToNoSpoolOnPickASpool() {
+        val vm = showPick()
+        rule.waitForIdle()
+        vm.onTag("4:77:90:f")
+        rule.waitForIdle()
+        auditAllFour("This tag is not linked to a spool yet. Search for the spool instead.")
+    }
+
+    @Test fun thePreviewAfterALostAnswerOffersTheOpenPrinterAndDone() {
+        val vm = showPick(ApiError(0, "offline", "x"))
+        rule.waitForIdle()
+        val spool = SpoolSummary(214, "Example Filaments", "PolyTerra Charcoal", "PLA", "2B2B2E", null, 620.0)
+        vm.pick(spool)
+        rule.waitForIdle()
+        vm.confirm()
+        rule.waitForIdle()
+        auditWindowsAllFour(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>().getString(R.string.spool_load_dropped))
+        rule.onNodeWithText("Open the printer").assertExists()
+        rule.onNodeWithText("Done").assertExists()
+        rule.onNodeWithText("Load").assertIsNotEnabled()
     }
 
     @Test fun thePreviewOfALoadIntoTheSlot() {
@@ -1481,7 +1522,10 @@ class ScreenSemanticsTest {
         override suspend fun undo(id: String, revision: Int) = record
     }
 
-    private class FakePrinters(private val list: List<Printer>? = null, state: String = "connected") : PrinterBackend {
+    private class FakePrinters(
+        private val list: List<Printer>? = null, state: String = "connected", job: String = "benchy.3mf",
+        private val unloadPlace: String = "Shelf A",
+    ) : PrinterBackend {
         var failWith: Exception? = null
         private val online = Printer(
             id = "ABC123", name = "Workshop X1", model = "X1C", serial = "ABC123", ip = "192.0.2.40", configured = true,
@@ -1498,7 +1542,7 @@ class ScreenSemanticsTest {
             configured = true, state = "wrong_code",
         )
         private val status = PrinterStatus(
-            gcodeState = "RUNNING", job = "benchy.3mf", percent = 42, layer = 120, totalLayers = 284, remainingMin = 72,
+            gcodeState = "RUNNING", job = job, percent = 42, layer = 120, totalLayers = 284, remainingMin = 72,
             eta = "2026-11-12T15:40:00Z", light = "on",
             temps = com.thompsonfabco.filamentkit.net.Temps(
                 nozzle = listOf(com.thompsonfabco.filamentkit.net.Temp(215.0, 215.0)),
@@ -1535,7 +1579,7 @@ class ScreenSemanticsTest {
         }
         override suspend fun command(id: String, action: String) = CommandResult(ok = true)
         override suspend fun unload(id: String, label: String, dryRun: Boolean) =
-            UnloadResult(slot = LoadSlot(label, 0, 0), location = "Shelf A")
+            UnloadResult(slot = LoadSlot(label, 0, 0), location = unloadPlace)
     }
 
     private class FakeCatalog(

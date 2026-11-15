@@ -30,6 +30,7 @@ icons/** text eol=lf
 server/filament_kit/shared_static/** text eol=lf
 strings/** text eol=lf
 web-shared/** text eol=lf
+tests/allowlists/** text eol=lf
 android/app/src/main/java/**/ui/theme/SpoolwardenTokens.kt text eol=lf
 android/app/src/main/res/values/strings.xml text eol=lf
 android/app/src/main/res/values*/sw_window.xml text eol=lf

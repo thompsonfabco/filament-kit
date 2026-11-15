@@ -1,0 +1,2 @@
+server/filament_kit/web/static/printers.js | input | 1 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/printers.js | select | 4 | built inline today; moves into the field component when the view is rebuilt

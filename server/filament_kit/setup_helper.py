@@ -118,22 +118,22 @@ WRONG = "wrong setup code"
 TRUST_GONE = "this computer is no longer trusted: type the setup code"
 TRUST_OFF = "trusted computers are turned off (Devices)"
 LOCKED = ("too many wrong setup codes: wait 10 minutes (longer after many from everywhere), or make a new code "
-          "at the server, which also lifts the lock: sudo filament-kit setup-code --new")
-NO_CODE = "no setup code is set on this server yet; make one at the server: sudo filament-kit setup-code"
+          "at the Hub, which also lifts the lock: sudo filament-kit setup-code --new")
+NO_CODE = "no setup code is set on this Hub yet; make one at the Hub: sudo filament-kit setup-code"
 APPLYING = "the last change is still being applied; wait until it has finished"
 BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has finished",
         "rollback": "a rollback is running; wait until it has finished",
         "check": "the check for updates is running; try again in a moment",
-        "station_pair": "the station is being paired; wait until it has finished",
-        "library_update": "the library is being updated; wait until it has finished",
-        "library_rollback": "the library is going back; wait until it has finished",
+        "station_pair": "the Weigh Station is being paired; wait until it has finished",
+        "library_update": "the Filament Catalog is being updated; wait until it has finished",
+        "library_rollback": "the Filament Catalog is going back; wait until it has finished",
         "remote_issue": "the certificate is being issued; wait until it has finished",
         "backup": "a backup is being written; wait until it has finished",
         "restore": "a restore is running; wait until it has finished",
         "local_intake_plan": "the reader's release is being checked; try again in a moment",
         "local_intake_install": "the local label reader is being installed; wait until it has finished",
         "local_intake_remove": "the local label reader is being removed; wait until it has finished",
-        "reader_setup": "a Printer Station is being set up; wait until it has finished"}
+        "reader_setup": "a Tag Reader is being set up; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}
 
@@ -320,11 +320,11 @@ def _start_job(name: str, why: str = "", checked: bool = False) -> None:
                        timeout=60, check=False)
     if r.returncode != 0:
         log.error("setup helper: cannot start %s: %s", unit, r.stderr.strip())
-        raise Refused(500, why or f"the job did not start; at the server: sudo filament-kit {' '.join(JOBS[name])}")
+        raise Refused(500, why or f"the job did not start; at the Hub: sudo filament-kit {' '.join(JOBS[name])}")
 
 
 def _start_apply(checked: bool = False) -> None:
-    _start_job("apply", "saved, but the apply did not start; run at the server: sudo filament-kit modules apply", checked)
+    _start_job("apply", "saved, but the apply did not start; run at the Hub: sudo filament-kit modules apply", checked)
 
 
 def _not_applying() -> None:
@@ -332,7 +332,7 @@ def _not_applying() -> None:
         busy = _applying()
     except CannotTell:
         log.warning("setup helper: systemctl gave no answer on what is running")
-        raise Refused(503, "The server can't tell whether a job is running just now. Try again in a moment.") from None
+        raise Refused(503, "The Hub can't tell whether a job is running just now. Try again in a moment.") from None
     if busy:
         raise Refused(409, _busy_text())
 
@@ -426,9 +426,9 @@ def _module(req: dict) -> dict:
     from . import cli
     name, want = req.get("name"), req.get("on")
     if name not in modules.MODULES or not isinstance(want, bool):
-        raise Refused(400, "name must be a module and on true or false")
+        raise Refused(400, "name must be a Feature and on true or false")
     if name == "server" and not want:
-        raise Refused(409, "this page is the server module's: switch it off at the server: "
+        raise Refused(409, "this page is the Hub's: switch it off at the Hub: "
                            "sudo filament-kit modules disable server")
     answers = _answers(req.get("settings"))
     _not_applying()
@@ -456,10 +456,10 @@ def station_url_error(value: str) -> str | None:
         u = urlparse(value)
         u.port
     except ValueError:
-        return "give the station's address, e.g. http://station.local:5003"
+        return "give the Weigh Station's address, e.g. http://station.local:5003"
     if u.scheme not in ("http", "https") or not u.hostname or u.username or u.password or u.query or u.fragment \
             or u.path not in ("", "/"):
-        return "give the station's address, e.g. http://station.local:5003"
+        return "give the Weigh Station's address, e.g. http://station.local:5003"
     return None
 
 
@@ -562,6 +562,12 @@ def _reader_tier(value) -> str:
     return value
 
 
+def _look(value) -> str:
+    if value not in config.LOOKS:
+        raise ValueError("must be one of: " + ", ".join(config.LOOKS))
+    return value
+
+
 def _tts(value) -> str:
     if value not in ("auto", "espeak"):
         raise ValueError("must be auto or espeak")
@@ -582,6 +588,7 @@ GENERAL = {
     "placement.box_count": (lambda v: _whole(v, 0, 999), None),
     "placement.overflow": (lambda v: _one_line(v, 100), None),
     "station.tts": (_tts, "apply"),
+    "appearance.theme": (_look, None),      # read on every page and api/info: no restart
     "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
     "web.printer_changes": (_bool, None),   # read on every request (printers_app.changes_allowed): no restart
     # read on every label read (intake._call): no restart
@@ -681,7 +688,7 @@ def _spoolman_url(req: dict) -> dict:
     cfg = config.load()
     on = modules.enabled(cfg)
     if "server" not in on or "spoolman" in on:
-        raise Refused(409, "this machine runs its own Spoolman: turn the spoolman module off first")
+        raise Refused(409, "this machine runs its own Spoolman: turn the Spoolman Feature off first")
     err = modules.check_setting("spoolman_url", url)
     if err:
         raise Refused(400, err, field="url")
@@ -699,14 +706,17 @@ def _spoolman_url(req: dict) -> dict:
     return {}
 
 
+_SETUP_NAME = {old: new for new, old in modules.MODE_ALIASES.items()}      # the setup names the page and the command show
+
+
 def _mode(req: dict) -> dict:
     """A mode preset, as `modules set` does it (a module switched on by hand stays on, see modules.set_mode)."""
     mode = modules.canonical_mode(req.get("mode"))
     if mode not in modules.MODES:
-        raise Refused(400, "mode must be one of: " + ", ".join(modules.MODES))
+        raise Refused(400, "setup must be one of: " + ", ".join(modules.MODE_ALIASES))
     if "server" not in modules.MODES[mode]:
-        raise Refused(409, "this page is the server module's, and that mode has none: at the server: "
-                           f"sudo filament-kit modules set {mode} --server <the kit server's address>")
+        raise Refused(409, "this page is the Hub's, and that setup has none: at the Hub: "
+                           f"sudo filament-kit modules set {_SETUP_NAME[mode]} --hub ADDRESS")
     answers = _answers(req.get("settings"))
     _not_applying()
     cfg = config.load()
@@ -743,7 +753,7 @@ def journal_units(cfg: dict) -> list[str]:
 def _journal(req: dict) -> dict:
     unit, lines = req.get("unit"), req.get("lines", 100)
     if not isinstance(unit, str) or unit not in journal_units(config.load()):
-        raise Refused(400, "unit must be a service of a module that is on")
+        raise Refused(400, "unit must be a service of a Feature that is on")
     if not isinstance(lines, int) or isinstance(lines, bool) or not 1 <= lines <= JOURNAL_LINES:
         raise Refused(400, f"lines must be a whole number from 1 to {JOURNAL_LINES}")
     if _no_systemd():
@@ -752,7 +762,7 @@ def _journal(req: dict) -> dict:
                        stdin=subprocess.DEVNULL, capture_output=True, timeout=30, check=False)
     if r.returncode != 0:
         log.error("setup helper: journalctl for %s exited %s", unit, r.returncode)
-        raise Refused(500, f"could not read the log; at the server: sudo journalctl -u {unit}")
+        raise Refused(500, f"could not read the log; at the Hub: sudo journalctl -u {unit}")
     out = r.stdout
     cut = len(out) > JOURNAL_MAX
     if cut:
@@ -826,7 +836,7 @@ def _job(req: dict) -> dict:
     if not isinstance(name, str) or name not in JOBS:
         raise Refused(400, "job must be one of: " + ", ".join(JOBS))
     if name == "reader_setup":
-        raise Refused(400, "the Printer Station is set up from the Flash a device tab (op reader_usb)")
+        raise Refused(400, "the Tag Reader is set up from the Flash a device tab (op reader_usb)")
     _not_applying()
     if name in ("update", "rollback"):
         from . import updates
@@ -864,15 +874,15 @@ def _reader_usb(req: dict) -> dict:
     except reader_setup.SetupError as e:
         raise Refused(400, str(e)) from None
     if reader_flash.bundled_image() is None:
-        raise Refused(409, "this kit has no Printer Station firmware bundled; update the kit")
+        raise Refused(409, "this Hub has no Tag Reader firmware bundled; update Spoolwarden")
     ports = [r.port for r in reader_setup.find_readers()]
     port = req.get("port")
     if port is not None and port not in ports:
         raise Refused(409, "that board is no longer plugged in; look again")
     if port is None and not ports:
-        raise Refused(409, "no ESP32 board on this server's USB: plug the Printer Station in with a data cable")
+        raise Refused(409, "no ESP32 board on this Hub's USB: plug the Tag Reader in with a data cable")
     if port is None and len(ports) > 1:
-        raise Refused(409, "there are several ESP32 boards on this server's USB: pick one")
+        raise Refused(409, "there are several ESP32 boards on this Hub's USB: pick one")
     _not_applying()
     reader_flash.write_pending({"ssid": ssid, "pass": password, "buzzer": buzzer, "port": port or ports[0],
                                 "name": name})

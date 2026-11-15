@@ -386,7 +386,8 @@ private fun StopDialog(printer: Printer, state: PrinterUiState, viewModel: Print
         cancel = SwAction(stringResource(R.string.printer_stop_keep), viewModel::cancelStop),
     ) {
         Text(
-            stringResource(R.string.printer_stop_dialog_body, job ?: stringResource(R.string.printer_stop_this_print), printer.name),
+            if (job != null) stringResource(R.string.printer_stop_dialog_body, job, printer.name)
+            else stringResource(R.string.printer_stop_dialog_body_nojob, printer.name),
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -616,10 +617,8 @@ private fun UnloadDialog(ask: UnloadAsk, state: PrinterUiState, viewModel: Print
     ) {
         BusyBack(state.unloading, say)
         Text(
-            stringResource(
-                R.string.printer_unload_body, ask.spool, ask.label,
-                ask.location.ifBlank { stringResource(R.string.printer_unload_previous_place) },
-            ),
+            if (ask.location.isBlank()) stringResource(R.string.printer_unload_body_noplace, ask.spool, ask.label)
+            else stringResource(R.string.printer_unload_body, ask.spool, ask.label, ask.location),
             style = MaterialTheme.typography.bodyMedium,
         )
     }

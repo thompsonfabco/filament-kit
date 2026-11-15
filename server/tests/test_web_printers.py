@@ -587,7 +587,7 @@ def test_over_the_stream_cap_the_phone_gets_a_message(env, kit):
     pa.streams = printers_app.MAX_STREAMS
     r = asyncio.run(pa.events_route(_Req()))
     text = r.body.decode()
-    assert text.startswith("retry: 30000") and "too many open views" in text and not kit.calls
+    assert text.startswith("retry: 30000") and "Too many phones and tabs are watching the printers" in text and not kit.calls
 
 
 def test_hls_relay_passes_the_kit_error_through(app, kit):
@@ -951,7 +951,7 @@ def test_load_and_unload_need_lan_and_origin(slotapp, slotkit):
 @pytest.mark.parametrize("code,status,needle", [
     ("slot_in_use", 409, "feeds the print that is running"),
     ("printer_offline", 409, "The printer is offline"),
-    ("no_preset", 409, "No preset for this filament on this printer yet"),
+    ("no_preset", 409, "No Slicer preset for this filament on this printer yet"),
     ("already_running", 409, "Slot mapping or a load is in progress"),
     ("needs_developer_mode", 409, "Developer Mode"),
     ("cert_changed", 409, "certificate changed"),

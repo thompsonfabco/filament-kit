@@ -217,6 +217,7 @@ line, then:
 | `recent/{hid}` | Record (10.2) | Recent | `recent` |
 | `recent/{hid}/edit/{item}` | Edit by hand (10.3) | Recent | `recent/{hid}`; asks first when a field changed |
 | `recent/{hid}/photos/{n}` | Photo viewer (10.5) | Recent | `recent/{hid}` |
+| `recent/corrections` | Corrections waiting (10.6) | Recent | `recent` |
 | `settings` | Settings (12.1) | Settings root | `home` tab |
 | `settings/appearance` | Appearance (12.2) | Settings | `settings` |
 | `settings/hub` | Hub connection (12.3) | Settings | `settings` |
@@ -1457,6 +1458,9 @@ A required field left empty: "Enter a name.", "Enter a brand.", "Enter a materia
 between the spools of an item, each change names its spools in brackets ("<change> (<spools>)"). When the record
 has nothing left to edit (after an undo, say), the form does not open: "This record has no spools to edit now."
 
+While Share corrections is on (10.6), the line "Share corrections is on: this correction will wait on the Hub to
+be shared." stands above the action bar, and the result on 10.2 is followed by one of the lines of 10.6.
+
 ### 10.4 Ask the Label Reader to correct it
 
 A panel on 10.2, titled "Ask the Label Reader to correct it".
@@ -1477,6 +1481,67 @@ A panel on 10.2, titled "Ask the Label Reader to correct it".
 Full screen, `--bg` ground, no bars except a close `IconButton` ("Close photo") and the line "Photo 1 of 2" at the
 top. `HorizontalPager` across the record's photos; pinch and double-tap zoom. Photos are never inverted in dark
 (F5). Loading: "Loading photo…"; failure "The photo could not be loaded." with "Try again".
+
+### 10.6 Share corrections and Corrections waiting (`recent/corrections`)
+
+Share corrections is switched on and off on the Hub page (Settings > Label Reader; `03-hub-page.md` 10.5.1), and
+sending is done there or on the command line. The app says when a correction will be shared, and shows what is
+waiting, where each one can be removed.
+
+Requests: `GET api/intake/history` carries `sharing` (on or off) and `corrections_waiting` (a count);
+`GET api/label-reader/corrections`, `GET api/label-reader/corrections/{id}/photos/{n}` (JPEG),
+`POST api/label-reader/corrections/{id}/remove`. The names are the server builder's (Stage V1.4).
+
+**Where a correction is saved.** Only while Share corrections is on:
+
+| Place | Line | Shape |
+|---|---|---|
+| Recently added (10.1), under the header facts | "Share corrections is on · <n> waiting", a text button that opens `recent/corrections` | info circle |
+| Edit by hand (10.3), above the action bar; a proposal (10.4), above "Accept" | "Share corrections is on: this correction will wait on the Hub to be shared." | info circle, `--muted` |
+| After "Save changes" or "Accept" succeeded, under the result line | "This correction is waiting to be shared." with the text button "Corrections waiting" | info circle |
+| The same, when no photo was kept for the record | "Not shared: no photo was kept for this record." | info circle |
+| The same, when the reader did not take it | "Saved. The correction is not waiting to be shared: <the Hub's reason>." | triangle, `warn` |
+| Check the spools (6.3), under the step's first line, when the spools were read from photos | "Share corrections is on: fields you change here will wait on the Hub to be shared once the spools are added." | info circle, `--muted` |
+
+Saving never waits for sharing and never fails because of it.
+
+**Corrections waiting** (`recent/corrections`). Top bar title "Corrections waiting", back arrow (to `recent`).
+
+```
++--------------------------------------+
+| <  Corrections wai… (o) Connected ☼  |
++--------------------------------------+
+| 12 waiting · 3.4 MB                  |
+| Nothing is sent until Send now is    |
+| pressed on the Hub page. Remove any  |
+| you do not want to share.            |
+| +----------------------------------+ |
+| |[ph] Polymaker PolyTerra PLA      | |
+| | 2   Charcoal Black               | |
+| |     2026-11-12 14:09 ·           | |
+| |     On this Hub                  | |
+| | Brand: Polymakr → Polymaker      | |
+| | Colour: #2B2B2E → #1F1F22        | |
+| | Note: brand is Polymaker         | |
+| |                      [ Remove ]  | |
+| +----------------------------------+ |
+| Sending is done on the Hub page,     |
+| under Settings > Label Reader.       |
++--------------------------------------+
+```
+
+| Element | Text / behaviour | Material 3 |
+|---|---|---|
+| Head | "<n> waiting · <size>"; then "Nothing is sent until Send now is pressed on the Hub page. Remove any you do not want to share." With Share corrections off and corrections left: "Share corrections is off, so no new corrections are added. These are still waiting." | `Text` |
+| Rows | Thumbnail `thumb-s` of the first photo with the photo count (tapping opens the photo viewer on that correction's photos); headline the filament, which opens `recent/{hid}` (a record no longer kept: not a link, with "This record is no longer kept."); supporting "2026-11-12 14:09 · On this Hub" or "· Cloud (Claude)", the engine whose reading was corrected; one line per changed field, "<Field>: <what was read> → <what it is now>" (`--mono` for the values); "Note: <note>". A correction the reader did not take shows the `warn` line "Not waiting: the reader did not take this correction. <reason>" instead. | Panel, `LazyColumn` |
+| Remove | Outlined button "Remove" on each row, no confirmation. Result: snackbar "Removed. The record in Recently added is unchanged." While it runs the button reads "Removing…". | `OutlinedButton` |
+| Foot | "Sending is done on the Hub page, under Settings > Label Reader." There is no Send, Download or Remove all in the app. | `Text` |
+| Empty | Empty state: title "No corrections waiting", text "Corrections you make in Recently added, or while adding spools, appear here." | Empty state |
+| The reader does not answer | `bad` notice "The reader does not answer, so the corrections waiting cannot be shown. They are kept." with "Try again" | Notice |
+| Other failures | The states of 3.2; the error words of 3.5 | |
+
+TalkBack: each row is read as "<filament>, corrected <time>, read by <engine>, <n> changes", then each change as
+"<Field>, <what was read>, becomes <what it is now>"; Remove is named "Remove the correction for <filament>".
 
 ---
 
@@ -1702,6 +1767,7 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 |---|---|---|
 | Per-field read confidence levels (high, medium, low, not on the label) for each item in the answer of `POST api/intake/read`, and per saved item in `GET api/intake/history/{hid}`. | 6.3 marks "Medium" and "Low"; 10.2 field marks | The app marks only "Estimated" (from `estimates`) and "Not on the label" (empty fields). |
 | A per-record confidence summary (the lowest level and the fields concerned) in `GET api/intake/history`. | 10.1 "To check" filter and row marks | The filter and the row marks are absent. |
+| Share corrections on the paired API: `sharing` and `corrections_waiting` in `GET api/intake/history`; the corrections waiting with thumbnails, and remove. | 10.1, 10.3, 10.4, 6.3, 10.6 | No Share corrections lines and no Corrections waiting screen. |
 | A single spool by number: `GET api/spools/{id}` with location, remaining and net weight, tag, sealed or opened, filament number, empty spool weight and lot. | 7.2 Details, deep links, restoring after the app was stopped | The spool screen shows the fields the search or tag answer carries; after a restart it shows the last summary and refreshes after the first change. |
 | Phone-callable Slicer presets actions: list filaments without a preset line, add them to a line, create a line, build presets now (today these exist only under `api/profiles/web/`, which phones may not call). | 11.2 | 11.2 points to the Hub page and the web app. |
 | The Hub's default theme ("Theme for new devices", F6.2) in `GET api/info` as the field `look` (for example `"look": "console"`). | 12.2 first start | The app starts on Console. |

@@ -1,0 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | .jpg | name of the temporary photo file, never shown (S4.7)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/CaptureScreen.kt | shot | name of the temporary photo file, never shown (S4.7)

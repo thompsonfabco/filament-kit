@@ -1,0 +1,1 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/pairing/PairingPayload.kt | filament-kit | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

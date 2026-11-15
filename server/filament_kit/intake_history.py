@@ -102,6 +102,12 @@ def _load(rid: str) -> dict:
     return rec
 
 
+def _version(rec: dict) -> int:
+    """Counts every change to `saved` or `revisions` (apply, split, Undo); a record from before it has 0."""
+    v = rec.get("version")
+    return v if isinstance(v, int) else 0
+
+
 def _save(rec: dict) -> None:
     d = _dir(rec["id"])
     make_state_dir(d)
@@ -432,10 +438,11 @@ def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = Tru
                                           "the values by hand")
     if not isinstance(note, str) or not note.strip() or len(note) > 500:
         raise HistoryError(400, "bad_request", "write what is wrong (at most 500 characters)")
-    rec = _load(rid)
-    it = _item(rec, item)
+    with _record_lock(rid):             # the record and its version are read together: a write after this is stale
+        rec = _load(rid)
+        it = _item(rec, item)
+        ver = _version(rec)
     images = [p.read_bytes() for p in _photos(_dir(rid))]
-    n_rev = len(rec.get("revisions") or [])
     hint = (f"Correction from the owner: {note.strip()}\nThe values saved from the first reading of this spool "
             f"were: {json.dumps(it['values'])}\nRead the photos again with the correction and give this one item "
             "with every value that follows from it corrected (temperatures, density, spool weight, line).")
@@ -466,7 +473,7 @@ def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = Tru
         rec = _load(rid)
         props = {k: v for k, v in (rec.get("proposals") or {}).items()
                  if isinstance(v, dict) and v.get("t", 0) > time.time() - PROPOSAL_TTL}
-        props[pid] = {"t": time.time(), "item": it["item"], "after": after, "note": note.strip(), "base": n_rev}
+        props[pid] = {"t": time.time(), "item": it["item"], "after": after, "note": note.strip(), "ver": ver}
         rec["proposals"] = props
         _save(rec)
     return {"proposal": pid, "item": it["item"], "before": before, "after": after, "changes": changes,
@@ -492,7 +499,7 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
             p = (rec.get("proposals") or {}).get(proposal)
             if not isinstance(p, dict) or p.get("t", 0) < time.time() - PROPOSAL_TTL:
                 raise HistoryError(404, "not_found", "no such proposal (they last an hour): revise again")
-            if p.get("base") != len(rec.get("revisions") or []):
+            if p.get("ver") != _version(rec):
                 raise HistoryError(409, "stale", "the record changed since this proposal: revise again")
             it = _item(rec, p["item"])
             diff = {k: v for k, v in p["after"].items() if k in FIELDS and v != it["values"].get(k)}
@@ -569,6 +576,7 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
         rec.setdefault("revisions", []).append(rev)
         rec["state"] = "revised_ai" if by == "ai" else "edited"
         rec["proposals"] = {}
+        rec["version"] = _version(rec) + 1
         _save(rec)
         log.info("intake history: record %s revision %d by %s (%s; filament %s -> %s%s)", rid, rev["n"], by,
                  ",".join(changed), fid, rev["filaments"]["to"],
@@ -635,6 +643,7 @@ def undo(sm, rid: str, revision) -> dict:
         rev["undone"] = True
         rec["state"] = rev.get("state_before") or "detected"
         rec["proposals"] = {}
+        rec["version"] = _version(rec) + 1
         _save(rec)
         log.info("intake history: record %s revision %d undone", rid, rev["n"])
     _rebuild([])

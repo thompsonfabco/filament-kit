@@ -129,7 +129,7 @@ internal fun mapShapeLook(shape: MapShape): Triple<Int, Color, Boolean> {
  * dialog so its Back button is caught.
  */
 @Composable
-internal fun rememberBusySay(@StringRes words: Int = R.string.common_working): () -> Unit {
+internal fun rememberBusySay(@StringRes words: Int = R.string.common_busy_wait): () -> Unit {
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
     val text = stringResource(words)

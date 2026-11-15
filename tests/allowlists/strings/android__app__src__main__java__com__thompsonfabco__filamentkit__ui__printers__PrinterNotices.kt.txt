@@ -1,0 +1,8 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | Pair again | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | The new certificate could not be trusted yet. Check that the server is reachable and  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | This phone is no longer paired with the server. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | cert_changed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | connected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | needs_developer_mode | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | try again, or pair again. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | wrong_code | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)

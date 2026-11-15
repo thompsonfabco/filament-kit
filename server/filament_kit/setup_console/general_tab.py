@@ -36,6 +36,7 @@ def _view() -> dict:
     cfg = config.load()
     on = modules.enabled(cfg)
     values = {k: setup_helper.general_value(cfg, k) for k in setup_helper.GENERAL}
+    values["appearance.theme"] = config.look(cfg)       # an unknown stored value reads as Console, as the shells do
     return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
             "ai_intake_on": "ai_intake" in on, "local_intake_on": "local_intake" in on,
             "local_intake_installed": local_intake_install.installed(),
@@ -87,7 +88,7 @@ def routes(page) -> list[tuple]:
         def text() -> str:
             cfg = config.load()
             if "remote" not in modules.enabled(cfg):
-                raise Refused(409, "the remote module is off: turn it on in Modules")
+                raise Refused(409, "the \"Remote access\" Feature is off: turn it on in Features")
             try:
                 return remote.firewall_text(remote.settings(cfg), config.paths().opt / "resources")
             except modules.ModuleError as e:
@@ -100,7 +101,7 @@ def routes(page) -> list[tuple]:
         def check() -> dict:
             cfg = config.load()
             if "local_intake" not in modules.enabled(cfg):
-                raise Refused(409, "the local_intake module is off: turn it on in Modules")
+                raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
             return local_reader.health(cfg)
         return await anyio.to_thread.run_sync(check)
 
@@ -119,7 +120,7 @@ def routes(page) -> list[tuple]:
         def check() -> dict:
             cfg = config.load()
             if "local_intake" not in modules.enabled(cfg):
-                raise Refused(409, "the local_intake module is off: turn it on in Modules")
+                raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
             raw = cfg.get("local_intake") if isinstance(cfg.get("local_intake"), dict) else {}
             return local_reader.health({**cfg, "local_intake": {**raw, "url": url, "tier": tier}})
         return await anyio.to_thread.run_sync(check)

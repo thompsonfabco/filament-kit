@@ -86,7 +86,7 @@ Everyday
 System
   features         Switch features on and off; choose the setup
   config           Settings menu; also config show, set and theme
-  label-reader     Label Reader: status and test
+  label-reader     Label Reader: status, test, corrections to share
   catalog          Filament Catalog: status, update, roll back, add
   backup           Make or list backups
   restore          Restore this Hub from a backup
@@ -170,6 +170,10 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `config theme [<theme>]` | Show or set the theme for new devices | Settings > Appearance > Theme for new devices |
 | `label-reader status` | Label Reader engines and their health (9.9) | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
+| `label-reader corrections` (same as `label-reader corrections list`) | The corrections waiting to be shared (9.9) | Settings > Label Reader, Corrections waiting |
+| `label-reader corrections remove <correction>... \| --all` | Take corrections out of the list (`--all` asks) | Remove / Remove all |
+| `label-reader corrections package [--out FILE]` | Write the exact file that `send` would send | Download the package |
+| `label-reader corrections send` | Send the corrections waiting (asks) | Send now |
 | `catalog status` | Filament Catalog version and last check | Settings > Filament Catalog |
 | `catalog update [--scheduled]` | Update now | Update now |
 | `catalog rollback` | Go back to the version before | Go back to the version before |
@@ -276,7 +280,8 @@ says `Error: mainsailos is found on the network but not added yet.` with
 Code.` and, where one exists, the Klipper command in the Fix line.
 
 **Devices, Tag Readers, records.** `<device>` is a device's name or id, `<reader>` a token's name or id, both
-matched the same way. `<record>` is a Recently added record's id, as `recent` shows it.
+matched the same way. `<record>` is a Recently added record's id, as `recent` shows it; `<correction>` is the ID
+of a correction waiting to be shared, as `label-reader corrections` shows it.
 
 ## 6. Output conventions
 
@@ -602,6 +607,10 @@ Every question, word for word (names are examples):
 | `features off` with dependants | `Also turn off Slicer presets? It needs Hub service.` (one question per dependant) | the plan includes it |
 | `features on` with needs | `Also turn on Hub service? Label Reader: Cloud (Claude) needs it.` | the plan includes it |
 | `recent revise` | the proposal (9.3), then `Accept these changes?` | `Saved as revision 2: Name, Nozzle range.` |
+| `label-reader corrections send` | `Send 12 corrections? The photos and values in the list go to the project maintainer for review, to improve the Label Reader. This cannot be taken back.` | `Sent 12 corrections. Thank you.` |
+| `label-reader corrections remove --all` | `Remove all 12 corrections waiting? They are not sent. The records in Recently added are unchanged.` | `Removed 12 corrections. Nothing was sent.` |
+| `config`, switching Share corrections off while corrections wait | `Delete the 12 corrections still waiting?` (no keeps them to send later) | staged until Save (8.3); then `12 corrections deleted.` or `12 corrections kept.` |
+| `features off label-reader-local` while corrections wait | `Also delete 12 corrections waiting to be shared? The reader keeps them, so they go with it.` (no stops the command: `Nothing changed.`) | the plan includes it |
 | `weigh-station flash-display` | `Write the Weigh Station display firmware to /dev/ttyACM0?` (one per board found) | the write runs |
 | `tag-reader flash` | `Write the Tag Reader firmware to /dev/ttyACM0? What is on the board now is replaced.` | the write runs |
 | `restore` | the backup's summary (9.10), then `Type restore to go on: ` | the restore runs |
@@ -756,6 +765,7 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 | Label Reader | Address | `local_intake.url` | text |
 | Label Reader | Tier | `local_intake.tier` | choice: Automatic · Processor (CPU) · Graphics card (GPU) |
 | Label Reader | Records kept | `intake.history_keep` | whole number 0 to 500; the row adds `Now 5 records, 14.2 MB of photos` |
+| Label Reader | Share corrections | `label_reader.share_corrections` | on / off; the row adds `12 waiting` when there are any. Opening it first prints the description of 9.9 |
 | Backups and restore | Keep nightly backups for | `backups.keep_days` | whole number of days, 1 to 365 |
 | Network and addresses | Public address | `web.public_url` | text, an https address |
 | Network and addresses | Weigh Station address | `station.url` | text; empty answer keeps, `-` clears |
@@ -768,11 +778,16 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 The Engine order choices map to the stored values `auto`, `local-then-cloud`, `cloud-then-local`, `cloud`,
 `local`; the Tier choices to `auto`, `cpu`, `gpu`; Piper and espeak-ng to `auto` and `espeak`. The Label Reader
 screen shows the Hub page's sub-headings above its items, numbering straight through: `Cloud (Claude)` above
-Anthropic API key, `On this Hub` above Address, `Recently added` above Records kept. Engine order is a choice
+Anthropic API key, `On this Hub` above Address, `Recently added` above Records kept, `Share corrections` above
+Share corrections. Engine order is a choice
 only while both Label Reader features are on; with one on, its row reads
 `Engine: Cloud (Claude). Switch on the other one in Features (11) to use both.` (or `Engine: On this Hub. …`)
 and cannot be opened. The Cloud (Claude) items show only while Label Reader: Cloud (Claude) is on, the On this
-Hub items only while Label Reader: On this Hub is on; Records kept always shows.
+Hub items only while Label Reader: On this Hub is on; Records kept always shows. Share corrections always shows;
+while it cannot be changed its row gives the reason and cannot be opened:
+`needs Label Reader: On this Hub. Switch it on in Features (11).`,
+`the reader on this Hub is too old to share corrections. Update it: sudo spoolwarden update`, or
+`the reader does not answer, so this cannot be changed now`.
 Each group's screen ends with the actions that are commands elsewhere, so they are one step away: Backups and
 restore ends with `Back up now: sudo spoolwarden backup create` and `Restore: sudo spoolwarden restore <zip>`;
 Filament Catalog with
@@ -1037,6 +1052,7 @@ Filament Catalog
 | Label Reader | `Cloud (Claude): the API key works` / `Cloud (Claude): no API key` / `Cloud (Claude): the API key was refused` | `sudo spoolwarden config` (Label Reader) |
 | Label Reader | note `Reads used today: N of M` (needs a look when N = M: `No reads left today (M of M)`) | `raise Reads per day in sudo spoolwarden config, or wait until tomorrow` |
 | Label Reader | `On this Hub: answering at <url> (tier: <tier>)` / `On this Hub: not answering at <url>` (only when installed) | `sudo spoolwarden label-reader status` |
+| Label Reader | note `Share corrections: on, 12 waiting` (only while it is on, or while corrections still wait: `Share corrections: off, 12 still waiting`) | `spoolwarden label-reader corrections` |
 | Weigh Station | `Answering at <url>`, `Tag reader seen`, `Scale seen`, `Paired with <address>` / `… not seen`, `Not paired` | per row: check the cable; `sudo spoolwarden pair --weigh-station` |
 | Devices | note `Paired devices: N` | (none) |
 | Printers | one row per printer with its state word (section 6.1); one needs-a-look row per printer problem | `sudo spoolwarden printer report "<name>"`, or the fix for that state |
@@ -1476,6 +1492,64 @@ Read by On this Hub (tier: cpu) in 11 s. Nothing was added.
   `Fix: sudo spoolwarden features on label-reader-local`.
 - A Cloud test counts toward the reads used today and says so: `Note: this used 1 of today's 40 reads.`
 
+**Share corrections.** Off by default; switched with `sudo spoolwarden config` (Label Reader, Share corrections) or
+`sudo spoolwarden config set label_reader.share_corrections on|off`. There is no address to show or set. The
+description, printed when the item is opened in the menu and by `help label-reader corrections`:
+
+```
+When this is on, each correction you make to a reading waits on this Hub to be shared: the label photos
+(made smaller, with location and camera data removed), what the Label Reader read, what you changed it to,
+and your note if you wrote one. Readings by On this Hub and by Cloud (Claude) both count. Nothing is sent
+until you run: sudo spoolwarden label-reader corrections send. Then the corrections waiting go to the
+project maintainer for review, to improve the Label Reader.
+```
+
+Switching it prints `Share corrections is on. The reader restarted.` (or `… is off. …`). A correction is an edit
+by hand or an accepted proposal in Recently added (`recent edit`, `recent revise`), or a read field changed while
+adding spools in the web app or the app. `recent edit` and `recent revise` end with one more line while it is on:
+`Note: this correction is waiting to be shared.`, or `Note: not shared: no photo was kept for this record.`, or
+`Note: the correction is not waiting to be shared: <reason>.` The edit itself never fails because of sharing.
+
+**`label-reader corrections`** lists what is waiting, oldest first. Listing and `package` need no sudo (they show
+what `recent show --photos` already shows); `remove` and `send` do.
+
+```
+$ spoolwarden label-reader corrections
+Corrections waiting: 2 · 0.6 MB. Nothing is sent until you run: sudo spoolwarden label-reader corrections send
+
+  ID   CORRECTED         RECORD                                   READ BY         PHOTOS
+  c7   2026-11-12 14:09  Polymaker PolyTerra PLA Charcoal Black   On this Hub     2
+         Brand: Polymakr → Polymaker
+         Colour: #2B2B2E → #1F1F22
+         Note: brand is Polymaker
+  c8   2026-11-12 09:50  Bambu Lab PETG HF Orange                 Cloud (Claude)  1
+         Net weight: 1000 g → 750 g
+```
+
+- `<correction>` is a correction's ID, as this list shows it (section 5).
+- Nothing waiting: `No corrections waiting.` (exit 0). Share corrections off with some left: the first line is
+  `Share corrections is off, so no new corrections are added. 2 are still waiting.`
+- A correction the reader did not take is listed last with `▲ not waiting: <reason>` in place of its changes; it
+  is not counted, packaged or sent.
+- `--json`: `{"sharing": true, "count": 2, "bytes": 629145, "entries": [{"id", "record", "item", "at", "engine",
+  "changes": [{"field", "read", "now"}], "note", "photos", "queued", "reason"}]}`, the Hub's own reply.
+- The reader does not answer: `Error: the reader does not answer, so the corrections waiting cannot be shown. They
+  are kept.` with `Fix: sudo spoolwarden label-reader status`.
+
+**`label-reader corrections remove <correction>...`** prints one line each,
+`Removed c7. The record in Recently added is unchanged.`; `--all` asks (section 7).
+
+**`label-reader corrections package [--out FILE]`** writes the exact file that `send` would send, by default
+`spoolwarden-corrections-<YYYY-MM-DD>.zip` in the current folder, and prints
+`Wrote spoolwarden-corrections-2026-11-12.zip (2 corrections, 0.6 MB). Nothing was sent.` Nothing waiting:
+`Error: no corrections are waiting, so there is nothing to package.`
+
+**`label-reader corrections send`** asks (section 7), shows `◐ Sending 2 corrections…`, then
+`Sent 2 corrections. Thank you.` A failure: `Error: could not send. <reason> The corrections are still waiting.`
+with `Fix: try again later; sudo spoolwarden label-reader status shows whether the reader answers`. Nothing
+waiting: `No corrections waiting. Nothing was sent.` (exit 0). Nothing is ever sent by a timer, an update or any
+other command.
+
 ### 9.10 `backup` and `restore`
 
 ```
@@ -1633,6 +1707,9 @@ this design.
 | Hub status and checks | P | Y | N | Y | Y, grouped as Overview, `--json` | web app, app: remain |
 | Add spools by hand | Y | N | Y | N | N (`add` prints where) | remains: needs a phone or the Weigh Station |
 | Add spools from label photos | Y | N | Y | N | N (`add`); `label-reader test` reads photos without adding | remains: needs a camera |
+| Share corrections: switch it on or off | N | new | N | N | new (`config`, `config set`) | web app, app: remain on purpose (Hub settings are on the Hub page) |
+| Share corrections: see what is waiting, remove | new | new | new | N | new (`label-reader corrections`, `remove`) | none |
+| Share corrections: download the package, send | N | new | N | N | new (`label-reader corrections package`, `send`) | web app, app: remain on purpose (sending is done on the Hub) |
 | Open a spool: link a tag, set weight, move, mark empty | Y | N | Y | N | N (`spool` prints where) | remains: needs NFC or a camera |
 | Search spools | Y | N | N | N | N (`spool`) | remains |
 | Add a filament line | Y | N | N | N | N (`spool`) | remains |
@@ -1707,3 +1784,7 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
 6. **A setup word for the Weigh Station only setup.** The Hub page's setup and the `--hub ADDRESS` option need the
    new setup names (`hub`, `weigh-station`, `hub-with-weigh-station`) accepted by the Hub's mode code beside the
    old ones (`server`, `station`, `all-in-one`).
+7. **Share corrections.** What the reader can do and its state, the setting `label_reader.share_corrections`
+   with the job that sets the reader, and the corrections waiting (list, remove, remove all, package, send) on
+   the routes the Hub page uses (`03-hub-page.md` 10.5.2). Until they exist the `label-reader corrections`
+   commands say `Error: this Hub cannot share corrections yet.` and the config item is not shown.

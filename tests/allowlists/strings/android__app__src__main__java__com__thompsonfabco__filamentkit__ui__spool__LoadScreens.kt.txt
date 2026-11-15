@@ -1,0 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadScreens.kt | cert_changed | wire identifier (JSON key, error code or saved-state key of the Hub's answer), never shown; the screen's texts are in the catalogue (S4.8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadScreens.kt | needs_developer_mode | wire identifier (JSON key, error code or saved-state key of the Hub's answer), never shown; the screen's texts are in the catalogue (S4.8)

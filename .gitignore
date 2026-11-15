@@ -34,6 +34,7 @@ handoffs/
 
 # IDE and local build files anywhere under android/
 android/**/.gradle/
+android/**/.kotlin/
 android/**/.idea/
 android/**/local.properties
 

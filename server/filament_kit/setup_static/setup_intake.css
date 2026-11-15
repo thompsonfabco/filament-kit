@@ -1,0 +1,60 @@
+/* recently added (S2.7) */
+/* the list: photo, filament, added, state, spool, confidence, open (02 6.1; the spool column goes below 1025 px) */
+.coll--recent { grid-template-columns: auto minmax(0, 2.4fr) minmax(0, 1.2fr) max-content minmax(0, 1fr) minmax(0, 1.8fr) auto; }
+@media (max-width: 1024px) {
+  .coll--recent { grid-template-columns: auto minmax(0, 2fr) minmax(0, 1.2fr) max-content minmax(0, 1.6fr) auto; }
+}
+@media (max-width: 600px) {
+  .coll--recent .coll__cell[data-col="visual"] { width: auto; }
+  .coll--recent .coll__cell[data-col="go"] { display: none; }
+}
+.coll--recent .thumb { cursor: inherit; }
+.coll--recent .coll__title.muted { color: var(--muted); }
+.confidence__summary { margin: 0; }
+.confidence__summary .status { white-space: normal; }
+/* one record: Photos, Revisions and Record at the left on a wide screen, Fields and Ask at the right; one column below, Fields first */
+.recent__head { display: grid; gap: var(--s1); margin-bottom: var(--s3); }
+.recent__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); }
+.recent__bar .detail__title { flex: 1 1 calc(var(--s7) * 4); min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.recent__newer .icon { transform: rotate(180deg); }
+.recent__grid { display: grid; gap: var(--s4); grid-template-columns: minmax(0, 1fr); }
+.recent__main, .recent__side { display: grid; gap: var(--s4); align-content: start; min-width: 0; }
+.recent__grid .card { margin: 0; }
+@media (min-width: 1025px) {
+  .recent__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr); }
+  .recent__side { grid-column: 1; grid-row: 1; }
+  .recent__main { grid-column: 2; grid-row: 1; }
+}
+.recent__grid h3, .recent__grid h4 { margin: 0; }
+.recent__cardhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: var(--s2); }
+.recent__group { display: grid; gap: var(--s2); align-content: start; min-width: 0; }
+.recent__group .kv__heading { margin: var(--s2) 0 0; }
+.recent__items { display: grid; gap: var(--s2); }
+.recent__photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--s7) * 2), 1fr)); gap: var(--s2); }
+.recent__photos .thumb { cursor: zoom-in; }
+.recent__suggestion:not(:empty) { margin-top: var(--s3); }
+.recent__form .kv--groups { gap: var(--s3) var(--s5); }
+.recent__form .recent__group { gap: var(--s3); }
+.recent__foot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--s2) var(--s3); margin-top: var(--s4); }
+.recent__foot > .result { flex: 1 1 100%; }
+.kv--groups { align-items: start; }
+@media (max-width: 1024px) {
+  .kv--groups { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  /* Save changes stays in reach while the form is long (03 6.1) */
+  .recent__foot { position: sticky; bottom: var(--tab); padding: var(--s3) 0; border-top: var(--hairline) solid var(--border); background: var(--surface); }
+  .changes__item { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); }
+  .changes__key { grid-column: 1 / -1; }
+}
+.changes__list, .changes--compact, .revisions__list { list-style: none; margin: 0; padding: 0; }
+.revisions__item + .revisions__item { border-top: var(--hairline) solid var(--border); }
+.revisions__item p { margin: 0; }
+/* the photo viewer (02 7.6) */
+.recent__viewer { display: grid; place-items: center; min-height: calc(var(--s7) * 4); background: var(--surface-2); border-radius: var(--r); }
+.recent__viewer-img { max-width: 100%; max-height: calc(100vh - var(--s7) * 5); object-fit: contain; }
+.recent__viewer-error { display: none; padding: var(--s4); }
+.recent__viewer[data-state="failed"] .recent__viewer-error { display: block; }
+.recent__viewer[data-state="failed"] .recent__viewer-img { display: none; }
+.kv__value .status { white-space: normal; }
+.kv__value { overflow-wrap: anywhere; }

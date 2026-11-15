@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/CameraParts.kt | interrupted | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/CameraParts.kt | local_network | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/CameraParts.kt | unauthorized | Hub identifier (printer state, job state, error code or field name), never shown

@@ -32,7 +32,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import __version__, intake, inventory, lan, modules, shared_files, tagsources
+from .. import __version__, config, intake, inventory, lan, modules, shared_files, tagsources
 from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
@@ -137,14 +137,22 @@ def _app_name(shared: dict) -> str:
 
 
 def _colours(shared: dict) -> dict:
-    """The default theme's (surface, bg) in light and dark, read from the generated tokens.css: its plain `:root`
-    block is the light colours and `:root[data-theme="dark"]` the dark ones."""
+    """Every theme's (surface, bg) in light and dark, {look: {"light": (surface, bg), "dark": (surface, bg)}}, read from
+    the generated tokens.css: Console's light colours are on plain `:root` and its dark ones on `:root[data-theme="dark"]`;
+    another theme's on `:root[data-look="x"]` and `:root[data-look="x"][data-theme="dark"]`. A dark block holds only what
+    changes, so a colour it lacks is the light one."""
     css = shared.get("tokens.css", b"").decode("utf-8")
+
+    def block(head: str) -> dict:
+        m = re.search("^" + re.escape(head) + r" \{(.*?)^\}", css, re.M | re.S)
+        return dict(re.findall(r"^\s*--(bg|surface):\s*(#[0-9a-fA-F]{3,8});", m.group(1), re.M)) if m else {}
     out = {}
-    for appearance, head in (("light", r"^:root \{"), ("dark", r'^:root\[data-theme="dark"\] \{')):
-        m = re.search(head + r"(.*?)^\}", css, re.M | re.S)
-        got = dict(re.findall(r"^\s*--(bg|surface):\s*(#[0-9a-fA-F]{3,8});", m.group(1), re.M)) if m else {}
-        out[appearance] = (got.get("surface", "#181c24"), got.get("bg", "#181c24"))
+    for look in config.LOOKS:
+        sel = ":root" if look == "console" else f':root[data-look="{look}"]'
+        light, dark = block(sel), block(sel + '[data-theme="dark"]' if look != "console" else ':root[data-theme="dark"]')
+        out[look] = {"light": (light.get("surface", "#181c24"), light.get("bg", "#181c24")),
+                     "dark": (dark.get("surface", light.get("surface", "#181c24")),
+                              dark.get("bg", light.get("bg", "#181c24")))}
     return out
 
 
@@ -170,7 +178,7 @@ class IntakeApp:
         self.icon = icon_png()
         self.icon_512 = icon_png(512)
         self.app_name = _app_name(self.shared)
-        self.colours = _colours(self.shared)    # the default theme's {"light": (surface, bg), "dark": (surface, bg)}
+        self.colours = _colours(self.shared)    # {look: {"light": (surface, bg), "dark": (surface, bg)}} of every theme
         self.tag_cache: dict = {}
         self.station: list = [None, None]  # [url, StationClient]
         cfg = tools.cfg()
@@ -301,8 +309,8 @@ class IntakeApp:
 
         def run() -> dict:
             if not self._ai():
-                raise intake_history.HistoryError(409, "ai_off", "label reading (ai_intake or local_intake) is off "
-                                                                 "on this server: edit the values by hand")
+                raise intake_history.HistoryError(409, "ai_off", "Label reading is off on this Hub: "
+                                                                 "edit the values by hand")
             cap = KitCap(self.kit)              # a revision by Claude is a read: the kit's daily cap
 
             def charge():
@@ -341,9 +349,10 @@ class IntakeApp:
     def _html(self, body: str, status: int = 200, app: bool = False) -> HTMLResponse:
         b = html.escape(self.base, quote=True)
         name = html.escape(self.app_name, quote=True)
-        light, dark = self.colours["light"][0], self.colours["dark"][0]
+        look = self._look()
+        light, dark = self.colours[look]["light"][0], self.colours[look]["dark"][0]
         return HTMLResponse(
-            "<!doctype html><html lang=en><meta charset=utf-8>"
+            f"<!doctype html><html lang=en data-look={look}><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
             "<meta name=color-scheme content='light dark'>"
             f"<meta name=theme-color content='{light}' media='(prefers-color-scheme: light)'>"
@@ -427,8 +436,12 @@ class IntakeApp:
     async def icon_512_route(self, request: Request):
         return Response(self.icon_512, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
 
+    def _look(self) -> str:
+        """The Hub's default theme now (a change shows on the next page, with no restart)."""
+        return config.look(self.tools.cfg())
+
     def _manifest(self, appearance: str) -> JSONResponse:
-        surface, bg = self.colours[appearance]
+        surface, bg = self.colours[self._look()][appearance]
         return JSONResponse({"name": self.app_name, "short_name": self.app_name, "start_url": self.base,
                              "scope": self.base, "display": "standalone", "background_color": bg,
                              "theme_color": surface,
@@ -461,7 +474,7 @@ class IntakeApp:
                 text = mcp_tools.error_text(e)
                 if text is None:
                     log.exception("intake %s", request.url.path)
-                    return JSONResponse({"error": "internal error (see the server log)"}, 500)
+                    return JSONResponse({"error": "Something went wrong on the Hub. The details are in its log."}, 500)
                 status = 409 if type(e).__name__ == "TagConflict" else 400
                 field = getattr(e, "field", None)           # the body key a refusal is about, when it is about one
                 problems = getattr(e, "problems", None)     # a refused add: every problem, with its item and field
@@ -499,7 +512,7 @@ class IntakeApp:
     # ---------- label photos -> items (Claude) ----------
     async def read(self, request: Request):
         if not {"ai_intake", "local_intake"} & modules.enabled(self.tools.cfg()):
-            raise Problem("label reading (the ai_intake or local_intake module) is off on this server")
+            raise Problem("Label reading is off on this Hub")
         async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             photos = []
             for i, f in enumerate(form.getlist("photos")):
@@ -545,7 +558,7 @@ class IntakeApp:
             if it.get("price_per_kg"):  # keep the read's order-based line unless the user changed the price
                 ppk = float(it["price_per_kg"])
                 if not str(it.get("price_line") or "").startswith(f"Price: ${ppk:g}/kg"):
-                    it["price_line"] = f"Price: ${ppk:g}/kg - entered in the intake app"
+                    it["price_line"] = f"Price: ${ppk:g}/kg - entered in the web app"
             else:
                 it.pop("price_line", None)
             try:

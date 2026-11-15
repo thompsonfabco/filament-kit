@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | leaving | wire identifier (JSON key, error code or saved-state key of the Hub's answer), never shown; the screen's texts are in the catalogue (S4.8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | result | wire identifier (JSON key, error code or saved-state key of the Hub's answer), never shown; the screen's texts are in the catalogue (S4.8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolViewModel.kt | weight | wire identifier (JSON key, error code or saved-state key of the Hub's answer), never shown; the screen's texts are in the catalogue (S4.8)
