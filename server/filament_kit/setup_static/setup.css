@@ -15,9 +15,10 @@
   .topbar__name { line-height: var(--lh-title); }
   .topbar__hub > [aria-hidden="true"] { display: none; }
 }
-/* the product name stays on one line at 320 px: the lock chip gives up some padding for it */
+/* the product name stays on one line at 320 px, in a wider font too: on a phone the lock chip is its icon (the button keeps its
+   aria-label, and the state shows in its colour and border) */
 .topbar__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 600px) { .topbar .chip { padding: 0 var(--s2); } }
+@media (max-width: 600px) { .topbar .chip--lock { padding: 0 var(--s2); min-width: var(--ctl); justify-content: center; } .topbar .chip--lock .chip__word { display: none; } }
 :where(.page) h2 { font-size: var(--fs-l); line-height: var(--lh-title); margin: 0 0 var(--s2); display: flex; gap: var(--s2); align-items: center; }
 :where(.page) p { margin: var(--s1) 0; }
 .muted { font-size: var(--fs-m); }
