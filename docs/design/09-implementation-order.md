@@ -33,9 +33,9 @@ line · 9 Stage 6: Themes · 10 Stage 7: wording · 11 Hub API additions · 12 D
    columns of the "Needs from the Hub" sections); section 11 lists every addition.
 7. **One feature, four interfaces.** A feature goes into the Hub page, the web app, the app and the command line,
    or the step says in one line why one of them cannot have it (foundations section 3).
-8. **The code rename is separate.** The command name, package and paths change in their own piece of work with its
-   own schedule. Steps that wait for it say so ("Waits for the rename"); everything else uses the new words on
-   screen and keeps the code names.
+8. **The rename comes in two parts.** What a person sees or types (the product name, the `spoolwarden` command)
+   changes in S5.9 and S7.4 to S7.8. The package, paths, unit names, protocol names and repository names change
+   in a later piece of work with its own schedule; until then every step keeps those code names.
 9. **Example data only.** Tests, fixtures and screenshots use the fake data of `mockups/CONTENT-SPEC.md` and the
    documentation addresses `192.0.2.x`, `printer.local` and `*.example` (foundations section 12, rule 8).
 
@@ -1020,7 +1020,7 @@ command line · L · Depends on: S5.3; S2.18 when present · Beside: Stages 3 an
 - **Check:** AUT-9 at 80 columns; a test that `help --markdown` lists every command of 06 3.2.
 
 ### S5.9 The `spoolwarden` command
-command line · S · Depends on: S5.8 · Beside: S6.1 to S6.9 · **Waits for the rename**
+command line · S · Depends on: S5.8 · Beside: S6.1 to S6.9, S7.4 to S7.6
 - **Files today:** `cli.py` (program name, line 2260); the installed `filament-kit` entry point.
 - **Change:** 06 2: `spoolwarden` installed where `filament-kit` is today; `filament-kit` becomes the wrapper that
   prints its one-line note on standard error; help, messages and Fix lines name `spoolwarden`; `--version` prints
@@ -1208,6 +1208,59 @@ documents · M · Depends on: S5.8; command names wait for S5.9 · Beside: S7.2
 - **Keep:** the instructions' steps and their order.
 - **Check:** the word list of AUT-7 run over `docs/` and `README.md`.
 
+### S7.4 Hub: the product name, the installer's words and the bridge
+Hub · L · Depends on: S7.2 · Beside: S5.9, S7.5, S7.6
+- **Files today:** `strings/en.json` (`app_name`, `command_name`); texts that spell the name out; `install/`; the
+  updater, the backup reader, discovery and the link parsers.
+- **Change:** the product is Spoolwarden and the command `spoolwarden` in the two catalogue entries; every text
+  that bypasses them moves onto the placeholders; page titles; the installer's first line and its once-only line
+  about the new name; the units' `Description=` lines. The bridge, with no visible effect: the updater, the backup
+  reader, discovery, link parsers and prefix checks accept the old and the new names.
+- **Keep:** paths, users, unit names, the Python package, `FK_*`, protocol and scheme names, repository and asset
+  names: nothing outside what a person reads changes name.
+- **Other interfaces:** S5.9 (command line), S7.5 (app), S7.6 (web app, Slicer Sync, Klipper add-on), S7.7 (documents).
+- **Check:** AUT-7 with the product-name entry gone from its allow-list; the upgrade tests of S7.8.
+
+### S7.5 App: label and texts
+app · S · Depends on: S7.4 · Beside: S5.9, S7.6
+- **Files today:** `android/app/build.gradle.kts`, the manifest, `strings.xml`.
+- **Change:** the app label "Spoolwarden" (05 1); every text that names the product or the command follows the
+  catalogue.
+- **Keep:** the application id, the signing keys, the link scheme.
+- **Other interfaces:** S7.4, S7.6.
+- **Check:** AUT-8; an installed 0.6 app updates in place and stays paired.
+
+### S7.6 Web app, Slicer Sync and Klipper add-on: visible names
+web app, PC tool, add-on · S · Depends on: S7.4 · Beside: S5.9, S7.5
+- **Files today:** the web app's manifests and title; `pc-sync/installer/`; the add-on's messages.
+- **Change:** the web app is "Spoolwarden" in its manifests, title and top bar; the PC tool is "Spoolwarden Slicer
+  Sync" with the Start menu entries "Pair Slicer Sync", "Slicer Sync status" and "Uninstall Spoolwarden Slicer Sync",
+  and the checkbox "Pair this PC with the Hub now"; the add-on's messages say Spoolwarden.
+- **Keep:** the program file `filament-kit-sync`, the installer id and state folder; macro, variable and file names
+  of the add-on.
+- **Other interfaces:** S7.4, S7.5.
+- **Check:** AUT-5 on the web app; the PC tool installs over the earlier version and keeps its pairing.
+
+### S7.7 Documents in the new name
+documents · M · Depends on: S5.9, S7.4 · Beside: S7.5, S7.6
+- **Files today:** `README.md`, `docs/`, the notes of the next release.
+- **Change:** Spoolwarden and `spoolwarden` throughout; one sentence says it was called filament-kit and that the
+  old command still works; the user guide's command table from `spoolwarden help --markdown`.
+- **Keep:** addresses, file names and on-device paths that did not change; the earlier release notes as history.
+- **Other interfaces:** none.
+- **Check:** the names test of S7.3 without its skip of the old name, with the history files and unchanged
+  addresses as its only exceptions.
+
+### S7.8 The rename's gate
+all four · S · Depends on: S5.9, S7.4 to S7.7 · Beside: none
+- **Files today:** the words lints; the upgrade scenarios.
+- **Change:** a words test that fails on a visible "filament-kit" outside the history files and unchanged
+  addresses; upgrade from the last release and from the last pre-release keeps pairing, discovery, the old
+  command and restoring an older backup.
+- **Keep:** every installed kit can update, pair and be found as before.
+- **Other interfaces:** each is covered once.
+- **Check:** both upgrade runs pass before the tag.
+
 ---
 
 ## 11. Hub API additions
@@ -1305,7 +1358,7 @@ Stage 4   S0.4 + S0.9 > S4.1 > S4.2 > S4.3 > S4.4 > each of S4.5 to S4.12 and S4
           S4.6 + S4.13 > S4.14      S3.7 > S4.7      S3.9 > S4.8, S4.11      S4.10 > S4.11
 
 Stage 5   S2.1 > S5.1 > S5.2 > S5.4      S2.17 > S5.4
-                 S5.1 > S5.3 > S5.5 / S5.6 / S5.7 / S5.8 > S5.9 (waits for the rename)
+                 S5.1 > S5.3 > S5.5 / S5.6 / S5.7 / S5.8 > S5.9
           S2.8 > S5.6      S2.11 > S5.7      (every Stage 5 step edits cli.py: one at a time)
 
 Stage 6   S2.17 > S6.1 > S6.2 > S6.4 > S6.6 > S6.8 \
@@ -1315,6 +1368,7 @@ Stage 6   S2.17 > S6.1 > S6.2 > S6.4 > S6.6 > S6.8 \
 Stage 8   V1.1 > V1.2 > V1.3 > V1.4 > V2.1 / V2.2 / V2.3 / V2.4      V2.1 > V3      V2.1 to V2.4 + V3 > V4
 
 Stage 7   S2.11 > S7.1 > S7.2 (after every interface step of Stages 1 to 5)      S5.8 > S7.3 (command names after S5.9)
+          S7.2 > S7.4 > S7.5 / S7.6      S5.9 + S7.4 > S7.7      S5.9 + S7.4 to S7.7 > S7.8
 ```
 
 Stages 3 and 4 do not wait for Stages 1 and 2: once Stage 0 is done they run beside them, each needing only the Hub
@@ -1458,7 +1512,7 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 
 | Section or command group | Steps |
 |---|---|
-| 2 The command name | S5.9 (waits for the rename) |
+| 2 The command name | S5.9; the rest of the visible rename S7.4 to S7.8 |
 | 3 The command tree | S5.8 (help), S5.9 |
 | 4 Old and new spellings | S5.5 to S5.8 |
 | 5 Naming a printer, device or record | S5.5, S5.6 |
@@ -1496,7 +1550,8 @@ of `10-feature-ideas.md` are not scheduled here either.
 ## 15. Stage 8: Share corrections
 
 The Label Reader's opt-in list of corrections (03 10.5.1 and 10.5.2, 04 7.5, 05 10.6, 06 9.9). It is not part of
-0.6: it ships in the first release where all four interfaces have it. The steps keep the ids the build uses (V).
+0.6: it ships in the first release where all four interfaces have it. The steps keep the ids the build uses: V,
+after the reader's own name (the vision module).
 
 ### V1.1 Hub: what the reader can do
 Hub · S · Depends on: S2.18 · Beside: Stage 6
