@@ -40,6 +40,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Slicer presets** on the phone: build the presets and see the result in place; add a new filament to a line, or start a new line with a search for its parent; Updates and Restore work as on the setup page.
 - **Recently added** on the phone: each addition with its badges, where it came from and when; open one for its photos and fields, correct it by hand or ask the Label Reader, and undo a revision.
 - **Printers** on the phone: the printer list and one printer's page with its status, slots, filament used, slot mapping and settings; a printer you add opens at once with "Added."
+- **Add spools** on the phone: find a filament you already have or read the label photos, check each spool card with the Label Reader's confidence marks, Preview, then Add; an unfinished add is kept as a draft in that browser.
 
 ## The Android app is on the new look
 

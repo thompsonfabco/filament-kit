@@ -2564,6 +2564,29 @@
     <string name="add_review_weight_unused">The weight (%1$s g) was not filled in: it is only used for one opened spool.</string>
     <!-- 1=step 2=total -->
     <string name="add_step">Step %1$s of %2$s</string>
+    <string name="add_note_label">Note for the Label Reader</string>
+    <string name="add_found_engine_local">On this Hub</string>
+    <!-- 1=engine -->
+    <string name="add_found_reader_only">Label Reader: %1$s</string>
+    <string name="add_found_not_rated">Not rated</string>
+    <string name="add_found_not_rated_hint">This reader does not say how sure it is. Check the values against the label.</string>
+    <!-- 1=seconds -->
+    <string name="add_found_usage_time">Read in %1$s s</string>
+    <!-- 1=name -->
+    <string name="add_read_colour_name">Colour: %1$s</string>
+    <!-- 1=name 2=family -->
+    <string name="add_read_colour_family">Colour: %1$s (%2$s)</string>
+    <string name="add_read_colour_none">Colour: no name found</string>
+    <string name="add_row_no_brand">No brand</string>
+    <string name="add_card_colour_pick">Pick a colour</string>
+    <string name="add_card_price_error">Enter a price above 0.</string>
+    <string name="add_card_grams_plain">Enter grams as a plain number, e.g. 1000.</string>
+    <!-- 1=number 2=field 3=message -->
+    <string name="add_bar_field_error">Spool %1$s, %2$s: %3$s</string>
+    <string name="add_preview_opened">Opened</string>
+    <!-- 1=spools 2=location -->
+    <string name="add_preview_placement">%1$s in %2$s</string>
+    <string name="add_preview_new_vendor">New brand</string>
     <string name="app_update_downloaded">The update is downloaded. Tap to install to open Android\'s install window again.</string>
     <string name="app_update_downloaded_home">Update downloaded: tap to install.</string>
     <!-- 1=percent -->
