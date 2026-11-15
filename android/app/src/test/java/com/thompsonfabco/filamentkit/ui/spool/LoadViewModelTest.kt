@@ -286,7 +286,7 @@ class LoadViewModelTest {
     @Test fun anAnswerTheAppCannotReadIsAnUnknownOutcomeNotARefusal() = runTest(dispatcher) {
         val vm = LoadPreviewViewModel(spool, "X1A", "A2", backend)
         advanceUntilIdle()
-        backend.failure = "load" to ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
+        backend.failure = "load" to ApiError(502, "internal", "The Hub returned an error (502)", noHubMessage = true)
         vm.load()
         advanceUntilIdle()
         assertTrue(vm.state.value.dropped)

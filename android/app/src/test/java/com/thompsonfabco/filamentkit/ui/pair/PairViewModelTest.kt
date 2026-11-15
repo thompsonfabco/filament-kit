@@ -218,7 +218,7 @@ class PairViewModelTest {
 
     @Test fun anErrorPageWithNoHubMessageIsNotAHub() {
         // the shape Api.errorFor gives a non-JSON error page
-        val page = ApiError(502, "internal", "The server returned an error (502)", noHubMessage = true)
+        val page = ApiError(502, "internal", "The Hub returned an error (502)", noHubMessage = true)
         backend.pairResult = { throw page }
         vm.submitAddress("10.0.0.2", "")
         vm.confirmFingerprint()
@@ -227,7 +227,7 @@ class PairViewModelTest {
     }
 
     @Test fun aNonJsonUnauthorizedPageIsNotAHubEither() {
-        backend.pairResult = { throw ApiError(401, "unauthorized", "The server returned an error (401)", noHubMessage = true) }
+        backend.pairResult = { throw ApiError(401, "unauthorized", "The Hub returned an error (401)", noHubMessage = true) }
         vm.submitAddress("10.0.0.2", "")
         vm.confirmFingerprint()
         vm.submitCode("123456")

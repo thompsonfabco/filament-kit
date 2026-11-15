@@ -44,10 +44,10 @@ class ReaderTextsTest {
     }
 
     @Test fun localErrorsAreWordedAndOthersLeftAlone() {
-        assertEquals("The local label reader is busy. Wait a moment, then retry.", ReaderTexts.localError("local_busy"))
+        assertEquals("The local label reader is busy. Wait a moment, then try again.", ReaderTexts.localError("local_busy"))
         assertEquals("This local label reader can't revise a reading. Edit by hand instead.",
             ReaderTexts.localError("local_revise_unsupported"))
-        assertEquals("The local label reader could not read the labels this time. Retry in a moment.",
+        assertEquals("The local label reader could not read the labels this time. Try again in a moment.",
             ReaderTexts.localError("local_new_kind"))
         assertNull(ReaderTexts.localError("rate_limited"))
     }

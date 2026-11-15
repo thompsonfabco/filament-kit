@@ -975,7 +975,7 @@ internal fun FilamentKitApp(
                                         } catch (e: kotlinx.coroutines.CancellationException) {
                                             throw e
                                         } catch (e: Exception) {
-                                            presetsNote = (e as? ApiError)?.message ?: "Could not ask the server for a build."
+                                            presetsNote = (e as? ApiError)?.message ?: "Could not ask the Hub for a build."
                                             presetsNoteIsError = true
                                         } finally {
                                             buildingPresets = false

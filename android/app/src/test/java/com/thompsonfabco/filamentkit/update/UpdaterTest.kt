@@ -156,7 +156,7 @@ class UpdaterTest {
     }
 
     @Test fun failedCheckShowsNoBannerAndDoesNotCrash() {
-        val source = FakeSource("9").apply { infoError = ApiError(0, "offline", "Could not reach the server") }
+        val source = FakeSource("9").apply { infoError = ApiError(0, "offline", "Could not reach the Hub") }
         val router = PairRouter()
         val u = updater(source, router = router)
         scheduler.runCurrent()
@@ -170,7 +170,7 @@ class UpdaterTest {
         updater(source, router = router)
         scheduler.runCurrent()
         assertTrue(router.notice.value is PairNotice.Unpaired)
-        assertEquals("This phone was unpaired from the server", UNPAIRED_MESSAGE)
+        assertEquals("This phone was unpaired from the Hub", UNPAIRED_MESSAGE)
         assertEquals(1, router.requests.value)
     }
 

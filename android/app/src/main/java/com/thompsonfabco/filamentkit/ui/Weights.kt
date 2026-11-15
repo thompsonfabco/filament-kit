@@ -9,7 +9,7 @@ fun parseWeight(text: String): Double? = text.trim().toDoubleOrNull()?.takeIf(::
 /** Why Update weight can't be tapped yet; null when it can. */
 fun weightHint(text: String): String? = when {
     parseWeight(text) != null -> null
-    text.isBlank() -> "Type the weight on the scale to update it."
+    text.isBlank() -> "Type the weight with the spool to update it."
     else -> "Type a weight in grams, more than 0."
 }
 

@@ -104,7 +104,7 @@ object PrinterHelp {
             "Access Code, then tap the printer in the Printers list and enter that code again."
         "needs_developer_mode" -> "The printer refuses remote control. On the printer open Settings → Network/LAN, " +
             "turn on LAN Only mode and then Developer Mode, then try again."
-        "offline" -> "The server cannot reach the printer. Check that the printer is turned on and connected to " +
+        "offline" -> "The Hub cannot reach the printer. Check that the printer is turned on and connected to " +
             "the same network."
         "not_configured" -> "This printer is not set up yet. Tap it and enter its Access Code."
         "cert_changed" -> CERT_CHANGED
@@ -115,24 +115,24 @@ object PrinterHelp {
         "camera_unavailable" -> "The camera did not start. Check that the printer is on and that LAN Mode Liveview " +
             "is turned on in the printer's network settings (Settings → Network/LAN)."
         "not_configured" -> "Set up this printer first: enter its Access Code on the Printers screen."
-        "not_found" -> "The server has no camera view for this printer."
-        "unauthorized" -> "This phone is no longer paired with the server."
+        "not_found" -> "The Hub has no camera view for this printer."
+        "unauthorized" -> "This phone is no longer paired with the Hub."
         "cert_changed" -> CERT_CHANGED
         else -> "The camera could not be shown right now. Leave this screen and come back to try again."
     }
 
     fun message(e: ApiError): String = when (e.code) {
-        "offline" -> "Could not reach the server. Check that you are on the same network."
+        "offline" -> "Could not reach the Hub. Check that you are on the same network."
         "printer_offline" -> "The printer is offline. Check that it is turned on and on the network."
         "no_reply" -> "The printer did not answer in time. Try again."
-        "not_found" -> "The server does not know this printer."
+        "not_found" -> "The Hub does not know this printer."
         "exists" -> "This printer is already set up."
         "printer_busy" -> "The printer is printing. Try again when it's idle."
         "slot_in_use" -> "This slot feeds the print that is running. Set it when the print is done, or pick another slot."
         "cert_changed" -> CERT_CHANGED
         "needs_developer_mode" -> fix("needs_developer_mode")!!
         "no_preset" -> "No preset for this filament on this printer yet. It is made at the next preset build; " +
-            "see Presets on the home screen."
+            "see Slicer presets on the home screen."
         "write_refused" -> "The printer refused the change"
         "already_running" -> "Slot mapping or a load is in progress on this printer. Try again in a moment."
         "too_old" -> "Older than 7 days, can't undo"
@@ -147,7 +147,7 @@ object PrinterHelp {
     /** Errors of "Add printer": a 404 means the server has not seen that printer on the network yet (its own words). */
     fun addMessage(e: ApiError): String = if (e.code == "not_found") e.message else message(e)
 
-    const val UNEXPECTED = "Unexpected response from the server"
+    const val UNEXPECTED = "Unexpected response from the Hub"
 
     /** gcode_state values during which a print is under way (the server's `status.ACTIVE`). */
     private val PRINTING = setOf("RUNNING", "PAUSE", "PREPARE", "SLICING")

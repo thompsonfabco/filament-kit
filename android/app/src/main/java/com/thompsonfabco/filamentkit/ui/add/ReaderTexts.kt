@@ -68,15 +68,15 @@ object ReaderTexts {
 
     /** The local reader's failures (`local_<kind>`), worded for the owner; null for any other code. */
     fun localError(code: String): String? = when (code) {
-        "local_unreachable" -> "The server can't reach its local label reader. Check that it is running, then retry."
-        "local_busy" -> "The local label reader is busy. Wait a moment, then retry."
-        "local_refused" -> "The local label reader could not use these photos. Retry, or take different photos."
-        "local_unauthorized" -> "The local label reader refused the server's token. Check the reader on the setup page, then retry."
-        "local_version" -> "The local label reader does not match this server's version. Update it, then retry."
-        "local_tier_unavailable" -> "The local label reader's tier (CPU or GPU) is not available. Change the tier on the setup page, then retry."
-        "local_bad_answer" -> "The local label reader gave an answer the server could not use. Retry in a moment."
+        "local_unreachable" -> "The Hub can't reach its local label reader. Check that it is running, then try again."
+        "local_busy" -> "The local label reader is busy. Wait a moment, then try again."
+        "local_refused" -> "The local label reader could not use these photos. Try again, or take different photos."
+        "local_unauthorized" -> "The local label reader refused the Hub's token. Check the reader on the Hub page, then try again."
+        "local_version" -> "The local label reader does not match this Hub's version. Update it, then try again."
+        "local_tier_unavailable" -> "The local label reader's tier (CPU or GPU) is not available. Change the tier on the Hub page, then try again."
+        "local_bad_answer" -> "The local label reader gave an answer the Hub could not use. Try again in a moment."
         "local_revise_unsupported" -> "This local label reader can't revise a reading. Edit by hand instead."
-        else -> if (code.startsWith("local_")) "The local label reader could not read the labels this time. Retry in a moment." else null
+        else -> if (code.startsWith("local_")) "The local label reader could not read the labels this time. Try again in a moment." else null
     }
 
     private fun JsonObject.text(key: String): String? =

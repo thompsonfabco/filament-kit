@@ -22,7 +22,7 @@ import javax.net.ssl.X509ExtendedTrustManager
  * Never accepted without the user's tap: the UI shows the new fingerprint, to trust it or pair again.
  */
 class FingerprintMismatch(val expected: String, val actual: String) :
-    IOException("The server's certificate changed: expected $expected, got $actual")
+    IOException("The Hub's certificate changed: expected $expected, got $actual")
 
 /** SHA-256 of the DER-encoded certificate as lowercase hex without colons (the server's `pairing.fingerprint`). */
 fun certFingerprint(cert: Certificate): String =
@@ -57,7 +57,7 @@ fun probeFingerprint(host: String, port: Int): String {
         raw.soTimeout = PROBE_TIMEOUT_MS
         (context.socketFactory.createSocket(raw, host, port, true) as SSLSocket).use { tls ->
             tls.startHandshake()
-            val leaf = tls.session.peerCertificates.firstOrNull() ?: throw IOException("The server sent no certificate")
+            val leaf = tls.session.peerCertificates.firstOrNull() ?: throw IOException("The Hub sent no certificate")
             return certFingerprint(leaf)
         }
     }
@@ -79,7 +79,7 @@ private class PinMismatchException(val expected: String, val actual: String) :
 private class PinnedTrustManager(private val expected: String) : X509ExtendedTrustManager() {
     private fun check(chain: Array<out X509Certificate>?) {
         // Self-signed server: only the leaf matters, no chain is built.
-        val leaf = chain?.firstOrNull() ?: throw CertificateException("The server sent no certificate")
+        val leaf = chain?.firstOrNull() ?: throw CertificateException("The Hub sent no certificate")
         val actual = certFingerprint(leaf)
         if (actual != expected) throw PinMismatchException(expected, actual)
     }
