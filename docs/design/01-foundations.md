@@ -339,8 +339,9 @@ except progress indicators. Everything respects `prefers-reduced-motion`.
 5. Every colour, size and duration comes from a token. A check fails the build on a literal colour in a component
    rule.
 6. Every page works by keyboard alone and with a screen reader (`07-accessibility.md`).
-7. Fast on a phone: the shared core stylesheet stays under 60 KB and the shared core script under 60 KB
-   uncompressed. The stylesheet's limit covers all four looks: every look's profile groups are in the one core
+7. Fast on a phone: the shared core stylesheet stays under 60 KB and the shared core script under 64 KB
+   uncompressed (the script's limit covers the shell's navigation for all four looks, the drill-in of Panes
+   included). The stylesheet's limit covers all four looks: every look's profile groups are in the one core
    file, so changing the look loads nothing and moves nothing (a look is chosen in the browser, so the Hub
    cannot send only one look's rules). Parts only some pages need (the job strip, photos and the photo viewer,
    and the detail part: the opener, the hosts and the pane behaviour of `02-components.md` 6.2 that are not in the
