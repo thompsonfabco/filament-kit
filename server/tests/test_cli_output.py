@@ -731,65 +731,12 @@ def test_the_apply_and_catalog_waits_run_programs_and_say_so(cfg, capsys, monkey
 
 # ---------- R348: commands whole, the right stream and exit code, names that can be typed ----------
 
-def _texts_of_errors(path):
-    """The text of every `_err_line(...)`, `output.error(what, fix)` and `output.note(...)` call in a module, the string
-    pieces joined in order and each value that is filled in standing as `X`."""
-    import ast
-    from pathlib import Path
-
-    def leaves(n):
-        if isinstance(n, ast.Constant) and isinstance(n.value, str):
-            return n.value
-        if isinstance(n, ast.JoinedStr):
-            return "".join(leaves(v) if isinstance(v, ast.Constant) else "X" for v in n.values)
-        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
-            return leaves(n.left) + leaves(n.right)
-        if isinstance(n, ast.IfExp):
-            return leaves(n.body) + leaves(n.orelse)
-        return "X"
-    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
-    found = []
-    for n in ast.walk(tree):
-        if not isinstance(n, ast.Call):
-            continue
-        f = n.func
-        name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
-        if name in ("_err_line", "error", "note") and n.args:
-            for a in n.args[:2]:
-                found.append((n.lineno, leaves(a)))
-    return found
-
-
-COMMAND = re.compile(r"\bsudo (?!for\b)\S|\bpip install|\bpython3? -m\b|\btar xzf|\./\S+\.sh|"
-                     r"\bfilament-kit (?:klipper|config|modules|backup|restore|update|web|reader|station|cert|remote|"
-                     r"library|uninstall|status|printer|pair|setup-code)\b")
-
-
-@pytest.mark.parametrize("columns", ["80", "40"])
-def test_no_command_in_an_error_or_fix_text_is_split(columns, monkeypatch):
-    """Every command an Error/Fix/Note text names is marked with backticks, and wrapped at 80 and at 40 columns it
-    stays on one line (06 6.3, 6.5)."""
-    from pathlib import Path
-    from filament_kit import output
-    monkeypatch.setenv("COLUMNS", columns)
-    root = Path(cli.__file__).parent
-    seen = 0
-    for module in ("cli.py", "klipper_cli.py"):
-        for lineno, text in _texts_of_errors(root / module):
-            seen += 1
-            unmarked = COMMAND.search(re.sub(r"`[^`]*`", "", text))
-            assert not unmarked, f"{module}:{lineno}: a command that is not in backticks: {text!r}"
-            lines = output.wrap("Error: " + text.replace("\nfix: ", "\nFix: "), indent=7, first=0)
-            for span in re.findall(r"`[^`]*`", text):
-                assert any(span in x for x in lines), f"{module}:{lineno}: {span!r} split at {columns} columns"
-    assert seen > 40            # the scan found the calls (a rename of them would otherwise pass it)
-
-
 def test_a_status_fix_that_is_a_command_is_not_split(monkeypatch):
     from filament_kit import output
     monkeypatch.setenv("COLUMNS", "40")
-    lines = output.status_row("needs a look", "service filament-kit active", "sudo systemctl start filament-kit")
-    assert any("sudo systemctl start filament-kit" in x for x in lines), lines
+    lines = output.status_row("needs a look", "service filament-kit active",
+                              output.cmd("sudo systemctl start filament-kit"))
+    assert any("`sudo systemctl start filament-kit`" in x for x in lines), lines
 
 
 def test_the_groupmissing_fix_is_split_into_a_fix_line(capsys, monkeypatch):

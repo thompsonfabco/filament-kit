@@ -65,15 +65,15 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
     assert lines(capsys) == [
         "--   service checks skipped (FK_NO_SYSTEMD=1)",
         f"FAIL certificate missing ({config.paths().etc / 'cert.pem'})",
-        "     fix: run: sudo filament-kit cert",
+        "     fix: run: `sudo filament-kit cert`",
         "--   display name: Workshop",
         f"FAIL Spoolman not reachable at {DEAD}: no answer",
         "     fix: check that the remote Spoolman is running and spoolman_url is right",
         f"FAIL Anthropic key missing ({config.paths().etc / 'anthropic_key'})",
-        "     fix: run: sudo filament-kit config  (option 4)",
+        "     fix: run: `sudo filament-kit config`  (option 4)",
         f"--   reads used today: 0 of {cfg['reads_per_day']}",
         "FAIL Weigh Station not answering at http://192.0.2.30:5003",
-        "     fix: check the Weigh Station machine: sudo systemctl status filament-kit-station  (url http://192.0.2.30:5003)",
+        "     fix: check the Weigh Station machine: `sudo systemctl status filament-kit-station`  (url http://192.0.2.30:5003)",
         "--   paired devices: 0",
         "--   Filament Catalog version 7 (bundled), 1 local addition",
     ]
@@ -117,11 +117,11 @@ def test_update_check_lines(cfg, capsys, monkeypatch):
     assert updates.check(cfg, fetcher=Fetcher("0.5.0")) == 0
     assert raw_lines(capsys) == ["installed 0.5.0; latest release 0.5.0: up to date"]
     assert updates.check(cfg, fetcher=Fetcher("0.6.0")) == 0
-    assert raw_lines(capsys) == ["installed 0.5.0; 0.6.0 is available: sudo filament-kit update"]
+    assert raw_lines(capsys) == ["installed 0.5.0; 0.6.0 is available: `sudo filament-kit update`"]
     updates._write_state(held="0.6.0")
     assert updates.check(cfg, fetcher=Fetcher("0.6.0")) == 0
     assert raw_lines(capsys) == ["installed 0.5.0; 0.6.0 is available (rolled back earlier: the timer skips it; "
-                             "`sudo filament-kit update` installs it): sudo filament-kit update"]
+                             "`sudo filament-kit update` installs it): `sudo filament-kit update`"]
 
 
 def test_update_check_failure_line(cfg, capsys):

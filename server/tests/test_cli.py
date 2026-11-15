@@ -227,7 +227,7 @@ def test_status_api_not_answering_fails(capsys, monkeypatch):
     assert cli.main(["status"]) == 1
     out = old_rows(capsys.readouterr().out)
     assert f"FAIL filament-kit API not answering at https://127.0.0.1:{cfg['port']}/api/info" in out
-    assert "     fix: sudo journalctl -u filament-kit -n 50" in out
+    assert "     fix: `sudo journalctl -u filament-kit -n 50`" in out
 
 
 def test_status_api_answering_ok(capsys, monkeypatch):
@@ -517,7 +517,7 @@ def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_li
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    assert "--   Filament Catalog not downloaded (filament-kit library update), 0 local additions" in out
+    assert "--   Filament Catalog not downloaded (`filament-kit library update`), 0 local additions" in out
     assert "--   Slicer presets: no build yet (waiting for Slicer Sync)" in out
     assert "--   Slicer Sync: not set up (see README: Pair your PC)" in out
 
@@ -572,7 +572,7 @@ def test_status_failed_build_and_library_update_warning(capsys, monkeypatch, spo
     out = _status_lines(capsys)
     assert "--   Filament Catalog update: HTTP 404: using bundled version 7" in out
     i = out.index("FAIL Slicer presets: last build failed: ValueError: boom; using build 20261101-070000")
-    assert out[i + 1] == "     fix: sudo journalctl -u filament-kit-build -n 50"
+    assert out[i + 1] == "     fix: `sudo journalctl -u filament-kit-build -n 50`"
     assert "--   Slicer Sync: last upload never, no build installed yet" in out
 
 

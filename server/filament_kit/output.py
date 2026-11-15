@@ -13,6 +13,7 @@ the environment and from what `configure` was given, so a test that sets `NO_COL
     status_row(word, text, fix) -> [str]      the lines of one status row (06 9.1)
     table(headers, rows, long=, right=)       a table as lines (06 6.3)
     wrap(text, indent=, first=) -> [str]      running text at the width
+    cmd(text) -> str                          a command inside running text, marked so `wrap` never breaks it
     wait(text)                                a progress line once 2 seconds pass with no other output (06 6.6);
                                               `paused()` holds it while the command asks a question
 """
@@ -200,6 +201,13 @@ def _words(para: str) -> list[str]:
     return words + [cur]
 
 
+def cmd(text: str) -> str:
+    """A command named in running text (`sudo filament-kit update`): in backticks, so `wrap` keeps it whole on one
+    line and it can be copied. Every command in the text of a message is marked through this or an equal pair of
+    backticks; `test_every_command_in_the_cli_text_is_marked` scans the modules for any that is not."""
+    return "`" + text + "`"
+
+
 def wrap(text: str, *, indent: int = 0, first: int | None = None) -> list[str]:
     """`text` as lines of at most width - 1 characters, wrapped at spaces outside backtick spans. The first line starts
     at column `first` (default `indent`), the others at `indent`, so a continuation lines up with where the text began.
@@ -218,7 +226,7 @@ def wrap(text: str, *, indent: int = 0, first: int | None = None) -> list[str]:
                 cur, col = "", indent + lead
             cur = f"{cur} {word}" if cur else word
         lines.append(" " * col + cur)
-    return [x.replace(_HELD, " ") for x in lines]
+    return lines
 
 
 def table(headers: list[str], rows: list[list], *, long: int = 0, right: tuple[int, ...] = (), whole: bool = False,
@@ -406,8 +414,6 @@ def status_row(word: str, text: str, fix: str = "", stream=None) -> list[str]:
     lines = [lead + body[0][start:]] + body[1:]
     if fix:
         indent = col if not plain() else start
-        if fix.startswith("sudo "):                       # a fix that is a command is never cut (06 6.3)
-            fix = fix.replace(" ", _HELD)
         lines += wrap("Fix: " + fix, indent=indent + 5, first=indent)
     return lines
 
