@@ -10,10 +10,12 @@
 // wider letters of a Linux machine, on any machine.
 import { spawn } from "node:child_process";
 import { endOwnBrowser } from "./aut5_browser_end.mjs";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// Also: --scheme light|dark (the emulated colour scheme), --shot <file.png> (a screenshot of the page as the script left it),
+// --init <file.js> (run in every new document before its own scripts).
 process.exitCode = 2;      // anything that ends the run early is a failed run, never a pass
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
@@ -111,6 +113,8 @@ async function main() {
     await send("Page.enable");
     await send("Runtime.enable");
     await send("Runtime.addBinding", { name: "__drive" });
+    if (args.scheme) await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: args.scheme }] });
+    if (args.init) await send("Page.addScriptToEvaluateOnNewDocument", { source: readFileSync(args.init, "utf8") });
     const width = Number(args.width || 1280);
     await send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width <= 600 });
     const fonts = args["font-dir"] || process.env.AUT5_FONT_DIR;
@@ -122,6 +126,9 @@ async function main() {
     }
     if (fonts) await send("Runtime.evaluate", { expression: "window.__fonts", awaitPromise: true });
     const r = await send("Runtime.evaluate", { expression: `(async () => {\n${script}\n})()`, awaitPromise: true, returnByValue: true }, 120000);
+    if (args.shot && !r.exceptionDetails) {
+      writeFileSync(args.shot, Buffer.from((await send("Page.captureScreenshot", { format: "png" })).data, "base64"));
+    }
     ws.close();
     if (r.exceptionDetails) {
       const d = r.exceptionDetails;

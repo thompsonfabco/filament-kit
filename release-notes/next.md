@@ -42,6 +42,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Printers** on the phone: the printer list and one printer's page with its status, slots, filament used, slot mapping and settings; a printer you add opens at once with "Added."
 - **Add spools** on the phone: find a filament you already have or read the label photos, check each spool card with the Label Reader's confidence marks, Preview, then Add; an unfinished add is kept as a draft in that browser.
 - **Spools** on the phone: the last tag read, a search that remembers Sealed only, and a spool sheet to link a tag and open the spool, update its weight, move it (with Undo), mark it empty or load it into a printer; nothing is written that was not previewed.
+- **Home screen and offline.** The Add to Home Screen sheet lists the three iPhone steps (other browsers offer their own install); the app opens without the Hub, and when the Hub does not answer it shows an Offline chip and a banner, tries again every 10 s, and says when it is connected again.
 
 ## The Android app is on the new look
 

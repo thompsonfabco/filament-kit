@@ -405,3 +405,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .spools__buttons { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s2); }
 .spools__danger { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
 .spools__form, .spools__load { display: grid; gap: var(--s3); padding: var(--s3); border: var(--hairline) solid var(--border); border-radius: var(--r); background: var(--surface-2); }
+/* Home and offline (S3.15) */
+.topbar__offline[hidden] { display: none; }
+.topbar__offline { margin-right: var(--s2); }
+.offline-banner { margin-bottom: var(--s3); }

@@ -1109,3 +1109,90 @@ def test_web_open_preview_shows_the_weight_spoolman_will_keep(app, env, sm):
     with _client(app) as c:
         r = c.post("/intake/api/open", json={"spool": sid, "gross": "4800", "dry_run": True}, headers={"Origin": ORIGIN})
         assert r.status_code == 200 and r.json()["spool"]["remaining_g"] == 1000                           # a full spool at most
+# ---- S3.15 (04 10.2): the service worker keeps the shell, never the API ----
+
+STATIC = Path(web_app.__file__).parent / "static"
+
+
+def _sw_code() -> str:
+    return re.sub(r"//[^\n]*", "", (STATIC / "sw.js").read_text(encoding="utf-8"))
+
+
+def test_the_service_worker_keeps_the_whole_shell_and_nothing_else():
+    code = _sw_code()
+    listed = re.search(r"const SHELL = \[(.*?)\];", code, re.S).group(1)
+    files = set(re.findall(r'"([^"]+)"', listed))
+    assert {"app.css", "app.js", "printers.js", "icon.png", "icon-512.png", "manifest-light.webmanifest", "manifest-dark.webmanifest",
+            "shared/theme-init.js", "shared/tokens.css", "shared/components.css", "shared/strings.js", "shared/components.js",
+            "shared/sprite.svg"} <= files
+    assert listed.startswith("BASE,")                              # the page itself, at the app's path
+    assert all(not f.startswith("api") and "/api" not in f for f in files)
+
+
+def test_the_service_worker_cache_is_named_after_the_version_and_older_ones_go():
+    code = _sw_code()
+    assert 'const VERSION = "__VERSION__"' in code and 'const CACHE = "fk-shell-" + VERSION' in code
+    assert 'k.startsWith("fk-shell-") && k !== CACHE' in code and "caches.delete(k)" in code     # an update replaces the copy
+    assert "skipWaiting" in code and "clients.claim" in code
+
+
+def test_the_service_worker_never_answers_or_stores_an_api_request():
+    code = _sw_code()
+    guard = re.search(r'if \((.*?)\) return;', code.split('addEventListener("fetch"')[1], re.S).group(1)
+    assert 'r.method !== "GET"' in guard and "!SHELL.includes(u.pathname)" in guard      # only a listed shell file is handled
+    assert "/api" not in code and "api/" not in code
+    puts = re.findall(r"\.put\(([^)]*)\)", code)
+    assert puts == ["u, resp", "u.pathname, copy"]            # the install and the fetch handler store, nothing else does
+    assert "resp.ok && !resp.redirected" in code               # a redirect to the sign-in page is not the shell
+    assert 'u.origin !== self.location.origin' in guard         # same origin only
+
+
+def test_the_service_worker_falls_back_to_the_copy_when_the_hub_does_not_answer():
+    code = _sw_code()
+    assert "fetch(r).then(" in code and ".catch(() => caches.match(u.pathname).then((hit) => hit || Response.error()))" in code
+
+
+def test_the_page_registers_the_worker_for_the_app_path():
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert 'navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE })' in js
+    assert 'register(BASE + "/sw.js", { scope: BASE })' in (STATIC / "printers.js").read_text(encoding="utf-8")
+    assert "install_step_" in js and "web_install_step_" not in js
+
+
+SW_HARNESS = r"""
+const fs = require("fs"), vm = require("vm");
+const src = fs.readFileSync(process.argv[2], "utf8").replace("__VERSION__", "t");
+const puts = [], handlers = {};
+const reply = (url) => (/app\.(js|css)$/.test(url) ? { ok: true, redirected: true, url: "signin" } : { ok: true, redirected: false, url });
+const ctx = { URL, Response: { error: () => "error" },
+  self: { registration: { scope: "https://x/intake" }, location: { origin: "https://x" }, skipWaiting() {}, clients: { claim() {} },
+          addEventListener: (n, f) => { handlers[n] = f; } },
+  caches: { open: async () => ({ put: async (u, r) => { puts.push(String(u)); } }), keys: async () => [], match: async () => undefined },
+  fetch: async (u) => { const x = String(u && u.url ? u.url : u); if (x.endsWith("printers.js")) throw new TypeError("down"); return { ...reply(x), clone() { return this; } }; } };
+vm.runInNewContext(src, ctx);
+(async () => {
+  let wait; handlers.install({ waitUntil: (p) => { wait = p; } }); await wait;
+  const installed = puts.splice(0);
+  for (const path of ["/intake/app.js", "/intake/app.css"]) {
+    let hit; handlers.fetch({ request: { method: "GET", url: "https://x" + path }, respondWith: (p) => { hit = p; } }); await hit;
+  }
+  await new Promise((r) => setTimeout(r, 20));
+  console.log(JSON.stringify({ installed, fetched: puts }));
+})();
+"""
+
+
+def test_a_redirect_during_install_or_fetch_is_never_cached(tmp_path):
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("needs Node")
+    (tmp_path / "h.js").write_text(SW_HARNESS, encoding="utf-8")
+    run = subprocess.run([node, str(tmp_path / "h.js"), str(STATIC / "sw.js")], capture_output=True, encoding="utf-8", timeout=60)
+    assert run.returncode == 0, run.stderr
+    out = json.loads(run.stdout)
+    assert "/intake/app.js" not in out["installed"] and "/intake/app.css" not in out["installed"]   # redirected: not stored
+    assert "/intake/shared/components.js" in out["installed"] and "/intake/icon.png" in out["installed"]
+    assert "/intake/printers.js" not in out["installed"]       # a file that cannot be fetched is skipped, not fatal
+    assert out["fetched"] == []                                 # a redirected answer to a later request is not stored either
