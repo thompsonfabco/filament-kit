@@ -2135,7 +2135,6 @@ window.SW_TEXT = Object.freeze({
   "recent_read_colour_unknown": "Colour: no name found",
   "recent_read_least_sure": "Least sure: {fields}",
   "recent_read_sure": "{percent} % sure",
-  "recent_size_mb": "{size} MB",
   "recent_reread": "Read again by the Label Reader ({engine}).",
   "recent_reread_sure": "Read again by the Label Reader ({engine}), {percent} % sure.",
   "recent_relink_other": "The spools now use filament {id}.",

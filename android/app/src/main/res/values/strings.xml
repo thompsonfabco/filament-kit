@@ -2926,8 +2926,6 @@
     <string name="recent_read_least_sure">Least sure: %1$s</string>
     <!-- 1=percent -->
     <string name="recent_read_sure">%1$s %% sure</string>
-    <!-- 1=size -->
-    <string name="recent_size_mb">%1$s MB</string>
     <!-- 1=engine -->
     <string name="recent_reread">Read again by the Label Reader (%1$s).</string>
     <!-- 1=engine 2=percent -->

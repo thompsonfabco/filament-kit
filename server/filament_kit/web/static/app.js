@@ -257,7 +257,7 @@ function historyTab() {
     await fill(list, SW.t("nav_recently_added"), async () => {
       const d = await api("history");
       records = d.records; reader = !!d.ai; keep = d.keep;
-      intro.textContent = SW.t("recent_intro", { count: d.keep, size: SW.t("recent_size_mb", { size: (d.photo_bytes / 1048576).toFixed(1) }) });
+      intro.textContent = SW.t("recent_intro", { count: d.keep, size: SW.t("recent_size_mb", { value: (d.photo_bytes / 1048576).toFixed(1) }) });
       return records.length ? table() : SW.empty({ icon: "recent", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") });
     });
   }
