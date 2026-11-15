@@ -97,14 +97,20 @@ def test_theme_init_carries_the_surface_of_every_theme_in_light_and_dark():
 # on the tile stores the look and applies it, also when the page showed another look (the Hub's default or a stored one)
 CLICK = PRELUDE + """
 const out = {};
-const clickTile = async () => {                              // the page may still be settling (fonts, a first read): aim again when the click missed
-  for (let i = 0; i < 4 && root.getAttribute("data-look") !== "console"; i++) {
-    const tile = $(".theme-picker__tile"); tile.scrollIntoView({ block: "center" });
-    await sleep(300);
-    const r = tile.getBoundingClientRect();
-    window.__drive(JSON.stringify({ click: [r.left + r.width / 2, r.top + r.height / 2] }));
-    await sleep(600);
+const resultText = () => text($(".theme-picker").parentElement.querySelector(":scope > .result .result__text"));
+const clickTile = async (changes) => {                      // one real click; when it should change the look, a missed click fails here
+  const tile = $(".theme-picker__tile"); tile.scrollIntoView({ block: "center" });
+  let last = "";
+  for (let i = 0; i < 50; i++) {                              // the page settles (fonts, a first read) before the aim is taken
+    const r = tile.getBoundingClientRect(), now = [r.left, r.top, r.width, r.height].join();
+    if (now === last) break;
+    last = now; await sleep(100);
   }
+  const r = tile.getBoundingClientRect();
+  window.__drive(JSON.stringify({ click: [r.left + r.width / 2, r.top + r.height / 2] }));
+  if (changes) { await until(() => root.getAttribute("data-look") === "console" && localStorage.getItem("spoolwarden.look") === "console", "the click to choose Console");
+    await until(() => resultText(), "the result line (it shows 30 ms after the change)"); }
+  else await sleep(800);                                      // already on: nothing is to happen, so give it time to
 };
 const open = async () => {
   location.hash = "__AWAY__"; await until(() => !$(".theme-picker"), "the picker to go");
@@ -114,12 +120,12 @@ const state = () => ({ ...picker(), look: root.getAttribute("data-look"), stored
 localStorage.removeItem("spoolwarden.look");
 await open();
 out.start = state();                                        // as served: nothing chosen
-await clickTile();
-out.clicked = { ...state(), result: text($(".theme-picker").parentElement.querySelector(":scope > .result .result__text")) };
+await clickTile(out.start.look !== "console");
+out.clicked = { ...state(), result: resultText() };
 localStorage.setItem("spoolwarden.look", "workbench"); root.setAttribute("data-look", "workbench");     // a stored look that has no tile
 await open();
 out.other = state();
-await clickTile();
+await clickTile(true);
 out.otherClicked = state();
 await open();
 out.again = state();
@@ -134,8 +140,10 @@ def _check_click(page, served_look):
     assert page["start"]["look"] == served_look and page["start"]["stored"] is None
     assert page["start"]["checked"] == (on if served_look == "console" else off)         # checked only when Console is the look shown
     assert page["clicked"]["look"] == "console" and page["clicked"]["checked"] == on
-    assert page["clicked"]["stored"] == "console" or served_look == "console"             # a click on a tile that is already on changes nothing
-    if served_look != "console":
+    if served_look == "console":                                                         # a click on a tile that is already on changes nothing
+        assert page["clicked"]["stored"] is None and page["clicked"]["result"] is None or page["clicked"]["result"] == ""
+    else:
+        assert page["clicked"]["stored"] == "console"
         assert page["clicked"]["result"] == T("appearance_theme_saved", name=T("theme_console_name"))
     assert page["other"]["look"] == "workbench" and page["other"]["checked"] == off
     assert page["otherClicked"]["look"] == "console" and page["otherClicked"]["stored"] == "console" and page["otherClicked"]["checked"] == on
