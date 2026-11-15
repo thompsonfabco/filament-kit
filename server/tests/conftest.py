@@ -29,6 +29,12 @@ def _made_up_host_name(monkeypatch):
     monkeypatch.setattr(socket, "gethostname", lambda: HOST_NAME)
     monkeypatch.setattr(socket, "getfqdn", lambda name="": HOST_NAME)
     monkeypatch.setattr(platform, "node", lambda: HOST_NAME)
+    real_getaddrinfo, real_gethostbyname = socket.getaddrinfo, socket.gethostbyname
+    # the made-up name resolves here, at once, as a machine's own name does (no DNS wait in any test)
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, *a, **k: real_getaddrinfo(
+        "127.0.0.1" if str(host).lower() in (HOST_NAME, HOST_NAME + ".local") else host, *a, **k))
+    monkeypatch.setattr(socket, "gethostbyname", lambda host: "127.0.0.1" if str(host).lower() in (HOST_NAME, HOST_NAME + ".local")
+                        else real_gethostbyname(host))
     monkeypatch.setitem(config.DEFAULTS, "server_name", HOST_NAME)    # read once, when config was imported
     if hasattr(os, "uname"):
         real = os.uname()
