@@ -71,7 +71,7 @@ function setGroup(id, o) {
 // ones that restart the Hub, as the Hub page's order is: plain, applies, restarts); `own` names the keys with an
 // endpoint of their own. The shared form group calls this once per changed key, in its order.
 const effectOf = (form, key) => { const c = form.elements[key]; return (c && c.dataset && c.dataset.effect) || ""; };
-function valueOf(form, key) {
+function fieldValue(form, key) {
   const c = form.elements[key];
   return !c ? "" : c.type === "checkbox" ? c.checked : c.value;
 }
@@ -96,7 +96,7 @@ function sender(getForm, getGroup, own, conv = {}) {
     const form = getForm(), fx = effectOf(form, key);
     if (!plan[fx]) {
       const keys = getGroup().changed().filter((k) => !own[k] && effectOf(form, k) === fx), values = {};
-      for (const k of keys) values[k] = conv[k] ? conv[k](valueOf(form, k)) : valueOf(form, k);
+      for (const k of keys) values[k] = conv[k] ? conv[k](fieldValue(form, k)) : fieldValue(form, k);
       plan[fx] = { left: keys, reply: null };
       try { plan[fx].reply = await api("settings/general", { values, code: theCode() }); } catch (e) { delete plan[fx]; throw setRefusal(form, e); }
     }
@@ -114,11 +114,16 @@ function wireGroup(form, id, o) {
     if (saved.length === keys.length) setTimeout(() => settled(form, id, o), 60);
   } });
   const save0 = g.save;
+  let running = false;
   g.save = async () => {
-    keys = o.keys = g.changed();
-    if (keys.length && o.before && !(await o.before(keys))) return;
-    if (o.send.reset) o.send.reset();
-    return save0();
+    if (running) return;                        // a second press while a save is under way changes nothing
+    running = true;
+    try {
+      keys = o.keys = g.changed();
+      if (keys.length && o.before && !(await o.before(keys))) return;
+      if (o.send.reset) o.send.reset();
+      return await save0();
+    } finally { running = false; }
   };
   if (o.after) o.after(g);
   o.group = g;
@@ -195,7 +200,7 @@ function settingsTab() {
   const loads = SET_GROUPS.map(([id]) => loadGroup(id));
   later(Promise.all(loads));
   const first = setGroupId();
-  Promise.all(loads).then(() => { if (first && setEl && !SW.phone()) scrollTo(first, false, true); });
+  Promise.all(loads).then(() => { if (first && setEl && !SW.phone()) scrollToGroup(first, false, true); });
   if (!setScrollOn) { setScrollOn = true; window.addEventListener("scroll", onScroll, { passive: true }); }
   markCurrent(first || SET_GROUPS[0][0]);
   return setEl;
@@ -214,8 +219,15 @@ function loadGroup(id, o = {}) {
       if (def[4] === "library") data.lib = setSeen.lib = await api("library");
       if (o.quiet && (dirtyIn(wrap) || wrap._hold || !wrap.isConnected)) { paintList(); return; }
       wrap._readAt = Date.now();
-      const had = wrap.contains(document.activeElement), el = def[3](data, o);
+      const had = wrap.contains(document.activeElement), keep = o.quiet && !o.result ? capture(wrap) : null, el = def[3](data, o);
       if (L) L.done(el); else wrap.replaceChildren(el);
+      stamp(wrap);
+      if (keep && keep.size) {                     // what was typed and not sent stays (the shared carry), and the group shows it as unsaved
+        wrap._keep = keep;
+        carry(wrap);
+        const f = el.matches("form") ? el : null;
+        if (f) f.dispatchEvent(new Event("change", { bubbles: true }));
+      }
       if (o.result) { const r = el.querySelector(".group__foot .result"); if (r) SW.result(r, o.result[0], o.result[1]); }
       if (had) { const t1 = el.querySelector(".group__title"); if (t1) t1.focus({ preventScroll: true }); }
     } catch (e) {
@@ -276,7 +288,7 @@ function onScroll() {
   for (const [id] of SET_GROUPS) { const w = wrapOf(id); if (w && w.getBoundingClientRect().top <= window.innerHeight / 3) cur = id; }
   markCurrent(cur);
 }
-function scrollTo(id, focus, instant) {
+function scrollToGroup(id, focus, instant) {
   const w = wrapOf(id);
   if (!w) return;
   w.scrollIntoView({ behavior: instant || matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
@@ -289,7 +301,7 @@ function jump(e) {
   e.preventDefault();
   if (SW.phone()) { location.hash = "#settings/" + id; return; }
   history.replaceState(null, "", "#settings/" + id);
-  scrollTo(id, true);
+  scrollToGroup(id, true);
   if (shellView) shellView.paint(false);
 }
 // the phone shows the list or one group; the wide layouts show them all (the CSS decides by the width)
@@ -304,7 +316,7 @@ window.addEventListener("hashchange", () => {
   setTimeout(() => { setHashMove = false; }, 0);
   if (setEl && setEl.isConnected && tabNow() === "settings") {
     const id = setGroupId();
-    if (id && !SW.phone() && setEl.dataset.open !== id) scrollTo(id, true);
+    if (id && !SW.phone() && setEl.dataset.open !== id) scrollToGroup(id, true);
   }
 });
 
@@ -374,16 +386,21 @@ function groupLabelReader({ g }) {
     value: v["intake.reader"] || "auto", optional: false, options: ORDERS.map(([k, w]) => ({ value: k, label: SW.t("settings_reader_order_" + w) })) }));
   else body.push(h("p", { textContent: SW.t("settings_reader_order_single", { engine: SW.t(cloud ? "settings_reader_engine_cloud" : "settings_reader_group_local") }) }));
 
-  let keyField = null;
+  let keyField = null, keyProxy = null;
   if (cloud) {
     const kbox = sbox();
-    keyField = SW.field({ row: true, name: "key", type: "secret", mono: true, label: SW.t("settings_reader_key_new"), placeholder: SW.t("settings_reader_key_placeholder"),
+    keyField = SW.field({ row: true, type: "secret", mono: true, label: SW.t("settings_reader_key_new"), placeholder: SW.t("settings_reader_key_placeholder"),
       attrs: { "aria-required": "false", autocomplete: "new-password" } });
+    // the form group sends its fields in the order they stand: a hidden field named `key` at the end of the form stands for
+    // the typed key, so it goes after Records kept (03 10.5) and can be cleared on its own once it was accepted
+    keyProxy = SW.field({ name: "key", label: SW.t("settings_reader_key_new"), attrs: { "aria-required": "false" } });
+    keyProxy.hidden = true;
+    keyField._control.oninput = () => { keyProxy._control.value = keyField._control.value; };
     const cancel = SW.btn(SW.t("common_cancel"), { cls: "btn--ghost", action: "cancel-key" });
     const entry = h("div", { class: "settings__entry" }, keyField, cancel);
     entry.hidden = true;
     const open = SW.btn(SW.t(S.anthropic.set ? "common_replace" : "settings_reader_key_set"), { action: "replace-key", run: () => { entry.hidden = false; open.hidden = true; keyField._control.focus(); } });
-    cancel.addEventListener("click", () => { keyField._control.value = ""; keyField._control.dispatchEvent(new Event("change", { bubbles: true })); entry.hidden = true; open.hidden = false; open.focus(); });
+    cancel.addEventListener("click", () => { keyField._control.value = keyProxy._control.value = ""; keyField._control.dispatchEvent(new Event("change", { bubbles: true })); entry.hidden = true; open.hidden = false; open.focus(); });
     const checkBtn = SW.btn(SW.t("common_check"), { action: "check-key", run: async () => {
       working(kbox, SW.t("settings_reader_key_checking"));
       try { const r = await api("key/check", {}); say(kbox, r.text, r.ok); } catch (e) { say(kbox, e.status === 429 ? SW.t("settings_reader_key_wait") : hubText(e.message), false); }
@@ -395,8 +412,8 @@ function groupLabelReader({ g }) {
       h("div", { class: "settings__keyrow" }, h("p", { class: "field__label" }, SW.t("settings_reader_key"), " ", SW.status(S.anthropic.set ? "set" : "not_set", { small: true })),
         h("div", { class: "actions" }, checkBtn, open, remove)),
       kbox, entry,
-      plainField({ name: "model", mono: true, label: SW.t("settings_reader_model"), value: v.model == null ? "" : String(v.model), placeholder: SW.t("settings_reader_model_placeholder"),
-        hint: SW.t("settings_reader_model_hint"), effect: "restarts" }),
+      requiredField({ name: "model", mono: true, label: SW.t("settings_reader_model"), value: v.model == null ? "" : String(v.model), effect: "restarts",
+        check: (x) => (x.trim() ? null : SW.t("settings_reader_model_error")) }),
       requiredField({ name: "reads_per_day", type: "number", mono: true, label: SW.t("settings_reader_reads"), value: String(v.reads_per_day == null ? "" : v.reads_per_day),
         unit: SW.t("settings_reader_reads_unit"), hint: SW.t("settings_reader_reads_hint"), effect: "restarts", check: whole(1, 100000, "settings_reader_reads_error") }));
   } else if (local) body.push(h("p", { class: "muted", textContent: SW.t("settings_reader_key_cloud_off") }));
@@ -421,8 +438,10 @@ function groupLabelReader({ g }) {
 
   const el = setGroup("label-reader", { desc: SW.t("settings_reader_desc"), save: SW.t("settings_reader_save"), badges, body });
   const o = { send: null };
+  if (keyProxy) el.querySelector(".group__body").append(keyProxy);
   const own = { key: async (value) => {
     try { await api("key", { key: value, code: theCode() }); } catch (e) { throw setRefusal(el, Object.assign(e, { data: { ...(e.data || {}), field: "key" } })); }
+    keyField._control.value = "";                // accepted: it does not stay in the page (the proxy keeps what was sent, so the group is clean)
     return {};
   } };
   o.send = sender(() => el, () => o.group, own, { "intake.history_keep": (x) => Number(x), reads_per_day: (x) => Number(x) });
@@ -430,6 +449,7 @@ function groupLabelReader({ g }) {
     text: SW.t("settings_restart_body"), confirm: SW.t("settings_restart_confirm") }));
   o.done = (text) => (o.keys.includes("key") ? text + " " + SW.t("settings_reader_key_saved") : text);
   wireGroup(el, "label-reader", o);
+  el.addEventListener("click", (e) => { if (keyField && e.target.closest('[data-action="undo-changes"]')) keyField._control.value = ""; });
   return el;
 }
 // the badge of the reader on this Hub: whether it answers now
@@ -545,7 +565,7 @@ function groupPassphrase() {
 function groupCatalog({ lib }) {
   const on = S.library_token.library, c = lib.last_check, set = S.library_token.set, none = lib.source === "none";
   const badges = [];
-  if (none) badges.push(h("span", { class: "settings__badge", textContent: SW.t("settings_catalog_none") }));
+  if (!on) { /* switched off: no state badge */ } else if (none) badges.push(h("span", { class: "settings__badge", textContent: SW.t("settings_catalog_none") }));
   else if (c && !c.ok) badges.push(h("span", { class: "settings__badge" }, SW.status("needs_look", { small: true }), " " + SW.t("settings_catalog_failed")));
   else badges.push(SW.status("ok", { small: true }));
   const state = h("div", { class: "settings__state-lines" }), box = sbox(), job = sbox(), entryBox = sbox();
@@ -581,7 +601,7 @@ function groupCatalog({ lib }) {
   if (set) body.push(h("div", { class: "actions" }, SW.btn(SW.t("settings_catalog_token_remove"), { cls: "btn--ghost btn--danger", action: "remove-library-token", run: (e) => confirmed(
     { ...destroy("settings_token_remove_title", "settings_token_remove_body", "settings_catalog_token_remove"), opener: e.currentTarget }, "library_token/remove", {},
     () => loadGroup("catalog", { quiet: true, fresh: true })) })));
-  body.push(entry, h("div", { class: "actions" }, add), entryBox);
+  if (on) body.push(entry, h("div", { class: "actions" }, add), entryBox);
   const el = setGroup("catalog", { desc: SW.t("settings_catalog_desc"), save: SW.t("settings_catalog_save"), badges, body });
   const o = { send: async (key, value) => {
     try { await api("library_token", { token: value, code: theCode() }); } catch (e) { throw setRefusal(el, Object.assign(e, { data: { ...(e.data || {}), field: key } })); }

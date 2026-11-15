@@ -195,3 +195,82 @@ def test_the_audit_passes_on_the_groups_that_read_more_once_unlocked(hub_change,
                "--ready", UNLOCK, *fonts)
     assert run.returncode == 0, run.stdout + run.stderr
     assert json.loads(run.stdout)["views"] == 20 and json.loads(run.stdout)["failing"] == 0
+
+
+def test_a_second_submit_during_a_save_changes_nothing_and_the_save_reports_what_it_did(hub, monkeypatch, tmp_path):
+    """R332 HIGH 2: the second press used to empty the plan of the save under way, which then reported a saved group as failed."""
+    import time
+    seen: list = []
+    real = setup_helper.OPS["general_group"]
+
+    def slow(req):
+        seen.append(dict(req["values"]))
+        time.sleep(1.2)
+        return real(req)
+    monkeypatch.setitem(setup_helper.OPS, "general_group", slow)
+    page = _drive(hub, tmp_path, PRELUDE + """
+await loaded();
+await unlock();
+const form = $("#set-storage");
+type(form, "locations", "Shelf C");
+type(form, "placement.box_count", "4");
+form.requestSubmit();
+await sleep(500);
+form.requestSubmit();                                   // while the first is still on its way
+await until(() => $("#set-storage") !== form && text($("#set-storage .group__foot .result__text")), "the saved result");
+return { result: text($("#set-storage .group__foot .result__text")), state: $("#set-storage").dataset.state || null };
+""")
+    assert len(seen) == 1, seen
+    assert page["result"] == T("form_saved_fields", fields=f"{T('settings_storage_locations')}, {T('settings_storage_boxes')}") and page["state"] is None
+
+
+def test_label_reader_sends_the_key_after_records_kept_and_a_secret_does_not_stay_once_accepted(hub, monkeypatch, tmp_path):
+    """R332 MED 1 and 2: a refused key does not turn the keys saved before it into 'not saved', and an accepted key leaves
+    the entry field even when a later key (the model, which restarts the Hub) is refused."""
+    _switch_on("ai_intake", "local_intake")
+    order: list = []
+    key_calls = []
+    real = setup_helper.OPS["general_group"]
+
+    def group(req):
+        order.append(("group", sorted(req["values"])))
+        if "model" in req["values"]:
+            raise setup_helper.Refused(400, "model is not usable", errors={"model": "model is not usable"})
+        return real(req)
+
+    def key(req):
+        order.append(("key",))
+        key_calls.append(1)
+        if len(key_calls) == 1:
+            raise setup_helper.Refused(400, "the key was refused", field="key")
+        return {}
+    monkeypatch.setitem(setup_helper.OPS, "general_group", group)
+    monkeypatch.setitem(setup_helper.OPS, "key_set", key)
+    page = _drive(hub, tmp_path, PRELUDE + """
+await loaded();
+await unlock();
+const form = $("#set-label-reader"), entry = () => $("#set-label-reader .settings__entry input");
+$('#set-label-reader [data-action="replace-key"]').click();
+const key = (v) => { const c = entry(); c.value = v; c.dispatchEvent(new Event("input", { bubbles: true })); };
+type(form, "intake.history_keep", "31");
+key("sk-ant-example-1");
+form.requestSubmit();
+const first = await until(() => text($("#set-label-reader .group__foot .result__text")), "the first result");
+const out = { first, keptAfterRefusal: entry().value };
+// the key is accepted now, the model is refused: the key leaves the page
+type(form, "model", "claude-example");
+await sleep(100);
+form.requestSubmit();
+const ask = await until(() => $("dialog[open]"), "the restart question");
+$('[data-action="confirm"]', ask).click();
+await until(() => { const r = text($("#set-label-reader .group__foot .result__text")); return r && r !== first ? r : null; }, "the second result");
+out.second = text($("#set-label-reader .group__foot .result__text"));
+out.keptAfterAccepted = entry().value;
+out.dirty = form.dataset.state || null;
+return out;
+""")
+    keys_first = order[:2]
+    assert keys_first == [("group", ["intake.history_keep"]), ("key",)], order       # Records kept goes first, the key after it
+    assert "Records kept" in page["first"].split("Not saved")[0] and "Address" not in page["first"], page["first"]
+    assert page["keptAfterRefusal"] == "sk-ant-example-1"
+    assert page["keptAfterAccepted"] == "" and page["dirty"] == "dirty", page

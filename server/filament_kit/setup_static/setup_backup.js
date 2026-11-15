@@ -107,6 +107,8 @@ function restoreSteps() {
     SW.disable(go, chosen ? null : SW.t("settings_restore_first"));
     go._refused = () => file._control.focus();
     sum.hidden = actions.hidden = stage < 3;
+    const wrap = steps.closest(".settings__group");
+    if (wrap) wrap._hold = stage > 1;            // a chosen zip or a checked upload is not drawn away by a read of the group
   };
   const reset = () => { file._control.value = ""; file._control.dispatchEvent(new Event("change")); summary = null; sum.replaceChildren(); actions.replaceChildren(); stage = 1; SW.result(rbox, null); paint(); };
   file._control.addEventListener("change", () => { stage = file._control.files.length ? 2 : 1; summary = null; sum.replaceChildren(); actions.replaceChildren(); bar.hidden = true; SW.result(rbox, null); paint(); });

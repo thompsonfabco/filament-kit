@@ -1192,6 +1192,7 @@ window.SW_TEXT = Object.freeze({
   "settings_reader_local_not_installed": "Not installed on this machine. A reader on another computer at home (one with a graphics card) works too: switch it on in Features and give its address above.",
   "settings_reader_local_remove": "Remove the reader",
   "settings_reader_model": "Claude model",
+  "settings_reader_model_error": "Enter a model name.",
   "settings_reader_model_hint": "Leave empty for the default model.",
   "settings_reader_model_placeholder": "Default model",
   "settings_reader_off": "The Label Reader is switched off. Spools are then added by hand.",
