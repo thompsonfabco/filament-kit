@@ -137,7 +137,7 @@ function settled(form, id, o) {
 }
 
 // A request with the code that says its result in `box` and does not draw anything again
-async function act(box, path, body, done, clear) {
+async function settingAct(box, path, body, done, clear) {
   await needCode(async () => {
     working(box, SW.t("common_saving"));
     let r;
@@ -169,7 +169,7 @@ async function confirmed(q, path, body, done) {
 function runJob(box, name, q) {
   const started = () => { SW.result(box, null); followApply(true); };
   if (q) return confirmed(q, "job", { name }, started);
-  return act(box, "job", { name }, started);
+  return settingAct(box, "job", { name }, started);
 }
 
 // ----- the section -----
@@ -495,7 +495,7 @@ function readerInstall(g) {
       h("p", { class: "muted", textContent: SW.t("settings_reader_plan_tier") }));
   }).catch((e) => say(out, hubText(e.message), false));
   const tok = SW.field({ row: true, type: "secret", label: SW.t("settings_reader_token"), attrs: { "aria-required": "false" } }), set = S.local_intake_token && S.local_intake_token.set;
-  const tokSet = SW.btn(SW.t(set ? "common_replace" : "settings_reader_token_set"), { action: "set-token", run: () => act(tokBox, "local_intake_token", { token: tok._control.value },
+  const tokSet = SW.btn(SW.t(set ? "common_replace" : "settings_reader_token_set"), { action: "set-token", run: () => settingAct(tokBox, "local_intake_token", { token: tok._control.value },
     () => loadGroup("label-reader", { quiet: true, fresh: true }), [tok._control]) });
   tok._control.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); tokSet.click(); } });
   return h("div", { class: "settings__reader" },
@@ -507,7 +507,7 @@ function readerInstall(g) {
     h("p", { class: "field__label" }, SW.t("settings_reader_token"), " ", SW.status(set ? "set" : "not_set", { small: true })),
     h("p", { class: "muted", textContent: SW.t("settings_reader_token_hint") }),
     tok, h("div", { class: "actions" }, tokSet,
-      set ? SW.btn(SW.t("common_remove"), { cls: "btn--ghost btn--danger", action: "remove-token", run: () => act(tokBox, "local_intake_token/remove", {}, () => loadGroup("label-reader", { quiet: true, fresh: true })) }) : null), tokBox);
+      set ? SW.btn(SW.t("common_remove"), { cls: "btn--ghost btn--danger", action: "remove-token", run: () => settingAct(tokBox, "local_intake_token/remove", {}, () => loadGroup("label-reader", { quiet: true, fresh: true })) }) : null), tokBox);
 }
 
 // ----- Network and addresses (03 10.7) -----
@@ -538,7 +538,7 @@ function remoteBlock(g) {
   const box = sbox(), rules = h("div");
   return h("div", { class: "settings__remote" }, h("p", { class: "muted", textContent: SW.t("settings_network_remote_text") }),
     h("div", { class: "actions" },
-      SW.btn(SW.t("settings_network_firewall"), { action: "firewall", run: () => act(box, "remote/firewall", {}, (r) => { SW.result(box, null); rules.replaceChildren(codeBlock(r.text, SW.t("settings_network_firewall"))); }) }),
+      SW.btn(SW.t("settings_network_firewall"), { action: "firewall", run: () => settingAct(box, "remote/firewall", {}, (r) => { SW.result(box, null); rules.replaceChildren(codeBlock(r.text, SW.t("settings_network_firewall"))); }) }),
       SW.btn(SW.t("settings_network_certificate"), { action: "certificate", run: (e) => runJob(box, "remote_issue", { kind: "confirm", title: SW.t("settings_certificate_title"),
         text: SW.t("settings_certificate_body"), confirm: SW.t("settings_network_certificate"), opener: e.currentTarget }) })), box, rules);
 }
@@ -585,7 +585,7 @@ function groupCatalog({ lib }) {
     const text = entry._control.value;
     try { JSON.parse(text); } catch { SW.fieldError(entry, SW.t("settings_catalog_entry_json")); entry._control.focus(); return; }
     SW.fieldError(entry, null);
-    act(entryBox, "library/add", { entry: text }, (r) => {
+    settingAct(entryBox, "library/add", { entry: text }, (r) => {
       say(entryBox, SW.t("settings_catalog_entry_added", { line: `${r.vendor} ${r.product}` }), true);
       entry._control.value = "";
       api("library").then(paint, () => {});

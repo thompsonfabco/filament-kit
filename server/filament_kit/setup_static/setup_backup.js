@@ -147,7 +147,7 @@ function restoreSteps() {
         title: SW.t("settings_restore_title"), text: SW.t("settings_restore_short", { host: s.host || SW.t("settings_restore_summary_other_hub"), created: s.created }),
         body: h("p", { class: "dialog__text", textContent: SW.t("settings_restore_body") }), confirm: SW.t("settings_restore_confirm") },
       "job", (values) => ({ name: "restore", confirm: values[values.length - 1].trim(), sha256: s.sha256 }), () => { reset(); followApply(true); }) }),
-      SW.btn(SW.t("settings_restore_discard"), { cls: "btn--ghost", action: "discard-upload", run: () => act(rbox, "restore/forget", {}, () => reset()) }));
+      SW.btn(SW.t("settings_restore_discard"), { cls: "btn--ghost", action: "discard-upload", run: () => settingAct(rbox, "restore/forget", {}, () => reset()) }));
     paint();
     actions.querySelector("button").focus();
   };
