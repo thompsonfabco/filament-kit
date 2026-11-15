@@ -135,3 +135,56 @@ def test_single_key_save_and_state_read(app):
 
 def test_state_reads_console_before_any_save(app):
     assert client(app).get("/setup/api/settings/general").json()["values"]["appearance.theme"] == "console"
+
+
+# ---- rework (refuter-03) ----
+
+@pytest.mark.parametrize("look", LOOKS)
+def test_state_carries_the_theme(app, look):
+    _set_look(look)
+    assert client(app).get("/setup/api/state").json()["appearance"] == {"theme": look}
+
+
+def test_state_and_general_read_console_for_an_unknown_stored_theme(app):
+    _set_look("neon")
+    c = client(app)
+    assert c.get("/setup/api/state").json()["appearance"]["theme"] == "console"
+    assert c.get("/setup/api/settings/general").json()["values"]["appearance.theme"] == "console"
+    assert c.get("/api/info").json()["look"] == "console" and "data-look=console>" in c.get("/setup").text
+
+
+def test_state_follows_a_save(app):
+    assert post(client(app), "settings/general", {"values": {"appearance.theme": "workbench"}}).status_code == 200
+    assert client(app).get("/setup/api/state").json()["appearance"]["theme"] == "workbench"
+
+
+@pytest.mark.parametrize("stored", ["neon", "", 5, ["panes"]])
+def test_web_app_falls_back_to_console_for_an_unknown_stored_theme(stored):
+    cfg = config.load()
+    cfg["appearance"] = {"theme": stored}
+    config.save(cfg)
+    light, dark = _surfaces("console")
+    with _web_client() as c:
+        text = c.get("/intake").text
+        assert text.startswith("<!doctype html><html lang=en data-look=console>")
+        assert _metas(text) == [(light, "(prefers-color-scheme: light)"), (dark, "(prefers-color-scheme: dark)")]
+        assert c.get("/intake/manifest-light.webmanifest").json()["theme_color"] == light
+        assert c.get("/intake/manifest-dark.webmanifest").json()["theme_color"] == dark
+
+
+def test_a_device_that_has_chosen_keeps_its_choice():
+    """Static: the head script (not driven in a browser) reads `spoolwarden.look` from localStorage and sets `data-look`
+    from it, so it wins over the Hub's default in the served `<html>`; both shells load it before any stylesheet."""
+    root = Path(__file__).resolve().parents[1] / "filament_kit"
+    js = (root / "shared_static" / "theme-init.js").read_text(encoding="utf-8")
+    assert 'getItem("spoolwarden.look")' in js and 'r.setAttribute("data-look", l)' in js
+    assert js.index("setAttribute(\"data-look\"") > js.index("indexOf(l) >= 0")      # only a known look is applied
+    for path in ("setup_page.py", "web/intake_app.py"):
+        src = (root / path).read_text(encoding="utf-8")
+        assert src.index("theme-init.js") < src.index("/tokens.css")
+
+
+def test_a_chosen_look_reaches_the_page_only_through_the_script(app):
+    _set_look("panes")
+    text = client(app).get("/setup").text
+    assert "data-look=panes>" in text and text.index("theme-init.js") < text.index("tokens.css")

@@ -572,6 +572,7 @@ class SetupPage:
         from .setup_console import jobs
         return {
             "server_name": cfg["server_name"], "address": setup_code.page_url(cfg), "code_set": setup_code.is_set(),
+            "appearance": {"theme": config.look(cfg)},      # the theme for new devices (S6.1); Console when unknown
             "version": __version__, "mode": modules.mode_of(on),
             "modes": [{"name": n, "modules": sorted(m), "here": "server" in m} for n, m in modules.MODES.items()],
             "modules": [{"name": n, "title": m.title, "description": m.description, "needs": modules.needs_of(n),
