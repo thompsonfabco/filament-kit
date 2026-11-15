@@ -57,6 +57,11 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `filament-kit modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
 - **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
 
+## The command line speaks one way
+
+- **One status vocabulary, Error and Fix lines.** Every command reports with the same state words and glyphs, and a failure is `Error: ...` with a `Fix: ...` line on standard error, with the command to run kept whole on one line (on its own line when it does not fit).
+- **Progress for waits, documented exit codes, plain output.** A wait longer than 2 seconds shows a progress line, each command ends with a documented exit code, and `--plain`, `--color` and `NO_COLOR` control the look for screen readers and pipes.
+
 ## Still to come
 
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the
