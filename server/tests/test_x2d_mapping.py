@@ -389,7 +389,7 @@ def test_cli_map_prints_the_notes(rig, capsys, monkeypatch):
     m, _printer = rig(_no_ams_report())
     real = mapping.Mapper.view
     monkeypatch.setattr(mapping.Mapper, "view", lambda self, s: {**real(self, s), "notes": ["a settled note"]})
-    assert cli.main(["printer", "map", SLOT_SERIAL], manager_factory=lambda s: m) == 0
+    assert cli.main(["printer", "map", SLOT_SERIAL, "--yes"], manager_factory=lambda s: m) == 0
     assert "  note: a settled note" in capsys.readouterr().out
 
 
