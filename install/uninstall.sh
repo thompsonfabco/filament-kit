@@ -126,11 +126,11 @@ fi
 rm -rf /opt/filament-kit
 if [ "$KIT_SPOOLMAN" -eq 1 ]; then
     rm -rf /opt/spoolman /opt/spoolman.new /opt/spoolman.old /etc/systemd/system/spoolman.service.d
-    REMOVED="filament-kit and Spoolman"
+    REMOVED="Spoolwarden and Spoolman"
     KEPT_SPOOLMAN=" /var/lib/spoolman"
 else
     echo "Left the Spoolman the kit did not install: its program, unit, settings, data and user."
-    REMOVED="filament-kit"
+    REMOVED="Spoolwarden"
     KEPT_SPOOLMAN=""
 fi
 

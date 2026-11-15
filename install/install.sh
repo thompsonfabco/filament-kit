@@ -135,7 +135,7 @@ if [ "${ID:-}" != ubuntu ] || ! [ "$major" -ge 24 ] 2>/dev/null; then
     die "Ubuntu 24.04 or newer is required (found ${PRETTY_NAME:-unknown})"
 fi
 if [ "${FK_NO_SYSTEMD:-}" != 1 ] && [ ! -d /run/systemd/system ]; then
-    die "systemd is not running on this computer, and filament-kit runs as systemd services"
+    die "systemd is not running on this computer, and Spoolwarden runs as systemd services"
 fi
 if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
     echo "note: this is WSL, which is not a supported server: a phone on your network cannot reach a server inside it."
@@ -189,7 +189,7 @@ install -d -m 700 -o root -g root /var/backups/filament-kit
 # It carries the system Python version, so a distro Python upgrade rebuilds the venv.
 PYVER=$(python3 --version 2>&1)
 FK_MARKER="$OPT/.fk-installed"
-say "Installing filament-kit ($(basename "$WHEEL"))"
+say "Installing Spoolwarden ($(basename "$WHEEL"))"
 mkdir -p "$OPT"
 # Earlier versions bundled the spec library inside the program. Keep a copy of it before the venv is replaced and
 # hand it to the new program below, so an upgrade keeps its library (and its profiles do not change).

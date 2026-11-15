@@ -302,8 +302,8 @@ def test_plants_are_found():
         ["theme_palette_name is missing"]
     # the product's name written inside another entry, the command's name too
     assert name_problems(raw) == []
-    planted = dict(raw, home_title="Home of filament-kit")
-    assert len(name_problems(planted)) == 2          # both names are today's name
+    planted = dict(raw, home_title="Home of Spoolwarden and filament-kit")
+    assert len(name_problems(planted)) == 2          # the product's name and the command's
     planted = dict(raw, app_name="Spoolwarden", home_title="Welcome to Spoolwarden", command_name="spoolwarden",
                    pair_start_intro="run sudo spoolwarden pair")
     assert sorted({p.split(":")[0] for p in name_problems(planted)}) == ["home_title", "pair_start_intro"]
