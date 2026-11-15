@@ -413,7 +413,7 @@ function menu(trigger, items, o = {}) {
       : h("button", { class: "menu__item" + (it.danger ? " menu__item--danger" : ""), type: "button", tabindex: "-1",
         role: it.checked != null ? "menuitemradio" : "menuitem", "aria-checked": it.checked != null ? String(!!it.checked) : null,
         "aria-disabled": it.disabled ? "true" : null, data: { action: it.action },
-        on: { click: () => { if (!it.disabled) { close(true); if (it.run) it.run(); } } } },
+        on: { click: () => { if (trigger.getAttribute("aria-disabled") === "true") { close(true); return; } if (!it.disabled) { close(true); if (it.run) it.run(); } } } },
       it.icon ? icon(it.icon, "icon--s") : null, E("span", "menu__label", it.label, it.reason ? E("span", "menu__desc", it.reason) : null),
       it.checked ? icon("check", "icon--s menu__check") : null)));
   const list = () => $$(".menu__item", pop);
@@ -457,8 +457,11 @@ function menu(trigger, items, o = {}) {
       move(l.slice(i + 1).concat(l.slice(0, i + 1)).find((b) => b.textContent.trim().toLowerCase().startsWith(typed)));
     }
   }
+  // a trigger that goes off (the Hub cannot be reached) while its menu is open: the menu closes and its items do nothing
+  new MutationObserver(() => { if (pop && trigger.getAttribute("aria-disabled") === "true") close(pop.contains(doc.activeElement)); }).observe(trigger, { attributes: true, attributeFilter: ["aria-disabled"] });
   on(trigger, "click", () => (pop ? close(true) : open("first")));
   on(trigger, "keydown", (e) => {
+    if (trigger.getAttribute("aria-disabled") === "true") return;       // a trigger that is off opens nothing, by key either
     if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !pop) { e.preventDefault(); open(e.key === "ArrowUp" ? "last" : "first"); }
   });
   return { open, close };
@@ -522,6 +525,7 @@ function field(o) {
     on(control, "keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); go(); } else if (e.key === "Escape" && control.value) { control.value = ""; go(); }
     });
+    wrap._cancel = () => clearTimeout(timer);                  // a search still waiting for the typing to stop is dropped
     wrap._busy = (on) => { const s = $(".spinner", box); if (on && !s) box.append(spinner()); if (!on && s) s.remove(); };
   }
   if (kind === "file") {

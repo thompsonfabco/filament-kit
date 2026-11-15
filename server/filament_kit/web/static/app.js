@@ -136,12 +136,15 @@ async function act(box, label, fn, o = {}) {
 // arrives), then the content; a failure is a line with Try again. A later load of the same region wins.
 async function fill(region, thing, fn, o = {}) {
   if (region._load && !region._load.quiet) region._load.done();   // a skeleton still showing: its timers stop
+  const had = region._kept && !region._load ? [...region.childNodes].filter((n) => !(n.classList && n.classList.contains("hub-age"))) : [];   // what was on show, for a load that cannot reach the Hub
   const load = region._load = o.quiet ? { quiet: true, done: (...kids) => region.replaceChildren(...kids) } : SW.loading(region, { thing, items: o.items || 3 });
   const mine = () => region._load === load;
-  try { const kids = [await fn()].flat().filter(Boolean); if (mine()) { region._load = null; load.done(...kids); } }
+  try { const kids = [await fn()].flat().filter(Boolean); if (mine()) { region._load = null; region._kept = true; load.done(...kids); } }
   catch (e) {
     if (!mine()) return;
     region._load = null;
+    if (had.length && e instanceof SW.HubError && e.unreachable) { load.done(...had); return; }   // the Hub is away: the old content stays (the banner and the group lines say so)
+    region._kept = false;
     const line = resultLine();
     load.done(line); failed(line, e, () => fill(region, thing, fn, o));
   }
@@ -159,6 +162,15 @@ window.addEventListener("click", (e) => {                    // in the capture p
 // a short state sentence that starts with its shape (04 3.3): never colour alone
 const note = (kind, text) => h("p", { class: "result", role: "status", "data-state": kind }, SW.shape({ ok: "s-filled", bad: "s-octagon", warn: "s-triangle", info: "s-diamond", neutral: "s-hollow" }[kind]),
   h("span", { class: "result__text" }, text));
+
+// ---------- "Cannot reach the Hub" marks (04 10.3): each screen says what needs the Hub, the shell switches the marks on and off ----------
+// needsHub(button): while the Hub cannot be reached the shell gives the button aria-disabled and the reason "Needs the Hub." (reach:
+// "The Hub cannot be reached.", for Read labels and Preview). hubGroup(group, at): the group keeps its last data and says "Last update
+// <age>: the Hub did not answer."; `at` is a function that gives when its data last arrived (without it, when the Hub last answered).
+const hubBack = [];                                          // what each screen does when the shell sees the Hub answer again
+let hubGone = false;                                         // the shell's offline state (set where the banner is shown); screens read it
+const needsHub = (b, reach) => { b.dataset.needsHub = reach ? "reach" : "1"; return b; };
+const hubGroup = (g, at) => { g.dataset.hubGroup = ""; g._hubAt = at || null; return g; };
 
 // ---------- Recently added (04 7): the newest additions with their photos; check, correct by hand or by the Label Reader, undo ----------
 // The fields of a record in the four groups of 04 7.2. kind: text (required: the Hub wants it), colour, range, whole, number.
@@ -243,7 +255,8 @@ const recChanges = (rev) => [...new Map((rev.changes || []).map((c) => [c.field,
 function historyTab() {
   const intro = h("p", { class: "muted" });
   const missing = h("div");                                   // "no longer kept" for an address that names a record the Hub dropped
-  const list = h("div");
+  let listAt = 0;                                             // when the list last came from the Hub
+  const list = hubGroup(h("div"), () => listAt);
   const el = h("section", { class: "hidden" }, intro, missing, list);
   const hp = (id, what) => `history/${encodeURIComponent(id)}${what ? "/" + what : ""}`;
   const photo = (id, n) => `${BASE}/api/${hp(id, "photos/" + n)}`;
@@ -256,6 +269,7 @@ function historyTab() {
     missing.replaceChildren();
     await fill(list, SW.t("nav_recently_added"), async () => {
       const d = await api("history");
+      listAt = Date.now();
       records = d.records; reader = !!d.ai; keep = d.keep;
       intro.textContent = SW.t("recent_intro", { count: d.keep, size: SW.t("recent_size_mb", { value: (d.photo_bytes / 1048576).toFixed(1) }) });
       return records.length ? table() : SW.empty({ icon: "recent", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") });
@@ -363,7 +377,7 @@ function historyTab() {
   // c: the record on show: its id, the Hub's reply, its slots (one per saved item) and the revisions' result line
   function recordBody(c) {
     const { id, rec } = c;
-    const photos = h("div", { class: "group" }, h("div", { class: "group__head" },
+    const photos = hubGroup(h("div", { class: "group" }, h("div", { class: "group__head" },
       h("h3", { class: "group__title" }, SW.t("recent_record_photos"), " ", h("span", { class: "mono", textContent: String(rec.photos) }))),
       h("div", { class: "group__body" }, rec.photos
         ? h("div", { class: "photos" }, ...Array.from({ length: rec.photos }, (_, i) => {
@@ -372,15 +386,15 @@ function historyTab() {
           b.addEventListener("click", () => viewer(c, i + 1, b));
           return b;
         }))
-        : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr", textContent: SW.t("photo_none") }))));
+        : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr", textContent: SW.t("photo_none") })))));
     c.slots = rec.saved.map((s) => slotFor(c, s));
     c.reg._ctx = c;
     revisions(c);
     return [h("div", { class: "detail__body" },
       h("div", { class: "detail__section" }, photos, ...c.slots.map((s) => s.group)),
       h("div", { class: "detail__section" }, ...(reader ? c.slots.map((s) => askGroup(c, s)) : [note("info", SW.t("recent_ask_off"))]),
-        h("div", { class: "group" }, h("div", { class: "group__head" }, h("h3", { class: "group__title", id: `rev-${id}`, tabindex: "-1" }, SW.t("revision_heading"), " ", c.count)),
-          h("div", { class: "group__body" }, c.list, c.res))))];
+        hubGroup(h("div", { class: "group" }, h("div", { class: "group__head" }, h("h3", { class: "group__title", id: `rev-${id}`, tabindex: "-1" }, SW.t("revision_heading"), " ", c.count)),
+          h("div", { class: "group__body" }, c.list, c.res)))))];
   }
   // a change came back from the Hub (it sends the whole record): the groups it touched, the revisions and the badges follow;
   // a group being edited with unsaved values is left alone
@@ -422,9 +436,9 @@ function historyTab() {
           : f.kind === "colour" ? [SW.swatch("#" + String(v).replace("#", "")), h("span", { class: "mono", textContent: recShow(f.key, v) })]
             : h("span", { class: f.kind === "text" ? "" : "mono", textContent: recShow(f.key, v) })));
     };
-    return h("div", { class: "group" }, h("div", { class: "group__head" }, h("div", {}, ...spoolsHead(s)), edit),
+    return hubGroup(h("div", { class: "group" }, h("div", { class: "group__head" }, h("div", {}, ...spoolsHead(s)), edit),
       h("div", { class: "group__body" }, ...REC_GROUPS.map(([gk, label]) => h("div", { class: "detail__section" },
-        h("h4", { class: "detail__heading", textContent: SW.t(label) }), h("dl", { class: "kv" }, ...REC_FIELDS.filter((f) => f.group === gk).map(row))))), foot);
+        h("h4", { class: "detail__heading", textContent: SW.t(label) }), h("dl", { class: "kv" }, ...REC_FIELDS.filter((f) => f.group === gk).map(row))))), foot));
   }
   function editGroup(c, slot) {
     const s = slot.s, res = resultLine(), fields = {}, title = recSpools(s.spool_ids);
@@ -436,7 +450,7 @@ function historyTab() {
       slot.show();
       slot.group.querySelector('[data-action="edit"]').focus();
     } });
-    const save = SW.btn(SW.t("common_save_changes"), { type: "submit", cls: "btn--primary", action: "save" });
+    const save = needsHub(SW.btn(SW.t("common_save_changes"), { type: "submit", cls: "btn--primary", action: "save" }));
     const form = h("form", { class: "group", novalidate: true },
       h("div", { class: "group__head" }, h("div", {}, ...spoolsHead(s))),
       h("div", { class: "group__body" }, ...REC_GROUPS.map(([gk, label]) => h("div", { class: "detail__section" },
@@ -478,7 +492,7 @@ function historyTab() {
   function askGroup(c, slot) {
     const res = resultLine(), prop = h("div");
     const text = SW.field({ type: "textarea", label: SW.t("recent_ask_label"), hint: SW.t("recent_ask_hint"), placeholder: SW.t("recent_ask_placeholder") });
-    const send = SW.btn(SW.t("recent_ask_button"), { action: "ask", run: () => ask() });
+    const send = needsHub(SW.btn(SW.t("recent_ask_button"), { action: "ask", run: () => ask() }));
     const sync = () => disabled(send, text._control.value.trim() ? null : SW.t("recent_ask_reason"), () => text._control);
     const group = h("div", { class: "group" }, h("div", { class: "group__head" }, h("div", {},
       h("h3", { class: "group__title", textContent: SW.t("recent_ask_title") }),
@@ -507,14 +521,14 @@ function historyTab() {
   function proposal(c, p, res, prop, text) {
     const tid = SW.uid("prop");
     const sr = (key) => h("span", { class: "sr", textContent: SW.t(key) });
-    const accept = SW.btn(SW.t("common_accept"), { cls: "btn--primary", action: "accept", run: (e) =>
+    const accept = needsHub(SW.btn(SW.t("common_accept"), { cls: "btn--primary", action: "accept", run: (e) =>
       act(res, SW.t("common_accepting"), async () => {
         const r = await api(hp(c.id, "apply"), { body: { proposal: p.proposal } });
         const rev = r.revisions[r.revisions.length - 1] || {};
         prop.replaceChildren();
         applied(c, r);
         return [SW.t("changes_accepted", { count: p.changes.length, number: rev.n }), ...recFilaments("apply", rev)].filter(Boolean).join(" ");
-      }, { button: e.currentTarget }) });
+      }, { button: e.currentTarget }) }));
     const discard = SW.btn(SW.t("common_discard"), { action: "discard", run: () => {
       prop.replaceChildren();
       SW.result(res, "neutral", SW.t("changes_discarded"));
@@ -537,14 +551,14 @@ function historyTab() {
     const live = c.rec.revisions.filter((v) => !v.undone), last = live[live.length - 1];
     const one = (v) => {
       const changes = recChanges(v);
-      const undo = last && last.n === v.n ? SW.btn(SW.t("revision_undo", { number: v.n }), { icon: "undo", action: "undo", run: (e) =>
+      const undo = last && last.n === v.n ? needsHub(SW.btn(SW.t("revision_undo", { number: v.n }), { icon: "undo", action: "undo", run: (e) =>
         act(c.res, SW.t("common_working"), async () => {
           const r = await api(hp(c.id, "undo"), { body: { revision: v.n } });
           const done = r.revisions.find((x) => x.n === v.n) || v;
           applied(c, r);
           return [SW.t("recent_result_undone", { number: v.n }), ...recChanges(done).map((x) => SW.t("recent_revision_value_again", { field: recLabel(x.field), value: recShow(x.field, x.old) })),
             ...recFilaments("undo", done)].filter(Boolean).join(" ");
-        }, { button: e.currentTarget, alert: true }) }) : null;
+        }, { button: e.currentTarget, alert: true }) })) : null;
       return h("li", { class: "revisions__item", "data-state": v.undone ? "undone" : null },
         h("p", {}, SW.t(v.by === "ai" ? "recent_revision_ai" : "recent_revision_hand", { number: v.n, time: recWhen(v.at), changes: changes.map((x) => recLabel(x.field)).join(", ") }),
           v.undone ? " " + SW.t("recent_revision_undone") : ""),
@@ -621,7 +635,8 @@ function historyTab() {
     const r = records.find((x) => x.id === id);
     return r && r.spools.length ? recSpools(r.spools.map((x) => x.spool_id)) : "";
   };
-  return { el, go, title, enter(rest) { if (!dirtySlots().length) ready = load(); return go(rest); }, leave() { addr = ""; } };
+  // the Hub away: the list on show is kept, not read again (it is, when the Hub answers)
+  return { el, go, title, enter(rest) { if (!dirtySlots().length && !(hubGone && records.length)) ready = load(); return go(rest); }, leave() { addr = ""; } };
 }
 
 // ---------- the shell (04 2 and 9): top bar, bottom bar (a rail on tablets), More, Settings; the places and their addresses ----------
@@ -905,7 +920,7 @@ if ("serviceWorker" in navigator) {
   const chip = SW.status("offline", { cls: "topbar__offline" });
   chip.hidden = true;
   document.querySelector(".topbar__tools").prepend(chip);
-  let down = false, banner = null, timer = 0, probing = false;
+  let down = false, banner = null, timer = 0, probing = false, answered = Date.now(), tick = 0;
   const sentence = () => (navigator.onLine === false ? SW.t("shell_banner_no_network") : `${SW.t("shell_banner_offline")} ${SW.t("shell_banner_retrying")}`);
   function paintOffline() {
     if (banner) banner.remove();
@@ -914,6 +929,43 @@ if ("serviceWorker" in navigator) {
     banner.classList.add("offline-banner");
     banner.querySelector(".icon").replaceWith(SW.icon("wifi-off"));
     document.getElementById("main").prepend(banner);
+  }
+  // the marks (04 10.3): every [data-needs-hub] button and [data-hub-group] group on the page, redrawn screens included
+  const reasonOf = (b) => SW.t(b.dataset.needsHub === "reach" ? "shell_hub_cannot_be_reached" : "shell_needs_hub");
+  function markButton(b, on) {
+    let r = b._hubWhy;
+    if (!on) {
+      if (!r) return;
+      const ids = (b.getAttribute("aria-describedby") || "").split(" ").filter((x) => x && x !== r.id);
+      r.remove(); b._hubWhy = null;
+      if (ids.length) b.setAttribute("aria-describedby", ids.join(" ")); else b.removeAttribute("aria-describedby");
+      if (!b._reason && b.getAttribute("aria-busy") !== "true") b.removeAttribute("aria-disabled");   // a reason of its own keeps it disabled
+      if (b._repaint) b._repaint();                                                                      // a button that decides for itself says so again
+      return;
+    }
+    if (!r || !r.isConnected) { r = b._hubWhy = h("span", { class: "btn__reason", id: r ? r.id : SW.uid("hub"), "data-hub-why": "" }); b.after(r); }
+    if (r.textContent !== reasonOf(b)) r.textContent = reasonOf(b);
+    r.hidden = !!b.closest("[hidden]");                         // the reason goes with its button (no camera: no button)
+    if (b.getAttribute("aria-disabled") !== "true") b.setAttribute("aria-disabled", "true");
+    const ids = (b.getAttribute("aria-describedby") || "").split(" ").filter(Boolean);
+    if (!ids.includes(r.id)) b.setAttribute("aria-describedby", [...ids, r.id].join(" "));
+  }
+  function markGroup(g, on) {
+    let p = g._hubAge;
+    if (!on) { if (p) { p.remove(); g._hubAge = null; } return; }
+    const host = g.querySelector(":scope > .group__body") || g, at = (g._hubAt && g._hubAt()) || answered;
+    const text = SW.t("common_last_update", { age: ago(Math.max(0, Math.round((Date.now() - at) / 1000))) });
+    if (!p) p = g._hubAge = h("p", { class: "hub-age" }, SW.shape("s-triangle"), h("span", { class: "hub-age__text" }));   // not a .result: it is no live region, and leaving a section does not clear it
+    if (p.parentNode !== host || host.firstChild !== p) host.prepend(p);
+    const said = p.querySelector(".hub-age__text");
+    if (said.textContent !== text) said.textContent = text;
+  }
+  const seen = new MutationObserver(() => marks());
+  function marks() {
+    seen.disconnect();                                       // what this pass changes is not a reason for another pass
+    for (const b of document.querySelectorAll("[data-needs-hub]")) markButton(b, down);
+    for (const g of document.querySelectorAll("[data-hub-group]")) markGroup(g, down);
+    if (down) seen.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-disabled", "data-needs-hub", "data-hub-group", "hidden"] });
   }
   function later() {
     clearTimeout(timer);
@@ -929,14 +981,19 @@ if ("serviceWorker" in navigator) {
   }
   function hubDown() {
     if (down) return;
-    down = true;
+    down = true; hubGone = true;
     chip.hidden = false;
     paintOffline();
     later();
+    marks();
+    tick = setInterval(() => { if (!document.hidden) marks(); }, 1000);   // the age moves on
   }
   function hubUp() {
+    answered = Date.now();
     if (!down) return;
-    down = false;
+    down = false; hubGone = false;
+    clearInterval(tick);
+    marks();
     clearTimeout(timer);
     chip.hidden = true;
     const focused = banner && banner.contains(document.activeElement);
@@ -946,6 +1003,7 @@ if ("serviceWorker" in navigator) {
     SW.toast(SW.t("shell_banner_back_online"), "ok");
     const again = ["recent", "presets", "printers"].includes(place) && tabs[place].enter;   // inputs and drafts stay where they are
     if (again) again();
+    for (const f of hubBack) f();
   }
   SW.configure({ down: hubDown, up: hubUp });
   window.addEventListener("offline", hubDown);
@@ -1028,7 +1086,7 @@ function addTab() {
   let rev = 0, started = 0, changedAt = 0, pending = null, keeping = true, wrote = false, saveTimer = 0, nextId = 1, memo = null;
   const cards = new Map();                                      // item _id -> its card
   let vendorTare = new Map();                                   // vendor name (lower case) -> empty spool weight
-  let rows = [], more = false, page = 1, findStamp = 0;                       // the filament search results, and the page shown
+  let rows = [], more = false, page = 1, findStamp = 0, foundAt = 0, pendingFind = false;           // the filament search results, and the page shown (foundAt: when they came)
 
   // ---- the page: title area, groups, list, action bar ----
   const lines = h("div", { class: "add__notes" });              // this add is open in another tab; no draft can be kept
@@ -1066,6 +1124,8 @@ function addTab() {
     }
   }
   window.addEventListener("online", () => { if (hubDown) { hubDown = false; paintBar(); } });
+  hubBack.push(() => { if (pendingFind) { searchField._cancel(); find(searchField._control.value.trim()); } });
+  hubBack.push(() => { if (hubDown) { clearTimeout(hubTimer); hubDown = false; paintBar(); } });   // the shell says the Hub answers: so does the bar
 
   // ============ the card's values: what is missing and what is wrong ============
   const textOf = (it, k) => String(k in it._text ? it._text[k] : it[k] ?? "").trim();
@@ -1243,7 +1303,7 @@ function addTab() {
   const photoNote = h("p", { class: "add__line", "data-state": "warn", hidden: true });
   const noteField = SW.field({ type: "textarea", label: SW.t("add_note_label"), optional: true, placeholder: SW.t("add_note_placeholder"), max: 2000 });
   noteField._control.addEventListener("input", saveSoon);
-  const readBtn = SW.btn(SW.t("add_read_labels"), { run: read });
+  const readBtn = needsHub(SW.btn(SW.t("add_read_labels"), { run: read }), true);
   const readBox = answer();                                     // the Label Reader's answer under its button
   const photoBody = AI ? [h("div", { class: "add__buttons" }, takeBtn, pickBtn, takeIn, pickIn), photoLimit, h("div", { class: "add__photos" }, strip, photoCount), photoNote,
     noteField, h("div", { class: "add__read" }, readBtn, readBox.el)] : null;
@@ -1371,12 +1431,13 @@ function addTab() {
   // ============ By hand (04 4.2) ============
   const searchField = SW.field({ type: "search", label: SW.t("add_search_label"), placeholder: SW.t("common_search_placeholder"), onSearch: (q) => find(q) });
   searchField.classList.add("add__search");
-  searchField.querySelector(".field__box").append(SW.iconBtn("search", SW.t("common_search"), { run: () => find(searchField._control.value.trim()) }));
+  searchField.querySelector(".field__box").append(needsHub(SW.iconBtn("search", SW.t("common_search"), { run: () => find(searchField._control.value.trim()) })));
   const findLine = resultLine();
   const findBox = h("div", { class: "add__finds" });
   const newBtn = () => SW.btn(SW.t("add_new_filament"), { icon: "plus", run: () => addItem(blankItem()) });
   handGroup.replaceChildren(h("header", { class: "group__head" }, h("h2", { class: "group__title", textContent: SW.t("add_group_hand") })),
     h("div", { class: "group__body" }, searchField, findLine, findBox, h("div", {}, newBtn()), vendorList));
+  hubGroup(handGroup, () => foundAt);
   api("vendors").then((res) => {
     vendorTare = new Map(res.vendors.map((v) => [v.name.toLowerCase(), v.tare]));
     vendorList.replaceChildren(...res.vendors.map((v) => h("option", { value: v.name })));
@@ -1395,6 +1456,8 @@ function addTab() {
     c.el.focus({ preventScroll: true });
   }
   async function find(q) {
+    if (hubGone) { pendingFind = true; return; }                // the Hub away: the results on show stay, nothing is asked; asked again when it answers
+    pendingFind = false;
     const stamp = ++findStamp;
     if (q.length < 2) { rows = []; findBox.replaceChildren(); clear(findLine); return; }
     searchField._busy(true);
@@ -1402,9 +1465,14 @@ function addTab() {
     try {
       const res = await call(`filaments?q=${encodeURIComponent(q)}&limit=${ADD_FIND_LIMIT}`);
       if (stamp !== findStamp) return;
-      clear(findLine); rows = res.filaments; more = !!res.has_more || (res.total != null && res.total > rows.length); page = 1; drawRows(false);
+      clear(findLine); foundAt = Date.now(); rows = res.filaments; more = !!res.has_more || (res.total != null && res.total > rows.length); page = 1; drawRows(false);
       if (!rows.length) SW.announce(SW.t("add_picker_none"));
-    } catch (e) { if (stamp === findStamp) { rows = []; findBox.replaceChildren(); failed(findLine, e, () => find(q)); } }
+    } catch (e) {
+      if (stamp === findStamp) {
+        if (hubGone) { pendingFind = true; clear(findLine); }      // the Hub went while asking: the last results stay, and the question is asked again when it answers
+        else { rows = []; findBox.replaceChildren(); failed(findLine, e, () => find(q)); }
+      }
+    }
     finally { if (stamp === findStamp) searchField._busy(false); }
   }
   function drawRows(focus) {
@@ -1591,6 +1659,7 @@ function addTab() {
   // ============ The action bar: Preview, then Add (04 4.6) ============
   const barText = h("p", { class: "add__bar-text", id: SW.uid("bar") });
   const barBtn = h("button", { class: "btn btn--primary add__bar-btn", type: "button", "aria-describedby": barText.id, on: { click: () => (previewed && !working ? submit(false) : submit(true)) } }, SW.t("common_preview"));
+  needsHub(barBtn, true); barBtn._repaint = () => paintBar();    // Preview and Add; paintBar says again what it decides for itself
   const bar = h("div", { class: "add__bar" }, barText, barBtn);
   // how many fields the Label Reader was not sure of, over all the cards
   const toCheck = () => items.reduce((n, it) => n + ADD_RATED.filter((k) => it._levels[k] === "low" || it._levels[k] === "medium").length, 0);
@@ -1805,14 +1874,15 @@ function openTab() {
   const searchField = SW.field({ type: "search", label: SW.t("spools_find_label"), placeholder: SW.t("common_search_placeholder"), onSearch: (q) => find(q) });
   searchField.classList.add("spools__search");
   searchField.querySelector(".field__label").classList.add("sr");
-  searchField.querySelector(".field__box").append(SW.iconBtn("search", SW.t("common_search"), { run: () => find(searchField._control.value.trim()) }));
+  searchField.querySelector(".field__box").append(needsHub(SW.iconBtn("search", SW.t("common_search"), { run: () => find(searchField._control.value.trim()) })));
   const sealedBox = SW.check({ label: SW.t("spools_sealed_only"), checked: sealedOnly });
   sealedBox._control.addEventListener("change", () => {
     sealedOnly = sealedBox._control.checked;
     try { localStorage.setItem(SEALED_KEY, sealedOnly ? "1" : "0"); } catch { /* not remembered here */ }
     find(searchField._control.value.trim());
   });
-  const findLine = resultLine(), resultsBox = h("div", { class: "spools__results" });
+  let foundAt = 0;                                           // when the list last came from the Hub
+  const findLine = resultLine(), resultsBox = hubGroup(h("div", { class: "spools__results" }), () => foundAt);
   async function find(q) {
     lastQ = q;
     const mine = ++findStamp;
@@ -1822,6 +1892,7 @@ function openTab() {
       try {
         const res = await api(`find?q=${encodeURIComponent(q)}&sealed=${sealedOnly ? 1 : 0}`);
         if (mine !== findStamp) return null;
+        foundAt = Date.now();
         rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ f, s })));
         cut = !!res.truncated; page = 1; asked = true;
         if (firstLoad) { firstLoad.done(); firstLoad = null; }
@@ -1902,8 +1973,8 @@ function openTab() {
     const hum = SW.field({ label: SW.t("spool_sheet_humidity"), optional: true, unit: SW.t("common_unit_percent"), hint: "", attrs: { inputmode: "decimal" },   // a text field: the number field is short, the placeholder is long
       placeholder: SW.t("spool_sheet_humidity_placeholder"), check: (v) => (within(0, 100)(v) === null ? null : SW.t("spool_sheet_humidity_error")) });
     const ans = answer();             // the answer to Preview and Link: the line, and the Hub's own text under it
-    const previewBtn = SW.btn(SW.t("common_preview"), { run: (e) => submit(true, e.currentTarget) });
-    const linkBtn = SW.btn(SW.t("spool_sheet_link"), { cls: "btn--primary", run: (e) => submit(false, e.currentTarget) });
+    const previewBtn = needsHub(SW.btn(SW.t("common_preview"), { run: (e) => submit(true, e.currentTarget) }), true);
+    const linkBtn = needsHub(SW.btn(SW.t("spool_sheet_link"), { cls: "btn--primary", run: (e) => submit(false, e.currentTarget) }));
     // Link waits for a Preview of what is on the form; an edit makes the last Preview stale (04 3.4)
     // rev counts what changes the form or the tag; a Preview answer counts only if rev is what it was when the Preview went out, and
     // Link sends exactly the body that was previewed (R345)
@@ -1967,9 +2038,9 @@ function openTab() {
     // -- Other actions: Update weight, Move, Load into a printer, and Mark empty kept apart --
     const actAns = resultLine();      // the answer to Move, Mark empty and Load; Update weight has its own line while it is open
     const weightBtn = SW.btn(SW.t("spool_update_weight"), { run: () => showWeight(weightForm.hidden) });
-    const moveBtn = SW.btn(SW.t("spool_move"), {});
-    const loadBtn = SW.btn(SW.t("spool_load"), { run: () => pickPrinter() });
-    const emptyBtn = SW.btn(SW.t("spool_mark_empty"), { cls: "btn--danger", run: (e) => markEmpty(e.currentTarget) });
+    const moveBtn = needsHub(SW.btn(SW.t("spool_move"), {}));
+    const loadBtn = needsHub(SW.btn(SW.t("spool_load"), { run: () => pickPrinter() }));
+    const emptyBtn = needsHub(SW.btn(SW.t("spool_mark_empty"), { cls: "btn--danger", run: (e) => markEmpty(e.currentTarget) }));
     function paintActions() {
       const empty = gone(), why = SW.t("spool_sheet_reason_empty");
       disabled(previewBtn, holdWhy()); link(linkKey);            // an empty spool is not opened
@@ -1983,8 +2054,8 @@ function openTab() {
     const wf = SW.field({ type: "number", decimal: true, label: SW.t("common_field_weight_with_spool"), unit: "g", hint: SW.t("spool_weight_hint"),
       check: (v) => (within(Number.MIN_VALUE, Infinity)(v) === null && v.trim() ? null : SW.t("common_error_grams")) });
     const wAns = resultLine();
-    const wPreview = SW.btn(SW.t("common_preview"), { run: (e) => weightGo(true, e.currentTarget) });
-    const wSave = SW.btn(SW.t("spool_weight_save"), { cls: "btn--primary", run: (e) => weightGo(false, e.currentTarget) });
+    const wPreview = needsHub(SW.btn(SW.t("common_preview"), { run: (e) => weightGo(true, e.currentTarget) }), true);
+    const wSave = needsHub(SW.btn(SW.t("spool_weight_save"), { cls: "btn--primary", run: (e) => weightGo(false, e.currentTarget) }));
     const weightForm = h("div", { class: "spools__form", hidden: true }, wf, h("div", { class: "spools__buttons" }, wPreview, wSave), wAns);
     let wWas = false, wKey = "spool_weight_need_preview", wRev = 0, wWorking = false, wShot = null;   // wWas: a Preview has run; wKey: why Save weight waits; wShot: { rev, value } of the last good Preview
     const wLock = (key) => { wKey = key; disabled(wSave, key ? SW.t(key) : null, () => (wf._control.value.trim() ? wPreview : wf._control)); };
@@ -2086,7 +2157,7 @@ function openTab() {
       }, { items: 2 });
     }
     function plan(p, sl) {
-      const line = resultLine(), go = SW.btn(SW.t("common_load"), { cls: "btn--primary", run: (e) => send(false, e.currentTarget) });
+      const line = resultLine(), go = needsHub(SW.btn(SW.t("common_load"), { cls: "btn--primary", run: (e) => send(false, e.currentTarget) }));
       loadBox.replaceChildren(h("h4", { class: "spools__step", textContent: SW.t("spool_load_title", { slot: sl.label }) }), line, go, stepFoot(() => pickSlot(p)));
       disabled(go, SW.t("spool_load_working_out"));
       async function send(dry, button) {
@@ -2171,18 +2242,20 @@ function presetsTab() {
   const gen = answer();        // the answer to Build presets now: the line, and the Hub's own text under it
   const upBox = h("div");      // presets in the slicers that a newer build would change: shown, then accepted
   const upLine = resultLine(); // the answer to Restore and Accept; kept in the list, so it stays while the list is read again
-  const buildBtn = SW.btn(SW.t("presets_build"), { cls: "btn--primary", action: "build", run: (e) => build(e.currentTarget) });
+  const buildBtn = needsHub(SW.btn(SW.t("presets_build"), { cls: "btn--primary", action: "build", run: (e) => build(e.currentTarget) }));
   upBox.className = "presets__updates";
   const el = h("section", { class: "hidden" }, h("p", { class: "muted", textContent: SW.t("presets_intro") }), box, upBox);
 
   const kvRow = (key, ...value) => h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: key }), h("dd", { class: "kv__value" }, ...value));
   const when = (stamp) => stamp ? h("span", { class: "mono", textContent: stamp }) : h("span", { class: "muted", textContent: SW.t("common_never") });
-  const group = (title, ...body) => h("div", { class: "group" }, h("div", { class: "group__head" }, h("h2", { class: "group__title", textContent: title })),
-    h("div", { class: "group__body" }, ...body));
+  let loadedAt = 0;                                           // when the groups last came from the Hub
+  const group = (title, ...body) => hubGroup(h("div", { class: "group" }, h("div", { class: "group__head" }, h("h2", { class: "group__title", textContent: title })),
+    h("div", { class: "group__body" }, ...body)), () => loadedAt);
 
   async function load(quiet) {
     await fill(box, SW.t("nav_slicer_presets"), async () => {
       const st = await api("presets");
+      loadedAt = Date.now();
       const status = group(SW.t("presets_build_title"),
         h("dl", { class: "kv" }, kvRow(SW.t("presets_field_last_build"), when(st.last_build)), kvRow(SW.t("updates_installed"), when(st.installed_build)),
           kvRow(SW.t("presets_lines_label"), SW.t("presets_built_lines", { count: st.lines }))),
@@ -2210,6 +2283,7 @@ function presetsTab() {
           SW.toast(SW.t("presets_added", { line: sel._control.value })); load(true);      // the card goes: the list is read again
           return null;
         }, { button: e.currentTarget }) });
+      needsHub(add);
       body.append(sel, h("div", {}, add), addRes);
     }
     const nm = SW.field({ label: SW.t("presets_line_name"), hint: SW.t("presets_line_name_help"),
@@ -2238,6 +2312,7 @@ function presetsTab() {
         return null;
       }, { button: e.currentTarget });
     } });
+    needsHub(create);
     const details = h("details", { class: "disclosure" }, h("summary", {}, h("span", { textContent: SW.t(lines.length ? "presets_new_line_with_lines" : "presets_new_line_none") }),
       SW.icon("chevron", "icon--s disclosure__chevron")),
       h("div", { class: "disclosure__body" }, nm, q, orca, bs, h("div", {}, create), newRes));
@@ -2247,7 +2322,7 @@ function presetsTab() {
       if (details.open && !orca._control.options.length) parents(q._control.value);
     });
     body.append(details);
-    return h("div", { class: "group" }, head, body);
+    return hubGroup(h("div", { class: "group" }, head, body), () => loadedAt);
   }
   async function build(button) {
     await act(gen, SW.t("presets_building"), async () => {
@@ -2261,6 +2336,7 @@ function presetsTab() {
   async function updates(quiet) {
     await fill(upBox, SW.t("presets_updates_title"), async () => {
       const u = await api("updates");
+      loadedAt = Date.now();
       const waiting = (u.updates || []).filter((x) => !x.accepted);
       const summary = u.count ? SW.t("presets_updates_summary", { count: u.count, lines: u.lines,
         accepted: u.accepted ? SW.t("presets_updates_accepted", { count: u.accepted }) : "" }) : SW.t("presets_updates_none");
@@ -2269,6 +2345,7 @@ function presetsTab() {
           await api("restore_deleted", { body: {} }); setTimeout(() => updates(true), 3000);
           return SW.t("presets_restore_asked");
         }, { button: e.currentTarget }) });
+      needsHub(restore);
       const shown = h("div"), shownLine = resultLine();     // the change list, with Accept under it, once asked for
       const accept = SW.btn(SW.t("presets_updates_accept"), { cls: "btn--primary", action: "accept-updates", run: (e) =>
         act(upLine, SW.t("common_working"), async () => {
@@ -2282,6 +2359,7 @@ function presetsTab() {
             return { kind: "warn", text: SW.t("presets_updates_stale") };
           }
         }, { button: e.currentTarget }) });
+      needsHub(accept);
       const keys = (x) => x.keys.slice(0, 6).join(", ") + (x.keys.length > 6 ? ", …" : "");
       const show = SW.btn(SW.t("presets_updates_show"), { action: "show-updates", run: () => {
         shown.replaceChildren(...(waiting.length ? [h("ul", {}, ...waiting.map((x) => h("li", { textContent: SW.t("presets_updates_line",
@@ -2294,5 +2372,5 @@ function presetsTab() {
         h("div", {}, show), shownLine, shown, h("div", {}, restore), upLine);
     }, { quiet });
   }
-  return { el, enter: () => { load(); updates(); } };
+  return { el, enter: () => { if (!(hubGone && box.querySelector(".group") && upBox.querySelector(".group"))) { load(); updates(); } } };   // the Hub away: the groups on show are kept
 }

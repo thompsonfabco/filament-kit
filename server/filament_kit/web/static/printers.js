@@ -93,8 +93,8 @@ function printersTab() {
   const foundBox = h("div");
   const countBox = h("p", { class: "printers__count" });
   const noteBox = h("div");
-  const addBtn = SW.btn(t("common_add"), { icon: "plus", cls: "btn--ghost", name: t("printers_add"), action: "add" });
-  const addKlipper = SW.btn(t("common_add_klipper_printer"), { action: "add-klipper", run: () => addKlipperSheet(addKlipper) });
+  const addBtn = needsHub(SW.btn(t("common_add"), { icon: "plus", cls: "btn--ghost", name: t("printers_add"), action: "add" }));
+  const addKlipper = needsHub(SW.btn(t("common_add_klipper_printer"), { action: "add-klipper", run: () => addKlipperSheet(addKlipper) }));
   const listAdd = h("p", { class: "printers__more" }, addKlipper);
   const listView = h("div", { class: "printers" },
     h("div", { class: "printers__bar" }, countBox, addBtn), noteBox, listLine, cards, foundBox, listAdd);
@@ -201,9 +201,9 @@ function printersTab() {
     foundBox.replaceChildren(...(found.length ? [h("h2", { class: "printers__heading" }, t("printers_found_group")),
       h("ul", { class: "pfound" }, found.map((p) => h("li", { class: "pfound__row" },
         h("span", { class: "pfound__name" }, p.model_name || p.model || t("common_bambu_lab")), h("span", { class: "mono muted" }, p.ip),
-        changes ? SW.btn(t("common_add"), { action: "add-found", name: t("printer_add_title", { model: p.model_name || p.model || p.ip }), run: (e) => addBambuSheet(p, e.currentTarget) }) : null)))] : []));
+        changes ? needsHub(SW.btn(t("common_add"), { action: "add-found", name: t("printer_add_title", { model: p.model_name || p.model || p.ip }), run: (e) => addBambuSheet(p, e.currentTarget) })) : null)))] : []));
     if (!printers.length && !found.length) {
-      cards.replaceChildren(SW.empty({ icon: "printer", title: t("home_printers_empty"), text: t("printer_list_empty_text"), actions: changes ? SW.btn(t("common_add_klipper_printer"), { action: "add-klipper", run: (e) => addKlipperSheet(e.currentTarget) }) : null }));
+      cards.replaceChildren(SW.empty({ icon: "printer", title: t("home_printers_empty"), text: t("printer_list_empty_text"), actions: changes ? needsHub(SW.btn(t("common_add_klipper_printer"), { action: "add-klipper", run: (e) => addKlipperSheet(e.currentTarget) })) : null }));
     }
     listAdd.hidden = !changes || (!printers.length && !found.length);
     layout();
@@ -259,7 +259,7 @@ function printersTab() {
     g.statusBox = h("div", { class: "printer__live" });
     g.controls = h("div", { class: "printer__controls" });
     g.msg = resultLine();
-    g.camBtn = SW.btn(t("printer_camera_show"), { icon: "camera", action: "camera", run: () => camera(!g.camOn) });
+    g.camBtn = needsHub(SW.btn(t("printer_camera_show"), { icon: "camera", action: "camera", run: () => camera(!g.camOn) }));
     g.camBox = h("div", { class: "pcam", hidden: true });
     g.units = h("div"); g.slotsBox = h("div");
     g.usageBox = h("div"); g.usageLine = resultLine();
@@ -273,6 +273,7 @@ function printersTab() {
     g.used.head.append(h("span", { class: "muted printer__days" }, t("printer_used_last_days")));
     g.map = group("printer_map_title_bambu", g.mapBox, g.mapLine, g.reportBox, g.repLine, g.manualLine);
     g.set = group("printer_settings_title", g.setBox, g.setLine);
+    for (const x of [g.slots, g.used, g.set]) hubGroup(x.el);       // the map group says it already, with its own line
     pageView.replaceChildren(g.back, top, g.slots.el, g.used.el, g.map.el, g.set.el);
     g.statusLoad = SW.loading(g.statusBox, { thing: nameOf(id), items: 2 });
     g.slotsLoad = SW.loading(g.slotsBox, { thing: t("printers_col_slots"), items: 2 });
@@ -396,12 +397,12 @@ function printersTab() {
     const sig = [up, st, s.light].join("|");
     if (sig === g.sig) return;                          // the buttons are as they were: one that works or holds focus stays
     g.sig = sig;
-    const ctl = (action, key, cls) => { const b = SW.btn(t(key), { cls, action, run: () => cmd(action, false, b) }); return b; };
+    const ctl = (action, key, cls) => { const b = needsHub(SW.btn(t(key), { cls, action, run: () => cmd(action, false, b) })); return b; };
     const row = [];
     if (up && st === "RUNNING") row.push(ctl("pause", "printer_pause", ""));
     if (g.paused) row.push(ctl("resume", "printer_resume", "btn--primary"));
     if (up && s.light) row.push(ctl(s.light === "on" ? "light_off" : "light_on", s.light === "on" ? "printer_light_off" : "printer_light_on", "btn--ghost"));
-    if (live) { const b = SW.btn(t("printer_stop"), { cls: "btn--danger", action: "stop", run: () => stop(b) }); row.push(h("div", { class: "printer__stop" }, b)); }
+    if (live) { const b = needsHub(SW.btn(t("printer_stop"), { cls: "btn--danger", action: "stop", run: () => stop(b) })); row.push(h("div", { class: "printer__stop" }, b)); }
     g.controls.replaceChildren(...row);
   }
   async function cmd(action, confirm, button) {
@@ -478,8 +479,8 @@ function printersTab() {
     const unitNode = (u) => {
       const rows = (u.slots || []).map((sl) => {
         const sp = sl.spool, key = (what) => `${what}:${sl.label}`, gr = grams(sl), hex = hexOf(sl);
-        const load = SW.btn(t("common_load"), { action: "load", name: t("spool_load_title", { slot: sl.label }), run: () => openLoad(sl, load) });
-        const unload = sp ? SW.btn(t("common_unload"), { action: "unload", name: t("printer_unload_title", { slot: sl.label }), run: () => unloadSlot(sl, sp, unload) }) : null;
+        const load = needsHub(SW.btn(t("common_load"), { action: "load", name: t("spool_load_title", { slot: sl.label }), run: () => openLoad(sl, load) }));
+        const unload = sp ? needsHub(SW.btn(t("common_unload"), { action: "unload", name: t("printer_unload_title", { slot: sl.label }), run: () => unloadSlot(sl, sp, unload) })) : null;
         load.dataset.key = key("load"); if (unload) unload.dataset.key = key("unload");
         const actions = h("div", { class: "pslot__actions" }, load, unload);
         if (!up) { disabled(load, t("slot_load_disabled")); if (unload) disabled(unload, t("slot_load_disabled")); }
@@ -511,8 +512,8 @@ function printersTab() {
     const picked = h("div", { class: "pload__picked", hidden: true });
     const search_ = h("div", { class: "pload__search" }, find, line, results, hint);
     const cancel = SW.btn(t("common_cancel"), { action: "cancel", run: () => dlg.close() });
-    const go = SW.btn(t("common_load"), { cls: "btn--primary", action: "load", run: () => doLoad(false) });
-    const tap = SW.btn(t("spool_load_last_tag"), { action: "last-tag", run: () => lastTap() });
+    const go = needsHub(SW.btn(t("common_load"), { cls: "btn--primary", action: "load", run: () => doLoad(false) }));
+    const tap = needsHub(SW.btn(t("spool_load_last_tag"), { action: "last-tag", run: () => lastTap() }));
     disabled(go, t("spool_load_pick_first"), () => find._control);
     const dlg = SW.sheet({ title: t("spool_load_title", { slot: label }), foot: [cancel, go],
       body: h("div", { class: "pload" }, tap, h("p", { class: "muted pload__or" }, t("spool_load_or")), search_, picked, plan) });
@@ -618,7 +619,7 @@ function printersTab() {
     const line = resultLine(), said = g.undone.get(e.id);
     if (said) SW.result(line, "ok", said);
     const from = e.spool === null ? t("printer_used_spool_gone") : e.spool ? t("printer_used_from_spool", { id: e.spool.id, name: spoolTitle(e.spool) }) : "";
-    const b = e.undone ? null : SW.btn(t("common_undo"), { action: "undo", name: t("printer_used_undo_name", { grams: e.grams ?? "?", job: e.job || t("printer_used_job_default") }), run: () => undo(e, b) });
+    const b = e.undone ? null : needsHub(SW.btn(t("common_undo"), { action: "undo", name: t("printer_used_undo_name", { grams: e.grams ?? "?", job: e.job || t("printer_used_job_default") }), run: () => undo(e, b) }));
     return h("li", { class: "pused__row", "data-state": e.undone ? "undone" : undefined },
       h("span", { class: "pused__grams mono" }, t("common_grams", { grams: e.grams ?? "?" })),
       h("span", { class: "pused__what" }, [e.job || t("printer_used_job_default"), e.slot].filter(Boolean).join(" · "), e.undone ? " " + t("recent_revision_undone") : ""),
@@ -641,9 +642,9 @@ function printersTab() {
   function mapNodes(g, m) {
     const running = m.state === "running";
     g.calibrated = !!m.calibrated; g.reportWanted = !!m.report_wanted;
-    const mapBtn = SW.btn(running ? [SW.spinner(), t("printers_mapping")] : t("printers_map_slots"), { action: "map", run: () => remap() });
-    const byLoad = SW.btn(t("printers_map_loading"), { action: "map-by-loading", run: () => openManual(byLoad) });
-    const report = SW.btn(t("printers_collect_report"), { action: "report", run: () => collectReport(report) });
+    const mapBtn = needsHub(SW.btn(running ? [SW.spinner(), t("printers_mapping")] : t("printers_map_slots"), { action: "map", run: () => remap() }));
+    const byLoad = needsHub(SW.btn(t("printers_map_loading"), { action: "map-by-loading", run: () => openManual(byLoad) }));
+    const report = needsHub(SW.btn(t("printers_collect_report"), { action: "report", run: () => collectReport(report) }));
     g.mapBtns = { map: mapBtn, report };
     disabled(mapBtn, running ? t("printers_map_running_reason") : null);
     disabled(byLoad, running ? t("printers_map_running_reason") : null);
@@ -666,7 +667,7 @@ function printersTab() {
     if (!g) return;
     clearTimeout(g.mapTimer);
     if (g.isKlipper()) {                                // the kit's slot map and report are for Bambu printers; Klipper has only Map by loading filament
-      const byLoad = SW.btn(t("printers_map_loading"), { action: "map-by-loading", run: () => openManual(byLoad) });
+      const byLoad = needsHub(SW.btn(t("printers_map_loading"), { action: "map-by-loading", run: () => openManual(byLoad) }));
       g.mapBtns = null;
       g.mapBox.replaceChildren(byLoad);
       return;
@@ -723,7 +724,7 @@ function printersTab() {
     const dlg = SW.sheet({ title: t("printers_map_loading"), cls: "sheet--detail", body: [body, line], foot,
       onClose: () => { if (g.manual) manualStop(); if (page === g) loadMap(); } });
     openHere(dlg, opener);
-    const start = SW.btn(t("printers_manual_start"), { cls: "btn--primary", action: "start", run: async () => {
+    const start = needsHub(SW.btn(t("printers_manual_start"), { cls: "btn--primary", action: "start", run: async () => {
       await act(line, t("common_working"), async () => {
         const v = await pj(mpath(id, "start"), {});
         manualStop();
@@ -732,7 +733,7 @@ function printersTab() {
         g.manual.timer = setTimeout(tick, 2000);
         return null;
       }, { button: start });
-    } });
+    } }));
     body.replaceChildren(h("p", {}, t("printers_map_loading_intro")), start);
     async function send(what, extra) {
       const m = g.manual;
@@ -809,7 +810,7 @@ function printersTab() {
 
   // ----- Printer settings (04 6.8): from the Hub's own printer list; every change in a sheet (12.2) -----
   const settingsRow = (label, value, ...buttons) => h("div", { class: "kv__row" }, h("span", { class: "kv__key" }, label), h("div", { class: "kv__value" }, value, ...buttons));
-  const sbtn = (key, setting, run) => SW.btn(t(key), { action: "change", name: t("printer_set_button_name", { action: t(key), setting }), run });
+  const sbtn = (key, setting, run) => needsHub(SW.btn(t(key), { action: "change", name: t("printer_set_button_name", { action: t(key), setting }), run }));
   // After a change the sheet has closed: the lists are read again and the group says what happened.
   async function changed(done) {
     const g = page;
@@ -852,7 +853,7 @@ function printersTab() {
         change({ title: t("printers_key_title", { name }), confirm: t("common_save_key"), opener: e.currentTarget, fields: [keyField({ check: needs("printers_error_key") })] },
           ([k]) => edit({ api_key: k }, t("printer_set_key_saved")), (r, done) => changed(done))) : null));
     }
-    const forget = changes ? SW.btn(t("printers_forget"), { icon: "trash", cls: "btn--danger", action: "forget", run: async () => {
+    const forget = changes ? needsHub(SW.btn(t("printers_forget"), { icon: "trash", cls: "btn--danger", action: "forget", run: async () => {
       const ok = await sheetAsk({ kind: "destructive", title: t("printers_forget_title", { name }), opener: forget, busy: t("common_working"),
         text: t(bambu ? "printers_forget_body_bambu" : "printers_forget_body_klipper", { product: t("app_name") }), confirm: t("printers_forget"),
         run: async () => { await pj(`${id}/forget`, {}); } });
@@ -862,7 +863,7 @@ function printersTab() {
       await backSettled();
       if (location.hash !== "#printers") location.hash = "#printers";
       try { await loadAll(); drawList(); } catch (e) { /* the list reads again by itself */ }
-    } }) : null;
+    } })) : null;
     g.setBox.replaceChildren(
       changes ? h("p", { class: "muted" }, t("printer_set_home_note")) : SW.banner({ kind: "info", text: t("printer_set_readonly"), inline: true }),
       h("div", { class: "kv pset" }, rows), forget ? h("div", { class: "detail__remove" }, forget) : null);
@@ -931,11 +932,11 @@ function alertsPanel(addToHome) {
   ownReg().then((reg) => reg && reg.pushManager.getSubscription()).then((sub) => {
     if (sub) { slot.replaceChildren(makeToggle(true)); paint(true); }     // this phone is already subscribed
   }).catch(() => {});
-  const test = SW.btn(SW.t("settings_alerts_test"), { action: "test", run: async () => {
+  const test = needsHub(SW.btn(SW.t("settings_alerts_test"), { action: "test", run: async () => {
     SW.busy(test, SW.t("common_working"));
     try { await pj("push/test", {}); SW.result(testBox, "ok", SW.t("settings_alerts_sent")); }
     catch (e) { SW.result(testBox, "bad", says(e)); }
     finally { SW.idle(test); }
-  } });
+  } }));
   return h("div", { class: "alerts" }, line, slot, test, testBox);
 }
