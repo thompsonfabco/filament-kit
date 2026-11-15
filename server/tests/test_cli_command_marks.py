@@ -188,7 +188,7 @@ def test_every_command_in_the_cli_texts_stays_whole_when_the_text_is_wrapped(col
 
 def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkeypatch):
     """The real texts of the reviews' items: the printer's not-connected hints, the serial-port hint, the two intake
-    commands and the status rows' fixes."""
+    commands (recent show, local-intake status) and the status rows' fixes."""
     class Who:
         name = "alice"
     cli_texts = [t for _, t in texts(ROOT / "cli.py")]
@@ -197,7 +197,7 @@ def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkey
         "wrong_code": cli.NOT_CONNECTED["wrong_code"],
         "cert_changed": cli.NOT_CONNECTED["cert_changed"],
         "port": "could not flash" + cli._port_hint(Who()),
-        "intake": next(t for t in cli_texts if "intake edit" in t),
+        "recent": next(t for t in cli_texts if "low confidence: filament-kit recent show" in t),
         "local-intake": next(t for t in cli_texts if "local-intake status" in t),
         "web": next(t for t in status if "filament-kit-web" in t and "journalctl" in t),
         "config": next(t for t in status if "option 4" in t and "internet" in t),
