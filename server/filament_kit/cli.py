@@ -211,6 +211,11 @@ def cmd_station_pair(ask=input) -> int:
 def _port_check(port: str, boards: list[tuple[str, ...]], what: str) -> str | None:
     """`--port` names a board the command would itself offer: its own scan's boards, each a port and its other names.
     The board's port when it is one of them; otherwise the Error and Fix are said and None is returned (exit 2)."""
+    if not port.strip():
+        output.error("--port needs the board's port name; nothing was written.",
+                     ("use one of: " + ", ".join(b[0] for b in boards) + ".") if boards else
+                     "no board was found; plug it into this PC with a data cable (a charge-only cable shows nothing).")
+        return None
     want = os.path.realpath(port)
     for names in boards:
         if any(n == port or os.path.realpath(n) == want for n in names):
@@ -242,7 +247,7 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
             _err_line("this station has no panel firmware bundled; nothing was flashed.")
             return 1
         ports = panel.blank_c3_ports()
-        if only_port:       # only a board this scan would offer: not the PN532, a running panel or a path that is no board
+        if only_port is not None:       # only a board this scan would offer: not the PN532, a running panel or a path that is no board
             only_port = _port_check(only_port, [(p,) for p in ports], "station flash-panel would write")
             if only_port is None:
                 return output.USAGE
@@ -256,7 +261,7 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
                          "name the board with --port, for example --port " + ports[0] + ".")
             return output.USAGE
         for port in ports:
-            if not only_port:
+            if only_port is None:
                 print(f"Found a USB serial board on {port} that does not answer as the intake panel.")
             try:
                 stop = _confirm(f"Write the intake panel firmware to {port}?",
@@ -2220,6 +2225,42 @@ def _answers_as_panel(port: str) -> bool:
     return ser is not None
 
 
+@contextlib.contextmanager
+def _service_paused(run):
+    """The station service stopped for the block when it runs, as `reader setup`'s write does it, and started again."""
+    service = "filament-kit-station.service"
+    was_active = run(["systemctl", "is-active", service], check=False, capture_output=True).returncode == 0
+    if was_active:
+        run(["systemctl", "stop", service], check=False, capture_output=True)
+    try:
+        yield
+    finally:
+        if was_active:
+            run(["systemctl", "start", service], check=False, capture_output=True)
+
+
+def _refuse_panel_board(port: str, explicit: bool, found, run=None) -> int | None:
+    """The board on port is asked for its HELLO (the station stopped meanwhile) before anything is asked or made: None
+    when it is no panel, else the exit code. The station's button panel is an ESP32-C3 too, and with the reader
+    unplugged it is the lone board (FA-040); a named --port gets the same check as a found board."""
+    try:
+        with (_service_paused(run) if run else _station_stopped()):    # the service would hold the port, a probe resets it
+            is_panel = _answers_as_panel(port)
+    except _StationBusy as e:
+        _err_line(str(e))
+        return 1
+    if not is_panel:
+        return None
+    said = f"{port} answers as the intake station's button panel, not a reader; nothing was written."
+    if explicit:
+        others = [r.port for r in found if r.port != port]
+        output.error(said, ("use one of: " + ", ".join(others) + ".") if others else
+                     "plug the reader into this PC with a data cable (a charge-only cable shows nothing).")
+        return output.USAGE
+    _err_line(said + " Plug the reader in, or name its port with --port.")
+    return 1
+
+
 def _ask_choice(ask, prompt: str, choices: dict[str, str], default: str) -> str | None:
     """One of `choices` (answer -> value) from the owner; the default on an empty answer; None when it can't ask."""
     for _ in range(3):
@@ -2263,12 +2304,13 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     job.next("Finding the board")
     found = rs.find_readers()
     yes = bool(getattr(a, "yes", False))
-    if a.port:
+    explicit = a.port is not None
+    if explicit:
         port = _port_check(a.port, [(r.port, r.by_id or r.port) for r in found], "reader setup would write")
         if port is None:
             return output.USAGE
     elif not found:
-        _err_line("no ESP32 board on this server's USB. Plug the Printer Station in with a data cable (a "
+        _err_line("no ESP32 board on this server's USB. Plug the reader in with a data cable (a "
                   "charge-only cable shows nothing), or name the port with --port.")
         return 1
     elif len(found) == 1:
@@ -2280,18 +2322,21 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         return 1
     elif yes:       # --yes answers for one named board, never for a pick among several (06 7)
         output.error("there are several ESP32 boards on this server's USB: " + ", ".join(r.port for r in found)
-                     + "; nothing was written.", "name the Printer Station's board with --port, for example --port "
+                     + "; nothing was written.", "name the reader's board with --port, for example --port "
                      + found[0].port + ".")
         return output.USAGE
     else:
         for i, r in enumerate(found, 1):
             print(f"  {i}. {r.by_id or r.port} ({r.product})")
-        pick = _ask_choice(ask, "Which one is the Printer Station? [number] ",
+        pick = _ask_choice(ask, "Which one is the reader? [number] ",
                            {str(i): r.port for i, r in enumerate(found, 1)}, "")
         if not pick:
             _err_line("no board picked; nothing was changed")
             return 1
         port = pick
+    refused = _refuse_panel_board(port, explicit, found, run)       # before any question or token
+    if refused is not None:
+        return refused
     try:
         base = a.base.rstrip("/") if a.base else rs.reader_base(config.load())
         if not base.startswith("https://"):
@@ -2302,7 +2347,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         _err_line(str(e))
         return 1
     try:
-        ssid = a.ssid or ask("Wi-Fi name the Printer Station joins: ").strip()
+        ssid = a.ssid or ask("Wi-Fi name the reader joins: ").strip()
     except (EOFError, RuntimeError, OSError):
         _err_line("reader setup needs a terminal to ask you; nothing was changed")
         return 1
@@ -2325,7 +2370,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         if not yes and ask is input and not output.terminal():      # nobody to ask: nothing is written
             return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit reader setup") + " --yes")
         try:
-            stop = _confirm(f"Write the Printer Station firmware to {port}? What is on the board now is replaced.",
+            stop = _confirm(f"Write the reader firmware to {port}? What is on the board now is replaced.",
                             "writing the firmware", yes=yes, ask=None if ask is input else ask)
         except KeyboardInterrupt:
             print("\nNothing was flashed.")
@@ -2347,15 +2392,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     if was_active:
         run(["systemctl", "stop", service], check=False, capture_output=True)
     try:
-        # the station's button panel is an ESP32-C3 too, and with the Printer Station unplugged it is the lone board
-        # (FA-040): one that answers as the panel is never written
-        if _answers_as_panel(port):
-            result = rf.Result(False, f"the board on {port} answers as the intake station's button panel, not a "
-                                      "Printer Station; nothing was written. Plug the Printer Station in, or name its "
-                                      "port with --port.")
-        else:
-            result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run,
-                              step=job.next)
+        result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run, step=job.next)
     finally:
         if was_active:
             run(["systemctl", "start", service], check=False, capture_output=True)
@@ -2405,45 +2442,39 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     port = None
     if flashing:
         found = rs.find_readers()
-        if a.port:
+        explicit = a.port is not None
+        if explicit:
             port = _port_check(a.port, [(r.port, r.by_id or r.port) for r in found], "reader setup would write")
             if port is None:
                 return output.USAGE
         elif len(found) == 1:
             port = found[0].port
-            what = f"{found[0].by_id or port} ({found[0].product})"
-            try:
-                with _station_stopped():    # the service would hold the panel's port, and a probe would reset it
-                    is_panel = _answers_as_panel(port)
-            except _StationBusy as e:
-                _err_line(str(e))
-                return 1
-            if is_panel:
-                _err_line(f"{what} answers as the Printer Station's button panel, not a reader; it was not "
-                          "flashed. Plug the reader in, or name its port with --port.")
-                return 1
-            # A station's button panel is an ESP32-C3 too: with the reader unplugged it is the lone board.
-            yes = bool(getattr(a, "yes", False))
-            if not yes and ask is input and not output.terminal():      # nobody to ask: nothing is written
-                return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit reader setup") + " --yes")
-            print(f"Found a USB board: {what}")
-            try:
-                stop = _confirm(f"Write the Printer Station firmware to {port}? What is on the board now is replaced.",
-                                "writing the firmware", yes=yes, ask=None if ask is input else ask)
-            except KeyboardInterrupt:
-                print("\nNothing was flashed.")
-                return 1
-            if stop is not None:
-                return stop
         elif not found:
             _err_line("no ESP32 board on USB here. Plug the reader in with a data cable (a charge-only cable "
                       "shows nothing), or name the port with --port.")
             return 1
         else:
             output.error("there are several ESP32 boards on USB: " + ", ".join(r.port for r in found)
-                         + "; nothing was written.", "name the Printer Station's board with --port, for example --port "
+                         + "; nothing was written.", "name the reader's board with --port, for example --port "
                          + found[0].port + ".")
             return output.USAGE
+        refused = _refuse_panel_board(port, explicit, found)        # a named port too, before any question or token
+        if refused is not None:
+            return refused
+        shown = next((r for r in found if r.port == port), None)
+        yes = bool(getattr(a, "yes", False))        # --port names the board; it never answers the question
+        if not yes and ask is input and not output.terminal():      # nobody to ask: nothing is written
+            return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit reader setup") + " --yes")
+        if not explicit and shown:
+            print(f"Found a USB board: {shown.by_id or port} ({shown.product})")
+        try:
+            stop = _confirm(f"Write the reader firmware to {port}? What is on the board now is replaced.",
+                            "writing the firmware", yes=yes, ask=None if ask is input else ask)
+        except KeyboardInterrupt:
+            print("\nNothing was flashed.")
+            return 1
+        if stop is not None:
+            return stop
     if a.secrets:
         try:
             text = Path(a.secrets).read_text(encoding="utf-8")

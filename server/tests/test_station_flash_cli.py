@@ -242,3 +242,38 @@ def test_port_with_no_blank_board_says_none_were_found(bench, monkeypatch, capsy
     bench.probe.hello = {"/dev/ttyACM0", "/dev/ttyACM1"}
     assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="/dev/ttyACM0") == 2
     assert "no such board was found" in " ".join(capsys.readouterr().err.split()) and bench.flashed == []
+
+
+def test_port_with_an_empty_name_writes_nothing_and_exits_2(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="") == 2
+    err = " ".join(capsys.readouterr().err.split())
+    assert bench.flashed == [] and err.startswith("Error: --port needs") and "/dev/ttyACM0" in err
+
+
+def test_port_written_another_way_is_the_board_the_scan_found(bench):
+    """`..` and links resolve to the scanned name, and that name is the one written."""
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="/dev/ttyUSB0/../ttyACM1") == 0
+    assert bench.flashed == [("/dev/ttyACM1", "10")]
+
+
+def test_port_check_matches_a_link_to_the_board(monkeypatch):
+    real = {"/dev/serial/by-id/usb-x": "/dev/ttyACM0", "/dev/link": "/dev/ttyACM0"}
+    monkeypatch.setattr(cli.os.path, "realpath", lambda p: real.get(p, p))
+    boards = [("/dev/ttyACM0", "/dev/serial/by-id/usb-x")]
+    assert cli._port_check("/dev/serial/by-id/usb-x", boards, "x") == "/dev/ttyACM0"
+    assert cli._port_check("/dev/link", [("/dev/ttyACM0",)], "x") == "/dev/ttyACM0"   # only the link resolves to it
+    assert cli._port_check("/dev/ttyACM9", boards, "x") is None
+
+
+def test_an_explicit_port_still_asks_at_a_terminal(bench, capsys):
+    asked = []
+    assert cli.cmd_station_flash_panel(ask=lambda p: asked.append(p) or "n", run=bench.run,
+                                       only_port="/dev/ttyACM1") == 5
+    assert len(asked) == 1 and bench.flashed == []
+
+
+def test_an_explicit_port_piped_without_yes_exits_2_and_writes_nothing(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, only_port="/dev/ttyACM1") == 2
+    assert bench.flashed == [] and "--yes" in capsys.readouterr().err
