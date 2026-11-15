@@ -982,8 +982,8 @@ def test_the_tab_script_never_uses_innerhtml_or_talks_elsewhere():
 
 def test_the_devices_card_says_when_a_pairing_is_claimed():
     src = (STATIC / "setup_devices.js").read_text(encoding="utf-8")
-    assert "watchPaired(box, known, r.expires_in)" in src and "`Paired: ${fresh.name}.`" in src
-    assert 'startJob(box, "station_pair")' in src
+    assert "newcomer(await readState())" in src and 'SW.t("qr_paired", { name: st.name })' in src
+    assert 'startJob(boxFor("pair"), "station_pair")' in src
 
 
 def test_the_scripts_never_hand_a_null_to_replacechildren():
