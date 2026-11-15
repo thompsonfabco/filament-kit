@@ -805,7 +805,7 @@ function openAdd() {
 }
 function openAddDrawer(opener) {
   const P = S.printers, id = SW.uid("add");
-  let family = P.bambu ? "bambu" : "klipper", adding = false;
+  let family = P.bambu ? "bambu" : "klipper", adding = false, sending = false;
   const f = {
     address: SW.field({ label: SW.t("printers_field_address"), name: "address", mono: true, placeholder: SW.t("printers_add_address_placeholder"), attrs: addressAttrs, check: needed("common_error_address") }),
     access_code: SW.field({ type: "secret", label: SW.t("common_field_access_code"), name: "access_code", mono: true, hint: SW.t("printers_access_code_hint"), attrs: secretAttrs, check: needed("common_error_access_code") }),
@@ -831,7 +831,7 @@ function openAddDrawer(opener) {
   add.setAttribute("form", id);
   const cancel = SW.btn(SW.t("common_cancel"), { run: () => requestClose() });
   async function submit() {
-    if (adding) return;
+    if (sending) return;      // from the press until the answer: guard() starts the add a moment later, and a second press must not send another
     SW.result(result, null);
     const mine = visible(), bad = mine.filter((x) => { const err = x._check && x._check(); SW.fieldError(x, err || null); return !!err; });
     if (bad.length) { bad[0]._control.focus(); return; }
@@ -839,16 +839,17 @@ function openAddDrawer(opener) {
     const [path, body] = family === "klipper" ? ["printers/klipper", { host: v(f.host), port: v(f.port), name: v(f.name), api_key: v(f.api_key) }]
       : ["printers", { address: v(f.address), access_code: f.access_code._control.value, name: v(f.name), serial: v(f.serial) }];
     let r = null;
-    await SW.guard(SW.t("common_add_printer").toLowerCase(), async () => {
+    sending = true;
+    try { await SW.guard(SW.t("common_add_printer").toLowerCase(), async () => {
       adding = true;
       SW.busy(add, SW.t("common_working"));
       for (const x of mine) x._control.readOnly = true;
       try { r = await api(path, { ...body, code: theCode() }); } catch (e) {
         if (e.locked) throw e;
         const at = e.data && e.data.field && mine.find((x) => x._control.name === e.data.field);
-        if (at) { SW.fieldError(at, addError(e.data.field, e.message)); at._control.focus(); } else SW.result(result, "bad", hubText(e.message));
+        if (at) { SW.fieldError(at, addError(e.data.field, e.message)); at._control.focus(); } else SW.result(result, "bad", addError(e.data && e.data.field, e.message));
       } finally { adding = false; SW.idle(add); for (const x of mine) x._control.readOnly = false; }
-    });
+    }); } finally { sending = false; }
     if (r) await afterAdd(r);
   }
   const d = openDrawer("add", { serial: "add" }, SW.t("printers_add"), form, [result, cancel, add],
@@ -921,17 +922,19 @@ async function showCommands(box, button) {
   SW.result(box, null);
   addonOut.replaceChildren(E("div", "code", E("p", "code__wait", { role: "status" }, SW.spinner(), SW.t("code_checking_release"))));
   try {
-    const r = await api("printers/pack", {}), cap = SW.uid("addon");
-    addonOut.replaceChildren(E("div", "code",
-      E("div", "code__bar", E("span", "code__caption mono", { id: cap }, SW.t("printers_addon_caption", { version: r.version })),
-        E("span", "result", { role: "status" }), SW.btn(SW.t("common_copy"), { cls: "btn--ghost", icon: "copy", action: "copy", name: SW.t("printers_addon_copy_name") })),
-      X("pre", { class: "code__text", tabindex: "0", "aria-labelledby": cap, text: r.lines.join("\n") })));
+    const r = await api("printers/pack", {}), cap = SW.uid("addon"), text = r.lines.join("\n");
+    // the caption and Copy sit above the block, not in it: the block scrolls, and its bar would scroll away with the lines
+    const copy = SW.btn(SW.t("common_copy"), { cls: "btn--ghost", icon: "copy", action: "copy", name: SW.t("printers_addon_copy_name") });
+    copy.dataset.copy = text;
+    addonOut.replaceChildren(E("div", "printers-addon__bar", E("span", "code__caption mono", { id: cap }, SW.t("printers_addon_caption", { version: r.version })),
+      E("span", "result", { role: "status" }), copy),
+    E("div", "code", X("pre", { class: "code__text", tabindex: "0", "aria-labelledby": cap, text })));
   } catch (e) {
     addonOut.replaceChildren();
     const m = e.status === 409 && /^no printer pack command: ([\s\S]*)$/.exec(e.message);
     if (m) sayWith(box, "bad", SW.t("printers_result_addon_unavailable", { reason: hubText(m[1]) }),
       { label: SW.t("common_try_again"), name: `${SW.t("common_try_again")}: ${SW.t("printers_addon_title")}`, run: () => showCommands(box, button) });
-    else say(box, e.message, false);
+    else say(box, hubText(e.message), false);
   } finally { SW.idle(button); }
 }
 function addonBlock() {
