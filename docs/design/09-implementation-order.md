@@ -1065,7 +1065,9 @@ app · M · Depends on: S6.1, S4.15 · Beside: S6.2
 Hub page, web app · L · Depends on: S6.2 · Beside: S6.5
 - **Files today:** `components.css` (profile groups keyed on Console only); `tokens.json` already holds Workbench.
 - **Change:** the `sidebar`, `cards` and `card` profile groups keyed on Workbench (F6.1, 02 1.3); the Workbench tile
-  in both pickers.
+  in both pickers. Two pieces of shared markup that every look carries, added here or in a step right after: the
+  "Sort by" label in the collection head (02 6.1) and the navigation's `data-state="off"` with its hidden suffix
+  for a switched-off section (02 2.2).
 - **Keep:** markup and scripts: a theme brings no markup or script of its own (F6.1).
 - **Check:** AUT-5 in Workbench light and dark; manual: release checklist step 4 (Workbench part). This step sets
   the size test (`tests/test_design_components.py`) to the numbers of F12 rule 7 and adds its page totals.
