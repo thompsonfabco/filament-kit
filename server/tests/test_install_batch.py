@@ -220,8 +220,9 @@ def test_pair_with_an_unreadable_config_says_use_sudo(monkeypatch, capsys):
     def load():
         raise PermissionError(13, "Permission denied", "/etc/filament-kit/config.json")
     monkeypatch.setattr(config, "load", load)
-    assert cli.main(["pair", "--pc"]) == 1
-    assert "run it with sudo: sudo filament-kit pair --pc" in capsys.readouterr().err
+    assert cli.main(["pair", "--pc"]) == 3
+    err = capsys.readouterr().err
+    assert err.startswith("Error: ") and "sudo filament-kit pair --pc" in err
 
 
 def test_pair_without_a_certificate_as_a_user_says_use_sudo(monkeypatch, capsys):

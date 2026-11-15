@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from fakes.claude_fake import FakeClaude
 
-from conftest import free_port
+from conftest import free_port, old_rows
 from filament_kit import cli, config, inventory, modules, pairing
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
@@ -528,8 +528,8 @@ def test_status_prints_the_state_passed_in_even_when_the_files_are_closed(monkey
     _station_mode(monkeypatch)
     monkeypatch.setattr(server_api, "token_file", _Unreadable)
     cli.main(["status", "--station-pairing=paired 192.0.2.10:8710"])
-    out = capsys.readouterr().out
-    assert "OK   station paired with the kit server (192.0.2.10:8710)" in out and "run it with sudo" not in out
+    out = old_rows(capsys.readouterr().out)
+    assert "OK   station paired with the kit server (192.0.2.10:8710)" in out and "run it with sudo" not in " ".join(out)
     cli.main(["status", "--station-pairing=unpaired"])
     assert PAIR_STEPS[1] in capsys.readouterr().out
     cli.main(["status"])  # no sudo: the wrapper passes nothing, and "run it with sudo" is the true advice
@@ -563,7 +563,7 @@ def test_station_pair_with_no_terminal_at_the_link_prompt(monkeypatch, capsys):
     _as_root(monkeypatch)
     assert cli.cmd_station_pair(ask=_no_terminal) == 1
     err = capsys.readouterr().err
-    assert "terminal" in err and err.startswith("error:")
+    assert "terminal" in err and err.startswith("Error:")
     assert _nothing_saved()
 
 

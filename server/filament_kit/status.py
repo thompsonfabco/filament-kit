@@ -7,12 +7,14 @@ the setup code, so it shows them through `redact.text` unless the code was given
 from __future__ import annotations
 
 import json
+import re
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, replace
 from typing import Iterable, Iterator
 
-from . import config, modules, pairing, remote
+from . import config, modules, output, pairing, remote
 
 OK, FAIL, INFO, DETAIL = "ok", "fail", "info", "detail"
 _MARKS = {"OK": OK, "--": INFO}
@@ -33,22 +35,67 @@ def _in(group: str, source: Iterable[Row]) -> Iterator[Row]:
         yield r if r.group else replace(r, group=group)
 
 
-def print_rows(rows: Iterable[Row]) -> bool:
-    """The rows as the CLI has always shown them. True when none failed."""
-    good = True
+# The headings of the Hub page's Overview, in its order (06 section 9.1); a row's group is one of these
+GROUPS = ("Hub", "Spoolman", "Label Reader", "Weigh Station", "Devices", "Printers", "Slicer presets", "Filament Catalog")
+_WORDS = {OK: "OK", FAIL: "needs a look", INFO: "note"}      # 06 6.1: the code's values as the words people read
+
+
+def _grouped(rows: list[Row]) -> list[tuple[str, list[Row]]]:
+    """The rows under their headings, the groups in the Overview's order and the rows of each in the order they came.
+    Rows with no group (`web status`) come last, with no heading."""
+    known = {g: [r for r in rows if r.group == g] for g in GROUPS}
+    other = [r for r in rows if r.group not in known]
+    return [(g, rs) for g, rs in known.items() if rs] + ([("", other)] if other else [])
+
+
+def _fours(text: str) -> str:
+    """A long run of hex digits (a certificate fingerprint) in groups of four, which can be read aloud and wrapped
+    (CLI-9, 06 9.4); nothing else is touched."""
+    return re.sub(r"[0-9A-Fa-f]{32,}", lambda m: " ".join(m[0][i:i + 4] for i in range(0, len(m[0]), 4)), text)
+
+
+def header_line(cfg: dict | None = None) -> str:
+    """`filament-kit 0.5.2 · Workshop hub · server`: the version, the Hub's display name and the setup."""
+    from . import updates
+    cfg = cfg if cfg is not None else config.load()
+    sep = output.sym("sep")
+    return sep.join([f"filament-kit {updates.current_version()}", str(cfg.get("server_name") or "Hub"),
+                     modules.mode_of(modules.enabled(cfg))])
+
+
+def summary_line(rows: Iterable[Row]) -> str:
+    """`2 need a look · 9 OK · 3 notes`: the rows counted by their word, none left out that has a count."""
+    n = {w: 0 for w in _WORDS.values()}
     for r in rows:
-        if r.state == OK:
-            print(f"OK   {r.text}")
-        elif r.state == FAIL:
-            good = False
-            print(f"FAIL {r.text}")
-            if r.fix:
-                print(f"     fix: {r.fix}")
-        elif r.state == INFO:
-            print(f"--   {r.text}")
-        else:
-            print(f"     {r.text}")
-    return good
+        if r.state in _WORDS:
+            n[_WORDS[r.state]] += 1
+    parts = [f"{n['needs a look']} need{'s' if n['needs a look'] == 1 else ''} a look" if n["needs a look"] else "",
+             f"{n['OK']} OK" if n["OK"] else "",
+             f"{n['note']} note{'' if n['note'] == 1 else 's'}" if n["note"] else ""]
+    return output.sym("sep").join(p for p in parts if p) or "No rows"
+
+
+def print_rows(rows: Iterable[Row], *, summary: bool = False) -> bool:
+    """The rows as the command line shows them (06 9.1): a heading per group, then a glyph, the state word and the text
+    of each row, a needs-a-look row followed by its `Fix:` line. Detail rows are aligned with the text. True when none
+    needs a look."""
+    rows = list(rows)
+    lines: list[str] = []
+    for group, members in _grouped(rows):
+        if group:
+            lines.append(output.paint(group, "bold", sys.stdout))
+        for r in members:
+            if r.state == DETAIL:
+                text = r.text.strip()
+                if text[:5].lower() == "fix: ":      # a fix that is its own line: the same word as the others
+                    text = "Fix: " + text[5:]
+                lines += output.status_row("", text)
+            else:
+                lines += output.status_row(_WORDS[r.state], _fours(r.text), r.fix if r.state == FAIL else "")
+    if summary:
+        lines += ["", summary_line(rows)]
+    output.out_lines(lines)
+    return not any(r.state == FAIL for r in rows)
 
 
 def station_rows(url: str) -> Iterator[Row]:

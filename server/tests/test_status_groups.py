@@ -52,7 +52,8 @@ def test_collect_files_every_kind_of_row_under_a_group(owned, monkeypatch):
 
 def test_the_group_is_not_part_of_what_the_command_line_prints(capsys):
     assert status.print_rows([status.Row("ok", "a", group="Hub"), status.Row("fail", "b", "do c", group="Spoolman")]) is False
-    assert capsys.readouterr().out == "OK   a\nFAIL b\n     fix: do c\n"
+    assert capsys.readouterr().out == ("Hub\n  + OK            a\nSpoolman\n  ! needs a look  b\n"
+                                       "                  Fix: do c\n")
 
 
 def test_state_reports_the_cloud_reads_used_and_the_limit(app, owned):

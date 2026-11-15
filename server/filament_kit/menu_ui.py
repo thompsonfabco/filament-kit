@@ -13,7 +13,7 @@ import os
 import sys
 from typing import Callable
 
-from . import modules
+from . import modules, output
 
 # curses' key codes, so the state machine needs no curses (and is tested without a terminal)
 KEY_DOWN, KEY_UP, KEY_HOME, KEY_END = 258, 259, 262, 360
@@ -201,7 +201,9 @@ def _stdin_tty() -> bool:
 
 
 def _usable() -> bool:
-    return os.environ.get("TERM", "") not in ("", "dumb") and _stdin_tty()
+    """A full-screen menu needs a terminal that is not `dumb`, and not the screen-reader mode (`--plain`, 07 CLI-3),
+    which wants the numbered list."""
+    return os.environ.get("TERM", "") not in ("", "dumb") and _stdin_tty() and not output.plain()
 
 
 def run_menu(on, ask: Callable[[str], str | None], say: Callable[[str], None] = print) -> frozenset[str] | None:

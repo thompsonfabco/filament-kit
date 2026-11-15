@@ -63,7 +63,7 @@ def test_disable_with_dependents_noninteractive_fails(applied, capsys, monkeypat
     _stdin(monkeypatch, "")
     assert cli.main(["modules", "disable", "server"]) == 1
     err = capsys.readouterr().err
-    assert "fix: disable presets, printers, ai_intake first" in err
+    assert "Fix: disable presets, printers, ai_intake first" in err
     assert applied == []
     assert "modules" not in config.load()
 
@@ -97,7 +97,7 @@ def test_disable_names_the_whole_set_before_asking(applied, capsys, monkeypatch)
     assert cli.main(["modules", "disable", "server"]) == 1
     err = capsys.readouterr().err
     for n in ("ai_intake", "orders", "printers", "presets", "web", "remote"):
-        assert n in err.split("fix:")[1], n
+        assert n in err.split("Fix:")[1], n
 
 
 def test_disable_after_a_yes_does_what_it_said(applied, capsys, monkeypatch):
@@ -188,7 +188,7 @@ def test_the_fix_line_can_be_followed_in_the_order_it_gives(applied, capsys, mon
     _deep()
     _stdin(monkeypatch, "")
     assert cli.main(["modules", "disable", "server"]) == 1
-    listed = capsys.readouterr().err.split("fix: disable ")[1].split(" first")[0].split(", ")
+    listed = capsys.readouterr().err.split("Fix: disable ")[1].split(" first")[0].split(", ")
     assert listed.index("orders") < listed.index("ai_intake") and listed.index("remote") < listed.index("web")
 
 
@@ -196,7 +196,7 @@ def test_enable_at_a_terminal_refused_changes_nothing(applied, capsys, monkeypat
     config.save(modules.set_mode(config.load(), "station"))
     monkeypatch.setattr(cli, "_tty_confirm", lambda q: False)
     assert cli.main(["modules", "enable", "printers"]) == 1
-    assert "fix: enable server first" in capsys.readouterr().err and applied == []
+    assert "Fix: enable server first" in capsys.readouterr().err and applied == []
 
 
 def test_every_way_of_switching_says_it_in_the_same_words(applied, capsys, monkeypatch):
@@ -212,7 +212,7 @@ def test_enable_with_dependency_off_fails(applied, capsys, monkeypatch):
     _stdin(monkeypatch, "")
     config.save(modules.set_mode(config.load(), "station"))
     assert cli.main(["modules", "enable", "printers"]) == 1
-    assert "fix: enable server first" in capsys.readouterr().err
+    assert "Fix: enable server first" in capsys.readouterr().err
 
 
 def test_enable_station_with_server_on_links_locally(applied):
@@ -301,8 +301,8 @@ def test_non_root_changes_nothing(applied, monkeypatch, capsys):
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
     for argv in (["modules", "set", "all-in-one"], ["modules", "enable", "station"],
                  ["modules", "disable", "library"]):
-        assert cli.main(argv) == 1
-        assert "run as root" in capsys.readouterr().err
+        assert cli.main(argv) == 3
+        assert "administrator rights" in capsys.readouterr().err
     assert "modules" not in config.load()
     assert applied == []
 

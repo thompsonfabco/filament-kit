@@ -278,7 +278,7 @@ def test_cli_makes_the_report(rig, capsys):
 
 
 def test_cli_refuses_a_printer_it_doesnt_have(capsys):
-    assert cli.main(["printer", "report", "NOPE"], manager_factory=lambda s: pytest.fail("connected")) == 1
+    assert cli.main(["printer", "report", "NOPE"], manager_factory=lambda s: pytest.fail("connected")) == 2
 
 
 def test_the_report_says_when_the_numbers_repeat_the_last_print():

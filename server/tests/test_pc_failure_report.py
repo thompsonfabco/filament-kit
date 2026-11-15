@@ -51,4 +51,4 @@ def test_status_prints_it(monkeypatch, capsys):
         "device_id": "dev42", "last_upload": None,
         "failure": {"class": "error_crash", "text": builds.PC_FAILURES["error_crash"], "at": 100.0}}})
     cli.main(["status"])
-    assert builds.PC_FAILURES["error_crash"] in capsys.readouterr().out
+    assert builds.PC_FAILURES["error_crash"] in " ".join(capsys.readouterr().out.split())

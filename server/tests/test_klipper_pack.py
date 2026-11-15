@@ -93,7 +93,7 @@ def test_bad_local_signature_is_an_error_not_a_fallback(env, srv, key, capsys):
     rc, out, err = _run(env, srv.fetcher(), capsys)    # the network copy would verify: it must not be used
     assert rc == 1
     _no_command(out)
-    assert "signature" in err and str(d) in err
+    assert "signature" in err and str(d) in "".join(err.split())
 
 
 def test_network_bad_signature(env, srv, key, capsys):
@@ -177,23 +177,25 @@ def test_cli_output_is_unchanged(env, srv, key, capsys):
     rc, out, err = _run(env, NoNet(), capsys)
     url = f"https://github.com/{release.REPO}/releases/download/v1.0.0/{PACK}"
     assert (rc, err) == (0, "")
-    assert out == (
+    head, _, tail = out.partition("The hash is")
+    assert " ".join(("The hash is" + tail).split()) == (
+        "The hash is the one in the signed SHA256SUMS of release v1.0.0 (checked here against the filament-kit "
+        "release key); nothing is unpacked or run unless the download matches it.")
+    assert head == (
         "Run this on the printer (as its normal user, not root):\n"
         f"  curl -fsSLo {PACK} {url}\n"
         f'  echo "{PACK_SHA}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
-        "&& sh fk-printer-pack/fk-printer-pack.sh install\n"
-        "The hash is the one in the signed SHA256SUMS of release v1.0.0 (checked here against the filament-kit "
-        "release key); nothing is unpacked or run unless the download matches it.\n")
+        "&& sh fk-printer-pack/fk-printer-pack.sh install\n")
 
 
 def test_cli_error_output_is_unchanged(env, key, capsys):
     rc, out, err = _run(env, NoNet(), capsys)
     assert (rc, out) == (1, "")
-    assert err == (
-        "error: cannot give a verified printer-pack command for filament-kit 1.0.0: cannot reach api.github.com: "
-        "offline\n"
-        "error: the pack's hash comes only from the signed release of this exact version (a development build has "
-        "none); nothing to run\n")
+    assert " ".join(err.split()) == (
+        "Error: cannot give a verified printer-pack command for filament-kit 1.0.0: cannot reach api.github.com: "
+        "offline Fix: the pack's hash comes only from the signed release of this exact version (a development build "
+        "has none), so there is nothing to run.")
+    assert err.startswith("Error: ") and all(len(x) <= 79 for x in err.splitlines())
 
 
 @pytest.mark.parametrize("repo", ["x/y$(id)", "x", "a/b/c", "x/y z", "x/y\n", 5])

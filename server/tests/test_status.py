@@ -210,7 +210,7 @@ def test_status_lines_for_hardware_data(tmp_path, monkeypatch, capsys):
         (tmp_path / "etc" / "bambu_hardware.xml").write_text("<bambu-hardware version='9'/>", "utf-8")
         assert cli._hardware_lines() is False
         out = capsys.readouterr().out
-        assert "FAIL" in out and "bambu_hardware.xml" in out
+        assert "needs a look" in out and "bambu_hardware.xml" in "".join(out.split())
     finally:
         hardware._reset_cache()
 
@@ -226,6 +226,6 @@ def test_status_fails_on_a_refused_klipper_override(capsys):
         path.write_text("<klipper-hardware version='9'><nope", "utf-8")
         assert cli._hardware_lines() is False
         out = capsys.readouterr().out
-        assert "Klipper hardware data" in out and str(path) in out
+        assert "Klipper hardware data" in out and str(path) in "".join(out.split())
     finally:
         kh._reset_cache()

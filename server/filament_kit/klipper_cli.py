@@ -23,9 +23,8 @@ import ipaddress
 import re
 import shlex
 import socket
-import sys
 
-from . import config, hostaddr, pairing, release, secret_input, updates
+from . import config, hostaddr, output, pairing, release, secret_input, updates
 from .bridge import registry
 from .bridge.klipper import detect as kdetect
 from .bridge.klipper import discovery
@@ -149,16 +148,14 @@ def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> 
     try:
         info = pack_info(version, cfg, fetcher=fetcher)
     except ReleaseError as e:
-        print(f"error: cannot give a verified printer-pack command for filament-kit {version}: {e}",
-              file=sys.stderr)
-        print("error: the pack's hash comes only from the signed release of this exact version (a "
-              "development build has none); nothing to run", file=sys.stderr)
-        return 1
-    print("Run this on the printer (as its normal user, not root):")
-    for line in info["lines"]:
-        print(f"  {line}")
-    print(f"The hash is the one in the signed {release.SUMS} of release v{version} (checked here against the "
-          "filament-kit release key); nothing is unpacked or run unless the download matches it.")
+        output.error(f"cannot give a verified printer-pack command for filament-kit {version}: {e}",
+                     "the pack's hash comes only from the signed release of this exact version (a "
+                     "development build has none), so there is nothing to run.")
+        return output.FAILED
+    output.out("Run this on the printer (as its normal user, not root):")
+    output.out_lines([f"  {line}" for line in info["lines"]])      # a command is never wrapped
+    output.out(f"The hash is the one in the signed {release.SUMS} of release v{version} (checked here against the "
+               "filament-kit release key); nothing is unpacked or run unless the download matches it.")
     return 0
 
 
@@ -232,14 +229,15 @@ def detect(p: registry.Printer, *, kit_spoolman: str | None = None, spoolman: bo
 
 
 def _describe(p: registry.Printer) -> int:
-    d = detect(p, spoolman=False)     # it prints no Spoolman, so a bad config.json must not stop it
+    with output.wait(f"Asking {registry.display_name(p)}…"):
+        d = detect(p, spoolman=False)     # it prints no Spoolman, so a bad config.json must not stop it
     if not d["ok"]:
-        print(f"  {d['message']}")
+        output.out(f"  {d['message']}")
         return 0
-    print(f"  model: {d['model']} ({d['model_key']}){'' if d['verified'] else ' - unverified entry'}")
-    print(f"  filament system: {d['system']}; slots: {', '.join(d['slots']) or 'from the printer'}")
+    output.out(f"  model: {d['model']} ({d['model_key']}){'' if d['verified'] else ' - unverified entry'}")
+    output.out(f"  filament system: {d['system']}; slots: {', '.join(d['slots']) or 'from the printer'}")
     for r in d["reasons"]:
-        print(f"    {r}")
+        output.out(f"    {r}")
     return 0
 
 
@@ -247,64 +245,65 @@ def run(args) -> int:
     c = args.klipper_cmd
     if c == "add":
         if not 1 <= args.port <= 65535:
-            print("error: the port must be a number from 1 to 65535", file=sys.stderr)
-            return 1
+            output.error("the port must be a number from 1 to 65535")
+            return output.USAGE
         host = hostaddr.clean(args.host)
         bad = hostaddr.form_error(host)
         if bad:
-            print(f"error: {bad}", file=sys.stderr)
-            return 1
+            output.error(str(bad))
+            return output.USAGE
         seen = hostaddr.inspect(host)       # a name that won't resolve is still saved: the printer may just be off
         try:
             p = discovery.add(args.name, host, args.port)
         except registry.DuplicatePrinter as e:
-            print(f"error: {e}", file=sys.stderr)
+            output.error(str(e))
             return 1
-        print(f"added {registry.display_name(p)} as {p.serial} ({p.host}:{p.port})")
+        output.result(f"added {registry.display_name(p)} as {p.serial} ({p.host}:{p.port})")
         if seen.problem or seen.note:
-            print(f"note: {seen.problem or seen.note}")
+            output.note(str(seen.problem or seen.note))
         return _describe(p)
     if c == "scan":
         try:
             net = ipaddress.ip_network(args.subnet, strict=False) if args.subnet else discovery.own_subnet()
         except ValueError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
+            output.error(str(e))
+            return output.USAGE
         if net is None:
-            print("error: cannot tell this machine's network; give --subnet", file=sys.stderr)
+            output.error("cannot tell this machine's network; give --subnet")
             return 1
         try:
-            found = discovery.scan(net, port=discovery.DEFAULT_PORT)
+            with output.wait(f"Looking for Moonraker on {net}…"):
+                found = discovery.scan(net, port=discovery.DEFAULT_PORT)
         except ValueError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
+            output.error(str(e))
+            return output.USAGE
         if not found:
-            print(f"no Moonraker found on {net}")
+            output.out(f"no Moonraker found on {net}")
             return 0
         added = discovery.added_at()
         for host, port in found:
             p = added.get((host, port)) or registry.detected_klipper(host, port, lookups=False)
             state = (f"added already as {registry.display_name(p)}" if p.configured
                      else f"add it: filament-kit klipper add NAME {host}")
-            print(f"{host}:{port}  ({state})")
+            output.out(f"{host}:{port}  ({state})")
         return 0
     p = registry.load().get(getattr(args, "id", "") or "")
     if c == "pack":
         return pack()
     if p is None or p.family != "klipper":
-        print(f"error: no Klipper printer {getattr(args, 'id', '')!r}", file=sys.stderr)
-        return 1
+        output.error(f"no Klipper printer {getattr(args, 'id', '')!r}")
+        return output.USAGE
     if c == "detect":
-        print(f"{registry.display_name(p)} ({p.host}:{p.port})")
+        output.out(f"{registry.display_name(p)} ({p.host}:{p.port})")
         return _describe(p)
     if c == "set":
         registry.set_lane_data(p.serial, args.lane_data)
-        print(f"{registry.display_name(p)}: lane_data {args.lane_data}")
+        output.result(f"{registry.display_name(p)}: lane_data {args.lane_data}")
         return 0
     if c == "api-key":
         key = secret_input.ask("Moonraker API key (empty clears it): ")
         registry.set_api_key(p.serial, key)
-        print(f"{registry.display_name(p)}: API key {'stored' if key.strip() else 'cleared'}")
+        output.result(f"{registry.display_name(p)}: API key {'stored' if key.strip() else 'cleared'}")
         return 0
     return 1
 

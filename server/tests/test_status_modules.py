@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from filament_kit import cli, config
+from conftest import old_rows
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +59,7 @@ def test_status_station_unreachable_fails_naming_url(capsys):
     _cfg("http://127.0.0.1:1")
     assert cli.main(["status"]) == 1
     out = capsys.readouterr().out
-    assert "FAIL" in out and "http://127.0.0.1:1" in out
+    assert "needs a look" in out and "http://127.0.0.1:1" in "".join(out.split())
 
 
 @pytest.mark.parametrize("status,body", [(500, {"error": "boom"}), (503, b""), (200, b"not json"), (200, [1, 2])])
@@ -70,7 +71,7 @@ def test_status_station_error_or_invalid_body_fails_naming_url(capsys, status, b
     finally:
         srv.shutdown()
     out = capsys.readouterr().out
-    assert "FAIL" in out and url in out and "Weigh Station answering" not in out
+    assert "needs a look" in out and url in "".join(out.split()) and "Weigh Station answering" not in out
 
 
 def test_status_station_not_seen_is_informational(capsys):
@@ -81,7 +82,8 @@ def test_status_station_not_seen_is_informational(capsys):
     finally:
         srv.shutdown()
     out = capsys.readouterr().out
-    assert "FAIL" not in out
+    assert "needs a look" not in out
+    out = "\n".join(old_rows(out))
     assert "--   Weigh Station reader not seen" in out and "--   Weigh Station scale not seen" in out
 
 
@@ -93,7 +95,7 @@ def test_status_station_seen(capsys):
     finally:
         srv.shutdown()
     out = capsys.readouterr().out
-    assert "OK   Weigh Station answering" in out and "not seen" not in out
+    assert "OK   Weigh Station answering" in "\n".join(old_rows(out)) and "not seen" not in out
 
 
 # What filament_kit.station really answers (station/http.py): "tag" is always an object, "nfc_id" null until a tap.
@@ -110,6 +112,7 @@ def test_status_real_fresh_station_shows_reader_and_scale_not_seen(capsys):
     finally:
         srv.shutdown()
     out = capsys.readouterr().out
+    out = "\n".join(old_rows(out))
     assert "--   Weigh Station reader not seen" in out and "--   Weigh Station scale not seen" in out
 
 
@@ -123,4 +126,4 @@ def test_status_real_station_after_a_tap_reader_seen(capsys):
     finally:
         srv.shutdown()
     out = capsys.readouterr().out
-    assert "reader not seen" not in out and "--   Weigh Station scale not seen" in out
+    assert "reader not seen" not in out and "--   Weigh Station scale not seen" in "\n".join(old_rows(out))

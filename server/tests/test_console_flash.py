@@ -215,7 +215,7 @@ def test_pending_takes_the_answers_once_asks_nothing_and_prints_no_secret(usb, c
 def test_pending_without_a_port_and_several_boards_asks_nothing(usb, capsys):
     rf.write_pending(ANSWERS)
     assert cli._reader_setup_usb(_args(), _no_ask, _no_ask, run=_run) == 1
-    assert "pick the Printer Station's port on the setup page" in capsys.readouterr().err
+    assert "pick the Printer Station's port on the setup page" in " ".join(capsys.readouterr().err.split())
     assert reader_tokens.TokenStore().list() == [] and not rf.pending_path().exists()
 
 

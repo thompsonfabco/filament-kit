@@ -129,7 +129,7 @@ def test_update_unchanged_no_rebuild(capsys, monkeypatch, rebuilds):
 
 def test_rollback_nothing(capsys, no_library):
     assert cli.main(["library", "rollback"]) == 1
-    assert "error" in capsys.readouterr().err
+    assert "Error" in capsys.readouterr().err
 
 
 def test_rollback_ok(capsys, monkeypatch, rebuilds):
@@ -168,7 +168,7 @@ def test_scheduled_404_is_a_warning(capsys, monkeypatch, rebuilds):
     _404_update(monkeypatch)
     assert cli.main(["library", "update", "--scheduled"]) == 0
     err = capsys.readouterr().err
-    assert err.startswith("warning: ") and "404" in err and "not found" in err
+    assert err.startswith("Note: ") and "404" in err and "not found" in err
     assert rebuilds == []
 
 

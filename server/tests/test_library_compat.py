@@ -180,7 +180,7 @@ def test_status_says_how_many(fresh, key, monkeypatch, capsys):  # noqa: F811
     assert _install(key, files).error is None
     capsys.readouterr()
     cli._library_status_lines()
-    assert "1 field left out, which this kit can't read; a newer kit may" in capsys.readouterr().out
+    assert "1 field left out, which this kit can't read; a newer kit may" in " ".join(capsys.readouterr().out.split())
 
 
 SAID = "1 field left out, which this kit can't read; a newer kit may"

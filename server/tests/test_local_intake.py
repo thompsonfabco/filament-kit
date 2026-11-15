@@ -573,7 +573,7 @@ def test_the_cli_token_needs_root(monkeypatch, capsys):
     from filament_kit import cli
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.main(["local-intake", "token"]) == 1 and "run as root" in capsys.readouterr().err
+    assert cli.main(["local-intake", "token"]) == 3 and "administrator rights" in capsys.readouterr().err
 
 
 # ---------- testing an address before it is saved (S2.18) ----------

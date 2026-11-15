@@ -49,6 +49,7 @@ def test_pair_on_a_station_says_pairing_runs_on_the_server(capsys, args):
     assert cli.main(args) == 1
     err = capsys.readouterr().err
     assert "no server certificate" not in err
+    err = " ".join(err.split())
     assert "pairing runs on the kit server" in err and "kit.example.lan" in err
     assert f"sudo filament-kit {' '.join(args)}" in err
 
@@ -57,6 +58,7 @@ def test_pair_on_a_station_without_a_known_server(capsys):
     _save({"station"}, station={"allow": ["127.0.0.1"], "url": None})
     assert cli.main(["pair"]) == 1
     err = capsys.readouterr().err
+    err = " ".join(err.split())
     assert "pairing runs on the kit server" in err and "station.allow" in err
 
 
@@ -120,9 +122,9 @@ def test_web_status_without_passphrase_is_not_a_failure(monkeypatch, capsys):
     monkeypatch.setattr(cli, "_web_health", lambda port: (True, "ok"))
     assert cli.main(["web", "status"]) == 0
     out = capsys.readouterr().out
-    assert "FAIL" not in out
+    assert "needs a look" not in out
     line = next(ln for ln in out.splitlines() if "passphrase" in ln)
-    assert line.startswith("--") and "Claude connector" in line
+    assert "note" in line and "Claude connector" in " ".join(out.split())
     assert "sudo filament-kit web passphrase" in out
 
 
@@ -254,8 +256,8 @@ def test_uninstall_refuses_when_not_root(tmp_path, fake_release, monkeypatch, ca
     _kept(tmp_path, "1.2.0")
     monkeypatch.delenv("FK_NO_SYSTEMD")
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.cmd_uninstall(purge=False, run=lambda cmd: pytest.fail("ran uninstall.sh as a normal user")) == 1
-    assert "run as root" in capsys.readouterr().err
+    assert cli.cmd_uninstall(purge=False, run=lambda cmd: pytest.fail("ran uninstall.sh as a normal user")) == 3
+    assert "administrator rights" in capsys.readouterr().err
 
 
 def test_uninstall_is_a_cli_command_run_as_root():

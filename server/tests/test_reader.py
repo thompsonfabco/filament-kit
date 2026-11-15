@@ -179,8 +179,8 @@ def test_a_broken_token_file_accepts_nothing(env):
 
 def test_cli_reader_token_list_revoke(env, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.main(["reader", "token"]) == 1
-    assert "root" in capsys.readouterr().err
+    assert cli.main(["reader", "token"]) == 3
+    assert "administrator rights" in capsys.readouterr().err
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     assert cli.main(["reader", "token", "--name", "bench"]) == 0
     out = capsys.readouterr().out
@@ -192,7 +192,7 @@ def test_cli_reader_token_list_revoke(env, monkeypatch, capsys):
     tid = reader.TokenStore().list()[0]["id"]
     assert cli.main(["reader", "revoke", tid]) == 0
     assert not reader.TokenStore().check(tok)
-    assert cli.main(["reader", "revoke", tid]) == 1
+    assert cli.main(["reader", "revoke", tid]) == 2
 
 
 # ---------- routes: auth, healthz, fw ----------

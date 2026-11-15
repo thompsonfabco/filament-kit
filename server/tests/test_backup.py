@@ -432,7 +432,7 @@ def test_listing_names_each_kind(kit, tmp_path):
 
 def test_the_commands_need_root(kit, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.main(["backup", "create"]) == 1 and cli.main(["restore", "x.zip"]) == 1
+    assert cli.main(["backup", "create"]) == 3 and cli.main(["restore", "x.zip"]) == 3
     assert "sudo filament-kit" in capsys.readouterr().err
 
 

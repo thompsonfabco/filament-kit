@@ -160,8 +160,8 @@ def test_a_token_file_needs_no_root_and_makes_no_token(tmp_path, monkeypatch):
 
 def test_without_root_or_a_token_file_nothing_happens(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.cmd_reader_setup(_args(out=str(tmp_path / "s.h")), ask_secret=_secret("p", "p")) == 1
-    assert "run as root" in capsys.readouterr().err and not (tmp_path / "s.h").exists()
+    assert cli.cmd_reader_setup(_args(out=str(tmp_path / "s.h")), ask_secret=_secret("p", "p")) == 3
+    assert "administrator rights" in capsys.readouterr().err and not (tmp_path / "s.h").exists()
 
 
 def test_two_different_passwords_change_nothing(tmp_path, monkeypatch):
@@ -204,7 +204,7 @@ def test_a_failed_flash_removes_the_token_nobody_holds(tmp_path, monkeypatch, ca
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
                                 ask_secret=_secret("p", "p")) == 1
     assert calls and calls[0][0] == "/dev/ttyACM0"
-    assert reader_tokens.TokenStore().list() == [] and "token was removed" in capsys.readouterr().err
+    assert reader_tokens.TokenStore().list() == [] and "token was removed" in " ".join(capsys.readouterr().err.split())
 
 
 def test_a_good_flash_keeps_the_token(tmp_path, monkeypatch, capsys):
@@ -228,6 +228,7 @@ def test_without_platformio_it_says_how_to_add_it(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(rs, "owner", lambda: rs.Owner("someone", 1000, 1000, Path("/home/someone")))
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)))) == 1
     err = capsys.readouterr().err
+    err = " ".join(err.split())
     assert "pip install --user platformio" in err and "someone's account" in err and "not with sudo" in err
 
 
@@ -314,7 +315,7 @@ def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, ca
     monkeypatch.setattr(rs, "owner", lambda: rs.Owner("someone", os.getuid() + 1, os.getgid(), tmp_path))
     victim = tmp_path / "hosts"
     victim.write_text("127.0.0.1 localhost\n")
-    assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
+    assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 3
     assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
     assert "not a file of yours" in capsys.readouterr().err
 

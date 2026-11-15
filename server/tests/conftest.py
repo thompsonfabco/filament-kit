@@ -16,6 +16,40 @@ def _restore_app_logger():
     log.handlers[:], log.level, log.propagate = saved
 
 
+@pytest.fixture(autouse=True)
+def _command_line_output(monkeypatch):
+    """What the command line writes (glyphs, colour, width) is the same on every machine: ASCII glyphs, no colour,
+    80 columns, and the switches of the last run forgotten."""
+    from filament_kit import output
+    for name in ("NO_COLOR", "SPOOLWARDEN_PLAIN", "LC_ALL", "LC_CTYPE", "LANG"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SPOOLWARDEN_GLYPHS", "ascii")
+    monkeypatch.setenv("COLUMNS", "80")
+    output.reset()
+    yield
+    output.reset()
+
+
+def old_rows(out: str) -> list[str]:
+    """`status` output as the lines it had before S5.1 (`OK   text`, `FAIL text`, `     fix: ...`, `--   text`), so a test
+    of what a row says need not know the heading, glyph and wrapping of the new layout. The header, the headings and the
+    summary are left out; a row wrapped at the width is joined again."""
+    import re
+    mark = {"OK": "OK   ", "needs a look": "FAIL ", "note": "--   "}
+    rows: list[str] = []
+    for line in out.splitlines():
+        m = re.match(r"^(?:  [+!*o~x] |)(OK|needs a look|note)(?: {2,}|$)(.*)$", line)
+        if m and (line.startswith("  ") or re.match(r"^(OK|needs a look|note)  ", line)):
+            rows.append(mark[m[1]] + m[2])
+        elif line.startswith(" " * 18) and rows:
+            text = line.strip()
+            if text.startswith("Fix: "):
+                rows.append("     fix: " + text[5:])
+            else:
+                rows[-1] += " " + text
+    return rows
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
