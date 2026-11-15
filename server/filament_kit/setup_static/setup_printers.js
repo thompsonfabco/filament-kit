@@ -931,7 +931,7 @@ async function showCommands(box, button) {
     E("div", "code", X("pre", { class: "code__text", tabindex: "0", "aria-labelledby": cap, text })));
   } catch (e) {
     addonOut.replaceChildren();
-    const m = e.status === 409 && /^no printer pack command: ([\s\S]*)$/.exec(e.message);
+    const m = e.status === 409 && e.data && typeof e.data.reason === "string" && [null, e.data.reason];
     if (m) sayWith(box, "bad", SW.t("printers_result_addon_unavailable", { reason: hubText(m[1]) }),
       { label: SW.t("common_try_again"), name: `${SW.t("common_try_again")}: ${SW.t("printers_addon_title")}`, run: () => showCommands(box, button) });
     else say(box, hubText(e.message), false);

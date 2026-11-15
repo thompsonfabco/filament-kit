@@ -309,8 +309,8 @@ class IntakeApp:
 
         def run() -> dict:
             if not self._ai():
-                raise intake_history.HistoryError(409, "ai_off", "label reading (ai_intake or local_intake) is off "
-                                                                 "on this server: edit the values by hand")
+                raise intake_history.HistoryError(409, "ai_off", "Label reading is off on this Hub: "
+                                                                 "edit the values by hand")
             cap = KitCap(self.kit)              # a revision by Claude is a read: the kit's daily cap
 
             def charge():
@@ -474,7 +474,7 @@ class IntakeApp:
                 text = mcp_tools.error_text(e)
                 if text is None:
                     log.exception("intake %s", request.url.path)
-                    return JSONResponse({"error": "internal error (see the server log)"}, 500)
+                    return JSONResponse({"error": "Something went wrong on the Hub. The details are in its log."}, 500)
                 status = 409 if type(e).__name__ == "TagConflict" else 400
                 field = getattr(e, "field", None)           # the body key a refusal is about, when it is about one
                 problems = getattr(e, "problems", None)     # a refused add: every problem, with its item and field
@@ -512,7 +512,7 @@ class IntakeApp:
     # ---------- label photos -> items (Claude) ----------
     async def read(self, request: Request):
         if not {"ai_intake", "local_intake"} & modules.enabled(self.tools.cfg()):
-            raise Problem("label reading (the ai_intake or local_intake module) is off on this server")
+            raise Problem("Label reading is off on this Hub")
         async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             photos = []
             for i, f in enumerate(form.getlist("photos")):
@@ -558,7 +558,7 @@ class IntakeApp:
             if it.get("price_per_kg"):  # keep the read's order-based line unless the user changed the price
                 ppk = float(it["price_per_kg"])
                 if not str(it.get("price_line") or "").startswith(f"Price: ${ppk:g}/kg"):
-                    it["price_line"] = f"Price: ${ppk:g}/kg - entered in the intake app"
+                    it["price_line"] = f"Price: ${ppk:g}/kg - entered in the web app"
             else:
                 it.pop("price_line", None)
             try:

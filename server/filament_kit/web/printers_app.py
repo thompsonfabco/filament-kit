@@ -57,7 +57,7 @@ POLL_SECONDS = 1.0        # at most one kit poll per second per open stream
 PING_SECONDS = 25.0
 MAX_STREAMS = 12          # open status streams (a phone or two per printer)
 MAX_CAMERAS = 4           # open MJPEG relays
-BUSY = "too many open views of the printers; close one (another phone or tab) and this one will retry"
+BUSY = "Too many phones and tabs are watching the printers. Close one; this page tries again by itself."
 ACTIONS = ("pause", "resume", "stop", "light_on", "light_off")
 # A printer id as the kit names it: a Bambu serial, or a Klipper printer's slug ("sv08-max", registry.slug). One
 # check for every printer route: a Bambu-only one refused Klipper printers before the kit was asked.
@@ -75,7 +75,7 @@ MANAGE_FIELDS = ("id", "name", "model", "model_name", "family", "ip", "host", "c
 EDIT_KEYS = ("name", "address", "port", "access_code", "api_key", "unpin")
 ADD_KEYS = ("family", "serial", "access_code", "name", "host", "port")
 PUBLIC_CHANGES_OFF = ("Printer changes from the public address are off. Open this page on the home network, or turn "
-                      "on \"Allow printer changes from the public address\" on the setup page (Settings, General).")
+                      "on \"Allow printer changes from the public address\" on the Hub page (Settings, General).")
 TAGGED_FIELDS = ("id", "vendor", "name", "location", "remaining_g")
 # The kit's refusals in the Android app's words (PrinterHelp.message); a not_found keeps the kit's own text, which
 # names what is missing (printer, slot or spool).
@@ -89,8 +89,8 @@ REFUSALS = {
                      "address: check the printer's IP before re-adding."),
     "needs_developer_mode": ("The printer refuses remote control. On the printer open Settings > Network/LAN, turn "
                              "on LAN Only mode and then Developer Mode, then try again."),
-    "no_preset": ("No preset for this filament on this printer yet. It is made at the next preset build; see the "
-                  "Presets tab."),
+    "no_preset": ("No Slicer preset for this filament on this printer yet. It is made at the next Slicer presets build; "
+                  "see Slicer presets."),
     "write_refused": "The printer refused the change",
     "already_running": "Slot mapping or a load is in progress on this printer. Try again in a moment.",
 }

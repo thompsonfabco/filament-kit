@@ -164,7 +164,7 @@ def routes(page) -> list[tuple]:
             if not subnet:
                 net = discovery.own_subnet()
                 if net is None:
-                    raise Refused(400, "can't tell this server's network; give a subnet such as 192.168.1.0/24", field="subnet")
+                    raise Refused(400, "can't tell this Hub's network; give a subnet such as 192.168.1.0/24", field="subnet")
                 return net
             try:
                 net = ipaddress.ip_network(str(subnet).strip(), strict=False)
@@ -205,7 +205,7 @@ def routes(page) -> list[tuple]:
             try:
                 info = klipper_cli.pack_info(updates.current_version(), config.load())
             except release.ReleaseError as e:       # no command at all, never an unchecked one
-                raise Refused(409, f"no printer pack command: {e}") from None
+                raise Refused(409, f"no Klipper add-on command: {e}", reason=str(e)) from None
             return {"version": info["version"], "lines": info["lines"]}
         return await anyio.to_thread.run_sync(run)
 
@@ -309,7 +309,7 @@ def routes(page) -> list[tuple]:
     def mapper_of(serial: str):
         bambu_entry(serial)
         if page.mapper is None:
-            raise Refused(409, "slot mapping isn't running on this server")
+            raise Refused(409, "slot mapping isn't running on this Hub")
         return page.mapper
 
     async def map_start(request, body):
@@ -343,13 +343,13 @@ def routes(page) -> list[tuple]:
             try:
                 r = m.report(serial)
             except PrinterOffline:
-                raise Refused(409, "the printer cannot be reached and the kit has saved nothing about it yet") from None
+                raise Refused(409, "the printer cannot be reached and the Hub has saved nothing about it yet") from None
             except UnknownPrinter:
                 raise Refused(404, "no such printer") from None
             except OSError as e:
                 raise Refused(500, f"the report could not be kept ({type(e).__name__})") from None
             note = None if r.get("live", True) else (
-                "The printer could not be reached: this report is built from what the kit saved"
+                "The printer could not be reached: this report is built from what the Hub saved"
                 + (f" (newest record {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['saved_until']))})"
                    if r.get("saved_until") else "") + ".")
             return {"ok": True, "name": r["name"], "live": r.get("live", True), "note": note}
@@ -393,7 +393,7 @@ def routes(page) -> list[tuple]:
                 if page._entry(serial).family == "klipper":
                     kf = getattr(page.printers, "klipper", None)
                     if kf is None:
-                        raise Refused(409, "the klipper module is off on this server")
+                        raise Refused(409, "the \"Klipper printers\" Feature is off on this Hub")
                     session = kf.manual
                 else:
                     session = mapper_of(serial).manual

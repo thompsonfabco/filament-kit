@@ -67,7 +67,7 @@ def routes(page) -> list[tuple]:
 
     def need_on() -> None:
         if "presets" not in modules.enabled(config.load()):
-            raise Refused(409, "the presets module is off: turn it on in Modules")
+            raise Refused(409, "the \"Slicer presets\" Feature is off: turn it on in Features")
 
     async def read(request, body):
         return await anyio.to_thread.run_sync(_view)
@@ -82,8 +82,8 @@ def routes(page) -> list[tuple]:
 
     async def build(request, body):
         need_on()
-        await anyio.to_thread.run_sync(builds.request_rebuild, "asked for on the setup page")
-        page.audit(request, "preset build requested")
+        await anyio.to_thread.run_sync(builds.request_rebuild, "asked for on the Hub page")
+        page.audit(request, "Slicer preset build requested")
         return {"ok": True}
 
     async def restore_deleted(request, body):
@@ -91,9 +91,9 @@ def routes(page) -> list[tuple]:
 
         def run() -> None:
             builds.restore_deleted_next()
-            builds.request_rebuild("restore presets deleted in Bambu Studio")
+            builds.request_rebuild("restore Slicer presets deleted in Bambu Studio")
         await anyio.to_thread.run_sync(run)
-        page.audit(request, "presets deleted in Bambu Studio: restore requested")
+        page.audit(request, "Slicer presets deleted in Bambu Studio: restore requested")
         return {"ok": True}
 
     async def set_parent(request, body):
@@ -118,7 +118,7 @@ def routes(page) -> list[tuple]:
             except lines_mod.LineStoreError as e:
                 raise Refused(503, e.message) from None
         line = await anyio.to_thread.run_sync(run)
-        page.audit(request, f"preset line {lid}: {target} parent set")
+        page.audit(request, f"Slicer preset line {lid}: {target} parent set")
         return {"ok": True, "parent": line.orca_parent if target == "orca" else line.bambu_parent}
 
     async def updates(request, body):
@@ -146,7 +146,7 @@ def routes(page) -> list[tuple]:
         r = await anyio.to_thread.run_sync(run)
         chosen = r.get("chosen") or []
         if not dry:
-            page.audit(request, f"{len(chosen)} preset updates accepted")
+            page.audit(request, f"{len(chosen)} Slicer preset updates accepted")
         return {"ok": True, "dry_run": dry, "stamp": r.get("stamp"),
                 "chosen": [{"line_id": u["line_id"], "target": u["target"], "name": u["name"], "file": u.get("file"),
                             "keys": u["keys"]} for u in chosen]}

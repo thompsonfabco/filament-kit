@@ -117,8 +117,8 @@ def test_every_control_of_the_section_reaches_its_hub_route(hub, monkeypatch, tm
     page = _drive(hub, tmp_path)
 
     names = sorted(c["name"] for c in CHOSEN)
-    assert seen[:7] == [("build", "asked for on the setup page"),                       # Build now
-                        ("restore flag",), ("build", "restore presets deleted in Bambu Studio"),   # Bring back deleted presets
+    assert seen[:7] == [("build", "asked for on the Hub page"),                       # Build now
+                        ("restore flag",), ("build", "restore Slicer presets deleted in Bambu Studio"),   # Bring back deleted presets
                         ("dry run", None, True),                                         # Show what would change
                         ("accept refused", names, "s1"),                                 # Accept these: out of date, once
                         ("dry run", None, True),
@@ -211,7 +211,7 @@ const result = await until(() => text($('.result[data-state="ok"] .result__text'
 return { before, title, result, after: SW.lock.state };
 """)
     assert page == {"before": "locked", "title": T("unlock_title"), "result": T("presets_build_asked"), "after": "unlocked"}
-    assert seen == ["asked for on the setup page"]               # nothing was sent before the code
+    assert seen == ["asked for on the Hub page"]               # nothing was sent before the code
 
 
 def test_the_header_of_a_section_left_before_its_read_returns_is_not_drawn(hub, monkeypatch, tmp_path):

@@ -88,7 +88,7 @@ def routes(page) -> list[tuple]:
         def text() -> str:
             cfg = config.load()
             if "remote" not in modules.enabled(cfg):
-                raise Refused(409, "the remote module is off: turn it on in Modules")
+                raise Refused(409, "the \"Remote access\" Feature is off: turn it on in Features")
             try:
                 return remote.firewall_text(remote.settings(cfg), config.paths().opt / "resources")
             except modules.ModuleError as e:
@@ -101,7 +101,7 @@ def routes(page) -> list[tuple]:
         def check() -> dict:
             cfg = config.load()
             if "local_intake" not in modules.enabled(cfg):
-                raise Refused(409, "the local_intake module is off: turn it on in Modules")
+                raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
             return local_reader.health(cfg)
         return await anyio.to_thread.run_sync(check)
 
@@ -120,7 +120,7 @@ def routes(page) -> list[tuple]:
         def check() -> dict:
             cfg = config.load()
             if "local_intake" not in modules.enabled(cfg):
-                raise Refused(409, "the local_intake module is off: turn it on in Modules")
+                raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
             raw = cfg.get("local_intake") if isinstance(cfg.get("local_intake"), dict) else {}
             return local_reader.health({**cfg, "local_intake": {**raw, "url": url, "tier": tier}})
         return await anyio.to_thread.run_sync(check)

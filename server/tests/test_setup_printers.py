@@ -735,3 +735,16 @@ def test_the_scan_refusals_name_the_subnet_field(both, scanned):
     for subnet in ("8.8.8.0/24", "10.0.0.0/16", "nope"):
         r = post(c, "printers/scan", {"subnet": subnet})
         assert r.status_code == 400 and r.json()["field"] == "subnet", subnet
+
+
+def test_the_add_on_refusal_carries_its_reason_and_the_page_reads_that_not_the_text(both, monkeypatch):
+    """The page shows the add-on text and Try again from the reply's `reason`, so a rewording cannot break it (S7.1)."""
+    from filament_kit import klipper_cli, release
+
+    def bad(v, cfg):
+        raise release.ReleaseError("a bad signature")
+    monkeypatch.setattr(klipper_cli, "pack_info", bad)
+    r = post(client(both), "printers/pack", {}, code=None)
+    assert r.status_code == 409 and r.json()["reason"] == "a bad signature"
+    js = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
+    assert "e.data.reason" in js and "pack command" not in js and "add-on command" not in js

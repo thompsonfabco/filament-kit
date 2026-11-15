@@ -62,7 +62,7 @@ def routes(page) -> list[tuple]:
             return call(intake_history.revise, sm(), request.path_params["hid"], body.get("note"),
                         body.get("item"), ai_on=ai_on(), charge=charge)
         out = await anyio.to_thread.run_sync(run)
-        page.audit(request, f"intake record {request.path_params['hid']} revision asked of the AI")
+        page.audit(request, f"recently added record {request.path_params['hid']} revision asked of the AI")
         return out
 
     async def apply(request, body):
@@ -70,13 +70,13 @@ def routes(page) -> list[tuple]:
             intake_history.apply, sm(), request.path_params["hid"], proposal=body.get("proposal"),
             item=body.get("item"), values=body.get("values") if body.get("proposal") is None else None,
             spool_ids=body.get("spool_ids"), device="setup page"))
-        page.audit(request, f"intake record {request.path_params['hid']} revised")
+        page.audit(request, f"recently added record {request.path_params['hid']} revised")
         return out
 
     async def undo(request, body):
         out = await anyio.to_thread.run_sync(lambda: call(intake_history.undo, sm(), request.path_params["hid"],
                                                           body.get("revision")))
-        page.audit(request, f"intake record {request.path_params['hid']} revision undone")
+        page.audit(request, f"recently added record {request.path_params['hid']} revision undone")
         return out
 
     return [("/intake/history", g(history), "GET"), ("/intake/history/{hid}", g(one), "GET"),

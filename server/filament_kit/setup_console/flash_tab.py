@@ -62,7 +62,7 @@ def routes(page) -> list[tuple]:
         dev = name.removesuffix(".bin")
         got = reader_flash.device_image(dev) if name.endswith(".bin") else None
         if got is None:
-            raise Refused(404, "this kit has no such firmware")
+            raise Refused(404, "this Hub has no such firmware")
         data = await anyio.to_thread.run_sync(got[0].read_bytes)
         return Response(data, media_type="application/octet-stream",
                         headers={"X-Firmware-Version": got[1], "X-Content-Type-Options": "nosniff"})
@@ -70,7 +70,7 @@ def routes(page) -> list[tuple]:
     async def provision(request, body):
         name = page._opt_text(body, "name") or "printer-station"
         if reader_flash.bundled_image() is None:
-            raise Refused(409, "this kit has no Printer Station firmware bundled; update the kit")
+            raise Refused(409, "this Hub has no Tag Reader firmware bundled; update Spoolwarden")
         base, why = _base()
         if base is None:
             raise Refused(409, why)
@@ -81,7 +81,7 @@ def routes(page) -> list[tuple]:
             except reader_tokens.TokenFileError as e:
                 raise Refused(409, f"{e}; nothing was changed") from None
         tid, token = await anyio.to_thread.run_sync(run)
-        page.audit(request, f"reader token {tid} made for a Printer Station flashed from the browser")
+        page.audit(request, f"reader token {tid} made for a Tag Reader flashed from the browser")
         # the one reply with a token: the page writes it to the board over USB and keeps it nowhere
         return {"ok": True, "id": tid, "token": token, "base": base}
 
@@ -91,7 +91,7 @@ def routes(page) -> list[tuple]:
             if k in body:
                 req[k] = body[k]
         r = await page._helper(req)
-        page.audit(request, "Printer Station setup on the server's USB started")
+        page.audit(request, "Tag Reader setup on the Hub's USB started")
         return {"ok": True, "name": r.get("name")}
 
     return [("/firmware", g(firmware), "GET"), ("/firmware/{device}", g(image), "GET"),
