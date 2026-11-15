@@ -196,6 +196,113 @@ class PresetsViewModelTest {
         assertEquals(listOf(9), vm.state.value.uncovered?.map { it.id })
     }
 
+    @Test fun openingTheNewLineFormReadsTheOrcaParentsOfTheMaterialAndSendsTheChosenOne() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        api.orcaLists["PLA"] = listOf("Bambu PLA Basic @BBL X1C", "Generic PLA")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val f = vm.state.value.uncovered!!.first()
+        vm.toggleNewLine(f)
+        assertNull("loading", vm.state.value.card(7).orcaParents)
+        advanceUntilIdle()
+        assertEquals(listOf("PLA"), api.orcaCalls)
+        assertEquals(listOf("Bambu PLA Basic @BBL X1C", "Generic PLA"), vm.state.value.card(7).orcaParents)
+        assertNull("optional: nothing is chosen", vm.state.value.card(7).orcaParent)
+        vm.chooseOrcaParent(7, "Generic PLA")
+        vm.createLine(f)
+        advanceUntilIdle()
+        assertEquals(listOf<String?>("Generic PLA"), api.createdOrca)
+    }
+
+    @Test fun withoutAChosenOrcaParentNothingIsSentForIt() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        api.orcaLists["PLA"] = listOf("Generic PLA")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val f = vm.state.value.uncovered!!.first()
+        vm.toggleNewLine(f)
+        advanceUntilIdle()
+        vm.chooseOrcaParent(7, "Generic PLA")
+        vm.chooseOrcaParent(7, null)
+        vm.createLine(f)
+        advanceUntilIdle()
+        assertEquals(listOf<String?>(null), api.createdOrca)
+    }
+
+    @Test fun anEmptyOrcaListMeansNoLibraryYetAndTheLineCanStillBeStarted() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val f = vm.state.value.uncovered!!.first()
+        vm.toggleNewLine(f)
+        advanceUntilIdle()
+        assertEquals(emptyList<String>(), vm.state.value.card(7).orcaParents)
+        assertNull(vm.state.value.card(7).fail)
+        vm.createLine(f)
+        advanceUntilIdle()
+        assertEquals(1, api.created.size)
+    }
+
+    @Test fun theOrcaParentsAreReadOncePerCardEvenWhenTheFormIsReopened() = runTest(dispatcher) {
+        api.orcaLists["PLA"] = listOf("Generic PLA")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val f = vm.state.value.uncovered!!.first()
+        vm.toggleNewLine(f)
+        advanceUntilIdle()
+        vm.toggleNewLine(f)
+        vm.toggleNewLine(f)
+        advanceUntilIdle()
+        assertEquals(listOf("PLA"), api.orcaCalls)
+    }
+
+    @Test fun anUnpairedPhoneIsTheHubNoticeOnTheCardAndTheOrcaListIsEmpty() = runTest(dispatcher) {
+        api.orcaFailure = ApiError(401, "unauthorized", "no token")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        vm.toggleNewLine(vm.state.value.uncovered!!.first())
+        advanceUntilIdle()
+        assertEquals(Fail(SaveFailure.NotPaired), vm.state.value.card(7).fail)
+        assertEquals(emptyList<String>(), vm.state.value.card(7).orcaParents)
+    }
+
+    @Test fun aHubWithoutTheOrcaRouteIsTheEmptyListWithoutAFailure() = runTest(dispatcher) {
+        api.orcaFailure = ApiError(404, "not_found", "no route")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        vm.toggleNewLine(vm.state.value.uncovered!!.first())
+        advanceUntilIdle()
+        assertEquals(emptyList<String>(), vm.state.value.card(7).orcaParents)
+        assertNull(vm.state.value.card(7).fail)
+    }
+
+    @Test fun aRefusedOrcaParentNamesItsFieldAndTypingTheChoiceClearsIt() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        api.orcaLists["PLA"] = listOf("Generic PLA")
+        api.failure = ApiError(400, "bad_request", "orca_parent is not an Orca Slicer preset", JsonObject(mapOf("field" to JsonPrimitive("orca_parent"))))
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val f = vm.state.value.uncovered!!.first()
+        vm.toggleNewLine(f)
+        advanceUntilIdle()
+        vm.chooseOrcaParent(7, "Generic PLA")
+        vm.createLine(f)
+        advanceUntilIdle()
+        assertEquals("orca_parent", vm.state.value.card(7).fail?.field)
+        assertTrue(vm.state.value.card(7).newLineOpen)
+        vm.chooseOrcaParent(7, null)
+        assertNull(vm.state.value.card(7).fail)
+    }
+
+    @Test fun aLineNameIsStrippedAtBothEndsAsTheHubDoesAndInnerRunsStay() {
+        fun line(vendor: String, product: String) = ProfileLine(lineId = "x", vendor = vendor, product = product, material = "PLA")
+        assertEquals("Example Filaments PolyTerra", PresetsViewModel.lineName(line("Example Filaments", "PolyTerra")))
+        // an empty product leaves the join's space at the end; the Hub strips it
+        assertEquals("Example", PresetsViewModel.lineName(line("Example", "")))
+        assertEquals("Silk", PresetsViewModel.lineName(line("", "Silk")))
+        assertEquals("Example   Silk", PresetsViewModel.lineName(line(" Example ", " Silk ")))
+    }
+
     @Test fun aLineCannotBeStartedWithoutATemplateOrAName() = runTest(dispatcher) {
         // Slicer Sync has reported no parents: the template stays empty
         val vm = PresetsViewModel(api)

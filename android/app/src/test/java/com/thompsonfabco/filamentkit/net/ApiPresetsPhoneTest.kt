@@ -73,6 +73,50 @@ class ApiPresetsPhoneTest {
         assertEquals(listOf(7), body["ids"]!!.jsonArray.map { it.jsonPrimitive.content.toInt() })
     }
 
+    @Test fun startingALineWithAnOrcaParentSendsItAndWithoutOneSendsNoKey() = runBlocking {
+        json(lineView, 200)
+        api.createLine("Example Filaments PolyTerra", "Example Filaments", listOf(7), "Generic PLA", "Generic PLA @Orca")
+        assertEquals("Generic PLA @Orca", server.takeRequest().bodyJson()["orca_parent"]!!.jsonPrimitive.content)
+        json(lineView, 200)
+        api.createLine("Example Filaments PolyTerra", "Example Filaments", listOf(7), "Generic PLA")
+        assertEquals(false, server.takeRequest().bodyJson().containsKey("orca_parent"))
+    }
+
+    @Test fun theOrcaParentsOfAMaterialAreReadFromTheOrcaParentsRoute() = runBlocking {
+        json("""{"orca_parents":["Bambu PLA Basic @BBL X1C","Generic PLA"]}""")
+        val list = api.orcaParents("PLA")
+        val r = server.takeRequest()
+        assertEquals("GET", r.method)
+        assertEquals("/api/profiles/orca-parents", r.url.encodedPath)
+        assertEquals("PLA", r.url.queryParameter("material"))
+        assertEquals("Bearer tok-9", r.headers["Authorization"])
+        assertEquals(listOf("Bambu PLA Basic @BBL X1C", "Generic PLA"), list.parents)
+    }
+
+    @Test fun noOrcaLibraryYetIsAnEmptyList() = runBlocking {
+        json("""{"orca_parents":[]}""")
+        assertEquals(emptyList<String>(), api.orcaParents("").parents)
+    }
+
+    @Test fun anUnpairedPhoneIsRefusedWith401OnTheOrcaParentsRoute() {
+        json("""{"error":"unauthorized","message":"no token"}""", 401)
+        val e = assertThrows(ApiError::class.java) { runBlocking { api.orcaParents("PLA") } }
+        assertEquals(401, e.status)
+    }
+
+    @Test fun aTooLongMaterialIsA400NamingTheMaterialField() {
+        json("""{"error":"bad_request","message":"material is too long","field":"material"}""", 400)
+        val e = assertThrows(ApiError::class.java) { runBlocking { api.orcaParents("x".repeat(101)) } }
+        assertEquals("bad_request", e.code)
+        assertEquals("material", e.extra["field"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun aRefusedOrcaParentOfANewLineNamesItsField() {
+        json("""{"error":"bad_request","message":"orca_parent is not in the Orca library","field":"orca_parent"}""", 400)
+        val e = assertThrows(ApiError::class.java) { runBlocking { api.createLine("X", "V", listOf(1), "Generic PLA", "Nope") } }
+        assertEquals("orca_parent", e.extra["field"]!!.jsonPrimitive.content)
+    }
+
     @Test fun aRefusalCarriesTheHubsMessageAndTheField() {
         json("""{"error":"bad_request","message":"a line named X already exists","field":"name"}""", 400)
         val e = assertThrows(ApiError::class.java) { runBlocking { api.createLine("X", "V", listOf(1), "Generic PLA") } }

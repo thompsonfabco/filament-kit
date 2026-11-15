@@ -247,6 +247,59 @@ class PresetsScreenTest {
         auditAllFour("Create line")
     }
 
+    @Test fun theNewLineFormHasTheOrcaSlicerParentSelectAndSendsTheChosenOne() {
+        api.parentLists["PLA"] = ParentList(listOf("Bambu PLA Basic", "Generic PLA"), synced = true)
+        api.orcaLists["PLA"] = listOf("Bambu PLA Basic @BBL X1C", "Generic PLA")
+        val vm = show()
+        rule.onNodeWithText("Or start a new line").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Orca Slicer parent").assertExists()
+        // optional: the Hub chooses until one is picked
+        rule.onNodeWithText("Let the Hub choose").assertExists()
+        rule.onNodeWithText("Orca Slicer parent").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Bambu PLA Basic @BBL X1C").performClick()
+        rule.waitForIdle()
+        assertEquals("Bambu PLA Basic @BBL X1C", vm.state.value.card(7).orcaParent)
+        // between "Find a parent" and "Bambu Studio template", as in the spec
+        val find = rule.onNodeWithText("Find a parent").fetchSemanticsNode().boundsInRoot.top
+        val orca = rule.onNodeWithText("Orca Slicer parent").fetchSemanticsNode().boundsInRoot.top
+        val template = rule.onNodeWithText("Bambu Studio template").fetchSemanticsNode().boundsInRoot.top
+        assertTrue("Find a parent, Orca Slicer parent, template", find < orca && orca < template)
+        auditAllFour("Create line")
+        rule.onNodeWithText("Create line").performClick()
+        rule.waitForIdle()
+        assertEquals(listOf<String?>("Bambu PLA Basic @BBL X1C"), api.createdOrca)
+    }
+
+    @Test fun withoutAnOrcaLibraryTheFormSaysSoAndIsAudited() {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        show()
+        rule.onNodeWithText("Or start a new line").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("No Orca Slicer library has been uploaded yet", substring = true).assertExists()
+        auditAllFour("Create line")
+    }
+
+    @Test fun anOrcaParentRefusalIsUnderTheOrcaSelectWhenItIsShown() {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        api.orcaLists["PLA"] = listOf("Generic PLA")
+        api.failure = ApiError(
+            400, "bad_request", "orca_parent is not in the Orca library",
+            kotlinx.serialization.json.JsonObject(mapOf("field" to kotlinx.serialization.json.JsonPrimitive("orca_parent"))),
+        )
+        show()
+        rule.onNodeWithText("Or start a new line").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Create line").performClick()
+        rule.waitForIdle()
+        assertEquals(1, rule.onAllNodesWithText("orca_parent is not in the Orca library", substring = true).fetchSemanticsNodes().size)
+        val message = rule.onNodeWithText("orca_parent is not in the Orca library", substring = true).fetchSemanticsNode()
+        val template = rule.onNodeWithText("Bambu Studio template").fetchSemanticsNode()
+        assertTrue("under the Orca select, above the template", message.boundsInRoot.bottom <= template.boundsInRoot.top)
+        auditAllFour("Create line")
+    }
+
     @Test fun addToLineAsksTheHubAndTheCardLeaves() {
         show()
         rule.onNodeWithText("Add to line").performClick()

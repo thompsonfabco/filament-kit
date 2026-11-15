@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.presets
 import com.thompsonfabco.filamentkit.net.BuildAttempt
 import com.thompsonfabco.filamentkit.net.BuildInfo
 import com.thompsonfabco.filamentkit.net.BuildRequested
+import com.thompsonfabco.filamentkit.net.OrcaParentList
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.net.ProfileLine
 import com.thompsonfabco.filamentkit.net.ProfileStatus
@@ -19,6 +20,11 @@ internal class FakePresets : PresetsBackend {
     var linesGate: CompletableDeferred<Unit>? = null
     val parentLists = mutableMapOf<String, ParentList>()
     val parentCalls = mutableListOf<String>()
+    val orcaLists = mutableMapOf<String, List<String>>()
+    val orcaCalls = mutableListOf<String>()
+    var orcaFailure: Exception? = null
+    /** The Orca Slicer parent each created line was sent with (null: none sent), in the order of [created]. */
+    val createdOrca = mutableListOf<String?>()
     val added = mutableListOf<Pair<String, Int>>()
     val created = mutableListOf<List<String>>()
     val reparented = mutableListOf<Pair<String, String>>()
@@ -62,6 +68,12 @@ internal class FakePresets : PresetsBackend {
         return parentLists[material] ?: ParentList(emptyList(), synced = false)
     }
 
+    override suspend fun orcaParents(material: String): OrcaParentList {
+        orcaCalls += material
+        orcaFailure?.let { throw it }
+        return OrcaParentList(orcaLists[material].orEmpty())
+    }
+
     override suspend fun setLineParent(lineId: String, parent: String): ProfileLine {
         reparented += lineId to parent
         gate?.await()
@@ -76,8 +88,9 @@ internal class FakePresets : PresetsBackend {
         return lines.first()
     }
 
-    override suspend fun newLine(name: String, vendor: String, id: Int, template: String): ProfileLine {
+    override suspend fun newLine(name: String, vendor: String, id: Int, template: String, orcaParent: String?): ProfileLine {
         created += listOf(name, vendor, id.toString(), template)
+        createdOrca += orcaParent
         gate?.await()
         failure?.let { throw it }
         // the line view of the new line, as the Hub answers; the list has it from now on

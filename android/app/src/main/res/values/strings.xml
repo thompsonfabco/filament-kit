@@ -2140,6 +2140,9 @@
     <string name="presets_new_line_with_lines">Or start a new line</string>
     <!-- 1=material -->
     <string name="presets_orca_default">Generic %1$s</string>
+    <string name="presets_orca_none">No Orca Slicer library has been uploaded yet, so the Hub chooses the Orca Slicer parent. Slicer Sync uploads it when it runs.</string>
+    <string name="presets_orca_parent">Orca Slicer parent</string>
+    <string name="presets_orca_unset">Let the Hub choose</string>
     <string name="presets_parent">Find a parent</string>
     <string name="presets_waiting">Waiting for Slicer Sync on the PC</string>
     <string name="presets_without_line">Filaments without a preset line</string>
