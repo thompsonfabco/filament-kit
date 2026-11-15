@@ -34,6 +34,7 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **The web app uses the shared design values and components**, the same as the setup page.
 - **A new shell.** A top bar and a bottom bar (a side rail on tablets), with Add, Spools, Printers, Recent, Slicer presets and Settings; a **More** sheet holds the places that do not fit. A place whose feature is switched off says so instead of showing an empty page.
 - **The page shown outside the home network, and the sign-in page,** use the same styles and the shared texts.
+- **Slicer presets** on the phone: build the presets and see the result in place; add a new filament to a line, or start a new line with a search for its parent; Updates and Restore work as on the setup page.
 
 ## The Android app is on the new look
 

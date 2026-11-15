@@ -2143,6 +2143,15 @@
     <string name="presets_parent">Find a parent</string>
     <string name="presets_waiting">Waiting for Slicer Sync on the PC</string>
     <string name="presets_without_line">Filaments without a preset line</string>
+    <!-- 1=material 2=id -->
+    <string name="presets_card_sub">%1$s · F%2$s</string>
+    <!-- 1=id -->
+    <string name="presets_card_sub_no_material">F%1$s</string>
+    <!-- 1=brand 2=name -->
+    <string name="presets_filament_name">%1$s %2$s</string>
+    <string name="presets_lines_label">Lines</string>
+    <string name="presets_line_name_needed">Type a line name first.</string>
+    <string name="presets_parent_help">A material or a name, e.g. PETG-CF. Changing it searches again.</string>
     <string name="add_preview_title_unsaved">Preview (nothing saved yet)</string>
     <string name="printer_camera_hide">Hide camera</string>
     <string name="printer_camera_show">Show camera</string>

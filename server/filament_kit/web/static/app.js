@@ -157,7 +157,7 @@ window.addEventListener("click", (e) => {                    // in the capture p
   if (to) to.focus();
 }, true);
 // a short state sentence that starts with its shape (04 3.3): never colour alone
-const note = (kind, text) => h("p", { class: "result", "data-state": kind }, SW.shape({ ok: "s-filled", bad: "s-octagon", warn: "s-triangle", info: "s-diamond", neutral: "s-hollow" }[kind]),
+const note = (kind, text) => h("p", { class: "result", role: "status", "data-state": kind }, SW.shape({ ok: "s-filled", bad: "s-octagon", warn: "s-triangle", info: "s-diamond", neutral: "s-hollow" }[kind]),
   h("span", { class: "result__text" }, text));
 
 // ---------- History: the intake history (the newest spool additions, their photos, revise, edit, undo) ----------
@@ -829,62 +829,89 @@ function openTab() {
     leave() { clearInterval(timer); timer = null; } };
 }
 
-// ---------- Presets ----------
+// ---------- Presets (04 8) ----------
 function presetsTab() {
   const box = h("div");
   const gen = answer();        // the answer to Build presets now: the line, and the Hub's own text under it
   const upBox = h("div");      // presets in the slicers that a newer build would change: shown, then accepted
   const upLine = resultLine(); // the answer to Restore and Accept; kept in the list, so it stays while the list is read again
-  const el = h("section", { class: "hidden" },
-    h("p", { class: "muted", textContent: "New filaments need a preset line before a build covers them. The desktop installs a build by itself the next time the slicers are closed." }),
-    box, h("p", {}, h("button", { textContent: "Build presets now", on: { click: (e) => build(e.currentTarget) } })), gen.el, upBox);
+  const buildBtn = SW.btn(SW.t("presets_build"), { cls: "btn--primary", action: "build", run: (e) => build(e.currentTarget) });
+  upBox.className = "presets__updates";
+  const el = h("section", { class: "hidden" }, h("p", { class: "muted", textContent: SW.t("presets_intro") }), box, upBox);
+
+  const kvRow = (key, ...value) => h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: key }), h("dd", { class: "kv__value" }, ...value));
+  const when = (stamp) => stamp ? h("span", { class: "mono", textContent: stamp }) : h("span", { class: "muted", textContent: SW.t("common_never") });
+  const group = (title, ...body) => h("div", { class: "group" }, h("div", { class: "group__head" }, h("h2", { class: "group__title", textContent: title })),
+    h("div", { class: "group__body" }, ...body));
 
   async function load(quiet) {
     await fill(box, SW.t("nav_slicer_presets"), async () => {
       const st = await api("presets");
-      const info = h("p", { class: "muted", textContent: `Last build ${st.last_build || "-"} · installed ${st.installed_build || "-"}${st.waiting_for_desktop ? " · waiting for the desktop" : ""} · ${st.lines} lines` });
-      if (!st.uncovered_filaments.length) return [info, h("p", { textContent: "Every filament has a preset line." })];
-      return [info, h("h2", { textContent: "Filaments without a preset line" }), ...st.uncovered_filaments.map(lineCard)];
+      const status = group(SW.t("presets_build_title"),
+        h("dl", { class: "kv" }, kvRow(SW.t("presets_field_last_build"), when(st.last_build)), kvRow(SW.t("updates_installed"), when(st.installed_build)),
+          kvRow(SW.t("presets_lines_label"), SW.t("presets_built_lines", { count: st.lines }))),
+        st.waiting_for_desktop ? note("warn", SW.t("presets_waiting")) : null,
+        ...(st.problems || []).map((p) => note("bad", String(p))),
+        st.note ? h("p", { class: "muted", textContent: st.note }) : null,
+        buildBtn, gen.el);
+      if (!st.uncovered_filaments.length) return [status, note("ok", SW.t("presets_all_done"))];
+      return [status, h("h2", {}, SW.t("presets_without_line"), " ", h("span", { class: "muted mono", textContent: String(st.uncovered_filaments.length) })),
+        h("div", { class: "cards" }, ...st.uncovered_filaments.map(lineCard))];
     }, { quiet });
   }
   function lineCard(f) {
-    const res = resultLine();
-    const card = h("div", { class: "card" }, h("h3", { textContent: `F${f.id} ${f.vendor} ${f.name}` }),
-      h("p", { class: "muted", textContent: f.material || "" }));
-    if (f.lines_for_vendor.length) {
-      const sel = h("select", {}, ...f.lines_for_vendor.map((l) => h("option", { value: l, textContent: l })));
-      card.append(h("label", {}, "Add to the line", sel), h("p", {}, h("button", { textContent: "Add to line", on: { click: (e) =>
-        act(res, SW.t("common_adding"), async () => {
-          await api("line_add", { body: { line: sel.value, ids: [f.id] } });
-          SW.toast(SW.t("presets_added", { line: sel.value })); load(true);      // the card goes: the list is read again
+    const addRes = resultLine(), newRes = resultLine();
+    const lines = f.lines_for_vendor, material = f.material || "";
+    const head = h("div", { class: "group__head" }, h("div", {}, h("h3", { class: "group__title", textContent: SW.t("presets_filament_name", { brand: f.vendor, name: f.name }) }),
+      h("p", { class: "group__desc", textContent: SW.t(material ? "presets_card_sub" : "presets_card_sub_no_material", { material, id: f.id }) })));
+    const body = h("div", { class: "group__body" });
+    let add = null;
+    if (lines.length) {
+      const sel = SW.field({ type: "select", label: SW.t("presets_add_select"), options: lines.map((l) => ({ value: l, label: l })) });
+      add = SW.btn(SW.t("presets_add_button"), { cls: "btn--primary", action: "add-to-line", run: (e) =>
+        act(addRes, SW.t("common_adding"), async () => {
+          await api("line_add", { body: { line: sel._control.value, ids: [f.id] } });
+          SW.toast(SW.t("presets_added", { line: sel._control.value })); load(true);      // the card goes: the list is read again
           return null;
-        }, { button: e.currentTarget }) } })));
+        }, { button: e.currentTarget }) });
+      body.append(sel, h("div", {}, add), addRes);
     }
-    const nm = h("input", { value: `${f.vendor} ${f.name.split(" ").slice(0, -1).join(" ") || f.name}` });
-    const orca = h("select"), bs = h("select");
-    const q = h("input", { value: f.material || "", placeholder: "search parents, e.g. PETG-CF" });
-    async function parents() {
+    const nm = SW.field({ label: SW.t("presets_line_name"), hint: SW.t("presets_line_name_help"),
+      value: [f.vendor, f.name.split(" ").slice(0, -1).join(" ") || f.name].join(" ") });
+    const orca = SW.field({ type: "select", label: SW.t("presets_col_orca_parent"), options: [] });
+    const bs = SW.field({ type: "select", label: SW.t("presets_bs_template"), options: [] });
+    const fillSel = (field, list, want) => field._control.replaceChildren(...list.map((n) => h("option", { value: n, textContent: n, selected: n === want })));
+    async function parents(text) {
       try {
-        const p = await api(`parents?q=${encodeURIComponent(q.value)}`);
-        const fill = (sel, list, want) => sel.replaceChildren(...list.map((n) => h("option", { value: n, textContent: n, selected: n === want })));
-        fill(orca, p.orca_parents, `Generic ${f.material}`); fill(bs, p.bs_templates, `Generic ${f.material}`);
-        clear(res);
-      } catch (e) { failed(res, e, parents); }
+        const p = await api(`parents?q=${encodeURIComponent(text)}`);
+        const want = SW.t("presets_orca_default", { material });
+        fillSel(orca, p.orca_parents, want); fillSel(bs, p.bs_templates, want);
+        if (p.note && (!p.orca_parents.length || !p.bs_templates.length)) {   // no parents to pick yet: the Hub says why, and Create waits
+          put(newRes, "warn", p.note); disabled(create, p.note, () => q._control);
+        } else { clear(newRes); disabled(create, null); }
+      } catch (e) { failed(newRes, e, () => parents(text)); }
     }
-    const details = h("details", {}, h("summary", { textContent: f.lines_for_vendor.length ? "…or a new line" : "New line (new brand or product line)" }),
-      h("div", { class: "grid" }, h("label", { class: "wide" }, "Line name '<Brand> <Line>'", nm),
-        h("label", { class: "wide" }, "Search parents", q), h("label", { class: "wide" }, "Orca parent", orca),
-        h("label", { class: "wide" }, "Bambu Studio template", bs)),
-      h("p", {}, h("button", { textContent: "Create line", on: { click: (e) =>
-        act(res, SW.t("presets_creating"), async () => {
-          await api("line_new", { body: { name: nm.value, vendor: f.vendor, ids: [f.id], orca_parent: orca.value, bs_template: bs.value } });
-          SW.toast(SW.t("presets_created", { name: nm.value })); load(true);
-          return null;
-        }, { button: e.currentTarget }) } })));
-    q.addEventListener("change", parents);
-    details.addEventListener("toggle", () => { if (details.open && !orca.options.length) parents(); });
-    card.append(details, res);
-    return card;
+    const q = SW.field({ type: "search", label: SW.t("presets_parent"), hint: SW.t("presets_parent_help"), value: material, onSearch: parents });
+    const create = SW.btn(SW.t("presets_create"), { cls: add ? "" : "btn--primary", action: "create-line", run: (e) => {
+      if (!nm._control.value.trim()) { SW.fieldError(nm, SW.t("presets_line_name_needed")); nm._control.focus(); return; }
+      SW.fieldError(nm, null);
+      return act(newRes, SW.t("presets_creating"), async () => {
+        const name = nm._control.value.trim();
+        await api("line_new", { body: { name, vendor: f.vendor, ids: [f.id], orca_parent: orca._control.value, bs_template: bs._control.value } });
+        SW.toast(SW.t("presets_created", { name })); load(true);
+        return null;
+      }, { button: e.currentTarget });
+    } });
+    const details = h("details", { class: "disclosure" }, h("summary", {}, h("span", { textContent: SW.t(lines.length ? "presets_new_line_with_lines" : "presets_new_line_none") }),
+      SW.icon("chevron", "icon--s disclosure__chevron")),
+      h("div", { class: "disclosure__body" }, nm, q, orca, bs, h("div", {}, create), newRes));
+    details.addEventListener("toggle", () => {       // while the disclosure is open, Create line is the card's only filled button
+      if (add) add.classList.toggle("btn--primary", !details.open);
+      create.classList.toggle("btn--primary", details.open || !add);
+      if (details.open && !orca._control.options.length) parents(q._control.value);
+    });
+    body.append(details);
+    return h("div", { class: "group" }, head, body);
   }
   async function build(button) {
     await act(gen, SW.t("presets_building"), async () => {
@@ -894,30 +921,41 @@ function presetsTab() {
     }, { button });
   }
   // Updates: the list names each preset and what changes; Accept takes exactly that list (the server refuses it once a
-  // newer build has come, and the list is loaded again). The desktop writes accepted presets at its next sync.
+  // newer build has come, and the list is loaded again). Slicer Sync writes accepted presets at its next run.
   async function updates(quiet) {
-    await fill(upBox, SW.t("nav_slicer_presets"), async () => {
+    await fill(upBox, SW.t("presets_updates_title"), async () => {
       const u = await api("updates");
-      const restore = h("p", {}, h("button", { class: "secondary", textContent: "Restore presets deleted in Bambu Studio", on: { click: (e) =>
+      const waiting = (u.updates || []).filter((x) => !x.accepted);
+      const summary = u.count ? SW.t("presets_updates_summary", { count: u.count, lines: u.lines,
+        accepted: u.accepted ? SW.t("presets_updates_accepted", { count: u.accepted }) : "" }) : SW.t("presets_updates_none");
+      const restore = SW.btn(SW.t("presets_restore_deleted"), { cls: "btn--ghost", action: "restore", run: (e) =>
         act(upLine, SW.t("common_working"), async () => {
           await api("restore_deleted", { body: {} }); setTimeout(() => updates(true), 3000);
-          return h("span", { textContent: "The next build brings them back; the desktop installs it at its next sync." });
-        }, { button: e.currentTarget }) } }));
-      const waiting = (u.updates || []).filter((x) => !x.accepted);
-      if (!waiting.length) return [h("h2", { textContent: "Updates" }), h("p", { class: "muted", textContent: u.accepted ? `Nothing waiting; ${u.accepted} accepted, written at the next desktop sync.` : "No preset in your slicers needs an update." }), restore, upLine];
-      const rows = waiting.map((x) => h("li", { textContent: `${x.name} (${x.target}): ${x.keys.join(", ")}` }));
-      const accept = h("button", { textContent: `Accept ${waiting.length} update${waiting.length === 1 ? "" : "s"}`, on: { click: (e) =>
+          return SW.t("presets_restore_asked");
+        }, { button: e.currentTarget }) });
+      const shown = h("div"), shownLine = resultLine();     // the change list, with Accept under it, once asked for
+      const accept = SW.btn(SW.t("presets_updates_accept"), { cls: "btn--primary", action: "accept-updates", run: (e) =>
         act(upLine, SW.t("common_working"), async () => {
           try {
             const r = await api("updates_accept", { body: { stamp: u.stamp, names: waiting.map((x) => x.name) } });
             setTimeout(() => updates(true), 3000);
-            return h("span", { textContent: `${r.accepted.length} accepted: the desktop writes them over the presets at its next sync.` });
-          } catch (err) { setTimeout(() => updates(true), 4000); throw err; }
-        }, { button: e.currentTarget }) } });
-      return [h("h2", { textContent: "Updates" }),
-        h("p", { class: "muted", textContent: "A newer build would change these presets already in your slicers. Nothing is written over until you accept." }),
-        h("ul", {}, ...rows), h("p", {}, accept),
-        (u.yours || []).length ? h("p", { class: "muted", textContent: `Never written over (your own preset of that name): ${u.yours.join(", ")}` }) : null, restore, upLine];
+            return SW.t("presets_updates_accepted_result", { count: r.accepted.length });
+          } catch (err) {
+            if (!(err instanceof SW.HubError) || err.status !== 409) { setTimeout(() => updates(true), 4000); throw err; }
+            updates(true);                                    // a newer build came: the list is read again
+            return { kind: "warn", text: SW.t("presets_updates_stale") };
+          }
+        }, { button: e.currentTarget }) });
+      const keys = (x) => x.keys.slice(0, 6).join(", ") + (x.keys.length > 6 ? ", …" : "");
+      const show = SW.btn(SW.t("presets_updates_show"), { action: "show-updates", run: () => {
+        shown.replaceChildren(...(waiting.length ? [h("ul", {}, ...waiting.map((x) => h("li", { textContent: SW.t("presets_updates_line",
+          { target: x.target, name: x.name, file: x.file || `${x.name}.json`, keys: keys(x) }) }))), h("div", {}, accept)] : []));
+        SW.result(shownLine, "ok", SW.t(waiting.length ? "presets_updates_would" : "presets_updates_nothing", { count: waiting.length }));
+      } });
+      return group(SW.t("presets_updates_title"),
+        h("p", { class: "muted", textContent: summary }),
+        (u.yours || []).length ? h("p", { class: "muted", textContent: SW.t("presets_updates_yours", { count: u.yours.length }) }) : null,
+        h("div", {}, show), shownLine, shown, h("div", {}, restore), upLine);
     }, { quiet });
   }
   return { el, enter: () => { load(); updates(); } };

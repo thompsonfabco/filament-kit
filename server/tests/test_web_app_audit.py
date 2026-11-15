@@ -18,6 +18,7 @@ from starlette.applications import Starlette
 
 from fakes import serving
 from filament_kit import config, modules
+from filament_kit.profiles import lines
 from filament_kit.spoolman import Spoolman
 from filament_kit.web import mcp_tools
 from filament_kit.web.intake_app import IntakeApp
@@ -34,15 +35,21 @@ FILAMENTS = [("Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "2B2B2E"),
              ("Prusament", "PLA Galaxy Silver", "PLA", "8D9199")]
 
 
-@pytest.fixture
-def served(tmp_path, monkeypatch, spoolman_url):
+# The Slicer presets screen in the states 04 8 draws: filaments waiting for a line (nothing in lines.json), waiting with a
+# line of their brand to join (the "Add to the line" select), every filament covered (the empty state), and switched off.
+STATES = ("waiting", "waiting-with-a-line", "all-covered", "presets-off")
+
+
+@pytest.fixture(params=STATES)
+def served(request, tmp_path, monkeypatch, spoolman_url):
     for name in ("etc", "state", "opt"):
         (tmp_path / name).mkdir()
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
     mods = {n: False for n in modules.MODES["server"]}
-    mods.update(web=True, ai_intake=True, presets=True)
+    mods.update(web=True, ai_intake=True, presets=request.param != "presets-off")
     config.save({"placement": RULES, "modules": mods, "server_name": "Workshop hub", "web": {"lan": ["127.0.0.0/8"]}})
     api = spoolman_url + "/api/v1"
+    made = []
     with httpx.Client() as c:
         vendors = {}
         for i, (vendor, name, material, colour) in enumerate(FILAMENTS):
@@ -51,8 +58,23 @@ def served(tmp_path, monkeypatch, spoolman_url):
             f = c.post(api + "/filament", json={"vendor_id": vendors[vendor], "name": name, "material": material,
                                                 "color_hex": colour, "density": 1.24, "diameter": 1.75, "weight": 1000,
                                                 "spool_weight": 200}).json()
+            made.append((vendor, name, material, f["id"]))
             c.post(api + "/spool", json={"filament_id": f["id"], "location": "Rack 1" if i % 2 else "Sealed stock",
                                          "remaining_weight": 1000 - 150 * i})
+    if request.param in ("waiting-with-a-line", "all-covered"):
+        used: set[str] = set()
+        ls = {}
+        for vendor, name, material, fid in made:
+            if request.param == "waiting-with-a-line" and vendor != "Prusament":
+                continue
+            product = name.rsplit(" ", 1)[0]
+            line_id = lines.line_id_for(vendor, product)
+            made_id = lines.new_filament_id(used)
+            used.add(made_id)
+            ls[line_id] = lines.Line(line_id=line_id, vendor=vendor, product=product, material=material, bambu_parent=None,
+                                     parent_source="none", filament_id=made_id, created="2026-01-01T00:00:00Z",
+                                     filaments=[fid] if request.param == "all-covered" else [])
+        lines.save(ls)
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
     app = Starlette(routes=IntakeApp(mcp_tools.Tools(sm), public_url=None, lan_cidrs=["127.0.0.0/8"], push=False).routes())
@@ -95,6 +117,7 @@ def test_the_page_audit_passes_on_every_view(served):
     assert run.returncode == 0, run.stdout + run.stderr
     out = json.loads(run.stdout)
     assert out["views"] == 6 * 2 * 2 and out["failing"] == 0      # six views, two widths, light and dark
+
 
 
 def test_the_allow_list_names_a_later_step_and_a_count_on_every_line():
