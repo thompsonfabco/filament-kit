@@ -356,3 +356,85 @@ def test_the_web_app_says_when_the_reader_is_off_and_the_public_page_has_no_rout
     r = _web().get("/intake/api/label-reader/corrections")
     assert r.status_code == 409 and r.json()["reason"] == "no_reader"
     assert _web("https://example.test/f").get("/intake/api/label-reader/corrections").status_code in (404, 405)
+
+
+# ---------- review R365: the command line, the lock, a missing count, a conflict ----------
+
+def test_the_list_and_package_work_while_the_page_is_locked_out_and_writes_do_not(hub):
+    from filament_kit import setup_code
+    c, data, _ = hub
+    add(data, "r1")
+    for _ in range(setup_code.LOCK_MAX):
+        assert post(c, "label-reader/corrections/fb-1/remove", {}, code="00000000").status_code == 403
+    assert post(c, "label-reader/corrections/fb-1/remove").status_code == 429       # even the right code now
+    assert post(c, "label-reader/corrections/send").status_code == 429
+    assert c.get(B).status_code == 200 and c.get(B + "/package").status_code == 200
+    assert len(data["queue"]) == 1
+
+
+def test_a_missing_count_falls_back_to_the_entries(hub):
+    c, data, started = hub
+    add(data, "r1"), add(data, "r2")
+    real = local_reader._request
+
+    def no_count(url, **kw):
+        out = real(url, **kw)
+        if isinstance(out, dict):
+            out.pop("count", None)
+        return out
+    local_reader._request = no_count
+    try:
+        assert c.get(B).json()["count"] == 2
+        assert post(c, "label-reader/corrections/send").status_code == 200 and started == ["corrections_send"]
+    finally:
+        local_reader._request = real
+
+
+def test_a_conflict_is_the_hubs_own_refusal(hub):
+    c, data, _ = hub
+    add(data, "r1")
+    data["errors"].append((409, "conflict", None))
+    data["errors"].append((409, "conflict", None))          # the health check does not use the queue: both go to list
+    r = c.get(B)
+    assert r.status_code == 409 and r.json()["reason"] == "conflict" and "already has" in r.json()["error"]
+
+
+def test_cli_list_remove_package(hub, capsys, tmp_path):
+    _, data, _ = hub
+    assert cli.main(["local-intake", "corrections", "list"]) == 0
+    assert "No corrections waiting." in capsys.readouterr().out
+    a, b = add(data, "r1"), add(data, "r2")
+    assert cli.main(["local-intake", "corrections"]) == 0
+    out = capsys.readouterr().out
+    assert "Corrections waiting: 2" in out and a in out and b in out and "Polymaker" in out
+    assert cli.main(["local-intake", "corrections", "package", str(tmp_path)]) == 0
+    saved = next(tmp_path.glob("spoolwarden-corrections-*.zip"))
+    assert saved.read_bytes() == local_reader.feedback_bundle(config.load())
+    capsys.readouterr()
+    assert cli.main(["local-intake", "corrections", "remove", a, "fb-99"]) == 1
+    cap = capsys.readouterr()
+    assert f"Removed {a}. Nothing was sent." in cap.out and "fb-99: That correction is not waiting" in cap.err
+    assert [e["id"] for e in data["queue"]] == [b] and data["submits"] == []
+
+
+def test_cli_refusals_are_the_routes_texts(hub, capsys, tmp_path):
+    _, data, _ = hub
+    assert cli.main(["local-intake", "corrections", "package", str(tmp_path / "x.zip")]) == 1
+    assert reader_corrections.EMPTY in capsys.readouterr().err
+    cfg = config.load()
+    cfg["modules"]["local_intake"] = False
+    config.save(cfg)
+    for args in (["list"], ["remove", "fb-1"], ["package", str(tmp_path)], ["send"]):
+        assert cli.main(["local-intake", "corrections", *args]) == 1
+        assert reader_corrections.NO_READER in capsys.readouterr().err
+
+
+def test_cli_corrections_need_root(hub, capsys, monkeypatch):
+    _, data, _ = hub
+    add(data, "r1")
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
+    for args in (["list"], ["remove", "fb-1"], ["package", "x.zip"], ["send"]):
+        assert cli.main(["local-intake", "corrections", *args]) == 1
+        assert "run as root" in capsys.readouterr().err
+    assert len(data["queue"]) == 1 and data["submits"] == []

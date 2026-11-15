@@ -5865,10 +5865,81 @@ def cmd_local_intake_token(remove: bool) -> int:
     return 0
 
 
+def _corrections_root() -> bool:
+    """The reader's token is root's (<etc>/local_intake_token): every corrections command needs root."""
+    if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
+        _err_line("run as root: sudo filament-kit local-intake corrections ...")
+        return False
+    return True
+
+
+def cmd_local_intake_corrections_list() -> int:
+    """The corrections waiting to be shared (the setup page's Corrections waiting): count, size and one line each."""
+    from . import reader_corrections
+    if not _corrections_root():
+        return 1
+    try:
+        out = reader_corrections.waiting(config.load())
+    except reader_corrections.CorrectionsError as e:
+        _err_line(str(e))
+        return 1
+    if not out["count"]:
+        print("No corrections waiting.")
+        return 0
+    print(f"Corrections waiting: {out['count']} - {out['bytes'] / 1048576:.1f} MB. Nothing is sent until you run: "
+          "sudo filament-kit local-intake corrections send")
+    for e in out["entries"]:
+        what = ", ".join(f"{k}: {v}" for k, v in (e.get("corrected") or {}).items()) if isinstance(
+            e.get("corrected"), dict) else ""
+        print(f"  {e.get('id')}  {e.get('created_at') or ''}  {what}".rstrip())
+    return 0
+
+
+def cmd_local_intake_corrections_remove(ids: list[str]) -> int:
+    """Take corrections out of the list; nothing is sent."""
+    from . import reader_corrections
+    if not _corrections_root():
+        return 1
+    cfg = config.load()
+    rc = 0
+    for eid in ids:
+        try:
+            reader_corrections.remove(cfg, eid)
+            print(f"Removed {eid}. Nothing was sent.")
+        except reader_corrections.CorrectionsError as e:
+            _err_line(f"{eid}: {e}")
+            rc = 1
+    return rc
+
+
+def cmd_local_intake_corrections_package(dest: str) -> int:
+    """Save the exact zip that send would send, to `dest` (a file name, or a folder to put the usual name in)."""
+    from . import reader_corrections
+    if not _corrections_root():
+        return 1
+    try:
+        data, name = reader_corrections.package(config.load())
+    except reader_corrections.CorrectionsError as e:
+        _err_line(str(e))
+        return 1
+    path = Path(dest)
+    if path.is_dir():
+        path = path / name
+    try:
+        path.write_bytes(data)
+    except OSError as e:
+        _err_line(f"cannot write {path}: {e.strerror or e}")
+        return 1
+    print(f"Saved the package to {path} ({len(data) / 1048576:.1f} MB). It is the file send would send.")
+    return 0
+
+
 def cmd_local_intake_corrections_send() -> int:
     """Ask the local reader to send the corrections waiting (the setup page's job `corrections_send`). The reader does
     the upload to where it sends them itself; nothing waiting is lost when it fails."""
     from . import reader_corrections
+    if not _corrections_root():
+        return 1
     cfg = config.load()
     job = steps.Steps(2)
     job.next("Checking the corrections waiting.")
@@ -6599,7 +6670,12 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                                           "(root; its settings are kept)")
     _add_yes(lir, "do not ask")
     lic = lisub.add_parser("corrections", help="the corrections waiting to be shared (the setup page's Send now)")
-    licsub = lic.add_subparsers(dest="lic_cmd", required=True)
+    licsub = lic.add_subparsers(dest="lic_cmd")
+    licsub.add_parser("list", help="the corrections waiting to be shared (the default)")
+    lcr = licsub.add_parser("remove", help="take corrections out of the list; nothing is sent")
+    lcr.add_argument("ids", nargs="+", help="the ids `list` shows")
+    lcp = licsub.add_parser("package", help="save the exact zip that send would send, to look at it first")
+    lcp.add_argument("file", help="a file name, or a folder")
     licsub.add_parser("send", help="ask the local reader to send the corrections waiting (nothing is sent by "
                                    "itself; the reader does the upload)")
     lit = lisub.add_parser("test", help="read photos with the local reader only and print the result (no Claude, "
@@ -6846,7 +6922,13 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
         if args.li_cmd == "corrections":
-            return cmd_local_intake_corrections_send()
+            if args.lic_cmd == "remove":
+                return cmd_local_intake_corrections_remove(args.ids)
+            if args.lic_cmd == "package":
+                return cmd_local_intake_corrections_package(args.file)
+            if args.lic_cmd == "send":
+                return cmd_local_intake_corrections_send()
+            return cmd_local_intake_corrections_list()
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)
     if args.cmd == "tag-reader" and args.tag_reader_cmd == "flash":
         return cmd_reader_setup(args)

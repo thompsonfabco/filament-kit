@@ -11,7 +11,7 @@ corrections send`, only asks the reader to do it: the Hub names no address and m
 
 Every failure is a CorrectionsError(status, code, text): the text is the Hub's words (shown as they are), the codes are
 no_reader | no_feedback | unreachable | unauthorized | feedback_disabled | empty | not_found | too_large |
-upload_failed | reader_error."""
+upload_failed | conflict | reader_error."""
 from __future__ import annotations
 
 import time
@@ -33,7 +33,8 @@ UNAUTHORIZED = "The reader did not accept the Hub's token. Set the token again i
 _MAP = {"unreachable": (503, "unreachable", UNREACHABLE), "unauthorized": (502, "unauthorized", UNAUTHORIZED),
         "feedback_disabled": (409, "feedback_disabled", FEEDBACK_OFF), "empty": (409, "empty", EMPTY),
         "not_found": (404, "not_found", NOT_FOUND), "too_large": (413, "too_large", TOO_LARGE),
-        "upload_failed": (502, "upload_failed", UPLOAD_FAILED)}
+        "upload_failed": (502, "upload_failed", UPLOAD_FAILED),
+        "conflict": (409, "conflict", "The reader already has this correction.")}
 
 
 class CorrectionsError(Exception):
