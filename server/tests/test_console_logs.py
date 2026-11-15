@@ -1,6 +1,7 @@
 """The setup console's Logs tab and the helper's journal op: a closed list of units, an argument list, the code first."""
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from test_setup_page import CODE, Helper, client, env, make, post  # noqa: F401
 from filament_kit import cli, config, setup_helper
 
 STATIC = Path(cli.__file__).parent / "setup_static"
+STRINGS = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
 
 
 class Mgr:
@@ -120,5 +122,19 @@ def test_with_no_systemd_there_is_nothing_to_read(app):
 def test_the_page_has_the_tab():
     assert 'logs: ["nav_logs", "logs", () => [logsTab]]' in (STATIC / "setup.js").read_text(encoding="utf-8")
     src = (STATIC / "setup_logs.js").read_text(encoding="utf-8")
-    assert 'api("logs/units")' in src and "code: theCode()" in src and "coded(box," in src and "innerHTML" not in src
+    assert 'api("logs/units")' in src and "code: theCode()" in src and "needCode(" in src and "innerHTML" not in src
     assert CODE
+
+
+def test_the_section_is_the_designed_one():
+    """03 13: a labelled service select, Lines as a segmented 50 | 100 | 200, the log in a code block with Copy, the
+    locked line and Unlock and show; its texts come from the catalogue (no literal in the script)."""
+    src = (STATIC / "setup_logs.js").read_text(encoding="utf-8")
+    assert "SW.field(" in src and 'type: "select"' in src and "SW.segmented(" in src
+    assert "const LOG_LINES = [50, 100, 200];" in src and 'value: "100"' in src
+    assert 'class: "code"' in src and '"code__text"' in src and 'action: text ? "copy" : null' in src
+    for key in ("logs_service", "logs_lines", "logs_locked", "logs_unlock_show", "logs_show_again", "logs_truncated",
+                "logs_empty", "logs_read_error", "common_copy", "common_reading"):
+        assert f'"{key}"' in src and key in STRINGS
+    assert "code: theCode()" in src and "needCode(" in src
+    assert 'textContent: "' not in src and "SW.t(" in src

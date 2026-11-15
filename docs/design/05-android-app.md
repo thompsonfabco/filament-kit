@@ -746,7 +746,18 @@ weight." with the text button "Show", which opens that panel and focuses the fir
 count for every spool."; or the empty-spool problem.
 
 **Added before.** When the Hub reports these spools may have been added already: a `warn` notice line at the top,
-"These spools may have been added already: <the Hub's note>. Check Spoolman before adding them again."
+"These spools may have been added already: <the Hub's note>. Check Spoolman before adding them again." When the
+reason is the app's own (the reply was lost), it is one whole text, never a phrase filled into that sentence:
+"These spools may have been added already: the connection was lost before the Hub answered. Check Spoolman before
+adding them again." When the app knows which spools (a draft restored after a lost reply), a third whole text
+names them as a list of data, joined by commas, never "and": "These spools may have been added already: spool 212,
+spool 213. Check Spoolman before adding them again." (for one: "This spool may have been added already: spool 212.
+Check Spoolman before adding it again."). On Preview, a reply lost while adding: "The connection to the Hub was lost while adding, so the
+spools may have been added. Check Spoolman before trying again; Try again first runs a new preview."
+
+Other lines of this step: a weighed value that cannot be used, "The weight (<n> g) was not filled in: it is only
+used for one opened spool."; a name typed with a printer part, error "Leave out the @ and the printer part."; a
+panel's state is read out as "Expanded" or "Collapsed".
 
 Empty (photo path, nothing found): empty state "No spools found in these photos" / "Go back to the photos and read
 them again, or add by hand." with "Back to photos" and "Add by hand".
@@ -954,6 +965,12 @@ that spool's summary row under it, then the button "Move the tag to this spool" 
 already has a tag, "Move the tag here and replace this spool's tag". "Cancel" returns to Find. On success: result
 line "Tag moved to this spool."
 
+**The spool already has a tag of its own** (the tapped tag is free; the Hub refuses the first "Link tag" with a
+conflict): a state of the preview, like the one above: `warn` notice "This spool already has a tag. Linking this
+one replaces it.", then the button "Replace this spool's tag" (main). "Cancel" returns to Find. On success: result
+line "Tag linked." Nothing is moved here, so the "Move the tag …" buttons and "Tag moved to this spool." are not
+used.
+
 ---
 
 ## 8. Add a line to the Filament Catalog (`catalog/new`)
@@ -1074,7 +1091,8 @@ buttons with the Hub's reason; the form keeps what was typed.
 "Find Klipper printers" (overflow item) opens a sheet: field "Network to search (optional)" with placeholder
 "e.g. 192.0.2.0/24" and the hint "Leave empty to search the Hub's own network.", button "Search" ("Searching…").
 Results: rows "192.0.2.57:7125" (`--mono`) with "Add" (opens 9.3 with the address filled in). Empty: "No Klipper
-printers answered on 192.0.2.0/24." With the Klipper Feature off: 3.5 "Feature off" text.
+printers answered on 192.0.2.0/24."; with the field left empty, "No Klipper printers answered on the Hub's own
+network." With the Klipper Feature off: 3.5 "Feature off" text.
 
 ### 9.4 Printer (`printers/{id}`)
 
@@ -1313,11 +1331,12 @@ The same texts on the Hub page and in the web app, where they show the same thin
 | Progress line (9.4), facts joined by " · " | "<n> %" · "Layer <n> of <m>" · "<time> left" · "done about <clock time>" (the line under the bar starts with "Layer …", as in the web app) |
 | Results of the controls (9.4) | "Resumed." · "Paused." · "Stopped." · "Light on." · "Light off." |
 | Stop dialog (9.4) when the printer gives no job name | Title as always "Stop the print?"; body "Stop the print on <printer>? It cannot be resumed." (a whole second text; no phrase is filled into the usual body) |
-| Load preview rows (7.6) | "Preset: <name>" or "Preset: none" · "Nozzle: <n> mm" or "Nozzle size not reported by the printer; assuming <n> mm" · "Spool <id> now in <slot> goes back to <location>" (when the place is not known, the whole text "Spool <id> now in <slot> goes back to its previous place") |
+| Load preview rows (7.6) | "Preset: <name>" or "Preset: none" · "Nozzle: <n> mm" or "Nozzle size not reported by the printer; assuming <n> mm" · "Spool <id> now in <slot> goes back to <location>" (when the place is not known, the whole text "Spool <id> now in <slot> goes back to its previous place"; when the spool's number is not known, "The spool now in <slot> goes back to <location>" or "The spool now in <slot> goes back to its previous place"; the word "Unknown" is never filled in as a number) |
+| Unload dialog (9.5) when the place is not known | Body "Unload <spool name> from <slot>? It goes back to its previous place. Only the inventory changes; the printer's slot setting stays as it is." (a whole second text beside the usual body with "<location>"; title and buttons as always) |
 | Map by loading rows (9.8) | "<slot>: <status>"; the nozzle as "Right nozzle" or "Left nozzle" |
-| Printer settings (9.9) | Field "Name", error "Enter a name."; results "Saved." |
+| Printer settings (9.9) | Field "Name", error "Enter a name."; results "Saved."; after a new Access Code is saved, "Access Code replaced." (`02-components.md` 5.3; the printer's name is not repeated) |
 | Sharing a printer report | No app can take the file: "No app on this phone can share or save the file." |
-| Back or a tap outside while a dialog or sheet is still writing (2.5 rule 2) | Snackbar: for a load "Loading into the printer… wait for its answer."; for any other write (Unload, Map slots, Put it back, Forget, the settings dialogs) "Still working. Wait for it to finish." The dialog stays open. |
+| Back or a tap outside while a dialog or sheet is still writing (2.5 rule 2) | Snackbar: for a load "Loading into the printer… wait for its answer."; for any other write (Unload, Map slots, Put it back, Forget, adding a printer, replacing an Access Code, the settings dialogs) "Still working. Wait for it to finish." The dialog stays open. |
 
 ---
 
@@ -1433,6 +1452,10 @@ Action bar: "Cancel" (text) and "Save changes" (main; "Saving…"). Only changed
 returns to 10.2 with its Fields panel result line "Saved 2 changes: Name, Nozzle range. Only these were sent." and
 the record's state "Edited by hand". Errors under their fields; others as a `bad` notice. Leaving with changes
 asks (2.5 rule 1).
+
+A required field left empty: "Enter a name.", "Enter a brand.", "Enter a material." When one field's change differs
+between the spools of an item, each change names its spools in brackets ("<change> (<spools>)"). When the record
+has nothing left to edit (after an undo, say), the form does not open: "This record has no spools to edit now."
 
 ### 10.4 Ask the Label Reader to correct it
 

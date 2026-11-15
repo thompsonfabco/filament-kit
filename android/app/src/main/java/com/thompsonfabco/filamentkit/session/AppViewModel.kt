@@ -49,7 +49,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** The adds that are open (one per draft): their reads and adds go on whichever screen is showing. */
     val addFlows = AddFlows(
         viewModelScope, drafts,
-        IntakeApi.of { this.session.api.value ?: throw ApiError(0, "offline", "No Hub is paired.") },
+        IntakeApi.of { this.session.api.value ?: throw ApiError.noHubPaired() },
     )
 
     /** The update checker, one per [ServerSession.api]; its daily loop stops with the old client. */

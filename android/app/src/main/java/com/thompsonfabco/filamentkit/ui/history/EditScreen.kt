@@ -200,7 +200,7 @@ private fun EditFields(vm: RecordViewModel, s: RecordState, e: EditUi) {
 }
 
 /** What each complaint says: the rule, in the words of 05-android-app 6.3 where it has them. */
-private fun errorText(error: FieldError, field: RecentField): Int = when (error) {
+internal fun errorText(error: FieldError, field: RecentField): Int = when (error) {
     FieldError.Required -> when (field) {
         RecentField.Vendor -> R.string.recent_error_brand
         RecentField.Material -> R.string.recent_error_material
@@ -212,7 +212,7 @@ private fun errorText(error: FieldError, field: RecentField): Int = when (error)
     FieldError.Grams -> R.string.common_error_grams
     FieldError.Density -> R.string.add_review_error_density
     FieldError.Price -> R.string.recent_error_price
-    FieldError.Range -> R.string.recent_error_range
+    FieldError.Range -> R.string.common_error_range
     FieldError.Colour -> R.string.recent_error_colour
 }
 

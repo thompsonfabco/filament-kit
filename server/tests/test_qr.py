@@ -222,7 +222,7 @@ def test_the_hub_pairing_reply_for_a_phone_carries_a_qr_of_the_link(app):
 
 
 def test_the_page_shows_the_svg_as_an_image_of_the_right_type():
-    js = (PKG / "setup_static" / "setup.js").read_text(encoding="utf-8")
+    js = (PKG / "setup_static" / "setup_devices.js").read_text(encoding="utf-8")
     assert js.count('new Blob([r.qr_svg], { type: "image/svg+xml" })') == 1
     assert setup_page.qr_svg(LINK) == qr.svg(LINK)
 

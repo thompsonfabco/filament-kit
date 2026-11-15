@@ -497,10 +497,11 @@ def test_a_bambu_printer_is_not_reachable_through_the_klipper_module(env, helper
 
 def test_setup_script_gives_klipper_rows_no_access_code_button():
     body = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    assert 'p.family === "klipper"' in body and "klipperRow" in body
-    kr = body[body.index("function klipperRow"):]
-    kr = kr[:kr.index("\n}")]
-    assert '"code"' not in kr and "Access Code" not in kr and "testButton" in kr and "forgetButton" in kr
+    assert "klipperOf(p)" in body and "function actionsOf" in body
+    acts = body[body.index("function actionsOf"):]
+    kr = acts[acts.index("else if (klip) {"):acts.index("} else {")]
+    assert "accessCode" not in kr and "Access Code" not in kr and "detect(" in kr
+    assert "testConnection" in body and 'forgetPrinter(p, box, klip ? "klipper" : "bambu")' in body
     assert "P.bambu ?" in body   # no Bambu add without it
 
 

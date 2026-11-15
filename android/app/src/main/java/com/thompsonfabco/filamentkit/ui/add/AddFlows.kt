@@ -94,6 +94,14 @@ class AddFlows(
         }
     }
 
+    /**
+     * A real add failed and was told to the person away from its screen, who did not open it: the flow is dropped and
+     * its draft stays on the phone. An add that is writing again is left alone.
+     */
+    fun dropAfterFailure(id: String) {
+        if (replaceRule(id) == AddReplace.Replace) release(id)
+    }
+
     /** What may happen to the open add when a new one is asked for (05-android-app 2.5). */
     fun replaceRule(id: String): AddReplace =
         synchronized(open) { open[id]?.vm }?.let { addReplace(it.state.value) } ?: AddReplace.Replace

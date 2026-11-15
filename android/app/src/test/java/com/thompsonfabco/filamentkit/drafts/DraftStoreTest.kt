@@ -155,4 +155,15 @@ class DraftStoreTest {
         assertEquals("without being open it goes", 1, store.purge(30 * day, now = 90 * day))
         assertTrue(store.create().sealed)
     }
+
+    @Test fun aTagTappedDraftWithoutPhotosIsContentAndSurvivesThePurge() {
+        val store = DraftStore(dir)
+        val tapped = store.create(manual = false)
+        val empty = store.create(manual = false)
+        store.update(store.get(tapped.id)!!.copy(tag = "04:a1:b2:c3"))
+        assertTrue(store.get(tapped.id)!!.hasContent)
+        assertFalse(store.get(empty.id)!!.hasContent)
+        assertEquals(1, store.purge(30 * day, now = System.currentTimeMillis() + 2 * day))
+        assertEquals(setOf(tapped.id), dir.list()!!.toSet())
+    }
 }

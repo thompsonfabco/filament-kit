@@ -27,7 +27,7 @@ import time
 import anyio
 
 from .. import config, hostaddr, release, updates
-from ..bridge import camera, mapping, registry
+from ..bridge import ams, camera, mapping, registry
 from ..bridge.connection import PrinterOffline, UnknownPrinter
 from ..bridge.klipper import discovery
 from ..bridge.slottest import NoStatus, PrinterBusy
@@ -52,8 +52,9 @@ OFFLINE = "the printer is offline; check that it is on and on the network"
 def printer_states(page) -> list[dict]:
     """One entry per listed printer: `serial`, `family`, `state` (as `G state` gives it), `job` (None while the Hub has
     no status: the printer's `gcode_state`, `name`, `percent`, `remaining_min`, `eta`, `layer`, `total_layers`) and
-    `slots` (the units of the printer's status, None while there is none). Read from the managers' held reports and
-    cached spool lists; no address or key, only the serial the list already shows."""
+    `slots` (the units of the printer's status, None while there is none) and, for a Bambu printer, `mapped` (the
+    server holds a slot map for it: the file only, no connection). Read from the managers' held reports and cached
+    spool lists; no address or key, only the serial the list already shows."""
     out = []
     for row in page._printer_rows():
         serial = row["serial"]
@@ -68,8 +69,11 @@ def printer_states(page) -> list[dict]:
             job = {"gcode_state": st["gcode_state"], "name": st["job"] or None, "percent": st["percent"],
                    "remaining_min": st["remaining_min"], "eta": st["eta"], "layer": st["layer"],
                    "total_layers": st["total_layers"]}
-        out.append({"serial": serial, "family": row["family"], "state": row["state"], "job": job,
-                    "slots": st["ams"] if st is not None else None})
+        entry = {"serial": serial, "family": row["family"], "state": row["state"], "job": job,
+                 "slots": st["ams"] if st is not None else None}
+        if row["family"] == "bambu":
+            entry["mapped"] = bool(row["configured"] and ams.load_map(serial).slots)
+        out.append(entry)
     return out
 
 
@@ -160,16 +164,16 @@ def routes(page) -> list[tuple]:
             if not subnet:
                 net = discovery.own_subnet()
                 if net is None:
-                    raise Refused(400, "can't tell this server's network; give a subnet such as 192.168.1.0/24")
+                    raise Refused(400, "can't tell this server's network; give a subnet such as 192.168.1.0/24", field="subnet")
                 return net
             try:
                 net = ipaddress.ip_network(str(subnet).strip(), strict=False)
             except ValueError:
-                raise Refused(400, "give a subnet such as 192.168.1.0/24") from None
+                raise Refused(400, "give a subnet such as 192.168.1.0/24", field="subnet") from None
             if net.version != 4 or not net.is_private or net.is_loopback or net.is_link_local or net.is_multicast:
-                raise Refused(400, "scan your own network: a private IPv4 subnet such as 192.168.1.0/24") from None
+                raise Refused(400, "scan your own network: a private IPv4 subnet such as 192.168.1.0/24", field="subnet") from None
             if net.prefixlen < 24:
-                raise Refused(400, "scan at most a /24 (256 addresses)")
+                raise Refused(400, "scan at most a /24 (256 addresses)", field="subnet")
             return net
 
         def run() -> dict:

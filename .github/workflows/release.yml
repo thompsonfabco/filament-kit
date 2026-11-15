@@ -300,12 +300,29 @@ jobs:
             echo "FK_FILES_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # release-notes/v<version>.prerelease in the tagged tree publishes the release as a pre-release, not Latest
+      - name: Pre-release marker
+        id: pre
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if test -f "release-notes/v${VERSION}.prerelease"; then
+            echo prerelease=true >> "$GITHUB_OUTPUT"
+            echo make_latest=false >> "$GITHUB_OUTPUT"
+          else
+            # empty: the action sends neither input, exactly as before the marker existed
+            echo prerelease= >> "$GITHUB_OUTPUT"
+            echo make_latest= >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8  # v2.3.2
         with:
           fail_on_unmatched_files: true
           # the written notes first; GitHub's generated list of changes is appended below them
           body_path: release-notes/v${{ needs.version.outputs.version }}.md
           generate_release_notes: true
+          prerelease: ${{ steps.pre.outputs.prerelease }}
+          make_latest: ${{ steps.pre.outputs.make_latest }}
           # from the sums step: dist/filament-kit-<version>.tar.gz, dist/filament-kit.apk,
           # dist/filament-kit-sync-setup-<version>.exe, dist/filament-kit-sync-linux-x86_64-<version>.tar.gz,
           # dist/get.sh, dist/bambu_hardware.xml, dist/klipper_hardware.xml, dist/fk-printer-pack.tar.gz,

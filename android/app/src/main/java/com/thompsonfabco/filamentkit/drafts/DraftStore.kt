@@ -26,8 +26,8 @@ data class Draft(
     /** An add by hand: no photos, the typed spools are the content. */
     val manual: Boolean = false,
 ) {
-    /** Something worth keeping: photos, or a hand add with spools typed in (Home lists these; start-up keeps them). */
-    val hasContent: Boolean get() = photos.isNotEmpty() || (manual && editedItems?.isNotEmpty() == true)
+    /** Something worth keeping: photos, a tag that was tapped, or a hand add with spools typed in (Home lists these; start-up keeps them). */
+    val hasContent: Boolean get() = photos.isNotEmpty() || tag != null || (manual && editedItems?.isNotEmpty() == true)
 }
 
 @Serializable

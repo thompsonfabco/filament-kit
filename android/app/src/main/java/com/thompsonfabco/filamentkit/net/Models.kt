@@ -245,6 +245,9 @@ class ApiError(
 
     companion object {
         const val BAD_RESPONSE = "bad_response"
+
+        /** No Hub is paired, so there is no client to ask: the same answer as a Hub that cannot be reached. */
+        fun noHubPaired() = ApiError(0, "offline", "No Hub is paired.")
     }
 }
 

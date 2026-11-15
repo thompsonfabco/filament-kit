@@ -133,6 +133,31 @@ def planted(hub_app):
         running.stop()
 
 
+class HttpsOrigin:
+    """ASGI wrapper for a change made from this test's plain-http server: the Hub page answers a change only from its own
+    https address (Origin check), so the Origin the browser sends is written as https (shipped code is untouched)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            scope["headers"] = [(k, b"https://" + v[len(b"http://"):] if k == b"origin" and v.startswith(b"http://") else v)
+                                for k, v in scope["headers"]]
+        await self.app(scope, receive, send)
+
+
+@pytest.fixture
+def hub_change(hub_app):
+    """The Hub page over plain http that accepts a change (the unlocked Logs pass reads a log with a POST)."""
+    app, port = hub_app
+    running = _serve(HttpsOrigin(app), port)
+    try:
+        yield running.url + "/setup"
+    finally:
+        running.stop()
+
+
 def _node() -> str | None:
     node = shutil.which("node")
     if not node:
@@ -179,6 +204,92 @@ def test_devices_and_flash_do_not_scroll_sideways_at_320_px_in_a_wide_font(monke
     assert not found, found
 
 
+LOGS_PRELUDE = """
+  const until = async (what, f, ms = 8000) => {
+    for (let t = 0; t < ms && !f(); t += 100) await new Promise((r) => setTimeout(r, 100));
+    if (!f()) throw new Error("Logs: " + what + " :: lock=" + SW.lock.state + " out=" + ((document.querySelector(".logs__out") || {}).innerText || "").slice(0, 150));
+  };
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const show = () => document.querySelector(".logs__controls .btn--primary");
+  // the page reads the Hub's trust once after it opens and sets the lock from that answer: a code entered before the
+  // answer arrives is dropped by it (the chip's loading line is gone when it has), so the test unlocks after it
+  const unlocked = async () => {
+    await until("the page did not finish its first reads", () => !document.querySelector(".chip--lock .skeleton__line")
+      && !document.querySelector('[aria-busy="true"]:not(button)'));
+    SW.setLock("unlocked", { code: %r });
+    await until("no Show button", () => show());
+  };
+""" % CODE
+
+# It waits on the outcome of Show (the log block, or the error state in its block), not on a fixed time.
+LOGS_UNLOCKED = """(async () => {""" + LOGS_PRELUDE + """
+  await unlocked();
+  show().click();
+  await until("no outcome after Show", () => document.querySelector(".logs__out .code"), 20000);
+  if (document.querySelector(".logs__out .error-state")) throw new Error("Logs: the read failed: " + document.querySelector(".logs__out").innerText);
+  if (!document.querySelector('.logs__out .code [data-action="copy"]')) throw new Error("Logs: no Copy button");
+  if (document.querySelectorAll(".logs__controls .segmented__input").length !== 3) throw new Error("Logs: Lines is not 50 | 100 | 200");
+  if (!document.querySelector(".logs__out .code__text").textContent.includes("backup started")) throw new Error("Logs: the log text is not shown");
+})()"""
+
+# a read still on its way when the page locks is dropped: the log is not written back onto the locked page
+LOGS_LOCKED_MIDWAY = """(async () => {""" + LOGS_PRELUDE + """
+  const real = window.fetch;
+  let release = null;
+  window.fetch = (u, o) => (String(u).endsWith("/api/logs") && o && o.method === "POST"
+    ? real(u, o).then((r) => new Promise((res) => { release = () => res(r); })) : real(u, o));
+  await unlocked();
+  show().click();
+  await until("the read was not sent", () => release, 20000);
+  SW.setLock("locked");
+  release();
+  await until("no locked line", () => document.querySelector(".logs .banner"));      // the locked page is drawn
+  await pause(1000);
+  if (document.querySelector(".logs__out .code")) throw new Error("Logs: the reply was written onto the locked page");
+})()"""
+
+
+def test_the_logs_section_passes_the_audit_unlocked_with_a_log_shown(hub_change, monkeypatch):
+    """AUT-5 on Logs, Unlocked (the Locked pass is in the test above): the controls, the log's code block and Copy."""
+    monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
+    real = subprocess.run      # the same module runs the audit's Node: only journalctl is faked
+
+    def journal(cmd, **kw):
+        if cmd[0] != "journalctl":
+            return real(cmd, **kw)
+        return subprocess.CompletedProcess(cmd, 0, stdout=b"2026-11-12T03:00:02 backup started\n", stderr=b"")
+    monkeypatch.setattr(setup_helper.subprocess, "run", journal)
+    run = _run("--url", hub_change, "--views", "#logs", "--ready", LOGS_UNLOCKED)
+    assert run.returncode == 0, run.stdout + run.stderr      # no allow-list: nothing of Logs is allowed any more
+    assert json.loads(run.stdout)["views"] == 4
+
+
+def test_a_log_that_arrives_after_the_page_locked_is_not_shown(hub_change, monkeypatch):
+    monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
+    real = subprocess.run
+
+    def journal(cmd, **kw):
+        if cmd[0] != "journalctl":
+            return real(cmd, **kw)
+        return subprocess.CompletedProcess(cmd, 0, stdout=b"2026-11-12T03:00:02 backup started" + bytes([10]), stderr=b"")
+    monkeypatch.setattr(setup_helper.subprocess, "run", journal)
+    run = _run("--url", hub_change, "--views", "#logs", "--ready", LOGS_LOCKED_MIDWAY)
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_the_page_audit_passes_on_slicer_presets_switched_off(hub_app):
+    cfg = config.load()
+    cfg["modules"]["presets"] = False
+    config.save(cfg)
+    running = _serve(*hub_app)
+    try:
+        run = _run("--url", running.url + "/setup", "--views", "#presets")       # no allow-list: nothing of this section is allowed
+        assert run.returncode == 0, run.stdout + run.stderr
+        assert json.loads(run.stdout)["views"] == 4 and json.loads(run.stdout)["failing"] == 0      # two widths, light and dark
+    finally:
+        running.stop()
+
+
 def test_an_unlabelled_button_added_to_the_served_page_fails_the_audit(planted):
     run = _run("--url", planted, "--views", VIEWS, "--allow", str(ALLOW))      # with the whole allow-list on
     assert run.returncode == 1, run.stdout + run.stderr
@@ -192,3 +303,216 @@ def test_the_allow_list_names_a_later_step_and_a_count_on_every_line():
             view, check, where, count, reason = (x.strip() for x in line.split("|"))
             assert view in ["#" + s for s in SECTIONS] and check and where, line
             assert count.isdigit() and int(count) > 0 and "removed by S2." in reason, line
+
+
+UPDATES = {"installed": "0.5.2", "installed_text": "0.5.2", "latest": "0.5.3", "newer": True, "checked_at": 1794700800,
+           "half_install": None, "notes": "Fixes the label reader.\nThe web app keeps its draft when the Hub restarts.",
+           "going_back": "Goes back to the signed release 0.5.1 and restarts the Hub.", "held": None, "failed": None,
+           "previous": "0.5.1", "module_on": True, "schedule": "daily", "update_refused": None, "rollback_refused": None}
+UPDATES_STATES = {
+    "available": {},
+    "held back": {"held": "0.5.3", "rollback_refused": "a printer is printing; wait until it has finished"},
+    "failed": {"failed": "0.5.3", "update_refused": "a printer is printing; wait until it has finished", "module_on": False},
+    "nightly": {"installed_text": "0.5.2-nightly.20260101", "notes": ""},
+}
+# what the Version list holds in each state, and whether Update is refused
+UPDATES_ROWS = {
+    "available": (["Installed", "Latest release", "0.5.3 is available.", "Last checked", "Checked by itself daily (Automatic updates)."], False),
+    "held back": (["Held back", "0.5.3 was rolled back. Automatic updates skip it; Update here installs it."], False),
+    "failed": (["Failed before", "Installing 0.5.3 failed before.", "Not checked by itself: Automatic updates are switched off."], True),
+    "nightly": (["0.5.2-nightly.20260101"], False),
+}
+
+UPDATES_READY = """(async () => {
+  const state = %s, [rows, refused] = %s, nightly = %s;
+  const until = async (what, f) => {
+    for (let i = 0; i < 80 && !f(); i++) await new Promise((r) => setTimeout(r, 100));
+    if (!f()) throw new Error("Updates (" + state + "): " + what);
+  };
+  await until("no Version list", () => document.querySelector(".updates__cards .kv"));
+  const text = document.querySelector(".updates__cards .kv").textContent;
+  for (const r of rows) if (!text.includes(r)) throw new Error("Updates (" + state + "): the Version list lacks " + r + " :: " + text);
+  const label = (b) => [...b.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("");      // not the tooltip of a refused one
+  const head = [...document.querySelectorAll(".updates__actions .btn")];
+  if (label(head[0]) !== "Check now" || head[0].classList.contains("btn--primary")) throw new Error("Updates (" + state + "): Check now");
+  const update = head.find((b) => b.classList.contains("btn--primary"));
+  if (!update || label(update) !== "Update to 0.5.3") throw new Error("Updates (" + state + "): no primary Update to 0.5.3");
+  if (!!update.getAttribute("aria-disabled") !== refused) throw new Error("Updates (" + state + "): Update disabled is not " + refused);
+  if (refused && !document.querySelector(".updates__actions + .banner--bad")) throw new Error("Updates (" + state + "): no refusal line");
+  if (!document.querySelector(".updates__cards .btn--danger") || label(document.querySelector(".updates__cards .btn--danger")) !== "Roll back to 0.5.1") throw new Error("Updates (" + state + "): no Roll back to 0.5.1");
+  if (!document.querySelector(".updates__cards .banner--info .updates__going")) throw new Error("Updates (" + state + "): no going-back note");
+  const foot = document.querySelector(".updates__foot .code");
+  if (!foot || !foot.textContent.includes("sudo filament-kit uninstall") || !foot.querySelector('[data-action="copy"]')) throw new Error("Updates (" + state + "): no uninstall code block with Copy");
+  const notes = document.querySelector(".updates__notes");
+  if (!!notes === (state === "nightly")) throw new Error("Updates (" + state + "): release notes");
+  if (notes && (!notes.querySelector("h2").textContent.startsWith("What 0.5.3 brings") || !notes.querySelector(".code__text").textContent.includes("\\n"))) throw new Error("Updates (" + state + "): notes box");
+  if (nightly) {
+    if (refused) return;
+    update.click();
+    await until("no Update dialog", () => document.querySelector("dialog[open] .dialog__text"));
+    const dlg = document.querySelector("dialog[open]");
+    if (!dlg.textContent.includes("Update to 0.5.3?") || !dlg.textContent.includes("This replaces the nightly build with the signed release 0.5.3.")) throw new Error("Updates (nightly): dialog " + dlg.textContent);
+    dlg.querySelector('[data-action="cancel"]').click();
+    await until("dialog still open", () => !document.querySelector("dialog[open]"));
+  }
+})()"""
+
+
+@pytest.mark.parametrize("state", list(UPDATES_STATES))
+def test_the_updates_section_passes_the_audit_with_an_update_available_held_back_failed_and_on_a_nightly(hub, monkeypatch, state):
+    """AUT-5 on Updates in its states (no allow-list: nothing of Updates is allowed any more), with what each shows: the
+    Version list, Check now and the primary Update to <version> in the header, the refusal, release notes, Roll back with
+    its note, the uninstall command in a code block with Copy, and the nightly sentence in the Update dialog."""
+    from filament_kit import updates
+    data = {**UPDATES, **UPDATES_STATES[state]}
+    monkeypatch.setattr(updates, "view", lambda cfg: data)
+    rows, refused = UPDATES_ROWS[state]
+    ready = UPDATES_READY % (json.dumps(state), json.dumps([rows, refused]), json.dumps(state == "nightly"))
+    fonts = ["--font-dir", os.environ["AUT5_FONT_DIR"]] if os.environ.get("AUT5_FONT_DIR") else ["--wide-font"]      # as a Linux runner draws it
+    run = _run("--url", hub, "--views", "#updates", "--ready", ready, *fonts)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert json.loads(run.stdout)["views"] == 4
+
+
+FEATURES_PRELUDE = LOGS_PRELUDE.replace("Logs: ", "Features: ").replace('.querySelector(".logs__out")', '.querySelector("main")').replace(
+    'const show = () => document.querySelector(".logs__controls .btn--primary");', 'const show = () => document.querySelector(".coll--features");')
+FEATURES_PRELUDE += """
+  const row = (n) => document.querySelector('.coll--features [data-key="' + n + '"]');
+  const button = (n) => row(n).querySelector("button");
+  const drawer = () => document.querySelector("dialog.dialog--drawer[open]");
+  const loaded = async () => { await until("no drawer", drawer); await until("the preview did not load", () => !drawer().querySelector(".skeleton")); };
+"""
+
+# a feature turned off and on again with the keyboard's own actions only: focus a button, press it (click), press Apply
+FEATURES_TURN_OFF_AND_ON = """(async () => {""" + FEATURES_PRELUDE + """
+  await unlocked();
+  const on = async () => (await (await fetch("/setup/api/state")).json()).modules.find((m) => m.name === "backup").on;
+  for (const [word, named, title, now] of [["Turn off", "Turn off Nightly backup", "Turn off Nightly backup?", false],
+                                           ["Turn on", "Turn on Nightly backup", "Turn on Nightly backup?", true]]) {
+    const b = button("backup");
+    if (b.textContent.trim() !== word || b.getAttribute("aria-label") !== named) throw new Error("Features: the button reads " + b.textContent + " / " + b.getAttribute("aria-label"));
+    b.focus();
+    b.click();
+    await loaded();
+    if (drawer().querySelector(".dialog__title").textContent !== title) throw new Error("Features: the drawer is titled " + drawer().querySelector(".dialog__title").textContent);
+    if (!drawer().contains(document.activeElement) || !document.activeElement.matches('[data-action="confirm"]')) throw new Error("Features: Apply does not have the focus");
+    if (location.hash !== "#features/backup") throw new Error("Features: the address is " + location.hash);
+    document.activeElement.click();
+    await until("the drawer did not close", () => !drawer());
+    await until("the row was not drawn again", () => button("backup").getAttribute("aria-label") !== named);
+    if (document.activeElement !== button("backup")) throw new Error("Features: the focus did not come back to the row's button");
+    if (!document.querySelector(".toast").textContent.includes("Saved; applying")) throw new Error("Features: no toast after the change");
+    if ((await on()) !== now) throw new Error("Features: the Hub did not change");
+    if (location.hash !== "#features") throw new Error("Features: the address is " + location.hash + " after closing");
+  }
+})()"""
+
+# the web feature needs an address: the drawer asks for it, refuses an empty one, and stays open for the audit
+FEATURES_DRAWER_OPEN = """(async () => {""" + FEATURES_PRELUDE + """
+  await unlocked();
+  const cards = [...document.querySelectorAll(".segmented--cards .segmented__input")];
+  if (cards.map((c) => c.value).join() !== "server,all-in-one,station,custom") throw new Error("Features: setups " + cards.map((c) => c.value));
+  if (!cards[3].checked || cards[0].checked || !cards[2].disabled) throw new Error("Features: Custom (printers are on) is not the checked setup or Weigh Station only is not off");
+  if (!document.querySelector(".card .code__text").textContent.includes("features setup weigh-station --hub ")) throw new Error("Features: no command for a Weigh Station only machine");
+  if (row("server").querySelector("button") || !row("server").textContent.includes("Always on while this page is open.")) throw new Error("Features: the Hub service row has a button");
+  if (!row("ai_intake").querySelector(".features__tag")) throw new Error("Features: no Uses AI tag");
+  button("web").focus();
+  button("web").click();
+  await loaded();
+  const field = drawer().querySelector(".field");
+  if (!field || !field.textContent.includes("Public https address of the web app")) throw new Error("Features: no address field");
+  document.activeElement.matches("input") || (() => { throw new Error("Features: the address field does not have the focus"); })();
+  drawer().querySelector('[data-action="confirm"]').click();
+  await until("no field error", () => drawer() && !drawer().querySelector(".field__error").hidden);
+})()"""
+
+
+# the same, Locked (the Hub over plain http answers no change, but the drawer only reads): the drawer of a feature with a field
+FEATURES_DRAWER_OPEN_LOCKED = """(async () => {""" + FEATURES_PRELUDE + """
+  await until("the page did not finish its first reads", () => !document.querySelector(".chip--lock .skeleton__line") && !document.querySelector('[aria-busy="true"]:not(button)'));
+  await until("the features were not drawn", () => show());
+  button("web").focus();
+  button("web").click();
+  await loaded();
+})()"""
+
+
+def test_a_feature_turns_off_and_on_again_by_keyboard_in_the_new_design(hub_change):
+    run = _run("--url", hub_change, "--views", "#features", "--ready", FEATURES_TURN_OFF_AND_ON)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert config.load()["modules"]["backup"] is True
+
+
+def test_features_and_its_preview_drawer_pass_the_audit(hub_change):
+    """AUT-5 on Features with the drawer open (a feature that needs an address), and nothing of Features allowed."""
+    run = _run("--url", hub_change, "--views", "#features", "--ready", FEATURES_DRAWER_OPEN)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert json.loads(run.stdout)["views"] == 4
+    assert not [l for l in ALLOW.read_text(encoding="utf-8").splitlines() if l.startswith("#features |")]
+
+
+def test_features_does_not_scroll_sideways_at_320_px_in_a_wide_font_with_a_long_hostname(monkeypatch, hub):
+    """The cards, the command for a Weigh Station only machine, the collection and the drawer hold long words: nothing
+    may widen the page on a runner without Segoe UI and Consolas (DejaVu is wider)."""
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "runnervm8axu0-workshop-hub-with-a-very-long-name")
+    fonts = ["--font-dir", os.environ["AUT5_FONT_DIR"]] if os.environ.get("AUT5_FONT_DIR") else ["--wide-font"]
+    run = _run("--url", hub, "--views", "#features", "--widths", "320", *fonts, "--ready", FEATURES_DRAWER_OPEN_LOCKED)
+    assert run.returncode in (0, 1), run.stdout + run.stderr
+    found = [(r["view"], r["scheme"], f["detail"]) for r in json.loads(run.stdout).get("report", [])
+             for f in r["findings"] if f["check"] == "sideways scroll"]
+    assert not found, found
+
+
+def test_no_two_hub_page_scripts_declare_the_same_top_level_name():
+    """The Hub page's scripts are classic scripts that share one global scope: a second `const cell` is a SyntaxError that
+    stops the later script, and only the page shows it."""
+    import re
+    seen: dict[str, str] = {}
+    for path in sorted((ROOT / "server" / "filament_kit" / "setup_static").glob("setup*.js")):
+        for name in re.findall(r"^(?:const|let|var|function|async function|class)\s+([A-Za-z_$][\w$]*)", path.read_text(encoding="utf-8"), re.M):
+            assert name not in seen, f"{name} is declared in {seen[name]} and in {path.name}"
+            seen[name] = path.name
+
+
+OVERVIEW_PRELUDE = """
+  const until = async (what, f, ms = 15000) => {
+    for (let t = 0; t < ms && !f(); t += 100) await new Promise((r) => setTimeout(r, 100));
+    if (!f()) throw new Error("Overview: " + what + " :: " + document.querySelector("main").innerText.slice(0, 300));
+  };
+  await until("the checks did not load", () => document.querySelector(".overview__checks .coll--checks")
+    && !document.querySelector('[aria-busy="true"]:not(button)'));
+  const text = document.querySelector("main").innerText;
+  if (/\bnull\b|undefined/.test(text)) throw new Error("Overview: a stray null or undefined: " + text.slice(0, 300));
+  if (!document.querySelector(".page-head__meta").textContent.includes("Setup:")) throw new Error("Overview: no setup in the meta line");
+  if (document.querySelectorAll(".tiles .tile").length !== 4) throw new Error("Overview: not four tiles");
+  if (!document.querySelector(".page-head__actions .btn--ghost")) throw new Error("Overview: no Run the checks again in the header");
+  if (!document.querySelector(".coll--checks .coll__group")) throw new Error("Overview: the checks are not in groups");
+"""
+
+OVERVIEW_UNLOCKED = "(async () => {" + OVERVIEW_PRELUDE + """
+  SW.setLock("unlocked", { code: %r });
+  await until("the hidden-values line stayed", () => !document.querySelector("main .banner--info"));
+})()""" % CODE
+
+# a failing check: the row that needs a look comes first, with Make the fields as the one primary button
+OVERVIEW_FAILING = "(async () => {" + OVERVIEW_PRELUDE + """
+  const first = document.querySelector(".coll--checks .coll__item:not(.coll__group)");
+  if (!first.textContent.includes("Needs a look")) throw new Error("Overview: the problem is not first: " + first.textContent);
+  if (!document.querySelector(".overview__head .status--warn")) throw new Error("Overview: no needs-a-look badge");
+  const primary = [...document.querySelectorAll("main .btn--primary")];
+  if (primary.length !== 1 || primary[0].textContent !== "Make the fields") throw new Error("Overview: the one primary button is not Make the fields");
+  if (document.querySelector(".overview__ok").open) throw new Error("Overview: the OK checks are open while a check needs a look");
+  if (!document.querySelector(".banner .actions .btn")) throw new Error("Overview: no Unlock to show while Locked");
+})()"""
+
+
+def test_overview_passes_the_audit_unlocked(hub_change):
+    run = _run("--url", hub_change, "--views", "#overview", "--ready", OVERVIEW_UNLOCKED)
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_overview_passes_the_audit_locked_with_a_failing_check(hub, monkeypatch):
+    """Locked (the all-sections test above also runs it, with no Overview line in the allow-list), with a check that needs a look."""
+    monkeypatch.setattr(cli.Spoolman, "missing_fields", lambda self: ["spoolwarden_example"])
+    run = _run("--url", hub, "--views", "#overview", "--ready", OVERVIEW_FAILING)
+    assert run.returncode == 0, run.stdout + run.stderr

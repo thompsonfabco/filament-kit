@@ -171,13 +171,15 @@ def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str 
              budget: float | None = None) -> dict:
     """Send one alert to every subscription; the ones the push service says are gone (404 / 410) are dropped.
     {"sent": how many the push services took, "failed": [what went wrong, one line each], "removed": how many were
-    dropped}. `budget` is the most seconds to spend: the subscriptions left after it are not tried."""
+    dropped}. `budget` is the most seconds to spend, counted from when the subscriptions have been read: the
+    subscriptions left after it are not tried, but the first one always is."""
+    subs = store.subs()
     deadline = None if budget is None else time.monotonic() + budget
     payload = json.dumps({"title": title, "body": body, "tag": tag, "url": url})
     dead = []
     sent, failed = 0, []
-    for ep, sub in store.subs().items():
-        if deadline is not None and time.monotonic() > deadline:
+    for n, (ep, sub) in enumerate(subs.items()):
+        if n and deadline is not None and time.monotonic() > deadline:
             failed.append(f"{urlparse(ep).hostname} not tried: out of time")
             continue
         try:

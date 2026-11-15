@@ -10,14 +10,16 @@ const day = (t) => { const d = new Date(t * 1000), p = (n) => String(n).padStart
 // first answer the chip shows Locked with a loading hint; if the Hub does not answer, it stays Locked and works.
 let trustKnown = false;
 async function loadTrust() {
-  const was = SW.lock.state;
   try { T = await api("trust"); } catch {
-    T = { ...T, trusted: was === "trusted" };       // as it was: nothing changes on a failed read
-    SW.setLock(was, { quiet: true });
+    // as it is now: nothing changes on a failed read
+    T = { ...T, trusted: SW.lock.state === "trusted" };
+    SW.setLock(SW.lock.state, { quiet: true });
     return;
   }
+  // the state is read after the answer: an unlock made while the read was out stays unlocked
+  const now = SW.lock.state;
   SW.lock.trustOffered = !!T.enabled;
-  SW.setLock(T.trusted ? "trusted" : was === "trusted" ? "locked" : was, { trustId: T.id, until: day(T.expires), quiet: !trustKnown });
+  SW.setLock(T.trusted ? "trusted" : now === "trusted" ? "locked" : now, { trustId: T.id, until: day(T.expires), quiet: !trustKnown });
   trustKnown = true;
 }
 // trusted or no longer trusted from the unlock dialog or the chip: the Devices card and the expiry follow

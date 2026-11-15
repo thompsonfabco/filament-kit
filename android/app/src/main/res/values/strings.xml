@@ -748,12 +748,14 @@
     <!-- 1=feature -->
     <string name="features_drawer_on">Turn on %1$s?</string>
     <string name="features_drawer_public_placeholder">https://hub.example/filament</string>
+    <string name="features_drawer_required">This setting is needed before the feature can be turned on.</string>
     <string name="features_drawer_public_prompt">Public https address of the web app</string>
     <string name="features_drawer_refused_server">This page belongs to the Hub service. To switch it off, run on the Hub: `sudo filament-kit features off hub`.</string>
     <!-- 1=setup -->
     <string name="features_drawer_setup">Change the setup to %1$s?</string>
     <string name="features_drawer_unchanged">Nothing to change.</string>
     <string name="features_filter_all">All</string>
+    <string name="features_filter_legend">Show features</string>
     <!-- 1=count -->
     <string name="features_filter_off">Off %1$d</string>
     <!-- 1=count -->
@@ -787,6 +789,7 @@
     <string name="features_name_remote">Remote access</string>
     <string name="features_name_server">Hub service</string>
     <string name="features_name_spoolman">Spoolman</string>
+    <string name="features_name_station">Weigh Station</string>
     <string name="features_name_updates">Automatic updates</string>
     <string name="features_name_web">Web access</string>
     <!-- 1=list -->
@@ -797,6 +800,7 @@
     <string name="features_setup_custom_line">Features chosen one by one.</string>
     <string name="features_setup_disabled">A machine with this setup has no Hub page.</string>
     <string name="features_setup_server_line">The Hub: inventory, printers, Slicer presets and this page.</string>
+    <string name="features_setup_server">Hub</string>
     <string name="features_setup_station">Weigh Station only</string>
     <!-- 1=hub_address -->
     <string name="features_setup_station_command">sudo filament-kit features setup weigh-station --hub %1$s</string>
@@ -804,6 +808,10 @@
     <string name="features_setup_station_note">A Weigh Station only machine has no Hub page. To make one, on that machine run</string>
     <string name="features_setup_title">Setup</string>
     <string name="features_turn_on">Turn on</string>
+    <!-- 1=feature -->
+    <string name="features_turn_on_named">Turn on %1$s</string>
+    <!-- 1=feature -->
+    <string name="features_turn_off_named">Turn off %1$s</string>
     <string name="features_uses_ai">Uses AI</string>
     <string name="flash_board">Board</string>
     <!-- 1=port 2=product_name -->
@@ -880,6 +888,7 @@
     <string name="logs_lines">Lines</string>
     <string name="logs_locked">Logs hold addresses and serial numbers, so reading them needs the setup code.</string>
     <string name="logs_none">No services are switched on.</string>
+    <string name="logs_read_error">Could not read the log.</string>
     <string name="logs_service">Service</string>
     <string name="logs_show_again">Show again</string>
     <string name="logs_truncated">Only the end is shown: the rest is too long for this page.</string>
@@ -924,8 +933,15 @@
     <string name="overview_all_ok">Everything checked out.</string>
     <!-- 1=count -->
     <string name="overview_badge_ok">%1$d OK</string>
+    <!-- 1=count -->
+    <plurals name="overview_badge_look">
+        <item quantity="one">%1$d needs a look</item>
+        <item quantity="other">%1$d need a look</item>
+    </plurals>
     <string name="overview_checks_title">Checks</string>
     <string name="overview_col_check">Check</string>
+    <string name="overview_command">Command</string>
+    <string name="overview_command_name">command</string>
     <string name="common_fix">Fix</string>
     <string name="common_field_status">Status</string>
     <!-- 1=reason -->
@@ -944,6 +960,7 @@
     <!-- 1=version -->
     <string name="overview_meta_version">filament-kit %1$s</string>
     <string name="overview_run_checks">Run the checks again</string>
+    <string name="overview_setup_hub">Hub</string>
     <!-- 1=count -->
     <plurals name="overview_show_ok">
         <item quantity="one">Show %1$d check that is OK</item>
@@ -952,12 +969,24 @@
     <!-- 1=count -->
     <string name="overview_tile_devices_paired">%1$d paired</string>
     <!-- 1=count -->
+    <plurals name="overview_tile_devices_readers">
+        <item quantity="one">%1$d Tag Reader</item>
+        <item quantity="other">%1$d Tag Readers</item>
+    </plurals>
+    <!-- 1=count -->
+    <string name="overview_tile_printers_connected">%1$d connected</string>
+    <!-- 1=count -->
     <string name="overview_tile_printers_not_configured">%1$d not configured</string>
+    <string name="overview_tile_printers_none">No printers yet</string>
+    <!-- 1=count -->
+    <string name="overview_tile_printers_offline">%1$d offline</string>
     <!-- 1=limit -->
     <string name="overview_tile_reader_limit">Reads per day: %1$s</string>
     <string name="overview_tile_reader_line">Cloud reads used today</string>
     <!-- 1=used 2=limit -->
     <string name="overview_tile_reader_value">%1$s of %2$s</string>
+    <string name="overview_tile_recent_error">Could not read</string>
+    <string name="overview_tiles_label">Summary</string>
     <!-- 1=id -->
     <string name="spool_title">Spool %1$s</string>
     <string name="overview_todo_key">Set the Anthropic API key, so the Label Reader can use Cloud.</string>
@@ -975,6 +1004,11 @@
     <string name="presets_build_failed">The last preset build failed: %1$s</string>
     <string name="presets_build_none">No build yet.</string>
     <string name="presets_build_now">Build now</string>
+    <!-- 1=stamp 2=presets 3=count -->
+    <plurals name="presets_build_summary_plain">
+        <item quantity="one">Last build %1$s: %2$s presets, %3$d problem.</item>
+        <item quantity="other">Last build %1$s: %2$s presets, %3$d problems.</item>
+    </plurals>
     <!-- 1=stamp 2=presets 3=orca 4=count -->
     <plurals name="presets_build_summary">
         <item quantity="one">Last build %1$s: %2$s presets, %3$s for Orca Slicer, %4$d problem.</item>
@@ -987,8 +1021,15 @@
     <string name="presets_error">Could not read the Slicer presets. %1$s</string>
     <!-- 1=reason -->
     <string name="presets_lines_error">Could not read the product lines. %1$s</string>
+    <!-- 1=vendor 2=line -->
+    <string name="presets_line_title">%1$s %2$s</string>
     <string name="presets_lines_none">No product lines yet. They are made from the filaments in Spoolman at the next build or when spools are added.</string>
     <string name="presets_lines_title">Product lines</string>
+    <!-- 1=stamp 2=count -->
+    <plurals name="presets_meta_build_plain">
+        <item quantity="one">Last build %1$s · %2$d preset</item>
+        <item quantity="other">Last build %1$s · %2$d presets</item>
+    </plurals>
     <!-- 1=stamp 2=count 3=orca -->
     <plurals name="presets_meta_build">
         <item quantity="one">Last build %1$s · %2$d preset, %3$s for Orca Slicer</item>
@@ -1012,6 +1053,8 @@
     <string name="presets_restore_deleted">Bring back deleted presets</string>
     <string name="presets_set_parent">Set parent</string>
     <!-- 1=name -->
+    <string name="presets_set_parent_for">Set parent for %1$s</string>
+    <!-- 1=name -->
     <string name="presets_stale_bambu">Delete by hand in Bambu Studio: %1$s</string>
     <!-- 1=name -->
     <string name="presets_stale_orca">Delete by hand in Orca Slicer: %1$s</string>
@@ -1031,10 +1074,13 @@
     </plurals>
     <!-- 1=target 2=name 3=file 4=keys -->
     <string name="presets_updates_line">%1$s: %2$s (in your file %3$s): %4$s</string>
+    <!-- 1=target 2=name 3=keys -->
+    <string name="presets_updates_line_nofile">%1$s: %2$s: %3$s</string>
     <string name="presets_updates_none">No updates. Presets already in your slicers are never replaced on their own.</string>
     <string name="presets_updates_nothing">No updates to accept.</string>
     <string name="presets_updates_show">Show what would change</string>
     <string name="presets_updates_stale">The updates changed since this list was shown. Show them again.</string>
+    <string name="presets_updates_title">Updates</string>
     <!-- 1=count 2=lines 3=accepted -->
     <plurals name="presets_updates_summary">
         <item quantity="one">%1$d update on %2$s line%3$s. Presets already in your slicers are never replaced unless you accept here.</item>
@@ -1056,6 +1102,9 @@
     <string name="printers_add_address_placeholder">192.0.2.40 or printer.local</string>
     <!-- 1=address 2=reported 3=expected -->
     <string name="printers_add_error_itself">The printer at %1$s calls itself %2$s, not %3$s. Check the address.</string>
+    <string name="printers_add_error_network">On the printer: Settings > Network.</string>
+    <string name="printers_addon_copy_name">Copy the install commands</string>
+    <string name="printers_scanning_own">Scanning the Hub\'s network for Klipper printers…</string>
     <string name="printers_add_error_serial">filament-kit could not read the serial. Type it in: on the printer, Settings > Device.</string>
     <string name="printers_add_klipper_placeholder">voron.example</string>
     <string name="printers_add_serial_hint">Read from the printer when left empty.</string>
@@ -1226,6 +1275,16 @@
     <string name="printers_result_klipper_ok">Test passed: Moonraker at %1$s:%2$s answers; Klipper is %3$s.</string>
     <!-- 1=host 2=port -->
     <string name="printers_result_klipper_other">Test failed: %1$s:%2$s answers, but not as Moonraker.</string>
+    <string name="printers_result_locked_bambu_differs">Test failed: the printer answers, but its certificate differs from the pinned one. If the printer was not reset, check its address before adding it again.</string>
+    <string name="printers_result_locked_bambu_new">Test passed: the printer answers. Its certificate is pinned at the first connection.</string>
+    <!-- 1=error_type -->
+    <string name="printers_result_locked_bambu_none">Test failed: no answer from the printer (%1$s). Check that it is on.</string>
+    <string name="printers_result_locked_bambu_pinned">Test passed: the printer answers; its certificate matches the pinned one.</string>
+    <string name="printers_result_locked_klipper_key">Moonraker answers but wants an API key. Set it in this printer\'s details.</string>
+    <string name="printers_result_locked_klipper_none">Test failed: no answer from Moonraker. Check that the printer is on and the address.</string>
+    <!-- 1=state -->
+    <string name="printers_result_locked_klipper_ok">Test passed: Moonraker answers; Klipper is %1$s.</string>
+    <string name="printers_result_locked_klipper_other">Test failed: the address answers, but not as Moonraker.</string>
     <!-- 1=subnet 2=found -->
     <string name="printers_result_scan_found">Found on %1$s: %2$s</string>
     <!-- 1=subnet -->
@@ -1265,6 +1324,39 @@
     <string name="printers_use_body">Found at %1$s:%2$s.</string>
     <!-- 1=name -->
     <string name="printers_use_title">Use %1$s</string>
+    <!-- 1=name -->
+    <string name="printers_collect_name">Collect a report for %1$s</string>
+    <!-- 1=model -->
+    <string name="printers_detected_bare">Detected %1$s.</string>
+    <!-- 1=model -->
+    <string name="printers_detected_bare_unconfirmed">Detected %1$s (not confirmed by the printer).</string>
+    <!-- 1=name -->
+    <string name="printers_dismiss_name">Dismiss %1$s</string>
+    <!-- 1=reason -->
+    <string name="printers_error">Could not read the printers. %1$s</string>
+    <string name="printers_fix_klippy">Klipper is not ready on the printer. Check it in Mainsail or Fluidd.</string>
+    <string name="printers_fix_not_configured_klipper">Use this printer to add it.</string>
+    <string name="printers_fix_unauthorized">Moonraker refused the API key. Replace it in this printer\'s details.</string>
+    <!-- 1=label -->
+    <string name="printers_load_confirmed_plain">Confirmed (%1$s)</string>
+    <string name="printers_load_idle">No mapping by loading filament is running for this printer.</string>
+    <!-- 1=state -->
+    <string name="printers_map_state">Slot mapping: %1$s.</string>
+    <!-- 1=count -->
+    <string name="printers_meta_connected">%1$d connected</string>
+    <!-- 1=count -->
+    <string name="printers_meta_offline">%1$d offline</string>
+    <string name="printers_note_unknown_model">Model not known; slots are read as a generic Klipper printer.</string>
+    <string name="printers_reports_locked">Saved reports show once this page is unlocked.</string>
+    <string name="printers_reports_made">Made</string>
+    <!-- 1=grams -->
+    <string name="printers_slot_grams">%1$s g</string>
+    <!-- 1=name -->
+    <string name="printers_test_name">Test connection to %1$s</string>
+    <!-- 1=name -->
+    <string name="printers_testing_name">Testing the connection to %1$s…</string>
+    <!-- 1=name -->
+    <string name="printers_use_name">Use this printer: %1$s</string>
     <string name="recent_ask_button">Ask the Label Reader</string>
     <string name="recent_ask_hint">The Label Reader reads the photos again with your note and suggests changes. Nothing changes until you accept.</string>
     <string name="recent_ask_label">What is wrong?</string>
@@ -1595,6 +1687,7 @@
     <string name="settings_voice_saved_espeak">Saved: espeak-ng.</string>
     <string name="settings_voice_saved_piper">Saved: Piper. The Weigh Station downloads it next time it is idle.</string>
     <string name="updates_check">Check now</string>
+    <string name="updates_code_caption">shell · run on the Hub</string>
     <string name="updates_dialog_rollback_body">filament-kit stops while it installs and starts again by itself. Settings and data stay.</string>
     <string name="updates_roll_back">Roll back</string>
     <!-- 1=version -->
@@ -1608,8 +1701,10 @@
     <string name="updates_error">Could not read the update state. %1$s</string>
     <!-- 1=version -->
     <string name="updates_failed">Installing %1$s failed before. Automatic updates wait for a newer release; Update here tries it again.</string>
+    <string name="updates_failed_label">Failed before</string>
     <!-- 1=version -->
     <string name="updates_held">%1$s was rolled back. Automatic updates skip it; Update here installs it.</string>
+    <string name="updates_held_label">Held back</string>
     <string name="updates_installed">Installed</string>
     <string name="updates_last_checked">Last checked</string>
     <string name="updates_latest">Latest release</string>
@@ -1629,6 +1724,7 @@
     <string name="updates_rollback_text">Goes back to %1$s, the version this one replaced. Settings and data stay.</string>
     <!-- 1=schedule -->
     <string name="updates_schedule">Checked by itself %1$s (Automatic updates).</string>
+    <string name="updates_schedule_label">Checking</string>
     <string name="updates_schedule_off">Not checked by itself: Automatic updates are switched off.</string>
     <!-- 1=version -->
     <string name="updates_update">Update to %1$s</string>
@@ -2708,7 +2804,6 @@
     <string name="recent_error_degrees_max">Enter degrees below 500.</string>
     <string name="recent_error_material">Enter a material.</string>
     <string name="recent_error_price">Enter a price above 0.</string>
-    <string name="recent_error_range">Enter a range like 190-230.</string>
     <string name="recent_keep_none">The Hub keeps no records of additions. Set how many to keep in Settings on the Hub page.</string>
     <string name="recent_leave_thing">this record</string>
     <string name="recent_mark_estimated">Estimated: check this</string>

@@ -964,6 +964,8 @@ def test_the_page_loads_both_scripts_under_its_csp(app):
     c = client(app)
     page = c.get("/setup")
     assert "/setup/setup.js" in page.text and "/setup/setup_tabs.js" in page.text
+    for n in ("overview", "features", "updates", "settings", "devices"):      # one script per section
+        assert f"/setup/setup_{n}.js" in page.text and c.get(f"/setup/setup_{n}.js").status_code == 200
     assert "script-src 'self'" in page.headers["content-security-policy"]
     r = c.get("/setup/setup_tabs.js")
     assert r.status_code == 200 and "javascript" in r.headers["content-type"]
@@ -971,21 +973,22 @@ def test_the_page_loads_both_scripts_under_its_csp(app):
 
 
 def test_the_tab_script_never_uses_innerhtml_or_talks_elsewhere():
-    lines = (STATIC / "setup_tabs.js").read_text(encoding="utf-8").splitlines()
+    lines = [ln for name in ("setup_tabs.js", "setup_overview.js", "setup_features.js", "setup_updates.js", "setup_settings.js", "setup_devices.js")
+             for ln in (STATIC / name).read_text(encoding="utf-8").splitlines()]
     src = " ".join(ln for ln in lines if not ln.lstrip().startswith("//"))
     assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|fetch\(", src)
     assert "localStorage" not in src and "sessionStorage" not in src
 
 
 def test_the_devices_card_says_when_a_pairing_is_claimed():
-    src = (STATIC / "setup.js").read_text(encoding="utf-8")
+    src = (STATIC / "setup_devices.js").read_text(encoding="utf-8")
     assert "watchPaired(box, known, r.expires_in)" in src and "`Paired: ${fresh.name}.`" in src
     assert 'startJob(box, "station_pair")' in src
 
 
 def test_the_scripts_never_hand_a_null_to_replacechildren():
     """It prints "null" on the page. `fill` and h() skip it."""
-    for name in ("setup.js", "setup_tabs.js"):
+    for name in ("setup.js", "setup_tabs.js", "setup_overview.js", "setup_features.js", "setup_updates.js", "setup_settings.js", "setup_devices.js"):
         src = (STATIC / name).read_text(encoding="utf-8")
         for m in re.finditer(r"\.replaceChildren\(", src):
             depth, i = 1, m.end()

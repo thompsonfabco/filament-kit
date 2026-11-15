@@ -177,4 +177,45 @@ class AddFlowsTest {
         assertEquals(setOf(id), flows.openIds())
         assertEquals(com.thompsonfabco.filamentkit.R.string.add_preview_checking, flows.writingReason(id))
     }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.failedAdd(flows: AddFlows): String {
+        val id = flows.start(manual = true)
+        val vm = flows.get(id)
+        advanceUntilIdle()
+        vm.newFilament()
+        vm.setText(0, "vendor", "SUNLU"); vm.setText(0, "name", "PETG"); vm.setText(0, "material", "PETG")
+        vm.setNumber(0, "net", 1000.0); vm.setNumber(0, "tare", 213.0)
+        vm.preview()
+        advanceUntilIdle()
+        api.addFailures += com.thompsonfabco.filamentkit.net.ApiError(409, "spoolman_error", "Spoolman refused.")
+        vm.confirm()
+        advanceUntilIdle()
+        return id
+    }
+
+    @Test fun aFailedAddToldAwayFromItsScreenIsReleasedAndItsDraftStays() = runTest(dispatcher) {
+        val flows = flows()
+        val id = failedAdd(flows)
+        assertTrue("open until the failure is told", id in flows.openIds())
+        flows.dropAfterFailure(id)
+        assertFalse(id in flows.openIds())
+        assertNotNull("the draft is kept", store.get(id))
+    }
+
+    @Test fun anAddThatIsWritingAgainIsNotReleasedByAnOldFailure() = runTest(dispatcher) {
+        val flows = flows()
+        val id = flows.start(manual = true)
+        val vm = flows.get(id)
+        advanceUntilIdle()
+        vm.newFilament()
+        vm.setText(0, "vendor", "SUNLU"); vm.setText(0, "name", "PETG"); vm.setText(0, "material", "PETG")
+        vm.setNumber(0, "net", 1000.0); vm.setNumber(0, "tare", 213.0)
+        api.gate = CompletableDeferred()
+        vm.preview()
+        advanceUntilIdle()
+        flows.dropAfterFailure(id)
+        assertTrue(id in flows.openIds())
+        api.gate!!.complete(Unit)
+        advanceUntilIdle()
+    }
 }
