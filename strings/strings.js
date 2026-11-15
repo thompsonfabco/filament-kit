@@ -1294,7 +1294,7 @@ window.SW_TEXT = Object.freeze({
   "settings_restore_summary_files": { "one": "Contains {count} file", "other": "Contains {count} files" },
   "settings_restore_summary_files_db": { "one": "Contains {count} file, and the Spoolman database", "other": "Contains {count} files, and the Spoolman database" },
   "common_value_none": "none",
-  "settings_restore_summary_other_host": "The backup is from another computer name: the Hub gets a new certificate, so phones and the PC sync pair again.",
+  "settings_restore_summary_other_host": "The backup is from another computer name: the Hub gets a new certificate, so phones and Slicer Sync pair again.",
   "settings_restore_summary_other_hub": "another Hub",
   "settings_restore_summary_replaces": "This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first.",
   "settings_restore_summary_sha": "Checked copy: SHA-256 {hash}. Only this copy is restored.",
