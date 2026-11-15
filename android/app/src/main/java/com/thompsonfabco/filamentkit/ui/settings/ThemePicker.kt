@@ -32,8 +32,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.R
@@ -105,34 +107,43 @@ private fun ThemeTile(look: Look, selected: Boolean, enabled: Boolean, dark: Boo
     val space = SpoolwardenTheme.space
     val shape = SpoolwardenTheme.shapes.r
     val outline = if (selected) 2.dp else SpoolwardenTheme.sizes.hairline
-    Column(
+    val said = if (selected) stringResource(R.string.a11y_theme_tile, stringResource(look.nameRes), stringResource(look.lineRes)) else null
+    val mark = space.s4
+    Box(
         modifier
             .clip(shape)
             .background(if (selected) colors.accentSoft else colors.surface)
             .border(outline, if (selected) colors.accentText else colors.borderStrong, shape)
             .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            // the chosen tile is read as one phrase; the others read their own words
+            .then(if (said != null) Modifier.clearAndSetSemantics { contentDescription = said } else Modifier)
             .padding(space.s3),
-        verticalArrangement = Arrangement.spacedBy(space.s2),
     ) {
-        if (enabled) {
-            val tokens = SpoolwardenTokens.of(look)
-            LookPreview(tokens, if (dark) tokens.dark else tokens.light, Modifier.fillMaxWidth().aspectRatio(4f / 3f))
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+        Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
+            if (enabled) {
+                val tokens = SpoolwardenTokens.of(look)
+                LookPreview(tokens, if (dark) tokens.dark else tokens.light, Modifier.fillMaxWidth().aspectRatio(4f / 3f))
+            }
+            // the name wraps at a large font size, it is never cut; with no preview the mark sits beside it
             Text(
-                stringResource(look.nameRes), Modifier.weight(1f),
+                stringResource(look.nameRes), Modifier.fillMaxWidth().padding(end = if (enabled) 0.dp else mark + space.s2),
                 color = if (enabled) colors.text else colors.muted, style = MaterialTheme.typography.titleSmall,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
+            Text(
+                stringResource(if (enabled) look.lineRes else R.string.theme_unavailable_line),
+                color = colors.muted, style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        // the check mark of the chosen tile, or the hollow circle of one not built, in the top right corner
+        Box(Modifier.align(Alignment.TopEnd).testTag("theme-tile-mark")) {
             when {
-                selected -> SwIcon(R.drawable.sw_ic_check, null, size = SwIconSize.Small, tint = colors.accentText)
-                !enabled -> Box(Modifier.size(space.s4).border(SpoolwardenTheme.sizes.hairline, colors.borderStrong, CircleShape))
+                selected -> SwIcon(
+                    R.drawable.sw_ic_check, null, size = SwIconSize.Small, tint = colors.accentText,
+                    modifier = Modifier.background(colors.accentSoft, CircleShape),
+                )
+                !enabled -> Box(Modifier.size(mark).border(SpoolwardenTheme.sizes.hairline, colors.borderStrong, CircleShape))
             }
         }
-        Text(
-            stringResource(if (enabled) look.lineRes else R.string.theme_unavailable_line),
-            color = colors.muted, style = MaterialTheme.typography.bodySmall,
-        )
     }
 }
 
@@ -141,7 +152,7 @@ private fun ThemeTile(look: Look, selected: Boolean, enabled: Boolean, dark: Boo
  * collection form of its `collection` profile. Decoration only; the tile's words carry the meaning.
  */
 @Composable
-private fun LookPreview(tokens: ThemeTokens, colors: SpoolwardenColors, modifier: Modifier) {
+internal fun LookPreview(tokens: ThemeTokens, colors: SpoolwardenColors, modifier: Modifier) {
     val rS = tokens.radius.rS
     val hairline = SpoolwardenTheme.sizes.hairline
     Canvas(modifier.clip(RoundedCornerShape(rS)).border(hairline, colors.border, RoundedCornerShape(rS))) {
@@ -163,7 +174,7 @@ private fun DrawScope.drawLookPreview(tokens: ThemeTokens, c: SpoolwardenColors,
     val bar = h * 0.14f
     drawRect(c.surface, Offset.Zero, Size(w, bar))
     drawRect(c.border, Offset(0f, bar - line), Size(w, line))
-    block(w * 0.04f, bar * 0.3f, w * 0.12f, bar * 0.4f, c.accent)
+    block(w * 0.04f, bar * 0.3f, w * 0.12f, bar * 0.4f, c.accentText)
     block(w * 0.8f, bar * 0.3f, w * 0.16f, bar * 0.4f, c.surface3)
 
     // the navigation form
@@ -212,7 +223,7 @@ private fun DrawScope.drawLookPreview(tokens: ThemeTokens, c: SpoolwardenColors,
         CollectionStyle.Rows -> repeat(4) { i ->
             val ry = y + tall * 0.25f * i
             drawRect(c.border, Offset(x, ry + tall * 0.2f), Size(room, line))
-            drawCircle(c.accent, tall * 0.05f, Offset(x + room * 0.04f, ry + tall * 0.1f))
+            drawCircle(c.accentText, tall * 0.05f, Offset(x + room * 0.04f, ry + tall * 0.1f))
             block(x + room * 0.12f, ry + tall * 0.07f, room * 0.4f, tall * 0.07f, c.muted)
         }
     }
