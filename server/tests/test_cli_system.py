@@ -380,7 +380,7 @@ def test_remote_firewall_starts_with_the_sentence_that_nothing_is_changed(capsys
     monkeypatch.setattr(remote, "settings", lambda cfg: {})
     monkeypatch.setattr(remote, "firewall_text", lambda s, r: "RULES")
     rc, out, _ = run(capsys, ["remote", "firewall"])
-    assert rc == 0 and out.startswith("filament-kit never changes your firewall or router. These are the rules to add:\n")
+    assert rc == 0 and out.startswith("Spoolwarden never changes your firewall or router. These are the rules to add:\n")
     assert out.rstrip().endswith("RULES")
 
 
@@ -616,10 +616,7 @@ def _design_commands() -> list[str]:
 _RENAME_STEPS = {
     r"| `pair [--slicer-sync \| --weigh-station] [--text]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |":
     r"| `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |",
-    "| `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |":
-    "| `spoolman fields` | Make the kit's extra fields in Spoolman | Overview, Make the fields |",
-    "| `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |":
-    "| `uninstall [--purge]` | Remove filament-kit (asks) | Updates, footer line |"}
+}
 
 
 def _design_rows() -> list[str]:

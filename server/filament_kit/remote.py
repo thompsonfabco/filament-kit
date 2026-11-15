@@ -304,6 +304,6 @@ def firewall(cfg: dict) -> int:
                      "/opt/filament-kit/resources/remote)")
         return output.FAILED
     output.emit({"text": text})
-    output.out("filament-kit never changes your firewall or router. These are the rules to add:")
+    output.out("Spoolwarden never changes your firewall or router. These are the rules to add:")
     print(text)
     return 0

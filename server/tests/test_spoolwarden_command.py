@@ -52,6 +52,16 @@ def test_the_wrapper_prints_the_note_on_stderr_only_and_passes_everything_else_t
 
 
 @needs_bash
+def test_the_wrapper_keeps_each_argument_whole_spaces_and_empty_ones_included(tmp_path):
+    body = 'printf "%s|" "$#" "$@"; echo'
+    tools = _tools(tmp_path, body)
+    args = ["printer", "test", "Bench by the door", ""]
+    direct = _run(tools["spoolwarden"], *args)
+    wrapped = _run(tools["filament-kit"], *args)
+    assert direct.stdout == wrapped.stdout == "4|printer|test|Bench by the door||\n"
+
+
+@needs_bash
 def test_the_wrapper_note_is_one_line_and_the_command_script_has_none(tmp_path):
     assert _text("install/filament-kit-wrapper.sh").count("is now called spoolwarden") == 1
     assert "is now called" not in _text("install/spoolwarden-cli.sh")

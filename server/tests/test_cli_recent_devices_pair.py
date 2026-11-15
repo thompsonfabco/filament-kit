@@ -672,7 +672,7 @@ def test_pair_prints_the_qr_the_instruction_the_code_the_fingerprint_and_the_exp
     qr_rows = [i for i, ln in enumerate(lines) if ln.startswith(ESC + "[30;47m")]
     assert rc == 0 and qr_rows and qr_rows == list(range(qr_rows[0], qr_rows[-1] + 1))
     tail = [ln for ln in lines[qr_rows[-1] + 1:] if ln]
-    assert tail[0] == "Open the filament-kit app and scan this code, or type the pairing code."
+    assert tail[0] == "Open the Spoolwarden app and scan this code, or type the pairing code."
     assert re.fullmatch(r"Pairing code: \d{3} \d{3}", tail[1])
     assert tail[2] == "Certificate fingerprint (the phone asks for two groups of it):"
     g = fingerprint_groups()
@@ -696,7 +696,7 @@ def test_pair_text_has_no_qr_and_the_link_alone_on_its_line(capsys, monkeypatch,
     rc, out, _ = run(capsys, "pair", "--text")
     lines = out.splitlines()
     assert rc == 0 and ESC not in out
-    assert lines[0] == "Open the filament-kit app and type the pairing code, or give it this link:"
+    assert lines[0] == "Open the Spoolwarden app and type the pairing code, or give it this link:"
     assert lines[1].startswith("fkit://pair?") and " " not in lines[1]
     assert lines[2].startswith("Pairing code: ") and lines[-1] == "Paired: phone."
 
@@ -728,7 +728,7 @@ def test_plain_is_text_without_a_qr(capsys, monkeypatch, waiting):
     monkeypatch.setattr(cli, "_qr_text", lambda payload: pytest.fail("no QR code with --plain"))
     waiting["steps"] = [lambda: pairing.redeem_code(pending_code())]
     rc, out, _ = run(capsys, "--plain", "pair")
-    assert rc == 0 and out.splitlines()[0].startswith("Open the filament-kit app and type the pairing code")
+    assert rc == 0 and out.splitlines()[0].startswith("Open the Spoolwarden app and type the pairing code")
     assert ESC not in out and "\r" not in out and out.isascii()
 
 

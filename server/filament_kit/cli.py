@@ -200,11 +200,11 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool 
         output.out(pr.qr)
     elif text:
         # no terminal (an install log): the link as text, for a phone that gets it some other way
-        output.out("Open the filament-kit app and type the pairing code, or give it this link:")
+        output.out("Open the Spoolwarden app and type the pairing code, or give it this link:")
         output.out(pr.qr)
     else:
         print(_qr_text(pr.qr), flush=True)
-        output.out("Open the filament-kit app and scan this code, or type the pairing code.")
+        output.out("Open the Spoolwarden app and scan this code, or type the pairing code.")
     output.out(f"Pairing code: {pr.code[:3]} {pr.code[3:]}")
     output.out("Certificate fingerprint (" + ("the phone asks for two groups of it" if not (slicer_sync or weigh_station)
                else f"check it matches the one the {'Slicer Sync' if slicer_sync else 'Weigh Station'} shows") + "):")
@@ -1907,7 +1907,7 @@ def _printer_do(p, letter: str) -> bool:
         else:
             output.out("Unchanged.")
     elif letter == "x":
-        stop = _confirm(f"Clear the Moonraker API key of {name}? filament-kit then connects without a key. If Moonraker "
+        stop = _confirm(f"Clear the Moonraker API key of {name}? Spoolwarden then connects without a key. If Moonraker "
                         "asks for one, the printer's test says so until a key is set.",
                         f"clearing the API key of {name}", yes=False, ask=_ask)
         if stop is None:
@@ -1921,7 +1921,7 @@ def _printer_do(p, letter: str) -> bool:
         else:
             what = ("its Moonraker API key, if one is saved." if p.family == "klipper" else
                     "its Access Code. To use it again, add it again.")
-            stop = _confirm(f"Forget {name}? filament-kit stops connecting to it and deletes {what}",
+            stop = _confirm(f"Forget {name}? Spoolwarden stops connecting to it and deletes {what}",
                             f"forgetting {name}", yes=False, ask=_ask)
             word = "Forgot"
         if stop is None:
@@ -3703,10 +3703,10 @@ def cmd_printer_forget(arg: str, yes: bool = False) -> int:
     if row is None:
         return output.USAGE
     if row["family"] == "klipper":
-        question = (f"Forget {row['name']}? filament-kit stops connecting to it and deletes its Moonraker API key, if one "
+        question = (f"Forget {row['name']}? Spoolwarden stops connecting to it and deletes its Moonraker API key, if one "
                     "is saved.")
     else:
-        question = (f"Forget {row['name']}? filament-kit stops connecting to it and deletes its Access Code. To use it "
+        question = (f"Forget {row['name']}? Spoolwarden stops connecting to it and deletes its Access Code. To use it "
                     "again, add it again.")
     stop = _confirm(question, f"forgetting {row['name']}", yes=yes)
     if stop is not None:
@@ -3797,7 +3797,7 @@ def cmd_printer_api_key(arg: str, api_key: str | None = None, clear: bool = Fals
         output.error("--clear and --api-key do not go together.", "use one of them.")
         return output.USAGE
     if clear:
-        stop = _confirm(f"Clear the Moonraker API key of {row['name']}? filament-kit then connects without a key. If "
+        stop = _confirm(f"Clear the Moonraker API key of {row['name']}? Spoolwarden then connects without a key. If "
                         "Moonraker asks for one, the printer's test says so until a key is set.",
                         f"clearing the API key of {row['name']}", yes=yes)
         if stop is not None:
@@ -4980,7 +4980,7 @@ def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
         target = updates._read_state().get("previous")
         if not isinstance(target, str) or not updates._kept(target):
             return None
-        return _confirm(f"Roll back to {target}? filament-kit stops while it installs and starts again by itself. "
+        return _confirm(f"Roll back to {target}? Spoolwarden stops while it installs and starts again by itself. "
                         "Settings and data stay.", "rolling back", yes=False)
     try:
         info = updates.check_info(cfg)
@@ -4988,7 +4988,7 @@ def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
         return None
     if not info["newer"]:
         return None
-    return _confirm(f"Update to {info['latest']}? filament-kit stops while it installs and starts again by itself. "
+    return _confirm(f"Update to {info['latest']}? Spoolwarden stops while it installs and starts again by itself. "
                     "Settings and data stay. The version before is kept, so you can roll back.", "updating", yes=False)
 
 
@@ -5027,10 +5027,10 @@ def cmd_uninstall(purge: bool, run=None, yes: bool = False) -> int:
                      cmd="sudo ./uninstall.sh" + (" --purge" if purge else ""))
         return 1
     if purge:
-        stop = _confirm("This also deletes everything filament-kit keeps on this machine. Type purge to go on: ",
-                        "removing filament-kit and deleting everything it keeps", yes=yes, word="purge")
+        stop = _confirm("This also deletes everything Spoolwarden keeps on this machine. Type purge to go on: ",
+                        "removing Spoolwarden and deleting everything it keeps", yes=yes, word="purge")
     else:
-        stop = _confirm("Remove filament-kit from this machine? Its data stays unless you add --purge.",
+        stop = _confirm("Remove Spoolwarden from this machine? Its data stays unless you add --purge.",
                         "removing filament-kit", yes=yes)
     if stop is not None:
         return stop
@@ -6150,9 +6150,9 @@ _HELP_GROUPS = [('Everyday',
    ('remote', 'Remote access: certificate and firewall rules'),
    ('setup-code', "The Hub page's address and setup code"),
    ('certificate', "The Hub's certificate and its fingerprint"),
-   ('spoolman', "Spoolman: its address and the kit's extra fields"),
-   ('update', 'Check, install or roll back filament-kit'),
-   ('uninstall', 'Remove filament-kit from this machine'),
+   ('spoolman', "Spoolman: its address and Spoolwarden's extra fields"),
+   ('update', 'Check, install or roll back Spoolwarden'),
+   ('uninstall', 'Remove Spoolwarden from this machine'),
    ('logs', "The end of a service's log")])]
 
 _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check', '{nav_overview}'),
@@ -6241,12 +6241,12 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`remote get-certificate`', 'Get the public certificate now', '{settings_network_certificate}'),
  ('`setup-code [--new] [--revoke-trusted]`', 'Hub page address and setup code', '{unlock_field_label}, {devices_trusted_title}'),
  ('`certificate`', "Make the Hub's certificate if missing; print its fingerprint", '(none)'),
- ('`spoolman fields`', "Make the kit's extra fields in Spoolman", '{nav_overview}, {overview_make_fields}'),
+ ('`spoolman fields`', "Make Spoolwarden's extra fields in Spoolman", '{nav_overview}, {overview_make_fields}'),
  ('`spoolman address [<url>]`',
   'Show or change the Spoolman in use (checked before saving)',
   '{nav_settings} > {settings_group_general}, {settings_general_spoolman}'),
  ('`update [--check \\| --rollback] [--scheduled]`', 'Updates', '{nav_updates}'),
- ('`uninstall [--purge]`', 'Remove filament-kit (asks)', '{nav_updates}, footer line'),
+ ('`uninstall [--purge]`', 'Remove Spoolwarden (asks)', '{nav_updates}, footer line'),
  ('`logs [<service>] [--lines 50\\|100\\|200]`', "The end of a service's log", '{nav_logs}'),
  ('`add`', 'Prints where spools are added', '(none)'),
  ('`spool`', 'Prints where spools are opened, tagged and moved', '(none)'),
@@ -6633,9 +6633,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
     _add_recent(sub, "intake", "the old spelling of recent", alias=True)
     sub.add_parser("ensure-fields", help="the old spelling of spoolman fields")
-    sm = sub.add_parser("spoolman", help="Spoolman: its address and the kit's extra fields")
+    sm = sub.add_parser("spoolman", help="Spoolman: its address and Spoolwarden's extra fields")
     smsub = sm.add_subparsers(dest="spoolman_cmd", required=True)
-    smsub.add_parser("fields", help="make the kit's extra fields in Spoolman")
+    smsub.add_parser("fields", help="make Spoolwarden's extra fields in Spoolman")
     sma = smsub.add_parser("address", help="show the Spoolman in use, or check an address and use it (root)")
     sma.add_argument("url", nargs="?", help="the new address, e.g. http://spoolman.example:7912")
     lg = sub.add_parser("logs", help="the end of a service's log (root)")
@@ -7033,7 +7033,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return remote.firewall(cfg)
         if "remote" in modules.enabled(cfg) and (_no_systemd() or _is_root()):     # else `issue` says what is wrong
             stop = _confirm("Get the certificate now? Port 80 on your router must reach this Hub while it runs. "
-                            "filament-kit never changes your firewall or router.", "getting the certificate",
+                            "Spoolwarden never changes your firewall or router.", "getting the certificate",
                             yes=args.yes)
             if stop is not None:
                 return stop

@@ -645,9 +645,9 @@ def test_dismiss_an_added_printer_points_to_forget(capsys):
     assert rc == 2 and err.splitlines()[1] == 'Fix: sudo spoolwarden printer forget "Garage Voron"'
 
 
-FORGET = [("printer forget workshop", f"Forget Workshop X1? filament-kit stops connecting to it and deletes its Access "
+FORGET = [("printer forget workshop", f"Forget Workshop X1? Spoolwarden stops connecting to it and deletes its Access "
                                       "Code. To use it again, add it again. [y/N] ", "Forgot Workshop X1.", X1),
-          ("printer forget garage", "Forget Garage Voron? filament-kit stops connecting to it and deletes its Moonraker "
+          ("printer forget garage", "Forget Garage Voron? Spoolwarden stops connecting to it and deletes its Moonraker "
                                     "API key, if one is saved. [y/N] ", "Forgot Garage Voron.", "garage-voron"),
           ("printer dismiss mainsailos", "Dismiss mainsailos? It leaves this list. A new scan may find it again. [y/N] ",
            "Dismissed mainsailos.", "mainsailos")]
@@ -778,7 +778,7 @@ def test_api_key_with_a_space_is_the_hubs_refusal(capsys, monkeypatch):
 def test_api_key_clear_asks_first(capsys, terminal):
     seed()
     registry.set_api_key("garage-voron", "s3cretkey")
-    question = ("Clear the Moonraker API key of Garage Voron? filament-kit then connects without a key. If Moonraker asks "
+    question = ("Clear the Moonraker API key of Garage Voron? Spoolwarden then connects without a key. If Moonraker asks "
                 "for one, the printer's test says so until a key is set. [y/N] ")
     terminal(False)
     rc, out, err = run(capsys, "printer", "api-key", "garage", "--clear")
