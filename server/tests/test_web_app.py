@@ -903,3 +903,20 @@ def test_web_spool_edit_refusals_name_their_field_and_write_nothing(app, sm):
     away = _client(app, AWAY)
     assert away.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False}, **post).status_code == 403
     assert sm.get(f"spool/{sid}") == before
+
+
+def test_every_text_key_built_from_a_prefix_in_the_page_scripts_exists():
+    """A key put together in a page script (SW.t("install_step_" + n)) is invisible to the string lint, so a
+    renamed catalogue key leaves the text missing on screen: each such prefix must start at least one key."""
+    repo = Path(__file__).resolve().parents[2]
+    keys = json.loads((repo / "strings" / "en.json").read_text(encoding="utf-8"))
+    pkg = repo / "server" / "filament_kit"
+    found = []
+    for folder in ("web/static", "setup_static", "shared_static"):
+        for f in sorted((pkg / folder).glob("*.js")):
+            if f.name == "strings.js":
+                continue
+            for prefix in re.findall(r'\bt\("([a-z0-9_]+)"\s*\+', f.read_text(encoding="utf-8")):
+                found.append((f.name, prefix))
+                assert any(k.startswith(prefix) for k in keys), f"{f.name}: no catalogue key starts with {prefix!r}"
+    assert ("app.js", "install_step_") in found
