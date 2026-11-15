@@ -1,4 +1,6 @@
 import logging
+import os
+import platform
 import socket
 
 import pytest
@@ -14,6 +16,29 @@ def _restore_app_logger():
     saved = (list(log.handlers), log.level, log.propagate)
     yield
     log.handlers[:], log.level, log.propagate = saved
+
+
+HOST_NAME = "workshop-hub"
+
+
+@pytest.fixture(autouse=True)
+def _made_up_host_name(monkeypatch):
+    """No test sees this machine's real host name (it is owner data, and a test that asserted it passed on one PC
+    only): every lookup the server code uses answers `workshop-hub`. A test that needs another name sets its own."""
+    from filament_kit import config
+    monkeypatch.setattr(socket, "gethostname", lambda: HOST_NAME)
+    monkeypatch.setattr(socket, "getfqdn", lambda name="": HOST_NAME)
+    monkeypatch.setattr(platform, "node", lambda: HOST_NAME)
+    real_getaddrinfo, real_gethostbyname = socket.getaddrinfo, socket.gethostbyname
+    # the made-up name resolves here, at once, as a machine's own name does (no DNS wait in any test)
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, *a, **k: real_getaddrinfo(
+        "127.0.0.1" if str(host).lower() in (HOST_NAME, HOST_NAME + ".local") else host, *a, **k))
+    monkeypatch.setattr(socket, "gethostbyname", lambda host: "127.0.0.1" if str(host).lower() in (HOST_NAME, HOST_NAME + ".local")
+                        else real_gethostbyname(host))
+    monkeypatch.setitem(config.DEFAULTS, "server_name", HOST_NAME)    # read once, when config was imported
+    if hasattr(os, "uname"):
+        real = os.uname()
+        monkeypatch.setattr(os, "uname", lambda: os.uname_result((real.sysname, HOST_NAME, *real[2:])))
 
 
 @pytest.fixture(autouse=True)
