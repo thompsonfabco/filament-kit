@@ -17,6 +17,14 @@ const E = (tag, cls, ...kids) => {
 const line = (kind, shape, text) => E("div", "printers-line", E("span", "status status--" + kind, SW.shape(shape), text));
 const klipperOf = (p) => p.family === "klipper";
 const lockedNow = () => SW.lock.state === "locked";
+// what names a row in the page (data-id, ids, the lane choice): never the serial, which is hidden while Locked (03 2.1); the map stays in this script
+const rowKeys = new Map();
+const keyOf = (serial) => { if (!rowKeys.has(serial)) rowKeys.set(serial, "p" + (rowKeys.size + 1)); return rowKeys.get(serial); };
+const serialOfKey = (key) => { for (const [serial, k] of rowKeys) if (k === key) return serial; return null; };
+// a Hub text with the printer's address and serial taken out while Locked
+const scrub = (p, text) => (lockedNow() ? [p.ip, p.host, p.serial].filter(Boolean).reduce((t, s) => t.split(s).join(SW.t("common_hidden_locked")), String(text)) : text);
+// the address of a row or drawer, as the person may see it: none while Locked
+const addressHash = (p, what) => (lockedNow() ? "#printers" : `#printers/${encodeURIComponent(p.serial)}${what ? "/" + what : ""}`);
 const addressOf = (p) => (klipperOf(p) ? hostPort(p) : p.ip || "");
 const sentence = (s) => { const t = nice(s).trim(); return t ? t[0].toUpperCase() + t.slice(1) + "." : t; };
 const laneWord = (m) => SW.t(m === "auto" ? "printers_lane_auto" : m === "on" ? "status_on" : "status_off");
@@ -27,6 +35,7 @@ let pollTimer = 0;
 const expanded = new Set();        // the rows that are open: kept across the redraw a change brings
 let rowViews = new Map();          // the parts of a drawn row that a read patches
 let listEl = null;                 // the collection's region
+let drawnLocked = false;           // whether the list on the page was drawn Locked (addresses and serials left out)
 const stateOf = (p) => (live && live[p.serial] ? live[p.serial].state : p.state);
 const slotsOf = (p) => (live && live[p.serial] && live[p.serial].slots ? live[p.serial].slots.flatMap((u) => u.slots || []) : null);
 const hexOf = (s) => (/^[0-9A-Fa-f]{6}$/.test(s.color_hex || "") ? "#" + s.color_hex : "");
@@ -78,7 +87,8 @@ function slotLines(p) {
 function testResult(p, r) {
   const t = String(r.text || ""), m = (re) => re.exec(t);
   let x, kind = r.reachable;
-  const say1 = (key, vars) => SW.t(key, vars);
+  // Locked: the same sentence without the address (keys "printers_result_locked_..."); `vars` still carries it and is not shown
+  const say1 = (key, vars) => SW.t(lockedNow() ? key.replace("printers_result_", "printers_result_locked_") : key, vars);
   if (klipperOf(p)) {
     if ((x = m(/^Moonraker at (.+):(\d+) answers; Klipper is (.+)$/))) return [say1("printers_result_klipper_ok", { host: x[1], port: x[2], state: x[3] }), true];
     if ((x = m(/^Moonraker at (.+):(\d+) answers but wants an API key/))) return [say1("printers_result_klipper_key", { host: x[1], port: x[2] }), "warn"];
@@ -90,7 +100,7 @@ function testResult(p, r) {
     if ((x = m(/^(.+) answers; its certificate differs/))) return [say1("printers_result_bambu_differs", { address: x[1] }), false];
     if ((x = m(/^no answer from (.+):8883 \((.+)\)/))) return [say1("printers_result_bambu_none", { address: x[1], error_type: x[2] }), false];
   }
-  return [hubText(t), kind];
+  return [hubText(scrub(p, t)), kind];
 }
 const lastTest = {};
 async function testConnection(p, box, button) {
@@ -101,7 +111,7 @@ async function testConnection(p, box, button) {
   try {
     const r = await api(printerPath(p, "test"), {}), [text, kind] = testResult(p, r);
     say(box, [text, " ", badgeFor(r.state)], kind);
-  } catch (e) { say(box, e.message, false); } finally { if (button) SW.idle(button); }
+  } catch (e) { say(box, scrub(p, e.message), false); } finally { if (button) SW.idle(button); }
 }
 const testingText = (p) => (lockedNow() ? SW.t("printers_testing_name", { name: p.name }) : SW.t("printers_testing_address", { address: addressOf(p) }));
 
@@ -111,12 +121,12 @@ async function detect(p, box, button) {
   if (button) SW.busy(button, SW.t("printers_detecting", { name: p.name }));
   try {
     const d = await api(printerPath(p, "detect"), {});
-    if (!d.ok) { say(box, hubText(d.message), false); return; }
+    if (!d.ok) { say(box, hubText(scrub(p, d.message)), false); return; }
     const model = d.model || SW.t("common_klipper"), slots = (d.slots || []).join(", ");
     const head = SW.t(slots ? (d.verified ? "printers_detected" : "printers_detected_unconfirmed") : (d.verified ? "printers_detected_bare" : "printers_detected_bare_unconfirmed"), { model, slots });
     const warn = d.spoolman && d.spoolman.warning;
-    say(box, [head, warn ? line("warn", "s-triangle", hubText(warn)) : null, d.message ? line("info", "s-diamond", hubText(d.message)) : null], true);
-  } catch (e) { say(box, e.message, false); } finally { if (button) SW.idle(button); }
+    say(box, [head, warn ? line("warn", "s-triangle", hubText(scrub(p, warn))) : null, d.message ? line("info", "s-diamond", hubText(scrub(p, d.message))) : null], true);
+  } catch (e) { say(box, scrub(p, e.message), false); } finally { if (button) SW.idle(button); }
 }
 
 // a change with its own working text: the code first (as change()), no redraw of the region
@@ -126,7 +136,7 @@ async function act(box, label, path, body, done) {
     working(box, label);
     try { out = await api(path, { ...body, code: theCode() }); } catch (e) {
       if (e.locked) { SW.result(box, null); throw e; }
-      say(box, e.message, false);
+      say(box, hubText(e.message), false);
       return;
     }
     box._said = null;
@@ -159,7 +169,7 @@ function changeAddress(p, box) {
   let typed = "";
   return asking(box, printerPath(p, "address"), {
     kind: "entry", title: SW.t("printers_change_address_title", { name: p.name }), confirm: SW.t("printers_change_address"),
-    fields: [entryField({ label: SW.t(bambu ? "printers_field_address" : "common_address"), name: "address", value: bambu ? p.ip || "" : p.host, mono: true,
+    fields: [entryField({ label: SW.t(bambu ? "printers_field_address" : "common_address"), name: "address", value: lockedNow() ? "" : bambu ? p.ip || "" : p.host, mono: true,
       hint: bambu ? SW.t("printers_change_address_hint_bambu") : SW.t("printers_change_address_hint_klipper", { port: p.port }) }, "common_error_address"),
     ...(bambu ? [entryField({ type: "secret", label: SW.t("common_field_access_code"), name: "access_code", mono: true,
       hint: SW.t("printers_change_address_code_hint") }, "common_error_access_code")] : [])],
@@ -189,15 +199,20 @@ function usePrinter(p, box) {
 }
 
 // ----- printer reports: one XML file, made from an allow-list, for an issue; kept on the server, the last five -----
+const reporting = new Set();       // the printers a report is being made for: a second press while it runs sends nothing
 async function collectReport(p, box) {
-  const inside = () => drawer && drawer.kind === "reports" && drawer.serial === p.serial;
-  const r = await act(box, SW.t("printers_reporting", { name: p.name }), printerPath(p, "report"), {}, (v) => {
-    const text = SW.t("printers_report_saved", { report: v.name, note: v.note || "" }).trim();
-    if (inside()) say(box, text, true);
+  if (reporting.has(p.serial)) return null;
+  reporting.add(p.serial);
+  try {
+    const inside = () => drawer && drawer.kind === "reports" && drawer.serial === p.serial;
+    const r = await act(box, SW.t("printers_reporting", { name: p.name }), printerPath(p, "report"), {}, () => {});
+    if (!r) return null;
+    await refresh(listEl || box);      // the row is drawn again: "Needs a look" ends with the report
+    const text = SW.t("printers_report_saved", { report: r.name, note: r.note || "" }).trim();
+    if (inside()) { say(box, text, true); drawer.reload(); }
     else sayWith(box, "ok", text, { label: SW.t("printers_saved_reports"), name: SW.t("printers_reports_title", { name: p.name }), run: () => openReports(p) });
-  });
-  if (r && inside()) drawer.reload();
-  return r;
+    return r;
+  } finally { reporting.delete(p.serial); }
 }
 
 // ----- slot mapping: the server's own connection does it, and this follows it in the printer's message row (03 5.7) -----
@@ -212,26 +227,42 @@ async function startMap(p, box) {
 const mapLines = (v) => [...(v.problems || []).map((t) => line("bad", "s-octagon", hubText(t))),
   ...(v.notes || []).map((t) => line("info", "s-diamond", hubText(t))),
   v.report_why ? line("warn", "s-triangle", hubText(v.report_why)) : null];
+// the progress and its Stop have a result slot of their own, in the printer's message row beside the printer's other results (a test, a
+// detect): they stay for the whole mapping. Leaving the section clears every result on the page, so a row drawn again puts them back (noteRow)
+const mapSlots = {}, mapShown = {};
+const mapSlot = (p) => mapSlots[p.serial] || (mapSlots[p.serial] = slot());
+const showProgress = (p) => { const m = mapShown[p.serial]; if (m) SW.result(mapSlot(p), "run", m.textEl, { action: m.stop }); };
 function followMap(p, box) {
   if (mapping[p.serial]) return;
   mapping[p.serial] = true;
-  const textEl = E("span", null, SW.t("printers_mapping"));     // updated in place: the Stop button below keeps its focus
+  const prog = mapSlot(p);
+  const textEl = E("span", null, SW.t("printers_mapping"));     // updated in place: the Stop button beside it keeps its focus
   let shown = false;
-  const stop = { label: SW.t("common_stop"), name: SW.t("common_stop") + ": " + p.name, run: () => act(box, SW.t("printers_mapping"), printerPath(p, "map/stop"), {}, () => {}) };
+  const stop = { label: SW.t("common_stop"), name: SW.t("common_stop") + ": " + p.name,
+    run: () => act(box, SW.t("common_working"), printerPath(p, "map/stop"), {}, () => { if (mapping[p.serial]) SW.result(box, null); }) };
   const tick = async () => {
     let v;
     try { v = await api(printerPath(p, "map")); } catch (e) {
       mapping[p.serial] = false;
-      say(box, e.message, false);
+      delete mapShown[p.serial];
+      SW.result(prog, null);
+      say(box, scrub(p, e.message), false);
       return;
     }
     if (v.state === "running") {
       textEl.textContent = v.step ? `${SW.t("printers_mapping")} ${v.step}` : SW.t("printers_mapping");
-      if (!shown) { shown = true; box._said = null; SW.result(box, "run", textEl, { action: stop }); }
+      if (!shown) {
+        shown = true;
+        if (box.dataset.state === "run") { box._said = null; SW.result(box, null); }      // the working text of the press that started it
+        mapShown[p.serial] = { textEl, stop };
+        showProgress(p);
+      }
       setTimeout(tick, 1500);
       return;
     }
     mapping[p.serial] = false;
+    delete mapShown[p.serial];
+    SW.result(prog, null);
     if (!v.state || v.state === "none") return;
     const failed = v.state === "failed", slots = (v.slots || []).map((s) => s.label).join(", ");
     const lines = mapLines(v);
@@ -242,36 +273,36 @@ function followMap(p, box) {
   tick();
 }
 
-// ----- the drawers (03 5.7): the shared detail region, moved into the drawer host -----
+// ----- the drawers (03 5.7): the detail region in a drawer dialog of its own, in every look (SW.openDetail leaves it in place under Panes,
+// where a drawer has no place); the dialog is made for each opening and removed when it closes, so nothing typed in it stays in the page -----
 let drawer = null;                 // { kind, serial, region, body, running(), reload(), end() }
-let stash = null;                  // where a drawer's region waits, hidden, between openings
 function openDrawer(kind, p, title, body, foot, o = {}) {
-  if (!stash) stash = X("div", { hidden: true });
-  if (!stash.isConnected) document.body.append(stash);
-  const id = `drawer-${kind}-${p.serial}`;
+  const id = `drawer-${kind}-${keyOf(p.serial)}`;
   const close = SW.iconBtn("close", SW.t("detail_close", { name: title }), { cls: "detail__close", run: (e) => { e.stopPropagation(); requestClose(); } });
-  const region = X("section", { class: "detail detail--drawer", id, "aria-labelledby": id + "-title", hidden: true },
+  const region = X("section", { class: "detail detail--drawer", id, "aria-labelledby": id + "-title" },
     E("header", "detail__head", X("h2", { class: "detail__title", id: id + "-title", tabindex: "-1", text: title }), close),
     E("div", "drawer__body", body), foot ? E("div", "detail__foot", foot) : null);
-  stash.append(region);
+  const dlg = X("dialog", { class: "dialog dialog--drawer", "aria-labelledby": id + "-title" }, region);
   drawer = { kind, serial: p.serial, region, running: () => false, reload() {}, end() {}, ...o };
   setTitle(title);
-  SW.openDetail(region, { opener: o.opener });
-  const dlg = region.closest("dialog");
-  if (!dlg._printersCancel) {       // Escape and the scrim ask first while a mapping runs
-    dlg._printersCancel = true;
-    dlg.addEventListener("cancel", (e) => { if (drawer && dlg.contains(drawer.region) && drawer.running()) { e.preventDefault(); requestClose(); } });
-  }
+  SW.modal(dlg, { temp: true, scrim: true });
+  dlg.addEventListener("cancel", (e) => {       // Escape and the scrim ask first while a mapping runs, or a form has changes
+    if (drawer && drawer.region === region && drawer.running()) { e.preventDefault(); requestClose(); }
+    else if (region.querySelector('form[data-state="dirty"]')) { e.preventDefault(); SW.closeDetail(region); }
+  });
   dlg.addEventListener("close", () => {
+    for (const f of dlg.querySelectorAll("input[type=password]")) f.value = "";      // a secret typed here is gone with the drawer
     const d = drawer;
     if (!d || d.region !== region) return;
     d.end();
     drawer = null;
     if (location.hash === `#printers/${encodeURIComponent(p.serial)}/${kind}`) {      // closed by the person: the address goes back to the row
-      history.replaceState(null, "", `#printers/${encodeURIComponent(p.serial)}`);
+      history.replaceState(null, "", addressHash(p));
       setTitle(expandedTitle());
     }
   }, { once: true });
+  SW.openModal(dlg, o.opener);
+  region.querySelector(".detail__title").focus({ preventScroll: true });
   return drawer;
 }
 // the drawer host closes with an event of its own, a moment after close(): a drawer opened before it would be taken for the closed one
@@ -279,7 +310,7 @@ function closeDrawerAsync() {
   if (!drawer) return Promise.resolve();
   const d = drawer, dlg = d.region.closest("dialog");
   d.end();
-  if (!dlg) { drawer = null; return Promise.resolve(); }
+  if (!dlg) { drawer = null; return Promise.resolve(); }      // already gone with its dialog
   return new Promise((done) => { dlg.addEventListener("close", () => setTimeout(done), { once: true }); dlg.close(); });
 }
 // closing a running mapping asks first (03 5.7): the positions confirmed so far are kept
@@ -300,7 +331,8 @@ function addressNow() {
   const [section, id, what] = location.hash.slice(1).split("/").map((s) => { try { return decodeURIComponent(s); } catch { return s; } });
   return section === PRINTERS ? { id: id || "", what: what || "" } : { id: "", what: "" };
 }
-function pushAddress(p, what) { history.pushState(null, "", `#printers/${encodeURIComponent(p.serial)}/${what}`); }
+// while Locked the serial is not put into the address: a drawer opened then has none (Saved reports shows the locked note)
+function pushAddress(p, what) { if (!lockedNow()) history.pushState(null, "", addressHash(p, what)); }
 
 // ----- Saved reports -----
 async function openReports(p) {
@@ -334,18 +366,25 @@ const pcell = (col, content, key) => X("div", { class: "coll__cell", role: "cell
 
 // ----- Map by loading filament: the owner loads each slot, the printer says which one it sees -----
 const manualOn = {};
+const starting = new Set();        // the printers a session is being started for: a second press while it starts sends nothing
 // `start`: the button was pressed (the Hub starts the session, with the code); otherwise the address opened it, and a session that is
 // running shows as it is, with a Start button when none is
 async function manualMap(p, box, start = true) {
   const base = printerPath(p, "manual-map");
   let v = null;
-  if (start) await coded(box, async () => { v = await api(base + "/start", { code: theCode() }); });
-  else {
-    try { v = await api(base); } catch (e) { if (e.status !== 404 && e.status !== 409) throw e; }
+  if (start) {
+    if (starting.has(p.serial)) return;
+    starting.add(p.serial);
   }
-  if (start && !v) return;
-  await closeDrawerAsync();
-  openLoadDrawer(p, box, v);
+  try {
+    if (start) await coded(box, async () => { v = await api(base + "/start", { code: theCode() }); });
+    else {
+      try { v = await api(base); } catch (e) { if (e.status !== 404 && e.status !== 409) throw e; }
+    }
+    if (start && !v) return;
+    await closeDrawerAsync();
+    openLoadDrawer(p, box, v);
+  } finally { if (start) starting.delete(p.serial); }
 }
 function openLoadDrawer(p, box, first) {
   const base = printerPath(p, "manual-map");
@@ -356,7 +395,11 @@ function openLoadDrawer(p, box, first) {
   const offer = (share) => coded(note, async () => {      // its answer is a line, not the session: the part is redrawn from v
     const r = await api(`${base}/offer`, { session: v.session, code: theCode(), share }); v.offer_report = false; draw(); say(note, r.message, true);
   });
-  const begin = () => coded(note, async () => { v = await api(base + "/start", { code: theCode() }); draw(); loop(); });
+  const begin = async () => {
+    if (starting.has(p.serial)) return;
+    starting.add(p.serial);
+    try { await coded(note, async () => { v = await api(base + "/start", { code: theCode() }); draw(); loop(); }); } finally { starting.delete(p.serial); }
+  };
   const stop = () => (v && v.open ? send("stop", {}) : Promise.resolve());
   openDrawer("load-map", p, SW.t("printers_load_title", { name: p.name }), [sheet, note], null,
     { opener: document.activeElement, running: () => !!(v && v.open), stop, end: () => { ended = true; clearTimeout(timer); manualOn[p.serial] = false; } });
@@ -474,7 +517,7 @@ function kv(rows) {
     E("dd", "kv__value", o.node ? o.node : value == null ? E("span", "muted", SW.t("common_empty")) : E("span", o.mono ? "mono" : null, value), o.badge || null))));
 }
 function laneChoice(p, box) {
-  const fs = SW.segmented({ legend: SW.t("printers_fact_lane_data"), name: "lane-" + p.serial, value: p.lane_data || "auto", write: true, result: box, wide: false,
+  const fs = SW.segmented({ legend: SW.t("printers_fact_lane_data"), name: "lane-" + keyOf(p.serial), value: p.lane_data || "auto", write: true, result: box, wide: false,
     options: ["auto", "on", "off"].map((m) => ({ value: m, label: laneWord(m) })),
     apply: async (mode) => {
       await api(printerPath(p, "lane_data"), { mode, code: theCode() });
@@ -494,7 +537,7 @@ function facts(p, box) {
     [SW.t("printers_fact_certificate"), SW.t(p.pinned ? "printers_cert_pinned_short" : "printers_cert_not_pinned_short")]]);
 }
 function detailRegion(p, box, acts) {
-  const id = "detail-" + p.serial, slotsBox = E("div", "printers-slots");
+  const id = "detail-" + keyOf(p.serial), slotsBox = E("div", "printers-slots");
   slotsBox.append(slotLines(p));
   rowViews.get(p.serial).detailSlots = slotsBox;
   return X("section", { class: "detail", id, "aria-labelledby": id + "-title", hidden: !expanded.has(p.serial) },
@@ -530,14 +573,23 @@ function noteRow(p, box) {
   const why = !klipperOf(p) && p.configured ? p.report_why : "";
   const problem = why ? E("div", "printers-problem", E("span", "status status--warn", SW.shape("s-triangle"), SW.t("printers_needs_look", { reason: why.replace(/\.$/, "") })),
     SW.btn(SW.t("printers_collect_report"), { cls: "btn--primary", name: SW.t("printers_collect_name", { name: p.name }), run: () => collectReport(p, box) })) : null;
-  const row = E("div", "coll__row coll__row--note", { role: "row" }, X("div", { class: "coll__cell", role: "cell", "aria-colspan": 7 }, problem, box));
-  const sync = () => { row.hidden = !(why || box.dataset.state); };
-  sync();
-  new MutationObserver(sync).observe(box, { attributes: true, attributeFilter: ["data-state"] });
+  const prog = mapSlot(p);      // a mapping's progress and Stop: the same slot each time the row is drawn
+  showProgress(p);
+  const row = E("div", "coll__row coll__row--note", { role: "row" }, X("div", { class: "coll__cell", role: "cell", "aria-colspan": 7 }, problem, prog, box));
+  watchNote(row, [box, prog], () => !!(why || box.dataset.state || prog.dataset.state));
   return row;
 }
+// the message row shows while anything is in it; one observer for the row, dropped when the list is drawn again
+const watchers = new Set();
+function watchNote(row, slots, shown) {
+  const sync = () => { row.hidden = !shown(); };
+  sync();
+  const o = new MutationObserver(sync);
+  for (const s of slots) o.observe(s, { attributes: true, attributeFilter: ["data-state"] });
+  watchers.add(o);
+}
 function printerItem(p) {
-  const box = boxFor("printer:" + p.serial), acts = actionsOf(p, box), id = "detail-" + p.serial, open = expanded.has(p.serial);
+  const box = boxFor("printer:" + p.serial), acts = actionsOf(p, box), id = "detail-" + keyOf(p.serial), open = expanded.has(p.serial);
   rowViews.set(p.serial, {});
   const view = rowViews.get(p.serial);
   if (p.mapping) followMap(p, box);      // a job already running (a reload, another browser): progress and Stop again
@@ -551,15 +603,15 @@ function printerItem(p) {
   sl.replaceChildren(...slotStrip(p));
   const cells = {
     title: X("div", { class: "coll__cell", role: "cell", "data-col": "title", "data-prio": 1, "data-sort": p.name },
-      X("a", { class: "coll__title", href: "#printers/" + encodeURIComponent(p.serial), text: p.name }), tagOf(p), p.model ? E("span", "coll__sub", p.model) : null),
-    address: X("div", { class: "coll__cell", role: "cell", "data-col": "address", "data-prio": 3, "data-sort": addressOf(p) }, E("span", "coll__key", { "aria-hidden": "true" }, SW.t("common_address")), addressCell(p)),
+      X("a", { class: "coll__title", href: addressHash(p), text: p.name }), tagOf(p), p.model ? E("span", "coll__sub", p.model) : null),
+    address: X("div", { class: "coll__cell", role: "cell", "data-col": "address", "data-prio": 3, "data-sort": lockedNow() ? "" : addressOf(p) }, E("span", "coll__key", { "aria-hidden": "true" }, SW.t("common_address")), addressCell(p)),
     status: X("div", { class: "coll__cell", role: "cell", "data-col": "status", "data-prio": 1, "data-sort": stateWord(p) }, st),
     slots: X("div", { class: "coll__cell", role: "cell", "data-col": "slots", "data-prio": 1 }, E("span", "coll__key", { "aria-hidden": "true" }, SW.t("printers_col_slots")), sl),
     connection: X("div", { class: "coll__cell", role: "cell", "data-col": "connection", "data-prio": 3 }, E("span", "coll__key", { "aria-hidden": "true" }, SW.t("printers_col_connection")), connectionCell(p)),
   };
   Object.assign(view, { p, statusEl: st, slotsEl: sl, statusCell: cells.status, addressCell: cells.address, connectionCell: cells.connection });
   const detail = detailRegion(p, box, acts);
-  return X("div", { class: "coll__item", role: "rowgroup", "data-id": p.serial },
+  return X("div", { class: "coll__item", role: "rowgroup", "data-id": keyOf(p.serial) },
     E("div", "coll__row", { role: "row" },
       X("div", { class: "coll__cell", role: "cell", "data-col": "expand" }, expand),
       cells.title, cells.address, cells.status, cells.slots, cells.connection,
@@ -585,10 +637,8 @@ function foundItem(p) {
       SW.btn(SW.t("printers_use"), { cls: "btn--primary", name: SW.t("printers_use_name", { name: p.name }), run: () => usePrinter(p, box) }), test,
       SW.btn(SW.t("common_dismiss"), { cls: "btn--ghost", name: SW.t("printers_dismiss_name", { name: p.name }), run: () => forgetPrinter(p, box, "dismiss") }))));
   const note = E("div", "coll__row coll__row--note", { role: "row" }, X("div", { class: "coll__cell", role: "cell", "aria-colspan": 7 }, box));
-  const sync = () => { note.hidden = !box.dataset.state; };
-  sync();
-  new MutationObserver(sync).observe(box, { attributes: true, attributeFilter: ["data-state"] });
-  return X("div", { class: "coll__item", role: "rowgroup", "data-id": p.serial, data: { state: "off" } }, row, note);
+  watchNote(note, [box], () => !!box.dataset.state);
+  return X("div", { class: "coll__item", role: "rowgroup", "data-id": keyOf(p.serial), data: { state: "off" } }, row, note);
 }
 
 // ----- the collection (03 5.2) -----
@@ -612,12 +662,14 @@ function printerTable(found, configured) {
     const btn = e.target.closest(".coll__expand") || (link && link.closest(".coll__item").querySelector(".coll__expand"));
     if (!btn) return;
     if (link) { e.preventDefault(); btn.click(); return; }
-    const id = btn.getAttribute("aria-controls").replace(/^detail-/, ""), open = btn.getAttribute("aria-expanded") === "true";
+    const serialOf = (b) => serialOfKey(b.getAttribute("aria-controls").replace(/^detail-/, ""));
+    const id = serialOf(btn), open = btn.getAttribute("aria-expanded") === "true";
     if (open) {
-      if (SW.phone()) for (const o of table.querySelectorAll('.coll__expand[aria-expanded="true"]')) if (o !== btn) { expanded.delete(o.getAttribute("aria-controls").replace(/^detail-/, "")); o.click(); }
+      if (SW.phone()) for (const o of table.querySelectorAll('.coll__expand[aria-expanded="true"]')) if (o !== btn) { expanded.delete(serialOf(o)); o.click(); }
       expanded.add(id);
     } else expanded.delete(id);
-    if (!drawer && /^#printers(\/[^/]*)?$/.test(location.hash)) history.replaceState(null, "", open ? `#printers/${encodeURIComponent(id)}` : "#printers");
+    // an address the person typed that already names this row stays as it is, also while Locked
+    if (!drawer && /^#printers(\/[^/]*)?$/.test(location.hash) && !(open && addressNow().id === id)) history.replaceState(null, "", open ? addressHash({ serial: id }) : "#printers");
     setTitle(expandedTitle());
   });
   return table;
@@ -669,7 +721,10 @@ function header(found) {
 function drawList(body) {
   const P = S.printers, found = P.list.filter((p) => klipperOf(p) && !p.configured), configured = P.list.filter((p) => !(klipperOf(p) && !p.configured));
   rowViews = new Map();
+  for (const o of watchers) o.disconnect();
+  watchers.clear();
   body._drawn = true;
+  drawnLocked = lockedNow();
   if (!P.list.length) {
     body.replaceChildren(E("div", "printers-head", E("div", "page-head__actions", P.bambu ? X("a", { class: "btn btn--ghost", href: liveUrl(), target: "_blank", rel: "noopener" },
       SW.icon("camera", "icon--s"), SW.t("printers_live_view")) : null)),
@@ -678,7 +733,7 @@ function drawList(body) {
     return;
   }
   body.replaceChildren(header(found), printerTable(found, configured));
-  if (pendingScroll) { const it = body.querySelector(`.coll__item[data-id="${CSS.escape(pendingScroll)}"]`); pendingScroll = null; if (it) it.scrollIntoView({ block: "start" }); }
+  if (pendingScroll) { const it = body.querySelector(`.coll__item[data-id="${CSS.escape(rowKeys.get(pendingScroll) || "")}"]`); pendingScroll = null; if (it) it.scrollIntoView({ block: "start" }); }
 }
 let pendingScroll = null;
 // a read of printers/states: the badges, the strips and the lines are patched in place; a different set of printers draws the list again
@@ -715,6 +770,12 @@ function poll() {
     poll();
   }, 10000);
 }
+// Lock now and Unlock draw the list again at once: addresses and serials go away or come back (03 2.1). An address that names a printer
+// (#printers/<serial>) still opens its row while Locked, as the person typed it; the serial is never written into the page or the address by this script then
+document.addEventListener("sw:lock", () => {
+  if (tabNow() !== PRINTERS || !listEl || !listEl.isConnected || !listEl._drawn || lockedNow() === drawnLocked) return;
+  drawList(listEl);
+});
 document.addEventListener("visibilitychange", () => {
   if (document.hidden || tabNow() !== PRINTERS || !listEl || !listEl.isConnected) return;
   api("printers/states").then((r) => paintLive(listEl, r), () => {});
@@ -793,7 +854,7 @@ async function followAddress() {
   if (a.id === "add") { goTo(addCard); return; }
   if (p) {
     expanded.add(p.serial);
-    const it = listEl && listEl.querySelector(`.coll__item[data-id="${CSS.escape(p.serial)}"]`);
+    const it = listEl && listEl.querySelector(`.coll__item[data-id="${CSS.escape(keyOf(p.serial))}"]`);
     const x = it && it.querySelector(".coll__expand");
     if (x && x.getAttribute("aria-expanded") !== "true") x.click();
     if (it && !a.what && !drawer) it.scrollIntoView({ block: "start" });

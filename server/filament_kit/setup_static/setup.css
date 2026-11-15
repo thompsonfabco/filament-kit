@@ -136,6 +136,7 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
   .coll--features{grid-template-columns:minmax(0,1fr) max-content max-content}
   .coll--features .coll__cell[data-col="what"]{display:none}
   .coll--features .coll__sub{display:block}
+}
 
 /* Printers (S2.4) */
 /* the header: the counts, and the three ways to the rest (03 5.1) */

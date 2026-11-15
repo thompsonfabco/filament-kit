@@ -1272,6 +1272,16 @@
     <string name="printers_result_klipper_ok">Test passed: Moonraker at %1$s:%2$s answers; Klipper is %3$s.</string>
     <!-- 1=host 2=port -->
     <string name="printers_result_klipper_other">Test failed: %1$s:%2$s answers, but not as Moonraker.</string>
+    <string name="printers_result_locked_bambu_differs">Test failed: the printer answers, but its certificate differs from the pinned one. If the printer was not reset, check its address before adding it again.</string>
+    <string name="printers_result_locked_bambu_new">Test passed: the printer answers. Its certificate is pinned at the first connection.</string>
+    <!-- 1=error_type -->
+    <string name="printers_result_locked_bambu_none">Test failed: no answer from the printer (%1$s). Check that it is on.</string>
+    <string name="printers_result_locked_bambu_pinned">Test passed: the printer answers; its certificate matches the pinned one.</string>
+    <string name="printers_result_locked_klipper_key">Moonraker answers but wants an API key. Set it in this printer\'s details.</string>
+    <string name="printers_result_locked_klipper_none">Test failed: no answer from Moonraker. Check that the printer is on and the address.</string>
+    <!-- 1=state -->
+    <string name="printers_result_locked_klipper_ok">Test passed: Moonraker answers; Klipper is %1$s.</string>
+    <string name="printers_result_locked_klipper_other">Test failed: the address answers, but not as Moonraker.</string>
     <!-- 1=subnet 2=found -->
     <string name="printers_result_scan_found">Found on %1$s: %2$s</string>
     <!-- 1=subnet -->
