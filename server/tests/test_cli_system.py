@@ -584,7 +584,8 @@ _RENAME_STEPS = {
 def _design_rows() -> list[str]:
     text = (ROOT / "docs" / "design" / "06-command-line.md").read_text(encoding="utf-8")
     table = text[text.index("### 3.2 Every command"):text.index("## 4. Old and new spellings")]
-    return [ln.strip() for ln in table.splitlines()
+    # the design's own section references ("(9.2)", "(section 10)") are left out of the printed help (design 11:55)
+    return [re.sub(r" \((?:section )?\d+(?:\.\d+)?\)", "", ln.strip()) for ln in table.splitlines()
             if re.match(r"\| `", ln) and not ln[3:].startswith(NOT_HERE)]
 
 
@@ -599,6 +600,7 @@ def test_help_markdown_lists_every_command_of_the_design(capsys):
         assert _RENAME_STEPS.get(row, row) in rows, row
     assert md.splitlines()[:2] == ["| Command | What it does | Hub page place |", "| --- | --- | --- |"]
     assert not any(f"| `{c}" in md for c in NOT_HERE)
+    assert not re.search(r"\((?:section )?\d+(?:\.\d+)?\)", md), "a design section number in the help"
 
 
 def test_every_command_the_help_lists_is_a_command_of_the_parser(capsys):
