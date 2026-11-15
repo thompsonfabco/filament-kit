@@ -74,7 +74,7 @@ def test_hub_and_server_options_give_the_same_result(applied):
 
 def test_hub_option_on_enable_is_the_server_option(monkeypatch):
     seen = []
-    monkeypatch.setattr(cli, "cmd_modules_toggle", lambda name, on, server=None: seen.append(server) or 0)
+    monkeypatch.setattr(cli, "cmd_modules_toggle", lambda name, on, server=None, yes=False: seen.append(server) or 0)
     assert cli.main(["modules", "enable", "station", "--hub", "h"]) == 0
     assert cli.main(["modules", "enable", "station", "--server", "h"]) == 0
     assert seen == ["h", "h"]
