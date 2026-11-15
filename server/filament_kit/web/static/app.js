@@ -129,7 +129,7 @@ async function act(box, label, fn, o = {}) {
       SW.result(line, d.kind || "ok", d.text, d.action ? { action: d.action } : {});
       if (d.code && box.code) box.code.replaceChildren(codeBlock(d.code));
     }
-  } catch (e) { failed(line, e, () => act(box, label, fn, o), o); }
+  } catch (e) { failed(line, e, o.again || (() => act(box, label, fn, o)), o); }   // o.again: Try again starts something larger than fn
   finally { if (b) SW.idle(b); }
 }
 // Data that loads for a block (04 3.5): a skeleton until the first data (none when `quiet`: the old data stays until the new
@@ -671,7 +671,7 @@ function show(key) {
   } else tabs[key].go?.(rest);
   place = key;
   page.dataset.section = key;
-  pageTitle.textContent = SW.t(TITLES[key]);
+  pageTitle.textContent = (tabs[key].heading && tabs[key].heading()) || SW.t(TITLES[key]);   // one printer fills the page: its name (04 6.2)
   if (key !== "settings") { try { localStorage.setItem(PLACE_KEY, key); } catch {} }   // #settings is never the stored place (04 2.4)
   paintMore();
 }
@@ -716,6 +716,14 @@ function openHere(dlg, opener, reuse) {                      // reuse: the entry
   const rec = track(dlg, "same");
   SW.openModal(dlg, opener);
   return rec;
+}
+// resolves once the Back a closed sheet asked for has landed: an address set before that would be taken back with it
+function backSettled() {
+  return new Promise((resolve) => {
+    let waited = 0;
+    const look = () => { if (settling > 0 && waited++ < 100) setTimeout(look, 20); else resolve(); };
+    setTimeout(look, 0);                                     // the sheet's close event may not have run yet
+  });
 }
 window.addEventListener("popstate", () => {
   if (settling) { settling--; return; }
@@ -858,7 +866,7 @@ function navigation() {
   app.replaceWith(skip, h("div", { class: "shell" }, topBar(), nav, main),
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   route(true);
-  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => ((ALIAS[s] || s) === "recent" && tabs.recent.title && tabs.recent.title()) || SW.t(TITLES[ALIAS[s] || s] || TITLES[place]), onSection: () => route() });
+  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => { const k = ALIAS[s] || s; return (tabs[k] && tabs[k].title && tabs[k].title()) || SW.t(TITLES[k] || TITLES[place]); }, onSection: () => route() });
   nav.append(moreBtn);                                       // after SW.shell: this More has its own sheet
   paintMore();
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page

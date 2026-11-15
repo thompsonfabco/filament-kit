@@ -126,14 +126,7 @@ pre { margin: var(--s2) 0; padding: var(--s3); border: 1px solid var(--border); 
 .filebtn input { position: absolute; inset: 0; min-height: 0; opacity: 0; }
 
 /* Printers tab */
-progress { width: 100%; height: var(--s3); accent-color: var(--accent-text); }
 .cam { display: block; width: 100%; height: auto; min-height: calc(var(--s7) * 2); border-radius: var(--r); background: var(--surface-3); }
-.slot { display: flex; gap: var(--s2); align-items: center; padding: var(--s1) 0; }
-.slot > :nth-child(3) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.slot.active { font-weight: var(--fw-label); }
-.sw { flex: none; width: calc(var(--s4) + var(--s1) / 2); height: calc(var(--s4) + var(--s1) / 2); border: 1px solid var(--border-strong);
-      border-radius: 50%; }
-.slot button { flex: none; min-height: calc(var(--s7) - var(--s1)); padding: 0 var(--s3); }
 
 /* Recently added (04 7): the list is the shared collection; a record opens in place under its row */
 .coll--recent { grid-template-columns: auto auto minmax(0, 3fr) max-content minmax(0, 1fr); }
@@ -179,3 +172,81 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 @media (prefers-reduced-motion: reduce) { .disclosure__chevron { transition: none; } }
 .presets__updates { margin-top: var(--s4); }
 .disclosure__body { display: grid; gap: var(--s3); padding-top: var(--s3); }
+/* Printers (04 6): the list of cards, the printer's page, its slot rows, Filament used, the load and mapping sheets */
+.printers__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); margin: var(--s2) 0 var(--s3); }
+.printers__count { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin: 0; color: var(--muted); font-size: var(--fs-m); }
+.printers__heading { margin: var(--s5) 0 var(--s2); }
+.printers__more { margin: var(--s4) 0 0; }
+.pcards, .pfound, .pused, .pmanual__rows { margin: 0; padding: 0; list-style: none; }
+.pitem + .pitem { margin-top: var(--s3); }
+.pcard { position: relative; display: grid; gap: var(--s2); padding: var(--s3) calc(var(--s4) + var(--s5)) var(--s3) var(--s4); border: 1px solid var(--border);
+         border-radius: var(--r); background: var(--surface); }
+.pcard[data-open="true"] { border-color: var(--accent-text); }
+.pcard p { margin: 0; }
+.pcard__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
+.pcard__name { color: var(--text); font-size: var(--fs-l); font-weight: var(--fw-title); text-decoration: none; overflow-wrap: anywhere; }
+.pcard__name::after { content: ""; position: absolute; inset: 0; }                     /* the whole card opens the printer */
+.pcard__go { position: absolute; right: var(--s3); bottom: var(--s3); color: var(--muted); }
+.pcard .status, .pcard .slot-strip { position: relative; }
+@media (hover: hover) { .pcard:hover { border-color: var(--border-strong); background: var(--surface-2); } }
+.pstate { display: flex; align-items: flex-start; gap: var(--s1); margin: 0; font-size: var(--fs-m); }
+.pstate > .status__shape { margin-top: calc(var(--s1) + var(--s1) / 2); }
+.pstate[data-state="run"] > .status__shape { color: var(--accent-text); }
+.pstate__text { min-width: 0; overflow-wrap: anywhere; }
+.pfound__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s3) var(--s4); border: 1px solid var(--border);
+               border-radius: var(--r); background: var(--surface); }
+.pfound__row + .pfound__row { margin-top: var(--s2); }
+.pfound__name { flex: 1 1 auto; font-weight: var(--fw-label); }
+
+.printer { display: grid; gap: var(--s4); }
+.printer--inline { margin-top: var(--s3); padding: var(--s4); border: 1px dashed var(--border); border-radius: var(--r); background: var(--surface-2); }
+.printer > .group, .printer .group + .group { margin-top: 0; }
+.printer__back { display: inline-flex; align-items: center; justify-self: start; gap: var(--s1); min-height: var(--ctl); color: var(--accent-text); text-decoration: none; }
+.printer__back-icon { transform: rotate(180deg); }
+.printer__facts { margin: 0; }
+.printer__conn { display: grid; justify-items: start; gap: var(--s1); }
+.printer__conn p { margin: 0; }
+.printer__live { display: grid; gap: var(--s2); }
+.printer__live p { margin: 0; }
+.printer__prog { display: flex; align-items: center; gap: var(--s3); }
+.printer__prog > .progress { flex: 1; }
+.printer__controls { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.printer__controls:empty { display: none; }
+.printer__stop { display: flex; flex: 0 0 auto; justify-content: flex-end; margin-left: auto; }
+@media (max-width: 600px) { .printer__stop { flex: 1 1 100%; } }                       /* Stop print on its own line, right-aligned (04 6.4) */
+.printer__buttons { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.printer__days { margin-left: auto; font-size: var(--fs-s); }
+.printer .group__title { margin: 0; }
+.pcam { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--r); background: var(--surface-3); }
+.pcam .cam { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.pcam__wait, .pcam__text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s2);
+                           padding: var(--s3); text-align: center; }
+.pcam__text p { margin: 0; }
+
+.punit + .punit { margin-top: var(--s4); }
+.punit__title { margin: 0 0 var(--s2); color: var(--muted); font-size: var(--fs-s); font-weight: var(--fw-title); }
+.slot-strip__row.pslot { grid-template-columns: calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) auto; align-items: start; row-gap: var(--s2); }
+.pslot__text { display: grid; min-width: 0; }
+.pslot__name { overflow-wrap: anywhere; }
+.pslot > .slot-strip__use { grid-column: 4; }
+.pslot__actions { grid-column: 3 / -1; display: flex; flex-wrap: wrap; gap: var(--s2); }
+.pslot__actions .btn { min-width: calc(var(--s7) * 2); min-height: var(--ctl); }
+.pslot > .result { grid-column: 3 / -1; margin: 0; }
+
+.pused__row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--s1) var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--border); }
+.pused__row:first-child { border-top: 0; }
+.pused__what { min-width: 0; overflow-wrap: anywhere; }
+.pused__when, .pused__from { grid-column: 2; }
+.pused__row > .btn { grid-column: 3; grid-row: 1 / span 2; min-height: var(--ctl); }
+.pused__row > .result { grid-column: 1 / -1; margin: 0; }
+.pused__row[data-state="undone"] > :not(.btn, .result) { color: var(--muted); text-decoration: line-through; }
+
+.pset .kv__value { justify-content: space-between; }
+.pset .kv__key { color: var(--muted); }
+@media (max-width: 600px) { .pset .kv__row { grid-template-columns: minmax(0, 1fr); padding: var(--s2) 0; } }   /* label above the value and its button */
+
+.pload, .pload__search, .pload__picked, .pmanual, .pmanual__ask, .pmanual__offer { display: grid; gap: var(--s3); }
+.pload__or { margin: 0; text-align: center; }
+.pmanual__heading { margin: 0; color: var(--muted); font-size: var(--fs-s); }
+.pmanual__foot { display: flex; flex: 1; gap: var(--s2); }
+.pmanual__foot > * { flex: 1 1 0; }
