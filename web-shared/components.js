@@ -353,11 +353,11 @@ function guard(what, run, onCancel) {
 // ----- appearance control and theme picker (3.3, 3.4): a choice applies at once -----
 const APPEAR = { light: ["sun", "appearance_light"], dark: ["moon", "appearance_dark"], system: ["half-circle", "appearance_system"] };
 const appearanceValue = () => { const v = root.getAttribute("data-theme"); return v === "light" || v === "dark" ? v : "system"; };
+const paintMetas = () => { const surface = getComputedStyle(root).getPropertyValue("--surface").trim(); for (const m of $$('meta[name^="theme-"]')) m.content = surface; };
 function setAppearance(v) {
   attr(root, "data-theme", v === "system" ? null : v);
   const kept = v === "system" ? store.del("spoolwarden.appearance") : store.set("spoolwarden.appearance", v);
-  const surface = getComputedStyle(root).getPropertyValue("--surface").trim();
-  for (const m of $$('meta[name^="theme-"]')) m.content = surface;
+  paintMetas();
   for (const i of $$(".appearance .segmented__input")) i.checked = i.value === v;
   for (const b of $$(".appearance--menu")) {
     attr(b, "aria-label", t("appearance_name", { choice: t(APPEAR[v][1]) }));
@@ -365,7 +365,28 @@ function setAppearance(v) {
   }
   return kept;
 }
-const setLook = (look) => { attr(root, "data-look", look); return store.set("spoolwarden.look", look); };
+function setLook(look) {
+  attr(root, "data-look", look);
+  paintMetas();                                        // the status bar follows the theme at once
+  return store.set("spoolwarden.look", look);
+}
+// the picker (3.4): one entry per theme that is built; a theme built later is one more entry here
+const THEMES = ["console"];
+function themePicker(o = {}) {
+  const now = root.getAttribute("data-look"), chosen = THEMES.includes(now) ? now : "console";
+  const fs = h("fieldset", { class: "theme-picker" }, h("legend", { class: o.legend ? "theme-picker__legend" : "sr" }, t("appearance_theme_title")));
+  for (const look of THEMES) {
+    const line = uid("look");
+    fs.append(h("label", { class: "theme-picker__tile" },
+      h("input", { class: "theme-picker__input", type: "radio", name: "look", value: look, checked: look === chosen, "aria-describedby": line }),
+      h("span", { class: "theme-picker__preview", "data-look": look, "aria-hidden": "true" },
+        h("span", { class: "theme-picker__bar" }), h("span", { class: "theme-picker__nav" }), h("span", { class: "theme-picker__rows" })),
+      h("span", { class: "theme-picker__name" }, t(`theme_${look}_name`)),
+      h("span", { class: "theme-picker__line", id: line }, t(`theme_${look}_line`)),
+      icon("check", "icon--s theme-picker__check")));
+  }
+  return fs;
+}
 on(doc, "change", (e) => {
   const i = e.target, fs = up(e, ".appearance, .theme-picker");
   if (!fs) return;
@@ -944,7 +965,7 @@ function shell(o = {}) {
 window.SW = Object.freeze({
   t, h, icon, shape, uid, profile, announce, configure, setting, api, HubError, errText, guard, lock, setLock,
   status, spinner, tooltip, btn, iconBtn, busy, idle, disable, result, toast, ask, sheet, openModal, modal,
-  leaveAsk, setAppearance, setLook, appearanceMenu, menu, field, fieldError, check, toggle, segmented, formGroup,
+  leaveAsk, setAppearance, setLook, themePicker, appearanceMenu, menu, field, fieldError, check, toggle, segmented, formGroup,
   collection, pager, openDetail, closeDetail, copy, swatch, paint, progress, setProgress, banner, empty, errorState, loading, shell, phone,
 });
 })();

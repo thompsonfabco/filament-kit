@@ -400,25 +400,9 @@ window.addEventListener("storage", (e) => {                 // another tab chose
 });
 
 // ----- the Settings sheet or page (04 9.2) -----
-const LOOKS = ["console", "workbench", "palette", "panes"];
 const installed = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 let installPrompt = null;                                    // a browser that offers installing (04 10.1)
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
-function themePicker() {
-  const now = document.documentElement.getAttribute("data-look");
-  const fs = h("fieldset", { class: "theme-picker" }, h("legend", { class: "sr" }, SW.t("appearance_theme_title")));
-  for (const look of LOOKS) {
-    const line = SW.uid("look");
-    fs.append(h("label", { class: "theme-picker__tile" },
-      h("input", { class: "theme-picker__input", type: "radio", name: "look", value: look, checked: look === (LOOKS.includes(now) ? now : "console"), "aria-describedby": line }),
-      h("span", { class: "theme-picker__preview", "data-preview": look, "aria-hidden": "true" },
-        h("span", { class: "theme-picker__bar" }), h("span", { class: "theme-picker__nav" }), h("span", { class: "theme-picker__rows" })),
-      h("span", { class: "theme-picker__name" }, SW.t(`theme_${look}_name`)),
-      h("span", { class: "theme-picker__line", id: line }, SW.t(`theme_${look}_line`)),
-      SW.icon("check", "icon--s theme-picker__check")));
-  }
-  return fs;
-}
 // wide: Settings as a page, which also holds "Add to Home Screen" (the More sheet is not there)
 function settingsBody(wide) {
   const group = (title, ...kids) => h("section", { class: "settings__group" }, h("h2", { class: "settings__title" }, title), ...kids);
@@ -426,7 +410,7 @@ function settingsBody(wide) {
   const hubPageLink = () => HUB_PAGE ? h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")) : null;
   return [h("div", { class: "settings" },
     group(SW.t("appearance_title"), appearanceControl({ wide: true, name: null }), h("p", { class: "muted" }, SW.t("settings_saved_on_phone")), live()),
-    group(SW.t("appearance_theme_title"), themePicker(), h("p", { class: "muted" }, SW.t("settings_theme_help")), live()),
+    group(SW.t("appearance_theme_title"), SW.themePicker(), h("p", { class: "muted" }, SW.t("settings_theme_help")), live()),
     PUSH && typeof alertsPanel === "function" ? group(SW.t("settings_alerts_title"), alertsPanel(() => installSheet())) : null,
     group(SW.t("settings_this_hub"), HUB ? h("p", { class: "settings__hub" }, HUB) : null,
       h("p", { class: "settings__address" }, location.origin + location.pathname), hubPageLink()),
