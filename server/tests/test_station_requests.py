@@ -279,6 +279,16 @@ def test_the_page_lists_and_answers_with_the_code_only(app, env, kit):  # noqa: 
     assert sr.poll(r)[0] == 200
 
 
+def test_an_unreadable_certificate_is_logged_with_its_type_and_the_page_gets_the_plain_text(app, env, kit, monkeypatch, caplog):  # noqa: F811
+    def broken():
+        raise PermissionError("denied")
+    monkeypatch.setattr(sr, "pending", broken)
+    r = post(client(app), "stations/requests", {})
+    assert r.status_code == 503 and "PermissionError" not in r.text
+    assert any(x.levelname == "WARNING" and "PermissionError" in x.getMessage() and "denied" in x.getMessage()
+               for x in caplog.records)
+
+
 def test_the_devices_tab_has_the_card():
     src = (STATIC / "setup_devices.js").read_text(encoding="utf-8")
     assert "function stationAsksCard(" in src and "devices_request_hint" in src

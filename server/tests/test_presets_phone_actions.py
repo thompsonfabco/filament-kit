@@ -129,6 +129,13 @@ def test_a_refused_new_line_names_its_field(app):
         assert r.json()["field"] == field and r.json()["message"], (body, r.text)
 
 
+def test_both_parent_inputs_refuse_with_the_one_parent_field(app):
+    c, h, sm = app
+    for body in (_new(orca_parent="Bad@Parent"), _new(bs_template="Bad@Parent"), _new(bs_template="")):
+        r = c.post("/api/profiles/lines", headers=h, json=body)
+        assert r.status_code == 400 and r.json()["field"] == "parent", (body, r.text)
+
+
 def test_an_unknown_parent_names_the_parent_field(app):
     c, h, sm = app
     TB.synced(sm)                                                   # a system store: the parent is checked

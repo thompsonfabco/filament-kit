@@ -7,9 +7,13 @@ takes the code or a trusted computer, as does each answer.
 """
 from __future__ import annotations
 
+import logging
+
 import anyio
 
 from .. import station_requests
+
+log = logging.getLogger(__name__)
 
 
 def routes(page) -> list[tuple]:
@@ -20,7 +24,8 @@ def routes(page) -> list[tuple]:
     async def listing(request, body):
         try:
             return {"requests": await anyio.to_thread.run_sync(station_requests.pending)}
-        except OSError:
+        except OSError as e:
+            log.warning("Weigh Station requests: cannot read the Hub certificate (%s: %s)", type(e).__name__, e)
             raise Refused(503, "cannot read the Hub certificate") from None
 
     def answer(approve: bool):
