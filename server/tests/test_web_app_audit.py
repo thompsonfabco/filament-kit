@@ -707,8 +707,8 @@ READY = {
   g.release();
   await until('the result', () => text('.add__added').includes('Added 1 spool:'));
   need('the result is the Add\'s, not "null"', text('.add__added').includes('Spools added') && !text('.add__added').split(' ').includes('null') && !text('.add').includes('null'));
-  need('the cards and the draft are cleared', !$$('.add__card').length && !localStorage.getItem('spoolwarden.draft.add'));
-  need('the bar starts again; nothing offers a second Add', text('.add__bar-text') === 'Add a spool first: photograph a label or find a filament.' && $('.add__bar-btn').textContent.trim() === 'Preview' && n === 2);
+  need('the sent card is gone, the one added meanwhile stays (it was not sent)', $$('.add__card').length === 1 && $('.add__card').textContent.includes('New spool') && !!localStorage.getItem('spoolwarden.draft.add'));
+  need('nothing offers a second Add of the sent spool: the bar asks for a preview', $('.add__bar-btn').textContent.trim() === 'Preview' && n === 2);
 """,
     "edit_during_preview": r"""
   await waitPage(); const g = gate(); let n = 0; const bodies = [];
@@ -747,6 +747,7 @@ READY = {
   typeIn(field('Net weight', card).querySelector('input'), '1,000');
   typeIn(field('Colour', card).querySelector('input'), 'F2762EFF');
   need('1,000 is a thousand and has no error', field('Net weight', card).querySelector('.field__error').hidden && field('Colour', card).querySelector('.field__error').hidden);
+  need('an 8-digit colour is shown whole', $('.add__sum', card).textContent.includes('#F2762EFF'));
   need('the summary line says 1000 g', $('.add__sum', card).textContent.includes('1000 g'));
   typeIn(field('Net weight', card).querySelector('input'), '1,5');
   need('1,5 is one and a half', $('.add__sum', card).textContent.includes('1.5 g'));
@@ -768,7 +769,7 @@ READY = {
   await waitPage(); const KEY = 'spoolwarden.draft.add';
   if (!sessionStorage.getItem('s38-corrupt')) {                         // the first pass leaves bad drafts; the next ones load the page with them
     sessionStorage.setItem('s38-corrupt', '1');
-    localStorage.setItem(KEY, JSON.stringify({ v: 1, items: [null] })); localStorage.setItem(KEY + '-new', 'not json');
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, items: [null, {}, { vendor: 5, count: 'abc' }] })); localStorage.setItem(KEY + '-new', 'not json');
     return;
   }
   need('the page started and says nothing of the bad drafts', $('.add__bar-text') && !$('.add__draft .banner'));
@@ -796,6 +797,57 @@ READY = {
   button('Try again', $('.add__read')).click();
   await until('the second read', () => reads.length === 2);
   need('it is a read again: the bar waits, with the photos there now', reads[1] === 1 && text('.add__bar-text') === 'Wait for the Label Reader.' && button('Reading…'));
+""",
+    "decimal_commas": r"""
+  await waitPage(); spyAdd(); const stamp = String(Date.now());
+  const card = await newFilament('Elegoo' + stamp, 'PLA Red' + stamp, 'PLA', '160');
+  typeIn(field('Density', card).querySelector('input'), '1,240');
+  need('in a decimal field the comma is the point: 1,240 is 1.24', field('Density', card).querySelector('.field__error').hidden);
+  typeIn(field('Net weight', card).querySelector('input'), '0,500');
+  need('0,500 g is a half gram, not 500', $('.add__sum', card).textContent.includes('0.5 g'));
+  typeIn(field('Spools', card).querySelector('input'), '1,000');
+  need('a whole-number field refuses a comma, in words', !field('Spools', card).querySelector('.field__error').hidden && field('Spools', card).querySelector('.field__error').textContent.includes('Enter a whole number, 1 or more.')
+    && text('.add__bar-text').startsWith('Spool 1, Spools:'));
+  typeIn(field('Spools', card).querySelector('input'), '1');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  need('the Hub got density 1.24 and net 0.5', sent[0].items[0].density === 1.24 && sent[0].items[0].net === 0.5);
+""",
+    "preview_then_read": r"""
+  await waitPage(); stub('add', () => PREVIEWED()); stub('read', () => reply(%(READING)s));
+  await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  await give(2); button('Read labels').click();
+  await until('the cards of the read', () => $$('.add__card').length === 3);
+  need('a read that changes the cards ends the preview', !$('.add__result-row') && !text('.add').includes('Preview ready. Nothing is saved yet.') && text('.add__bar-text').includes('not previewed') && $('.add__bar-btn').textContent.trim() === 'Preview');
+""" % {"READING": json.dumps(READING)},
+    "undo_during_add": r"""
+  await waitPage(); const g = gate(); let n = 0;
+  stub('add', async () => { n++; if (n === 2) await g.wait; return n === 1 ? PREVIEWED() : ADDED(); });
+  await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  await newFilament('Extra', 'Spool', 'PLA', '160');
+  button('Remove', $$('.add__card')[1]).click();                        // a card removed; its toast offers Undo
+  need('one card left, and Undo is offered', $$('.add__card').length === 1 && button('Undo', $('.toasts')));
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  $('.add__bar-btn').click(); await until('the add is under way', busy);
+  button('Undo', $('.toasts')).click();                                 // too late to bring it back into the Add
+  need('Undo does nothing while the Add is written', $$('.add__card').length === 1);
+  g.release(); await until('the result', () => text('.add__added').includes('Added 1 spool:'));
+  need('the Add finished cleanly, no card is left half added', !$$('.add__card').length && n === 2);
+""",
+    "restore_during_add": r"""
+  await waitPage(); const KEY = 'spoolwarden.draft.add';
+  if (!localStorage.getItem(KEY)) { await newFilament('Seed', 'Spool', 'PLA', '160'); await until('the draft is kept', () => localStorage.getItem(KEY)); return; }
+  const g = gate(); let n = 0;
+  stub('add', async () => { n++; if (n === 2) await g.wait; return n === 1 ? PREVIEWED() : ADDED(); });
+  await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  $('.add__bar-btn').click(); await until('the add is under way', busy);
+  const restore = button('Restore them', $('.add__draft')); need('the draft is waiting', restore);
+  restore.click();                                                      // not while the Add is written
+  need('Restore does nothing yet: still one card', $$('.add__card').length === 1);
+  g.release(); await until('the result', () => text('.add__added').includes('Added 1 spool:'));
+  need('the waiting draft is still there, whole', localStorage.getItem(KEY) && button('Restore them', $('.add__draft')) && !$$('.add__card').length);
+  button('Restore them', $('.add__draft')).click(); await until('the drafted card is back', () => $$('.add__card').length >= 1);
 """,
     "card_fields": r"""
   await waitPage(); const card = await newFilament('', '', '');
@@ -833,7 +885,7 @@ def _states(url: str, name: str, *extra: str) -> dict:
     return out
 
 
-MULTI_PASS = ("draft", "draft_restored", "draft_discard", "draft_waiting", "draft_corrupt", "draft_partial")
+MULTI_PASS = ("draft", "draft_restored", "draft_discard", "draft_waiting", "draft_corrupt", "draft_partial", "restore_during_add")
 
 
 @pytest.mark.parametrize("name", [n for n in READY if n not in MULTI_PASS])

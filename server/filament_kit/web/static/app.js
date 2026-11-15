@@ -890,10 +890,15 @@ function addTab() {
   const ADD_REQUIRED = ["vendor", "name", "material", "count", "net"];     // a label without "(optional)"
   const ADD_NUMBER = new Set(["count", "net", "tare", "density", "nozzle", "bed", "gross", "price_per_kg"]);
   const ADD_HEX = /^#?([0-9a-f]{6}|[0-9a-f]{8})$/i;                  // 6 digits, or 8 with the alpha pair last, as the Hub takes them
+  const addHexFull = (s) => { const m = ADD_HEX.exec(String(s || "")); return m ? "#" + m[1].toUpperCase() : ""; };   // as typed and sent
   const addHex = (s) => { const m = ADD_HEX.exec(String(s || "")); return m ? "#" + m[1].slice(0, 6).toUpperCase() : ""; };   // for a swatch
-  const addParse = (text) => {                                   // "1,000" is a thousand, "1,5" one and a half; anything else that is not a number is NaN
+  const ADD_GRAMS = new Set(["net", "tare", "gross"]), ADD_WHOLE = new Set(["count", "nozzle", "bed"]);
+  // "1,000" g is a thousand (a group of three after 1 to 3 digits, the first not 0), "0,500" is a half; in a decimal field (density, price)
+  // the comma is the decimal point; a whole-number field takes no comma
+  const addParse = (text, key) => {
     let t = String(text).trim();
-    t = /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t) ? t.replace(/,/g, "") : t.replace(",", ".");
+    if (ADD_WHOLE.has(key) && t.includes(",")) return NaN;
+    t = ADD_GRAMS.has(key) && /^[1-9]\d{0,2}(,\d{3})+(\.\d+)?$/.test(t) ? t.replace(/,/g, "") : t.replace(",", ".");
     const n = Number(t);
     return t !== "" && Number.isFinite(n) ? n : NaN;
   };
@@ -983,7 +988,7 @@ function addTab() {
   function missing(it) { return ADD_REQUIRED.filter((k) => textOf(it, k) === ""); }
   // the sentence for a value that is not right (null when it is fine or empty and optional)
   function wrong(it, k) {
-    const t = textOf(it, k), n = ADD_NUMBER.has(k) ? addParse(t) : 0;
+    const t = textOf(it, k), n = ADD_NUMBER.has(k) ? addParse(t, k) : 0;
     if (k === COL) return t === "" || ADD_HEX.test(t) ? null : SW.t("add_card_colour_error");
     if (!ADD_NUMBER.has(k) || t === "") return null;
     if (k === "count") return Number.isInteger(n) && n >= 1 ? null : SW.t("add_card_spools_error");
@@ -1029,7 +1034,8 @@ function addTab() {
   // a stored draft is only used when it has the shape this page writes; whatever else is in it is left out (04 4.7)
   function clean(d) {
     if (!isObj(d) || d.v !== 1 || !Array.isArray(d.items)) return null;
-    const its = d.items.filter(isObj), note = typeof d.note === "string" ? d.note : "";
+    const its = d.items.filter((it) => isObj(it) && ["vendor", "name", "material"].every((k) => typeof it[k] === "string") && Number.isFinite(Number(it.count)) && it.count !== null && it.count !== ""),
+      note = typeof d.note === "string" ? d.note : "";
     if (!its.length && !note.trim()) return null;
     const f = isObj(d.found) ? d.found : null, list = (v) => (Array.isArray(v) ? v : []), sum = f && isObj(f.summary) ? f.summary : null;
     return { ...d, items: its, note, readId: typeof d.readId === "string" ? d.readId : null, tag: isObj(d.tag) ? d.tag : null,
@@ -1077,6 +1083,7 @@ function addTab() {
       actions: [SW.btn(SW.t("common_restore_them"), { cls: "btn--primary", run: restore }), SW.btn(SW.t("common_discard"), { run: discard })] }));
   }
   function restore() {
+    if (working === "add" || !pending) return;
     const d = pending; pending = null; draftBox.replaceChildren();
     const mine = items;
     items = [];
@@ -1087,7 +1094,7 @@ function addTab() {
     }
     items.push(...mine);
     listBox.replaceChildren(...items.map((it) => (cards.get(it._id) || addCard(it)).el));
-    if (!noteField._control.value && d.note) noteField._control.value = d.note;
+    if (d.note && !noteField._control.value.includes(d.note)) noteField._control.value = [d.note, noteField._control.value].filter(Boolean).join("\n");
     if (!found && !readId && !tag) { found = d.found || null; readId = d.readId || null; tag = d.tag || null; }
     started = d.started || Date.now();
     if (d.readId || d.found) draftBox.append(line("info", SW.t("add_draft_photos_not_kept")));
@@ -1095,6 +1102,7 @@ function addTab() {
     SW.announce(SW.t("add_draft_banner", { age: ageText(d.changed || started), count: spoolsOf(d.items || []) }));
   }
   async function discard(e) {
+    if (working === "add" || !pending) return;
     const ok = await SW.ask({ kind: "destructive", title: SW.t("home_draft_discard_title"), text: SW.t("add_draft_discard_body", { count: spoolsOf(pending.items || []) }),
       confirm: SW.t("common_discard"), cancel: SW.t("common_keep"), open: openHere, opener: e && e.currentTarget });
     if (!ok) return;
@@ -1115,7 +1123,7 @@ function addTab() {
   // ============ an edit, an added or removed card, a new read: the preview is out of date ============
   function changed(it) {
     rev++;
-    if (previewed) { if (!working) { previewBox.replaceChildren(); memo = null; } edited = it ? it._id : null; }   // a request under way keeps its answer's place
+    if (previewed) { if (working !== "add") { previewBox.replaceChildren(); memo = null; } edited = it ? it._id : null; }   // only an Add under way keeps its result
     else if (working && it) edited = it._id;
     previewed = false; problemsShown = false;
     changedAt = Date.now();
@@ -1325,11 +1333,13 @@ function addTab() {
   const addCard = (it) => { const c = buildCard(it); cards.set(it._id, c); listBox.append(c.el); return c; };
   const dropCard = (it) => { const c = cards.get(it._id); if (c) { c.el.remove(); cards.delete(it._id); } };
   function removeItem(it) {
+    if (working === "add") return;
     const at = items.indexOf(it), c = cards.get(it._id);
     items.splice(at, 1); c.el.remove(); cards.delete(it._id);
     drawList(); changed();
     listHead.focus();
     SW.toast(SW.t("add_review_removed"), "ok", { action: { label: SW.t("common_undo"), run: () => {
+      if (working === "add" || items.includes(it)) return;       // not while an Add is written: it would be dropped with the sent cards
       const to = Math.min(at, items.length);
       items.splice(to, 0, it); cards.set(it._id, c); listBox.insertBefore(c.el, listBox.children[to] || null);
       drawList(); changed();
@@ -1358,7 +1368,7 @@ function addTab() {
       return f;
     };
     function edit(key, value) {
-      if (ADD_NUMBER.has(key)) { it._text[key] = value; const n = addParse(value); it[key] = value.trim() === "" || Number.isNaN(n) ? null : n; }
+      if (ADD_NUMBER.has(key)) { it._text[key] = value; const n = addParse(value, key); it[key] = value.trim() === "" || Number.isNaN(n) ? null : n; }
       else if (key === COL) it.color_hex = value.trim().replace(/^#/, "");
       else it[key] = value;
       it._edited = true; delete it._levels[key]; delete it._fill[key]; delete it._problems[key];
@@ -1404,7 +1414,7 @@ function addTab() {
       paintSwatch();
       chips.replaceChildren(h("span", { class: "add__chip", textContent: it.existing_filament_id ? SW.t("add_existing_filament", { id: SW.t("common_filament_number", { id: it.existing_filament_id }) }) : SW.t("add_new_filament") }),
         ...(Number(it.count) > 1 ? [h("span", { class: "add__chip mono", textContent: SW.t("add_card_chip_count", { count: it.count }) })] : []));
-      const hex = addHex(it.color_hex);
+      const hex = addHexFull(it.color_hex);
       sum.textContent = [it.material, hex || SW.t("common_no_colour"), it.net != null ? SW.t("common_grams", { grams: it.net }) : "",
         it.sealed ? SW.t("common_sealed") : it.gross != null ? SW.t("add_card_opened", { grams: it.gross }) : SW.t("add_preview_opened"),
         it.location || SW.t("common_option_automatic")].filter(Boolean).join(" · ");
@@ -1430,7 +1440,7 @@ function addTab() {
     function showErrors() { for (const [k, f] of Object.entries(fields)) SW.fieldError(f, sentence(it, k)); }
 
     // ---- the fields, in the six groups of the Android app ----
-    const colourField = mk(COL, { optional: true, mono: true, unit: "#", placeholder: SW.t("add_card_colour_placeholder"), value: it.color_hex ? addHex(it.color_hex) : "" });
+    const colourField = mk(COL, { optional: true, mono: true, unit: "#", placeholder: SW.t("add_card_colour_placeholder"), value: it.color_hex ? addHexFull(it.color_hex) : "" });
     const picker = h("input", { class: "add__picker", type: "color", value: addHex(it.color_hex).toLowerCase() || "#808080", "aria-labelledby": id + "-pick",
       on: { input: (e) => { colourField._control.value = e.target.value.toUpperCase(); edit(COL, colourField._control.value); SW.fieldError(colourField, sentence(it, COL)); } } });
     const box = colourField.querySelector(".field__box");        // the swatch and the picker sit inside the field's box, at its right
@@ -1521,8 +1531,8 @@ function addTab() {
     ans.code.replaceChildren(); itemsBox.replaceChildren(); extras.replaceChildren();
     const mine = resultGroup(dry ? SW.t("add_preview_title") : SW.t("common_add"), dry), sent = rev;
     previewBox.replaceChildren(mine);
-    for (const part of [inputs, foundBox, listGroup]) part.inert = !dry;     // while an Add is written nothing is edited
-    const n = spoolsOf();
+    for (const part of [inputs, foundBox, listGroup, draftBox]) part.inert = !dry;     // while an Add is written nothing is edited
+    const n = spoolsOf(), sentItems = items.slice();
     try {
       await act(ans, dry ? SW.t("add_preview_checking") : SW.t("add_preview_adding"), async () => {
         let res;
@@ -1548,7 +1558,7 @@ function addTab() {
         previewBox.replaceChildren(); addedBox.replaceChildren(mine);
         mine.querySelector(".group__title").textContent = SW.t("add_done_title");
         mine.querySelector(".add__sub")?.remove();
-        everything(); SW.toast(SW.t("add_added_toast", { count: ids.length || n }));
+        everything(sentItems); SW.toast(SW.t("add_added_toast", { count: ids.length || n }));
         if (HISTORY && res.history_id) extras.append(SW.btn(SW.t("add_added_check_recent"), { run: () => { location.hash = "#recent/" + encodeURIComponent(res.history_id); } }));
         if (made || !res.items) extras.append(h("p", {}, made ? SW.t("add_added_new_filaments", { count: made }) : null),
           SW.btn(SW.t("add_added_set_up_presets"), { run: () => { location.hash = "#presets"; } }));
@@ -1557,7 +1567,7 @@ function addTab() {
       }, { button: barBtn, busy: dry ? SW.t("common_checking") : SW.t("common_adding"), again: () => submit(true) });
     } finally {
       working = null; paintBar();
-      for (const part of [inputs, foundBox, listGroup]) part.inert = false;
+      for (const part of [inputs, foundBox, listGroup, draftBox]) part.inert = false;
       if (previewBox.firstElementChild) previewBox.firstElementChild.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }
@@ -1568,9 +1578,12 @@ function addTab() {
     return g;
   }
   // everything of the add is cleared after an Add: cards, photos, note, tag, search (04 4.6)
-  function everything() {
-    for (const it of items) dropCard(it);
-    items = []; tag = null; readId = null; found = null; previewed = false; problemsShown = false; edited = null;
+  function everything(sent) {
+    for (const it of sent) dropCard(it);
+    items = items.filter((it) => !sent.includes(it));          // a card that was not sent stays
+    previewed = false; problemsShown = false; edited = null;
+    if (items.length) { drawList(); paintBar(); save(); return; }
+    tag = null; readId = null; found = null;
     photos.splice(0).forEach((p) => URL.revokeObjectURL(p.url));
     noteField._control.value = ""; searchField._control.value = ""; rows = []; findBox.replaceChildren(); clear(findLine);
     drawFound(); drawPhotos(); drawList(); clearDraft();
