@@ -208,20 +208,23 @@ def test_uninstall_falls_back_to_the_newest_kept_release_and_says_so(tmp_path, f
     ran = []
     assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: ran.append(Path(cmd[1]).read_text()) or 3) == 3
     assert ran == ["# 1.1.0\n"]
-    out = capsys.readouterr().out
-    assert "no kept copy of 1.2.0" in out and "uninstall.sh of 1.1.0" in out
+    seen = capsys.readouterr()
+    note = " ".join(seen.err.split())
+    assert "no copy of 1.2.0 is kept" in note and "removal script of 1.1.0" in note
+    assert "The removal stopped" in seen.out
 
 
 def test_uninstall_with_the_running_versions_copy_says_nothing_extra(tmp_path, fake_release, capsys):
     _kept(tmp_path, "1.2.0")
     assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: 0) == 0
-    assert capsys.readouterr().out == ""
+    seen = capsys.readouterr()
+    assert seen.out == "filament-kit is removed from this machine.\n" and seen.err == ""
 
 
 def test_uninstall_without_a_kept_release_says_how_to_get_one(tmp_path, fake_release, capsys):
     assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: 0) == 1
     err = capsys.readouterr().err
-    assert "no kept copy" in err and "filament-kit-1.2.0.tar.gz" in err and "./uninstall.sh" in err
+    assert "no copy of a release is kept" in err and "filament-kit-1.2.0.tar.gz" in err and "./uninstall.sh" in err
 
 
 def _verify_fails_for(monkeypatch, *versions):
@@ -242,7 +245,7 @@ def test_uninstall_skips_a_kept_copy_that_does_not_verify_and_uses_the_next(tmp_
     ran = []
     assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: ran.append(Path(cmd[1]).read_text()) or 0) == 0
     assert ran == ["# 1.1.0\n"]                              # never the tampered one, not the older one either
-    assert "uninstall.sh of 1.1.0" in capsys.readouterr().out
+    assert "removal script of 1.1.0" in " ".join(capsys.readouterr().err.split())
 
 
 def test_uninstall_runs_nothing_when_no_kept_copy_verifies(tmp_path, fake_release, monkeypatch, capsys):
@@ -250,7 +253,7 @@ def test_uninstall_runs_nothing_when_no_kept_copy_verifies(tmp_path, fake_releas
     _kept(tmp_path, "1.1.0")
     _verify_fails_for(monkeypatch, "1.2.0", "1.1.0")
     assert cli.cmd_uninstall(purge=True, yes=True, run=lambda cmd: pytest.fail("ran an unverified uninstall.sh")) == 1
-    assert "no kept copy" in capsys.readouterr().err
+    assert "no copy of a release is kept" in capsys.readouterr().err
 
 
 def test_uninstall_refuses_when_not_root(tmp_path, fake_release, monkeypatch, capsys):
@@ -263,7 +266,7 @@ def test_uninstall_refuses_when_not_root(tmp_path, fake_release, monkeypatch, ca
 
 def test_uninstall_is_a_cli_command_run_as_root():
     wrapper = (ROOT / "install" / "filament-kit-cli.sh").read_text(encoding="utf-8")
-    assert "| update | uninstall | station | setup-code)" in wrapper
+    assert "| update | uninstall | station |" in wrapper and "| setup-code | logs)" in wrapper
     with pytest.raises(SystemExit):
         cli.main(["uninstall", "--bogus"])
 

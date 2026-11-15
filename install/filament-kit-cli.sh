@@ -50,10 +50,19 @@ run_as_root() { exec "$BIN" ${SWITCHES[@]+"${SWITCHES[@]}"} "$@"; }
 run_as_user() { exec runuser -u filament-kit -- "$BIN" ${SWITCHES[@]+"${SWITCHES[@]}"} "$@"; }
 
 case "${1:-}" in
-    config | cert | modules | remote | update | uninstall | station | setup-code)
+    config | cert | certificate | modules | features | remote | update | uninstall | station | weigh-station \
+        | setup-code | logs)
         run_as_root "$@"
         ;;
 esac
+# `spoolman address` saves the Hub's settings and applies them; `spoolman fields` runs as the user below.
+if [ "${1:-}" = spoolman ] && [ "${2:-}" = address ] && [ -n "${3:-}" ]; then
+    run_as_root "$@"
+fi
+# `catalog token` writes the root-owned token file; `catalog status`, `update`, `rollback`, `add` and `adopt` run as the user.
+if [ "${1:-}" = catalog ] && [ "${2:-}" = token ]; then
+    run_as_root "$@"
+fi
 # `backup` and `restore` read and write everything the kit keeps, its root-owned files too.
 case "${1:-}" in
     backup | restore) run_as_root "$@" ;;
@@ -77,14 +86,14 @@ if [ "${1:-}" = local-intake ] && { [ "${2:-}" = install ] || [ "${2:-}" = remov
 fi
 
 if [ "$(id -u)" -eq 0 ]; then
-    # `library add <file>`: the service user may not be able to read a file in the caller's home folder,
-    # so root opens it and the CLI reads it on stdin.
-    if [ "${1:-}" = library ] && [ "${2:-}" = add ] && [ -n "${3:-}" ] && [ "$3" != - ]; then
+    # `catalog add <file>` (and the old `library add`): the service user may not be able to read a file in the
+    # caller's home folder, so root opens it and the CLI reads it on stdin.
+    if { [ "${1:-}" = catalog ] || [ "${1:-}" = library ]; } && [ "${2:-}" = add ] && [ -n "${3:-}" ] && [ "$3" != - ]; then
         if [ ! -f "$3" ] || [ ! -r "$3" ]; then
-            printf 'error: %s: no such file (give the path to a library entry JSON file)\n' "$3" >&2
-            exit 1
+            printf 'Error: there is no readable file at %s.\nFix: give the path of one catalog entry as a JSON file.\n' "$3" >&2
+            exit 2
         fi
-        run_as_user library add - < "$3"
+        run_as_user "$1" add - < "$3"
     fi
     # `status`: the station's pairing folder is closed to the service user, so root looks and status gets the answer
     # (one line, never the token). With no folder there is no pairing to find, and status says so itself.

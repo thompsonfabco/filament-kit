@@ -387,19 +387,35 @@ def check_info(cfg: dict, *, fetcher: release.Fetcher | None = None, now: float 
             "notes": notes, "going_back": back}
 
 
+def _schedule_words(cfg: dict) -> str:
+    """The line about the Automatic updates feature (06 9.13, the Hub page's words)."""
+    if MODULE not in modules.enabled(cfg):
+        return "Not checked by itself: the Automatic updates feature is off."
+    return f"Checked by itself {settings(cfg)['schedule']} (the Automatic updates feature)."
+
+
 def check(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
+    """`update --check` (06 9.13): the installed version, the latest release, what the Hub page says of held and failed."""
     try:
-        info = check_info(cfg, fetcher=fetcher)
+        with output.wait("Checking for updates…"):
+            info = check_info(cfg, fetcher=fetcher)
     except ReleaseError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
+        output.error(str(e))
+        return output.FAILED
     cur, latest = info["installed"], info["latest"]
-    if info["newer"]:
-        note = " (rolled back earlier: the timer skips it; sudo filament-kit update installs it)" \
-            if info["held"] == latest else ""
-        output.out(f"installed {cur}; {latest} is available{note}: sudo filament-kit update")
-    else:
-        print(f"installed {cur}; latest release {latest}: up to date")
+    output.out(f"Installed: {cur}.")
+    output.out(f"Latest release: {latest}." if info["newer"] else f"Latest release: {latest} (up to date).")
+    st = _read_state()
+    if info["held"] == latest:
+        output.out(f"{latest} was rolled back. Automatic updates skip it; sudo filament-kit update installs it.")
+    if isinstance(st.get("failed"), str) and st["failed"]:
+        output.out(f"Installing {st['failed']} failed before. Automatic updates wait for a newer release; "
+                   "sudo filament-kit update tries it again.")
+    repair = half_install()
+    if repair:
+        output.out_lines(output.status_row("needs a look", "The last install or update stopped halfway.",
+                                           f"to repair it, run: {repair}"))
+    output.out(_schedule_words(cfg))
     return 0
 
 
@@ -509,7 +525,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
             return 1
         if not _newer(latest, cur) and not nightly_now:
             _write_state(last_ok_at=now)
-            print(f"filament-kit {cur} is up to date")
+            output.out(f"No updates available: {cur} is the latest.")
             return _feed(fetcher, rel)
         st = _read_state()
         if scheduled and st.get("held") == latest:
@@ -540,11 +556,14 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
                 print(f"going back to the signed release {latest} (older than this nightly's {cur})")
             try:
                 job.next("Checking its signature")
-                ok = (_install_older if downgrade else _install)(cfg, latest, _start_at(run, job, "Installing"))
+                with output.wait(f"Updating to {latest}…", programs=True):
+                    ok = (_install_older if downgrade else _install)(cfg, latest, _start_at(run, job, "Installing"))
             except ReleaseError:        # re-verify or unpack refused it: nothing was stopped or changed
                 _write_state(previous=old_previous)
                 raise
             if not ok:
+                output.out_lines(output.status_row("failed", f"Updating to {latest} failed.",
+                                                   "see the whole log: sudo filament-kit logs"))
                 return _restore(cfg, cur, kept, old_previous, run)
     except Busy as e:
         print(f"{'skipped' if scheduled else 'error'}: printer {e} is mapping or loading; "
@@ -557,8 +576,8 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
     previous = cur if _kept(cur) and not nightly_now else old_previous if isinstance(old_previous, str) else None
     _write_state(last_ok_at=now, previous=previous, held=None, failed=None)
     _prune({latest, cur} | ({previous} if previous else set()))
-    print(f"updated filament-kit {version_text() if nightly_now else cur} -> {latest}"
-          + ("" if previous else " (no rollback copy)"))
+    output.out_lines(output.status_row("done", f"Installed {latest}. The Hub is back."
+                                       + ("" if previous else " No rollback copy is kept.")))
     return _feed_after_install(cfg, fetcher, rel, run)
 
 
@@ -813,17 +832,19 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
     st = _read_state()
     target = st.get("previous")
     if not isinstance(target, str) or not _kept(target):
-        print(f"error: no verified earlier version is kept in {store()}; nothing to roll back to",
-              file=sys.stderr)
-        return 1
+        output.error("no earlier version is kept, so there is nothing to roll back to.")
+        return output.FAILED
     if not _modules_fit(target):
         return 1
     job.next(f"Installing {target}")
     try:
         with printers_idle():
-            if not _install_older(cfg, target, run):
-                print("error: the rollback failed; the version before is still kept, try again", file=sys.stderr)
-                return 1
+            with output.wait(f"Rolling back to {target}…", programs=True):
+                ok = _install_older(cfg, target, run)
+            if not ok:
+                output.out_lines(output.status_row("failed", f"Rolling back to {target} failed.",
+                                                   "see the whole log: sudo filament-kit logs"))
+                return output.FAILED
     except Busy as e:
         print(f"error: printer {e} is mapping or loading; try again when it is done", file=sys.stderr)
         return 1
@@ -832,6 +853,7 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
         return 1
     held = cur if cur != target else st.get("held")    # after a half-done update this process may say `target`
     _write_state(previous=None, held=held)
-    output.out(f"rolled back filament-kit {cur} -> {target}; settings and data stay as they are."
-               + (f" The timer will not install {held} again; sudo filament-kit update does." if held else ""))
+    output.out_lines(output.status_row("done", f"Rolled back to {target}. The Hub is back."))
+    if held:
+        output.out(f"Automatic updates will not install {held} again; sudo filament-kit update does.")
     return 0

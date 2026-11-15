@@ -43,7 +43,7 @@ def test_a_nightly_is_replaced_by_the_latest_release(env, srv, monkeypatch, caps
     run = Runner()
     assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=run) == 0
     assert run.installed == ["filament-kit-1.0.0"]
-    assert "updated filament-kit 1.0.0-nightly.20261110 -> 1.0.0" in capsys.readouterr().out
+    assert "Installed 1.0.0. The Hub is back." in capsys.readouterr().out
 
 
 def test_a_newer_nightly_is_replaced_by_the_older_release(env, srv, monkeypatch, capsys):
@@ -64,7 +64,7 @@ def test_a_release_on_a_release_is_up_to_date(env, srv, capsys):
     srv.add("1.0.0")
     run = Runner()
     assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=run) == 0
-    assert run.installed == [] and "up to date" in capsys.readouterr().out
+    assert run.installed == [] and "No updates available: 1.0.0 is the latest." in capsys.readouterr().out
 
 
 def test_a_nightly_kit_sees_the_release_as_newer(env, srv, monkeypatch):
@@ -80,7 +80,7 @@ def test_a_nightly_channel_left_in_config_is_ignored(env, srv, capsys):
     srv.add("1.0.0")
     run = Runner()
     assert updates.update(_cfg(env, updates={"channel": "nightly"}), fetcher=srv.fetcher(), run=run) == 0
-    assert "up to date" in capsys.readouterr().out
+    assert "No updates available: 1.0.0 is the latest." in capsys.readouterr().out
     assert "channel" not in updates.view(_cfg(env, updates={"channel": "nightly"}))
 
 

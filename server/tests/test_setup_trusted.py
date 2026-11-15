@@ -296,7 +296,7 @@ def test_a_new_setup_code_keeps_trusted_computers_and_says_so(app, helper, monke
     assert _change(c).status_code == 200 and _change(c, code=CODE).status_code == 403     # cookie yes, old code no
     assert cli.main(["setup-code", "--new", "--revoke-trusted", "--yes"]) == 0
     out = capsys.readouterr().out
-    assert "1 trusted computer revoked: each needs the setup code again." in out and "stay trusted" not in out
+    assert "1 trusted computer revoked. Each needs the setup code again." in out and "stay trusted" not in out
     assert _change(c).status_code == 403 and trusted.listing() == []
     assert cli.main(["setup-code", "--new", "--yes"]) == 0
     assert "trusted" not in capsys.readouterr().out.lower()                                 # nobody trusted: no line

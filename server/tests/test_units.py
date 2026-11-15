@@ -130,9 +130,13 @@ def test_backup_excludes():
 
 def test_cli_wrapper_library_add_uses_stdin():
     text = _text(INSTALL / "filament-kit-cli.sh")
-    assert 'run_as_user library add - < "$3"' in text  # root opens the file; the service user reads it on stdin
+    assert 'run_as_user "$1" add - < "$3"' in text  # root opens the file; the service user reads it on stdin
+    # the new name and the old spelling both read from stdin
+    assert '{ [ "${1:-}" = catalog ] || [ "${1:-}" = library ]; } && [ "${2:-}" = add ]' in text
     assert 'run_as_user() { exec runuser -u filament-kit -- "$BIN" ' in text
     assert '[ ! -f "$3" ] || [ ! -r "$3" ]' in text  # a missing file is refused with a message
+    refusal = text[text.index('[ ! -f "$3" ] || [ ! -r "$3" ]'):text.index('run_as_user "$1" add - < "$3"')]
+    assert "exit 2" in refusal                                # a usage error (06 6.7)
 
 
 def test_release_packages_path_units_and_keeps_library_out_of_the_wheel():

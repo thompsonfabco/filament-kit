@@ -40,16 +40,16 @@ LOCAL = {"vendor": "SUNLU", "product": "PLA+ 2.0", "material": "PLA",
 def test_status_bundled(capsys):
     assert cli.main(["library", "status"]) == 0
     out = capsys.readouterr().out
-    assert f"library version {library.load().version} (updated), 0 local additions" in out
+    assert f"Filament Catalog version {library.load().version} (signed release), 0 local additions." in out
     assert library.DEFAULT_LIBRARY_URL in out
-    assert "last check: never" in out
+    assert "Last check: never." in out
 
 
 def test_add_from_stdin(capsys, monkeypatch, rebuilds):
     _stdin(monkeypatch, json.dumps(LOCAL).encode())
     assert cli.main(["library", "add", "-"]) == 0
     out = capsys.readouterr().out
-    assert "sunlu--pla-plus-2-0" in out
+    assert "Added SUNLU PLA+ 2.0. A preset build follows." in out
     assert library.load().local_count == 1
     assert len(rebuilds) == 1 and "sunlu--pla-plus-2-0" in rebuilds[0]
     assert cli.main(["library", "status"]) == 0
@@ -77,14 +77,14 @@ def test_update_scheduled_off(capsys, monkeypatch):
     config.save(cfg)
     monkeypatch.setattr(library, "update", lambda *a, **k: pytest.fail("must not update"))
     assert cli.main(["library", "update", "--scheduled"]) == 0
-    assert "library updates are off" in capsys.readouterr().out
+    assert "Filament Catalog updates are off." in capsys.readouterr().out
 
 
 def test_update_scheduled_not_due(capsys, monkeypatch):
     monkeypatch.setattr(library, "due", lambda cfg, now: False)
     monkeypatch.setattr(library, "update", lambda *a, **k: pytest.fail("must not update"))
     assert cli.main(["library", "update", "--scheduled"]) == 0
-    assert "not due" in capsys.readouterr().out
+    assert "Not due yet." in capsys.readouterr().out
 
 
 def test_update_error_exits_1_without_query(capsys, monkeypatch, rebuilds):
@@ -96,8 +96,9 @@ def test_update_error_exits_1_without_query(capsys, monkeypatch, rebuilds):
     cfg["library"]["url"] = "https://mirror.example/lib/"
     config.save(cfg)
     assert cli.main(["library", "update"]) == 1
-    err = capsys.readouterr().err
-    assert "404" in err and "not found" in err and f"using version {library.load().version}" in err
+    out = capsys.readouterr().out
+    assert "failed " in out
+    assert "404" in out and "not found" in out and f"using version {library.load().version}" in out
     assert rebuilds == []
 
 
@@ -115,7 +116,7 @@ def test_update_changed_requests_rebuild(capsys, monkeypatch, rebuilds):
     monkeypatch.setattr(library, "update",
                         lambda url=None, **k: library.UpdateResult(True, 3, 1, None))
     assert cli.main(["library", "update"]) == 0
-    assert "library version 3" in capsys.readouterr().out
+    assert "Installed 3 (1 entry downloaded)." in capsys.readouterr().out
     assert len(rebuilds) == 1
 
 
@@ -123,7 +124,7 @@ def test_update_unchanged_no_rebuild(capsys, monkeypatch, rebuilds):
     monkeypatch.setattr(library, "update",
                         lambda url=None, **k: library.UpdateResult(False, 2, 0, None))
     assert cli.main(["library", "update"]) == 0
-    assert "up to date" in capsys.readouterr().out
+    assert "Up to date: 2." in capsys.readouterr().out
     assert rebuilds == []
 
 
@@ -135,7 +136,7 @@ def test_rollback_nothing(capsys, no_library):
 def test_rollback_ok(capsys, monkeypatch, rebuilds):
     monkeypatch.setattr(library, "rollback", lambda: 3)
     assert cli.main(["library", "rollback", "--yes"]) == 0
-    assert "library version 3" in capsys.readouterr().out
+    assert "Back to version 3." in capsys.readouterr().out
     assert len(rebuilds) == 1
 
 
@@ -143,7 +144,7 @@ def test_rollback_says_scheduled_updates_skip_it(capsys, monkeypatch, rebuilds):
     monkeypatch.setattr(library, "rollback", lambda: 3)
     monkeypatch.setattr(library, "rolled_back_from", lambda: 4)
     assert cli.main(["library", "rollback", "--yes"]) == 0
-    assert "skip version 4" in capsys.readouterr().out
+    assert "skip version 4" in capsys.readouterr().err
 
 
 def test_scheduled_update_held_after_rollback(capsys, monkeypatch, rebuilds):
@@ -222,7 +223,7 @@ def test_status_prints_sanitized_url(capsys):
     config.save(cfg)
     assert cli.main(["library", "status"]) == 0
     out = capsys.readouterr().out
-    assert "url: https://mirror.example/lib/\n" in out
+    assert "Source: https://mirror.example/lib/\n" in out
     assert "s3cret" not in out and "pw@" not in out and "frag" not in out
 
 

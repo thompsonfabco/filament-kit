@@ -145,7 +145,7 @@ def test_remote_print_names_ports_window_and_sandbox(tmp_path, capsys):
     assert run.calls == []  # printing runs nothing
     assert "443" in out and "80" in out and "03:10 America/New_York" in out
     assert "IPAddressAllow=127.0.0.0/8 ::1 160.79.104.0/21 2607:6bc0::/48 192.168.5.0/24" in out
-    assert "certbot" in out and "filament-kit remote issue" in out
+    assert "certbot" in out and "filament-kit remote get-certificate" in out
     assert "will not change" in out  # says plainly that the kit does not apply it
 
 
@@ -198,7 +198,8 @@ def test_issue_runs_certbot_standalone_with_hooks(monkeypatch, capsys):
     assert "me@example.org" in text and "--agree-tos" in cmd
     for hook, arg in (("--pre-hook", "pre"), ("--post-hook", "post"), ("--deploy-hook", "deploy")):
         assert cmd[cmd.index(hook) + 1] == f"{remote.HOOK} {arg}"
-    assert "port 80" in capsys.readouterr().out  # the owner opens it; we only say so
+    seen = capsys.readouterr()
+    assert "port 80" in seen.err and "Certificate issued for fk.example.org." in seen.out  # the owner opens it; we only say so
     assert not FORBIDDEN.search(text)
 
 
@@ -237,7 +238,7 @@ def test_cli_remote_firewall_only_prints(capsys, tmp_path, monkeypatch):
 
 def test_wrapper_runs_remote_as_root():
     text = (INSTALL / "filament-kit-cli.sh").read_text()
-    assert "config | cert | modules | remote | update | uninstall | station | setup-code)" in text
+    assert "| remote | update | uninstall |" in text and "| setup-code | logs)" in text
 
 
 def test_no_firewall_command_anywhere_in_the_remote_code_or_files():

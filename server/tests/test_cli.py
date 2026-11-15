@@ -167,12 +167,15 @@ def test_key_never_printed(monkeypatch, capsys, secret_terminal):
 
 def test_cert_creates_once_and_never_regenerates(capsys):
     assert cli.main(["cert"]) == 0
-    first = capsys.readouterr().out.strip()
+    first = capsys.readouterr().out
     pem = (config.paths().etc / "cert.pem").read_bytes()
-    assert first == pairing.fingerprint(pem)
-    assert cli.main(["cert"]) == 0
+    assert first.startswith("Made a new certificate.\nFingerprint:\n")
+    assert "".join(first.split("Fingerprint:")[1].split()) == pairing.fingerprint(pem)
+    assert cli.main(["certificate"]) == 0
     assert (config.paths().etc / "cert.pem").read_bytes() == pem
-    assert capsys.readouterr().out.strip() == first
+    second = capsys.readouterr().out
+    assert second.startswith("Certificate present.\n")
+    assert second.split("\n", 1)[1] == first.split("\n", 1)[1]
 
 
 def test_cert_force_not_offered():

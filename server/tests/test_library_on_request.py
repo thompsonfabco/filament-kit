@@ -98,7 +98,8 @@ def test_library_module_is_off_for_new_installs():
 
 def test_cli_status_says_not_downloaded(fresh, capsys):
     assert cli.main(["library", "status"]) == 0
-    assert "library not downloaded (run: filament-kit library update)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "The Filament Catalog is not downloaded yet.\nFix: sudo filament-kit catalog update" in out
 
 
 # ---------- profiles without any library ----------
@@ -386,7 +387,7 @@ def test_adopt_with_nothing_there(fresh, tmp_path):
 
 def test_cli_library_adopt(fresh, tmp_path, capsys):
     assert cli.main(["library", "adopt", str(legacy_dir(tmp_path))]) == 0
-    assert "kept the library" in capsys.readouterr().out
+    assert "Took over the catalog in" in " ".join(capsys.readouterr().out.split())
     assert library.load().source == "updated"
 
 

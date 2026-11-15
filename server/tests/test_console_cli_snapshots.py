@@ -115,13 +115,16 @@ def raw_lines(capsys):
 def test_update_check_lines(cfg, capsys, monkeypatch):
     monkeypatch.setattr(updates, "current_version", lambda: "0.5.0")
     assert updates.check(cfg, fetcher=Fetcher("0.5.0")) == 0
-    assert raw_lines(capsys) == ["installed 0.5.0; latest release 0.5.0: up to date"]
+    off = "Not checked by itself: the Automatic updates feature is off."
+    assert raw_lines(capsys) == ["Installed: 0.5.0.", "Latest release: 0.5.0 (up to date).", off]
     assert updates.check(cfg, fetcher=Fetcher("0.6.0")) == 0
-    assert raw_lines(capsys) == ["installed 0.5.0; 0.6.0 is available: sudo filament-kit update"]
+    assert raw_lines(capsys) == ["Installed: 0.5.0.", "Latest release: 0.6.0.", off]
     updates._write_state(held="0.6.0")
     assert updates.check(cfg, fetcher=Fetcher("0.6.0")) == 0
-    assert raw_lines(capsys) == ["installed 0.5.0; 0.6.0 is available (rolled back earlier: the timer skips it;",
-                             "     sudo filament-kit update installs it): sudo filament-kit update"]
+    lines = raw_lines(capsys)
+    assert lines[:2] == ["Installed: 0.5.0.", "Latest release: 0.6.0."] and lines[-1] == off
+    assert " ".join(lines[2:-1]) == ("0.6.0 was rolled back. Automatic updates skip it; sudo filament-kit update "
+                                     "installs it.")
 
 
 def test_update_check_failure_line(cfg, capsys):
@@ -129,5 +132,5 @@ def test_update_check_failure_line(cfg, capsys):
         def release(self, repo, version=None):
             raise updates.ReleaseError("cannot reach api.github.com: no route")
     assert updates.check(cfg, fetcher=Down()) == 1
-    assert "error: cannot reach api.github.com: no route" in capsys.readouterr().err
+    assert "Error: cannot reach api.github.com: no route" in capsys.readouterr().err
     assert json.dumps(updates._read_state().get("latest")) == "null"

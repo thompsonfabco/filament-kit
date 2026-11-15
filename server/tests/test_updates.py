@@ -178,7 +178,7 @@ def test_summary_carries_the_half_install_line(env):
 def test_check_says_newer(env, srv, key, capsys):
     srv.add("1.1.0")
     assert updates.check(_cfg(env), fetcher=srv.fetcher()) == 0
-    assert "1.1.0 is available" in capsys.readouterr().out
+    assert "Latest release: 1.1.0." in capsys.readouterr().out
 
 
 def test_check_up_to_date(env, srv, key, capsys):
@@ -199,7 +199,7 @@ def test_update_installs_and_keeps_the_previous(env, srv, key, capsys):
     assert st["previous"] == "1.0.0" and st["held"] is None and st["last_ok_at"] == 1000.0
     kept = sorted(p.name for p in (env / "opt/releases").iterdir() if p.is_dir())
     assert kept == ["1.0.0", "1.1.0"]
-    assert "updated filament-kit 1.0.0 -> 1.1.0" in capsys.readouterr().out
+    assert "Installed 1.1.0. The Hub is back." in capsys.readouterr().out
 
 
 def test_update_stops_the_services_when_systemd(env, srv, key, monkeypatch):
@@ -429,7 +429,7 @@ def test_no_rollback_copy_still_updates_with_a_warning(env, srv, key, capsys):
     run = Runner()
     assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=run) == 0
     out, err = capsys.readouterr()
-    assert "no verified copy of the installed 1.0.0" in err and "(no rollback copy)" in out
+    assert "no verified copy of the installed 1.0.0" in err and "No rollback copy is kept." in out
     assert _state(env)["previous"] is None
 
 
@@ -533,7 +533,7 @@ def test_cli_update_check(env, srv, key, monkeypatch, capsys):
     _cfg(env)
     monkeypatch.setattr(updates, "default_fetcher", lambda cfg: srv.fetcher())
     assert cli.main(["update", "--check"]) == 0
-    assert "1.2.0 is available" in capsys.readouterr().out
+    assert "Latest release: 1.2.0." in capsys.readouterr().out
 
 
 def test_cli_update_flags_are_exclusive(capsys):
@@ -547,7 +547,7 @@ def test_update_runs_the_real_install_sh(env, srv, key, capsys):
     srv.add("1.1.0")
     assert updates.update(_cfg(env), fetcher=srv.fetcher()) == 0      # default_run: bash install.sh
     out = capsys.readouterr().out
-    assert "installed" in out or "updated filament-kit 1.0.0 -> 1.1.0" in out
+    assert "installed" in out or "Installed 1.1.0. The Hub is back." in out
     assert not (env / "opt/releases/.work").exists()
 
 

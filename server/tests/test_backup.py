@@ -237,7 +237,10 @@ def test_restore_brings_every_file_and_the_database_back(kit, capsys):
     assert run.cmds == [[backup.WRAPPER, "modules", "apply", "--no-pair"], [backup.WRAPPER, "status"]]
     assert not list(kit.glob("*" + backup.OLD)) and not list(kit.glob("*" + backup.NEW))
     out = capsys.readouterr().out
-    assert "Restored." in out and "certificate" not in out
+    assert "Restored. The Hub is back." in out and "certificate" not in out
+    assert "files and the Spoolman database. Features: " in out         # the summary of 06 9.10, the Hub page's words
+    assert "This replaces the spools, settings, printers and pairings on this Hub." in out
+    assert "The Hub restarts, and afterwards the setup code is the one from the backup." in out
     # what was here first is kept, as a zip a restore takes too
     kept = [p for p in (kit / "backups").iterdir() if p.name.startswith(backup.PRE_RESTORE)]
     assert len(kept) == 1 and backup.verify(kept[0])
