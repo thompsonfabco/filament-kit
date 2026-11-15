@@ -1,4 +1,4 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields, printer (list, show, test, add, map, ...), library,
+"""Command line: status, pair, devices, recent, config, cert, ensure-fields, printer (list, show, test, add, map, ...), library,
 profiles, modules, web, remote, setup-code."""
 from __future__ import annotations
 
@@ -130,54 +130,91 @@ def _station_server(cfg: dict) -> str:
     return next((str(a).strip() for a in allow if str(a).strip() not in ("127.0.0.1", "localhost", "::1")), "")
 
 
-def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int:
-    cmd = "sudo filament-kit pair" + (" --pc" if pc else " --station" if station else "")
+def _fingerprint_lines(fp: str) -> list[str]:
+    """The certificate fingerprint in groups of four, eight groups to a line."""
+    groups = [fp[i:i + 4] for i in range(0, len(fp), 4)]
+    return ["  " + " ".join(groups[i:i + 8]) for i in range(0, len(groups), 8)]
+
+
+def _pending_device(token: str) -> str | None:
+    """The id of the device a fresh pairing made, whose first use or code claims it."""
+    h = pairing._hash(token)
+    return next((d["id"] for d in pairing._read("devices.json") if d.get("hash") == h), None)
+
+
+PAIR_POLL = 1.0         # seconds between looks for the device while `pair` waits (the Hub page looks every 3)
+
+
+def _wait_for_device(device_id: str | None, expires: float, who: str, cmd: str) -> int:
+    """06 9.4: wait until the device has paired or the code runs out. Ctrl-C stops the wait; the code stays valid."""
+    if device_id is None:               # the pairing is gone already (nothing to watch)
+        return 0
+    until = time.strftime("%H:%M", time.localtime(expires))
+    paired = None
+    try:
+        with output.wait(f"Waiting for {who}… (the code works until {until})"):
+            while True:
+                paired = next((d for d in pairing.devices() if d["id"] == device_id), None)
+                if paired is not None or time.time() >= expires:
+                    break
+                time.sleep(PAIR_POLL)
+    except KeyboardInterrupt:
+        output.out(f"Stopped waiting. The code works until {until}.")
+        return output.INTERRUPTED
+    if paired is None:
+        output.error("the pairing code expired before a device paired.", "make a new one with:", cmd=cmd)
+        return output.FAILED
+    output.result(f"Paired: {paired['name']}.")
+    return 0
+
+
+def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool = False, wait: bool = True) -> int:
+    """`pair` (06 9.4): what the Hub page's pairing dialog shows, in its order (the QR code for a phone, the instruction,
+    the pairing code, the certificate fingerprint, the expiry), then waits for the device. `--json` ends after the document."""
+    cmd = "sudo filament-kit pair" + (" --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else "")
     cfg = config.load()                 # unreadable: main() says to run it with sudo
     if "server" not in modules.enabled(cfg):
-        # a station (or another machine without the server): no certificate here, and none is needed
+        # a Weigh Station (or another machine without the Hub): no certificate here, and none is needed
         addr = _station_server(cfg)
-        where = (f"the kit server ({addr}, from station.allow)" if addr
-                 else "the kit server (its address is not set here: station.allow names none)")
-        _err_line(f"the server module is off on this machine; pairing runs on the kit server.\n"
-                  f"fix: run {cmd} on {where}")
+        output.error("this machine has no Hub, so it cannot pair devices.",
+                     "run it on the Hub" + (f" ({addr}, from station.allow)." if addr else "."))
         return 1
     try:
-        pr = pairing.issue(device_hint="pc" if pc else "station" if station else "", scope="station" if station else None)
+        pr = pairing.issue(device_hint="pc" if slicer_sync else "station" if weigh_station else "",
+                           scope="station" if weigh_station else None)
     except pairing.PairingError as e:
         # /etc/filament-kit is root's: as a user the certificate cannot be read (or even seen)
         unreadable = isinstance(e, pairing.CertUnreadable) or not _is_root()
         _err_line(f"{e}" + (f"\nfix: run it with sudo: {cmd}" if unreadable else ""))
         return 1
+    fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
     if output.json_mode():
-        output.emit({"ok": True, "code": pr.code, "link": pr.qr,
-                     "fingerprint": pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes()),
-                     "expires": _iso(pr.expires)})
+        output.emit({"ok": True, "code": pr.code, "link": pr.qr, "fingerprint": fp, "expires": _iso(pr.expires)})
         return 0
-    if pc or station:
+    text = text or output.plain()       # --plain: no QR code (06 6.2)
+    if slicer_sync or weigh_station:
         # no QR scanner there: the link is pasted (printed by design, never logged)
-        output.out("Link for filament-kit-sync (paste it when asked):" if pc else
-                   "Link for the intake station (on the station PC: sudo filament-kit station pair"
-                   + ", then paste it):")
-        print(pr.qr)
-        fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-        print(f"Certificate fingerprint (check it matches the one the {'PC' if pc else 'station'} shows):")
+        output.out("Paste this link into the Slicer Sync when it asks:" if slicer_sync else
+                   "On the Weigh Station run: sudo filament-kit station pair, then paste this link:")
+        output.out(pr.qr)
     elif text:
         # no terminal (an install log): the link as text, for a phone that gets it some other way
-        print(f"Pairing link: {pr.qr}")
-        fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-        print("Certificate fingerprint (the phone asks for two groups of it):")
+        output.out("Open the filament-kit app and type the pairing code, or give it this link:")
+        output.out(pr.qr)
     else:
-        print(_qr_text(pr.qr))
-        fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-        print("Certificate fingerprint (the phone asks for two groups of it):")
-    print("  " + " ".join(fp[i:i + 4] for i in range(0, len(fp), 4)))
-    print(f"Pairing code: {pr.code}")
-    print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "
-          f"(in {max(0, int(pr.expires - time.time()) // 60)} min)")
-    if station:
-        output.out(f"The link works for {pairing.TOKEN_TTL // 60} minutes: run sudo filament-kit station pair on the "
-                   "station PC before then.")
-    return 0
+        print(_qr_text(pr.qr), flush=True)
+        output.out("Open the filament-kit app and scan this code, or type the pairing code.")
+    output.out(f"Pairing code: {pr.code[:3]} {pr.code[3:]}")
+    output.out("Certificate fingerprint (" + ("the phone asks for two groups of it" if not (slicer_sync or weigh_station)
+               else f"check it matches the one the {'Slicer Sync' if slicer_sync else 'Weigh Station'} shows") + "):")
+    output.out_lines(_fingerprint_lines(fp))
+    output.out(f"Expires at {time.strftime('%H:%M', time.localtime(pr.expires))} "
+               f"(in {max(1, -(-int(pr.expires - time.time()) // 60))} min).")
+    if not wait:                        # 06 9.4 (R68): the code, then when it stops working; no waiting line
+        output.out(f"The code works until {time.strftime('%H:%M', time.localtime(pr.expires))}.")
+        return 0
+    return _wait_for_device(_pending_device(pr.token), pr.expires,
+                            "Slicer Sync" if slicer_sync else "the Weigh Station" if weigh_station else "the phone", cmd)
 
 
 def cmd_station_pair(ask=input) -> int:
@@ -439,34 +476,62 @@ def _confirm(question: str, doing: str, *, yes: bool, word: str | None = None, a
                           word=word, ask=ask)
 
 
-def cmd_unpair(device_id: str | None, yes: bool = False) -> int:
-    if device_id is None:
-        devs = pairing.devices()
-        from .web.slots import CLI_DEVICE, INTAKE_DEVICE
-        output.emit([{"id": d["id"], "name": d["name"], "paired": _iso(d["paired"]), "last_seen": _iso(d["last_seen"]),
-                      "built_in": d["name"] in (INTAKE_DEVICE, CLI_DEVICE)} for d in devs])
-        if not devs:
-            output.out("No paired devices.")
-            return 0
-        output.out_lines(output.table(
-            ["Id", "Name", "Paired", "Last seen"],
-            [[d["id"], d["name"], _fmt_time(d["paired"]), _fmt_time(d["last_seen"])] for d in devs], long=1, whole=True))   # `unpair` takes the id; the name is what tells phones apart
+def cmd_devices(yes: bool = False, forget: str | None = None) -> int:
+    """`devices` (06 9.4): the paired devices, as the Hub page lists them; `devices forget <device>` unpairs one."""
+    if forget is not None:
+        return _devices_forget(forget, yes)
+    from .web.slots import CLI_DEVICE, INTAKE_DEVICE
+    devs = pairing.devices()
+    built_in = lambda d: d["name"] in (INTAKE_DEVICE, CLI_DEVICE)       # noqa: E731
+    output.emit([{"id": d["id"], "name": d["name"], "paired": _iso(d["paired"]), "last_seen": _iso(d["last_seen"]),
+                  "built_in": built_in(d)} for d in devs])
+    if not devs:
+        output.out("Nothing paired yet.")
+        output.out("Pair a phone: sudo filament-kit pair")
         return 0
-    dev = next((d for d in pairing.devices() if d["id"] == device_id), None)
-    if dev is None:     # a pairing token nobody has claimed yet is removed too (`unpair <id>` always did)
-        dev = next((d for d in pairing._read("devices.json") if d.get("id") == device_id), None)
+    output.out_lines(output.table(
+        ["Name", "Paired", "Last seen", "ID"],
+        [[d["name"], "built in: this Hub's own pairing" if built_in(d) else _fmt_time(d["paired"]),
+          "" if built_in(d) else _fmt_time(d["last_seen"]), d["id"]] for d in devs], whole=True))     # `forget` takes the id or the name
+    return 0
+
+
+def _device_named(arg: str, rows: list[dict], unclaimed: list[dict]) -> dict | None:
+    """06 5: an exact id, else an exact name, else the start of exactly one name; ignoring case. A pairing nobody has
+    claimed yet (`unpair <id>` always removed one) is found by its exact id only. None after the error (exit 2)."""
+    a = arg.strip().lower()
+    hit = [r for r in rows + unclaimed if r["id"].lower() == a] if a else []
+    if len(hit) != 1:
+        hit = [r for r in rows if r["name"].lower() == a] or [r for r in rows if r["name"].lower().startswith(a)] if a else []
+    if len(hit) == 1:
+        return hit[0]
+    close = [r for r in rows if a and (a in r["name"].lower() or a in r["id"].lower())][:5]
+    output.error(f'"{arg}" does not name one device.', "use a name or id from filament-kit devices." + (
+        " Close matches:\n" + "\n".join(f"{r['name']}  {r['id']}" for r in close) if close else ""))
+    return None
+
+
+def _devices_forget(arg: str, yes: bool) -> int:
+    from .web.slots import CLI_DEVICE, INTAKE_DEVICE
+    rows = pairing.devices()
+    unclaimed = [{"id": d["id"], "name": d.get("name") or d["id"]} for d in pairing._read("devices.json")
+                 if d.get("claimed") is None and isinstance(d.get("id"), str)]
+    dev = _device_named(arg, rows, unclaimed)
     if dev is None:
-        _err_line(f"no paired device {device_id}")
         return output.USAGE
-    name = dev.get("name") or device_id
-    stop = _confirm(f"Unpair {name}? It can no longer reach the kit server until it is paired again.",
+    name = dev.get("name") or dev["id"]
+    if name in (INTAKE_DEVICE, CLI_DEVICE):
+        output.error(f"{name} is built in: it is this Hub's own pairing.")
+        return output.USAGE
+    stop = _confirm(f"Unpair {name}? It can no longer reach the Hub until it is paired again.",
                     f"unpairing {name}", yes=yes)
     if stop is not None:
         return stop
-    if pairing.revoke(device_id):
-        output.result(f"Unpaired {device_id}.")
+    if pairing.revoke(dev["id"]):
+        output.emit({"ok": True, "id": dev["id"], "name": name})
+        output.result(f"Unpaired {name}.")
         return 0
-    _err_line(f"no paired device {device_id}")
+    output.error(f'"{arg}" does not name one device.', "use a name or id from filament-kit devices.")
     return output.USAGE
 
 
@@ -1860,128 +1925,434 @@ def cmd_modules_menu(raw: bool) -> int:
     return 0
 
 
-def _intake_line(s: dict) -> str:
-    sp = s.get("spools") or []
-    what = ", ".join(sorted({f"{x.get('vendor')} {x.get('name')}" for x in sp})) or "no spools"
-    ids = ", ".join(str(x.get("spool_id")) for x in sp)
-    return f"{s['id']}  {s.get('at', '')[:16].replace('T', ' ')}  {s.get('source')}  {s.get('state')}  {what} (spool {ids})"
+# ---------- recent: Recently added (06 9.3) ----------
+# The Hub page's own history code does the work (intake_history, the functions setup_console/intake_tab calls too).
+
+# [field, the Hub page's label, its group], in the order of a group's rows
+_REC_FIELDS = (("vendor", "Brand", "Identity"), ("name", "Name", "Identity"), ("material", "Material", "Identity"),
+               ("color_hex", "Colour", "Identity"), ("net", "Net weight", "Weights"),
+               ("tare", "Empty spool weight", "Weights"), ("density", "Density", "Weights"),
+               ("nozzle", "Nozzle", "Temperatures"), ("bed", "Bed", "Temperatures"),
+               ("nozzle_range", "Nozzle range", "Temperatures"), ("bed_range", "Bed range", "Temperatures"),
+               ("price_per_kg", "Price per kg", "Other"), ("line", "Line", "Other"))
+_REC_LABEL = {f: label for f, label, _ in _REC_FIELDS}
+_REC_GROUPS = ("Identity", "Weights", "Temperatures", "Other")
+# the keys of `recent edit` (06 9.3) and the other spellings of each; `color-hex` and the underscored names worked before
+_REC_KEYS = {"brand": "vendor", "vendor": "vendor", "name": "name", "material": "material", "colour": "color_hex",
+             "color": "color_hex", "color-hex": "color_hex", "net-weight": "net", "net": "net",
+             "empty-spool-weight": "tare", "spool-weight": "tare", "tare": "tare", "density": "density",
+             "nozzle": "nozzle", "bed": "bed", "nozzle-range": "nozzle_range", "bed-range": "bed_range",
+             "price-per-kg": "price_per_kg", "line": "line"}
+_REC_KEY_LIST = ("brand, name, material, colour, net-weight, empty-spool-weight, density, nozzle, bed, nozzle-range, "
+                 "bed-range, price-per-kg, line")
+_REC_STATE = {"detected": "as detected", "revised_ai": "revised by AI", "edited": "edited by hand"}
+_REC_FROM = {"phone": "phone photo", "web": "web app", "station": "Weigh Station", "cli": "command line"}
+_REC_FROM_SENTENCE = {"phone photo": "from a phone photo", "web app": "from the web app",
+                      "Weigh Station": "from the Weigh Station", "by hand": "added by hand",
+                      "command line": "from the command line"}
+# a read confidence below high: its word (06 6.1), the glyph meaning of the word and its colour
+_REC_LEVELS = {"low": ("low: check this", "error", "bad"), "medium": ("medium", "look", "warn"),
+               "not_on_label": ("not on label", "off", "muted")}
+_REC_EDIT_NOTHING = "nothing to change"       # intake_history.apply's refusal of values equal to the current ones
 
 
-def _show_values(v: dict) -> str:
+def _num_text(v) -> str:
+    return str(int(v)) if isinstance(v, float) and v.is_integer() else str(v)
+
+
+def _rec_value(field: str, v) -> str:
+    """A value as the Hub page shows it: the colour with its #, a unit after a number, `(empty)` for none."""
+    if v is None or v == "":
+        return "(empty)"
+    if field == "color_hex":
+        return "#" + str(v).lstrip("#").upper()
+    if field in ("net", "tare"):
+        return f"{_num_text(v)} g"
+    if field == "density":
+        return f"{_num_text(v)} g/cm" + ("³" if output.unicode_glyphs() else "3")
+    if field in ("nozzle", "bed"):
+        return f"{_num_text(v)}{output.sym('degree')}"
+    if field in ("nozzle_range", "bed_range"):
+        return str(v) if re.search(r"[Cc]\s*$", str(v)) else f"{v}{output.sym('degree')}"
+    return _num_text(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
+
+
+def _rec_when(at) -> str:
+    return (at or "")[:16].replace("T", " ")
+
+
+def _rec_from(r: dict) -> str:
+    """The words of the FROM column: where the record came from (a phone or web record with no photo was typed in)."""
+    if r.get("source") in ("station", "cli"):
+        return _REC_FROM[r["source"]]
+    return _REC_FROM.get(r.get("source"), "phone photo") if r.get("photos") else "by hand"
+
+
+def _rec_filament_text(r: dict) -> str:
+    """The filaments of a record's spools: `Bambu Lab PETG HF Orange x2`, a comma between different ones."""
+    seen: dict[str, int] = {}
+    for sp in r.get("spools") or []:
+        name = f"{sp.get('vendor')} {sp.get('name')}"
+        seen[name] = seen.get(name, 0) + 1
+    return ", ".join(n + (f" x{c}" if c > 1 else "") for n, c in seen.items()) or "(no spools)"
+
+
+def _paint_in(lines: list[str], text: str, token: str) -> list[str]:
+    """`text` painted where it stands in every one of `lines` that holds it; a line's width is the same without colour."""
+    painted = output.paint(text, token, sys.stdout)
+    if painted == text:
+        return lines
+    return [ln.replace(text, painted) for ln in lines]
+
+
+def _history_error(e, rid: str | None = None) -> int:
+    """A refusal of the Hub's history code, as an error: a wrong record or value is exit 2, anything else 1."""
     from . import intake_history
-    return ", ".join(f"{k} {v.get(k)}" for k in intake_history.FIELDS if v.get(k) is not None)
+    if rid is not None and e.code == "not_found" and str(e) == "no such intake record":
+        output.error(f'"{rid}" is not a record in Recently added; only the newest {intake_history.keep()} are kept.',
+                     "use an ID from filament-kit recent.")
+        return output.USAGE
+    output.error(str(e))
+    return output.USAGE if e.status in (400, 404) else output.FAILED
 
 
-def cmd_intake(args) -> int:
+def cmd_recent(show_from: bool = False) -> int:
+    """`recent` (06 9.3): a summary line, then the records newest first."""
     from . import intake, intake_history
-    sm = Spoolman(config.load()["spoolman_url"])
-    try:
-        if args.intake_cmd == "history":
-            d = intake_history.list_records("ai_intake" in modules.enabled(config.load()))
-            output.emit(d)
-            print(f"Intake history: {d['count']} record(s), keeping {d['keep']}, "
-                  f"{d['photo_bytes'] / 1048576:.1f} MB of photos.")
-            for s in d["records"]:
-                print(_intake_line(s))
-                for p in intake_history.photo_paths(s["id"]):
-                    print(f"    photo {p}")
-            return 0
-        if args.intake_cmd == "show":
-            r = intake_history.get(args.id)
-            output.emit(r)
-            print(_intake_line(r))
-            for p in intake_history.photo_paths(args.id):
-                print(f"  photo {p}")
-            for s in r["saved"]:
-                print(f"  item {s['item']}: {_show_values(s['values'])} (spools {s['spool_ids']}, "
-                      f"filament {s['filament_id']})")
-            for rv in r["revisions"]:
-                ch = "; ".join(sorted({f"{c['field']} {c['old']} -> {c['new']}" for c in rv["changes"]}))
-                print(f"  revision {rv['n']} {rv['at'][:16].replace('T', ' ')} by {rv['by']}"
-                      f"{' (undone)' if rv.get('undone') else ''}: {ch}"
-                      + (f" | note: {rv['note']}" if rv.get("note") else ""))
-                if rv["filaments"].get("orphaned"):
-                    print(f"    filament {rv['filaments']['orphaned']} has no spools left (not deleted)")
-            return 0
-        if args.intake_cmd == "revise":
-            from . import intake
-            cfg = config.load()
-            if not intake.reading_on(cfg):
-                _err_line("label reading (ai_intake or local_intake) is off on this server: use "
-                          + "filament-kit intake edit")
-                return 1
-            if not args.yes and not output.terminal():      # before the read is spent: nobody can accept it
-                return output.no_terminal("applying the revision", _sudo_command("sudo filament-kit <command>") + " --yes")
-            p = intake_history.revise(sm, args.id, args.note, args.item)
-            if p.get("reader"):
-                print(f"Read again by {'the local reader' if p['reader'] == 'local' else 'Claude'}"
-                      + (f", {round(p['confidence'] * 100)} % sure" if p.get("confidence") is not None else "")
-                      + (f" ({p['note']})" if p.get("note") else "") + ".")
-            print(f"Before: {_show_values(p['before'])}\nAfter:  {_show_values(p['after'])}")
-            if not p["changes"]:
-                print("The AI changed nothing.")
-                return 0
-            print("Changes: " + ", ".join(p["changes"]) + (" (no photo was kept for this record)" if p["no_photo"] else ""))
-            stop = _confirm("Accept these changes?", "applying the revision", yes=args.yes)
-            if stop is not None:
-                return stop
-            r = intake_history.apply(sm, args.id, proposal=p["proposal"], device="command line")
-            return _say_revision(r)
-        if args.intake_cmd == "edit":
-            vals = {}
-            for kv in args.values:
-                k, sep, v = kv.partition("=")
-                if not sep:
-                    _err_line(f"{kv}: write field=value")
-                    return 1
-                vals[k.strip()] = _cli_value(k.strip(), v.strip())
-            spools = None
-            if args.spools:
-                try:
-                    spools = [int(x) for x in args.spools.split(",") if x.strip()]
-                except ValueError:
-                    _err_line("--spools takes spool ids, e.g. 41,42")
-                    return 1
-            return _say_revision(intake_history.apply(sm, args.id, item=args.item, values=vals, spool_ids=spools,
-                                                      device="command line"))
-        if args.intake_cmd == "undo":
-            r = intake_history.undo(sm, args.id, None)
-            output.emit({"ok": True, **r})
-            print(f"Undone. The record is now {r['state']}.")
-            return 0
-    except intake_history.HistoryError as e:
-        _err_line(str(e))
-        return 1
-    except intake.ReadError as e:
-        _err_line(str(e))
-        return 1
-    return 1
-
-
-def _cli_value(k: str, v: str):
-    if k in ("nozzle", "bed"):
-        return int(v) if v.lstrip("-").isdigit() else v
-    if k in ("net", "tare", "density", "price_per_kg"):
-        try:
-            return float(v)
-        except ValueError:
-            return v
-    return v or None
-
-
-def _say_revision(r: dict) -> int:
-    output.emit({"ok": True, **r})
-    if output.quiet():                  # `intake revise` is not muted as a whole: its proposal is what was asked for
+    ai = intake.reading_on(config.load())
+    d = intake_history.list_records(ai)
+    output.emit(d)
+    n = d["count"]
+    if not d["keep"]:
+        output.out("Recently added keeps no records. Set how many to keep with filament-kit config (Records kept).")
+    else:
+        output.out(f"Recently added: {n} record{'s' if n != 1 else ''}, keeping {d['keep']}, "
+                   f"{d['photo_bytes'] / 1048576:.1f} MB of photos.")
+    if not ai:
+        output.note("the Label Reader is off on this Hub, so corrections are by hand only.")
+    if not n:
+        if d["keep"]:
+            output.out("No spool has been added since the history started.")
         return 0
+    wide = output.width() >= 100 or not output._is_tty(sys.stdout) or output.plain()
+    with_from = show_from and wide                      # the FROM column is for wide terminals; `show` and --json have it
+    head = ["ID", "Added", "State", "Spools"] + (["From"] if with_from else []) + ["Filament"]
+    rows = [[r["id"], _rec_when(r.get("at")), _REC_STATE.get(r.get("state"), r.get("state")),
+             ", ".join(str(sp["spool_id"]) for sp in r["spools"])] + ([_rec_from(r)] if with_from else [])
+            + [_rec_filament_text(r)] for r in d["records"]]
+    output.out()
+    output.out_lines(_paint_in(output.table(head, rows, long=len(head) - 1), "revised by AI", "info"))
+    low = [r["id"] for r in d["records"] if (r.get("confidence") or {}).get("low")]
+    if low:
+        glyph = output.paint(output.glyph("look"), "warn", sys.stdout)
+        output.out()
+        output.out((glyph + " " if glyph else "") + (
+            f"{low[0]} has fields read with low confidence: filament-kit recent show {low[0]}" if len(low) == 1 else
+            f"{len(low)} records have fields read with low confidence, the newest: filament-kit recent show {low[0]}"))
+    return 0
+
+
+def _rec_reading(r: dict, item: int) -> dict | None:
+    """The read the Hub kept for one item: {levels: field -> level, rated, filled}, or None for a record typed by hand."""
+    read = r.get("read") if isinstance(r.get("read"), dict) else {}
+    items = read.get("items") or []
+    it = items[item] if 0 <= item < len(items) and isinstance(items[item], dict) else None
+    if not it or not it.get("confidence_levels"):
+        return None
+    rated = read.get("confidence_rated") is not False
+    return {"levels": {k: (None if v == "high" and not rated else v) for k, v in it["confidence_levels"].items()},
+            "rated": rated, "filled": it.get("confidence_filled") or []}
+
+
+def _rec_changed(r: dict) -> set:
+    return {c["field"] for rv in r.get("revisions") or [] if not rv.get("undone") for c in rv.get("changes") or []}
+
+
+def _rec_change_text(c: dict) -> str:
+    """`Nozzle range 190-230 °C → 190-220 °C`."""
+    f = c["field"]
+    return f"{_REC_LABEL.get(f, f)} {_rec_value(f, c['old'])} {output.sym('arrow')} {_rec_value(f, c['new'])}"
+
+
+def _rec_changes(rv: dict) -> list[dict]:
+    """A revision's changes, each field once (an edit of several spools lists it for each)."""
+    seen: set = set()
+    return [c for c in rv.get("changes") or [] if not (c["field"] in seen or seen.add(c["field"]))]
+
+
+def _rec_item_lines(r: dict, s: dict) -> list[str]:
+    """One item's fields in groups, a confidence mark only where it is not high (06 9.3)."""
+    reading, changed = _rec_reading(r, s["item"]), _rec_changed(r)
+    shown = {f: _rec_value(f, s["values"].get(f)) for f, _, _ in _REC_FIELDS}
+    room = min(max(len(v) for v in shown.values()), 30)
+    lines: list[str] = []
+    for group in _REC_GROUPS:
+        lines.append(group)
+        for field, label, g in _REC_FIELDS:
+            if g != group:
+                continue
+            value, mark, painted = shown[field], "", ""
+            lv = reading["levels"].get(field) if reading and field not in changed else None
+            if lv in _REC_LEVELS:
+                word, glyph, _ = _REC_LEVELS[lv]
+                painted = (output.glyph(glyph) + " " if not output.plain() else "") + word
+                mark = painted + (": filled in by the Hub" if lv == "medium" and field in reading["filled"] else "")
+            text = value.ljust(room + 3) + mark if mark and len(value) <= room else value + ("  " + mark if mark else "")
+            body = output.wrap(text.rstrip(), indent=22)
+            body[0] = f"  {label:<20}" + body[0][22:]
+            lines += _paint_in(body, painted, _REC_LEVELS[lv][2]) if mark else body
+    if reading:
+        lines.append("Read confidence is high unless marked." if reading["rated"] else
+                     "This reader does not say how sure it is. Check the values against the label.")
+    return lines
+
+
+def cmd_recent_show(rid: str, photos: bool = False) -> int:
+    """`recent show <record>`: where it came from, its fields in groups, its revisions."""
+    from . import intake_history, setup_code
+    try:
+        r = intake_history.get(rid)
+    except intake_history.HistoryError as e:
+        return _history_error(e, rid)
+    output.emit(r)
+    sep = output.sym("sep")
+    state = _REC_STATE.get(r.get("state"), str(r.get("state")))
+    head = output.wrap(f"Record {r['id']}{sep}{_rec_when(r.get('at'))}{sep}{_REC_FROM_SENTENCE[_rec_from(r)]}{sep}{state}")
+    output.out_lines(_paint_in(head, state, "info") if r.get("state") == "revised_ai" else head)
+    ids = [str(sp["spool_id"]) for sp in r["spools"]]
+    items = r["saved"]
+    eng = (r.get("engine") or {}).get("reader")
+    facts = [(f"Spool {ids[0]}" if len(ids) == 1 else f"Spools {', '.join(ids)}") if ids else "No spools"]
+    if len(items) == 1 and items[0].get("filament_id") is not None:
+        facts.append(f"filament {items[0]['filament_id']}")
+    if r.get("photos"):
+        facts.append(f"{r['photos']} photo{'s' if r['photos'] != 1 else ''}")
+    if eng in ("cloud", "local"):
+        facts.append("read by " + ("Cloud (Claude)" if eng == "cloud" else "On this Hub"))
+    output.out(sep.join(facts))
+    if not items:
+        output.out()
+        output.out("This record has no spools to edit now.")
+    for s in items:
+        output.out()
+        if len(items) > 1:
+            some = ", ".join(str(x) for x in s["spool_ids"])
+            output.out(f"Item {s['item'] + 1}: spool{'s' if len(s['spool_ids']) > 1 else ''} {some} "
+                       f"(filament {s['filament_id']}); changes apply to all of them")
+        output.out_lines(_rec_item_lines(r, s))
+    output.out()
+    revs = r.get("revisions") or []
+    if not revs:
+        output.out("Revisions: none.")
+    else:
+        output.out("Revisions:")
+        for rv in revs:
+            by = "by the Label Reader" if rv.get("by") == "ai" else "by hand"
+            line = (f"  {rv['n']}  {_rec_when(rv.get('at'))}  {by}  "
+                    + "; ".join(_rec_change_text(c) for c in _rec_changes(rv)))
+            fl = rv.get("filaments") or {}
+            gone = (fl.get("orphaned_by_undo") if rv.get("undone") else fl.get("orphaned")) or []
+            if rv.get("note"):
+                line += f"{sep}note: {rv['note']}"
+            if gone:
+                line += f"{sep}filament {', '.join(str(g) for g in gone)} has no spools left (not deleted)"
+            lines = output.wrap(line.lstrip() + (" (undone)" if rv.get("undone") else ""), indent=5, first=2)
+            output.out_lines(_paint_in(lines[::-1], "(undone)", "muted")[::-1] if rv.get("undone") else lines)
+    paths = intake_history.photo_paths(rid)
+    if paths:
+        output.out("Photos open on the Hub page: " + setup_code.page_url(config.load()) + f"#recent/{rid}")
+        if photos:
+            output.out("Photo files on the Hub:")
+            output.out_lines(["  " + p for p in paths])
+    else:
+        output.out("No photo: this spool was added by hand." if _rec_from(r) == "by hand"
+                   else "No photo was taken for this addition.")
+    return 0
+
+
+def _rec_filament_sentences(rv: dict, *, undone: bool = False) -> list[str]:
+    """The Hub's sentences about the filament a change moved the spools to or emptied (03 6.4)."""
+    fl = rv.get("filaments") or {}
+    out = []
+    if not undone and fl.get("to") is not None and fl.get("to") != fl.get("from"):
+        out.append(f"The spools now use filament {fl['to']}" + (" (new)." if fl.get("created") else "."))
+    gone = (fl.get("orphaned_by_undo") if undone else fl.get("orphaned")) or []
+    if gone:
+        out.append(f"Filament {', '.join(str(g) for g in gone)} has no spools left; it was not deleted.")
+    return out
+
+
+def _say_revision(r: dict, *, detail: bool = True) -> int:
+    """`Saved as revision 2: Empty spool weight 140 g → 150 g.` (an edit), or `... 2: Name, Nozzle range.` (a revision
+    the Label Reader proposed), then the Hub's sentences about the filament."""
+    output.emit({"ok": True, **r})
     rv = r["revisions"][-1]
-    print(f"Saved as revision {rv['n']}: " + "; ".join(sorted({f"{c['field']} {c['old']} -> {c['new']}"
-                                                               for c in rv["changes"]})))
-    fl = rv["filaments"]
-    if fl["to"] != fl["from"]:
-        print(f"Spools {rv['spool_ids']} moved from filament {fl['from']} to {fl['to']}"
-              + (" (new)" if fl["created"] else "") + ".")
-    if fl.get("orphaned"):
-        print(f"Filament {fl['orphaned']} has no spools left; it was not deleted.")
+    changes = _rec_changes(rv)
+    what = ("; ".join(_rec_change_text(c) for c in changes) if detail
+            else ", ".join(_REC_LABEL.get(c["field"], c["field"]) for c in changes))
+    output.result(f"Saved as revision {rv['n']}: {what}.")
+    for sentence in _rec_filament_sentences(rv):
+        output.result(sentence)
+    return 0
+
+
+def _rec_item_arg(item: int | None) -> int | None | bool:
+    """`--item N` is the number the Hub page and `recent show` give an item (from 1); the history counts from 0. False
+    after the error (exit 2)."""
+    if item is None:
+        return None
+    if item < 1:
+        output.error("item numbers start at 1.", "use --item 1 for the first item, as filament-kit recent show numbers them.")
+        return False
+    return item - 1
+
+
+def _history_audit(rid: str, what: str) -> None:
+    """The Hub page's audit line for a change to a record, written as its routes write it (intake_tab.py)."""
+    from types import SimpleNamespace
+    from .setup_page import SetupPage
+    SetupPage.audit(SetupPage, SimpleNamespace(client=None), f"recently added record {rid} {what}")
+
+
+def _history_charge():
+    """The read a revision by Claude takes off the daily cap, as the Hub's route takes it (reads.json, reads_per_day)."""
+    from . import intake
+    cap = intake.ReadCap(config.paths().state / "reads.json", config.load()["reads_per_day"])
+
+    def charge():
+        ticket = cap.take("command line")
+        return lambda: intake.refund_quietly(cap, ticket, "command line")
+    return charge
+
+
+def cmd_recent_revise(rid: str, note: str, item: int | None = None, yes: bool = False) -> int:
+    """`recent revise <record> --note`: ask the Label Reader again with the record's photos and the note, show what it
+    suggests, and save it once it is accepted."""
+    from . import intake, intake_history
+    index = _rec_item_arg(item)
+    if index is False:
+        return output.USAGE
+    try:
+        intake_history.get(rid)
+        if not intake.reading_on(config.load()):
+            output.error("the Label Reader is off on this Hub, so only edits by hand work.",
+                         cmd=f'sudo filament-kit recent edit {rid} name="{output.sym("ellipsis")}"')
+            return output.FAILED
+        if not yes and not output.terminal():           # before the read is spent: nobody can accept it
+            return output.no_terminal("applying the revision", _sudo_command("sudo filament-kit <command>") + " --yes")
+        sm = Spoolman(config.load()["spoolman_url"])
+        with output.wait("Asking the Label Reader… (up to a minute)"):
+            p = intake_history.revise(sm, rid, note, index, charge=_history_charge())
+        _history_audit(rid, "revision asked of the AI")
+        if p.get("no_photo"):
+            output.note("no photo was kept for this record; the Label Reader worked from the saved values and your note.")
+        if not p["changes"]:
+            output.result("The Label Reader changed nothing.")
+            return 0
+        output.out("The Label Reader suggests:")
+        limit = output.width() - 1
+        arrow = output.sym("arrow")
+        for k in p["changes"]:
+            label, old, new = _REC_LABEL.get(k, k), _rec_value(k, p["before"].get(k)), _rec_value(k, p["after"].get(k))
+            one = f"  {label}: {old} {arrow} {new}"
+            output.out_lines([one] if len(one) <= limit else [f"  {label}: {old}", f"     {arrow} {new}"])
+        stop = _confirm("Accept these changes?", "applying the revision", yes=yes)
+        if stop is not None:
+            return stop
+        r = intake_history.apply(sm, rid, proposal=p["proposal"], device="command line")
+        _history_audit(rid, "revised")
+        return _say_revision(r, detail=False)
+    except intake_history.HistoryError as e:
+        return _history_error(e, rid)
+    except intake.CapReached as e:
+        output.error(str(e), "wait until a read is 24 hours old, or raise Reads per day in filament-kit config.")
+        return output.FAILED
+    except intake.ReadError as e:
+        output.error(str(e))
+        return output.FAILED
+
+
+def _rec_number(field: str, text: str, what: str, unit: str, whole: bool = False):
+    """A number typed with or without its unit (`1000` or `1000 g`); empty is no value. ValueError says what was expected."""
+    t = text.strip()
+    if not t:
+        return None
+    m = re.fullmatch(r"([0-9]+(?:[.,][0-9]+)?)\s*(?:" + unit + r")?", t, re.I)
+    if not m:
+        raise ValueError(f"{_REC_LABEL[field]} must be {what}.")
+    n = float(m.group(1).replace(",", "."))
+    if whole and not n.is_integer():
+        raise ValueError(f"{_REC_LABEL[field]} must be {what}.")
+    return int(n) if n.is_integer() else n
+
+
+def _rec_edit_value(field: str, text: str):
+    if field in ("net", "tare"):
+        return _rec_number(field, text, "a number of grams, like 1000 or 1000 g", "g")
+    if field == "density":
+        return _rec_number(field, text, "a number in g/cm³, like 1.24", r"g/cm[³3]")
+    if field in ("nozzle", "bed"):
+        return _rec_number(field, text, "whole degrees, like 210", r"°\s*c|c", whole=True)
+    if field == "price_per_kg":
+        return _rec_number(field, text, "a number, like 24.5", "")
+    return text.strip() or None
+
+
+def cmd_recent_edit(rid: str, pairs: list[str], item: int | None = None, spools: str | None = None) -> int:
+    """`recent edit <record> field=value ...`: change the saved values by hand (one revision)."""
+    from . import intake_history
+    values: dict = {}
+    for kv in pairs:
+        key, sep, text = kv.partition("=")
+        if not sep:
+            output.error(f'"{kv}" is not field=value.', "write each change as field=value, for example nozzle=230.")
+            return output.USAGE
+        field = _REC_KEYS.get(key.strip().lower().replace("_", "-"))
+        if field is None:
+            output.error(f'"{key.strip()}" is not a field of a record.', "use one of: " + _REC_KEY_LIST + ".")
+            return output.USAGE
+        try:
+            values[field] = _rec_edit_value(field, text)
+        except ValueError as e:
+            output.error(str(e))
+            return output.USAGE
+    ids = None
+    if spools:
+        try:
+            ids = [int(x) for x in spools.split(",") if x.strip()]
+        except ValueError:
+            ids = []
+        if not ids:
+            output.error("--spools takes spool ids.", "give them like --spools 41,42.")
+            return output.USAGE
+    index = _rec_item_arg(item)
+    if index is False:
+        return output.USAGE
+    try:
+        sm = Spoolman(config.load()["spoolman_url"])
+        r = intake_history.apply(sm, rid, item=index, values=values, spool_ids=ids, device="command line")
+        _history_audit(rid, "revised")
+        return _say_revision(r)
+    except intake_history.HistoryError as e:
+        if str(e).startswith(_REC_EDIT_NOTHING):
+            output.result("Nothing changed.")
+            return 0
+        return _history_error(e, rid)
+
+
+def cmd_recent_undo(rid: str) -> int:
+    """`recent undo <record>`: take back its newest revision that is not undone (the revision is kept, marked undone)."""
+    from . import intake_history
+    try:
+        newest = next((rv for rv in reversed(intake_history.get(rid)["revisions"]) if not rv.get("undone")), None)
+        r = intake_history.undo(Spoolman(config.load()["spoolman_url"]), rid, newest["n"] if newest else None)
+    except intake_history.HistoryError as e:
+        return _history_error(e, rid)
+    _history_audit(rid, "revision undone")
+    output.emit({"ok": True, **r})
+    output.result(f"Undone: revision {newest['n']}. Record {rid} is {_REC_STATE.get(r['state'], r['state'])} again.")
+    for sentence in _rec_filament_sentences(r["revisions"][newest["n"] - 1], undone=True):
+        output.result(sentence)
     return 0
 
 
@@ -4831,6 +5202,45 @@ class _Parser(argparse.ArgumentParser):
         raise SystemExit(output.USAGE)
 
 
+def _add_recent(sub, name: str, help: str, *, alias: bool) -> None:
+    """`recent` and its old spelling `intake`: the same subcommands (06 9.3). `recent` alone is `recent history`."""
+    rp = sub.add_parser(name, help=help)
+    if not alias:
+        rp.add_argument("--from", dest="show_from", action="store_true", help="add the FROM column on a wide terminal")
+    rsub = rp.add_subparsers(dest="recent_cmd", required=alias)
+    rh = rsub.add_parser("history", help="the newest records first (what recent alone shows)")
+    rh.add_argument("--from", dest="show_from", action="store_true", default=argparse.SUPPRESS,
+                    help="add the FROM column on a wide terminal")
+    rs = rsub.add_parser("show", help="one record: its fields, revisions and photos")
+    rs.add_argument("record", help="its ID, as recent shows it")
+    rs.add_argument("--photos", action="store_true", help="also list the photos' file paths on the Hub")
+    rr = rsub.add_parser("revise", help="ask the Label Reader again with a note, e.g. --note 'brand is Polymaker'")
+    rr.add_argument("record", help="its ID")
+    rr.add_argument("--note", required=True, help="what is wrong")
+    rr.add_argument("--item", type=int, default=None, help="the item to ask about, as recent show numbers it (from 1)")
+    _add_yes(rr, "apply the suggestion without asking")
+    re_ = rsub.add_parser("edit", help="change saved values by hand: field=value ...")
+    re_.add_argument("record", help="its ID")
+    re_.add_argument("values", nargs="+", metavar="field=value")
+    re_.add_argument("--item", type=int, default=None, help="the item to change, as recent show numbers it (from 1)")
+    re_.add_argument("--spools", default=None, help="only these of the item's spools, e.g. 41,42 (default: all)")
+    ru = rsub.add_parser("undo", help="undo the record's newest revision")
+    ru.add_argument("record", help="its ID")
+
+
+def _dispatch_recent(args) -> int:
+    which = args.recent_cmd or "history"
+    if which == "history":
+        return cmd_recent(show_from=getattr(args, "show_from", False))
+    if which == "show":
+        return cmd_recent_show(args.record, photos=args.photos)
+    if which == "revise":
+        return cmd_recent_revise(args.record, args.note, item=args.item, yes=args.yes)
+    if which == "edit":
+        return cmd_recent_edit(args.record, args.values, item=args.item, spools=args.spools)
+    return cmd_recent_undo(args.record)
+
+
 def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = _Parser(prog="filament-kit")
     ap.add_argument("--color", choices=("auto", "always", "never"), default="auto",
@@ -4850,10 +5260,14 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     sub = ap.add_subparsers(dest="cmd", required=True)
     stat = sub.add_parser("status", help="check services, Spoolman, key, certificate")
     stat.add_argument("--station-pairing", help=argparse.SUPPRESS)  # passed by the wrapper, from its check as root
-    pp = sub.add_parser("pair", help="show a QR code and code to pair a phone (--pc: a link for the PC sync)")
+    pp = sub.add_parser("pair", help="show a QR code and code to pair a phone, then wait for it (--slicer-sync, "
+                                     "--weigh-station: a link to paste instead)")
     pkind = pp.add_mutually_exclusive_group()
-    pkind.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
-    pkind.add_argument("--station", action="store_true", help="pair the intake station's button flow: print the link")
+    pkind.add_argument("--slicer-sync", "--pc", dest="slicer_sync", action="store_true",
+                       help="pair the Slicer Sync on a PC: print the link, no QR code")
+    pkind.add_argument("--weigh-station", "--station", dest="weigh_station", action="store_true",
+                       help="pair a Weigh Station on another computer: print the link")
+    pp.add_argument("--no-wait", action="store_true", help="show the code and end without waiting for the device")
     stp = sub.add_parser("station", help="intake station commands (run on the station PC)")
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
     stpp = stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
@@ -4863,29 +5277,20 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     fpp.add_argument("--port", help="the board's serial port (/dev/ttyACM0): only that one is offered")
     _add_yes(fpp)
     stp_sub.add_parser("pairing-state", help="print whether the button flow is paired, as one line")
-    pkind.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
-    up = sub.add_parser("unpair", help="list or remove paired phones")
-    up.add_argument("device_id", nargs="?")
+    pp.add_argument("--text", action="store_true", help="print the pairing link and code without the QR code")
+    dv = sub.add_parser("devices", help="the paired devices; devices forget unpairs one")
+    dsub = dv.add_subparsers(dest="devices_cmd")
+    dsub.add_parser("list", help="the paired devices (also what devices alone shows)")
+    dfg = dsub.add_parser("forget", help="unpair a device, after asking")
+    dfg.add_argument("device", help="its name or ID (or the start of its name)")
+    _add_yes(dfg)
+    up = sub.add_parser("unpair", help="list or remove paired devices (the old spelling of devices and devices forget)")
+    up.add_argument("device", nargs="?")
     _add_yes(up)
     sub.add_parser("config", help="interactive settings menu")
     sub.add_parser("cert", help="create the server certificate if missing")
-    ih = sub.add_parser("intake", help="the intake history: the last spool additions, their photos, revisions")
-    isub = ih.add_subparsers(dest="intake_cmd", required=True)
-    isub.add_parser("history", help="the newest records first, with their photo files")
-    ish = isub.add_parser("show", help="one record with its revisions")
-    ish.add_argument("id")
-    irv = isub.add_parser("revise", help="ask the AI again with a note, e.g. --note 'brand is Polymaker'")
-    irv.add_argument("id")
-    irv.add_argument("--note", required=True)
-    irv.add_argument("--item", type=int, default=None)
-    _add_yes(irv, "apply the proposal without asking")
-    ied = isub.add_parser("edit", help="change saved values by hand: field=value ...")
-    ied.add_argument("id")
-    ied.add_argument("values", nargs="+", metavar="field=value")
-    ied.add_argument("--item", type=int, default=None)
-    ied.add_argument("--spools", default=None, help="only these of the item's spools, e.g. 41,42 (default: all)")
-    iun = isub.add_parser("undo", help="undo the record's newest revision")
-    iun.add_argument("id")
+    _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
+    _add_recent(sub, "intake", "the old spelling of recent", alias=True)
     sub.add_parser("ensure-fields", help="create the Spoolman extra fields")
     pr = sub.add_parser("printer", help="printers: list, show, test, add, change, map slots, reports, forget")
     psub = pr.add_subparsers(dest="printer_cmd", required=True)
@@ -5086,6 +5491,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     args = ap.parse_args(argv)
+    if args.cmd == "intake":                    # the old spellings are the same commands (06 4)
+        args.cmd = "recent"
+    elif args.cmd == "unpair":
+        args.cmd, args.devices_cmd = "devices", "forget" if args.device else "list"
     if output.json_mode():
         refused = _json_refusal(args)
         if refused is not None:
@@ -5096,7 +5505,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
 
 def _sub_of(a) -> str | None:
     """The word after the command: `backup create` is `create`."""
-    for name in ("station_cmd", "intake_cmd", "printer_cmd", "library_cmd", "profiles_cmd", "modules_cmd", "web_cmd",
+    for name in ("station_cmd", "recent_cmd", "devices_cmd", "printer_cmd", "library_cmd", "profiles_cmd", "modules_cmd", "web_cmd",
                  "li_cmd", "reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd"):
         if hasattr(a, name):
             return getattr(a, name)
@@ -5132,8 +5541,8 @@ def _json_refusal(a) -> int | None:
 
 # `--quiet`: the commands whose standard output is only results (06 6.8 drops them). Every other command prints what it
 # exists to print there (a list, a detail, an answer, a link or token) or is a screen, and stays as it is.
-_RESULTS_ONLY = {("station", "flash-panel"), ("backup", "create"), ("restore", None), ("intake", "edit"),
-                 ("intake", "undo"), ("ensure-fields", None), ("printer", "report"), ("printer", "unpin"),
+_RESULTS_ONLY = {("station", "flash-panel"), ("backup", "create"), ("restore", None), ("recent", "edit"),
+                 ("recent", "undo"), ("devices", "forget"), ("ensure-fields", None), ("printer", "report"), ("printer", "unpin"),
                  ("library", "update"), ("library", "rollback"), ("library", "adopt"), ("library", "add"),
                  ("profiles", "build"), ("profiles", "set-parent"), ("profiles", "restore-deleted"),
                  ("profiles", "apply-updates"), ("modules", "apply"), ("modules", "set"), ("modules", "enable"),
@@ -5154,8 +5563,6 @@ def _reports_results(a) -> bool:
         return a.local
     if c == "printer" and sub == "map":
         return not a.manual
-    if c == "unpair":
-        return a.device_id is not None
     if c == "update":
         return not a.check
     return (c, sub) in _RESULTS_ONLY
@@ -5167,19 +5574,20 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "status":
         return cmd_status(client_factory or _default_client, station_pairing=args.station_pairing)
     if args.cmd == "pair":
-        return cmd_pair(pc=args.pc, station=args.station, text=args.text)
+        return cmd_pair(slicer_sync=args.slicer_sync, weigh_station=args.weigh_station, text=args.text,
+                        wait=not args.no_wait)
     if args.cmd == "station" and args.station_cmd == "pair" and args.local:
         return cmd_station_pair_local()
     if args.cmd == "station" and args.station_cmd == "flash-panel":
         return cmd_station_flash_panel(yes=args.yes, only_port=args.port)
     if args.cmd == "station":
         return cmd_station_pairing_state() if args.station_cmd == "pairing-state" else cmd_station_pair()
-    if args.cmd == "unpair":
-        return cmd_unpair(args.device_id, yes=args.yes)
+    if args.cmd == "devices":
+        return cmd_devices(yes=getattr(args, "yes", False), forget=args.device if args.devices_cmd == "forget" else None)
     if args.cmd == "config":
         return cmd_config()
-    if args.cmd == "intake":
-        return cmd_intake(args)
+    if args.cmd == "recent":
+        return _dispatch_recent(args)
     if args.cmd == "cert":
         return cmd_cert()
     if args.cmd == "printer":

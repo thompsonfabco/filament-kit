@@ -66,7 +66,7 @@ def terminal(monkeypatch):
 def _unpair(m, rec, tmp_path):
     m.setattr(cli.pairing, "devices", lambda: [{"id": "d1", "name": "Shop phone", "paired": 0, "last_seen": 0}])
     m.setattr(cli.pairing, "revoke", lambda i: rec("revoke")() == 0)
-    return ["unpair", "d1"], "Unpair Shop phone? It can no longer reach the kit server until it is paired again."
+    return ["unpair", "d1"], "Unpair Shop phone? It can no longer reach the Hub until it is paired again."
 
 
 def _unpin(m, rec, tmp_path):
@@ -180,6 +180,7 @@ def _local_intake_remove(m, rec, tmp_path):
 def _intake_revise(m, rec, tmp_path):
     from filament_kit import intake, intake_history
     m.setattr(intake, "reading_on", lambda cfg: True)
+    m.setattr(intake_history, "get", lambda rid: {"id": rid})           # the record is kept
     proposal = {"reader": None, "before": {"vendor": "Example"}, "after": {"vendor": "Sample"},
                 "changes": ["vendor"], "no_photo": False, "proposal": {}}
     m.setattr(intake_history, "revise", lambda *a, **k: proposal)

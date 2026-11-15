@@ -206,12 +206,12 @@ def test_the_cli_qr_is_the_blocks_not_the_link(capsys):
 
 def test_pair_prints_a_qr_for_the_pairing_link(capsys, env):
     pairing.make_cert("kit", ["192.0.2.5"], config.paths().etc)
-    assert cli.main(["pair"]) == 0
+    assert cli.main(["pair", "--no-wait"]) == 0
     out = capsys.readouterr().out
     block = "\n".join(ln for ln in out.splitlines() if ln.startswith(START))
     link = decode(from_text(block))
     assert link.startswith("fkit://pair?")
-    assert re.search(r"Pairing code: \d{6}", out) and "Certificate fingerprint" in out
+    assert re.search(r"Pairing code: \d{3} \d{3}", out) and "Certificate fingerprint" in out
 
 
 def test_the_hub_pairing_reply_for_a_phone_carries_a_qr_of_the_link(app):

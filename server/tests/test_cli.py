@@ -95,10 +95,10 @@ def test_status_counts_reads_today(capsys, spoolman_url):
 
 def test_pair_prints_code(capsys):
     _cert()
-    assert cli.main(["pair"]) == 0
+    assert cli.main(["pair", "--no-wait"]) == 0
     out = capsys.readouterr().out
     pend = json.loads((config.paths().state / "pending.json").read_text())
-    assert pend[0]["code"] in out
+    assert f"Pairing code: {pend[0]['code'][:3]} {pend[0]['code'][3:]}" in out
     assert "fkit://pair?" in out or "█" in out or "▀" in out
 
 
@@ -407,11 +407,12 @@ def test_printers_add_records_the_model_for_the_camera(capsys, monkeypatch):
 def test_pair_prints_grouped_certificate_fingerprint(capsys):
     _cert()
     fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-    assert cli.main(["pair"]) == 0
+    assert cli.main(["pair", "--no-wait"]) == 0
     out = capsys.readouterr().out
-    grouped = " ".join(fp[i:i + 4] for i in range(0, len(fp), 4))
+    groups = [fp[i:i + 4] for i in range(0, len(fp), 4)]
     assert "Certificate fingerprint (the phone asks for two groups of it):" in out
-    assert grouped in out and len(grouped.split(" ")) == 16
+    assert "  " + " ".join(groups[:8]) in out.splitlines() and "  " + " ".join(groups[8:]) in out.splitlines()
+    assert len(groups) == 16
 
 
 # ---------- Task 7b: profiles, pair --pc, status lines ----------
@@ -475,15 +476,15 @@ def test_pair_pc_prints_link_not_qr(capsys, monkeypatch):
         raise AssertionError("pair --pc must not make a QR code")
 
     monkeypatch.setattr(cli.qr, "text", no_qr)
-    assert cli.main(["pair", "--pc"]) == 0
+    assert cli.main(["pair", "--pc", "--no-wait"]) == 0
     out = capsys.readouterr().out
     rows = out.splitlines()
-    i = rows.index("Link for filament-kit-sync (paste it when asked):")
+    i = rows.index("Paste this link into the Slicer Sync when it asks:")
     assert rows[i + 1].startswith("fkit://pair?")
     fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-    assert " ".join(fp[j:j + 4] for j in range(0, len(fp), 4)) in out
+    assert "  " + " ".join(fp[j:j + 4] for j in range(0, 32, 4)) in rows
     pend = json.loads((config.paths().state / "pending.json").read_text())
-    assert f"Pairing code: {pend[0]['code']}" in out
+    assert f"Pairing code: {pend[0]['code'][:3]} {pend[0]['code'][3:]}" in out
     pairing.redeem_code(pend[0]["code"])
     assert [d["name"] for d in pairing.devices()] == ["pc"]
 
@@ -491,7 +492,7 @@ def test_pair_pc_prints_link_not_qr(capsys, monkeypatch):
 def test_pair_qr_has_four_module_quiet_zone(capsys, monkeypatch):
     _cert()
     monkeypatch.setenv("PATH", "")      # no qrencode: the Hub draws the code itself
-    assert cli.main(["pair"]) == 0
+    assert cli.main(["pair", "--no-wait"]) == 0
     rows = [re.sub(r"\x1b\[[0-9;]*m", "", ln) for ln in capsys.readouterr().out.splitlines()
             if ln.startswith("\x1b[30;47m")]
     assert rows and rows[0].strip() == "" and rows[1].strip() == ""     # 4 blank module rows = 2 character rows
@@ -703,13 +704,13 @@ def test_label_reader_off_shows_only_records_kept_and_says_where_to_switch_it_on
     assert "off: only Records kept" in out and "Records kept" in out and "Anthropic API key" not in out
 
 
-def test_pair_station_says_the_link_works_for_10_minutes(capsys):
+def test_pair_weigh_station_says_when_the_link_runs_out(capsys):
     _cert()
-    assert cli.main(["pair", "--station"]) == 0
-    assert "works for 10 minutes" in capsys.readouterr().out
+    assert cli.main(["pair", "--station", "--no-wait"]) == 0
+    assert re.search(r"Expires at \d\d:\d\d \(in 10 min\)\.", capsys.readouterr().out)
 
 
-@pytest.mark.parametrize("flags", [["--pc", "--station"], ["--pc", "--text"], ["--station", "--text"]])
+@pytest.mark.parametrize("flags", [["--pc", "--station"]])
 def test_pair_kinds_are_mutually_exclusive(capsys, flags):
     _cert()
     with pytest.raises(SystemExit) as e:
@@ -753,3 +754,10 @@ def test_status_without_a_wait_has_no_waiting_line(capsys, monkeypatch, spoolman
     _fake_library(monkeypatch)
     cli.main(["status"], client_factory=_ok_client)
     assert not any("waiting for Bambu Studio" in ln for ln in _status_lines(capsys))
+
+
+@pytest.mark.parametrize("flags", [["--pc", "--text"], ["--station", "--text"]])
+def test_pair_text_goes_with_either_kind(capsys, flags):
+    _cert()
+    assert cli.main(["pair", *flags, "--no-wait"]) == 0
+    assert not capsys.readouterr().err

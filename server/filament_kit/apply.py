@@ -1076,7 +1076,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
                 print("\nPairing skipped: pair a phone later with: sudo filament-kit pair")
             elif tty:
                 print("\n==> Pair a phone: open the filament-kit app and scan this code")
-                ex.ok([WRAPPER, "pair"])
+                ex.ok([WRAPPER, "pair", "--no-wait"])
             else:
                 # no terminal (the updater, a provisioning script): the output goes to a log, so no pairing token
                 print("\nPair a phone at a terminal: sudo filament-kit pair  (pairing links are not written to logs)")
