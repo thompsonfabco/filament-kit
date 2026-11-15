@@ -900,7 +900,7 @@ function alertsPanel(addToHome) {
   };
   async function subscribe() {
     if ((await Notification.requestPermission()) !== "granted") { paint(false); throw said(new Error(SW.t("settings_alerts_blocked"))); }
-    const reg = await navigator.serviceWorker.register(BASE + "/sw.js");
+    const reg = await navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE });
     await navigator.serviceWorker.ready;
     const key = (await pj("push/key")).key;
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });

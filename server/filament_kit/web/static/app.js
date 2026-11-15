@@ -872,6 +872,63 @@ function navigation() {
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page
 }
 
+// ----- the shell kept by sw.js, and "Cannot reach the Hub" (04 10.2, 10.3) -----
+// A request that gets no answer (SW.configure down/up) shows the Offline chip and the banner under the top bar; the Hub is tried
+// again every 10 s while the page is visible, and at once on Try now; when it answers the banner goes and the open lists are read again.
+if ("serviceWorker" in navigator) navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE }).catch(() => {});
+{
+  const RETRY = 10000;
+  const chip = SW.status("offline", { cls: "topbar__offline" });
+  chip.hidden = true;
+  document.querySelector(".topbar__tools").prepend(chip);
+  let down = false, banner = null, timer = 0, probing = false;
+  const sentence = () => (navigator.onLine === false ? SW.t("shell_banner_no_network") : `${SW.t("shell_banner_offline")} ${SW.t("shell_banner_retrying")}`);
+  function paintOffline() {
+    if (banner) banner.remove();
+    const text = h("span", {}, h("span", { class: "sr" }, SW.t("status_needs_look") + ": "), sentence());
+    banner = SW.banner({ kind: "warn", text, inline: true, late: true, actions: SW.btn(SW.t("common_try_now"), { action: "try-now", run: () => probe() }) });
+    banner.classList.add("offline-banner");
+    banner.querySelector(".icon").replaceWith(SW.icon("wifi-off"));
+    document.getElementById("main").prepend(banner);
+  }
+  function later() {
+    clearTimeout(timer);
+    timer = setTimeout(() => { if (document.hidden) later(); else probe(); }, RETRY);
+  }
+  async function probe() {                                   // any answer from the Hub, even an error, means it can be reached
+    if (probing) return;
+    probing = true;
+    const stop = new AbortController(), cut = setTimeout(() => stop.abort(), 8000);
+    try { await fetch(BASE + "/api/vendors", { credentials: "same-origin", cache: "no-store", signal: stop.signal }); hubUp(); }
+    catch { if (down) later(); else hubDown(); }
+    finally { clearTimeout(cut); probing = false; }
+  }
+  function hubDown() {
+    if (down) return;
+    down = true;
+    chip.hidden = false;
+    paintOffline();
+    later();
+  }
+  function hubUp() {
+    if (!down) return;
+    down = false;
+    clearTimeout(timer);
+    chip.hidden = true;
+    if (banner) banner.remove();
+    banner = null;
+    SW.toast(SW.t("shell_banner_back_online"), "ok");
+    const again = ["recent", "presets", "printers"].includes(place) && tabs[place].enter;   // inputs and drafts stay where they are
+    if (again) again();
+  }
+  SW.configure({ down: hubDown, up: hubUp });
+  window.addEventListener("offline", hubDown);
+  window.addEventListener("online", () => { if (down) { paintOffline(); probe(); } });
+  document.addEventListener("visibilitychange", () => { if (down && !document.hidden) probe(); });
+  probe();                                                   // a page opened from the copy learns at once that the Hub is away
+}
+
+
 // ---------- Add spools (04 4) ----------
 // What is being added is `items`, one object per card, in the shape the Hub takes (keys that start with "_" are the page's own
 // and never leave it). Each card is drawn once and an edit changes only what it touches, so a field in use is never redrawn.

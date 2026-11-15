@@ -21,7 +21,8 @@ self.addEventListener("fetch", (event) => {
   if (r.method !== "GET" || u.origin !== self.location.origin || !SHELL.includes(u.pathname)) return;
   // network first, the copy when the Hub does not answer
   event.respondWith(fetch(r).then((resp) => {
-    if (resp.ok) { const copy = resp.clone(); caches.open(CACHE).then((c) => c.put(u.pathname, copy)); }
+    // only the page itself: an answer redirected (to the sign-in page) is not the shell
+    if (resp.ok && !resp.redirected) { const copy = resp.clone(); caches.open(CACHE).then((c) => c.put(u.pathname, copy)); }
     return resp;
   }).catch(() => caches.match(u.pathname).then((hit) => hit || Response.error())));
 });

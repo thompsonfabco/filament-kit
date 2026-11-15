@@ -1654,3 +1654,100 @@ def test_the_tag_poll_runs_only_while_the_screen_is_shown_and_the_page_is_visibl
 """
     out = _spools_run(spools_hub.url, "poll", script, "#spools", "--widths", "1280", "--schemes", "light")
     assert out["views"] == 1
+# ---- S3.15: the Add to Home Screen sheet and "Cannot reach the Hub" in a headless browser (tests/page_drive.mjs) ----
+
+DRIVER = ROOT / "tests" / "page_drive.mjs"
+SHOTS = os.environ.get("FK_SHOTS_DIR")        # set: also save a screenshot of each state (fake data only)
+LOOKS = [(375, "light"), (375, "dark"), (1280, "light"), (1280, "dark")]
+HOME_PRELUDE = r"""
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const $ = (s, root = document) => root.querySelector(s);
+const text = (el) => (el ? el.textContent.trim().replace(/\s+/g, " ") : null);
+async function until(look, what, ms = 8000) {
+  for (let t = 0; t < ms; t += 50) { const v = look(); if (v) return v; await sleep(50); }
+  throw new Error("waited for " + what + "; the page shows: " + text($("main")).slice(0, 300) + " | dialogs: " + [...document.querySelectorAll("dialog")].map((d) => d.open + ":" + text(d).slice(0, 60)) + " | buttons: " + [...document.querySelectorAll("button, a")].filter((b) => /Home/.test(text(b))).map((b) => b.className + ":" + text(b)));
+}
+const press = (label) => [...document.querySelectorAll("button, a")].find((b) => text(b).startsWith(label));
+"""
+INSTALL = """
+if (innerWidth <= 600) { $(".nav__more").click(); await until(() => $(".more"), "the More sheet"); press("Add to Home Screen").click(); }
+else {
+  // a desktop Chrome that finds the app installable offers its own prompt: the row then reads "Install app" (04 10.1)
+  location.hash = "#settings"; await until(() => press("Add to Home Screen") || press("Install app"), "the Settings page");
+  await sleep(1500);
+  if (press("Install app")) return { prompt: true, label: text(press("Install app")), sheet: !!$("dialog[open]") };
+  press("Add to Home Screen").click();
+}
+const dlg = await until(() => $("dialog[open] ol.install"), "the install sheet");
+return { title: text($("dialog[open] .sheet__title")), steps: [...dlg.querySelectorAll("li")].map(text),
+         note: text($("dialog[open] .banner")), done: !!press("Done") };
+"""
+OFFLINE = """
+const real = window.fetch;
+let down = false;
+window.fetch = (u, o) => (down && String(u).includes("/api/") ? Promise.reject(new TypeError("Failed to fetch")) : real(u, o));
+const chip = () => $(".topbar__offline"), banner = () => $(".offline-banner");
+const seen = { before: !!banner() && !chip().hidden };
+const search = () => press("Search").click();
+async function lose() { down = true; search(); await until(() => banner(), "the offline banner"); }
+// the Hub stops answering: the shell stays, the chip and the banner show
+await lose();
+seen.chip = text(chip()); seen.chipShown = !chip().hidden; seen.banner = text(banner()); seen.role = banner().getAttribute("role");
+seen.icon = !!banner().querySelector("use[href='#i-wifi-off']"); seen.title = text($("h1")); seen.nav = !!$(".nav");
+if (__LEAVE__) return seen;
+// the Hub answers again, Try now: the banner and the chip go and a toast says so
+down = false; press("Try now").click();
+await until(() => !banner(), "the banner to go");
+seen.chipGone = chip().hidden; seen.toast = text($(".toast"));
+// the Hub stops again and answers again without a press: the page tries again by itself within 10 s
+if (__AUTO__) { await lose(); down = false; await until(() => !banner(), "the automatic retry", 14000); seen.auto = true; }
+return seen;
+"""
+
+
+def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str | None = None) -> dict:
+    node = _node()
+    if not node:
+        _missing("the page driver needs Node 22 or later")
+    file = tmp_path / "drive.js"
+    file.write_text(HOME_PRELUDE + script, encoding="utf-8")
+    init = tmp_path / "init.js"       # the browser's own install offer is not taken, so the sheet is what the row opens
+    init.write_text("addEventListener('beforeinstallprompt', (e) => e.stopImmediatePropagation(), true);", encoding="utf-8")
+    cmd = [node, str(DRIVER), "--url", url + "#add", "--script", str(file), "--width", str(width), "--scheme", scheme, "--init", str(init)]
+    if SHOTS and shot:
+        Path(SHOTS).mkdir(parents=True, exist_ok=True)
+        cmd += ["--shot", str(Path(SHOTS) / f"S3-15-{shot}-{width}-{scheme}.png")]
+    run = subprocess.run(cmd, capture_output=True, encoding="utf-8", timeout=300)
+    if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
+        _missing("the page driver needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
+    if run.returncode == 3:
+        _missing("page driver: " + run.stderr.strip().replace("AUT-5: ", "", 1))
+    assert run.returncode == 0, run.stdout + run.stderr
+    return json.loads(run.stdout)
+
+
+@pytest.mark.parametrize("served_web", ["waiting"], indirect=True)
+@pytest.mark.parametrize("width,scheme", LOOKS)
+def test_the_install_sheet_shows_the_three_iphone_steps(served_web, tmp_path, width, scheme):
+    out = _drive(served_web, tmp_path, INSTALL, width, scheme, "install")
+    if out.get("prompt"):                                  # the browser's own install prompt, not the sheet
+        assert out["label"].startswith("Install app") and not out["sheet"]
+        return
+    assert out["title"].startswith("Add ") and out["title"].endswith(" to the Home Screen")
+    assert out["steps"] == ["Tap Share in Safari's toolbar (the square with an arrow).", "Choose Add to Home Screen.", "Tap Add."]
+    assert out["note"] == "Print alerts on iPhone work only from the Home Screen." and out["done"]
+
+
+@pytest.mark.parametrize("served_web", ["waiting"], indirect=True)
+@pytest.mark.parametrize("width,scheme", LOOKS)
+def test_the_hub_not_answering_shows_the_chip_and_the_banner_and_the_app_recovers(served_web, tmp_path, width, scheme):
+    auto = (width, scheme) == (1280, "light")      # the 10 s wait is done once
+    out = _drive(served_web, tmp_path, OFFLINE.replace("__LEAVE__", "true" if SHOTS else "false").replace("__AUTO__", "false" if SHOTS else str(auto).lower()),
+                 width, scheme, "offline")
+    assert out["before"] is False
+    assert out["chip"] == "Offline" and out["chipShown"] and out["icon"] and out["role"] == "status" and out["nav"]
+    assert out["banner"] == "Needs a look: Cannot reach the Hub. Retrying every 10 s.Try now"
+    assert out["title"] == "Add spools"                    # the shell and the page stay
+    if not SHOTS:
+        assert out["chipGone"] and out["toast"] == "Connected to the Hub again."
+        assert out.get("auto", not auto)
