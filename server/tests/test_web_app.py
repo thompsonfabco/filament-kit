@@ -752,7 +752,7 @@ def test_a_link_can_open_a_place_by_its_hash():
     src = _app_js()
     assert 'const PLACES = ["add", "spools", "printers", "recent", "presets"];' in src
     assert 'const ALIAS = { open: "spools", history: "recent" };' in src          # #open and #history redirect
-    assert "if (PLACES.includes(name)) return show(name);" in src
+    assert 'if (PLACES.includes(name)) { show(name); if (name === "spools") tabs.spools.address(raw.slice(head.length + 1), initial); return; }' in src   # #spools/<id> opens the sheet
     assert 'const PLACE_KEY = "spoolwarden.place";' in src and 'localStorage.getItem("tab")' in src
 
 
@@ -969,3 +969,59 @@ def test_every_text_key_built_from_a_prefix_in_the_page_scripts_exists():
                 found.append((f.name, prefix))
                 assert any(k.startswith(prefix) for k in keys), f"{f.name}: no catalogue key starts with {prefix!r}"
     assert ("app.js", "install_step_") in found
+
+
+# ---------- S3.10: Spools in the new design ----------
+
+def _spools_src() -> str:
+    """The Spools part of app.js: from its heading to Slicer presets."""
+    src = _app_js()
+    return src[src.index("// ---------- Open spool"):src.index("// ---------- Presets")]
+
+
+def test_spools_keeps_every_action_of_today_and_the_requests():
+    src = _spools_src()
+    for call in ('api("tag")', "find?q=${encodeURIComponent(q)}&sealed=${sealedOnly ? 1 : 0}",
+                 'api("open", { body: { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), dry_run: dry } })',
+                 "add_summary_error_preview", "add_summary_preview_ok", "spool_sheet_opened_toast", "spool_sheet_link",
+                 "[...new Set([...PICKS, ...LOCATIONS])]"):                        # Last tag, search, Preview (Check) and Link tag and open
+        assert call in src, call
+    for call in ("api(`spools/${id}`)", "{ body: { gross: num(wf), dry_run: dry } }", "{ body: { location: l, dry_run: false } }",
+                 "{ body: { empty: true, dry_run: false } }"):                      # the S3.9 routes: weight, move, mark empty
+        assert call in src, call
+    for call in ('api("printers")', 'api("printers/tagged")', "api(`printers/${enc(p.id)}/state`)", "/load`, { body: { spool_id: id, dry_run: dry } }"):
+        assert call in src, call                                                    # Load into a printer: the load sheet's own routes
+
+
+def test_spools_poll_the_tag_every_3_s_only_while_shown_and_visible():
+    src = _spools_src()
+    assert "setInterval(poll, 3000)" in src and "clearInterval(timer)" in src
+    assert 'addEventListener("visibilitychange"' in src and "if (document.hidden) stopPoll(); else startPoll();" in src
+    assert "leave() { shown = false; stopPoll(); closeSheet(); }" in src and "if (!document.hidden) startPoll();" in src
+
+
+def test_spools_remember_sealed_only_under_its_key_and_wrap_storage():
+    src = _spools_src()
+    assert 'const SEALED_KEY = "spoolwarden.sealedOnly"' in src
+    for call in ("localStorage.getItem(SEALED_KEY)", "localStorage.setItem(SEALED_KEY,"):
+        i = src.index(call)
+        assert "try {" in src[max(0, i - 120):i], call                              # every read and write is in a try
+
+
+def test_spools_other_actions_follow_what_the_hub_offers():
+    src = _spools_src()
+    assert 'document.body.dataset.spoolEdit === "1"' in src
+    assert "EDIT ? weightBtn : null, EDIT ? moveBtn : null, PRINTERS ? loadBtn : null" in src     # editing, and Load with the Printers Feature
+    assert "const other = EDIT || PRINTERS ?" in src and "EDIT ? h(\"div\", { class: \"spools__danger\" }, emptyBtn)" in src
+    assert "history.pushState({ sheet: true }, \"\", `#spools/${id}`)" in src and "document.title" not in src   # the title comes from the shell
+
+
+def test_spools_texts_come_from_the_catalogue_and_new_keys_use_the_section_prefix():
+    keys = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    src = _spools_src()
+    used = set(re.findall(r'SW\.t\(\s*"([a-z0-9_]+)"', src)) | set(re.findall(r'"((?:spool|spools|common|add)_(?!_)[a-z0-9_]+)"', src))
+    assert used and not sorted(k for k in used if k not in keys)
+    assert not [k for k in used if k.startswith("web_")]
+    for key in ("spool_sheet_humidity", "spool_sheet_reason_empty", "spool_sheet_slot_empty"):
+        assert key in used and key in keys
+    assert "innerHTML" not in src and ".style." not in src                         # no data into markup, no inline style (the CSP)

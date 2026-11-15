@@ -354,3 +354,54 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 /* the number of spools waiting, on the Add destination (04 2.1) */
 .nav__badge { position: absolute; top: var(--s1); left: calc(50% + var(--s1)); display: grid; place-items: center; min-width: var(--s4); height: var(--s4); padding: 0 var(--s1);
               border: var(--hairline) solid var(--accent-text); border-radius: var(--s3); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); font-weight: var(--fw-label); }
+/* Spools (S3.10): the last tag, the search, the rows and the spool sheet (04 5) */
+.spools { display: grid; gap: var(--s4); }
+.spools p { margin: 0; }
+.spools > * { min-width: 0; }
+.spools .group + .group { margin-top: 0; }
+.spools .group__title { margin: 0; }
+.spools__tag { display: grid; gap: var(--s2); }
+.spools__tagline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); }
+.spools__tagid { font-size: var(--fs-b); font-weight: var(--fw-label); overflow-wrap: anywhere; }
+.spools__age { margin-left: auto; font-size: var(--fs-m); }
+.spools__meta { font-size: var(--fs-m); }
+.spools__hub { font-size: var(--fs-m); white-space: pre-wrap; overflow-wrap: anywhere; }
+.spools__linked { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.spools__linked:empty { display: none; }
+.spools__find { display: grid; gap: var(--s2); }
+.spools__search .field__box { position: relative; }
+.spools__search .field__box, .spools__search .field__control { width: 100%; }
+.spools__search .field__control { padding-right: calc(var(--ctl) + var(--s5)); }
+.spools__search .field__box > .btn--icon { position: absolute; top: 0; right: 0; }
+.spools__search .spinner { right: calc(var(--ctl) + var(--s1)); }
+.spools__search .field__control, .spools__search .field__box > .btn--icon { min-height: calc(var(--s7) - var(--s1)); }   /* 44 px at 1280 px too */
+.spools__state { display: flex; align-items: center; gap: var(--s2); color: var(--muted); font-size: var(--fs-m); }
+.spools__results { display: grid; gap: var(--s3); }
+.spools__results:empty { display: none; }
+.spools__fil { display: grid; gap: 0; margin-top: var(--s2); }
+.spools__fil-name { margin: 0; font-size: var(--fs-b); font-weight: var(--fw-title); line-height: var(--lh-title); overflow-wrap: anywhere; }
+.spools__fil-meta { font-size: var(--fs-s); }
+.spools__rows { display: grid; gap: var(--s1); margin: 0; padding: 0; list-style: none; }
+.spools__row { display: flex; align-items: center; justify-content: flex-start; width: 100%; min-height: var(--row); gap: var(--s3); padding: var(--s2) var(--s3);
+               text-align: left; font-weight: var(--fw-text); }
+.spools__row-text { display: grid; flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.spools__row-text b { font-size: var(--fs-b); font-weight: var(--fw-label); }
+.spools__row-text .muted { font-size: var(--fs-s); }
+.spools__chevron { flex: none; color: var(--muted); }
+.spools__none { color: var(--muted); }
+
+/* the spool sheet: the summary, "Open it and link the tag", "Other actions" */
+.spools__sheet { display: grid; gap: var(--s4); }
+.spools__sheet p { margin: 0; }
+.spools__sheet > * { min-width: 0; }
+.spools__sum { display: flex; align-items: center; gap: var(--s3); }
+.spools__sum:has(.skeleton) { display: block; }
+.spools__sum-text { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.spools__sum-text b { font-size: var(--fs-b); font-weight: var(--fw-title); }
+.spools__sum-text .muted { font-size: var(--fs-m); }
+.spools__part { display: grid; gap: var(--s3); padding-top: var(--s4); border-top: var(--hairline) solid var(--border); }
+.spools__part-title, .spools__step { margin: 0; font-size: var(--fs-b); font-weight: var(--fw-title); line-height: var(--lh-title); }
+.spools__sheet-tag { font-size: var(--fs-m); overflow-wrap: anywhere; }
+.spools__buttons { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s2); }
+.spools__danger { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
+.spools__form, .spools__load { display: grid; gap: var(--s3); padding: var(--s3); border: var(--hairline) solid var(--border); border-radius: var(--r); background: var(--surface-2); }
