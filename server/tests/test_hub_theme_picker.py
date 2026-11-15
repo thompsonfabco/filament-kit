@@ -122,7 +122,7 @@ await open();
 out.start = state();                                        // as served: nothing chosen
 await clickTile(out.start.look !== "console");
 out.clicked = { ...state(), result: resultText() };
-localStorage.setItem("spoolwarden.look", "panes"); root.setAttribute("data-look", "panes");     // a stored look that has no tile
+localStorage.setItem("spoolwarden.look", "neon"); root.setAttribute("data-look", "neon");     // a stored look nothing knows: no tile is checked
 await open();
 out.other = state();
 await clickTile(true);
@@ -136,16 +136,16 @@ return out;
 
 def _check_click(page, served_look):
     on, off = [T("theme_console_name")], []
-    assert page["start"]["tiles"] == 3 and page["start"]["line"] == [T("theme_console_line"), T("theme_workbench_line"), T("theme_palette_line")] and page["start"]["legend"] == T("appearance_theme_title")
+    assert page["start"]["tiles"] == 4 and page["start"]["line"] == [T("theme_console_line"), T("theme_workbench_line"), T("theme_palette_line"), T("theme_panes_line")] and page["start"]["legend"] == T("appearance_theme_title")
     assert page["start"]["look"] == served_look and page["start"]["stored"] is None
-    assert page["start"]["checked"] == (on if served_look == "console" else off)         # checked only when Console is the look shown
+    assert page["start"]["checked"] == [T(f"theme_{served_look}_name")]                  # the tile of the look shown is the checked one
     assert page["clicked"]["look"] == "console" and page["clicked"]["checked"] == on
     if served_look == "console":                                                         # a click on a tile that is already on changes nothing
         assert page["clicked"]["stored"] is None and page["clicked"]["result"] is None or page["clicked"]["result"] == ""
     else:
         assert page["clicked"]["stored"] == "console"
         assert page["clicked"]["result"] == T("appearance_theme_saved", name=T("theme_console_name"))
-    assert page["other"]["look"] == "panes" and page["other"]["checked"] == off
+    assert page["other"]["look"] == "neon" and page["other"]["checked"] == off
     assert page["otherClicked"]["look"] == "console" and page["otherClicked"]["stored"] == "console" and page["otherClicked"]["checked"] == on
     assert page["again"]["checked"] == on and page["again"]["look"] == "console"
 
