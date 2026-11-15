@@ -463,15 +463,47 @@ def test_features_does_not_scroll_sideways_at_320_px_in_a_wide_font_with_a_long_
     assert not found, found
 
 
+# What a top-level `function` or `var` of a classic script would replace on `window` (a `const` or `let` of such a name is a
+# SyntaxError), and the names every object has: a section script must not declare one of these (R332: `function scrollTo`
+# turned off the page's own scrolling)
+BROWSER_NAMES = {
+    "scrollTo", "scroll", "scrollBy", "open", "close", "print", "name", "status", "top", "parent", "self", "length", "focus", "blur",
+    "find", "stop", "event", "history", "location", "origin", "alert", "confirm", "prompt", "fetch", "frames", "opener", "closed",
+    "document", "navigator", "screen", "performance", "crypto", "console", "external", "menubar", "toolbar", "statusbar", "scrollX",
+    "scrollY", "innerWidth", "innerHeight", "outerWidth", "outerHeight", "screenX", "screenY", "setTimeout", "setInterval",
+    "clearTimeout", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "getComputedStyle", "getSelection", "matchMedia",
+    "postMessage", "atob", "btoa", "addEventListener", "removeEventListener", "dispatchEvent", "moveTo", "moveBy", "resizeTo",
+    "resizeBy", "queueMicrotask", "structuredClone", "reportError", "caches", "indexedDB", "localStorage", "sessionStorage",
+    "customElements", "speechSynthesis", "visualViewport", "devicePixelRatio", "isSecureContext", "onload", "onerror", "escape",
+    "unescape", "eval", "parseInt", "parseFloat", "isNaN", "isFinite", "Event", "URL", "Node", "Element", "Text", "Image", "Option",
+    "Range", "Selection", "Storage", "Request", "Response", "Headers", "Worker", "Notification",
+    # Object.prototype
+    "constructor", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "toLocaleString", "toString", "valueOf", "__proto__",
+    "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__",
+}
+
+
+def _declared_names(source: str) -> list[str]:
+    import re
+    return re.findall(r"^(?:const|let|var|function|async function|class)\s+([A-Za-z_$][\w$]*)", source, re.M)
+
+
 def test_no_two_hub_page_scripts_declare_the_same_top_level_name():
     """The Hub page's scripts are classic scripts that share one global scope: a second `const cell` is a SyntaxError that
-    stops the later script, and only the page shows it."""
-    import re
+    stops the later script, and only the page shows it. A name the browser's window or every object already has is refused
+    too: `function open` would replace `window.open`."""
     seen: dict[str, str] = {}
     for path in sorted((ROOT / "server" / "filament_kit" / "setup_static").glob("setup*.js")):
-        for name in re.findall(r"^(?:const|let|var|function|async function|class)\s+([A-Za-z_$][\w$]*)", path.read_text(encoding="utf-8"), re.M):
+        for name in _declared_names(path.read_text(encoding="utf-8")):
             assert name not in seen, f"{name} is declared in {seen[name]} and in {path.name}"
+            assert name not in BROWSER_NAMES, f"{name} in {path.name} replaces a name the browser or every object has"
             seen[name] = path.name
+
+
+def test_a_top_level_name_of_the_browser_is_found_in_a_section_script():
+    src = "\n".join(["const ok = 1;", "function open(){}", "async function valueOf(){}", "let scrollTo = 2;", "function fine(){}"])
+    names = _declared_names(src)
+    assert [n for n in names if n in BROWSER_NAMES] == ["open", "valueOf", "scrollTo"]
 
 
 OVERVIEW_PRELUDE = """
