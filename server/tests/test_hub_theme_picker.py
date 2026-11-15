@@ -1,7 +1,7 @@
 """The theme picker on the web (design 09 S6.2, 02 3.4, 03 10.2, 04 9.2), in a real headless browser: theme-init.js applies the
 device's stored look (or the Hub's default) and sets the two theme-color metas to that look's surface, on the Hub page and in
 the web app; the Appearance group (Hub Settings) and the web app's Settings sheet hold the picker with the tiles built so far
-(Console and Workbench), Console selected; a device that has not chosen stays on the Hub's default (Console unless the Hub says otherwise). The AUT-5 audit of
+(Console, Workbench and Palette), Console selected; a device that has not chosen stays on the Hub's default (Console unless the Hub says otherwise). The AUT-5 audit of
 the picker at 320 px with a long Hub name. The same skip rules as the page audit: no Node 22 or no browser is a skip (a
 failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -122,7 +122,7 @@ await open();
 out.start = state();                                        // as served: nothing chosen
 await clickTile(out.start.look !== "console");
 out.clicked = { ...state(), result: resultText() };
-localStorage.setItem("spoolwarden.look", "palette"); root.setAttribute("data-look", "palette");     // a stored look that has no tile
+localStorage.setItem("spoolwarden.look", "panes"); root.setAttribute("data-look", "panes");     // a stored look that has no tile
 await open();
 out.other = state();
 await clickTile(true);
@@ -136,7 +136,7 @@ return out;
 
 def _check_click(page, served_look):
     on, off = [T("theme_console_name")], []
-    assert page["start"]["tiles"] == 2 and page["start"]["line"] == [T("theme_console_line"), T("theme_workbench_line")] and page["start"]["legend"] == T("appearance_theme_title")
+    assert page["start"]["tiles"] == 3 and page["start"]["line"] == [T("theme_console_line"), T("theme_workbench_line"), T("theme_palette_line")] and page["start"]["legend"] == T("appearance_theme_title")
     assert page["start"]["look"] == served_look and page["start"]["stored"] is None
     assert page["start"]["checked"] == (on if served_look == "console" else off)         # checked only when Console is the look shown
     assert page["clicked"]["look"] == "console" and page["clicked"]["checked"] == on
@@ -145,7 +145,7 @@ def _check_click(page, served_look):
     else:
         assert page["clicked"]["stored"] == "console"
         assert page["clicked"]["result"] == T("appearance_theme_saved", name=T("theme_console_name"))
-    assert page["other"]["look"] == "palette" and page["other"]["checked"] == off
+    assert page["other"]["look"] == "panes" and page["other"]["checked"] == off
     assert page["otherClicked"]["look"] == "console" and page["otherClicked"]["stored"] == "console" and page["otherClicked"]["checked"] == on
     assert page["again"]["checked"] == on and page["again"]["look"] == "console"
 
@@ -156,14 +156,14 @@ def _set_default(look):
     config.save(cfg)
 
 
-@pytest.mark.parametrize("default", ["console", "palette"])
+@pytest.mark.parametrize("default", ["console", "panes"])
 def test_a_click_on_the_tile_in_the_hub_settings_chooses_console_whatever_the_page_showed(hub, tmp_path, default):
     _set_default(default)
     page = _drive(hub, tmp_path, CLICK.replace("__HASH__", "#settings/appearance").replace("__AWAY__", "#overview"))
     _check_click(page, default)
 
 
-@pytest.mark.parametrize("default", ["console", "palette"])
+@pytest.mark.parametrize("default", ["console", "panes"])
 def test_a_click_on_the_tile_in_the_web_app_chooses_console_whatever_the_page_showed(served, tmp_path, default):  # noqa: F811
     _set_default(default)
     page = _drive(served, tmp_path, CLICK.replace("__HASH__", "#settings").replace("__AWAY__", "#add"))

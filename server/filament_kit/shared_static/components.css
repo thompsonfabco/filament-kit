@@ -505,3 +505,50 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 /* profile: detail=card */
 /* only a detail open in its card; a form moved into a dialog keeps the dialog's own look */
 :root[data-look="workbench"] .coll__row--detail .detail{padding:var(--s4) 0 0;border-top:var(--hairline) solid var(--border);background:none}
+/* profile: nav=pills */
+/* a second row under the top bar from tablet up (a phone keeps the bottom bar); no side column, so the page uses the full width */
+@media (min-width:601px){
+  :root[data-look="palette"] .shell{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr;grid-template-areas:"top" "nav" "main"}
+  :root[data-look="palette"] .shell>.nav{position:static;flex-direction:row;flex-wrap:wrap;gap:var(--s2);height:auto;overflow:visible;padding:var(--s2) var(--s4);border-right:0;border-bottom:var(--hairline) solid var(--border)}
+  :root[data-look="palette"] .shell .nav__group{display:flex;flex-wrap:wrap;gap:var(--s2)}
+  :root[data-look="palette"] .shell .nav__group+.nav__heading+.nav__group{margin:0;padding:0;border:0}
+  :root[data-look="palette"] .shell .nav__item{flex-direction:row;justify-content:flex-start;gap:var(--s2);min-height:var(--ctl);margin:0;padding:0 var(--s4) 0 var(--s3);border-radius:var(--r-l);color:var(--text);text-align:left}
+  :root[data-look="palette"] .shell .nav__item[data-state="off"]{color:var(--muted)}
+  :root[data-look="palette"] .shell .nav__item[aria-current="page"]{color:var(--accent-text)}
+  :root[data-look="palette"] .shell .nav__item .nav__label{font-size:var(--fs-m);font-weight:var(--fw-label)}
+  :root[data-look="palette"] .shell .nav__item[aria-current="page"]::before{content:none}
+}
+/* profile: collection=tiles */
+/* two tiles wide from 420 px, one below; the title row is the tile's top, the main action runs the full width at its foot (02 6.1) */
+:root[data-look="palette"] .coll{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,14rem),1fr));gap:var(--s4);border:0;background:none}
+:root[data-look="palette"] .coll__head{grid-column:1 / -1;display:block;border:0;border-radius:0;background:none}
+:root[data-look="palette"] .coll__head:not(:has(.coll__sort)){position:absolute;width:var(--hairline);height:var(--hairline);overflow:hidden;clip-path:inset(50%)}
+:root[data-look="palette"] .coll__head .coll__row{gap:var(--s2);padding:0}
+:root[data-look="palette"] .coll__head .coll__cell{font-size:var(--fs-m);letter-spacing:normal;text-transform:none}
+:root[data-look="palette"] .coll__head .coll__cell:not(:has(.coll__sort)){position:absolute;width:var(--hairline);height:var(--hairline);overflow:hidden;clip-path:inset(50%)}
+:root[data-look="palette"] .coll__sort{padding:0 var(--s3);border:var(--hairline) solid var(--border-strong);border-radius:var(--r);background:var(--surface);color:var(--text);font-weight:var(--fw-label)}
+:root[data-look="palette"] .coll__sort:hover{background:var(--surface-2)}
+:root[data-look="palette"] .coll__head [aria-sort]>.coll__sort{border-color:var(--accent-text);background:var(--accent-soft);color:var(--accent-text)}
+:root[data-look="palette"] .coll__item{grid-column:auto;display:flex;flex-direction:column;gap:var(--s2);margin:0;padding:var(--s4);border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface)}
+:root[data-look="palette"] .coll__group{grid-column:1 / -1;padding:0;border:0;background:none}
+:root[data-look="palette"] .coll__item:hover{border-color:var(--border-strong)}
+:root[data-look="palette"] .coll__item[data-selected="true"],:root[data-look="palette"] .coll__item[aria-current="true"],:root[data-look="palette"] .coll__item:has(.coll__title:active){background:var(--surface-3)}
+:root[data-look="palette"] .coll__item:hover>.coll__row:first-child,:root[data-look="palette"] .coll__item[data-selected="true"]>.coll__row:first-child,:root[data-look="palette"] .coll__item[aria-current="true"]>.coll__row:first-child,:root[data-look="palette"] .coll__item:has(.coll__title:active)>.coll__row:first-child{background:none}
+:root[data-look="palette"] .coll__row{display:flex;flex-wrap:wrap;align-items:center;grid-column:auto;gap:var(--s1) var(--s2);padding:0}
+:root[data-look="palette"] .coll__row--detail{display:block}
+:root[data-look="palette"] .coll__cell{display:block;min-height:0;padding:0}
+:root[data-look="palette"] .coll__cell[data-prio="2"],:root[data-look="palette"] .coll__cell[data-prio="3"],:root[data-look="palette"] .coll__cell[data-col="go"]{display:none}
+:root[data-look="palette"] .coll__cell[data-col="title"]{flex:1 1 calc(var(--s7) * 2);min-width:0}
+:root[data-look="palette"] .coll__cell[data-col="visual"]{display:flex;align-items:center;justify-content:center;order:-1;width:100%;min-height:calc(var(--s7) * 2)}
+:root[data-look="palette"] .coll__item .coll__cell:not([data-col="expand"]):not([data-col="title"]):not([data-col="status"]):not([data-col="select"]):not([data-col="visual"]){width:100%}
+:root[data-look="palette"] .coll__cell[data-col="actions"]{display:flex;flex-wrap:wrap;gap:var(--s2);justify-content:flex-start;margin-top:auto}
+:root[data-look="palette"] .coll__cell[data-col="actions"]>.actions{flex:1 1 100%;flex-wrap:nowrap}
+:root[data-look="palette"] .coll__cell[data-col="actions"] .btn:first-child{flex:1 1 auto}
+:root[data-look="palette"] .coll__key{display:inline;color:var(--muted)}
+:root[data-look="palette"] .coll__key::after{content:": "}
+:root[data-look="palette"] .coll__title{font-size:var(--fs-l);font-weight:var(--fw-title)}
+/* profile: detail=sheet */
+/* the shared script moves an open detail into the detail host; a wide screen keeps the right-hand sheet of the host, a phone gets it from the top bar's height to the bottom */
+@media (max-width:600px){
+  :root[data-look="palette"] .sheet--detail{height:calc(100% - var(--top) - env(safe-area-inset-top));max-height:none}
+}
