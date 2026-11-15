@@ -18,10 +18,16 @@ the environment and from what `configure` was given, so a test that sets `NO_COL
     wrap(text, indent=, first=) -> [str]      running text at the width; a command in it is never split
     wait(text)                                a progress line once 2 seconds pass with no other output (06 6.6);
                                               `paused()` holds it while the command asks a question
+    json_mode() / quiet()                     `--json` and `--quiet` (06 6.8); `emit(doc)` gives the JSON document of a
+                                              command, `run_json(fn)` runs one so standard output holds that document alone,
+                                              `muted()` drops the standard output of a command that only reports results
+                                              and `shown()` lets a question through it
 """
 from __future__ import annotations
 
 import contextlib
+import io
+import json
 import os
 import re
 import shutil
@@ -37,26 +43,42 @@ PLAIN_EVERY = 10.0          # --plain: one more whole line this often
 STOP_HINT_AFTER = 5         # at a terminal the line adds "(Ctrl-C stops)" after this many seconds
 STATE_WORD_WIDTH = 12       # 06 9.1: the state word is padded to this
 
-_switches = {"color": "auto", "plain": False, "no_progress": False}
+_switches = {"color": "auto", "plain": False, "no_progress": False, "json": False, "quiet": False}
 
 
-def configure(*, color: str | None = None, plain: bool | None = None, no_progress: bool | None = None) -> None:
-    """What `--color always|never|auto`, `--plain` and `--no-progress` said for this run (None: unchanged)."""
+def configure(*, color: str | None = None, plain: bool | None = None, no_progress: bool | None = None,
+              json: bool | None = None, quiet: bool | None = None) -> None:
+    """What `--color always|never|auto`, `--plain`, `--no-progress`, `--json` and `--quiet` said for this run (None:
+    unchanged)."""
     if color is not None:
         _switches["color"] = color
     if plain is not None:
         _switches["plain"] = plain
     if no_progress is not None:
         _switches["no_progress"] = no_progress
+    if json is not None:
+        _switches["json"] = json
+    if quiet is not None:
+        _switches["quiet"] = quiet
 
 
 def reset() -> None:
-    _switches.update(color="auto", plain=False, no_progress=False)
+    _switches.update(color="auto", plain=False, no_progress=False, json=False, quiet=False)
+
+
+def json_mode() -> bool:
+    """`--json`: standard output holds one JSON document and nothing else, and nothing asks (06 6.8)."""
+    return bool(_switches["json"])
+
+
+def quiet() -> bool:
+    """`-q` / `--quiet`: only what the command exists to print (06 6.8)."""
+    return bool(_switches["quiet"])
 
 
 def extract_switches(argv: list[str]) -> tuple[list[str], dict]:
-    """`argv` without `--color X`, `--color=X`, `--plain` and `--no-progress`, which every command accepts in any
-    place before a bare `--`; and what they said, as `configure` takes it."""
+    """`argv` without `--color X`, `--color=X`, `--plain`, `--no-progress`, `--json`, `--quiet` and `-q`, which every
+    command accepts in any place before a bare `--`; and what they said, as `configure` takes it."""
     rest, got, i = [], {}, 0
     while i < len(argv):
         a = argv[i]
@@ -67,6 +89,10 @@ def extract_switches(argv: list[str]) -> tuple[list[str], dict]:
             got["plain"] = True
         elif a == "--no-progress":
             got["no_progress"] = True
+        elif a == "--json":
+            got["json"] = True
+        elif a in ("--quiet", "-q"):
+            got["quiet"] = True
         elif a == "--color" and i + 1 < len(argv):
             got["color"] = argv[i + 1]
             i += 1
@@ -139,7 +165,7 @@ def _is_tty(stream) -> bool:
 def colour_on(stream) -> bool:
     """Decided for each stream, first rule that applies: `--color always|never`; `NO_COLOR` not empty; `TERM` dumb or
     unset; a terminal."""
-    if plain():
+    if plain() or json_mode():
         return False
     mode = _switches["color"]
     if mode in ("always", "never"):
@@ -421,7 +447,10 @@ def out_lines(lines: list[str]) -> None:
     _write(sys.stdout, lines)
 
 
-result = out        # a result is one line in the past tense on standard output (06 6.5)
+def result(text: str = "") -> None:
+    """A result: one line in the past tense on standard output (06 6.5). `--quiet` drops it."""
+    if not quiet():
+        out(text)
 
 
 def err(text: str) -> None:
@@ -429,8 +458,11 @@ def err(text: str) -> None:
     _write(sys.stderr, wrap(text))
 
 
-def note(text: str) -> None:
-    """A note that is not a result: on standard error, `Note: ` first."""
+def note(text: str, *, old_name: bool = False) -> None:
+    """A note that is not a result: on standard error, `Note: ` first. `--quiet` drops it, but for the old-name line
+    (`old_name`, 06 2), which says what a command is called now."""
+    if quiet() and not old_name:
+        return
     _write(sys.stderr, wrap("Note: " + text, indent=6, first=0))
 
 
@@ -440,6 +472,7 @@ def error(what: str, fix: str | None = None, *, cmd: str | None = None) -> None:
     its own second line `fix: ...` (the texts the module code returns) is split there."""
     if fix is None and "\nfix: " in what:
         what, _, fix = what.partition("\nfix: ")
+    _failure[:] = [(what, " ".join(x for x in (fix, cmd) if x) or None)]       # for the error document of --json
     lines = wrap("Error: " + what, indent=7, first=0)
     lines[0] = paint("Error:", "bad", sys.stderr) + lines[0][6:]
     if fix:
@@ -458,8 +491,8 @@ def need_sudo(cmd: str) -> int:
 # ---------- confirmations (06 7) ----------
 
 def terminal() -> bool:
-    """Is standard input a terminal: can a question be answered."""
-    return _is_tty(sys.stdin)
+    """Is standard input a terminal: can a question be answered. Never under `--json`, which does not ask."""
+    return not json_mode() and _is_tty(sys.stdin)
 
 
 def no_terminal(doing: str, rerun: str | None = None) -> int:
@@ -476,26 +509,169 @@ def confirm(question: str, *, yes: bool = False, doing: str = "", rerun: str | N
     input is no. With `word`, `question` ends with the prompt (`Type purge to go on: `) and only that word, compared
     without case and surrounding spaces, goes on. Returns None to go on, or the exit code to stop with: 5 after no
     (`Nothing changed.` is printed), 2 when there is no terminal and no `yes` (`no_terminal`, standard output stays
-    empty). `yes` answers without printing the question. `ask` stands in for the terminal's input (the caller's
+    empty), and also 2 under `--json`, which never asks. `yes` answers without printing the question. `ask` stands in for the terminal's input (the caller's
     own, or a test's): it is not checked for a terminal."""
     if yes:
         return None
+    if json_mode():                     # --json never asks (06 6.8)
+        return no_terminal(doing, rerun)
     if ask is None:
         if not terminal():
             return no_terminal(doing, rerun)
         ask = input
     lines = wrap(question if word else question + " [y/N]")
-    _write(sys.stdout, lines[:-1])
-    try:
-        answer = ask(lines[-1].rstrip() + " ")
-    except (EOFError, RuntimeError, OSError):       # the end of input is a no
-        answer = ""
-        _write(sys.stdout, [""])
+    with shown():
+        _write(sys.stdout, lines[:-1])
+        try:
+            answer = ask(lines[-1].rstrip() + " ")
+        except (EOFError, RuntimeError, OSError):       # the end of input is a no
+            answer = ""
+            _write(sys.stdout, [""])
     answer = (answer or "").strip().lower()
     if answer == word.lower() if word else answer in ("y", "yes"):
         return None
-    out("Nothing changed.")
+    result("Nothing changed.")
     return CANCELLED
+
+
+# ---------- --json and --quiet (06 6.8) ----------
+
+_doc: list = []             # the document a command gave `emit`
+_failure: list = []         # (what, fix) of the last `error`, for the error document
+_show = [False]             # `shown()` is on: a muted standard output lets this through
+
+
+def emit(doc) -> None:
+    """The JSON document of this command (`--json`); ignored without it. The last one given is the one written."""
+    if json_mode():
+        _doc[:] = [doc]
+
+
+class _Tee:
+    """Standard error under `--json`: passes everything on and keeps the text, for an error nothing recorded."""
+
+    def __init__(self, real):
+        self.real = real
+        self.text: list[str] = []
+
+    def write(self, text):
+        self.text.append(text)
+        return self.real.write(text)
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+def _failed(rc: int, err: _Tee, held: str) -> dict:
+    """`{"ok": false, "error", "fix"}` for a command that ended with `rc`: its last `error`, else the first line it wrote
+    to standard error, else its last line of output."""
+    if _failure:
+        what, fix = _failure[-1]
+    else:
+        first = next((ln for ln in "".join(err.text).splitlines() if ln.strip()), "")
+        what, fix = re.sub(r"^error: ?", "", first.strip(), flags=re.I), None
+        if not what:
+            what = next((ln.strip() for ln in reversed(held.splitlines()) if ln.strip()), "") \
+                or f"it stopped with exit code {rc}"
+    return {"ok": False, "error": what, "fix": fix}
+
+
+def run_json(fn) -> int:
+    """Run `fn()` (a command, which returns its exit code) with `--json`: standard output is held back, and then holds
+    one document and a newline, 2-space indented at a terminal and on one line otherwise: what the command gave `emit`,
+    else `{"ok": true, "message": ...}` for a command that ended with 0 or `{"ok": false, "error", "fix"}` for one that
+    did not. Standard error, the exit code and `-h` are as without it."""
+    real_out, real_err = sys.stdout, sys.stderr
+    held = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", newline="\n", write_through=True)
+    tee = _Tee(real_err)
+    _doc.clear()
+    _failure.clear()
+    sys.stdout, sys.stderr = held, tee
+    exit_ = None
+    try:
+        try:
+            rc = fn()
+        except SystemExit as e:                     # a wrong option, or -h
+            exit_ = e
+            rc = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+        text = held.buffer.getvalue().decode("utf-8", "replace")
+    finally:
+        sys.stdout, sys.stderr = real_out, real_err
+    if exit_ is not None and rc == 0 and not _doc:      # -h: its text is the answer, not a result
+        real_out.write(text)
+        real_out.flush()
+        raise exit_
+    if _doc:
+        doc = _doc[-1]
+    elif rc == 0:
+        doc = {"ok": True, **({"message": text.strip()} if text.strip() else {})}
+    else:
+        doc = _failed(rc, tee, text)
+    real_out.write(json.dumps(doc, indent=2 if _is_tty(real_out) else None, default=str) + "\n")
+    real_out.flush()
+    if exit_ is not None:
+        raise exit_
+    return rc
+
+
+@contextlib.contextmanager
+def shown():
+    """Inside this, a muted standard output lets the text through: a question must be seen."""
+    old = _show[0]
+    _show[0] = True
+    try:
+        yield
+    finally:
+        _show[0] = old
+
+
+class _Mute:
+    """Standard output of a command that only reports results, under `--quiet`: writes are dropped unless `shown()`."""
+
+    def __init__(self, real):
+        self.real = real
+
+    def write(self, text):
+        return self.real.write(text) if _show[0] else len(text)
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    @property
+    def buffer(self):
+        return _MuteBytes(self.real.buffer)
+
+    def isatty(self):               # a prompt that picks its stream (secret_input) then goes to standard error
+        return False
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+class _MuteBytes(_Mute):
+    @property
+    def buffer(self):
+        return self
+
+
+@contextlib.contextmanager
+def muted():
+    """Run a command whose standard output is only results with `--quiet`: it writes nothing there. `--json` has its own
+    way (a document), so nothing is muted with it."""
+    if not quiet() or json_mode():
+        yield
+        return
+    real = sys.stdout
+    sys.stdout = _Mute(real)
+    try:
+        yield
+    finally:
+        sys.stdout = real
 
 
 # ---------- status rows (06 9.1) ----------
@@ -626,7 +802,7 @@ class wait:
             pause = False
             with _lock:
                 err, now = _raw(sys.stderr), time.monotonic()
-                if self._held or _midline[0] or now - self._since < PROGRESS_AFTER:
+                if self._held or _midline[0] or now - self._since < PROGRESS_AFTER or quiet():
                     continue
                 if _switches["no_progress"] or (not plain() and (self.programs or not _is_tty(err))):
                     if not self._printed:                      # once, whole, without the counter

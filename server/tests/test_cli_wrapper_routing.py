@@ -69,7 +69,7 @@ def test_other_commands_run_as_the_service_user(tmp_path, args):
 
 
 SWITCHED = [["--plain"], ["--no-progress"], ["--color", "never"], ["--color=always"],
-            ["--plain", "--color", "never", "--no-progress"]]
+            ["--plain", "--color", "never", "--no-progress"], ["--json"], ["--quiet"], ["-q"], ["--json", "-q"]]
 
 
 @pytest.mark.parametrize("switches", SWITCHED, ids=" ".join)

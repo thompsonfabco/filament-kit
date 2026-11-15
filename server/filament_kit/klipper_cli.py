@@ -152,6 +152,7 @@ def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> 
                      "the pack's hash comes only from the signed release of this exact version (a "
                      "development build has none), so there is nothing to run.")
         return output.FAILED
+    output.emit({"ok": True, **info})
     output.out("Run this on the printer (as its normal user, not root):")
     output.out_lines([f"  {line}" for line in info["lines"]])      # a command is never wrapped
     output.out(f"The hash is the one in the signed {release.SUMS} of release v{version} (checked here against the "
@@ -228,9 +229,11 @@ def detect(p: registry.Printer, *, kit_spoolman: str | None = None, spoolman: bo
     return out
 
 
-def _describe(p: registry.Printer) -> int:
+def _describe(p: registry.Printer, added: dict | None = None) -> int:
+    """What the printer says it is. `--json`: that answer, inside `added` (what `add` did) when given."""
     with output.wait(f"Asking {registry.display_name(p)}…"):
         d = detect(p, spoolman=False)     # it prints no Spoolman, so a bad config.json must not stop it
+    output.emit({**added, "detect": d} if added is not None else d)
     if not d["ok"]:
         output.out(f"  {d['message']}")
         return 0
@@ -261,7 +264,8 @@ def run(args) -> int:
         output.result(f"added {registry.display_name(p)} as {p.serial} ({p.host}:{p.port})")
         if seen.problem or seen.note:
             output.note(str(seen.problem or seen.note))
-        return _describe(p)
+        return _describe(p, {"ok": True, "id": p.serial, "name": registry.display_name(p), "host": p.host,
+                             "port": p.port})
     if c == "scan":
         try:
             net = ipaddress.ip_network(args.subnet, strict=False) if args.subnet else discovery.own_subnet()
@@ -278,14 +282,20 @@ def run(args) -> int:
             output.error(str(e))
             return output.USAGE
         if not found:
+            output.emit([])
             output.out(f"no Moonraker found on {net}")
             return 0
         added = discovery.added_at()
+        listed = []
         for host, port in found:
             p = added.get((host, port)) or registry.detected_klipper(host, port, lookups=False)
+            listed.append({"host": host, "port": port, "added": bool(p.configured),
+                           "id": p.serial if p.configured else None,
+                           "name": registry.display_name(p) if p.configured else None})
             state = (f"added already as {registry.display_name(p)}" if p.configured
                      else f"add it: filament-kit klipper add NAME {host}")
             output.out(f"{host}:{port}  ({state})")
+        output.emit(listed)
         return 0
     p = registry.load().get(getattr(args, "id", "") or "")
     if c == "pack":
@@ -298,6 +308,7 @@ def run(args) -> int:
         return _describe(p)
     if c == "set":
         registry.set_lane_data(p.serial, args.lane_data)
+        output.emit({"ok": True, "id": p.serial, "lane_data": args.lane_data})
         output.result(f"{registry.display_name(p)}: lane_data {args.lane_data}")
         return 0
     if c == "api-key":

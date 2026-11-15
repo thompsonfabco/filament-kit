@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+import datetime
 import http.client
 import json
 import os
@@ -95,8 +96,9 @@ def cmd_status(client_factory, station_pairing: str | None = None) -> int:
     user, which can't read the station's pairing."""
     with output.wait("Checking…", programs=True):
         rows = list(status_rows.rows(client_factory=client_factory, station_pairing=station_pairing))
-    output.out(status_rows.header_line())
-    output.out()
+    if not (output.json_mode() or output.quiet()):
+        output.out(status_rows.header_line())
+        output.out()
     return 0 if status_rows.print_rows(rows, summary=True) else output.FAILED
 
 
@@ -144,6 +146,11 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
         unreadable = isinstance(e, pairing.CertUnreadable) or not _is_root()
         _err_line(f"{e}" + (f"\nfix: run it with sudo: {cmd}" if unreadable else ""))
         return 1
+    if output.json_mode():
+        output.emit({"ok": True, "kind": "pc" if pc else "station" if station else "phone", "link": pr.qr,
+                     "fingerprint": pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes()),
+                     "code": pr.code, "expires_at": _iso(pr.expires)})
+        return 0
     if pc or station:
         # no QR scanner there: the link is pasted (printed by design, never logged)
         output.out("Link for filament-kit-sync (paste it when asked):" if pc else
@@ -324,6 +331,9 @@ def cmd_backup(action: str, out: str | None) -> int:
         return output.need_sudo(_sudo_command(f"sudo filament-kit backup {action}"))
     if action == "list":
         rows = backup.listing()
+        output.emit({"backups": [{"name": e.name, "download": e.download, "size": e.size, "kind": e.kind,
+                                  "at": _iso(e.at)} for e in rows],
+                     "keep_days": backup.keep_days(config.load()), "folder": str(backup.backups_dir())})
         if not rows:
             output.out(f"No backups in {backup.backups_dir()}.")
             return 0
@@ -338,6 +348,7 @@ def cmd_backup(action: str, out: str | None) -> int:
     except (OSError, backup.BackupError) as e:
         _err_line(f"the backup was not written: {e}")
         return 1
+    output.emit({"ok": True, "path": str(path)})
     print(f"backup written: {path}")
     return 0
 
@@ -369,12 +380,22 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             return 1
     try:
         waiting = output.wait("Restoring…", programs=True)
+        held: list[str] = []        # --quiet: what is said before the question is its context, shown only if one is asked
+
+        def say(text: str) -> None:
+            if output.quiet() and not text.startswith("error: "):
+                held.append(text)
+            else:
+                _restore_out(text)
 
         def ask(prompt: str) -> str:
-            with waiting.paused():              # the wait starts after the answer, never over the question
+            with waiting.paused(), output.shown():      # the wait starts after the answer, never over the question
+                for text in held:
+                    _restore_out(text)
+                held.clear()
                 return input(prompt)
         with waiting:
-            return backup.restore(path, yes=yes, ask=ask, out=_restore_out,
+            return backup.restore(path, yes=yes, ask=ask, out=say,
                                   step=steps.Steps(backup.restore_steps()).next)
     finally:
         if uploaded:
@@ -384,7 +405,10 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
 def cmd_station_pairing_state() -> int:
     """One line for the wrapper, run as root: see server_api.pairing_state."""
     from .station import server_api
-    print(server_api.pairing_state())
+    state = server_api.pairing_state()
+    word, _, address = state.partition(" ")
+    output.emit({"state": word, "address": address or None})
+    print(state)
     return 0
 
 
@@ -392,6 +416,15 @@ def _fmt_time(t) -> str:
     if isinstance(t, str):
         return t
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "never"
+
+
+def _iso(t) -> str | None:
+    """A time for `--json`: ISO 8601 with the offset (06 6.8); text is kept as it is; no time is None."""
+    if isinstance(t, str):
+        return t
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not t:
+        return None
+    return datetime.datetime.fromtimestamp(t).astimezone().isoformat(timespec="seconds")
 
 
 def _confirm(question: str, doing: str, *, yes: bool, word: str | None = None, ask=None) -> int | None:
@@ -404,6 +437,9 @@ def _confirm(question: str, doing: str, *, yes: bool, word: str | None = None, a
 def cmd_unpair(device_id: str | None, yes: bool = False) -> int:
     if device_id is None:
         devs = pairing.devices()
+        from .web.slots import CLI_DEVICE, INTAKE_DEVICE
+        output.emit([{"id": d["id"], "name": d["name"], "paired": _iso(d["paired"]), "last_seen": _iso(d["last_seen"]),
+                      "built_in": d["name"] in (INTAKE_DEVICE, CLI_DEVICE)} for d in devs])
         if not devs:
             output.out("No paired devices.")
             return 0
@@ -432,7 +468,8 @@ def cmd_unpair(device_id: str | None, yes: bool = False) -> int:
 # ---------- config ----------
 
 def _ask(prompt: str) -> str | None:
-    print(prompt, end="", flush=True)
+    with output.shown():            # a question is seen even where --quiet drops the results
+        print(prompt, end="", flush=True)
     line = sys.stdin.readline()
     if line == "":
         return None
@@ -783,6 +820,7 @@ def cmd_intake(args) -> int:
     try:
         if args.intake_cmd == "history":
             d = intake_history.list_records("ai_intake" in modules.enabled(config.load()))
+            output.emit(d)
             print(f"Intake history: {d['count']} record(s), keeping {d['keep']}, "
                   f"{d['photo_bytes'] / 1048576:.1f} MB of photos.")
             for s in d["records"]:
@@ -792,6 +830,7 @@ def cmd_intake(args) -> int:
             return 0
         if args.intake_cmd == "show":
             r = intake_history.get(args.id)
+            output.emit(r)
             print(_intake_line(r))
             for p in intake_history.photo_paths(args.id):
                 print(f"  photo {p}")
@@ -849,6 +888,7 @@ def cmd_intake(args) -> int:
                                                       device="command line"))
         if args.intake_cmd == "undo":
             r = intake_history.undo(sm, args.id, None)
+            output.emit({"ok": True, **r})
             print(f"Undone. The record is now {r['state']}.")
             return 0
     except intake_history.HistoryError as e:
@@ -872,6 +912,7 @@ def _cli_value(k: str, v: str):
 
 
 def _say_revision(r: dict) -> int:
+    output.emit({"ok": True, **r})
     rv = r["revisions"][-1]
     print(f"Saved as revision {rv['n']}: " + "; ".join(sorted({f"{c['field']} {c['old']} -> {c['new']}"
                                                                for c in rv["changes"]})))
@@ -901,6 +942,7 @@ def cmd_ensure_fields() -> int:
     except SpoolmanError as e:
         _err_line(f"Spoolman: {e}")
         return 1
+    output.emit({"ok": True, "made": list(created)})
     print("Spoolman: added the kit's extra fields: " + ", ".join(created) if created
           else "Spoolman: the kit's extra fields are in place")
     return 0
@@ -976,6 +1018,7 @@ def _printer_name(serial: str) -> str:
 
 
 def _print_map_view(serial: str, v: dict, stopped: list) -> int:
+    output.emit({**v, "ok": not stopped and v.get("outcome") in ("confirmed", "partial")})
     for s in v.get("slots") or []:
         where = "no number yet" if s.get("global") is None else f"printer slot {s['global']}"
         print(f"  {s['label']}: AMS {s['ams_id']} tray {s['tray_id']} -> {where}")
@@ -1352,6 +1395,7 @@ def cmd_printer_report(serial: str, manager_factory) -> int:
 
 
 def _report_said(r: dict) -> int:
+    output.emit({"ok": True, **r})
     if not r.get("live", True):
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(r["saved_until"])) if r.get("saved_until") else "unknown"
         print(f"The printer could not be reached: this report is built from what the kit saved (newest record {when}),"
@@ -1415,6 +1459,12 @@ def _library_line(st: dict) -> str:
 
 def cmd_library_status() -> int:
     st = library.status()
+    if output.json_mode():
+        from .setup_console import library_tab
+        view = library_tab._view()          # the Hub page's own reply
+        if isinstance(view.get("last_check"), dict):
+            view["last_check"]["at"] = _iso((st.get("last_check") or {}).get("at"))
+        output.emit(view)
     print(_library_line(st))
     print(f"url: {st['url']}")
     lc = st["last_check"]
@@ -1526,6 +1576,7 @@ def cmd_library_add(source: str) -> int:
     except ValueError as e:
         _err_line(f"entry not added: {e}")
         return 1
+    output.emit({"ok": True, "vendor": entry["vendor"], "product": entry["product"], "line": line})
     print(f"added local entry {entry['vendor']} {entry['product']} (line {line})")
     _request_rebuild(f"local library addition {line}")
     return 0
@@ -1559,6 +1610,9 @@ def cmd_profiles_build(sm_factory) -> int:
 
 
 def cmd_profiles_status() -> int:
+    if output.json_mode():
+        from .setup_console import presets_tab
+        output.emit(presets_tab._view())        # the Hub page's own reply
     st = builds.status()
     b, la, inst, pc = st["build"], st["last_attempt"], st["installed"], st["pc"]
     print(f"lines: {st['lines']}")
@@ -1613,6 +1667,10 @@ def cmd_profiles_lines() -> int:
     except lines_mod.LineStoreError as e:
         _err_line(e.message)
         return 1
+    if output.json_mode():
+        from . import profiles_api
+        counts = profiles_api._preset_counts()
+        output.emit({"lines": [profiles_api._line_view(line, counts) for _k, line in sorted(ls.items())]})
     c = builds.current()
     per_line: dict[str, int] = {}
     for row in builds.bambu_rows(builds.manifest(c["stamp"]) if c else None):
@@ -1659,6 +1717,8 @@ def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> in
     except lines_mod.LineStoreError as e:
         _err_line(e.message)
         return 1
+    output.emit({"ok": True, "line": line.line_id, "target": "orca" if orca else "bambu",
+                 "parent": line.orca_parent if orca else line.bambu_parent})
     if orca:
         print(f"line {line.line_id}: Orca parent {line.orca_parent} (set by you)")
     else:
@@ -1684,11 +1744,12 @@ def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool, y
         return 1 if line_id else 0
     if not dry_run and not yes and not output.terminal():       # nothing is listed or accepted when nobody can answer
         return output.no_terminal("accepting the updates", _sudo_command("sudo filament-kit <command>") + " --yes")
-    for u in chosen:
-        app = "Orca Slicer" if u["target"] == "orca" else "Bambu Studio"
-        keys = ", ".join(u["keys"][:6]) + (", ..." if len(u["keys"]) > 6 else "")
-        where = f" (in your file {u['file']})" if u.get("file") else ""
-        print(f"  {u['line_id']}  {app}: {u['name']}{where}: {keys}")
+    with output.shown() if dry_run or not yes else contextlib.nullcontext():    # asked-for data, or what the question is about
+        for u in chosen:
+            app = "Orca Slicer" if u["target"] == "orca" else "Bambu Studio"
+            keys = ", ".join(u["keys"][:6]) + (", ..." if len(u["keys"]) > 6 else "")
+            where = f" (in your file {u['file']})" if u.get("file") else ""
+            print(f"  {u['line_id']}  {app}: {u['name']}{where}: {keys}")
     lines = len({u["line_id"] for u in chosen})
     what = f"{len(chosen)} update{'' if len(chosen) == 1 else 's'} ({lines} line{'' if lines == 1 else 's'})"
     if not dry_run:
@@ -1707,8 +1768,10 @@ def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool, y
         except ValueError as e:
             _err_line(str(e))
             return 1
+    output.emit({"ok": True, "dry_run": dry_run, "count": len(chosen), "updates": chosen})
     if dry_run:
-        print(f"dry run: {what} would be accepted; nothing was changed")
+        with output.shown():
+            print(f"dry run: {what} would be accepted; nothing was changed")
     else:
         print(f"accepted {what}; the PC sync writes them at its next run (after its backup)")
     return 0
@@ -1725,10 +1788,10 @@ def cmd_profiles_restore_deleted() -> int:
 
 def cmd_modules_units() -> int:
     """Every unit of every module, with companion services (uninstall.sh reads this)."""
-    for mod in modules.MODULES.values():
-        for unit in mod.units:
-            for u in apply._unit_files(unit):
-                print(u)
+    units = [u for mod in modules.MODULES.values() for unit in mod.units for u in apply._unit_files(unit)]
+    output.emit({"units": units})
+    for u in units:
+        print(u)
     return 0
 
 
@@ -1872,6 +1935,9 @@ def _tty_confirm(text: str) -> bool:
 
 def cmd_modules_list() -> int:
     on = modules.enabled(config.load())
+    output.emit({"modules": [{"name": n, "title": m.title, "description": m.description, "needs": modules.needs_of(n),
+                              "optional_ai": m.optional_ai, "on": n in on} for n, m in modules.MODULES.items()],
+                 "setup": modules.mode_of(on)})
     width = max(len(n) for n in modules.MODULES)
     for n, m in modules.MODULES.items():
         print(f"{n:<{width}}  {'on ' if n in on else 'off'}  {m.title}")
@@ -1937,9 +2003,10 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> i
             _err_line(err)
             return 1
     notes: list[str] = []
-    err = _change_module(cfg, name, want_on, confirm=_tty_confirm, server=server, notes=notes,
-                         ask_address=_ask_station_server if apply._tty() else None,
-                         ask_settings=_ask_module_settings if apply._tty() else None)
+    tty = apply._tty() and not output.json_mode()         # --json never asks
+    err = _change_module(cfg, name, want_on, confirm=_tty_confirm if tty else None, server=server, notes=notes,
+                         ask_address=_ask_station_server if tty else None,
+                         ask_settings=_ask_module_settings if tty else None)
     if err:
         _err_line(err)
         return 1
@@ -2666,6 +2733,10 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -
     else:
         code = setup_code.ensure()
     url = setup_code.page_url(config.load())
+    if output.json_mode():
+        output.emit({"ok": True, "url": url, "code": {"set": True}, "new": new,
+                     "trusted_revoked": trusted.revoke_all() if revoke_trusted else 0})
+        return 0
     if apply._tty():
         print(f"Open {url}  (setup code: {setup_code.shown(code)})")
     else:
@@ -2699,12 +2770,14 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes
     try:
         if action == "token":
             tid, tok = store.issue(name)
+            output.emit({"ok": True, "id": tid, "name": reader._clean_name(name), "token": tok})
             output.out(f"New reader token {tid} ({reader._clean_name(name)}). It is shown only this once:\n\n  {tok}\n\n"
                        "Put it in the reader's src/secrets.h as READER_TOKEN, then build and flash (reader/README.md).\n"
                        "Remove it later with: " + f"sudo filament-kit reader revoke {tid}")
             return 0
         if action == "tokens":
             rows = store.list()
+            output.emit(rows)
             if not rows:
                 output.out("No reader tokens yet. Make one with:")
                 output.out("  sudo filament-kit reader token --name printer-station")
@@ -2741,7 +2814,10 @@ def _web_health(port: int) -> tuple[bool, str]:
 
 
 def cmd_web_status() -> int:
-    return 0 if status_rows.print_rows(status_rows.web_rows()) else 1
+    rows = list(status_rows.web_rows())
+    if output.json_mode():
+        rows = list(status_rows._in("Hub", rows))      # the group the Overview files them under
+    return 0 if status_rows.print_rows(rows) else 1
 
 
 def cmd_local_intake_status() -> int:
@@ -2761,6 +2837,7 @@ def cmd_local_intake_plan(fetcher=None) -> int:
     except lii.InstallError as e:
         _err_line(str(e))
         return 1
+    output.emit(p)
     for line in lii.plan_text(p):
         print(line)
     lii.save_plan(p)
@@ -2795,10 +2872,14 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
     except lii.InstallError as e:
         _err_line(str(e))
         return 1
-    for line in lii.plan_text(p):
-        print(line)
+    with output.shown() if not yes else contextlib.nullcontext():       # what the question is about
+        for line in lii.plan_text(p):
+            print(line)
     if p["tier"] not in p["tiers"]:
         return 1
+    if not yes and output.json_mode():          # --json never asks
+        return output.no_terminal("installing the local label reader",
+                                  _sudo_command("sudo filament-kit local-intake install") + " --yes")
     if not yes:
         a = _ask("Go ahead? [y/N] ")
         if not a or a.strip().lower() not in ("y", "yes"):
@@ -2899,6 +2980,7 @@ def cmd_local_intake_test(photos: list[str]) -> int:
     except SpoolmanError as e:
         _err_line(f"Spoolman: {e}")
         return 1
+    output.emit({"ok": True, **out})
     conf = out.get("confidence")
     print(f"Read by the local reader ({out.get('tier') or '?'} tier"
           + (f", {round(conf * 100)} % sure" if conf is not None else "") + (", unsure" if out.get("unsure") else "")
@@ -2935,15 +3017,18 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         return output.USAGE
     output.configure(**switches)
     _invoked[:] = args
-    try:
-        return _main(args, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
-    except PermissionError as e:
-        where = f"{e.filename}: " if e.filename else ""
-        output.error(f"{where}permission denied.", "run it with sudo:", cmd=_sudo_command("sudo filament-kit"))
-        return output.NEEDS_SUDO
-    except KeyboardInterrupt:
-        output.out("Stopped.")
-        return output.INTERRUPTED
+
+    def run() -> int:
+        try:
+            return _main(args, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
+        except PermissionError as e:
+            where = f"{e.filename}: " if e.filename else ""
+            output.error(f"{where}permission denied.", "run it with sudo:", cmd=_sudo_command("sudo filament-kit"))
+            return output.NEEDS_SUDO
+        except KeyboardInterrupt:
+            output.out("Stopped.")
+            return output.INTERRUPTED
+    return output.run_json(run) if output.json_mode() else run()
 
 
 def _add_yes(parser, help: str = "answer yes to the question this command asks (a script has no terminal to ask on)") -> None:
@@ -2967,6 +3052,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                          "(also SPOOLWARDEN_PLAIN=1; implied by TERM=dumb)")
     ap.add_argument("--no-progress", action="store_true",
                     help="print each progress line once, as a whole line, instead of rewriting it")
+    ap.add_argument("--json", action="store_true",
+                    help="standard output is one JSON document; nothing asks (a command that would needs --yes)")
+    ap.add_argument("-q", "--quiet", action="store_true",
+                    help="print only what the command exists to print: errors, lists and details asked for, answers")
     sub = ap.add_subparsers(dest="cmd", required=True)
     stat = sub.add_parser("status", help="check services, Spoolman, key, certificate")
     stat.add_argument("--station-pairing", help=argparse.SUPPRESS)  # passed by the wrapper, from its check as root
@@ -3155,7 +3244,76 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     args = ap.parse_args(argv)
+    if output.json_mode():
+        refused = _json_refusal(args)
+        if refused is not None:
+            return refused
+    with output.muted() if _reports_results(args) else contextlib.nullcontext():
+        return _dispatch(args, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
 
+
+def _sub_of(a) -> str | None:
+    """The word after the command: `backup create` is `create`."""
+    for name in ("station_cmd", "intake_cmd", "printer_cmd", "library_cmd", "profiles_cmd", "modules_cmd", "web_cmd",
+                 "li_cmd", "reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd"):
+        if hasattr(a, name):
+            return getattr(a, name)
+    return None
+
+
+def _json_refusal(a) -> int | None:
+    """06 6.8: the menus take no `--json`, and a command that needs typed answers has nothing to ask them on. The exit
+    code (2) when this is one of them, after its Error and Fix."""
+    c, sub = a.cmd, _sub_of(a)
+    if c == "config":
+        output.error("config is a menu.", "use filament-kit config show --json")
+        return output.USAGE
+    if c == "modules" and sub == "menu":
+        output.error("modules menu is a menu.", "use filament-kit modules list --json")
+        return output.USAGE
+    asks = ((c == "station" and sub == "pair" and not a.local, "station pair"),
+            (c == "reader" and sub == "setup" and not a.pending, "reader setup"),
+            (c == "web" and sub == "passphrase", "web passphrase"),
+            (c == "local-intake" and sub == "token" and not a.remove, "local-intake token"),
+            (c == "printer" and sub == "unpin", "printer unpin"),
+            (c == "printer" and sub == "map" and a.manual, "printer map --manual"),
+            (c == "klipper" and sub == "api-key", "klipper api-key"))
+    for yes, name in asks:
+        if yes:
+            output.error(f"{name} asks for typed answers, and --json does not ask.", "run it without --json.")
+            return output.USAGE
+    return None
+
+
+# `--quiet`: the commands whose standard output is only results (06 6.8 drops them). Every other command prints what it
+# exists to print there (a list, a detail, an answer, a link or token) or is a screen, and stays as it is.
+_RESULTS_ONLY = {("station", "flash-panel"), ("backup", "create"), ("restore", None), ("intake", "edit"),
+                 ("intake", "undo"), ("ensure-fields", None), ("printer", "report"), ("printer", "unpin"),
+                 ("library", "update"), ("library", "rollback"), ("library", "adopt"), ("library", "add"),
+                 ("profiles", "build"), ("profiles", "set-parent"), ("profiles", "restore-deleted"),
+                 ("profiles", "apply-updates"), ("modules", "apply"), ("modules", "set"), ("modules", "enable"),
+                 ("modules", "disable"), ("web", "passphrase"), ("local-intake", "install"),
+                 ("local-intake", "remove"), ("local-intake", "token"), ("reader", "revoke"), ("remote", "issue"),
+                 ("uninstall", None), ("update", None), ("klipper", "add"), ("klipper", "set")}
+
+
+def _reports_results(a) -> bool:
+    """Is this run, with `--quiet`, a command whose standard output is only results."""
+    if not output.quiet():
+        return False
+    c, sub = a.cmd, _sub_of(a)
+    if c == "station" and sub == "pair":
+        return a.local
+    if c == "printer" and sub == "map":
+        return not a.manual
+    if c == "unpair":
+        return a.device_id is not None
+    if c == "update":
+        return not a.check
+    return (c, sub) in _RESULTS_ONLY
+
+
+def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     if args.cmd == "klipper":
         return klipper_cli.run(args)
     if args.cmd == "status":
@@ -3243,6 +3401,14 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         from . import updates
         cfg = config.load()
         if args.check:
+            if output.json_mode():
+                from . import release
+                try:
+                    output.emit(updates.check_info(cfg))
+                except release.ReleaseError as e:
+                    output.error(str(e))
+                    return output.FAILED
+                return 0
             return updates.check(cfg)
         if args.feed:
             return updates.feed_now(cfg)

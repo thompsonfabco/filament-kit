@@ -11,7 +11,7 @@ import re
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from typing import Iterable, Iterator
 
 from . import config, modules, output, pairing, remote
@@ -75,11 +75,43 @@ def summary_line(rows: Iterable[Row]) -> str:
     return output.sym("sep").join(p for p in parts if p) or "No rows"
 
 
+def row_dicts(rows: Iterable[Row]) -> list[dict]:
+    """The rows as the Overview's reply holds them (`GET /setup/api/overview`): state, text, fix, action, group."""
+    return [asdict(r) for r in rows]
+
+
+def summary_counts(rows: Iterable[Row]) -> dict:
+    """The summary line's counts, for `--json`: rows that need a look, rows that are fine, notes."""
+    n = {w: 0 for w in _WORDS}
+    for r in rows:
+        if r.state in n:
+            n[r.state] += 1
+    return {"needs_a_look": n[FAIL], "ok": n[OK], "notes": n[INFO]}
+
+
+def _needing_a_look(rows: list[Row]) -> list[Row]:
+    """`--quiet`: the rows that need a look, each with the detail lines under it."""
+    keep, on = [], False
+    for r in rows:
+        if r.state != DETAIL:
+            on = r.state == FAIL
+        if on:
+            keep.append(r)
+    return keep
+
+
 def print_rows(rows: Iterable[Row], *, summary: bool = False) -> bool:
     """The rows as the command line shows them (06 9.1): a heading per group, then a glyph, the state word and the text
     of each row, a needs-a-look row followed by its `Fix:` line. Detail rows are aligned with the text. True when none
-    needs a look."""
+    needs a look. `--json`: the document `{"rows": [...], "summary": {...}}` instead; `--quiet`: only the rows that need
+    a look, and no summary line."""
     rows = list(rows)
+    if output.json_mode():
+        output.emit({"rows": row_dicts(rows), "summary": summary_counts(rows)})
+        return not any(r.state == FAIL for r in rows)
+    ok = not any(r.state == FAIL for r in rows)
+    if output.quiet():
+        rows, summary = _needing_a_look(rows), False
     lines: list[str] = []
     for group, members in _grouped(rows):
         if group:
@@ -95,7 +127,7 @@ def print_rows(rows: Iterable[Row], *, summary: bool = False) -> bool:
     if summary:
         lines += ["", summary_line(rows)]
     output.out_lines(lines)
-    return not any(r.state == FAIL for r in rows)
+    return ok
 
 
 def station_rows(url: str) -> Iterator[Row]:
