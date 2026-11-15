@@ -7,6 +7,8 @@ run. Example names and addresses only."""
 from __future__ import annotations
 
 import builtins
+import io
+import sys
 import types
 
 import pytest
@@ -371,20 +373,17 @@ def test_purge_piped_without_yes_is_refused_and_with_yes_runs_both(rec, monkeypa
     assert run(capsys, [*argv, "--purge", "--yes"])[0] == 0 and rec.acted == ["uninstall"]
 
 
-def test_the_config_menu_asks_in_the_hub_pages_words_and_a_no_removes_nothing(monkeypatch, capsys):
+def test_the_config_menu_asks_in_the_hub_pages_words_and_a_no_removes_nothing(rec, monkeypatch, capsys):
     p = registry.Printer(SERIAL, "Workshop X1", "X1C", "192.0.2.40", "12345678", True)
-    removed = []
-    monkeypatch.setattr(registry, "remove", lambda serial: removed.append(serial))
-    answers = iter(["n"])
-    monkeypatch.setattr(cli, "_ask", lambda prompt: print(prompt, end="") or next(answers))
-    monkeypatch.setattr(cli, "_pick_printer", lambda printers: p)
-    cli._printers_action("4", [p])
+    registry.upsert(p)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("10\n1\nf\nn\nq\nq\nq\n"))        # Printers, the printer, forget: no
+    assert cli.main(["config", "--numbered"]) == 0
     out = " ".join(capsys.readouterr().out.split())
-    assert removed == [] and "Forget Workshop X1? filament-kit stops connecting to it and deletes its Access Code." in out
+    assert SERIAL in registry.load() and "Forget Workshop X1? filament-kit stops connecting to it and deletes its Access Code." in out
     assert "To use it again, add it again." in out and "Nothing changed." in out
-    answers = iter(["yes"])
-    cli._printers_action("4", [p])
-    assert removed == [SERIAL]
+    monkeypatch.setattr(sys, "stdin", io.StringIO("10\n1\nf\nyes\nq\nq\n"))
+    assert cli.main(["config", "--numbered"]) == 0
+    assert SERIAL not in registry.load() and "Forgot Workshop X1." in capsys.readouterr().out
 
 
 def test_nothing_in_the_setup_helper_jobs_waits_for_an_answer():

@@ -294,11 +294,11 @@ def test_api_re_add_clears_the_pin_and_re_pins(monkeypatch):
         m.stop()
 
 
-def test_cli_re_add_clears_the_pin(monkeypatch):
+def test_cli_re_add_clears_the_pin(monkeypatch, secret_terminal):
     registry.upsert(printer(fp="aa" * 32, ip="10.0.0.5"))
-    monkeypatch.setattr(sys, "stdin", io.StringIO(f"5\n2\nOffice\n10.0.0.5\n{SERIAL}\n\n0\n0\n"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(f"10\na\nb\n10.0.0.5\nOffice\n{SERIAL}\n\nq\nq\n"))
     monkeypatch.setattr("getpass.getpass", lambda prompt="": CODE)
-    assert cli.main(["config"]) == 0
+    assert cli.main(["config", "--numbered"]) == 0
     p = registry.load()[SERIAL]
     assert p.cert_fp == "" and p.access_code == CODE
 

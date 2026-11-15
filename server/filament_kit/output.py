@@ -43,13 +43,14 @@ PLAIN_EVERY = 10.0          # --plain: one more whole line this often
 STOP_HINT_AFTER = 5         # at a terminal the line adds "(Ctrl-C stops)" after this many seconds
 STATE_WORD_WIDTH = 12       # 06 9.1: the state word is padded to this
 
-_switches = {"color": "auto", "plain": False, "no_progress": False, "json": False, "quiet": False}
+_switches = {"color": "auto", "plain": False, "no_progress": False, "json": False, "quiet": False,
+             "numbered": False}
 
 
 def configure(*, color: str | None = None, plain: bool | None = None, no_progress: bool | None = None,
-              json: bool | None = None, quiet: bool | None = None) -> None:
-    """What `--color always|never|auto`, `--plain`, `--no-progress`, `--json` and `--quiet` said for this run (None:
-    unchanged)."""
+              json: bool | None = None, quiet: bool | None = None, numbered: bool | None = None) -> None:
+    """What `--color always|never|auto`, `--plain`, `--no-progress`, `--json`, `--quiet` and `--numbered` said for this
+    run (None: unchanged)."""
     if color is not None:
         _switches["color"] = color
     if plain is not None:
@@ -60,10 +61,12 @@ def configure(*, color: str | None = None, plain: bool | None = None, no_progres
         _switches["json"] = json
     if quiet is not None:
         _switches["quiet"] = quiet
+    if numbered is not None:
+        _switches["numbered"] = numbered
 
 
 def reset() -> None:
-    _switches.update(color="auto", plain=False, no_progress=False, json=False, quiet=False)
+    _switches.update(color="auto", plain=False, no_progress=False, json=False, quiet=False, numbered=False)
 
 
 def json_mode() -> bool:
@@ -77,7 +80,7 @@ def quiet() -> bool:
 
 
 def extract_switches(argv: list[str]) -> tuple[list[str], dict]:
-    """`argv` without `--color X`, `--color=X`, `--plain`, `--no-progress`, `--json`, `--quiet` and `-q`, which every
+    """`argv` without `--color X`, `--color=X`, `--plain`, `--no-progress`, `--numbered`, `--json`, `--quiet` and `-q`, which every
     command accepts in any place before a bare `--`; and what they said, as `configure` takes it."""
     rest, got, i = [], {}, 0
     while i < len(argv):
@@ -89,6 +92,8 @@ def extract_switches(argv: list[str]) -> tuple[list[str], dict]:
             got["plain"] = True
         elif a == "--no-progress":
             got["no_progress"] = True
+        elif a == "--numbered":
+            got["numbered"] = True
         elif a == "--json":
             got["json"] = True
         elif a in ("--quiet", "-q"):
@@ -107,6 +112,12 @@ def extract_switches(argv: list[str]) -> tuple[list[str], dict]:
 def plain() -> bool:
     """The screen-reader mode: `--plain`, `SPOOLWARDEN_PLAIN=1`, or `TERM=dumb`."""
     return bool(_switches["plain"]) or os.environ.get("SPOOLWARDEN_PLAIN") == "1" or os.environ.get("TERM") == "dumb"
+
+
+def numbered() -> bool:
+    """Menus and checklists as numbered lines, never full-screen (06 8.1): `--numbered`, `SPOOLWARDEN_MENU=numbered`,
+    and the screen-reader mode, which implies it (07 CLI-3)."""
+    return bool(_switches["numbered"]) or os.environ.get("SPOOLWARDEN_MENU") == "numbered" or plain()
 
 
 # ---------- glyphs and symbols (06 6.1, 6.2) ----------
@@ -195,6 +206,14 @@ def state(word: str, stream=None) -> str:
     if plain():
         return word
     return paint(f"{uni if unicode_glyphs() else asc} {word}", token, stream)
+
+
+def glyph(meaning: str) -> str:
+    """The glyph of a status meaning (`good`, `working`, ...) in the set in use; empty in plain mode (07 CLI-2)."""
+    if plain():
+        return ""
+    uni, asc, _ = _GLYPHS[meaning]
+    return uni if unicode_glyphs() else asc
 
 
 # ---------- width, wrapping, tables (06 6.3) ----------

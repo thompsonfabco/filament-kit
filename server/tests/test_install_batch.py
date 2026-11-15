@@ -74,11 +74,21 @@ def test_ctrl_c_interrupts():
         _typed("ab\x03")
 
 
-def test_without_a_terminal_it_falls_back_to_getpass(monkeypatch):
-    _stdin(monkeypatch, "", tty=False)
+def test_without_a_terminal_the_next_line_of_standard_input_is_the_secret(monkeypatch, capsys):
+    _stdin(monkeypatch, "tok\nnext\n", tty=False)             # getpass is not mocked: it must not be called at all
+    monkeypatch.setattr(secret_input.getpass, "getpass", lambda prompt="": pytest.fail("getpass reads /dev/tty"))
+    assert secret_input.ask("Token: ") == "tok" and sys.stdin.readline() == "next\n"
+    assert capsys.readouterr().err == "Token: "
+    with pytest.raises(EOFError):                              # the end of input, as getpass raises it
+        secret_input.ask("Token: ")
+
+
+def test_at_a_terminal_a_secret_goes_through_getpass_when_there_is_no_descriptor(monkeypatch):
+    _stdin(monkeypatch, "next\n", tty=True)
     asked = []
     monkeypatch.setattr(secret_input.getpass, "getpass", lambda prompt="": asked.append(prompt) or "tok")
     assert secret_input.ask("Token: ") == "tok" and asked == ["Token: "]
+    assert sys.stdin.readline() == "next\n"
 
 
 def test_a_fake_tty_without_a_file_descriptor_falls_back_to_getpass(monkeypatch):
@@ -97,8 +107,8 @@ def test_no_getpass_left_in_the_cli_and_apply():
 def test_access_code_goes_through_the_masked_prompt(monkeypatch, capsys):
     asked = []
     monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(prompt) or "ACCESS1234")
-    _stdin(monkeypatch, "5\n2\nH2D\n192.0.2.20\n0948ZZ0A0000001\n\n0\n0\n")
-    cli.main(["config"])
+    _stdin(monkeypatch, "10\na\nb\n192.0.2.20\nH2D\n0948ZZ0A0000001\n\nq\nq\n")
+    cli.main(["config", "--numbered"])
     assert any("Access Code" in p for p in asked)
     assert "ACCESS1234" not in capsys.readouterr().out
 
@@ -106,8 +116,8 @@ def test_access_code_goes_through_the_masked_prompt(monkeypatch, capsys):
 def test_anthropic_key_in_config_goes_through_the_masked_prompt(monkeypatch, capsys):
     asked = []
     monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(prompt) or "sk-ant-EXAMPLE")
-    _stdin(monkeypatch, "4\n0\n")
-    assert cli.main(["config"]) == 0
+    _stdin(monkeypatch, "4\n2\nq\nq\ny\n")           # Label Reader, Anthropic API key, back, leave: unsaved, yes
+    assert cli.main(["config", "--numbered"]) == 5
     assert any("Anthropic" in p for p in asked)
     assert "sk-ant-EXAMPLE" not in capsys.readouterr().out
 
