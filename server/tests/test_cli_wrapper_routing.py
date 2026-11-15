@@ -22,14 +22,18 @@ ROOT_COMMANDS = [
     ["web", "passphrase"], ["reader", "token", "a"], ["reader", "revoke", "a"], ["reader", "setup"],
     ["local-intake", "install", "--yes", "--planned"], ["local-intake", "remove", "--yes"],
     ["local-intake", "token"], ["local-intake", "plan"],
+    ["certificate"], ["logs"], ["logs", "filament-kit-web", "--lines", "50"], ["features", "on", "web"],
+    ["weigh-station", "pair"], ["spoolman", "address", "http://spoolman.example:7912"], ["catalog", "token"],
+    ["catalog", "token", "--remove"], ["backup", "keep", "21"], ["remote", "get-certificate"], ["config", "set", "model", "x"],
 ]
 USER_COMMANDS = [
     ["local-intake", "status"], ["local-intake", "test", "a.jpg"], ["web", "status"], ["reader", "tokens"],
-    ["printer", "list"], ["recent"],
+    ["printer", "list"], ["recent"], ["label-reader", "status"], ["label-reader", "test", "a.jpg"], ["catalog", "status"],
+    ["catalog", "update"], ["spoolman", "fields"], ["spoolman", "address"], ["add"], ["spool"], ["help", "aliases"],
 ]
 
 
-def _route(tmp_path, args, station=False):
+def _route(tmp_path, args, station=False, result=False):
     stubs = tmp_path / "bin"
     stubs.mkdir(exist_ok=True)
     for name, body in (("id", 'echo 0'), ("runuser", 'shift 3; echo "AS-USER $*"'),
@@ -48,7 +52,7 @@ def _route(tmp_path, args, station=False):
     script.write_text(text, encoding="utf-8", newline="\n")
     env = {**os.environ, "PATH": f"{stubs}:{os.environ.get('PATH', '')}"}
     r = subprocess.run([BASH, str(script), *args], capture_output=True, text=True, env=env, timeout=30)
-    return r.stdout.strip()
+    return r if result else r.stdout.strip()
 
 
 def test_the_wrapper_is_patched_where_the_test_expects():
@@ -88,3 +92,19 @@ def test_switches_before_a_user_command_stay_in_front_of_it(tmp_path, switches):
 def test_status_keeps_its_station_pairing_answer_after_switches(tmp_path):
     got = _route(tmp_path, ["--plain", "status"], station=True)
     assert got.startswith("AS-USER ") and " --plain status --station-pairing=" in got
+
+
+@pytest.mark.parametrize("old", ["catalog", "library"])
+def test_catalog_add_of_a_file_that_cannot_be_read_is_exit_2_with_the_fix(tmp_path, old):
+    r = _route(tmp_path, [old, "add", str(tmp_path / "none.json")], result=True)
+    assert r.returncode == 2 and r.stdout == ""
+    assert r.stderr.startswith("Error: there is no readable file at ") and r.stderr.endswith("none.json.\n" + (
+        "Fix: give the path of one catalog entry as a JSON file.\n"))
+
+
+@pytest.mark.parametrize("old", ["catalog", "library"])
+def test_catalog_add_of_a_readable_file_is_run_by_the_user_on_standard_input(tmp_path, old):
+    entry = tmp_path / "entry.json"
+    entry.write_text("{}", encoding="utf-8")
+    got = _route(tmp_path, [old, "add", str(entry)])
+    assert got.startswith("AS-USER ") and got.endswith(f" {old} add -")

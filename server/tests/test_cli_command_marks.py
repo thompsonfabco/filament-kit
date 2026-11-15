@@ -26,8 +26,9 @@ COMMAND = re.compile(
     r"python3?|tar|pio|curl|tee|cp|mv)\b)|\bsystemctl (?:start|stop|restart|status|enable|disable|mask|daemon-reload|reload)\b|"
     r"\bjournalctl -|\bapt(?:-get)? (?:install|remove)\b|\bpip install|\bpython3? -m\b|\btar xzf|\bcurl -|\busermod\b|"
     r"\bgroupadd\b|\bpio run\b|\./\S+\.sh|\bcertbot (?:certonly|renew)\b|"
-    r"\bfilament-kit (?:apply|backup|cert|config|devices|ensure-fields|intake|klipper|library|local-intake|modules|pair|"
-    r"printer|profiles|reader|recent|remote|restore|setup-code|station|status|uninstall|unpair|update|web)\b")
+    r"\bfilament-kit (?:apply|backup|catalog|cert|certificate|config|devices|ensure-fields|help|intake|klipper|label-reader|"
+    r"library|local-intake|logs|modules|pair|printer|profiles|reader|recent|remote|restore|setup-code|spoolman|station|"
+    r"status|uninstall|unpair|update|web)\b")
 # a quoted argument, spaces and commas inside it: from a quote to the same quote
 QUOTED = re.compile(r"""(["'])(?:(?!\1).)*\1""")
 # where a command ends in these texts, written the other way round: at the first of a closing bracket, a comma, a
@@ -198,7 +199,7 @@ def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkey
         "cert_changed": cli.NOT_CONNECTED["cert_changed"],
         "port": "could not flash" + cli._port_hint(Who()),
         "recent": next(t for t in cli_texts if "low confidence: filament-kit recent show" in t),
-        "local-intake": next(t for t in cli_texts if "local-intake status" in t),
+        "local-intake": next(t for t in cli_texts if "filament-kit local-intake status" in t),
         "web": next(t for t in status if "filament-kit-web" in t and "journalctl" in t),
         "config": next(t for t in status if "option 4" in t and "internet" in t),
     }
@@ -316,9 +317,7 @@ def test_the_texts_other_places_print_hold_no_marker(monkeypatch, tmp_path):
         t = remote.firewall_text({"hostname": "h.example.com", "route": "r", "lan": ["192.168.1.0/24"], "email": "",
                                   "window": ""}, tmp_path)
     _plain(t, "firewall_text")
-    assert "sudo filament-kit remote issue" in t and "sudo systemctl daemon-reload" in t
-    _plain(cli._library_line({"source": "none", "local": 2}), "library status")
-    assert "(run: filament-kit library update)" in cli._library_line({"source": "none", "local": 2})
+    assert "sudo filament-kit remote get-certificate" in t and "sudo systemctl daemon-reload" in t
     p = {"version": "1.0", "tier": "cpu", "installed": "2.0", "installed_tier": "cpu", "downgrade": True,
          "upgrade": False, "same": False, "tiers": {"cpu": {"download_mb": 1, "disk_mb": 2, "minutes": 1, "fetched_at_install": ""}},
          "asked_tier": None}

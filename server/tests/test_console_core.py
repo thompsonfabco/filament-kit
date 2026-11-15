@@ -857,7 +857,7 @@ def test_check_as_a_plain_user_still_answers(env, monkeypatch, capsys):  # noqa:
         raise PermissionError("no")
     monkeypatch.setattr(updates, "_write_state", denied)
     assert updates.check(config.load(), fetcher=Fetcher()) == 0
-    assert "0.6.0 is available" in capsys.readouterr().out
+    assert "Latest release: 0.6.0." in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("notes,want", [

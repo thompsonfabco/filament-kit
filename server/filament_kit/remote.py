@@ -237,7 +237,7 @@ def firewall_text(s: dict, resources: Path) -> str:
         f"  DNS      {host} must resolve to your public address (and, at home, to this machine)",
         "",
         "Port 80 is only for certbot: it binds :80 itself during the run (nginx steps aside meanwhile).",
-        "Open it, then run:  sudo filament-kit remote issue",
+        "Open it, then run:  sudo filament-kit remote get-certificate",
         "Until that succeeds, nginx serves a self-signed placeholder certificate.",
         "",
         "Optional hardening, save as /etc/systemd/system/nginx.service.d/filament-kit.conf",
@@ -253,16 +253,17 @@ def _is_root() -> bool:
 
 
 def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
-    """`filament-kit remote issue`: certbot standalone for remote.hostname, with the kit's hooks."""
+    """`filament-kit remote get-certificate` (06 9.12; `remote issue` is its old spelling): certbot standalone for
+    remote.hostname, with the kit's hooks."""
     from .modules import enabled
     if run is None:
         from .apply import run_checked as run
     if "remote" not in enabled(cfg):
-        output.error("the remote module is off.", "turn it on first:", cmd="sudo filament-kit modules enable remote")
+        output.error("Remote access is off.", "turn it on first:", cmd="sudo filament-kit features on remote")
         return output.FAILED
     if not _is_root():
         from .cli import _sudo_command
-        return output.need_sudo(_sudo_command("sudo filament-kit remote issue"))
+        return output.need_sudo(_sudo_command("sudo filament-kit remote get-certificate"))
     try:
         s = settings(cfg)
     except ModuleError as e:
@@ -272,21 +273,28 @@ def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
            "--cert-name", s["hostname"], "-d", s["hostname"]]
     cmd += ["--email", s["email"]] if s["email"] else ["--register-unsafely-without-email"]
     cmd += ["--pre-hook", f"{HOOK} pre", "--post-hook", f"{HOOK} post", "--deploy-hook", f"{HOOK} deploy"]
-    output.out(f"certbot will bind port 80 on this machine now. The kit does not open it: make sure port 80 "
-               f"reaches this machine (run filament-kit remote firewall for the rules).\n"
-               f"nginx stops for the run and starts again after.")
+    output.note("certbot listens on port 80 of this Hub now. The kit does not open it: your router must forward it "
+                "here.")
     try:
-        run(cmd)
+        with output.wait("Getting the certificate…", programs=True):
+            run(cmd)
     except (subprocess.CalledProcessError, OSError) as e:
-        output.error(f"certbot failed: {e}", f"check that {s['hostname']} resolves here and port 80 is open, then retry")
+        output.out_lines(output.status_row(
+            "failed", f"The certificate was not issued: {str(e).rstrip('.')}.",
+            f"check that {s['hostname']} points at this Hub and port 80 reaches it, then run this again."))
         return output.FAILED
-    print(f"Certificate issued for {s['hostname']}.")
+    output.out_lines(output.status_row("done", f"Certificate issued for {s['hostname']}."))
     return 0
 
 
 def firewall(cfg: dict) -> int:
+    """`filament-kit remote firewall` (06 9.12): the rules to add by hand; nothing is changed."""
+    from .modules import enabled
+    if "remote" not in enabled(cfg):
+        output.error("Remote access is off.", "turn it on first:", cmd="sudo filament-kit features on remote")
+        return output.FAILED
     try:
-        print(firewall_text(settings(cfg), config.paths().opt / "resources"))
+        text = firewall_text(settings(cfg), config.paths().opt / "resources")
     except ModuleError as e:
         output.error(str(e))
         return output.FAILED
@@ -295,4 +303,7 @@ def firewall(cfg: dict) -> int:
                      f"run the install command again: {config.GET_COMMAND} (they live in "
                      "/opt/filament-kit/resources/remote)")
         return output.FAILED
+    output.emit({"text": text})
+    output.out("filament-kit never changes your firewall or router. These are the rules to add:")
+    print(text)
     return 0

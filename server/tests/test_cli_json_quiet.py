@@ -298,9 +298,8 @@ def test_modules_enable_json_stops_on_a_missing_setting_with_exit_2(capsys, monk
     before = config.load()
     rc, out, err = run(capsys, ["modules", "enable", "web", "--json", "--yes"])
     got = doc(out)
-    assert rc == 2 and got["ok"] is False and "config set" not in got["fix"]
-    assert got["fix"] == ("run it again at a terminal without --json to answer it: "
-                                                  "sudo filament-kit modules enable web --yes")
+    assert rc == 2 and got["ok"] is False
+    assert got["fix"] == "set it first, then run this again: sudo filament-kit config set web.public_url <value>"
     assert config.load() == before
 
 
@@ -423,7 +422,7 @@ def test_a_list_that_was_asked_for_is_kept(capsys, monkeypatch):
 
 def test_quiet_drops_a_commands_other_result_lines(capsys, monkeypatch, tmp_path):
     rc, out, err = run(capsys, ["ensure-fields"])
-    assert out.startswith("Spoolman:") and "backup written" in run(capsys, ["backup", "create"])[1]
+    assert out.startswith("Spoolman:") and "Backup written" in run(capsys, ["backup", "create"])[1]
     assert run(capsys, ["backup", "create", "--quiet"])[1:] == ("", "")
     assert run(capsys, ["profiles", "restore-deleted", "-q"])[1:] == ("", "")
 

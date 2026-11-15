@@ -397,22 +397,42 @@ def cmd_station_pair_local() -> int:
     return 1 if result.status == "failed" else 0
 
 
-def cmd_backup(action: str, out: str | None) -> int:
-    from . import backup
+_BACKUP_KIND = {"made": "made here", "pre-restore": "before a restore", "daily": "nightly"}     # the Hub page's words
+
+
+def cmd_backup(action: str, out: str | None, days: int | None = None) -> int:
+    """`backup create`, `list` and `keep <days>` (06 9.10); the same helper functions the Hub page's routes use."""
+    from . import backup, setup_helper
     if not _is_root():
-        return output.need_sudo(_sudo_command(f"sudo filament-kit backup {action}"))
+        return output.need_sudo(_sudo_command(f"sudo filament-kit backup {action}" + (f" {days}" if days else "")))
+    if action == "keep":
+        try:
+            r = setup_helper._backup_keep({"days": days})
+        except setup_helper.Refused as e:
+            output.error(str(e).rstrip(".") + ".")
+            return output.USAGE
+        _hub_audit(f"backups kept for {r['days']} days")
+        output.emit({"ok": True, "days": r["days"]})
+        output.result(f"Backups are kept for {r['days']} days.")
+        return 0
     if action == "list":
         rows = backup.listing()
-        output.emit({"backups": [{"name": e.name, "download": e.download, "size": e.size, "kind": e.kind,
-                                  "at": _iso(e.at)} for e in rows],
-                     "keep_days": backup.keep_days(config.load()), "folder": str(backup.backups_dir())})
+        keep = backup.keep_days(config.load())
+        output.emit({"backups": [{"name": e.name, "download": e.download, "size": e.size,
+                                  "kind": e.kind, "at": _iso(e.at)} for e in rows],
+                     "keep_days": keep, "folder": str(backup.backups_dir())})
         if not rows:
-            output.out(f"No backups in {backup.backups_dir()}.")
+            output.out(f"No backups in {backup.backups_dir()} yet.")
+            output.out("Back up now: sudo filament-kit backup create")
             return 0
+        output.out(f"Nightly backups are kept {keep} days.")
+        output.out()
         output.out_lines(output.table(
-            ["When", "Kind", "Size", "Name"],
-            [[time.strftime("%Y-%m-%d %H:%M", time.localtime(e.at)), e.kind, f"{e.size // 1024:,} KiB", e.name]
-             for e in rows], long=3, right=(2,), whole=True))   # restore needs the whole name
+            ["Made", "Kind", "Size", "Name"],
+            [[time.strftime("%Y-%m-%d %H:%M", time.localtime(e.at)), _BACKUP_KIND.get(e.kind, e.kind),
+              f"{e.size // 1024:,} KiB", e.name] for e in rows], long=3, right=(2,), whole=True))   # restore needs the whole name
+        output.out()
+        output.out(f"Folder: {backup.backups_dir()}")
         return 0
     try:
         with output.wait("Backing up…", programs=True):
@@ -421,14 +441,18 @@ def cmd_backup(action: str, out: str | None) -> int:
         _err_line(f"the backup was not written: {e}")
         return 1
     output.emit({"ok": True, "path": str(path)})
-    print(f"backup written: {path}")
+    output.result(f"Backup written: {path}")
+    output.note("the zip is not encrypted and holds the setup secrets: store it somewhere safe.")
     return 0
 
 
 def _restore_out(text: str) -> None:
-    """What `backup.restore` says: its `error: ...` lines are errors (standard error), the rest results."""
+    """What `backup.restore` says: its `error: ...` lines are errors (standard error), `Restored.` is the done row, the
+    rest results."""
     if text.startswith("error: "):
         output.error(text[len("error: "):])
+    elif text.startswith("Restored."):
+        output.out_lines(output.status_row("done", text))
     else:
         output.out(text)
 
@@ -1078,7 +1102,7 @@ class _ConfigMenu:
         if gid == "backups":
             after = ["Back up now: sudo filament-kit backup create", "Restore: sudo filament-kit restore <zip>"]
         elif gid == "catalog":
-            after = ["Update now: sudo filament-kit library update"]
+            after = ["Update now: sudo filament-kit catalog update"]
         elif gid == "network":
             after = ["Firewall rules: filament-kit remote firewall"]
         sc = menu_ui.Screen(f"group-{gid}", f"Settings > {title}", rows, actions=tuple(actions),
@@ -1366,6 +1390,215 @@ def cmd_config() -> int:
     for line in session.final:
         output.out(line)
     return rc
+
+# ---------- config show and config set (06 9.8) ----------
+
+_KEY_ALIASES = {"backups.keep_days": "backup.keep_days"}      # 06 8.3 writes the key this way; the file holds backup.keep_days
+_SECRET_WHERE = {"apikey": "Label Reader", "passphrase": "Web passphrase", "token": "Filament Catalog"}
+
+
+def _menu_items(cfg: dict) -> list[tuple[str, list[_Item]]]:
+    """The groups of the menu with the items it shows now, in its order (what `config show` prints)."""
+    on = modules.enabled(cfg)
+    out = []
+    for gid, title in _GROUPS:
+        items = []
+        for iid in _GROUP_ITEMS[gid]:
+            if iid == "spoolman" and not ("server" in on and "spoolman" not in on):
+                continue
+            if iid == "changes" and "web" not in on:
+                continue
+            if gid == "reader" and iid in ("apikey", "model", "reads") and "ai_intake" not in on:
+                continue
+            if gid == "reader" and iid in ("address", "tier") and "local_intake" not in on:
+                continue
+            if gid == "reader" and iid == "engine" and not ("ai_intake" in on and "local_intake" in on):
+                continue
+            items.append(_ITEMS[iid])
+        if gid == "voice" and "station" not in on:
+            continue
+        if items:
+            out.append((title, items))
+    return out
+
+
+def cmd_config_show() -> int:
+    """`config show`: every setting in the menu's order, a heading per group, secrets as set / not set."""
+    cfg = config.load()
+    menu = _ConfigMenu(cfg, None)
+    groups = _menu_items(cfg)
+    label_width = max(len(it.label) for _, items in groups for it in items)
+    doc, lines = {"values": {}, "secrets": {}, "groups": []}, []
+    for title, items in groups:
+        lines.append(output.paint(title, "bold", sys.stdout))
+        rows = []
+        for it in items:
+            if it.kind == "secret":
+                is_set = menu.is_set(it)
+                doc["secrets"][it.key] = {"set": is_set}
+                shown = "set" if is_set else "not set"
+            else:
+                value = menu.stored(it)
+                if it.id == "keep" and value is None:       # the number the Hub keeps when none is set
+                    from . import intake_history
+                    value = intake_history.keep(cfg)
+                doc["values"][it.key] = value
+                shown = (menu.show(it, value).split(" (")[0] if it.kind == "choice" else menu.show(it, value)) or "not set"
+            rows.append({"label": it.label, "key": it.key, "value": {"set": is_set} if it.kind == "secret" else value})
+            gap = " " * (label_width - len(it.label) + 2)
+            lines += output.wrap(f"{it.label}{gap}{shown}", indent=2 + label_width + 2, first=2)
+        doc["groups"].append({"group": title, "items": rows})
+    output.emit(doc)
+    output.out_lines(lines)
+    return 0
+
+
+def _set_keys() -> list[str]:
+    return [it.key for it in _ITEMS.values() if it.kind != "secret" and it.id != "spoolman"]
+
+
+def _config_set_value(it: _Item, raw: str):
+    """The checked value of `raw` for `config set` (the menu's checks), or raises _Sentence with what is wrong."""
+    session = _ConfigMenu({}, None)
+    if it.kind == "choice":
+        word = raw.strip().lower()
+        by_name = {words.split(" (")[0].split(":")[0].lower(): value for value, words in it.choices}
+        value = word if word in dict(it.choices) else by_name.get(word)
+        if value is None:
+            raise _Sentence(f"{raw!r} is not a choice for {_lower_first(it.label)}.")
+        return value
+    if it.kind == "bool":
+        word = raw.strip().lower()
+        if word in ("on", "true", "yes", "1"):
+            return True
+        if word in ("off", "false", "no", "0"):
+            return False
+        raise _Sentence(f"the {_lower_first(it.label)} is on or off.")
+    return session.check(it, raw)
+
+
+def cmd_config_set(key: str, raw: str) -> int:
+    """`config set <key> <value>`: one setting, checked as the menu checks it and saved the way `s` saves."""
+    key = _KEY_ALIASES.get(key, key)
+    item = next((it for it in _ITEMS.values() if it.key == key), None)
+    keys = ", ".join(k for k in ("backups.keep_days" if k == "backup.keep_days" else k for k in _set_keys()))
+    if item is not None and item.kind == "secret":
+        output.error(f"the {_lower_first(item.label)} is a secret.", f"sudo filament-kit config, {_SECRET_WHERE[item.id]}.")
+        return output.USAGE
+    if item is not None and item.id == "spoolman" or key == "spoolman_url":
+        output.error("the Spoolman address is not set this way.", "check and save it with:",
+                     cmd="sudo filament-kit spoolman address <url>")
+        return output.USAGE
+    if item is None:
+        output.error(f'there is no setting called "{key}".', f"the keys are {keys}.")
+        return output.USAGE
+    if not _no_systemd() and not _is_root():
+        return output.need_sudo(_sudo_command("sudo filament-kit config set " + shlex.join([key, raw])))
+    try:
+        value = _config_set_value(item, raw)
+    except _Sentence as e:
+        output.error(str(e))
+        return output.USAGE
+    except ValueError as e:
+        output.error(str(e))
+        return output.USAGE
+    session = _ConfigMenu(config.load(), None)
+    sentence = f"{item.label} is {session.show(item, value).split(' (')[0] if item.kind == 'choice' else session.show(item, value)}."
+    if value == session.stored(item):
+        output.emit({"ok": True, "key": item.key, "changed": False})
+        output.result(f"Unchanged: {sentence}")
+        return 0
+    session.staged[item.id] = value
+    new = copy.deepcopy(session.cfg)
+    err = session.build(new)
+    if err:
+        output.error(f"nothing was saved: {err.rstrip('.')}.")
+        return 1
+    try:
+        config.save(new)
+    except (GroupMissing, ValueError, library.LibraryError, OSError) as e:
+        output.error(f"nothing was saved: {str(e).rstrip('.')}.")
+        return 1
+    output.emit({"ok": True, "key": item.key, "changed": True, "restarts": item.restarts,
+                 "applies": item.key in _APPLY_KEYS})
+    output.result(f"Saved: {sentence}")
+    if item.key in _APPLY_KEYS:
+        rc = _run_apply(pairing=False)
+        if rc:
+            return rc
+    if item.restarts and not _no_systemd():
+        with output.wait("The Hub is restarting…", programs=True):
+            _restart_service()
+        output.result("The Hub is back.")
+    return 0
+
+
+# ---------- logs and the pointer commands (06 9.14, 10) ----------
+
+def cmd_logs(service: str | None, lines: int = 100) -> int:
+    """`logs [<service>] [--lines 50|100|200]` (06 9.14): the end of a service's journal, as the Hub page's Logs tab reads
+    it (setup_helper's journal op), whole: addresses and serials are not hidden here."""
+    from . import setup_helper
+    if not _no_systemd() and not _is_root():
+        return output.need_sudo(_sudo_command("sudo filament-kit logs" + (f" {service}" if service else "")))
+    units = setup_helper.journal_units(config.load())
+    unit = None
+    if service is None:
+        unit = "filament-kit.service" if "filament-kit.service" in units else None
+    else:
+        word = service.strip().lower()
+        hits = [u for u in units if u.lower() in (word, word + ".service")]
+        hits = hits or [u for u in units if u.lower().startswith(word)]
+        unit = hits[0] if len(hits) == 1 else None
+    if unit is None:
+        which = f'"{service}" is not one of the services' if service else "the Hub's service does not run here"
+        output.error(f"{which} the switched-on features run.",
+                     "name one of: " + (", ".join(u.removesuffix(".service") for u in units) or "none is running here")
+                     + ".")
+        return output.USAGE
+    try:
+        r = setup_helper._journal({"unit": unit, "lines": lines})
+    except setup_helper.Refused as e:
+        output.error(str(e).rstrip(".") + ".")
+        return output.FAILED
+    _hub_audit(f"log of {r['unit']} read")
+    output.emit({"unit": r["unit"], "text": r["text"], "truncated": r["truncated"]})
+    shown = r["text"].splitlines()
+    if not shown:
+        output.out("Nothing logged.")
+        return 0
+    output.out_lines(shown)
+    if r["truncated"] or len(shown) >= lines:
+        output.out(f"Only the last {lines} lines are shown.")
+        output.out(f"Fix: for more, run journalctl -u {r['unit'].removesuffix('.service')}")
+    return 0
+
+
+def _intake_url() -> str:
+    """The web app's address on this Hub, for the lines that say where something is (06 10)."""
+    ips = pairing.local_ips()
+    host = ips[0] if ips else f"{pairing.short_hostname()}.local"
+    return f"https://{host}:{int(config.load().get('port', 8710))}/intake"
+
+
+def _pointer(where: str, sentence: str, url: str) -> int:
+    """06 10: one line saying where a thing the command line cannot do is, the address on the next line when the two do
+    not fit together; exit 0. `--json`: {"available": false, "where", "url"}."""
+    output.emit({"available": False, "where": where, "url": url})
+    if len(sentence) + 1 + len(url) <= output.width() - 1:
+        output.out_lines([f"{sentence} {url}"])
+    else:
+        output.out_lines([sentence, url])
+    return 0
+
+
+def cmd_add() -> int:
+    return _pointer("web app", "Add spools in the web app, app or Weigh Station:", _intake_url())
+
+
+def cmd_spool() -> int:
+    return _pointer("web app", "Spools are opened and tagged in the web app or app:", _intake_url())
+
 
 # ---------- the Printers screen (06 8.4) ----------
 
@@ -2402,26 +2635,67 @@ def cmd_recent_undo(rid: str) -> int:
 
 
 def cmd_cert() -> int:
+    """`certificate` (06 9.12): make the Hub's certificate when there is none, print its fingerprint."""
     cert = config.paths().etc / "cert.pem"
-    if cert.exists():
-        print(pairing.fingerprint(cert.read_bytes()))
-        return 0
-    cert.parent.mkdir(parents=True, exist_ok=True)
-    full, short = socket.gethostname(), pairing.short_hostname()
-    print(pairing.make_cert(short, pairing.local_ips(), cert.parent, extra_dns=[full] if full != short else []))
+    made = not cert.exists()
+    if made:
+        cert.parent.mkdir(parents=True, exist_ok=True)
+        full, short = socket.gethostname(), pairing.short_hostname()
+        fp = pairing.make_cert(short, pairing.local_ips(), cert.parent, extra_dns=[full] if full != short else [])
+    else:
+        fp = pairing.fingerprint(cert.read_bytes())
+    output.emit({"ok": True, "made": made, "fingerprint": fp})
+    output.out("Made a new certificate." if made else "Certificate present.")
+    output.out("Fingerprint:")
+    output.out_lines(_fingerprint_lines(fp))
     return 0
 
 
 def cmd_ensure_fields() -> int:
+    """`spoolman fields` (06 9.12)."""
     try:
         created = Spoolman(config.load()["spoolman_url"]).ensure_fields()
     except SpoolmanError as e:
         _err_line(f"Spoolman: {e}")
         return 1
     output.emit({"ok": True, "made": list(created)})
-    print("Spoolman: added the kit's extra fields: " + ", ".join(created) if created
-          else "Spoolman: the kit's extra fields are in place")
+    output.result("Spoolman: added the kit's extra fields: " + ", ".join(created) + "." if created
+                  else "Spoolman: the kit's extra fields are in place.")
     return 0
+
+
+def cmd_spoolman_address(url: str | None) -> int:
+    """`spoolman address [<url>]` (06 9.12): show the Spoolman in use, or check an address and save it the way the Hub's
+    Settings > General does (it must answer first; the kit applies the change)."""
+    cfg = config.load()
+    if url is None:
+        output.emit({"url": cfg.get("spoolman_url")})
+        output.out(f"Spoolman in use: {cfg.get('spoolman_url')}.")
+        return 0
+    on = modules.enabled(cfg)
+    if "server" not in on or "spoolman" in on:
+        output.error("this machine runs its own Spoolman, so its address is not set.",
+                     "turn the Spoolman Feature off first:", cmd="sudo filament-kit features off spoolman")
+        return output.FAILED
+    if not _no_systemd() and not _is_root():
+        return output.need_sudo(_sudo_command("sudo filament-kit spoolman address " + shlex.quote(url)))
+    menu = _ConfigMenu(copy.deepcopy(cfg), None)
+    try:
+        value = menu.check(_ITEMS["spoolman"], url)
+    except _Sentence as e:
+        output.error(str(e))
+        return output.USAGE
+    with output.wait(f"Checking {value}…"):
+        menu.staged["spoolman"] = value
+        new = copy.deepcopy(cfg)
+        err = menu.build(new)
+    if err:
+        output.error(f"nothing was changed: {err.rstrip('.')}.")
+        return output.FAILED
+    config.save(new)
+    output.emit({"ok": True, "url": value})
+    output.result(f"Saved. The kit now uses the Spoolman at {value}.")
+    return _run_apply(pairing=False)
 
 
 # ---------- printer map / unpin ----------
@@ -3668,16 +3942,11 @@ def _request_rebuild(reason: str) -> None:
     builds.request_rebuild(reason)
 
 
-def _library_line(st: dict) -> str:
-    n = st["local"]
-    if st["source"] == "none":
-        return ("library not downloaded (run: filament-kit library update" + f"), "
-                f"{n} local addition{'' if n == 1 else 's'}")
-    return (f"library version {st['version']} ({st['source']}), "
-            f"{n} local addition{'' if n == 1 else 's'}")
+_CATALOG_SOURCE = {"updated": "signed release", "bundled": "bundled with this version"}
 
 
 def cmd_library_status() -> int:
+    """`catalog status` (06 9.11): the version, where it comes from, the last check and what was skipped."""
     st = library.status()
     if output.json_mode():
         from .setup_console import library_tab
@@ -3685,74 +3954,87 @@ def cmd_library_status() -> int:
         if isinstance(view.get("last_check"), dict):
             view["last_check"]["at"] = _iso((st.get("last_check") or {}).get("at"))
         output.emit(view)
-    print(_library_line(st))
-    print(f"url: {st['url']}")
+    n = st["local"]
+    additions = f"{n} local addition{'' if n == 1 else 's'}"
+    if st["source"] == "none":
+        output.out("The Filament Catalog is not downloaded yet.")
+        output.out("Fix: sudo filament-kit catalog update")
+    else:
+        output.out(f"Filament Catalog version {st['version']} ({_CATALOG_SOURCE.get(st['source'], st['source'])}), "
+                   f"{additions}.")
+    output.out(f"Source: {st['url']}")
     lc = st["last_check"]
     if lc is None:
-        print("last check: never")
+        output.out("Last check: never.")
     else:
-        print(f"last check: {_fmt_time(lc['at'])} {'ok' if lc['ok'] else 'failed: ' + str(lc['error'])}")
+        output.out(f"Last check {_fmt_time(lc['at'])}: " + ("ok." if lc["ok"] else f"failed: {str(lc['error']).rstrip('.')}."))
     if st["skipped"]:
-        print(st["skipped"])
+        output.out(st["skipped"])
     return 0
 
 
+def _failed_row(text: str, fix: str = "") -> int:
+    """`× failed  <text>` (06 6.1), the way a command's job ends when it did not work."""
+    output.out_lines(output.status_row("failed", text, fix))
+    return output.FAILED
+
+
 def cmd_library_update(scheduled: bool) -> int:
+    """`catalog update [--scheduled]` (06 9.11)."""
     cfg = config.load()
     try:
         if scheduled:
             if library.schedule(cfg) == "off":
-                print("library updates are off")
+                output.out("Filament Catalog updates are off.")
                 return 0
             if not library.due(cfg, time.time()):
-                print("library update not due yet")
+                output.out("Not due yet.")
                 return 0
         job = steps.Steps(4)
         with output.wait("Updating the Filament Catalog…", programs=True):
             r = library.update(cfg["library"].get("url") or None, scheduled=scheduled, step=job.next)
     except (library.LibraryError, ValueError) as e:
-        _err_line(str(e))
-        return 1
+        return _failed_row(str(e))
     if r.note:
         output.note(r.note)
     if r.error:
         if scheduled and r.http_status in library.PRIVATE_STATUSES:
-            # the library may simply not be published yet: the timer run is not a failure, the last good
+            # the catalog may simply not be published yet: the timer run is not a failure, the last good
             # version (or none) stays in use
-            output.note(r.error)
+            output.note(f"{r.error.rstrip('.')}. The version in use stays.")
             return 0
-        _err_line(r.error)
-        return 1
+        return _failed_row(r.error)
     if r.held_from is not None:
-        output.out(f"library version {r.version} kept: version {r.held_from} was rolled back and is the newest published; "
-                   "scheduled updates wait for a newer one (run: sudo filament-kit library update"
-                   + " to install it anyway)")
+        output.out(f"Version {r.version} stays: version {r.held_from} was rolled back and is the newest published. "
+                   "Scheduled updates wait for a newer one; to install it anyway run: "
+                   "sudo filament-kit catalog update")
         return 0
     if not r.changed:
-        print(f"library version {r.version} is up to date")
+        output.out(f"Up to date: {r.version}.")
         return 0
-    print(f"library version {r.version} installed ({r.downloaded} entr{'y' if r.downloaded == 1 else 'ies'} "
-          f"downloaded)")
+    output.out(f"Installed {r.version} ({r.downloaded} entr{'y' if r.downloaded == 1 else 'ies'} downloaded).")
     text = library.skipped_text()
     if text:
-        print(text)
+        output.out(text)
     job.next("Asking for a preset build")
     _request_rebuild(f"library updated to version {r.version}")
     return 0
 
 
 def cmd_library_adopt(folder: str) -> int:
+    """`catalog adopt <folder>` (06 9.11)."""
     try:
-        v = library.adopt(Path(folder))
+        library.adopt(Path(folder))
     except library.LibraryError as e:
         _err_line(str(e))
         return 1
-    if v is not None:
-        print(f"kept the library of the earlier program version (library version {v})")
+    n = library.load().local_count
+    output.result(f"Took over the catalog in {folder}: {n} local addition{'' if n == 1 else 's'}.")
     return 0
 
 
 def cmd_library_rollback(yes: bool = False) -> int:
+    """`catalog rollback` (06 7, 9.11)."""
     stop = _confirm("Go back to the previous Filament Catalog? The version before the last update comes back. Your own "
                     "entries are kept.", "going back to the previous Filament Catalog", yes=yes)
     if stop is not None:
@@ -3764,17 +4046,18 @@ def cmd_library_rollback(yes: bool = False) -> int:
     except library.LibraryError as e:
         _err_line(str(e))
         return 1
-    print(f"rolled back to library version {v}")
+    output.result(f"Back to version {v}.")
     left = library.rolled_back_from()
     if left is not None:
-        output.out(f"scheduled updates will skip version {left} until a newer one is published "
-                   "(run: sudo filament-kit library update to install it anyway)")
+        output.note(f"scheduled updates skip version {left} until a newer one is published; "
+                    "sudo filament-kit catalog update installs it anyway.")
     job.next("Asking for a preset build")
     _request_rebuild(f"library rolled back to version {v}")
     return 0
 
 
 def cmd_library_add(source: str) -> int:
+    """`catalog add <file | ->` (06 9.11)."""
     limit = library.LOCAL_LIMIT
     try:
         if source == "-":
@@ -3785,11 +4068,11 @@ def cmd_library_add(source: str) -> int:
         else:
             with open(source, "rb") as fh:
                 data = fh.read(limit + 1)
-    except OSError as e:
-        _err_line(f"cannot read {source}: {e.strerror or e}")
-        return 1
+    except OSError:
+        output.error(f"there is no readable file at {source}.", "give the path of one catalog entry as a JSON file.")
+        return output.USAGE
     if len(data) > limit:
-        _err_line(f"entry not added: larger than {limit // 1024} KiB")
+        _err_line(f"entry not added: larger than {limit // 1024} KiB.")
         return 1
     try:
         entry, line = library.add_local(data)
@@ -3797,8 +4080,44 @@ def cmd_library_add(source: str) -> int:
         _err_line(f"entry not added: {e}")
         return 1
     output.emit({"ok": True, "vendor": entry["vendor"], "product": entry["product"], "line": line})
-    print(f"added local entry {entry['vendor']} {entry['product']} (line {line})")
+    output.result(f"Added {entry['vendor']} {entry['product']}. A preset build follows.")
     _request_rebuild(f"local library addition {line}")
+    return 0
+
+
+def cmd_library_token(remove: bool, yes: bool = False) -> int:
+    """`catalog token [--remove]` (06 9.11, 8.7): set, replace or remove the token the Filament Catalog downloads with."""
+    if not _no_systemd() and not _is_root():
+        return output.need_sudo(_sudo_command("sudo filament-kit catalog token" + (" --remove" if remove else "")))
+    if remove:
+        stop = _confirm("Remove the Catalog token? The Filament Catalog can then download only from public sources.",
+                        "removing the Catalog token", yes=yes)
+        if stop is not None:
+            return stop
+        try:
+            library.remove_token()
+        except (OSError, library.LibraryError) as e:
+            _err_line(f"the token was not removed: {e}")
+            return 1
+        output.emit({"ok": True, "token": {"set": False}})
+        output.result("Removed the Catalog token.")
+        return 0
+    if output.json_mode():
+        output.error("catalog token asks for the token, and --json does not ask.", "run it without --json.")
+        return output.USAGE
+    try:
+        token = secret_input.ask("Catalog token (typing is not shown): ").strip()
+    except EOFError:
+        return _input_ended()
+    if not token or " " in token or not token.isprintable() or len(token) > 400:
+        output.error("a GitHub token is one word of printable characters.")
+        return output.USAGE
+    try:
+        library.write_token(token)
+    except (OSError, library.LibraryError, ValueError) as e:
+        _err_line(f"the token was not saved: {e}")
+        return 1
+    output.result("Saved the catalog token.")
     return 0
 
 
@@ -4493,6 +4812,9 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None, yes:
             output.error("Weigh Station needs the Hub's address, and there is no terminal to ask.",
                          "give it with --hub:", cmd=_sudo_command(f"sudo filament-kit features on {_KEY_OF[name]}")
                          + " --hub <address>")
+        elif key in _set_keys():
+            output.error(f"{modules.MODULES[name].title} needs {key}, and there is no terminal to ask.",
+                         "set it first, then run this again:", cmd=f"sudo filament-kit config set {key} <value>")
         else:
             output.error(f"{modules.MODULES[name].title} needs {key}, and there is no terminal to ask.",
                          "run it again at a terminal without --json to answer it:",
@@ -4605,23 +4927,42 @@ def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
                     "Settings and data stay. The version before is kept, so you can roll back.", "updating", yes=False)
 
 
+def _run_removal(cmd: list[str], stdin_file: Path | None) -> tuple[int, str]:
+    """Run the removal script, its lines dim and indented below the wait line as they arrive (06 6.6, 9.13); (its exit
+    code, its last non-empty line)."""
+    last = ""
+    with output.wait("Removing the kit…", programs=True):
+        stdin = open(stdin_file) if stdin_file else subprocess.DEVNULL
+        try:
+            proc = subprocess.Popen(cmd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                    errors="replace")
+        finally:
+            if stdin_file:
+                stdin.close()
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line.strip():
+                last = line.strip()
+                output.out_lines(["    " + output.paint(line, "muted", sys.stdout)])
+        return proc.wait(), last
+
+
 def cmd_uninstall(purge: bool, run=None, yes: bool = False) -> int:
-    """Run uninstall.sh of the kept release (/opt/filament-kit/releases/<version>/), unpacked outside /opt, which
-    it removes. The question and, for --purge, the typed word are asked here (06 7); uninstall.sh asks its own for
-    `./uninstall.sh --purge` too, which this answers with the word it was just given."""
+    """`uninstall [--purge]` (06 9.13): run uninstall.sh of the kept release (/opt/filament-kit/releases/<version>/),
+    unpacked outside /opt, which it removes. The question and, for --purge, the typed word are asked here (06 7);
+    uninstall.sh asks its own for `./uninstall.sh --purge` too, which this answers with the word it was just given."""
     from . import release, updates
     if not _no_systemd() and not _is_root():
         return output.need_sudo(_sudo_command("sudo filament-kit uninstall"))
     kept = _kept_release()
     if kept is None:
         ver = updates.current_version()
-        _err_line(f"no kept copy of a release in {updates.store()}, so there is no uninstall.sh to run.\n"
-                  f"fix: download filament-kit-{ver}.tar.gz from https://github.com/{release.REPO}/releases, unpack it "
-                  f"(tar xzf filament-kit-{ver}.tar.gz), then in its folder run: "
-                  + "sudo ./uninstall.sh" + (" --purge" if purge else ""))
+        output.error("no copy of a release is kept, so there is no removal script to run.",
+                     f"download filament-kit-{ver}.tar.gz from the releases page, unpack it, then in its folder run:",
+                     cmd="sudo ./uninstall.sh" + (" --purge" if purge else ""))
         return 1
     if purge:
-        stop = _confirm("Remove filament-kit and delete everything it keeps on this machine? Type purge to go on: ",
+        stop = _confirm("This also deletes everything filament-kit keeps on this machine. Type purge to go on: ",
                         "removing filament-kit and deleting everything it keeps", yes=yes, word="purge")
     else:
         stop = _confirm("Remove filament-kit from this machine? Its data stays unless you add --purge.",
@@ -4631,26 +4972,30 @@ def cmd_uninstall(purge: bool, run=None, yes: bool = False) -> int:
     ver, tarball = kept
     running = updates.current_version()
     if ver != running:
-        print(f"Using the uninstall.sh of {ver}, the newest kept release: there is no kept copy of {running} "
-              f"(the installed version).")
+        output.note(f"using the removal script of {ver}, the newest kept release; no copy of {running} is kept.")
     import tempfile
     work = Path(tempfile.mkdtemp(prefix="filament-kit-uninstall-"))
     try:
         root = release.extract(tarball, ver, work)
         cmd = ["bash", str(root / "uninstall.sh")] + (["--purge"] if purge else [])
         if run is not None:
-            return run(cmd)
-        if not purge:
-            return subprocess.call(cmd)
-        kept_word = work / "purge-answer"       # uninstall.sh's own typed word, answered from here
-        kept_word.write_text("purge\n")
-        with open(kept_word) as answer:
-            return subprocess.call(cmd, stdin=answer)
+            rc, last = run(cmd), ""
+        else:
+            kept_word = None
+            if purge:
+                kept_word = work / "purge-answer"       # uninstall.sh's own typed word, answered from here
+                kept_word.write_text("purge\n")
+            rc, last = _run_removal(cmd, kept_word)
     except (release.ReleaseError, OSError) as e:
         _err_line(f"cannot unpack the kept release {ver}: {e}")
         return 1
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    if rc != 0:
+        output.out_lines(output.status_row("failed", f"The removal stopped: {last.rstrip('.') or f'exit code {rc}'}."))
+        return rc if run is not None else output.FAILED
+    output.out("filament-kit is removed from this machine.")
+    return 0
 
 
 def _port_hint(who) -> str:
@@ -5135,7 +5480,7 @@ def cmd_web_passphrase() -> int:
         _err_line("the two passphrases do not match.")
         return 1
     try:
-        dest = write_passphrase(first)
+        write_passphrase(first)
     except GroupMissing as e:
         _err_line(f"{e}; nothing was changed\n"
                   "fix: install the kit first (it creates the filament-kit user and group), "
@@ -5144,8 +5489,7 @@ def cmd_web_passphrase() -> int:
     except ValueError as e:
         _err_line(f"{e}; nothing was changed")
         return 1
-    print(f"Passphrase saved ({dest}). Sign-ins from now on use it; existing sessions and connectors stay "
-          "signed in.")
+    output.result("Passphrase saved.")
     return 0
 
 
@@ -5183,13 +5527,14 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -
     if new or apply._tty():             # a code made now is the answer, with or without a terminal; a stored one needs one
         print(f"Open {url}  (setup code: {setup_code.shown(code)})")
     else:
-        output.out(f"Setup page: {url}  (see its setup code at a terminal: sudo filament-kit setup-code)")
+        output.out(f"Open {url}")
+        output.note("the setup code is shown at a terminal only.")
     if new and not output.quiet():
         print("The old setup code no longer works.")
     if revoke_trusted:
         n = trusted.revoke_all()
         if not output.quiet():
-            print(f"{n} trusted computer{'' if n == 1 else 's'} revoked: each needs the setup code again.")
+            print(f"{n} trusted computer{'' if n == 1 else 's'} revoked. Each needs the setup code again.")
     elif new and not output.quiet():
         n = len(trusted.listing())
         if n:
@@ -5270,12 +5615,50 @@ def cmd_web_status() -> int:
     return 0 if status_rows.print_rows(rows) else 1
 
 
+_ENGINE_NAMES = {"local": "On this Hub", "cloud": "Cloud (Claude)"}
+
+
+def _label_reader_row_lines(rows) -> list[str]:
+    """The rows of one group as `status` prints them: state word, text, and a `Fix:` line under a row that needs a look."""
+    lines = []
+    for r in rows:
+        if r.state == status_rows.DETAIL:
+            lines += output.status_row("", r.text.strip())
+        else:
+            lines += output.status_row(status_rows._WORDS[r.state], status_rows._fours(r.text),
+                                       r.fix if r.state == status_rows.FAIL else "")
+    return lines
+
+
 def cmd_local_intake_status() -> int:
+    """`label-reader status` (06 9.9): the engine order, then the Label Reader group of `status`."""
+    from . import intake
     cfg = config.load()
-    if "local_intake" not in modules.enabled(cfg):
-        _err_line("the local_intake module is off.\nfix: sudo filament-kit modules enable local_intake")
-        return 1
-    return 0 if status_rows.print_rows(status_rows.local_reader_rows(cfg)) else 1
+    order = intake.reader_order(cfg)
+    if not order:
+        output.error("the Label Reader is off, so no engine reads labels.", "turn an engine on first:",
+                     cmd="sudo filament-kit features on label-reader")
+        return output.FAILED
+    on = modules.enabled(cfg)
+    rows: list = []
+    with output.wait("Checking…", programs=True):
+        if "ai_intake" in on:
+            rows += list(status_rows._key_rows(_default_client, True))
+            rows.append(status_rows.Row(status_rows.INFO,
+                                        f"Reads used today: {_reads_today()} of {cfg['reads_per_day']}",
+                                        group="Label Reader"))
+        if "local_intake" in on:
+            rows += [r for r in status_rows.local_reader_rows(cfg) if not r.text.startswith("label reading:")]
+    engine = ", then ".join(_ENGINE_NAMES[r] for r in order)
+    if output.json_mode():
+        output.emit({"engine_order": order, "rows": status_rows.row_dicts(rows),
+                     "summary": status_rows.summary_counts(rows)})
+        return 0 if not any(r.state == status_rows.FAIL for r in rows) else 1
+    lines = [output.paint("Label Reader", "bold", sys.stdout)]
+    lines += output.status_row("on", f"Engine order: {engine}")
+    lines += _label_reader_row_lines(rows)
+    output.out_lines(lines)
+    return 0 if not any(r.state == status_rows.FAIL for r in rows) else 1
 
 
 def cmd_local_intake_plan(fetcher=None) -> int:
@@ -5409,44 +5792,323 @@ def cmd_local_intake_token(remove: bool) -> int:
     return 0
 
 
-def cmd_local_intake_test(photos: list[str]) -> int:
-    """Read photos with the local reader only (no cloud, no daily read used) and print what it read."""
+_READ_LEVEL_WORD = {"high": "high", "medium": "medium", "low": "low: check this", "not_on_label": "not on label"}
+_READ_ROWS = (("Brand", "vendor"), ("Name", "name"), ("Material", "material"), ("Colour", "color_hex"),
+              ("Net weight", "net"), ("Price per kg", "price_per_kg"))
+
+
+def _read_item_lines(it: dict) -> list[str]:
+    """One read item as the Label Reader test shows it: label, value and how sure the reader was of it."""
+    levels = it.get("confidence_levels") or {}
+    values = []
+    for label, field in _READ_ROWS:
+        value = _rec_value(field, it.get(field))
+        if field == "color_hex" and it.get("color_hex") and it.get("color_name"):
+            value += f" ({it['color_name']})"
+        values.append((label, value, levels.get(field)))
+    lw = max(len(v) for _, v, _l in values)
+    limit = output.width() - 1
+    lines = []
+    for label, value, level in values:
+        word = _READ_LEVEL_WORD.get(level)
+        shown = output.state(word) if word else ""
+        head = f"  {label:<13} {value}"
+        if not word:
+            lines.append(head)
+        elif len(head) + 2 + 2 + len(word) + 2 <= limit and 2 + 13 + 1 + lw + 2 + 2 + len(word) + 1 <= limit:
+            lines.append(f"{head}{' ' * (lw - len(value) + 2)}{shown}")
+        else:
+            lines += [head, f"      {shown}"]
+    return lines
+
+
+def cmd_local_intake_test(photos: list[str], engine: str | None = None, yes: bool = False) -> int:
+    """`label-reader test <photo>... [--engine cloud|local]` (06 9.9): read photos with the chosen engine, or the engine
+    order, and print the fields with how sure it was. Nothing is added and no record is made."""
     from . import intake
     cfg = config.load()
-    if "local_intake" not in modules.enabled(cfg):
-        _err_line("the local_intake module is off.\nfix: sudo filament-kit modules enable local_intake")
-        return 1
+    order = intake.reader_order(cfg)
+    want = {"cloud": "ai_intake", "local": "local_intake"}.get(engine or "")
+    if engine and want not in modules.enabled(cfg):
+        output.error(f"{_ENGINE_NAMES[engine]} is not installed.", "turn it on first:",
+                     cmd="sudo filament-kit features on " + _KEY_OF[want])
+        return output.FAILED
+    if not order:
+        output.error("the Label Reader is off, so no engine reads labels.", "turn an engine on first:",
+                     cmd="sudo filament-kit features on label-reader")
+        return output.FAILED
+    readers = [engine] if engine else order
     try:
         images = intake.check_photos([(p, Path(p).read_bytes()) for p in photos])
     except OSError as e:
-        _err_line(f"{e.filename}: {e.strerror}")
-        return 1
+        output.error(f"there is no readable file at {e.filename}.", "give the path of a JPEG photo of a label.")
+        return output.USAGE
     except intake.PhotoError as e:
         _err_line(str(e))
         return 1
+    names = " then ".join(_ENGINE_NAMES[r] for r in readers)
+    charged: list[bool] = []
+    charge = _history_charge()
+
+    def counted():
+        charged.append(True)
+        return charge()
+    started = time.monotonic()
     try:
-        with output.wait(f"Reading {len(images)} photo{'' if len(images) == 1 else 's'} with On this Hub…"):
-            out = intake._call(Spoolman(cfg["spoolman_url"]), images, "", None, None, readers=["local"])
+        with output.wait(f"Reading {len(images)} photo{'' if len(images) == 1 else 's'} with {names}…"):
+            out = intake._call(Spoolman(cfg["spoolman_url"]), images, "", None, None, readers=readers, charge=counted)
+    except intake.CapReached as e:
+        _err_line(str(e))
+        return 1
     except intake.ReadError as e:
         _err_line(str(e))
         return 1
     except SpoolmanError as e:
         _err_line(f"Spoolman: {e}")
         return 1
+    seconds = round(time.monotonic() - started)
     output.emit({"ok": True, **out})
-    conf = out.get("confidence")
-    print(f"Read by the local reader ({out.get('tier') or '?'} tier"
-          + (f", {round(conf * 100)} % sure" if conf is not None else "") + (", unsure" if out.get("unsure") else "")
-          + (f", {out['usage']['ms'] / 1000:.1f} s" if out["usage"].get("ms") is not None else "") + "):")
-    for it in out["items"]:
-        colour = it.get("color_name") or "?"
-        print(f"  {it['vendor']} {it['name']} ({it['material']}), colour {colour}"
-              + (f" #{it['color_hex']}" if it.get("color_hex") else "")
-              + f", {it['count']} x {it['net']} g, {'sealed' if it.get('sealed') else 'opened'}; {it['match']}"
-              + (f"; {round(it['confidence'] * 100)} % sure" if it.get("confidence") is not None else ""))
+    by = _ENGINE_NAMES.get(out.get("reader"), "the Label Reader")
+    tier = f" (tier: {out['tier']})" if out.get("tier") else ""
+    output.out(f"Read by {by}{tier} in {seconds} s. Nothing was added.")
+    for n, it in enumerate(out["items"], 1):
+        output.out()
+        if len(out["items"]) > 1:
+            output.out(f"Item {n} of {len(out['items'])}")
+        output.out_lines(_read_item_lines(it))
     for q in out.get("questions") or []:
-        print(f"  question: {q}")
+        output.out(f"Question: {q}")
+    if charged and out.get("reader") == "cloud":
+        output.note(f"this used 1 of today's {cfg['reads_per_day']} reads.")
     return 0
+
+
+# ---------- help (06 3, 4) ----------
+
+# The groups of the top-level help (06 3.1), then every command (06 3.2) and the old spellings (06 4). `help
+# --markdown` is the guide's command table; a test holds it to the design's table. Commands that are not in this
+# program (migrate-ops, migrate-scanner, config theme, label-reader corrections) are not listed.
+_HELP_GROUPS = [('Everyday',
+  [('status', 'What works and what needs a look'),
+   ('printer', 'List, test, map and manage printers'),
+   ('klipper', 'The Klipper add-on'),
+   ('recent', 'Recently added spools: show, correct, undo'),
+   ('devices', 'Paired phones, PCs and Weigh Stations'),
+   ('pair', 'Pair a phone, the Slicer Sync or a Weigh Station'),
+   ('weigh-station', 'Weigh Station: pair it, flash its display'),
+   ('tag-reader', 'Tag Readers: tokens, flash one over USB'),
+   ('presets', 'Slicer presets: build, status, parents, updates')]),
+ ('System',
+  [('features', 'Switch features on and off; choose the setup'),
+   ('config', 'Settings menu; also config show and set'),
+   ('label-reader', 'Label Reader: status and test'),
+   ('catalog', 'Filament Catalog: status, update, roll back, add'),
+   ('backup', 'Make or list backups'),
+   ('restore', 'Restore this Hub from a backup'),
+   ('web', "Access from outside the home, and Claude's connector"),
+   ('remote', 'Remote access: certificate and firewall rules'),
+   ('setup-code', "The Hub page's address and setup code"),
+   ('certificate', "The Hub's certificate and its fingerprint"),
+   ('spoolman', "Spoolman: its address and the kit's extra fields"),
+   ('update', 'Check, install or roll back filament-kit'),
+   ('uninstall', 'Remove filament-kit from this machine'),
+   ('logs', "The end of a service's log")])]
+
+_COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check (9.1)', 'Overview'),
+ ('`printer list`', 'All printers, set up and found (9.2)', 'Printers'),
+ ('`printer show <printer>`', 'One printer: details and slots', 'Printers, expanded row'),
+ ('`printer test <printer>`', 'Test connection', 'Test connection'),
+ ('`printer add [--klipper] [options]`', 'Add a printer; asks for what is missing', 'Add a printer'),
+ ('`printer use <printer>`', 'Add a Klipper printer that a scan found', 'Use this printer'),
+ ('`printer dismiss <printer>`', 'Drop a found printer from the list', 'Dismiss'),
+ ('`printer rename <printer> <new name>`', 'Rename', 'Rename'),
+ ('`printer address <printer> <address>`', 'Change address', 'Change address'),
+ ('`printer access-code <printer>`', 'Replace the Access Code (Bambu)', 'Replace Access Code'),
+ ('`printer api-key <printer> [--clear]`',
+  'Set, replace or clear the Moonraker API key (Klipper)',
+  'Set / Replace / Clear key'),
+ ('`printer lane-data <printer> auto\\|on\\|off`', 'Klipper lane data', 'Lane data'),
+ ('`printer detect <printer>`', 'Detect model and slots (Klipper)', 'Detect model and slots'),
+ ('`printer scan [--subnet CIDR]`', 'Find Klipper printers on the network', 'Find Klipper printers'),
+ ('`printer map <printer> [--by-loading]`',
+  'Map slots, or map by loading filament',
+  'Map slots / Map by loading filament'),
+ ('`printer report <printer>`', 'Collect a report', 'Collect a report'),
+ ('`printer reports <printer>`', 'List saved reports', 'Saved reports'),
+ ('`printer forget-certificate <printer>`', 'Forget certificate (Bambu)', 'Forget certificate'),
+ ('`printer forget <printer>`', 'Forget printer', 'Forget printer'),
+ ('`printer live <printer>`', 'Prints where the live view is (section 10)', 'Open the live printer view'),
+ ('`printer menu`', 'The Printers screen (8.4)', 'Printers'),
+ ('`klipper add-on`', 'Prints the commands that install the Klipper add-on', 'Klipper add-on'),
+ ('`recent` (same as `recent history`)', 'Recently added records (9.3)', 'Recently added'),
+ ('`recent show <record> [--photos]`', 'One record: fields, confidence, revisions', 'Record detail'),
+ ('`recent revise <record> --note TEXT [--item N]`',
+  'Ask the Label Reader to correct it',
+  'Ask the Label Reader to correct it'),
+ ('`recent edit <record> field=value... [--item N] [--spools 41,42]`', 'Edit by hand', 'Edit by hand, Save changes'),
+ ('`recent undo <record>`', 'Undo the newest revision that is not undone', 'Undo revision N'),
+ ('`devices` (same as `devices list`)', 'Paired devices (9.4)', 'Devices'),
+ ('`devices forget <device>`', 'Unpair a device', 'Revoke'),
+ ('`pair [--slicer-sync \\| --weigh-station] [--text] [--no-wait]`',
+  'Pairing code, QR and fingerprint',
+  'Pair a phone / Link for the Slicer Sync / Link for the Weigh Station'),
+ ('`weigh-station pair [--local]`',
+  'Run on the Weigh Station: pair it with the Hub',
+  'Pair the Weigh Station on this machine'),
+ ('`weigh-station flash-display`', 'Write the Weigh Station display firmware over USB', 'Flash a device'),
+ ('`weigh-station pairing-state`', 'Paired, not paired or not checked yet', '(none)'),
+ ('`tag-reader list`', 'Tag Reader tokens', 'Devices, Tag Readers'),
+ ('`tag-reader new-token [--name NAME]`', 'Make a token', 'Make a token'),
+ ('`tag-reader revoke <reader>`', 'Revoke a token', 'Revoke'),
+ ('`tag-reader flash [options]`', "Write a Tag Reader over the Hub's USB", 'Flash a device'),
+ ('`presets status`', 'Build, Slicer Sync and update state (9.5)', 'Slicer presets'),
+ ('`presets build`', 'Build now', 'Build now'),
+ ('`presets lines`', 'Filament lines and their parents', 'Product lines'),
+ ('`presets set-parent <line> <parent> [--orca]`', 'Set the Bambu Studio or Orca Slicer parent', 'Set parent'),
+ ('`presets restore-deleted`', 'Bring back presets deleted in Bambu Studio', 'Restore deleted presets'),
+ ('`presets updates (--line ID \\| --all)`',
+  'Show what would be accepted (changes nothing)',
+  'Show what would be accepted'),
+ ('`presets accept-updates (--line ID \\| --all)`', 'Accept updates (asks)', 'Accept these'),
+ ('`features` (same as `features list`)', 'Features, on or off (9.6)', 'Features'),
+ ('`features menu [--numbered] [--raw]`', 'The Features checklist (8.5)', 'Features'),
+ ('`features on <feature> [--hub ADDRESS]` / `features off <feature>`',
+  'Switch one feature (`--hub` when switching on the Weigh Station without the Hub service)',
+  'Turn on / Turn off'),
+ ('`features setup <setup> [--hub ADDRESS]`', 'Choose the setup', 'Setup'),
+ ('`features apply [--no-pair]`', 'Apply the features again', 'Apply again'),
+ ('`features units`', 'The service files the features need, one per line', '(none)'),
+ ('`config [--numbered]`', 'The settings menu (8.3)', 'Settings'),
+ ('`config show`', 'All settings, in menu order', 'Settings'),
+ ('`config set <key> <value>`', 'Change one setting', 'Settings, one field'),
+ ('`label-reader status`', 'Label Reader engines and their health (9.9)', 'Settings > Label Reader'),
+ ('`label-reader test <photo>... [--engine cloud\\|local]`', 'Read label photos without adding anything', 'Test'),
+ ('`catalog status`', 'Filament Catalog version and last check', 'Settings > Filament Catalog'),
+ ('`catalog update [--scheduled]`', 'Update now', 'Update now'),
+ ('`catalog rollback`', 'Go back to the version before', 'Go back to the version before'),
+ ('`catalog add <file \\| ->`', 'Add your own entry', 'Add entry'),
+ ('`catalog adopt <folder>`', 'Take over a catalog folder from an older install', '(none)'),
+ ('`catalog token [--remove]`', 'Set, replace or remove the catalog token', 'Catalog token'),
+ ('`backup create [--out DIR]`', 'Back up now', 'Back up now'),
+ ('`backup list`', 'Backups on this Hub', 'Show the backups'),
+ ('`backup keep <days>`', 'Keep nightly backups for N days', 'Keep nightly backups for N days'),
+ ('`restore <zip> \\| --uploaded`', 'Restore (asks for the typed word)', 'Restore'),
+ ('`web status`', 'Access from outside: rows as in `status`', 'Settings > Network and addresses'),
+ ('`web passphrase`', 'Set or replace the web passphrase', 'Web passphrase'),
+ ('`remote firewall`', 'Print the firewall rules (changes nothing)', 'Show the firewall rules'),
+ ('`remote get-certificate`', 'Get the public certificate now', 'Get the certificate'),
+ ('`setup-code [--new] [--revoke-trusted]`', 'Hub page address and setup code', 'Setup code, Trusted computers'),
+ ('`certificate`', "Make the Hub's certificate if missing; print its fingerprint", '(none)'),
+ ('`spoolman fields`', "Make the kit's extra fields in Spoolman", 'Overview, Make the fields'),
+ ('`spoolman address [<url>]`',
+  'Show or change the Spoolman in use (checked before saving)',
+  'Settings > General, Spoolman address'),
+ ('`update [--check \\| --rollback] [--scheduled]`', 'Updates', 'Updates'),
+ ('`uninstall [--purge]`', 'Remove filament-kit (asks)', 'Updates, footer line'),
+ ('`logs [<service>] [--lines 50\\|100\\|200]`', "The end of a service's log", 'Logs'),
+ ('`add`', 'Prints where spools are added (section 10)', '(none)'),
+ ('`spool`', 'Prints where spools are opened, tagged and moved (section 10)', '(none)'),
+ ('`help [<command> \\| aliases \\| --markdown]`',
+  'Help; `--markdown` prints the command table for the user guide',
+  '(none)')]
+
+_ALIASES = [('pair --pc', 'pair --slicer-sync'),
+ ('pair --station', 'pair --weigh-station'),
+ ('station pair [--local]', 'weigh-station pair [--local]'),
+ ('station flash-panel', 'weigh-station flash-display'),
+ ('station pairing-state', 'weigh-station pairing-state'),
+ ('unpair', 'devices list'),
+ ('unpair <id>', 'devices forget <device>'),
+ ('cert', 'certificate'),
+ ('intake history', 'recent` (or `recent history`)'),
+ ('intake show`, `revise`, `edit`, `undo', 'recent show`, `revise`, `edit`, `undo'),
+ ('ensure-fields', 'spoolman fields'),
+ ('printer map --manual', 'printer map --by-loading'),
+ ('printer unpin', 'printer forget-certificate'),
+ ('library status`, `update`, `rollback`, `adopt`, `add', 'catalog status`, `update`, `rollback`, `adopt`, `add'),
+ ('profiles build`, `status`, `lines`, `set-parent`, `restore-deleted',
+  'presets build`, `status`, `lines`, `set-parent`, `restore-deleted'),
+ ('profiles apply-updates --dry-run', 'presets updates'),
+ ('profiles apply-updates', 'presets accept-updates'),
+ ('modules list`, `menu`, `apply`, `units', 'features list`, `menu`, `apply`, `units'),
+ ('modules enable <name>` / `disable <name>', 'features on <feature>` / `off <feature>'),
+ ('modules enable <name> --server ADDR', 'features on <feature> --hub ADDRESS'),
+ ('modules set server\\|station\\|all-in-one [--server ADDR]',
+  'features setup hub\\|weigh-station\\|hub-with-weigh-station [--hub ADDRESS]'),
+ ('reader tokens', 'tag-reader list'),
+ ('reader token [--name]', 'tag-reader new-token [--name]'),
+ ('reader revoke', 'tag-reader revoke'),
+ ('reader setup', 'tag-reader flash'),
+ ('remote issue', 'remote get-certificate'),
+ ('klipper add NAME HOST [--port]', 'printer add --klipper --name NAME --address HOST [--port]'),
+ ('klipper scan [--subnet]', 'printer scan [--subnet]'),
+ ('klipper detect ID', 'printer detect <printer>'),
+ ('klipper set ID --lane-data X', 'printer lane-data <printer> X'),
+ ('klipper api-key ID', 'printer api-key <printer>'),
+ ('klipper pack', 'klipper add-on'),
+ ('local-intake status`, `test', 'label-reader status`, `test'),
+ ('status --station-pairing` (hidden)', 'status --weigh-station-pairing` (hidden)')]
+
+def _top_help() -> str:
+    """06 3.1: the groups in the Hub page's order, what each command is for, and the switches every command takes."""
+    lines = ["filament-kit on this Hub. Commands marked (sudo) in their own help need sudo.",
+             "Usage: filament-kit <command> [options]    More: filament-kit <command> -h", ""]
+    for group, items in _HELP_GROUPS:
+        lines.append(group)
+        lines += [f"  {name:<16} {text}" for name, text in items]
+        lines.append("")
+    lines += ["Every command: -h  --json  -q/--quiet  -y/--yes  --color auto|always|never",
+              "               --plain  --no-progress"]
+    return "\n".join(lines) + "\n"
+
+
+def _markdown_table() -> str:
+    """`help --markdown`: the command table of 06 3.2 as the user guide holds it."""
+    rows = [("Command", "What it does", "Hub page place"), ("---", "---", "---"), *_COMMAND_TABLE]
+    return "\n".join("| " + " | ".join(r) + " |" for r in rows) + "\n"
+
+
+def _help(args, ap, sub) -> int:
+    """`help [<command> | aliases | --markdown]` (06 3.2)."""
+    if args.markdown:
+        output.emit({"markdown": _markdown_table()})
+        sys.stdout.write(_markdown_table())
+        return 0
+    if args.topic is None:
+        print(ap.format_help(), end="")
+        return 0
+    if args.topic == "aliases":
+        pairs = [(old.replace("`, `", ", "), new.replace("`, `", ", ")) for old, new in _ALIASES if "(hidden)" not in old]
+        output.emit({"aliases": [{"old": old, "new": new} for old, new in pairs]})
+        output.out("The old spellings keep working. Each does what the new one does.")
+        output.out()
+        for old, new in pairs:
+            output.out_lines(output.wrap(f"{old} {output.sym('arrow')} {new}", indent=4))
+        return 0
+    if args.topic not in sub.choices:
+        output.error(f'there is no command called "{args.topic}".', "see the commands with: filament-kit help")
+        return output.USAGE
+    print(sub.choices[args.topic].format_help(), end="")
+    return 0
+
+
+def _add_catalog(sub, name: str, *, alias: bool) -> None:
+    """`catalog` and its old spelling `library` (06 9.11, 4): the same subcommands; `token` is the new one's."""
+    lb = sub.add_parser(name, help="the Filament Catalog: status, update, roll back, add" if not alias
+                        else "the old spelling of catalog")
+    lsub = lb.add_subparsers(dest="library_cmd", required=True)
+    lsub.add_parser("status", help="the catalog version, its local additions and the last update check")
+    lu = lsub.add_parser("update", help="download or update the catalog (library.url)")
+    lu.add_argument("--scheduled", action="store_true", help="only if config library.schedule says it is due")
+    _add_yes(lsub.add_parser("rollback", help="go back to the catalog version before the last update"))
+    la = lsub.add_parser("adopt", help="keep the catalog an older program version bundled (used by the installer)")
+    la.add_argument("folder", help="the old library_data folder (index.json and library/)")
+    la = lsub.add_parser("add", help="add or replace your own entry from a JSON file ('-' reads stdin)")
+    la.add_argument("file")
+    if not alias:
+        lt = lsub.add_parser("token", help="set, replace or remove the token the catalog downloads with (root)")
+        lt.add_argument("--remove", action="store_true", help="remove it (asks first)")
+        _add_yes(lt, "answer yes to the question before removing the token")
 
 
 _invoked: list[str] = []      # the arguments of this run, for the Fix line of a command that needs root
@@ -5495,6 +6157,10 @@ class _Parser(argparse.ArgumentParser):
     def error(self, message: str):
         output.error(message, f"see what it takes with: {self.prog} -h")
         raise SystemExit(output.USAGE)
+
+    def format_help(self) -> str:
+        """The top-level help is the grouped text of 06 3.1 (the old spellings are not in it)."""
+        return _top_help() if getattr(self, "grouped_help", False) else super().format_help()
 
 
 def _add_recent(sub, name: str, help: str, *, alias: bool) -> None:
@@ -5655,6 +6321,7 @@ def _dispatch_recent(args) -> int:
 
 def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = _Parser(prog="filament-kit")
+    ap.grouped_help = True
     ap.add_argument("--color", choices=("auto", "always", "never"), default="auto",
                     help="colour on the terminal: always, never, or auto (default; NO_COLOR and TERM=dumb turn it off)")
     ap.add_argument("--plain", action="store_true",
@@ -5669,7 +6336,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                     help="standard output is one JSON document; nothing asks (a command that would needs --yes)")
     ap.add_argument("-q", "--quiet", action="store_true",
                     help="print only what the command exists to print: errors, lists and details asked for, answers")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub = ap.add_subparsers(dest="cmd", required=False)
     stat = sub.add_parser("status", help="check services, Spoolman, key, certificate")
     stat.add_argument("--station-pairing", help=argparse.SUPPRESS)  # passed by the wrapper, from its check as root
     pp = sub.add_parser("pair", help="show a QR code and code to pair a phone, then wait for it (--slicer-sync, "
@@ -5692,11 +6359,30 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     up = sub.add_parser("unpair", help="list or remove paired devices (the old spelling of devices and devices forget)")
     up.add_argument("device", nargs="?")
     _add_yes(up)
-    sub.add_parser("config", help="interactive settings menu")
-    sub.add_parser("cert", help="create the server certificate if missing")
+    cf = sub.add_parser("config", help="the settings menu; config show and config set read and change one setting")
+    cfsub = cf.add_subparsers(dest="config_cmd")
+    cfsub.add_parser("show", help="every setting in the menu's order; secrets as set or not set")
+    cfs = cfsub.add_parser("set", help="change one setting, checked as the menu checks it (root)")
+    cfs.add_argument("key", help="the setting's key, e.g. placement.pla_location")
+    cfs.add_argument("value", help="its new value")
+    sub.add_parser("certificate", help="make the Hub's certificate if missing; print its fingerprint")
+    sub.add_parser("cert", help="the old spelling of certificate")
     _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
     _add_recent(sub, "intake", "the old spelling of recent", alias=True)
-    sub.add_parser("ensure-fields", help="create the Spoolman extra fields")
+    sub.add_parser("ensure-fields", help="the old spelling of spoolman fields")
+    sm = sub.add_parser("spoolman", help="Spoolman: its address and the kit's extra fields")
+    smsub = sm.add_subparsers(dest="spoolman_cmd", required=True)
+    smsub.add_parser("fields", help="make the kit's extra fields in Spoolman")
+    sma = smsub.add_parser("address", help="show the Spoolman in use, or check an address and use it (root)")
+    sma.add_argument("url", nargs="?", help="the new address, e.g. http://spoolman.example:7912")
+    lg = sub.add_parser("logs", help="the end of a service's log (root)")
+    lg.add_argument("service", nargs="?", help="a service the switched-on features run (default: the Hub's)")
+    lg.add_argument("--lines", type=int, choices=(50, 100, 200), default=100, help="how many lines (default 100)")
+    sub.add_parser("add", help="where spools are added")
+    sub.add_parser("spool", help="where spools are opened, tagged and moved")
+    hp = sub.add_parser("help", help="help for a command; help aliases lists the old spellings; help --markdown the command table")
+    hp.add_argument("topic", nargs="?", help="a command, or aliases")
+    hp.add_argument("--markdown", action="store_true", help="the command table for the user guide")
     pr = sub.add_parser("printer", help="printers: list, show, test, add, change, map slots, reports, forget")
     psub = pr.add_subparsers(dest="printer_cmd", required=True)
     PRINTER = dict(metavar="printer", help="its name, serial or id (or the start of its name)")
@@ -5759,16 +6445,15 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     pf.add_argument("printer", **PRINTER)
     _add_yes(pf)
     psub.add_parser("menu", help="the Printers screen")
-    lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
-    lsub = lb.add_subparsers(dest="library_cmd", required=True)
-    lsub.add_parser("status", help="show the library version, local additions and the last update check")
-    lu = lsub.add_parser("update", help="download or update the library (library.url)")
-    lu.add_argument("--scheduled", action="store_true", help="only if config library.schedule says it is due")
-    _add_yes(lsub.add_parser("rollback", help="go back to the library version before the last update"))
-    la = lsub.add_parser("adopt", help="keep the library an older program version bundled (used by the installer)")
-    la.add_argument("folder", help="the old library_data folder (index.json and library/)")
-    la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
-    la.add_argument("file")
+    _add_catalog(sub, "catalog", alias=False)
+    _add_catalog(sub, "library", alias=True)
+    lr = sub.add_parser("label-reader", help="the Label Reader: its engines and their health; read photos to test")
+    lrsub = lr.add_subparsers(dest="lr_cmd", required=True)
+    lrsub.add_parser("status", help="the engine order and how each engine is doing")
+    lrt = lrsub.add_parser("test", help="read label photos and print the fields (nothing is added, no record is made)")
+    lrt.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
+    lrt.add_argument("--engine", choices=("cloud", "local"), default=None,
+                     help="read with this engine only (default: the engine order)")
     _add_presets(sub, "presets", alias=False)
     _add_presets(sub, "profiles", alias=True)
     _add_features(sub, "features", alias=False)
@@ -5797,6 +6482,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lit = lisub.add_parser("test", help="read photos with the local reader only and print the result (no Claude, "
                                         "no daily read used, nothing saved)")
     lit.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
+    lit.add_argument("--engine", choices=("cloud", "local"), default=None, help=argparse.SUPPRESS)
     _add_tag_reader(sub, "tag-reader", alias=False)
     _add_tag_reader(sub, "reader", alias=True)
     bk = sub.add_parser("backup", help="a whole-kit backup as one zip: make one, list them (root)")
@@ -5804,6 +6490,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     bkc = bksub.add_parser("create", help="write a backup zip (default: into /var/backups/filament-kit)")
     bkc.add_argument("--out", help="the folder to write it into")
     bksub.add_parser("list", help="the backups in /var/backups/filament-kit")
+    bkk = bksub.add_parser("keep", help="keep the nightly backups for this many days (1 to 365)")
+    bkk.add_argument("days", type=int)
     rs = sub.add_parser("restore", help="bring this machine to the state in a backup zip (root)")
     rs_what = rs.add_mutually_exclusive_group(required=True)
     rs_what.add_argument("zip", nargs="?", help="the backup zip")
@@ -5811,7 +6499,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_yes(rs, "ask nothing, the typed word included (no terminal: the installer, the setup page)")
     rm_ = sub.add_parser("remote", help="remote access: get the certificate, show the firewall rules")
     rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
-    _add_yes(rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)"))
+    _add_yes(rmsub.add_parser("get-certificate", aliases=["issue"],
+                              help="get the certificate with certbot (standalone on port 80) (root)"))
     rmsub.add_parser("firewall", help="print the firewall and port-forward rules to set up by hand")
     ud = sub.add_parser("update", help="install the latest signed release (root); --check only looks, --rollback "
                                        "goes back to the version before the last update")
@@ -5835,10 +6524,25 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     args = ap.parse_args(argv)
+    if args.cmd is None:                        # no command: the top-level help (06 3.1)
+        print(ap.format_help(), end="")
+        return 0
+    if args.cmd == "help":
+        return _help(args, ap, sub)
     if args.cmd == "intake":                    # the old spellings are the same commands (06 4)
         args.cmd = "recent"
     elif args.cmd == "unpair":
         args.cmd, args.devices_cmd = "devices", "forget" if args.device else "list"
+    elif args.cmd == "library":
+        args.cmd = "catalog"
+    elif args.cmd == "cert":
+        args.cmd = "certificate"
+    elif args.cmd == "ensure-fields":
+        args.cmd, args.spoolman_cmd = "spoolman", "fields"
+    elif args.cmd == "local-intake" and args.li_cmd in ("status", "test"):
+        args.cmd, args.lr_cmd = "label-reader", args.li_cmd
+    elif args.cmd == "remote" and args.remote_cmd == "issue":
+        args.remote_cmd = "get-certificate"
     else:
         _old_spelling(args)
     if output.json_mode():
@@ -5872,7 +6576,8 @@ def _old_spelling(args) -> None:
 def _sub_of(a) -> str | None:
     """The word after the command: `backup create` is `create`."""
     for name in ("station_cmd", "recent_cmd", "devices_cmd", "printer_cmd", "library_cmd", "presets_cmd", "features_cmd",
-                 "web_cmd", "li_cmd", "tag_reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd"):
+                 "web_cmd", "li_cmd", "lr_cmd", "tag_reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd",
+                 "config_cmd", "spoolman_cmd"):
         if hasattr(a, name):
             return getattr(a, name)
     return None
@@ -5882,7 +6587,7 @@ def _json_refusal(a) -> int | None:
     """06 6.8: the menus take no `--json`, and a command that needs typed answers has nothing to ask them on. The exit
     code (2) when this is one of them, after its Error and Fix."""
     c, sub = a.cmd, _sub_of(a)
-    if c == "config":
+    if c == "config" and sub is None:
         output.error("config is a menu.", "use filament-kit config show --json")
         return output.USAGE
     if c == "features" and sub == "menu":
@@ -5894,6 +6599,7 @@ def _json_refusal(a) -> int | None:
     asks = ((c == "weigh-station" and sub == "pair" and not a.local, "weigh-station pair"),
             (c == "tag-reader" and sub == "flash" and not a.pending, "tag-reader flash"),
             (c == "web" and sub == "passphrase", "web passphrase"),
+            (c == "catalog" and sub == "token" and not a.remove, "catalog token"),
             (c == "local-intake" and sub == "token" and not a.remove, "local-intake token"),
             (c == "printer" and sub in ("unpin", "forget-certificate") and not a.access_code, f"printer {sub}"),
             (c == "printer" and sub == "map" and a.manual, "printer map --manual"),
@@ -5907,13 +6613,15 @@ def _json_refusal(a) -> int | None:
 
 # `--quiet`: the commands whose standard output is only results (06 6.8 drops them). Every other command prints what it
 # exists to print there (a list, a detail, an answer, a link or token) or is a screen, and stays as it is.
-_RESULTS_ONLY = {("weigh-station", "flash-display"), ("backup", "create"), ("restore", None), ("recent", "edit"),
-                 ("recent", "undo"), ("devices", "forget"), ("ensure-fields", None), ("printer", "report"), ("printer", "unpin"),
-                 ("library", "update"), ("library", "rollback"), ("library", "adopt"), ("library", "add"),
+_RESULTS_ONLY = {("weigh-station", "flash-display"), ("backup", "create"), ("backup", "keep"), ("restore", None),
+                 ("recent", "edit"), ("recent", "undo"), ("devices", "forget"), ("spoolman", "fields"),
+                 ("spoolman", "address"), ("config", "set"), ("printer", "report"), ("printer", "unpin"),
+                 ("catalog", "update"), ("catalog", "rollback"), ("catalog", "adopt"), ("catalog", "add"),
+                 ("catalog", "token"),
                  ("presets", "build"), ("presets", "set-parent"), ("presets", "restore-deleted"),
                  ("presets", "accept-updates"), ("features", "apply"), ("features", "setup"), ("features", "on"),
                  ("features", "off"), ("web", "passphrase"), ("local-intake", "install"),
-                 ("local-intake", "remove"), ("local-intake", "token"), ("tag-reader", "revoke"), ("remote", "issue"),
+                 ("local-intake", "remove"), ("local-intake", "token"), ("tag-reader", "revoke"), ("remote", "get-certificate"),
                  ("uninstall", None), ("update", None), ("klipper", "add"), ("klipper", "set"), ("klipper", "api-key"),
                  ("printer", "forget-certificate"), ("printer", "add"), ("printer", "use"), ("printer", "dismiss"),
                  ("printer", "forget"), ("printer", "rename"), ("printer", "address"), ("printer", "access-code"),
@@ -5952,14 +6660,30 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "devices":
         return cmd_devices(yes=getattr(args, "yes", False), forget=args.device if args.devices_cmd == "forget" else None)
     if args.cmd == "config":
-        return cmd_config()
+        if args.config_cmd == "show":
+            return cmd_config_show()
+        return cmd_config_set(args.key, args.value) if args.config_cmd == "set" else cmd_config()
     if args.cmd == "recent":
         return _dispatch_recent(args)
-    if args.cmd == "cert":
+    if args.cmd == "certificate":
         return cmd_cert()
+    if args.cmd == "spoolman":
+        return cmd_ensure_fields() if args.spoolman_cmd == "fields" else cmd_spoolman_address(args.url)
+    if args.cmd == "logs":
+        return cmd_logs(args.service, args.lines)
+    if args.cmd == "add":
+        return cmd_add()
+    if args.cmd == "spool":
+        return cmd_spool()
+    if args.cmd == "label-reader":
+        if args.lr_cmd == "status":
+            return cmd_local_intake_status()
+        return cmd_local_intake_test(args.photos, getattr(args, "engine", None))
     if args.cmd == "printer":
         return _dispatch_printer(args, manager_factory or _default_manager)
-    if args.cmd == "library":
+    if args.cmd == "catalog":
+        if args.library_cmd == "token":
+            return cmd_library_token(args.remove, yes=args.yes)
         if args.library_cmd == "status":
             return cmd_library_status()
         if args.library_cmd == "update":
@@ -6000,16 +6724,17 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_reader({"list": "tokens", "new-token": "token"}.get(args.tag_reader_cmd, args.tag_reader_cmd),
                           getattr(args, "name", None), getattr(args, "ref", None), yes=getattr(args, "yes", False))
     if args.cmd == "backup":
-        return cmd_backup(args.backup_cmd, args.out if args.backup_cmd == "create" else None)
+        return cmd_backup(args.backup_cmd, args.out if args.backup_cmd == "create" else None,
+                          days=args.days if args.backup_cmd == "keep" else None)
     if args.cmd == "restore":
         return cmd_restore(args.zip, uploaded=args.uploaded, yes=args.yes)
     if args.cmd == "remote":
         from . import remote
         cfg = config.load()
-        if args.remote_cmd != "issue":
+        if args.remote_cmd != "get-certificate":
             return remote.firewall(cfg)
         if "remote" in modules.enabled(cfg) and (_no_systemd() or _is_root()):     # else `issue` says what is wrong
-            stop = _confirm("Get the certificate now? Port 80 on your router must reach this kit server while it runs. "
+            stop = _confirm("Get the certificate now? Port 80 on your router must reach this Hub while it runs. "
                             "filament-kit never changes your firewall or router.", "getting the certificate",
                             yes=args.yes)
             if stop is not None:

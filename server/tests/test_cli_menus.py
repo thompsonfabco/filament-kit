@@ -67,7 +67,7 @@ def test_a_group_screen_is_headed_by_its_place_and_ends_with_the_actions_that_ar
     assert "Settings > Backups and restore" in out and "Back up now: sudo filament-kit backup create" in out
     assert "Restore: sudo filament-kit restore <zip>" in out
     assert "Settings > Network and addresses" in out and "Firewall rules: filament-kit remote firewall" in out
-    assert "Settings > Filament Catalog" in out and "Update now: sudo filament-kit library update" in out
+    assert "Settings > Filament Catalog" in out and "Update now: sudo filament-kit catalog update" in out
 
 
 def test_a_staged_change_is_saved_with_s_and_the_group_shows_what_is_stored(capsys, monkeypatch):

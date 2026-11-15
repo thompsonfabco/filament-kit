@@ -659,12 +659,14 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
         out(f"error: {why}. Nothing was changed.")
         return 1
     s = m.summary()
-    out(f"Backup of {m.host or 'a kit'} made {m.created} by filament-kit {m.kit}: {s['files']} files"
-        + (", the Spoolman database" if m.spoolman else "") + f"; modules {', '.join(m.modules) or 'none'}.")
+    titles = [modules.MODULES[n].title for n in m.modules if n in modules.MODULES]
+    out(f"Backup of {m.host or 'a kit'} made {m.created} by filament-kit {m.kit}:\n{s['files']} files"
+        + (" and the Spoolman database" if m.spoolman else "") + f". Features: {', '.join(titles) or 'none'}.")
     other_host = bool(m.host) and m.host != host()
     if _has_data():
-        out("This replaces the spools, settings, printers and pairings on this machine. What is there now is kept as a "
-            f"backup in {backups_dir()} first.")
+        out("This replaces the spools, settings, printers and pairings on this Hub.\n"
+            "What is here now is saved as a backup first.")
+    out("The Hub restarts, and afterwards the setup code is the one from the backup.")
     if not yes:
         try:
             said = ask("Type restore to go on: ")
@@ -762,7 +764,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             shutil.rmtree(old, ignore_errors=True)
     if db_old is not None:
         db_old.unlink(missing_ok=True)
-    out("Restored. The setup code, trusted computers, printers and pairings are the ones in the backup.")
+    out("Restored. The Hub is back.")
     step("Checking that everything answers")
     run([WRAPPER, "status"])
     return 0

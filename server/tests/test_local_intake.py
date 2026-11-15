@@ -403,7 +403,8 @@ def test_cli_status_and_test(sm, spoolman_url, fake_reader, dead_url, capsys, tm
     data["read"] = lrf.reply(color_name="Charcoal")
     assert cli.main(["local-intake", "test", str(photo)]) == 0
     out = capsys.readouterr().out
-    assert "Read by the local reader (cpu tier, 93 % sure" in out and "SUNLU PLA+ Grey (PLA), colour Charcoal" in out
+    assert "Read by On this Hub (tier: cpu) in" in out and "Nothing was added." in out
+    assert "Brand         SUNLU" in out and "Colour        #" in out and "(Charcoal)" in out
     assert intake.reads_today(config.paths().state / "reads.json") == 0
     setup(dead_url, {"spoolman": True, "server": True, "local_intake": True})
     assert cli.main(["local-intake", "status"]) == 1

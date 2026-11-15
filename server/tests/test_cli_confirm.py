@@ -155,7 +155,7 @@ def _uninstall(m, rec, tmp_path):
     m.setattr(cli, "_kept_release", lambda: ("1.2.0", tmp_path / "1.2.0.tar.gz"))
     m.setattr(updates, "current_version", lambda: "1.2.0")
     m.setattr(release, "extract", lambda tarball, ver, work: root)
-    m.setattr(cli.subprocess, "call", lambda cmd, **k: rec("uninstall")() or 0)
+    m.setattr(cli, "_run_removal", lambda cmd, stdin_file: (rec("uninstall")() or 0, ""))
     return ["uninstall"], "Remove filament-kit from this machine? Its data stays unless you add --purge."
 
 
@@ -176,7 +176,7 @@ def _remote_issue(m, rec, tmp_path):
     from filament_kit import remote
     m.setattr(modules, "enabled", lambda cfg: {"remote"})
     m.setattr(remote, "issue", lambda cfg, **k: rec("issue")() or 0)
-    return ["remote", "issue"], "Get the certificate now? Port 80 on your router must reach this kit server while it runs."
+    return ["remote", "issue"], "Get the certificate now? Port 80 on your router must reach this Hub while it runs."
 
 
 def _local_intake_remove(m, rec, tmp_path):
