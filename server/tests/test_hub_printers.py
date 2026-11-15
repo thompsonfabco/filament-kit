@@ -363,3 +363,256 @@ return out;
     assert mapper.reports == 1, mapper.reports
     assert mapper.manual.starts == 1, mapper.manual.starts
 
+
+# ---------------------------------------------------------------- Printers add (S2.5): Add a printer, Find Klipper printers, Klipper add-on
+
+PRINTERS_PRELUDE = """
+  const until = async (what, f, ms = 10000) => {
+    for (let t = 0; t < ms && !f(); t += 100) await new Promise((r) => setTimeout(r, 100));
+    if (!f()) throw new Error("Printers: " + what + " :: lock=" + SW.lock.state);
+  };
+  const quiet = () => until("the page did not finish its first reads", () => !document.querySelector(".chip--lock .skeleton__line")
+    && !document.querySelector('[aria-busy="true"]:not(button)'));
+  const unlock = async () => { await quiet(); SW.setLock("unlocked", { code: %r }); };
+""" % CODE
+
+# the drawer opens from its address; Add with nothing typed shows the field's own error, then a refusal of the Hub shows at its field
+ADD_DRAWER = """(async () => {""" + PRINTERS_PRELUDE + """
+  await unlock();
+  await until("no Add a printer drawer", () => document.querySelector(".detail--drawer .printers-add"));
+  const drawer = document.querySelector(".detail--drawer"), add = drawer.querySelector(".detail__foot .btn--primary");
+  if (add.textContent.trim() !== "Add printer") throw new Error("Printers: the drawer's main action is " + add.textContent);
+  add.click();
+  await until("no error at an empty address", () => drawer.querySelector('.field[data-state="error"] .field__error:not([hidden])'));
+  const set = (name, v) => { const c = drawer.querySelector('[name="' + name + '"]'); c.value = v; c.dispatchEvent(new Event("input", { bubbles: true })); };
+  set("address", "192.0.2.77"); set("access_code", "12345678");
+  const real = window.fetch;
+  window.fetch = (u, o) => (String(u).endsWith("/api/printers") && o && o.method === "POST"
+    ? Promise.resolve(new Response(JSON.stringify({ error: "the printer at 192.0.2.77 names itself 01P00A000000009, not 00M00A000000001: check the address", field: "address" }),
+      { status: 400, headers: { "Content-Type": "application/json" } })) : real(u, o));
+  add.click();
+  await until("no refusal at the address field", () => /calls itself/.test(drawer.querySelector('[name="address"]').closest(".field").innerText));
+  if (document.activeElement !== drawer.querySelector('[name="address"]')) throw new Error("Printers: the refused field is not focused");
+  window.fetch = real;
+})()"""
+
+SCAN_AND_ADDON = """(async () => {""" + PRINTERS_PRELUDE + """
+  %s
+  await until("no Find Klipper printers card", () => document.querySelector(".printers-tools .btn"));
+  const tools = document.querySelector(".printers-tools");
+  %s
+})()"""
+
+FIND_RESULTS = SCAN_AND_ADDON % ("await unlock();", """
+  const scan = [...tools.querySelectorAll(".btn")].find((b) => b.textContent.trim() === "Scan");
+  scan.click();
+  await until("no scan result", () => /Found on 192[.]168[.]1[.]0[/]24/.test(tools.innerText));
+  if (![...tools.querySelectorAll(".btn")].some((b) => b.textContent.trim() === "Use this printer")) throw new Error("Printers: no Use this printer in the result");
+  await until("the found group did not take the new printer", () => document.querySelectorAll(".printers-found .coll__item").length >= 2);
+""")
+
+ADDON_COMMANDS = SCAN_AND_ADDON % ("await quiet();", """
+  [...tools.querySelectorAll(".btn")].find((b) => b.textContent.trim() === "Show the commands").click();
+  await until("no commands", () => tools.querySelector(".code__text") && tools.querySelector('.printers-addon [data-action="copy"]'));
+  if (!tools.querySelector(".code__text").textContent.includes("sha256sum")) throw new Error("Printers: the commands are not shown");
+""")
+
+
+@pytest.fixture
+def klipper_tools(monkeypatch, printers_hub):
+    from filament_kit import klipper_cli, setup_page
+    from filament_kit.bridge.klipper import discovery
+    from filament_kit.setup_console import printers_tab
+    monkeypatch.setattr(printers_tab, "SCAN_GAP", 0)
+    monkeypatch.setattr(setup_page, "CHECK_GAP", 0)      # the passes of one run read the commands a few seconds apart
+    monkeypatch.setattr(discovery, "scan", lambda net, port=7125: [("192.0.2.57", 7125), ("192.0.2.58", 7125)])
+    monkeypatch.setattr(discovery, "own_subnet", lambda: __import__("ipaddress").ip_network("192.168.1.0/24"))
+    monkeypatch.setattr(klipper_cli, "pack_info", lambda v, cfg: {"version": "0.4.3", "sha256": "ab", "url": "u", "lines": [
+        "curl -fsSLo fk-printer-pack.tar.gz https://example.invalid/releases/download/v0.4.3/fk-printer-pack.tar.gz",
+        'echo "abababababababababababababababababababababababababababababababab  fk-printer-pack.tar.gz" | sha256sum -c - && tar xzf fk-printer-pack.tar.gz']})
+    return printers_hub[0]
+
+
+def _printers_run(url: str, view: str, ready: str, wide: bool):
+    args = ["--url", url, "--views", view, "--settle", "500", "--ready", ready]
+    if wide:
+        args += ["--widths", "320", *(["--font-dir", os.environ["AUT5_FONT_DIR"]] if os.environ.get("AUT5_FONT_DIR") else ["--wide-font"])]
+    run = _run(*args)
+    assert run.returncode == 0, run.stdout + run.stderr      # no allow-list: nothing of these cards is allowed
+    assert json.loads(run.stdout)["views"] == (2 if wide else 4)
+
+
+@pytest.mark.parametrize("wide", [False, True])
+def test_the_add_a_printer_drawer_with_a_field_error_passes_the_audit(monkeypatch, printers_hub, wide):
+    """03 5.6: the drawer from its address, Locked then Unlocked by the test, an empty address refused at the field and a Hub refusal at its field."""
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "runnervm8axu0")
+    url, _ = printers_hub
+    _printers_run(url, "#printers/add", ADD_DRAWER, wide)
+
+
+@pytest.mark.parametrize("wide", [False, True])
+def test_find_klipper_printers_results_pass_the_audit(monkeypatch, klipper_tools, wide):
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "runnervm8axu0")
+    _printers_run(klipper_tools, "#printers/find", FIND_RESULTS, wide)
+
+
+@pytest.mark.parametrize("wide", [False, True])
+def test_the_klipper_add_on_commands_pass_the_audit_while_locked(monkeypatch, klipper_tools, wide):
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "runnervm8axu0")
+    _printers_run(klipper_tools, "#printers", ADDON_COMMANDS, wide)
+
+
+ADD_PRE = PRE + UNLOCK + """
+location.hash = "#printers";
+await until(() => rowOf("Workshop X1"), "the rows");
+const posts = [], real = window.fetch;
+let hold = null;                                    // a promise the Hub's answer to an add waits for
+window.fetch = (u, o) => {
+  const add = o && o.method === "POST" && /\\/setup\\/api\\/printers(\\/klipper)?$/.test(String(u));
+  if (add) posts.push([String(u).replace(/^.*\\/setup\\/api\\//, ""), JSON.parse(o.body)]);
+  return add && hold ? hold.then(() => real(u, o)) : real(u, o);
+};
+const open = () => $("dialog[open] .detail--drawer");
+const setv = (root, name, v) => { const c = $('[name="' + name + '"]', root); c.value = v; c.dispatchEvent(new Event("input", { bubbles: true })); };
+const addButton = () => [...document.querySelectorAll(".printers-head .page-head__actions .btn")].find((b) => text(b) === "Add a printer");
+const openAdd = async () => { addButton().click(); return until(open, "the Add drawer"); };
+const kind = (region, k) => { $('input[type=radio][value="' + k + '"]', region).click(); };
+const typed = () => [...document.querySelectorAll("input[type=password]")].filter((i) => i.value).length;
+const dup = () => { const ids = [...document.querySelectorAll("[id]")].map((e) => e.id), seen = new Set(); return ids.filter((i) => seen.size === seen.add(i).size); };
+const footBtn = (region, label) => [...region.querySelectorAll(".detail__foot .btn")].find((b) => text(b) === label);
+const said = (name) => text([...rowOf(name).querySelectorAll(".coll__row--note .result")].pop());
+const leftOver = () => ({ drawers: document.querySelectorAll(".detail--drawer, dialog.dialog--drawer").length, typed: typed(), dup: dup() });
+"""
+
+
+def test_adding_a_bambu_and_a_klipper_printer_sends_one_add_each_and_opens_the_new_row(printers_hub, tmp_path):
+    """03 5.6: the path and body of each add, a double press that sends one, the drawer gone with nothing typed left in the page, and the
+    new row open with its message; the second opening makes no id twice."""
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, ADD_PRE + """
+const out = {};
+let region = await openAdd();
+out.hashOpen = location.hash;
+out.bambuFields = ["address", "access_code", "serial"].map((n) => !!$('[name="' + n + '"]', region).offsetParent);
+setv(region, "address", " 192.0.2.77 "); setv(region, "access_code", "12345678"); setv(region, "name", "Fresh P1"); setv(region, "serial", "01P00A000000009");
+const add = footBtn(region, "Add printer");
+add.click(); add.click();
+await sleep(50); add.click();
+await until(() => !open() && rowOf("Fresh P1"), "the drawer to close and the new row");
+await sleep(300);
+const row = rowOf("Fresh P1");
+out.bambu = { posts: posts.slice(), expanded: row.querySelector(".coll__expand").getAttribute("aria-expanded"), said: said("Fresh P1"), hash: location.hash, left: leftOver() };
+posts.length = 0;
+region = await openAdd();
+out.second = dup();
+kind(region, "klipper");
+out.klipperFields = ["host", "port", "api_key"].map((n) => !!$('[name="' + n + '"]', region).offsetParent);
+out.bambuHidden = ["address", "access_code"].map((n) => !$('[name="' + n + '"]', region).offsetParent);
+setv(region, "host", "192.0.2.88"); setv(region, "name", "Fresh Klipper"); setv(region, "api_key", "k-secret");
+const go = footBtn(region, "Add printer");
+go.click(); go.click();
+await until(() => !open() && rowOf("Fresh Klipper"), "the drawer to close and the Klipper row");
+await sleep(300);
+out.klipper = { posts: posts.slice(), expanded: rowOf("Fresh Klipper").querySelector(".coll__expand").getAttribute("aria-expanded"), said: said("Fresh Klipper"), left: leftOver() };
+return out;
+""")
+    assert page["hashOpen"] == "#printers/add" and page["bambuFields"] == [True, True, True], page
+    assert page["bambu"]["posts"] == [["printers", {"address": "192.0.2.77", "access_code": "12345678", "name": "Fresh P1", "serial": "01P00A000000009", "code": CODE}]], page
+    assert page["bambu"]["expanded"] == "true" and page["bambu"]["said"].startswith(T("printers_added_connecting")), page
+    assert page["bambu"]["hash"] == "#printers/01P00A000000009", page
+    assert page["bambu"]["left"] == {"drawers": 0, "typed": 0, "dup": []}, page
+    assert page["second"] == [] and page["klipperFields"] == [True, True, True] and page["bambuHidden"] == [True, True], page
+    assert page["klipper"]["posts"] == [["printers/klipper", {"host": "192.0.2.88", "port": "7125", "name": "Fresh Klipper", "api_key": "k-secret", "code": CODE}]], page
+    assert page["klipper"]["expanded"] == "true" and page["klipper"]["said"].startswith(T("printers_added_connecting")), page
+    assert page["klipper"]["left"] == {"drawers": 0, "typed": 0, "dup": []}, page
+
+
+def test_cancel_with_typed_values_asks_first_and_the_busy_drawer_says_wait(printers_hub, tmp_path):
+    """03 5.6: Cancel with typed values asks to leave first (Stay keeps them; Leave sends nothing and leaves no secret in the page);
+    Cancel while the Hub answers an add warns and keeps the drawer."""
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, ADD_PRE + """
+const out = {};
+let region = await openAdd();
+setv(region, "address", "192.0.2.78"); setv(region, "access_code", "87654321");
+footBtn(region, "Cancel").click();
+const ask = await until(() => $("dialog[open]:not(.dialog--drawer)"), "the leave-first ask");
+out.ask = text(ask);
+$('[data-action="cancel"]', ask).click();
+await until(() => !$("dialog[open]:not(.dialog--drawer)"), "the ask to close");
+out.stay = { open: !!open(), address: $('[name="address"]', region).value, code: $('[name="access_code"]', region).value };
+footBtn(region, "Cancel").click();
+$('[data-action="confirm"]', await until(() => $("dialog[open]:not(.dialog--drawer)"), "the second ask")).click();
+await until(() => !open() && !$(".detail--drawer"), "the drawer to close");
+out.leave = { posts: posts.length, hash: location.hash, left: leftOver() };
+region = await openAdd();
+out.second = dup();
+setv(region, "address", "192.0.2.79"); setv(region, "access_code", "12345678"); setv(region, "serial", "01P00A000000010");
+let release; hold = new Promise((r) => { release = r; });
+footBtn(region, "Add printer").click();
+await until(() => footBtn(region, "Cancel") && $('.detail__foot [aria-busy="true"]', region), "the add to be sent");
+footBtn(region, "Cancel").click();
+await until(() => text($(".detail__foot .result", region)), "the warning");
+out.busy = { warning: text($(".detail__foot .result", region)), open: !!open(), asked: !!$("dialog[open]:not(.dialog--drawer)"), posts: posts.length };
+release();
+for (let i = 0; i < 300 && open(); i++) await sleep(100);
+out.end = { left: leftOver(), hash: location.hash, still: open() ? text(open()) : null };
+return out;
+""")
+    count = T("form_leave_first", count=2, group=T("printers_add"))
+    assert page["ask"].startswith(T("common_leave_title")) and T("form_leave_body", changes=count) in page["ask"], page
+    assert page["stay"] == {"open": True, "address": "192.0.2.78", "code": "87654321"}, page
+    assert page["leave"] == {"posts": 0, "hash": "#printers", "left": {"drawers": 0, "typed": 0, "dup": []}}, page
+    assert page["second"] == [], page
+    assert page["busy"]["warning"].startswith(T("printers_add_wait")), page      # the result line adds the time
+    assert (page["busy"]["open"], page["busy"]["asked"], page["busy"]["posts"]) == (True, False, 1), page
+    assert page["end"]["left"] == {"drawers": 0, "typed": 0, "dup": []}, page
+
+
+ADD_LOOKS = PRE + """
+document.documentElement.setAttribute("data-look", "__LOOK__");
+""" + UNLOCK + """
+location.hash = "#printers";
+await until(() => rowOf("Workshop X1"), "the rows");
+const open = () => $("dialog[open] .detail--drawer");
+const out = { profile: SW.profile().detail, opened: [] };
+for (const how of ["button", "address"]) {
+  if (how === "button") [...document.querySelectorAll(".printers-head .page-head__actions .btn")].find((b) => text(b) === "Add a printer").click();
+  else location.hash = "#printers/add";
+  const region = await until(open, "the Add drawer by " + how);
+  out.opened.push({ how, title: text($(".detail__title", region)), visible: !!region.getClientRects().length, hash: location.hash, form: !!$(".printers-add", region) });
+  $(".detail__close", region).click();
+  await until(() => !open() && !$(".detail--drawer"), "the Add drawer to close");
+  out.opened[out.opened.length - 1].after = location.hash;
+  out.opened[out.opened.length - 1].left = document.querySelectorAll(".detail--drawer, dialog.dialog--drawer").length;
+}
+return out;
+"""
+
+
+@pytest.mark.parametrize("look", ["console", "workbench", "palette", "panes"])
+def test_the_add_a_printer_drawer_opens_and_closes_in_every_look(printers_hub, tmp_path, look):
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, ADD_LOOKS.replace("__LOOK__", look))
+    assert [o["how"] for o in page["opened"]] == ["button", "address"], page
+    for o in page["opened"]:
+        assert o["title"] == T("printers_add") and o["visible"] is True and o["form"] is True and o["hash"] == "#printers/add", page
+        assert o["after"] == "#printers" and o["left"] == 0, page
+
+
+def test_the_klipper_add_on_caption_and_copy_sit_above_the_block_and_inside_the_page_at_320_px(klipper_tools, tmp_path):
+    """The caption and Copy are not in the scrolling block: both are fully inside the page's width at 320 px."""
+    page = _drive(klipper_tools, tmp_path, PRE + UNLOCK + """
+location.hash = "#printers";
+await until(() => $(".printers-tools .btn"), "the cards");
+[...document.querySelectorAll(".printers-tools .btn")].find((b) => text(b) === "Show the commands").click();
+const addon = await until(() => $(".printers-addon .code__text") && $(".printers-addon"), "the commands");
+const box = (e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; };
+const block = $(".printers-addon .code");
+return { width: document.documentElement.clientWidth, caption: box($(".code__caption", addon)), copy: box($('[data-action="copy"]', addon)),
+  captionInBlock: block.contains($(".code__caption", addon)), copyInBlock: block.contains($('[data-action="copy"]', addon)),
+  scroll: document.documentElement.scrollWidth };
+""", width=320)
+    assert page["captionInBlock"] is False and page["copyInBlock"] is False, page
+    assert page["caption"][0] >= 0 and page["copy"][0] >= 0 and page["caption"][1] <= page["width"] and page["copy"][1] <= page["width"], page
+    assert page["scroll"] <= page["width"], page

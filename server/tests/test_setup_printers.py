@@ -519,8 +519,9 @@ def test_the_script_keeps_the_page_rules():
 
 def test_the_add_form_asks_a_klipper_printer_for_no_access_code():
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    klipper = text.split('if (family.value === "klipper") {')[1].split("} else {")[0]
-    assert "Access Code" not in klipper and "access_code" not in klipper and "API key (optional)" in klipper
+    klipper = text.split('family === "klipper" ? ["printers/klipper", {')[1].split("}]")[0]
+    assert "access_code" not in klipper and "api_key" in klipper
+    assert "klipperOnly = [f.host, f.port, f.api_key]" in text and "access_code" not in text.split("klipperOnly = [")[1].split("]")[0]
     acts = text.split("function actionsOf(p, box)")[1].split("\n}\n")[0]
     klipper_acts = acts.split("else if (klip) {")[1].split("} else {")[0]
     assert "accessCode" not in klipper_acts and "access_code" not in klipper_acts
@@ -547,8 +548,8 @@ def test_a_running_mapping_is_followed_again_after_a_reload(mapped):
 
 def test_a_family_with_its_module_off_is_not_rendered():
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    assert '...(P.klipper ? [h("option"' in text and '...(P.bambu ? [h("option"' in text
-    assert "P.klipper ? scanCard : null" in text and "P.klipper ? packCard : null" in text
+    assert "const type = P.bambu && P.klipper ? SW.segmented(" in text      # the type choice only with both on
+    assert "S.printers.klipper ? E(\"div\", \"printers-tools\", scanBlock(), addonBlock()) : null" in text
 
 
 def test_map_by_loading_filament_on_a_klipper_printer(env, helper, manager, kl):
@@ -714,3 +715,23 @@ def test_every_action_of_a_printer_row_is_still_in_the_script():
         assert f'SW.t("{key}")' in acts or f'"{key}"' in acts, key
     assert 'api(printerPath(p, "lane_data")' in text and "printersTab" in text and "usePrinter" in text and "forgetPrinter(p, box, \"dismiss\")" in text
 
+
+
+def test_every_action_of_the_add_scan_and_add_on_cards_is_still_in_the_script():
+    """S2.5 kept what the old cards did (03 14.4): add (Bambu Lab and Klipper), scan with its subnet, Use this printer, the
+    commands with Copy, the unavailable text, and the old cards are gone."""
+    text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
+    for call in ('api(path, { ...body, code: theCode() })', 'api("printers/scan", { subnet: typed, code: theCode() })', 'api("printers/pack", {})',
+                 '"printers/klipper"', 'usePrinter(p, boxFor("printer:" + p.serial))', 'action: "copy"', "printers_result_addon_unavailable",
+                 "printers_result_scan_soon", "printers_result_scan_running", "printers_result_scan_refused", "printers_add_error_itself",
+                 "printers_add_error_serial", "openAddDrawer", "#printers/add"):
+        assert call in text, call
+    for gone in ("function addCard", "function scanCard", "function packCard", 'h("input"', 'h("select"', "secret("):
+        assert gone not in text, gone
+
+
+def test_the_scan_refusals_name_the_subnet_field(both, scanned):
+    c = client(both)
+    for subnet in ("8.8.8.0/24", "10.0.0.0/16", "nope"):
+        r = post(c, "printers/scan", {"subnet": subnet})
+        assert r.status_code == 400 and r.json()["field"] == "subnet", subnet
