@@ -314,7 +314,8 @@ def bridge_slots(kit, printer: str | None = None) -> dict:
                                      "in the slot (null: the printer does not say)"}
 
 
-def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str | None = None) -> dict:
+def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str | None = None, *,
+                    ai_note: bool = False) -> dict:
     p = pick_printer(kit, printer)
     try:
         labels = [sl["label"] for sl in status_slots(kit.get(printer_path(p["id"])).get("status") or {})]
@@ -325,7 +326,7 @@ def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str |
                    {"spool_id": int(spool_id), "dry_run": bool(dry_run)})
     res = dict(res) if isinstance(res, dict) else {"result": res}
     res.update(printer=p["id"], slot=label)
-    if dry_run:
+    if dry_run and ai_note:       # the MCP tool's instruction to the AI client, not text for a person
         res["note"] = "dry run: nothing sent. Show the user, then call again with dry_run=false."
     return res
 

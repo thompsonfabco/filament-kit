@@ -125,12 +125,14 @@ class Tools:
         return {"matches": len(res), "filaments": rows, "truncated": paging["has_more"], **paging}
 
     def add_spools(self, items: list[dict], dry_run: bool = True, link_tag: str | None = None, *,
-                   new_filaments_only_lines: bool = False, with_saved: bool = False) -> dict:
+                   new_filaments_only_lines: bool = False, with_saved: bool = False, ai_note: bool = False) -> dict:
         """Add spools (vendor + name reuse an existing filament). `link_tag` (the web app): the tag a label read
         saw; it is linked to the one opened spool only while it is still the readers' last tap.
         `new_filaments_only_lines` (the MCP path, Ruling AC): `line` / `bambu_parent` are dropped from items that
         match an existing filament, so a routine add never moves that filament to another preset line (the web
-        app sends the label read's own line, which is the filament's, and keeps them)."""
+        app sends the label read's own line, which is the filament's, and keeps them).
+        `ai_note` (the MCP path): a dry run ends with the instruction to call again with dry_run=false, which is
+        text for an AI client, so the web app's preview leaves it out."""
         notes: list[str] = []
         if new_filaments_only_lines and isinstance(items, list):
             items = self._drop_lines_of_existing(items)
@@ -144,7 +146,7 @@ class Tools:
                              "Tap it again and link it on Open spool.")
                 uid = None
         r = inventory.add_and_link(self.sm, items, self._rules(), bool(dry_run), uid)
-        if r.dry:
+        if r.dry and ai_note:
             notes.append("dry run: nothing written. Show the user, then call again with dry_run=false.")
         out = {"output": "\n".join(r.lines + notes), "exit_code": 0, "spool_ids": r.spool_ids, "dry": r.dry,
                "items": r.items}
@@ -186,8 +188,9 @@ class Tools:
 
     def open_spool(self, spool: int | None = None, filament: int | None = None, location: str | None = None,
                    gross: float | None = None, remaining: float | None = None, humidity: float | None = None,
-                   force: bool = False, dry_run: bool = True) -> dict:
-        """Link the readers' last tap to a spool (or a filament's lowest-id sealed spool) and mark it opened."""
+                   force: bool = False, dry_run: bool = True, ai_note: bool = False) -> dict:
+        """Link the readers' last tap to a spool (or a filament's lowest-id sealed spool) and mark it opened.
+        `ai_note`: the MCP path adds the call-again instruction to a dry run (see add_spools)."""
         if (spool is None) == (filament is None):
             raise Problem("give exactly one of spool or filament")
         t = tagsources.latest(self.cfg())
@@ -212,7 +215,7 @@ class Tools:
                                    humidity=_num(humidity), remaining=_num(remaining))
         head = (f"{'would link' if dry_run else 'linked'} tag {uid} ({ago(t['age_seconds'])} on the {t['reader']} "
                 f"reader) to {inventory.describe(out)}")
-        if dry_run:
+        if dry_run and ai_note:
             notes.append("dry run: nothing changed. Show the user, then call again with dry_run=false.")
         return {"output": "\n".join([head, *notes]), "exit_code": 0, "spool": _spool_view(out), "dry": bool(dry_run)}
 
@@ -290,8 +293,9 @@ class Tools:
     def printer_slots(self, printer: str | None = None) -> dict:
         return slots.bridge_slots(self.kit_bridge(), printer)
 
-    def printer_set_slot(self, spool: int, slot: str, dry_run: bool = True, printer: str | None = None) -> dict:
-        return slots.bridge_set_slot(self.kit_bridge(), spool, slot, dry_run, printer)
+    def printer_set_slot(self, spool: int, slot: str, dry_run: bool = True, printer: str | None = None,
+                         ai_note: bool = False) -> dict:
+        return slots.bridge_set_slot(self.kit_bridge(), spool, slot, dry_run, printer, ai_note=ai_note)
 
 
 def _uid(v) -> str | None:
@@ -409,7 +413,7 @@ def register(mcp, tools: Tools) -> None:
         Run with dry_run=true, show the user, then dry_run=false. New filaments then join a preset line
         (preset_status)."""
         return await call(tools.add_spools, [item_dict(i) for i in items], dry_run, None,
-                          new_filaments_only_lines=True)
+                          new_filaments_only_lines=True, ai_note=True)
 
     @mcp.tool(annotations=read)
     async def tag_state() -> str:
@@ -429,7 +433,7 @@ def register(mcp, tools: Tools) -> None:
         """Link the last tapped NFC tag to a spool and mark it opened (first_used, location, weight, humidity;
         removes SEALED). Give spool or filament. With no weight it stays full; with no location it goes where the
         server's placement rules say (see the instructions)."""
-        return await call(tools.open_spool, spool, filament, location, gross, remaining, humidity, force, dry_run)
+        return await call(tools.open_spool, spool, filament, location, gross, remaining, humidity, force, dry_run, ai_note=True)
 
     @mcp.tool(annotations=read)
     async def preset_status() -> str:
@@ -485,7 +489,7 @@ def register(mcp, tools: Tools) -> None:
                    slot: Annotated[str, Field(description=SLOT_ARG)], dry_run: bool = True,
                    printer: Annotated[str | None, Field(description="printer id or name, when several are set up")] = None
                    ) -> str:
-        return await call(tools.printer_set_slot, spool, slot, dry_run, printer)
+        return await call(tools.printer_set_slot, spool, slot, dry_run, printer, ai_note=True)
 
     mcp.tool(name="printer_slots", description=slots_doc, annotations=read)(_slots)
     mcp.tool(name="printer_set_slot", description=set_doc, annotations=write)(_set)

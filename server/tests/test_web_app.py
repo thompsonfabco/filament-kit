@@ -421,6 +421,7 @@ def test_read_add_link_open_flow(app, env, sm, fake):
         r = c.post("/intake/api/add", json={"items": items, "dry_run": True, "link_tag": UID}, **post)
         assert r.status_code == 200, r.text
         assert r.json()["spool_ids"] == [] and f"would link tag {UID}" in r.json()["output"]
+        assert "call again" not in r.json()["output"]       # that sentence is for an MCP client, not the page
         assert sm.get("spool") == []
         # add + link by the new spool's id
         r = c.post("/intake/api/add", json={"items": items, "dry_run": False, "link_tag": UID}, **post)
@@ -441,6 +442,7 @@ def test_read_add_link_open_flow(app, env, sm, fake):
         r = c.post("/intake/api/open", json={"spool": sid2, "gross": "1100", "location": "", "humidity": "41",
                                              "dry_run": True}, **post)
         assert r.status_code == 200 and tags.stored(sm.get(f"spool/{sid2}")) is None
+        assert "call again" not in r.json()["output"] and r.json()["dry"] is True
         r = c.post("/intake/api/open", json={"spool": sid2, "gross": "1100", "location": "", "humidity": "41",
                                              "dry_run": False}, **post)
         assert r.status_code == 200, r.text
