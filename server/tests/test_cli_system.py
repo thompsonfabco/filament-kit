@@ -87,7 +87,7 @@ def test_config_set_saves_one_setting_checked_as_the_menu_checks_it(capsys):
 
 
 def test_config_set_takes_the_key_of_the_design_for_the_backup_days(capsys):
-    assert run(capsys, ["config", "set", "backups.keep_days", "20"])[:2] == (0, "Saved: Keep nightly backups for is 20.\n")
+    assert run(capsys, ["config", "set", "backups.keep_days", "20"])[:2] == (0, "Saved: Nightly backups are kept for 20 days.\n")
     assert config.load()["backup"]["keep_days"] == 20
 
 
@@ -482,7 +482,7 @@ def test_logs_takes_a_service_by_its_name_and_the_lines(capsys, monkeypatch):
 def test_logs_with_no_match_lists_the_services(capsys, monkeypatch):
     _units(monkeypatch)
     rc, out, err = run(capsys, ["logs", "nosuch"])
-    assert rc == 2 and '"nosuch" is not one of the services' in err
+    assert rc == 2 and '"nosuch" is not one of the services the switched-on features run.' in words(err)
     assert "name one of: filament-kit-web, filament-kit." in words(err)
 
 
@@ -571,12 +571,32 @@ def _design_commands() -> list[str]:
     return found
 
 
+# The three rows this program words otherwise until their steps: the product name (the rename steps) and pair --no-wait.
+_RENAME_STEPS = {
+    r"| `pair [--slicer-sync \| --weigh-station] [--text]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |":
+    r"| `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |",
+    "| `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |":
+    "| `spoolman fields` | Make the kit's extra fields in Spoolman | Overview, Make the fields |",
+    "| `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |":
+    "| `uninstall [--purge]` | Remove filament-kit (asks) | Updates, footer line |"}
+
+
+def _design_rows() -> list[str]:
+    text = (ROOT / "docs" / "design" / "06-command-line.md").read_text(encoding="utf-8")
+    table = text[text.index("### 3.2 Every command"):text.index("## 4. Old and new spellings")]
+    return [ln.strip() for ln in table.splitlines()
+            if re.match(r"\| `", ln) and not ln[3:].startswith(NOT_HERE)]
+
+
 def test_help_markdown_lists_every_command_of_the_design(capsys):
     rc, md, _ = run(capsys, ["help", "--markdown"])
     wanted = [c for c in _design_commands() if not c.startswith(NOT_HERE)]
     assert rc == 0 and len(wanted) > 70
+    rows = md.splitlines()
     for command in wanted:
         assert f"| `{command}" in md, command
+    for row in _design_rows():                      # every row whole: the command, what it does, the Hub page place
+        assert _RENAME_STEPS.get(row, row) in rows, row
     assert md.splitlines()[:2] == ["| Command | What it does | Hub page place |", "| --- | --- | --- |"]
     assert not any(f"| `{c}" in md for c in NOT_HERE)
 
@@ -611,3 +631,158 @@ def test_aut9_the_new_commands_hold_80_columns_no_escape_ascii_and_json(argv, ca
     assert plain.isascii(), [c for c in plain if not c.isascii()]
     rc, js, _ = run(capsys, [*argv, "--json"])
     assert isinstance(json.loads(js), dict)
+
+
+# ---------- the rework of S5.8 (brief 69) ----------
+
+REAL_AUDIT = cli._hub_audit
+
+
+class _Journal:
+    """Stands in for the syslog handler on /dev/log: keeps the lines the command writes."""
+    made: list = []
+
+    def __init__(self, address=None, **kw):
+        import logging
+        self.level, self.lines, self.filters = logging.NOTSET, [], []
+        _Journal.made.append(self)
+
+    def setFormatter(self, fmt):
+        self.fmt = fmt
+
+    def handle(self, record):
+        self.lines.append(self.fmt.format(record))
+
+    def acquire(self):
+        pass
+
+    def release(self):
+        pass
+
+
+@pytest.fixture
+def audit(monkeypatch):
+    """The real `_hub_audit` (the autouse fixture stubs it) with the journal handler replaced; returns the lines written."""
+    import logging
+    import logging.handlers
+    _Journal.made = []
+    monkeypatch.setattr(cli, "_hub_audit", REAL_AUDIT)
+    monkeypatch.setattr(cli, "_journal_address", lambda: "/dev/log")
+    monkeypatch.setattr(logging.handlers, "SysLogHandler", _Journal)
+    logging.getLogger("filament_kit").handlers[:] = []
+    return lambda: [ln for h in _Journal.made for ln in h.lines]
+
+
+def _heard(lines, what):
+    return [ln for ln in lines if f"setup: {what} from " in ln]
+
+
+def test_config_set_writes_the_hubs_audit_line_and_an_unchanged_value_none(capsys, audit):
+    run(capsys, ["config", "set", "placement.pla_location", "Shelf B"])
+    assert len(_heard(audit(), "setting placement.pla_location changed")) == 1
+    run(capsys, ["config", "set", "placement.pla_location", "Shelf B"])
+    assert len(audit()) == 1
+
+
+def test_spoolman_address_writes_the_hubs_audit_line(capsys, monkeypatch, audit):
+    modules_on("server")
+    monkeypatch.setattr(cli, "Spoolman", _Spoolman)
+    monkeypatch.setattr(cli, "_run_apply", lambda **k: 0)
+    run(capsys, ["spoolman", "address", "http://spoolman.example:7912"])
+    assert len(_heard(audit(), "Spoolman address changed")) == 1
+
+
+def test_catalog_token_writes_the_hubs_audit_lines_set_replaced_and_removed(capsys, monkeypatch, audit):
+    monkeypatch.setattr(secret_input, "ask", lambda prompt="": "ghp_abc123")
+    assert run(capsys, ["catalog", "token"])[0] == 0
+    assert run(capsys, ["catalog", "token"])[0] == 0
+    assert run(capsys, ["catalog", "token", "--remove", "--yes"])[0] == 0
+    assert run(capsys, ["catalog", "token", "--remove", "--yes"])[0] == 0           # none left: nothing to say
+    lines = audit()
+    assert len(lines) == 3
+    for line, what in zip(lines, ("library token set", "library token replaced", "library token removed")):
+        assert _heard([line], what), line
+
+
+def test_catalog_token_remove_says_so_when_none_was_set(capsys):
+    rc, out, _ = run(capsys, ["catalog", "token", "--remove", "--yes"])
+    assert (rc, out) == (0, "There was no Catalog token to remove.\n")
+
+
+def test_config_show_json_is_the_hubs_general_values(capsys):
+    from filament_kit.setup_console import general_tab
+    modules_on("spoolman", "server")                         # the menu hides the reader and voice rows; the Hub's values stay
+    cfg = config.load()
+    cfg["appearance"] = {"theme": "no-such-theme"}
+    config.save(cfg)
+    got = json.loads(run(capsys, ["config", "show", "--json"])[1])["values"]
+    hub = general_tab._view()["values"]
+    assert hub["appearance.theme"] == "console" and got == {**got, **hub}
+    for key in ("model", "reads_per_day", "intake.reader", "local_intake.url", "local_intake.tier", "station.tts",
+                "web.printer_changes"):
+        assert key in got, key
+    assert got["intake.history_keep"] is None and "backup.keep_days" in got
+
+
+def test_config_show_still_prints_the_number_of_records_the_hub_keeps(capsys):
+    modules_on("spoolman", "server", "ai_intake")
+    assert re.search(r"^  Records kept +\d+$", run(capsys, ["config", "show"])[1], re.M)
+
+
+def test_the_old_local_intake_test_reads_with_the_local_reader_only(capsys, monkeypatch, tmp_path):
+    modules_on("spoolman", "server", "local_intake", "ai_intake")
+    photo = tmp_path / "a.jpg"
+    photo.write_bytes(b"x")
+    seen = []
+    monkeypatch.setattr(intake, "check_photos", lambda photos: [b"x"])
+    monkeypatch.setattr(intake, "_call", lambda sm, images, hint, tag, client, *, readers, charge: seen.append(readers) or _read())
+    assert run(capsys, ["local-intake", "test", str(photo)])[0] == 0
+    assert run(capsys, ["label-reader", "test", str(photo)])[0] == 0
+    assert seen == [["local"], ["local", "cloud"]]
+
+
+def test_the_old_local_intake_test_help_still_says_no_claude(capsys):
+    assert "no Claude" in words(run(capsys, ["local-intake", "-h"])[1])
+
+
+def test_quiet_spoolman_address_without_an_address_still_shows_the_one_in_use(capsys):
+    rc, out, _ = run(capsys, ["--quiet", "spoolman", "address"])
+    assert rc == 0 and out == f"Spoolman in use: {config.load()['spoolman_url']}.\n"
+
+
+def test_help_under_json_is_ok_and_the_help_text(capsys):
+    plain = run(capsys, ["help"])[1]
+    for argv in (["help", "--json"], ["--json"], ["help", "catalog", "--json"]):
+        rc, out, _ = run(capsys, argv)
+        got = json.loads(out)
+        assert rc == 0 and set(got) == {"ok", "help"} and got["ok"] is True, argv
+    assert json.loads(run(capsys, ["help", "--json"])[1])["help"] == plain
+    assert json.loads(run(capsys, ["help", "catalog", "--json"])[1])["help"].startswith("usage: filament-kit catalog")
+
+
+def test_config_set_the_weigh_station_address_with_the_feature_off_is_refused(capsys, monkeypatch):
+    modules_on("spoolman", "server")
+    monkeypatch.setattr(cli, "_run_apply", lambda **k: pytest.fail("no apply"))
+    before = config.load()
+    rc, out, err = run(capsys, ["config", "set", "station.url", "http://station.example:7913"])
+    assert rc == 1 and 'the "Weigh Station" Feature is off.' in err and "features on weigh-station" in words(err)
+    assert config.load() == before
+
+
+def test_spoolman_address_a_save_error_is_an_error_line_not_a_traceback(capsys, monkeypatch):
+    modules_on("server")
+    monkeypatch.setattr(cli, "Spoolman", _Spoolman)
+    monkeypatch.setattr(cli, "_run_apply", lambda **k: 0)
+
+    def refuse(cfg):
+        raise PermissionError("read-only")
+    monkeypatch.setattr(config, "save", refuse)
+    rc, out, err = run(capsys, ["spoolman", "address", "http://spoolman.example:7912"])
+    assert rc == 1 and err.startswith("Error: nothing was changed: read-only.")
+
+
+def test_logs_with_no_service_of_the_hub_running_says_it_in_one_sentence(capsys, monkeypatch):
+    monkeypatch.setattr(setup_helper, "journal_units", lambda cfg: ["filament-kit-web.service"])
+    rc, out, err = run(capsys, ["logs"])
+    assert rc == 2 and err.startswith("Error: the Hub's service does not run here.\n")
+    assert "run here the" not in err

@@ -1428,7 +1428,10 @@ def cmd_config_show() -> int:
     menu = _ConfigMenu(cfg, None)
     groups = _menu_items(cfg)
     label_width = max(len(it.label) for _, items in groups for it in items)
-    doc, lines = {"values": {}, "secrets": {}, "groups": []}, []
+    from .setup_console import general_tab
+    # the Hub's own values (GENERAL's keys, null where nothing is stored, the theme as config.look reads it), then the
+    # menu's keys the Hub keeps elsewhere (backups, addresses)
+    doc, lines = {"values": dict(general_tab._view()["values"]), "secrets": {}, "groups": []}, []
     for title, items in groups:
         lines.append(output.paint(title, "bold", sys.stdout))
         rows = []
@@ -1438,12 +1441,12 @@ def cmd_config_show() -> int:
                 doc["secrets"][it.key] = {"set": is_set}
                 shown = "set" if is_set else "not set"
             else:
-                value = menu.stored(it)
+                value = doc["values"].setdefault(it.key, menu.stored(it))
+                text = value
                 if it.id == "keep" and value is None:       # the number the Hub keeps when none is set
                     from . import intake_history
-                    value = intake_history.keep(cfg)
-                doc["values"][it.key] = value
-                shown = (menu.show(it, value).split(" (")[0] if it.kind == "choice" else menu.show(it, value)) or "not set"
+                    text = intake_history.keep(cfg)
+                shown = (menu.show(it, text).split(" (")[0] if it.kind == "choice" else menu.show(it, text)) or "not set"
             rows.append({"label": it.label, "key": it.key, "value": {"set": is_set} if it.kind == "secret" else value})
             gap = " " * (label_width - len(it.label) + 2)
             lines += output.wrap(f"{it.label}{gap}{shown}", indent=2 + label_width + 2, first=2)
@@ -1502,8 +1505,12 @@ def cmd_config_set(key: str, raw: str) -> int:
     except ValueError as e:
         output.error(str(e))
         return output.USAGE
+    if item.id == "station" and "station" not in modules.enabled(config.load()):
+        output.error('the "Weigh Station" Feature is off.', "turn it on first:", cmd="sudo filament-kit features on weigh-station")
+        return output.FAILED
     session = _ConfigMenu(config.load(), None)
-    sentence = f"{item.label} is {session.show(item, value).split(' (')[0] if item.kind == 'choice' else session.show(item, value)}."
+    shown = session.show(item, value).split(' (')[0] if item.kind == 'choice' else session.show(item, value)
+    sentence = f"Nightly backups are kept for {shown} days." if item.id == "days" else f"{item.label} is {shown}."
     if value == session.stored(item):
         output.emit({"ok": True, "key": item.key, "changed": False})
         output.result(f"Unchanged: {sentence}")
@@ -1519,6 +1526,7 @@ def cmd_config_set(key: str, raw: str) -> int:
     except (GroupMissing, ValueError, library.LibraryError, OSError) as e:
         output.error(f"nothing was saved: {str(e).rstrip('.')}.")
         return 1
+    _hub_audit(f"setting {item.key} changed")
     output.emit({"ok": True, "key": item.key, "changed": True, "restarts": item.restarts,
                  "applies": item.key in _APPLY_KEYS})
     output.result(f"Saved: {sentence}")
@@ -1551,8 +1559,8 @@ def cmd_logs(service: str | None, lines: int = 100) -> int:
         hits = hits or [u for u in units if u.lower().startswith(word)]
         unit = hits[0] if len(hits) == 1 else None
     if unit is None:
-        which = f'"{service}" is not one of the services' if service else "the Hub's service does not run here"
-        output.error(f"{which} the switched-on features run.",
+        which = f'"{service}" is not one of the services the switched-on features run.' if service             else "the Hub's service does not run here."
+        output.error(which,
                      "name one of: " + (", ".join(u.removesuffix(".service") for u in units) or "none is running here")
                      + ".")
         return output.USAGE
@@ -2692,7 +2700,12 @@ def cmd_spoolman_address(url: str | None) -> int:
     if err:
         output.error(f"nothing was changed: {err.rstrip('.')}.")
         return output.FAILED
-    config.save(new)
+    try:
+        config.save(new)
+    except (GroupMissing, ValueError, library.LibraryError, OSError) as e:
+        output.error(f"nothing was changed: {str(e).rstrip('.')}.")
+        return output.FAILED
+    _hub_audit("Spoolman address changed")
     output.emit({"ok": True, "url": value})
     output.result(f"Saved. The kit now uses the Spoolman at {value}.")
     return _run_apply(pairing=False)
@@ -4095,11 +4108,15 @@ def cmd_library_token(remove: bool, yes: bool = False) -> int:
         if stop is not None:
             return stop
         try:
-            library.remove_token()
+            removed = library.remove_token()
         except (OSError, library.LibraryError) as e:
             _err_line(f"the token was not removed: {e}")
             return 1
         output.emit({"ok": True, "token": {"set": False}})
+        if not removed:
+            output.result("There was no Catalog token to remove.")
+            return 0
+        _hub_audit("library token removed")
         output.result("Removed the Catalog token.")
         return 0
     if output.json_mode():
@@ -4112,11 +4129,14 @@ def cmd_library_token(remove: bool, yes: bool = False) -> int:
     if not token or " " in token or not token.isprintable() or len(token) > 400:
         output.error("a GitHub token is one word of printable characters.")
         return output.USAGE
+    from .setup_page import _present
+    had = _present(library.TOKEN_FILE)
     try:
         library.write_token(token)
     except (OSError, library.LibraryError, ValueError) as e:
         _err_line(f"the token was not saved: {e}")
         return 1
+    _hub_audit("library token replaced" if had else "library token set")
     output.result("Saved the catalog token.")
     return 0
 
@@ -6075,8 +6095,7 @@ def _help(args, ap, sub) -> int:
         sys.stdout.write(_markdown_table())
         return 0
     if args.topic is None:
-        print(ap.format_help(), end="")
-        return 0
+        return _print_help(ap.format_help())
     if args.topic == "aliases":
         pairs = [(old.replace("`, `", ", "), new.replace("`, `", ", ")) for old, new in _ALIASES if "(hidden)" not in old]
         output.emit({"aliases": [{"old": old, "new": new} for old, new in pairs]})
@@ -6088,7 +6107,13 @@ def _help(args, ap, sub) -> int:
     if args.topic not in sub.choices:
         output.error(f'there is no command called "{args.topic}".', "see the commands with: filament-kit help")
         return output.USAGE
-    print(sub.choices[args.topic].format_help(), end="")
+    return _print_help(sub.choices[args.topic].format_help())
+
+
+def _print_help(text: str) -> int:
+    """Help text as it is, or under --json as {"ok": true, "help": text} (like -h)."""
+    output.emit({"ok": True, "help": text})
+    print(text, end="")
     return 0
 
 
@@ -6525,8 +6550,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     args = ap.parse_args(argv)
     if args.cmd is None:                        # no command: the top-level help (06 3.1)
-        print(ap.format_help(), end="")
-        return 0
+        return _print_help(ap.format_help())
     if args.cmd == "help":
         return _help(args, ap, sub)
     if args.cmd == "intake":                    # the old spellings are the same commands (06 4)
@@ -6541,6 +6565,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         args.cmd, args.spoolman_cmd = "spoolman", "fields"
     elif args.cmd == "local-intake" and args.li_cmd in ("status", "test"):
         args.cmd, args.lr_cmd = "label-reader", args.li_cmd
+        if args.li_cmd == "test" and not getattr(args, "engine", None):
+            args.engine = "local"           # the old spelling reads with the local reader only, as it always did
     elif args.cmd == "remote" and args.remote_cmd == "issue":
         args.remote_cmd = "get-certificate"
     else:
@@ -6639,6 +6665,8 @@ def _reports_results(a) -> bool:
         return not a.manual
     if c == "update":
         return not a.check
+    if c == "spoolman" and sub == "address":
+        return a.url is not None            # without an address it shows the one in use
     return (c, sub) in _RESULTS_ONLY
 
 
