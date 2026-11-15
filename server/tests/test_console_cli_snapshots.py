@@ -88,15 +88,15 @@ def test_web_status_lines(cfg, capsys, monkeypatch):
     port = cfg["web"]["port"]
     out = capsys.readouterr().out
     assert out.splitlines() == [                      # no group, so no heading and no summary
-        "  + OK            web module is on",
+        "  + OK            Web access is on",
         "  + OK            public URL https://printer.example.com/filament",
-        "                  connector: https://printer.example.com/filament/mcp   phone",
+        "                  connector: https://printer.example.com/filament/mcp   web",
         "                  app: https://printer.example.com/filament/intake",
         "  * note          sign-in passphrase not set: the Claude connector cannot sign",
         "                  in until sudo filament-kit web passphrase",
         f"  + OK            web unit answers on 127.0.0.1:{port}",
         "                  connectors: none signed in yet",
-        "                  printer slots: none; tag readers: 0 + no station",
+        "                  printer slots: none; tag readers: 0 + no Weigh Station",
     ]
 
 

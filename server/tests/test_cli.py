@@ -432,7 +432,7 @@ def test_profiles_build_waiting_exits_0_with_message(capsys, spoolman_url):
     _spoolman_cfg(spoolman_url)
     assert cli.main(["profiles", "build"]) == 0
     out = capsys.readouterr()
-    assert "install and pair the Slicer Sync" in out.out
+    assert "install and pair the PC sync" in out.out
     assert "see README: Pair your PC" in out.out
     assert "FAIL" not in out.out and out.err == ""
 
@@ -728,7 +728,7 @@ def test_config_menu_station_voice_piper_or_espeak(monkeypatch, capsys):
 
 
 def test_status_shows_the_pc_sync_waiting_for_studio(capsys, monkeypatch, spoolman_url):
-    """The Slicer Sync's last heartbeat says it waits for Bambu Studio to close."""
+    """The PC sync's last heartbeat says it waits for Bambu Studio to close."""
     _status_setup(spoolman_url)
     since = time.mktime((2026, 11, 3, 10, 0, 0, 0, 0, -1))
     _fake_profiles(monkeypatch, pc={"device_id": "d1", "last_upload": since,
@@ -736,9 +736,9 @@ def test_status_shows_the_pc_sync_waiting_for_studio(capsys, monkeypatch, spoolm
     _fake_library(monkeypatch)
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
-    assert "--   Slicer Sync waiting for Bambu Studio to close since 2026-11-03 10:00" in out
+    assert "--   PC sync waiting for Bambu Studio to close since 2026-11-03 10:00" in out
     assert cli.main(["profiles", "status"]) == 0
-    assert "Slicer Sync waiting for Bambu Studio to close since 2026-11-03 10:00" in capsys.readouterr().out
+    assert "PC sync waiting for Bambu Studio to close since 2026-11-03 10:00" in capsys.readouterr().out
 
 
 def test_status_without_a_wait_has_no_waiting_line(capsys, monkeypatch, spoolman_url):

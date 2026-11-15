@@ -288,8 +288,9 @@ def test_wrap_breaks_only_at_spaces_outside_a_command():
     for line in got:
         assert "`" not in line and chr(2) not in line      # nothing is added to a command
     assert "sudo filament-kit station pair" in " ".join(got) and any("sudo filament-kit status" in x for x in got)
-    long_span = "run " + "sudo filament-kit " * 6 + "end now"
-    assert [x.strip() for x in output.wrap(long_span, indent=2)] == ["run", long_span[4:-4], "now"]
+    long_cmd = "sudo filament-kit profiles apply-updates --line a-very-long-line-name --all --dry-run --output /tmp/some/path.txt"
+    assert len(long_cmd) > 80
+    assert [x.strip() for x in output.wrap(f"run {long_cmd} now", indent=2)] == ["run", long_cmd, "now"]
 
 
 def test_the_no_terminal_error_of_station_pair_keeps_its_command_whole(capsys):
