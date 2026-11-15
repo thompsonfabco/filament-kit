@@ -171,6 +171,8 @@ def test_cli_scan_shows_a_printer_added_by_name_as_that_printer(capsys, monkeypa
     out = capsys.readouterr().out
     assert "192.0.2.20:7125  (added already as Voron)" in out
     assert "add NAME 192.0.2.20" not in out and "add NAME 192.0.2.21" in out
+    assert "192.0.2.21:7125  (add it: filament-kit klipper add NAME 192.0.2.21)\n" in out     # printed plain, no backticks
+    assert "`" not in out
     assert {p.host for p in registry.load().values()} == {mine.host, "192.0.2.21"}
 
 

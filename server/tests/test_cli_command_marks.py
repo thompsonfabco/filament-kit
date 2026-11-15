@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import cli, output
+from filament_kit import cli, modules, output
 
 ROOT = Path(cli.__file__).parent
 # the modules whose texts the command line prints (an error, a note, a row, a result); not the setup page's, not the
@@ -93,6 +93,38 @@ def texts(path: Path) -> list[tuple[int, str]]:
     return found
 
 
+# the words a kit command takes after its own: what the parsers name, read from the modules' source
+SUBCOMMANDS = {m for f in MODULES for m in re.findall(r'add_parser\(\s*"([a-z-]+)"', (ROOT / f).read_text(encoding="utf-8"))} | {"key"} | set(modules.MODULES)
+# what a kit command takes as an argument: an option, a NAME or <placeholder> or {value}, a path, an address or number
+ARGUMENT = re.compile(r"-\S*|<[^>]*>\S*|\{[^}]*\}\S*|[A-Z][A-Z0-9_]*|x|[~./]\S*|\S*/\S*|[\d.:]*\d[\d.:]*|\||[a-z0-9_.]*[-_0-9][a-z0-9_.-]*")
+
+
+def _kit_end(flat: str, start: int) -> int:
+    """Where a `filament-kit` command ends: after its last argument, a subcommand word right after the command word, or a
+    quoted value (its spaces and commas inside), before any other word."""
+    pos = start + len(re.match(r"(?:sudo )?filament-kit \S+", flat[start:]).group())
+    sub = True
+    while True:
+        m = re.compile(r' +').match(flat, pos)
+        if not m or m.end() - m.start() > 1 or pos > start and flat[pos - 1] in ",;:.)":
+            return pos
+        q = re.compile(r"""(["'])(?:(?!).)*""").match(flat, m.end())
+        if q:
+            pos, sub = q.end(), False
+            continue
+        w = re.compile(r"\S+").match(flat, m.end())
+        if not w:
+            return pos
+        word = w.group().rstrip(",;:.)`")
+        if ARGUMENT.fullmatch(word):
+            sub = False
+        elif not (sub and word in SUBCOMMANDS):
+            return pos
+        pos = m.end() + len(word)
+        if w.group() != word:                      # a closing mark after it ends the clause
+            return pos
+
+
 def commands(text: str) -> list[str]:
     """The commands a text holds, each to the end of its clause, as the scan expects them to print."""
     flat = text.replace("\n", " ")
@@ -100,7 +132,10 @@ def commands(text: str) -> list[str]:
     for m in COMMAND.finditer(flat):
         if m.start() < at:
             continue
-        end = CLAUSE.match(flat, m.start()).end()
+        if re.match(r"(?:sudo )?filament-kit ", flat[m.start():]):
+            end = _kit_end(flat, m.start())
+        else:
+            end = CLAUSE.match(flat, m.start()).end()
         got.append(" ".join(flat[m.start():end].split()))
         at = end
     return got
@@ -110,6 +145,19 @@ def _layouts(text: str) -> list[list[str]]:
     """A text as an error, as a status row's text and as its fix line."""
     return [output.wrap("Error: " + text, indent=7, first=0), output.status_row("needs a look", text),
             output.status_row("needs a look", "x", text)]
+
+
+def _over_width_ok(x: str, columns: int, cmds: list[str]) -> bool:
+    """A line within the width, a single word, or a command alone on it (after its label or indent, with at most a closing
+    mark after it): a word glued to a command that is too wide for the line is no excuse."""
+    if len(x) <= columns - 1 or " " not in x.strip():
+        return True
+    for c in cmds:
+        before, found, after = x.partition(c)
+        if found and re.fullmatch(r"\s*(?:! needs a look|Fix:|Error:)?\s*(?:[(\"'`]*<venv>/bin/)?[(\"'`]*", before) \
+                and re.fullmatch(r"[,;:.)\]\"'`]*", after.strip()):
+            return True
+    return False
 
 
 def _whole(cmd: str, lines: list[str]) -> bool:
@@ -153,11 +201,8 @@ def test_every_command_in_the_cli_texts_stays_whole_when_the_text_is_wrapped(col
             for lines in _layouts(text):
                 for c in cmds:
                     assert _whole(c, lines), f"{module}:{line}: {c!r} split at {columns} columns: {lines}"
-                for x in lines:          # over the width only where one command, at the left, is longer, or one word is
-                    alone = any(re.fullmatch(r"\s*(?:! needs a look|Fix:|Error:)?\s*(?:[(\"'`]*<venv>/bin/)?[(\"'`]*", x.partition(c)[0])
-                                for c in cmds if c in " ".join(x.split()) and c in x)
-                    assert len(x) <= int(columns) - 1 or alone or " " not in x.strip(), \
-                        f"{module}:{line}: {x!r} is over the width"
+                for x in lines:          # over the width only where one command alone is longer, or one word is
+                    assert _over_width_ok(x, int(columns), cmds), f"{module}:{line}: {x!r} is over the width"
     assert seen > 60
 
 
@@ -328,3 +373,54 @@ def test_the_setup_pages_pattern_matches_every_status_fix_that_is_a_command():
         assert m and m[1].startswith(("sudo", "filament-kit")), f"status.py:{line}: {text!r}"
         _plain(text, f"status.py:{line}")
     assert seen >= 8
+
+
+# ---------- where a command ends: its arguments, not the clause (refuter-23) ----------
+
+@pytest.mark.parametrize("columns", ["80", "40", "30"])
+def test_a_quoted_argument_with_prose_words_or_a_comma_belongs_to_the_command(columns, monkeypatch):
+    monkeypatch.setenv("COLUMNS", columns)
+    for text, command in (('Fix: run sudo filament-kit printer test "Bench by the door"', 'sudo filament-kit printer test "Bench by the door"'),
+                          ('Fix: run sudo filament-kit printer test "Bench, by the door", then wait',
+                           'sudo filament-kit printer test "Bench, by the door",')):
+        lines = output.wrap(text, indent=5, first=0)
+        assert _whole(command, lines), lines
+        assert all(len(x) <= int(columns) - 1 or " " not in x.strip() or x.strip() == command for x in lines), lines
+
+
+@pytest.mark.parametrize("text, command, rest", [
+    ("sudo filament-kit status before you start,", "sudo filament-kit status", "before you start,"),
+    ("run sudo filament-kit config when ready", "sudo filament-kit config", "when ready"),
+    ("run sudo filament-kit station pair here", "sudo filament-kit station pair", "here"),
+    ("run sudo filament-kit klipper add NAME 192.168.1.50 first", "sudo filament-kit klipper add NAME 192.168.1.50", "first"),
+    ("run sudo filament-kit reader token --name printer-station now", "sudo filament-kit reader token --name printer-station", "now"),
+    ("run filament-kit printer map --manual <serial> soon", "filament-kit printer map --manual <serial>", "soon"),
+    ("run sudo filament-kit local-intake install --version 1.2.3 and wait", "sudo filament-kit local-intake install --version 1.2.3", "and wait"),
+])
+def test_a_command_ends_at_the_first_word_that_is_not_an_argument(text, command, rest, monkeypatch):
+    """A word that is not in the prose list is not glued on: only an option, a quoted value, a NAME or placeholder, a
+    path, an address, a number, or a subcommand word right after the command word belongs to the command."""
+    monkeypatch.setenv("COLUMNS", "80")
+    units = output._units(text)
+    assert [u for u, is_cmd in units if is_cmd] == [command]
+    assert " ".join(u for u, is_cmd in units if not is_cmd)[-len(rest):] == rest
+    monkeypatch.setenv("COLUMNS", "34")
+    lines = output.wrap(text)
+    assert _whole(command, lines) and not any(command + " " + rest.split()[0] in " ".join(x.split()) and len(x) > 33 for x in lines), lines
+
+
+def test_no_line_has_a_trailing_space_after_a_double_space_at_a_break(monkeypatch):
+    monkeypatch.setenv("COLUMNS", "40")
+    lines = output.wrap("Fix: run: sudo filament-kit config  and then more words follow here", indent=5, first=0)
+    assert all(x == x.rstrip() for x in lines), lines
+    assert all(x == x.rstrip() for x in output.wrap("Fix: run: sudo filament-kit config  ", indent=5, first=0))
+
+
+def test_the_width_check_also_fails_on_a_command_glued_to_a_word_and_too_wide(monkeypatch):
+    """The scan's over-width test accepts a long line only when the command is alone on it: a word after it fails."""
+    monkeypatch.setenv("COLUMNS", "40")
+    cmd = "sudo filament-kit klipper add NAME 192.168.1.50"
+    assert not _over_width_ok("Fix: " + cmd + " before", 40, [cmd])
+    assert _over_width_ok("     " + cmd, 40, [cmd])
+    assert _over_width_ok("Fix: " + cmd, 40, [cmd])
+    assert _over_width_ok("short line", 40, [cmd])
