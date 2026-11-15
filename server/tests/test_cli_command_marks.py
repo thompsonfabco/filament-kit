@@ -145,14 +145,18 @@ def test_every_marked_command_stays_whole_when_its_text_is_wrapped(columns, monk
             shown = text.replace("\x01", "x")
             for lines in (output.wrap("Error: " + shown, indent=7, first=0),
                           output.status_row("needs a look", shown), output.status_row("needs a look", "x", shown)):
-                for span in (s.replace("\x01", "x") for s in spans):
-                    assert any(span in x for x in lines), f"{module}:{line}: {span!r} split at {columns} columns"
+                for span in (s.replace("\x01", "x").strip("`") for s in spans):
+                    assert any(" ".join(span.split()) in " ".join(x.split()) for x in lines), \
+                        f"{module}:{line}: {span!r} split at {columns} columns"
                 for x in lines:          # over the width only where one command, at the left, is longer, or one word is
-                    alone = any(s in x and not x[:x.find(s)].rpartition("needs a look")[2].strip(" ([\"'")
-                                for s in (s.replace("\x01", "x") for s in spans))
+                    alone = any(" ".join(x.split()).rpartition("needs a look")[2].lstrip(" ([\"'").startswith(" ".join(s.split()))
+                                for s in (s.replace("\x01", "x").strip("`") for s in spans))
                     assert len(x) <= int(columns) - 1 or alone or " " not in x.strip(), \
                         f"{module}:{line}: {x!r} is over the width"
     assert seen > 60
+
+
+MARK = r"`[^`]*`|\x02[^\x03]*\x03"          # a mark in a text: backticks written out, or what `output.cmd` makes
 
 
 class _Who:
@@ -176,14 +180,58 @@ def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkey
     for columns in ("80", "40"):
         monkeypatch.setenv("COLUMNS", columns)
         for name, text in shown.items():
-            assert re.findall(r"`[^`]*`", text), f"{name} has no mark"
+            assert re.findall(MARK, text), f"{name} has no mark"
             lines = output.wrap("Error: " + text, indent=7, first=0)
-            for span in re.findall(r"`[^`]*`", text):
-                assert any(span in x for x in lines), f"{name}: {span!r} split at {columns} columns: {lines}"
+            for span in re.findall(MARK, text):
+                assert any(span.strip("`\x02\x03") in x for x in lines), f"{name}: {span!r} split at {columns} columns: {lines}"
         for text in (web_fix, config_fix):
             lines = output.status_row("needs a look", "a row", text.replace("\x01", "x"))
-            for span in re.findall(r"`[^`]*`", text):
-                assert any(span.replace("\x01", "x") in x for x in lines), (span, columns, lines)
+            for span in re.findall(MARK, text):
+                assert any(span.replace("\x01", "x").strip("`\x02\x03") in x for x in lines), (span, columns, lines)
     monkeypatch.setenv("COLUMNS", "80")
     lines = output.status_row("needs a look", "a row", web_fix)       # no 94-character line after a lone `Fix:`
     assert all(len(x) <= 79 for x in lines), lines
+
+
+# ---------- the mark is never printed; a command that does not fit goes on its own line (06 6.5) ----------
+
+def test_06_6_5_example_is_reproduced_at_80_columns(monkeypatch):
+    """`Fix: check ... test it:` and the command on a line of its own, five spaces in, no quotes or braces added."""
+    monkeypatch.setenv("COLUMNS", "80")
+    command = 'sudo spoolwarden printer test "Study A1 mini"'
+    fix = "check that it is switched on and on the network, then test it: " + output.cmd(command)
+    assert output.wrap("Fix: " + fix, indent=5, first=0) == [
+        "Fix: check that it is switched on and on the network, then test it:", "     " + command]
+
+
+def test_a_command_that_fits_stays_on_the_line_and_one_that_does_not_goes_to_its_own(monkeypatch):
+    monkeypatch.setenv("COLUMNS", "80")
+    assert output.wrap("Fix: run " + output.cmd("sudo filament-kit update") + " again", indent=5, first=0) == [
+        "Fix: run sudo filament-kit update again"]
+    got = output.wrap("Error: it failed, so go on and then " + output.cmd("sudo filament-kit profiles apply-updates "
+                                                                          "--all --dry-run") + " now", indent=7, first=0)
+    assert got == ["Error: it failed, so go on and then",
+                   "     sudo filament-kit profiles apply-updates --all --dry-run now"]
+    rows = output.status_row("needs a look", "a row", "check it, then: " + output.cmd("sudo journalctl -u filament-kit "
+                                                                                    "-n 50 --no-pager --output cat"))
+    assert rows[-1].startswith(" " * 23 + "sudo journalctl") and rows[-2].rstrip().endswith("then:")
+
+
+def test_the_mark_is_never_printed_in_any_form(monkeypatch, capsys):
+    for columns in ("80", "40"):
+        monkeypatch.setenv("COLUMNS", columns)
+        text = "go on: " + output.cmd("sudo filament-kit update") + ", or `sudo filament-kit status` (written out)"
+        lines = output.wrap(text) + output.status_row("needs a look", text, text)
+        assert not any("`" in x or "\x02" in x or "\x03" in x for x in lines), lines
+    monkeypatch.setenv("COLUMNS", "80")
+    output.error(text, cmd="sudo filament-kit update")
+    output.note(text)
+    output.out(text)
+    got = capsys.readouterr()
+    assert not any(c in got.out + got.err for c in ("`", "\x02", "\x03"))
+
+
+def test_a_backtick_in_what_a_person_typed_is_printed(monkeypatch):
+    monkeypatch.setenv("COLUMNS", "80")
+    assert output.wrap("no printer named a`b here") == ["no printer named a`b here"]
+    assert output.wrap("name `x here") == ["name `x here"]          # no pair: not a command span

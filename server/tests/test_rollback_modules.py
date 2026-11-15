@@ -103,7 +103,7 @@ def test_klipper_on_refuses_a_rollback_to_0_3_0(env, capsys):
     cfg = cli._with_modules(cfg, modules.enabled(cfg) | {"klipper"})
     _write(env, cfg)
     assert not updates._modules_fit("0.3.0")
-    assert "`sudo filament-kit modules disable klipper` first" in capsys.readouterr().err
+    assert "sudo filament-kit modules disable klipper first" in capsys.readouterr().err
     assert _read(env) == cfg                            # nothing changed
 
 

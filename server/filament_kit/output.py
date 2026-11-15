@@ -7,6 +7,7 @@ the environment and from what `configure` was given, so a test that sets `NO_COL
 
     configure(color=, plain=, no_progress=)   what `--color`, `--plain` and `--no-progress` said (main reads them)
     out(text) / result(text)                  a line on standard output, wrapped at the width
+    err(text)                                 a line of running text on standard error
     note(text) / error(what, fix=, cmd=)      standard error: `Note: ...`, `Error: ...` and its `Fix: ...` line
     need_sudo(cmd) -> 3                       the error of a command that needs root, and its exit code
     state(word) -> str                        a status word with its glyph and colour (`● OK`)
@@ -187,12 +188,24 @@ def _visible(s: str) -> int:
 _HELD = "\x00"        # a space that wrap does not break at (a fix that is a command); it goes back to a space
 
 
+_OPEN, _CLOSE = "\x02", "\x03"      # a marked command: never printed; `wrap` keeps it whole and may give it a line
+_SPAN = re.compile(r"\x60([^\x60\n]*[^\x60\n ] [^\x60\n]*)\x60")      # a span between backticks with a space inside
+
+
+def _marked(text: str) -> str:
+    """`text` with its backtick spans that hold a command (a space inside, as every command here has) as marks. A
+    backtick in what a person typed or a file name has no such pair, so it is printed as it is."""
+    return _SPAN.sub(lambda m: _OPEN + m[1] + _CLOSE, text)
+
+
 def _words(para: str) -> list[str]:
-    """`para` split at its spaces, except those inside a `backtick span`: a command stays whole on a line."""
+    """`para` split at its spaces, except those inside a marked command: a command stays whole on a line."""
     words, cur, inside = [], "", False
     for ch in para:
-        if ch == "`":
-            inside = not inside
+        if ch == _OPEN:
+            inside = True
+        elif ch == _CLOSE:
+            inside = False
         if ch == " " and not inside:
             words.append(cur)
             cur = ""
@@ -202,29 +215,33 @@ def _words(para: str) -> list[str]:
 
 
 def cmd(text: str) -> str:
-    """A command named in running text (`sudo filament-kit update`): in backticks, so `wrap` keeps it whole on one
-    line and it can be copied. Every command in the text of a message is marked through this or an equal pair of
-    backticks; `test_every_command_in_the_cli_text_is_marked` scans the modules for any that is not."""
-    return "`" + text + "`"
+    """A command named in running text (`sudo filament-kit update`), marked so `wrap` keeps it whole on one line and,
+    when it does not fit the rest of the line, puts it on a line of its own (06 6.5). The mark is never printed.
+    Every command in the text of a message is marked through this or an equal pair of backticks;
+    `test_every_command_in_the_cli_text_is_marked` scans the modules for any that is not."""
+    return _OPEN + text + _CLOSE
 
 
 def wrap(text: str, *, indent: int = 0, first: int | None = None) -> list[str]:
-    """`text` as lines of at most width - 1 characters, wrapped at spaces outside backtick spans. The first line starts
-    at column `first` (default `indent`), the others at `indent`, so a continuation lines up with where the text began.
-    Newlines in `text` start a new line. A word, number, address, path or backtick span longer than a line stays whole
-    on a line of its own (06 6.3): a command or address cut in two cannot be copied."""
+    """`text` as lines of at most width - 1 characters, wrapped at spaces outside a marked command. The first line
+    starts at column `first` (default `indent`), the others at `indent`, so a continuation lines up with where the
+    text began. Newlines in `text` start a new line. A word, number, address, path or command longer than a line stays
+    whole on a line of its own (06 6.3): a command or address cut in two cannot be copied. A command that does not fit
+    on the rest of the line goes on a line of its own, five spaces in from where the text began (06 6.5). The marks
+    are not in the lines."""
     limit = width() - 1
     first = indent if first is None else first
     lines: list[str] = []
-    for para in text.split("\n"):
+    for para in _marked(text).split("\n"):
         lead = len(para) - len(para.lstrip(" "))          # spaces a line starts with stay, and carry to its wrap
         para = para[lead:]
         cur, col = "", (first if not lines else indent) + lead
         for word in _words(para):
-            if cur and col + len(cur) + 1 + len(word) > limit:
+            shown = word.replace(_OPEN, "").replace(_CLOSE, "")
+            if cur and col + len(cur) + 1 + len(shown) > limit:
                 lines.append(" " * col + cur)
-                cur, col = "", indent + lead
-            cur = f"{cur} {word}" if cur else word
+                cur, col = "", (first + 5 if _OPEN in word else indent) + lead
+            cur = f"{cur} {shown}" if cur else shown
         lines.append(" " * col + cur)
     return lines
 
@@ -362,6 +379,11 @@ def out_lines(lines: list[str]) -> None:
 
 
 result = out        # a result is one line in the past tense on standard output (06 6.5)
+
+
+def err(text: str) -> None:
+    """A line on standard error; running text wraps at the width."""
+    _write(sys.stderr, wrap(text))
 
 
 def note(text: str) -> None:

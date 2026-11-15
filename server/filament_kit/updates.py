@@ -304,7 +304,7 @@ def _remove_units_left_behind(before: set[str], version: str, run: Callable[[lis
         try:
             run(["systemctl", "daemon-reload"])
         except OSError as e:
-            print(f"warning: {output.cmd('systemctl daemon-reload')}: {e}", file=sys.stderr)
+            output.err(f"warning: {output.cmd('systemctl daemon-reload')}: {e}")
         print(f"Removed {', '.join(removed)}: filament-kit {version} does not have them.")
 
 
@@ -397,7 +397,7 @@ def check(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
     if info["newer"]:
         note = " (rolled back earlier: the timer skips it; `sudo filament-kit update` installs it)" \
             if info["held"] == latest else ""
-        print(f"installed {cur}; {latest} is available{note}: {output.cmd('sudo filament-kit update')}")
+        output.out(f"installed {cur}; {latest} is available{note}: {output.cmd('sudo filament-kit update')}")
     else:
         print(f"installed {cur}; latest release {latest}: up to date")
     return 0
@@ -514,13 +514,13 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
         st = _read_state()
         if scheduled and st.get("held") == latest:
             _write_state(last_ok_at=now)
-            print(f"{latest} was rolled back; the timer leaves it "
-                  f"({output.cmd('sudo filament-kit update')} installs it)")
+            output.out(f"{latest} was rolled back; the timer leaves it "
+                       f"({output.cmd('sudo filament-kit update')} installs it)")
             return _feed(fetcher, rel)
         if scheduled and st.get("failed") == latest:
             _write_state(last_ok_at=now)
-            print(f"installing {latest} failed before; the timer waits for a newer release "
-                  f"({output.cmd('sudo filament-kit update')} tries it again)")
+            output.out(f"installing {latest} failed before; the timer waits for a newer release "
+                       f"({output.cmd('sudo filament-kit update')} tries it again)")
             return _feed(fetcher, rel)
         if not _kept(cur) and not nightly_now:
             try:
@@ -743,8 +743,8 @@ def hardware_feed(fetcher: release.Fetcher, rel: dict, asset: tuple = HW_ASSETS[
 def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
     """After a failed install: reinstall `cur` from its kept copy. Always returns 1 (the update failed)."""
     if not kept:
-        print(f"error: no kept copy of {cur} to go back to; reinstall it by hand: "
-              + output.cmd(f"curl -fsSL <get.sh url> | sudo bash -s -- --version {cur}"), file=sys.stderr)
+        output.err(f"error: no kept copy of {cur} to go back to; reinstall it by hand: "
+                   + output.cmd(f"curl -fsSL <get.sh url> | sudo bash -s -- --version {cur}"))
         return 1
     print(f"reinstalling filament-kit {cur}", file=sys.stderr)
     try:
@@ -756,8 +756,8 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
         _write_state(previous=old_previous)
         print(f"filament-kit {cur} is back in place; the update failed", file=sys.stderr)
     else:
-        print(f"error: reinstalling {cur} failed too; try again with: "
-              + output.cmd("sudo filament-kit update --rollback"), file=sys.stderr)
+        output.err(f"error: reinstalling {cur} failed too; try again with: "
+                   + output.cmd("sudo filament-kit update --rollback"))
     return 1
 
 
@@ -794,7 +794,7 @@ def _modules_fit(target: str) -> bool:
     mods = raw.get("modules") if isinstance(raw, dict) else None
     on = [n for n in unknown if mods[n]]
     if on:
-        print(f"error: {_unfit_text(target, on)}", file=sys.stderr)
+        output.err(f"error: {_unfit_text(target, on)}")
         return False
     if unknown:
         for n in unknown:
@@ -832,6 +832,6 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
         return 1
     held = cur if cur != target else st.get("held")    # after a half-done update this process may say `target`
     _write_state(previous=None, held=held)
-    print(f"rolled back filament-kit {cur} -> {target}; settings and data stay as they are."
-          + (f" The timer will not install {held} again; `sudo filament-kit update` does." if held else ""))
+    output.out(f"rolled back filament-kit {cur} -> {target}; settings and data stay as they are."
+               + (f" The timer will not install {held} again; `sudo filament-kit update` does." if held else ""))
     return 0

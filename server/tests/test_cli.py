@@ -227,7 +227,7 @@ def test_status_api_not_answering_fails(capsys, monkeypatch):
     assert cli.main(["status"]) == 1
     out = old_rows(capsys.readouterr().out)
     assert f"FAIL filament-kit API not answering at https://127.0.0.1:{cfg['port']}/api/info" in out
-    assert "     fix: `sudo journalctl -u filament-kit -n 50`" in out
+    assert "     fix: sudo journalctl -u filament-kit -n 50" in out
 
 
 def test_status_api_answering_ok(capsys, monkeypatch):
@@ -432,7 +432,7 @@ def test_profiles_build_waiting_exits_0_with_message(capsys, spoolman_url):
     _spoolman_cfg(spoolman_url)
     assert cli.main(["profiles", "build"]) == 0
     out = capsys.readouterr()
-    assert "install and pair the PC sync" in out.out
+    assert "install and pair the Slicer Sync" in out.out
     assert "see README: Pair your PC" in out.out
     assert "FAIL" not in out.out and out.err == ""
 
@@ -517,7 +517,7 @@ def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_li
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    assert "--   Filament Catalog not downloaded (`filament-kit library update`), 0 local additions" in out
+    assert "--   Filament Catalog not downloaded (filament-kit library update), 0 local additions" in out
     assert "--   Slicer presets: no build yet (waiting for Slicer Sync)" in out
     assert "--   Slicer Sync: not set up (see README: Pair your PC)" in out
 
@@ -572,7 +572,7 @@ def test_status_failed_build_and_library_update_warning(capsys, monkeypatch, spo
     out = _status_lines(capsys)
     assert "--   Filament Catalog update: HTTP 404: using bundled version 7" in out
     i = out.index("FAIL Slicer presets: last build failed: ValueError: boom; using build 20261101-070000")
-    assert out[i + 1] == "     fix: `sudo journalctl -u filament-kit-build -n 50`"
+    assert out[i + 1] == "     fix: sudo journalctl -u filament-kit-build -n 50"
     assert "--   Slicer Sync: last upload never, no build installed yet" in out
 
 
@@ -728,7 +728,7 @@ def test_config_menu_station_voice_piper_or_espeak(monkeypatch, capsys):
 
 
 def test_status_shows_the_pc_sync_waiting_for_studio(capsys, monkeypatch, spoolman_url):
-    """The PC sync's last heartbeat says it waits for Bambu Studio to close."""
+    """The Slicer Sync's last heartbeat says it waits for Bambu Studio to close."""
     _status_setup(spoolman_url)
     since = time.mktime((2026, 11, 3, 10, 0, 0, 0, 0, -1))
     _fake_profiles(monkeypatch, pc={"device_id": "d1", "last_upload": since,
@@ -736,9 +736,9 @@ def test_status_shows_the_pc_sync_waiting_for_studio(capsys, monkeypatch, spoolm
     _fake_library(monkeypatch)
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
-    assert "--   PC sync waiting for Bambu Studio to close since 2026-11-03 10:00" in out
+    assert "--   Slicer Sync waiting for Bambu Studio to close since 2026-11-03 10:00" in out
     assert cli.main(["profiles", "status"]) == 0
-    assert "PC sync waiting for Bambu Studio to close since 2026-11-03 10:00" in capsys.readouterr().out
+    assert "Slicer Sync waiting for Bambu Studio to close since 2026-11-03 10:00" in capsys.readouterr().out
 
 
 def test_status_without_a_wait_has_no_waiting_line(capsys, monkeypatch, spoolman_url):

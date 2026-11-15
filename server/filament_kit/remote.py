@@ -272,9 +272,9 @@ def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
            "--cert-name", s["hostname"], "-d", s["hostname"]]
     cmd += ["--email", s["email"]] if s["email"] else ["--register-unsafely-without-email"]
     cmd += ["--pre-hook", f"{HOOK} pre", "--post-hook", f"{HOOK} post", "--deploy-hook", f"{HOOK} deploy"]
-    print(f"certbot will bind port 80 on this machine now. The kit does not open it: make sure port 80 "
-          f"reaches this machine (run `filament-kit remote firewall` for the rules).\n"
-          f"nginx stops for the run and starts again after.")
+    output.out(f"certbot will bind port 80 on this machine now. The kit does not open it: make sure port 80 "
+               f"reaches this machine (run `filament-kit remote firewall` for the rules).\n"
+               f"nginx stops for the run and starts again after.")
     try:
         run(cmd)
     except (subprocess.CalledProcessError, OSError) as e:

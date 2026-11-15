@@ -53,6 +53,7 @@ def check_width(*texts):
     """No line over 79 columns, but one word that is longer than that (the test machine's long temporary path) stays
     whole on its own line: a path or address cut in two cannot be used (06 6.3)."""
     for text in texts:
+        assert "`" not in text and chr(2) not in text and chr(3) not in text, text     # no mark is ever printed
         for line in lines_of(text):
             assert len(line) <= 79 or " " not in line.strip(), line
 
@@ -209,7 +210,7 @@ def test_exit_codes_of_06_6_7(cfg, capsys, monkeypatch):
     monkeypatch.setattr(cli.registry, "load", lambda: {"S1": p})
     rc, out, err = run(capsys, "printer", "map", "S1", "--manual")
     assert (rc, out) == (4, "")                                           # the Hub is not running
-    assert "Fix: `sudo systemctl start filament-kit`" in err
+    assert "Fix: sudo systemctl start filament-kit" in err
 
 
 def test_ctrl_c_ends_with_stopped_and_130(cfg, capsys, monkeypatch):
@@ -285,10 +286,10 @@ def test_wrap_breaks_only_at_spaces_outside_backtick_spans():
     got = output.wrap(text, indent=5, first=0)
     assert len(got) > 1 and all(len(x) <= 79 for x in got)
     for line in got:
-        assert line.count("`") % 2 == 0, line               # no command is split over two lines
-    assert "`sudo filament-kit station pair`" in " ".join(got) and any("`sudo filament-kit status`" in x for x in got)
+        assert "`" not in line and chr(2) not in line      # the mark is never printed
+    assert "sudo filament-kit station pair" in " ".join(got) and any("sudo filament-kit status" in x for x in got)
     long_span = "run `" + "sudo filament-kit " * 6 + "end` now"
-    assert [x.strip() for x in output.wrap(long_span, indent=2)] == ["run", long_span[4:-4], "now"]
+    assert [x.strip() for x in output.wrap(long_span, indent=2)] == ["run", long_span[5:-5], "now"]
 
 
 def test_the_no_terminal_error_of_station_pair_keeps_its_command_whole(capsys):
@@ -297,8 +298,8 @@ def test_the_no_terminal_error_of_station_pair_keeps_its_command_whole(capsys):
                  "fingerprint. Nothing was saved.")
     err = capsys.readouterr().err
     check_width(err)
-    assert all(x.count("`") % 2 == 0 for x in err.splitlines())
-    assert "`sudo filament-kit station pair`" in err
+    assert "`" not in err
+    assert "sudo filament-kit station pair needs a terminal" in err
 
 
 def test_the_local_pair_error_keeps_both_its_commands_whole(capsys):
@@ -308,8 +309,8 @@ def test_the_local_pair_error_keeps_both_its_commands_whole(capsys):
                  "pair` here")              # the text of cli.py cmd_station_pair_local: its spans are mid-text
     err = capsys.readouterr().err
     check_width(err)
-    assert all(x.count("`") % 2 == 0 for x in err.splitlines())
-    assert "`sudo filament-kit pair --station`" in err and "`sudo filament-kit station pair`" in err
+    assert "`" not in err
+    assert "sudo filament-kit pair --station" in err and "sudo filament-kit station pair" in err
 
 
 def test_long_state_word_pushes_its_own_row_only(monkeypatch):
@@ -736,7 +737,7 @@ def test_a_status_fix_that_is_a_command_is_not_split(monkeypatch):
     monkeypatch.setenv("COLUMNS", "40")
     lines = output.status_row("needs a look", "service filament-kit active",
                               output.cmd("sudo systemctl start filament-kit"))
-    assert any("`sudo systemctl start filament-kit`" in x for x in lines), lines
+    assert any("sudo systemctl start filament-kit" in x for x in lines), lines
 
 
 def test_the_groupmissing_fix_is_split_into_a_fix_line(capsys, monkeypatch):
