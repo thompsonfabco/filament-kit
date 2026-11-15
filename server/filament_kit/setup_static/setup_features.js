@@ -132,7 +132,7 @@ function commandBlock(caption, text) {
   return h("div", { class: "code" },
     h("div", { class: "code__bar" }, h("span", { class: "code__caption mono", id: id + "-name", textContent: caption }),
       h("span", { class: "result", role: "status" }), SW.btn(SW.t("common_copy"), { cls: "btn--ghost", icon: "copy", action: "copy" })),
-    h("pre", { class: "code__text", tabindex: "0", "aria-labelledby": id + "-name", textContent: text }));
+    h("pre", { class: "code__text code__text--log", tabindex: "0", "aria-labelledby": id + "-name", textContent: text }));
 }
 
 function modesCard() {

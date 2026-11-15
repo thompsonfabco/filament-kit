@@ -56,7 +56,7 @@
 /* devices (S2.9) */
 /* the section is two columns from a wide tablet up: Paired devices across, then the cards in pairs (03 7.1) */
 @media (min-width: 1025px) {
-  .page[data-section="devices"] > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s4); align-items: start; }
+  .page[data-section="devices"] > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s4); align-items: stretch; }   /* a pair is as tall as its taller card: no gap under the shorter one */
   .page[data-section="devices"] > div:last-child > :first-child { grid-column: 1 / -1; }
 }
 .page[data-section="devices"] > div:last-child > .card { min-width: 0; width: 100%; box-sizing: border-box; }

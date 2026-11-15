@@ -20,8 +20,8 @@ def routes(page) -> list[tuple]:
     async def listing(request, body):
         try:
             return {"requests": await anyio.to_thread.run_sync(station_requests.pending)}
-        except OSError as e:
-            raise Refused(503, f"cannot read the Hub certificate ({type(e).__name__})") from None
+        except OSError:
+            raise Refused(503, "cannot read the Hub certificate") from None
 
     def answer(approve: bool):
         async def route(request, body):

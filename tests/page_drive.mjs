@@ -5,6 +5,9 @@
 // failed; 3: a browser was found but cannot run headless here. Same browser rules as tests/aut5_run.mjs.
 //
 //   node tests/page_drive.mjs --url http://127.0.0.1:8799/setup --script tests/hub_presets_drive.js [--width 1280] [--browser <path>]
+//        [--font-dir <dir>]
+// --font-dir (or AUT5_FONT_DIR) loads the DejaVu files of that folder as the page's fonts, as tests/aut5_run.mjs does: the
+// wider letters of a Linux machine, on any machine.
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,6 +29,20 @@ function findBrowser() {
   const nix = ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
     "/usr/bin/microsoft-edge", "/snap/bin/chromium", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"];
   return [...win, ...nix].find((p) => existsSync(p));
+}
+
+// the DejaVu files of the font dir, loaded in the page as FontFace objects (the page's content security policy does not apply
+// to them); the same as dejavuScript of tests/aut5_run.mjs
+function dejavuScript(dir) {
+  const face = (family, file, weight) => `faces.push(new FontFace(${JSON.stringify(family)}, Uint8Array.from(atob("${
+    readFileSync(join(dir, file)).toString("base64")}"), (c) => c.charCodeAt(0)).buffer, { weight: "${weight}" }));`;
+  return `(() => { const faces = [];
+    ${face("DejaVu Sans", "DejaVuSans.ttf", 400)} ${face("DejaVu Sans", "DejaVuSans-Bold.ttf", 700)}
+    ${face("DejaVu Sans Mono", "DejaVuSansMono.ttf", 400)} ${face("DejaVu Sans Mono", "DejaVuSansMono-Bold.ttf", 700)}
+    window.__fonts = Promise.all(faces.map((f) => f.load().then(() => document.fonts.add(f))));
+    document.addEventListener("DOMContentLoaded", () => { const s = new CSSStyleSheet();
+      s.replaceSync(':root{--sans:"DejaVu Sans",sans-serif !important;--mono:"DejaVu Sans Mono",monospace !important}');
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, s]; }); })();`;
 }
 
 async function main() {
@@ -85,11 +102,14 @@ async function main() {
     await send("Runtime.enable");
     const width = Number(args.width || 1280);
     await send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width <= 600 });
+    const fonts = args["font-dir"] || process.env.AUT5_FONT_DIR;
+    if (fonts) await send("Page.addScriptToEvaluateOnNewDocument", { source: dejavuScript(fonts) });
     await send("Page.navigate", { url: args.url });
     for (let i = 0; i < 100; i++) {
       if ((await send("Runtime.evaluate", { expression: "document.readyState", returnByValue: true })).result.value === "complete") break;
       await sleep(50);
     }
+    if (fonts) await send("Runtime.evaluate", { expression: "window.__fonts", awaitPromise: true });
     const r = await send("Runtime.evaluate", { expression: `(async () => {\n${script}\n})()`, awaitPromise: true, returnByValue: true }, 120000);
     ws.close();
     if (r.exceptionDetails) {

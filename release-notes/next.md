@@ -58,6 +58,7 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `filament-kit modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
 - **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
 - **Hub page, Printers:** pressing Add again while the Hub is still adding a printer says "Still working. Wait for it to finish.", the same words as the app.
+- **Hub page fixes:** the Trusted computers card no longer shows a stray `null` line and its switch is drawn in full, a failed read of the Weigh Stations asking to pair no longer shows an internal error name, the header name stays on one line on a 320 px phone, the setup command box wraps instead of cutting the command, and the Updates title, Logs service list and Devices card pairs line up with the other sections.
 
 ## Still to come
 
