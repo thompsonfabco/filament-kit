@@ -41,7 +41,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 command -v python3 >/dev/null || die "python3 is missing"
 python3 -c 'import cryptography' 2>/dev/null || die "python3-cryptography is missing: sudo apt-get install python3-cryptography"
 for p in /etc/filament-kit /opt/filament-kit /var/lib/filament-kit /var/lib/spoolman /opt/spoolman \
-         /usr/local/bin/filament-kit; do
+         /usr/local/bin/filament-kit /usr/local/bin/spoolwarden; do
     [ ! -e "$p" ] || die "$p exists: this host already has filament-kit (data) on it; the e2e run needs a clean host"
 done
 for port in 7912 8101 8710 8883; do
@@ -72,7 +72,7 @@ snapshot() {
         sha256sum /etc/passwd /etc/group
         echo "## paths"
         for p in /etc/filament-kit /opt/filament-kit /var/lib/filament-kit /var/lib/spoolman /opt/spoolman \
-                 /opt/spoolman.new /opt/spoolman.old /var/backups/filament-kit /usr/local/bin/filament-kit \
+                 /opt/spoolman.new /opt/spoolman.old /var/backups/filament-kit /usr/local/bin/filament-kit /usr/local/bin/spoolwarden \
                  /etc/avahi/services/filament-kit.service /etc/udev/rules.d/99-zz-filament-kit-station.rules \
                  "$ALSA_STATE"; do
             if [ -e "$p" ]; then echo "$p present"; else echo "$p absent"; fi

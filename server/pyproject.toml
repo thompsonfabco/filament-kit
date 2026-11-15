@@ -29,7 +29,8 @@ web = ["mcp==2.3.0"]  # exact: the web unit imports SDK internals and install.sh
 push = ["pywebpush>=2.0,<3"]  # only for config web.push (Printers tab alerts); the sender imports it when used
 
 [project.scripts]
-filament-kit = "filament_kit.cli:main"
+spoolwarden = "filament_kit.cli:main"
+filament-kit = "filament_kit.cli:main"      # the old name, kept for pip installs
 
 [tool.setuptools.dynamic]
 version = {attr = "filament_kit.__version__"}

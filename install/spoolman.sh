@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch, verify and install Spoolman, and its systemd unit. Run as root by `filament-kit modules apply`
+# Fetch, verify and install Spoolman, and its systemd unit. Run as root by `spoolwarden modules apply`
 # (from /opt/filament-kit/resources/spoolman.sh) when the spoolman module is on; the spoolman user exists by then.
 # This was step 3 of install.sh. Safe to run again: the marker skips a finished install.
 set -euo pipefail
@@ -37,10 +37,10 @@ SPOOLMAN_UNIT=${SPOOLMAN_UNIT:-/etc/systemd/system/spoolman.service}
 if [ ! -f "$SPOOLMAN_MARKER" ] && { [ -d "$SPOOLMAN_OPT" ] || [ -f "$SPOOLMAN_UNIT" ]; } \
         && ! grep -qs '^Description=Spoolman filament inventory' "$SPOOLMAN_UNIT"; then
     [ -d "$SPOOLMAN_OPT" ] || die "a spoolman.service the kit did not install is at $SPOOLMAN_UNIT, and installing would replace it. Your Spoolman was not changed.
-To use that one: set spoolman_url in /etc/filament-kit/config.json to its address, then: sudo filament-kit modules disable spoolman
+To use that one: set spoolman_url in /etc/filament-kit/config.json to its address, then: sudo spoolwarden modules disable spoolman
 To let the kit install its own beside it: rename that unit, and run the same command again."
     die "a Spoolman the kit did not install is in $SPOOLMAN_OPT, and installing would replace it. Your Spoolman was not changed.
-To use that one: set spoolman_url in /etc/filament-kit/config.json to its address, then: sudo filament-kit modules disable spoolman
+To use that one: set spoolman_url in /etc/filament-kit/config.json to its address, then: sudo spoolwarden modules disable spoolman
 To let the kit replace its program (its database is not touched): sudo touch $SPOOLMAN_MARKER, and run the same command again."
 fi
 # END foreign-spoolman check

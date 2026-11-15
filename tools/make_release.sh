@@ -52,7 +52,7 @@ done
 # ---------- scripts and units ----------
 cp install/install.sh install/uninstall.sh "$stage/"
 cp LICENSE THIRD-PARTY.md "$stage/"    # the GPL text and the third-party notices travel with every release
-cp install/backup.sh install/filament-kit-cli.sh install/spoolman.sh "$stage/install/"
+cp install/backup.sh install/spoolwarden-cli.sh install/filament-kit-wrapper.sh install/spoolman.sh "$stage/install/"
 cp install/systemd/*.service install/systemd/*.timer install/systemd/*.path install/systemd/*.socket "$stage/install/systemd/"
 cp install/avahi/filament-kit.service "$stage/install/avahi/"
 cp install/remote/* "$stage/install/remote/"
@@ -62,7 +62,7 @@ cp reader/firmware/printer-station.bin reader/firmware/VERSION "$stage/install/r
 find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' -o -name '*.path' -o -path '*/install/remote/*' \) \
     -exec sed -i 's/\r$//' {} +
 chmod 755 "$stage/install.sh" "$stage/uninstall.sh" "$stage/install/backup.sh" \
-    "$stage/install/filament-kit-cli.sh" "$stage/install/spoolman.sh"
+    "$stage/install/spoolwarden-cli.sh" "$stage/install/filament-kit-wrapper.sh" "$stage/install/spoolman.sh"
 
 # ---------- Android app (optional) ----------
 # versionCode: FK_VERSION_CODE is passed to the Gradle build AND written to app/version.txt, so the update check on

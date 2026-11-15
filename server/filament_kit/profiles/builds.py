@@ -130,7 +130,7 @@ _DRIVE = re.compile(r"[A-Za-z]:")
 class OtherPc(ProfileError):
     def __init__(self, owner: str | None = None):
         super().__init__(409, "other_pc", "another PC is this server's sync PC; unpair it first "
-                                          "(filament-kit unpair <id>)", owner=owner)
+                                          "(spoolwarden unpair <id>)", owner=owner)
 
 
 class BadZip(ProfileError):
@@ -1284,7 +1284,7 @@ def _pc_failure(device_id: str | None) -> dict | None:
 
 def pc_waiting_text(pc: dict | None) -> str | None:
     """"PC sync waiting for Bambu Studio to close since <local date>" from status() `pc`, else None (one text for
-    `filament-kit status`, `profiles status` and the phone / MCP preset status)."""
+    `spoolwarden status`, `profiles status` and the phone / MCP preset status)."""
     w = (pc or {}).get("waiting") if isinstance(pc, dict) else None
     if not isinstance(w, dict):
         return None

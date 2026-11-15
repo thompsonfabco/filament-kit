@@ -99,7 +99,7 @@ def test_library_module_is_off_for_new_installs():
 def test_cli_status_says_not_downloaded(fresh, capsys):
     assert cli.main(["library", "status"]) == 0
     out = capsys.readouterr().out
-    assert "The Filament Catalog is not downloaded yet.\nFix: sudo filament-kit catalog update" in out
+    assert "The Filament Catalog is not downloaded yet.\nFix: sudo spoolwarden catalog update" in out
 
 
 # ---------- profiles without any library ----------

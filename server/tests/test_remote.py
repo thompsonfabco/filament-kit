@@ -145,7 +145,7 @@ def test_remote_print_names_ports_window_and_sandbox(tmp_path, capsys):
     assert run.calls == []  # printing runs nothing
     assert "443" in out and "80" in out and "03:10 America/New_York" in out
     assert "IPAddressAllow=127.0.0.0/8 ::1 160.79.104.0/21 2607:6bc0::/48 192.168.5.0/24" in out
-    assert "certbot" in out and "filament-kit remote get-certificate" in out
+    assert "certbot" in out and "spoolwarden remote get-certificate" in out
     assert "will not change" in out  # says plainly that the kit does not apply it
 
 
@@ -237,7 +237,7 @@ def test_cli_remote_firewall_only_prints(capsys, tmp_path, monkeypatch):
 
 
 def test_wrapper_runs_remote_as_root():
-    text = (INSTALL / "filament-kit-cli.sh").read_text()
+    text = (INSTALL / "spoolwarden-cli.sh").read_text()
     assert "| remote | update | uninstall |" in text and "| setup-code | logs)" in text
 
 
@@ -450,7 +450,7 @@ def test_an_expired_served_certificate_warns_and_names_how_to_renew():
     assert expired and "ended on 2026-11-09" in text and "sudo certbot renew" in fix
     expired, text, fix = remote.certificate_warning(
         {"self_signed": True, "not_after": now - datetime.timedelta(days=3)}, now)
-    assert expired and "sudo filament-kit modules apply" in fix
+    assert expired and "sudo spoolwarden modules apply" in fix
 
 
 # ---- v0.3.0: the kit's own route marker (the ops router writes "written by mcp-route" too) ----

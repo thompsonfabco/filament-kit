@@ -1,4 +1,4 @@
-"""`filament-kit reader setup` over the server's USB (reader_flash.py): the kit's own image, then the settings over the
+"""`spoolwarden reader setup` over the server's USB (reader_flash.py): the kit's own image, then the settings over the
 serial port, then the reader's report of its first start. A fake board speaks the firmware's line protocol
 (reader/lib/reader_core/src/settings.h)."""
 from __future__ import annotations

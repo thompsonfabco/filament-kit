@@ -1,5 +1,5 @@
 """v0.3.0 installer fixes: pairing on a station, `modules enable web` asking for its address, the passphrase line of
-`web status`, quiet probes during an apply, and `filament-kit uninstall`."""
+`web status`, quiet probes during an apply, and `spoolwarden uninstall`."""
 import io
 import json
 import os
@@ -126,7 +126,7 @@ def test_web_status_without_passphrase_is_not_a_failure(monkeypatch, capsys):
     assert "needs a look" not in out
     line = next(ln for ln in out.splitlines() if "passphrase" in ln)
     assert "note" in line and "Claude connector" in " ".join(out.split())
-    assert "sudo filament-kit web passphrase" in out
+    assert "sudo spoolwarden web passphrase" in out
 
 
 # ---------- B5: quiet probes and the Spoolman fields line ----------
@@ -160,7 +160,7 @@ def test_ensure_fields_says_what_it_checked(capsys, spoolman_url):
     assert "Spoolman: added the kit's extra fields" in out and "Spoolman: the kit's extra fields are in place" in out
 
 
-# ---------- B6: filament-kit uninstall ----------
+# ---------- B6: spoolwarden uninstall ----------
 
 def _kept(tmp_path, version, *, body="echo uninstall \"$@\"\n"):
     d = updates.store() / version
@@ -265,7 +265,7 @@ def test_uninstall_refuses_when_not_root(tmp_path, fake_release, monkeypatch, ca
 
 
 def test_uninstall_is_a_cli_command_run_as_root():
-    wrapper = (ROOT / "install" / "filament-kit-cli.sh").read_text(encoding="utf-8")
+    wrapper = (ROOT / "install" / "spoolwarden-cli.sh").read_text(encoding="utf-8")
     assert "| update | uninstall | station |" in wrapper and "| setup-code | logs)" in wrapper
     with pytest.raises(SystemExit):
         cli.main(["uninstall", "--bogus"])

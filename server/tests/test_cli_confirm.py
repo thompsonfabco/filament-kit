@@ -140,7 +140,7 @@ def _reader_revoke(m, rec, tmp_path):
             return True
     m.setattr(web_reader, "TokenStore", Store)
     return (["tag-reader", "revoke", "tr3"], "Revoke the token tr3? A Tag Reader using it is refused from now on. Set it "
-            "up again with sudo filament-kit tag-reader flash to give it a new token.")
+            "up again with sudo spoolwarden tag-reader flash to give it a new token.")
 
 
 def _reader_revoke_old(m, rec, tmp_path):
@@ -362,7 +362,7 @@ def test_the_fix_line_names_the_command_again_with_yes(rec, monkeypatch, termina
     argv, _ = _unpair(monkeypatch, rec, tmp_path)
     terminal(False)
     err = run(capsys, argv)[2]
-    assert err.splitlines()[-1].strip() == "sudo filament-kit unpair d1 --yes"
+    assert err.splitlines()[-1].strip() == "sudo spoolwarden unpair d1 --yes"
 
 
 def test_purge_asks_only_for_the_typed_word(rec, monkeypatch, terminal, capsys, tmp_path):

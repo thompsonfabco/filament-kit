@@ -1,4 +1,4 @@
-"""`filament-kit klipper add-on` and the Klipper halves of the `printer` commands (spec 2026-11-03-klipper-printers
+"""`spoolwarden klipper add-on` and the Klipper halves of the `printer` commands (spec 2026-11-03-klipper-printers
 §6, §7; 06 9.2).
 
     klipper add-on                          print the verified command that installs this version's Klipper add-on
@@ -233,7 +233,7 @@ def detect(p: registry.Printer, *, kit_spoolman: str | None = None, spoolman: bo
         d = kdetect.probe(client, hw)
     except Unauthorized:
         out.update(problem="api_key", message=f"{p.host}:{p.port} wants a Moonraker API key: "
-                                              f"run `filament-kit klipper api-key {p.serial}`")
+                                              f"run `spoolwarden klipper api-key {p.serial}`")
         return out
     except MoonrakerError as e:
         out.update(problem="offline", message=f"{e}; the server keeps trying once it runs")
@@ -303,7 +303,7 @@ def run(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="filament-kit")
+    ap = argparse.ArgumentParser(prog="spoolwarden")
     sub = ap.add_subparsers(dest="cmd", required=True)
     add_parser(sub)
     return run(ap.parse_args(["klipper", *(argv or [])]))

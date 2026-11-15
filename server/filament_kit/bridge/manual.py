@@ -181,7 +181,7 @@ class ManualMaps:
             return {"share": False, "message": "Noted: this map is not shared."}
         return {"share": True, "message": "Noted. The kit sends nothing itself: make the report with Collect a report on "
                 f"the printer's page in any of them (the setup page, the phone web app, the Android app), or on the server "
-                f"run: sudo filament-kit printer report {serial}, then attach the "
+                f"run: sudo spoolwarden printer report {serial}, then attach the "
                 "file to an issue."}
 
     # ---------------------------------------------------------------- inside

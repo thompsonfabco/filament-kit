@@ -1,4 +1,4 @@
-"""filament-kit modules list/set/enable/disable and the Features checklist (spec sections 3-4; 06 8.5)."""
+"""spoolwarden modules list/set/enable/disable and the Features checklist (spec sections 3-4; 06 8.5)."""
 import io
 import re
 import sys
@@ -268,7 +268,7 @@ def test_enable_station_with_server_on_links_locally(applied):
 def test_unknown_module_fails(applied, capsys):
     assert cli.main(["modules", "enable", "nope"]) == 2
     err = capsys.readouterr().err
-    assert 'Error: "nope" is not a Feature.' in err and "filament-kit features" in err
+    assert 'Error: "nope" is not a Feature.' in err and "spoolwarden features" in err
     assert cli.main(["features", "on", "label-reader-local", "--yes"]) == 0           # a key, an old name or a title
     assert cli.main(["features", "off", "local_intake"]) == 0
 

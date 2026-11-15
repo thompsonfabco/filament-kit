@@ -349,7 +349,7 @@ def test_a_failed_apply_keeps_the_data_and_says_how_to_finish(kit, capsys):
     assert backup.restore(z, yes=True, run=Runner(rc=1)) == 1
     assert (kit / "state" / "devices.json").read_text() == '[{"id": "d1"}]\n'
     out = capsys.readouterr().out
-    assert "sudo filament-kit modules apply" in out and "the earlier" in out
+    assert "sudo spoolwarden modules apply" in out and "the earlier" in out
 
 
 # ---------------------------------------------------------------- the nightly tar.gz as the same zip
@@ -449,7 +449,7 @@ def test_listing_names_each_kind(kit, tmp_path):
 def test_the_commands_need_root(kit, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
     assert cli.main(["backup", "create"]) == 3 and cli.main(["restore", "x.zip"]) == 3
-    assert "sudo filament-kit" in capsys.readouterr().err
+    assert "sudo spoolwarden" in capsys.readouterr().err
 
 
 def test_backup_create_and_restore_through_the_cli(kit, monkeypatch, capsys):
@@ -617,9 +617,9 @@ def test_scripts():
     assert "filament_kit.backup keep-days" in text and "-mtime +$((KEEP - 1))" in text
     inst = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
     assert '--restore) [ $# -ge 2 ] || usage; RESTORE="$2"' in inst
-    assert 'exec /usr/local/bin/filament-kit restore --yes "$RESTORE"' in inst
+    assert 'exec /usr/local/bin/spoolwarden restore --yes "$RESTORE"' in inst
     assert inst.index("restore --yes") < inst.index("# ---------- 4. install mode")
-    wrap = (ROOT / "install" / "filament-kit-cli.sh").read_text(encoding="utf-8")
+    wrap = (ROOT / "install" / "spoolwarden-cli.sh").read_text(encoding="utf-8")
     assert '    backup | restore) run_as_root "$@" ;;' in wrap
 
 

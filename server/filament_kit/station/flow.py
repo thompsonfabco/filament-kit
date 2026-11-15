@@ -40,7 +40,7 @@ def ascii_text(text, width=LINE_WIDTH):
     return unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()[:width]
 
 
-# ---- the kit server: one ServerApi, built again when `filament-kit station pair` rewrites the pairing files -------
+# ---- the kit server: one ServerApi, built again when `spoolwarden station pair` rewrites the pairing files -------
 
 _api: dict = {"key": None, "api": None}
 

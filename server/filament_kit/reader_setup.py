@@ -1,7 +1,7 @@
 """Setting up a Printer Station (ESP32-C3) with the firmware as it is: its Wi-Fi, server address, token and update key
 are compiled in from `reader/src/secrets.h`, so a setup is a token, that file, a PlatformIO build and a USB flash
 (reader/README.md, "Build"). This module finds a reader on USB, writes `secrets.h` and runs the build and flash; the
-CLI is `filament-kit reader setup`. Nothing secret is printed or logged: the token and the Wi-Fi password go only
+CLI is `spoolwarden reader setup`. Nothing secret is printed or logged: the token and the Wi-Fi password go only
 into the file, which is written 0600 and, for a flash, into a private temporary folder deleted afterwards.
 """
 from __future__ import annotations
@@ -117,7 +117,7 @@ def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str, buz
         raise SetupError("the Wi-Fi password must be at most 63 bytes")
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", token):
         raise SetupError("that is not a reader token")
-    return ("// Written by `filament-kit reader setup`. It holds the reader's token and the Wi-Fi password: keep it\n"
+    return ("// Written by `spoolwarden reader setup`. It holds the reader's token and the Wi-Fi password: keep it\n"
             "// out of version control and delete it once the reader is flashed.\n"
             "#pragma once\n"
             f"static const char* WIFI_SSID = {c_string(ssid)};\n"

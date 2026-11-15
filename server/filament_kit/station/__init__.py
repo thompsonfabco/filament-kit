@@ -24,7 +24,7 @@ owner's filament-mcp reads a kit station unchanged):
   (NFC_DEVICE=auto). A panel on other firmware than the bundled one is reflashed with esptool (STATION_PANEL_FLASH=0
   stops that);
 - `flow`: the intake flow the panel runs (scan, camera + recognition, weigh, long yellow saves; red cancels), asking
-  the kit server through `server_api` (pinned TLS, the pairing files from `filament-kit station pair`);
+  the kit server through `server_api` (pinned TLS, the pairing files from `spoolwarden station pair`);
 - `wire`: the one write path to the panel, shared by panel, beep and speech;
 - `beep`: without the panel, a scan beeps through ALSA (aplay);
 - `speech`: the panel speaks ("1042 grams. Hold yellow to save."): Piper (the voice from `voice`) or espeak-ng, cut

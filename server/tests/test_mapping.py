@@ -340,7 +340,7 @@ def test_in_progress_sees_another_process_job(stubs):
     d = config.paths().state / "printers" / SERIAL
     d.mkdir(parents=True, exist_ok=True)
     m = mapping.Mapper(FakeManager())
-    with open(d / mapping.LOCK_FILE, "a") as other:          # `filament-kit printer map` in another process
+    with open(d / mapping.LOCK_FILE, "a") as other:          # `spoolwarden printer map` in another process
         fcntl.flock(other.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert m.in_progress(SERIAL) is True
         fcntl.flock(other.fileno(), fcntl.LOCK_UN)

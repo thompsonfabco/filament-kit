@@ -22,11 +22,11 @@ MODULES = ("cli.py", "klipper_cli.py", "status.py", "updates.py", "remote.py", "
 # a command is a word that is typed: the programs a text names, and the kit's own commands by their first word. This
 # list is written apart from `output`'s, so a program one of them misses is found here
 COMMAND = re.compile(
-    r"\bsudo (?:-\S+ |\S*/\S|(?:filament-kit|systemctl|journalctl|rm|apt|apt-get|bash|ufw|usermod|groupadd|certbot|pip3?|"
+    r"\bsudo (?:-\S+ |\S*/\S|(?:spoolwarden|filament-kit|systemctl|journalctl|rm|apt|apt-get|bash|ufw|usermod|groupadd|certbot|pip3?|"
     r"python3?|tar|pio|curl|tee|cp|mv)\b)|\bsystemctl (?:start|stop|restart|status|enable|disable|mask|daemon-reload|reload)\b|"
     r"\bjournalctl -|\bapt(?:-get)? (?:install|remove)\b|\bpip install|\bpython3? -m\b|\btar xzf|\bcurl -|\busermod\b|"
     r"\bgroupadd\b|\bpio run\b|\./\S+\.sh|\bcertbot (?:certonly|renew)\b|"
-    r"\bfilament-kit (?:apply|backup|catalog|cert|certificate|config|devices|ensure-fields|help|intake|klipper|label-reader|"
+    r"\b(?:spoolwarden|filament-kit) (?:apply|backup|catalog|cert|certificate|config|devices|ensure-fields|help|intake|klipper|label-reader|"
     r"library|local-intake|logs|modules|pair|printer|profiles|reader|recent|remote|restore|setup-code|spoolman|station|"
     r"status|uninstall|unpair|update|web)\b")
 # a quoted argument, spaces and commas inside it: from a quote to the same quote
@@ -151,18 +151,18 @@ def test_the_scan_sees_the_texts_and_the_commands_in_them():
     """The scan finds the commands in the kinds of expression the modules use (a literal, an f-string, joined pieces, a
     conditional piece), so a rename cannot make it pass by seeing nothing."""
     src = ('def f(x, ok):\n'
-           '    a = "run sudo filament-kit config now"\n'
+           '    a = "run sudo spoolwarden config now"\n'
            '    b = f"see {x}: sudo systemctl start {x}"\n'
-           '    c = "run " + "sudo filament-kit cert" + (" --purge" if ok else "") + ", then go"\n'
-           '    need_sudo("sudo filament-kit update")\n')
+           '    c = "run " + "sudo spoolwarden cert" + (" --purge" if ok else "") + ", then go"\n'
+           '    need_sudo("sudo spoolwarden update")\n')
     path = Path(__file__).with_name("_scan_probe.py")
     path.write_text(src, encoding="utf-8")
     try:
         got = {line: commands(text) for line, text in texts(path)}
     finally:
         path.unlink()
-    assert got == {2: ["sudo filament-kit config"], 3: ["sudo systemctl start x"],
-                   4: ["sudo filament-kit cert --purge"]}
+    assert got == {2: ["sudo spoolwarden config"], 3: ["sudo systemctl start x"],
+                   4: ["sudo spoolwarden cert --purge"]}
     assert sum(len(texts(ROOT / m)) for m in MODULES) > 400          # it reads the real modules, not nothing
     assert sum(len(commands(t)) for m in MODULES for _, t in texts(ROOT / m)) > 60
 
@@ -198,8 +198,8 @@ def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkey
         "wrong_code": cli.NOT_CONNECTED["wrong_code"],
         "cert_changed": cli.NOT_CONNECTED["cert_changed"],
         "port": "could not flash" + cli._port_hint(Who()),
-        "recent": next(t for t in cli_texts if "low confidence: filament-kit recent show" in t),
-        "local-intake": next(t for t in cli_texts if "filament-kit local-intake status" in t),
+        "recent": next(t for t in cli_texts if "low confidence: spoolwarden recent show" in t),
+        "local-intake": next(t for t in cli_texts if "spoolwarden local-intake status" in t),
         "web": next(t for t in status if "filament-kit-web" in t and "journalctl" in t),
         "config": next(t for t in status if "option 4" in t and "internet" in t),
     }
@@ -221,7 +221,7 @@ def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkey
 def test_06_6_5_example_is_reproduced_at_80_columns(monkeypatch):
     """`Fix: check ... test it:` and the command on a line of its own, five spaces in, no quotes or braces added."""
     monkeypatch.setenv("COLUMNS", "80")
-    command = 'sudo filament-kit printer test "Study A1 mini"'
+    command = 'sudo spoolwarden printer test "Study A1 mini"'
     fix = "check that it is switched on and on the network, then test it: " + command
     assert output.wrap("Fix: " + fix, indent=5, first=0) == [
         "Fix: check that it is switched on and on the network, then test it:", "     " + command]
@@ -229,20 +229,20 @@ def test_06_6_5_example_is_reproduced_at_80_columns(monkeypatch):
 
 def test_a_command_that_fits_stays_on_the_line_and_one_that_does_not_goes_to_its_own(monkeypatch):
     monkeypatch.setenv("COLUMNS", "80")
-    assert output.wrap("Fix: run sudo filament-kit update again", indent=5, first=0) == [
-        "Fix: run sudo filament-kit update again"]
-    got = output.wrap("Error: it failed, so go on and then sudo filament-kit profiles apply-updates --all --dry-run now",
+    assert output.wrap("Fix: run sudo spoolwarden update again", indent=5, first=0) == [
+        "Fix: run sudo spoolwarden update again"]
+    got = output.wrap("Error: it failed, so go on and then sudo spoolwarden profiles apply-updates --all --dry-run now",
                       indent=7, first=0)
     assert got == ["Error: it failed, so go on and then",
-                   "     sudo filament-kit profiles apply-updates --all --dry-run now"]
+                   "     sudo spoolwarden profiles apply-updates --all --dry-run now"]
     rows = output.status_row("needs a look", "a row",
                              "check it, then: sudo journalctl -u filament-kit -n 50 --no-pager --output cat")
     assert rows[-1].startswith(" " * 23 + "sudo journalctl") and rows[-2].rstrip().endswith("then:")
 
 
 @pytest.mark.parametrize("text, command", [
-    ("go on (sudo filament-kit update installs it), then stop", "sudo filament-kit update"),
-    ("Paste the link from sudo filament-kit pair --station on the server: ", "sudo filament-kit pair --station"),
+    ("go on (sudo spoolwarden update installs it), then stop", "sudo spoolwarden update"),
+    ("Paste the link from sudo spoolwarden pair --station on the server: ", "sudo spoolwarden pair --station"),
     ("it is gone; run sudo systemctl daemon-reload && sudo systemctl restart nginx. Then wait",
      "sudo systemctl daemon-reload && sudo systemctl restart nginx"),
     ("add it: sudo usermod -aG dialout alice, then log in again", "sudo usermod -aG dialout alice"),
@@ -271,10 +271,10 @@ def test_a_backtick_in_a_text_is_printed_as_it_is(monkeypatch):
     assert output.wrap("no printer named a`b here") == ["no printer named a`b here"]
     assert output.wrap("name `x here") == ["name `x here"]
     assert output.wrap("Printer Shop `A B` X1, and `odd") == ["Printer Shop `A B` X1, and `odd"]
-    assert output.wrap("see: `sudo filament-kit status` now") == ["see: `sudo filament-kit status` now"]
+    assert output.wrap("see: `sudo spoolwarden status` now") == ["see: `sudo spoolwarden status` now"]
     monkeypatch.setenv("COLUMNS", "25")
-    got = output.wrap("a `sudo filament-kit config`, Printers) and more")        # the backticks are part of the words
-    assert got == ["a", "     `sudo filament-kit config`,", "Printers) and more"], got
+    got = output.wrap("a `sudo spoolwarden config`, Printers) and more")        # the backticks are part of the words
+    assert got == ["a", "     `sudo spoolwarden config`,", "Printers) and more"], got
 
 
 # ---------- no marker in any text ----------
@@ -303,8 +303,8 @@ def test_the_status_rows_and_their_fixes_are_plain_strings(monkeypatch):
     from filament_kit import status
     for _, text in texts(ROOT / "status.py"):
         _plain(text, "status.py")
-    for r in (status.Row("fail", "x", "run: sudo filament-kit cert"), ):
-        assert r.fix == "run: sudo filament-kit cert"
+    for r in (status.Row("fail", "x", "run: sudo spoolwarden cert"), ):
+        assert r.fix == "run: sudo spoolwarden cert"
 
 
 def test_the_texts_other_places_print_hold_no_marker(monkeypatch, tmp_path):
@@ -317,13 +317,13 @@ def test_the_texts_other_places_print_hold_no_marker(monkeypatch, tmp_path):
         t = remote.firewall_text({"hostname": "h.example.com", "route": "r", "lan": ["192.168.1.0/24"], "email": "",
                                   "window": ""}, tmp_path)
     _plain(t, "firewall_text")
-    assert "sudo filament-kit remote get-certificate" in t and "sudo systemctl daemon-reload" in t
+    assert "sudo spoolwarden remote get-certificate" in t and "sudo systemctl daemon-reload" in t
     p = {"version": "1.0", "tier": "cpu", "installed": "2.0", "installed_tier": "cpu", "downgrade": True,
          "upgrade": False, "same": False, "tiers": {"cpu": {"download_mb": 1, "disk_mb": 2, "minutes": 1, "fetched_at_install": ""}},
          "asked_tier": None}
     for line in lii.plan_text(p):
         _plain(line, "plan")
-    assert any("filament-kit local-intake install --version 1.0" in x for x in lii.plan_text(p))
+    assert any("spoolwarden local-intake install --version 1.0" in x for x in lii.plan_text(p))
     seen: list[str] = []
 
     def ask(prompt):
@@ -331,7 +331,7 @@ def test_the_texts_other_places_print_hold_no_marker(monkeypatch, tmp_path):
         raise EOFError
     monkeypatch.setattr(cli.os, "geteuid", lambda: 0, raising=False)
     cli.cmd_station_pair(ask=ask)
-    assert seen and all("sudo filament-kit pair --weigh-station" in s for s in seen)
+    assert seen and all("sudo spoolwarden pair --weigh-station" in s for s in seen)
     for s in seen:
         _plain(s, "pair prompt")
 
@@ -345,7 +345,7 @@ def test_the_setup_pages_pattern_matches_every_status_fix_that_is_a_command():
     assert "const FIX_COMMAND = /^(?:run: )?((?:sudo|filament-kit) .+)$/;" in src      # the port is of this one
     seen = 0
     for line, text in texts(ROOT / "status.py"):
-        if not (text.startswith("run: ") or re.match(r"(?:sudo|filament-kit|systemctl|journalctl) ", text))                 or not COMMAND.search(text):
+        if not (text.startswith("run: ") or re.match(r"(?:sudo|spoolwarden|filament-kit|systemctl|journalctl) ", text))                 or not COMMAND.search(text):
             continue                                   # not a fix that is a command
         seen += 1
         m = FIX_COMMAND.match(text)
@@ -359,20 +359,20 @@ def test_the_setup_pages_pattern_matches_every_status_fix_that_is_a_command():
 @pytest.mark.parametrize("columns", ["80", "40", "30"])
 def test_a_quoted_argument_with_prose_words_or_a_comma_belongs_to_the_command(columns, monkeypatch):
     monkeypatch.setenv("COLUMNS", columns)
-    for text, command in (('Fix: run sudo filament-kit printer test "Bench by the door"', 'sudo filament-kit printer test "Bench by the door"'),
-                          ('Fix: run sudo filament-kit printer test "Bench, by the door", then wait',
-                           'sudo filament-kit printer test "Bench, by the door",')):
+    for text, command in (('Fix: run sudo spoolwarden printer test "Bench by the door"', 'sudo spoolwarden printer test "Bench by the door"'),
+                          ('Fix: run sudo spoolwarden printer test "Bench, by the door", then wait',
+                           'sudo spoolwarden printer test "Bench, by the door",')):
         lines = output.wrap(text, indent=5, first=0)
         assert _whole(command, lines), lines
         assert all(len(x) <= int(columns) - 1 or " " not in x.strip() or x.strip() == command for x in lines), lines
 
 
 @pytest.mark.parametrize("command", [
-    "sudo filament-kit modules enable station", "sudo filament-kit modules disable klipper",
-    "sudo filament-kit printer report 01P00A123456789", "sudo filament-kit modules set hub --hub ADDRESS",
-    "sudo filament-kit printer test Bench", "sudo filament-kit printer add Voron 192.0.2.4",
-    "sudo filament-kit profiles apply --line PLA-Basic", "sudo filament-kit restore backup.tar.gz",
-    "sudo filament-kit cert", "sudo usermod -aG dialout alice"])
+    "sudo spoolwarden modules enable station", "sudo spoolwarden modules disable klipper",
+    "sudo spoolwarden printer report 01P00A123456789", "sudo spoolwarden modules set hub --hub ADDRESS",
+    "sudo spoolwarden printer test Bench", "sudo spoolwarden printer add Voron 192.0.2.4",
+    "sudo spoolwarden profiles apply --line PLA-Basic", "sudo spoolwarden restore backup.tar.gz",
+    "sudo spoolwarden cert", "sudo usermod -aG dialout alice"])
 @pytest.mark.parametrize("columns", ["80", "40"])
 def test_a_real_command_stays_whole_at_80_and_40_columns(command, columns, monkeypatch):
     """The commands the modules print (refuter-25 H1) are one piece, however long, whatever words their arguments are."""
@@ -398,5 +398,5 @@ def test_the_oracles_quote_pattern_takes_a_quoted_value_whole():
     assert QUOTED.match("'a b' c").group() == "'a b'"
     assert QUOTED.match('"a\'b c" d').group() == '"a\'b c"'
     assert QUOTED.match('"never closed') is None
-    assert commands('Fix: run sudo filament-kit printer test "Bench, by the door", then wait') == [
-        'sudo filament-kit printer test "Bench, by the door"']
+    assert commands('Fix: run sudo spoolwarden printer test "Bench, by the door", then wait') == [
+        'sudo spoolwarden printer test "Bench, by the door"']
