@@ -2583,19 +2583,7 @@
     <string name="catalog_save">Save to the catalog</string>
     <string name="catalog_saved">Saved to the Filament Catalog. Slicer presets are rebuilt in a minute.</string>
     <string name="catalog_title">New catalog line</string>
-    <string name="catalog_change_parent">Change parent</string>
     <string name="catalog_leave_thing">the new catalog line</string>
-    <!-- 1=material 2=presets -->
-    <string name="catalog_line_material">%1$s · %2$s</string>
-    <!-- 1=brand 2=line -->
-    <string name="catalog_line_name">%1$s %2$s</string>
-    <!-- 1=name -->
-    <string name="catalog_line_parent">Bambu Studio parent: %1$s</string>
-    <string name="catalog_line_parent_none">Bambu Studio parent: none</string>
-    <string name="catalog_lines_title">Existing lines</string>
-    <string name="catalog_parent_loading">Loading…</string>
-    <string name="catalog_parent_saved">Saved. A preset build was asked for.</string>
-    <string name="catalog_parent_unsynced">Slicer Sync has not reported any parents yet. It reports them when it runs.</string>
     <string name="catalog_saving_wait">Saving to the catalog… wait for the Hub\'s answer.</string>
     <string name="common_add">Add</string>
     <string name="common_bambu_parent_applies">Applies to every colour of this line.</string>
@@ -2648,6 +2636,41 @@
     <string name="presets_status_unavailable">Slicer preset status is not available right now.</string>
     <string name="presets_sync_not_set_up">Slicer Sync is not set up</string>
     <string name="presets_result_build_requested">Build requested. The Hub builds the presets within a minute or two.</string>
+    <string name="presets_change_parent">Change parent</string>
+    <!-- 1=line -->
+    <string name="presets_change_parent_for">Change parent of %1$s</string>
+    <!-- 1=material 2=presets -->
+    <string name="presets_line_material">%1$s · %2$s</string>
+    <!-- 1=name -->
+    <string name="presets_line_parent">Bambu Studio parent: %1$s</string>
+    <string name="presets_line_parent_none">Bambu Studio parent: none</string>
+    <string name="presets_line_saved">Saved. A preset build was asked for.</string>
+    <string name="presets_lines_empty">No lines yet. They are made from the filaments in Spoolman at the next build or when a spool is added.</string>
+    <string name="presets_lines_more">Show more</string>
+    <string name="presets_parent_loading">Loading…</string>
+    <string name="presets_parent_no_match">No parent matches.</string>
+    <!-- 1=line -->
+    <string name="presets_parent_sheet_title">Bambu Studio parent of %1$s</string>
+    <string name="presets_parent_unreported">Slicer Sync has not reported any parents yet. It reports them when it runs.</string>
+    <string name="presets_sheet_save">Save</string>
+    <!-- 1=vendor 2=name -->
+    <string name="presets_filament_title">%1$s %2$s</string>
+    <!-- 1=material 2=id -->
+    <string name="presets_filament_meta">%1$s · F%2$s</string>
+    <string name="presets_build_failed_plain">The last preset build failed</string>
+    <string name="presets_unknown_time">unknown time</string>
+    <!-- 1=count -->
+    <plurals name="presets_updates_waiting">
+        <item quantity="one">%1$d preset in your slicers can be updated.</item>
+        <item quantity="other">%1$d presets in your slicers can be updated.</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="presets_updates_review">
+        <item quantity="one">Review %1$d update</item>
+        <item quantity="other">Review %1$d updates</item>
+    </plurals>
+    <string name="presets_build_elsewhere">To build now, open the setup page (Settings, Open the setup page).</string>
+    <string name="presets_templates_none">Slicer Sync has not reported any parents yet, so a line cannot be started here. It reports them when it runs.</string>
     <string name="printer_add_connecting">Connecting to the printer…</string>
     <!-- 1=model 2=serial -->
     <string name="printer_add_facts">%1$s · serial %2$s</string>

@@ -8,9 +8,15 @@ import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.UpdatesInfo
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import java.util.TimeZone
 
+@RunWith(RobolectricTestRunner::class)
 class PresetsCardTest {
+    private val res get() = RuntimeEnvironment.getApplication().resources
+
     /** Times shown as `<raw>` so the tests do not depend on the phone's locale. */
     private val fmt: (String?) -> String = { "<$it>" }
 
@@ -24,9 +30,9 @@ class PresetsCardTest {
         assertEquals(
             listOf(
                 PresetLine("96 presets for 12 lines, built <2026-11-02T01:02:03Z>"),
-                PresetLine("Installed on your PC <2026-11-02T01:05:00Z>"),
+                PresetLine("Installed on your PC <2026-11-02T01:05:00Z>", mark = PresetMark.Installed, row = PresetRow.OnPc),
             ),
-            presetLines(s, fmt),
+            presetLines(s, res, fmt),
         )
     }
 
@@ -39,10 +45,10 @@ class PresetsCardTest {
         assertEquals(
             listOf(
                 PresetLine("96 presets for 12 lines, built <2026-11-02T01:02:03Z>"),
-                PresetLine("The last preset build failed: validation failed: x.json", error = true),
-                PresetLine("Not installed on your PC yet"),
+                PresetLine("The last preset build failed: validation failed: x.json", error = true, row = PresetRow.LastBuild),
+                PresetLine("Not installed on your PC yet", mark = PresetMark.NotYet, row = PresetRow.OnPc),
             ),
-            presetLines(s, fmt),
+            presetLines(s, res, fmt),
         )
     }
 
@@ -54,28 +60,28 @@ class PresetsCardTest {
         )
         assertEquals(
             listOf(
-                PresetLine("The last preset build failed: no system presets uploaded", error = true),
-                PresetLine("PC sync not set up"),
+                PresetLine("The last preset build failed: no system presets uploaded", error = true, row = PresetRow.LastBuild),
+                PresetLine("Slicer Sync is not set up", mark = PresetMark.NotSetUp, row = PresetRow.OnPc),
             ),
-            presetLines(s, fmt),
+            presetLines(s, res, fmt),
         )
     }
 
     @Test fun neverAttempted() {
         assertEquals(
-            listOf(PresetLine("No presets built yet"), PresetLine("PC sync not set up")),
-            presetLines(ProfileStatus(), fmt),
+            listOf(PresetLine("No presets built yet"), PresetLine("Slicer Sync is not set up", mark = PresetMark.NotSetUp, row = PresetRow.OnPc)),
+            presetLines(ProfileStatus(), res, fmt),
         )
     }
 
     @Test fun aFailureWithoutTextStillSaysSo() {
         val s = ProfileStatus(lastAttempt = BuildAttempt("x", ok = false, error = null))
-        assertEquals(PresetLine("The last preset build failed", error = true), presetLines(s, fmt)[0])
+        assertEquals(PresetLine("The last preset build failed", error = true, row = PresetRow.LastBuild), presetLines(s, res, fmt)[0])
     }
 
     @Test fun oneLineAndOnePresetAreSingular() {
         val s = ProfileStatus(lines = 1, presets = 1, build = build.copy(presets = 1))
-        assertEquals("1 preset for 1 line, built <2026-11-02T01:02:03Z>", presetLines(s, fmt)[0].text)
+        assertEquals("1 preset for 1 line, built <2026-11-02T01:02:03Z>", presetLines(s, res, fmt)[0].text)
     }
 
     @Test fun timesFromTheServerAreReadAsIsoOrEpochSeconds() {
@@ -90,20 +96,30 @@ class PresetsCardTest {
     }
 
     @Test fun buildNowIsOfferedOnlyWhileNoPcSyncIsSetUp() {
-        assertEquals(PresetActions(canBuild = true, hints = emptyList()), presetActions(ProfileStatus()))
-        val withPc = presetActions(ProfileStatus(pc = PcInfo("pc-1", null)))
+        assertEquals(PresetActions(canBuild = true, hints = emptyList()), presetActions(ProfileStatus(), res))
+        val withPc = presetActions(ProfileStatus(pc = PcInfo("pc-1", null)), res)
         assertEquals(false, withPc.canBuild)
-        assertEquals(listOf("To build now, $SETUP_PAGE_HINT."), withPc.hints)
+        assertEquals(listOf("To build now, open the setup page (Settings, Open the setup page)."), withPc.hints)
     }
 
     @Test fun waitingUpdatesAreReviewedOnThePhoneAndAcceptedOnesAreNotCounted() {
-        val a = presetActions(ProfileStatus(updates = UpdatesInfo(count = 3, lines = 2, accepted = 1)))
+        val a = presetActions(ProfileStatus(updates = UpdatesInfo(count = 3, lines = 2, accepted = 1)), res)
         assertEquals(listOf("2 presets in your slicers can be updated."), a.hints)
         assertEquals(2, a.waiting)
-        assertEquals("Review 2 updates", updatesButton(a))
-        val none = presetActions(ProfileStatus(updates = UpdatesInfo(count = 2, lines = 1, accepted = 2)))
+        assertEquals("Review 2 updates", updatesButton(a, res))
+        val none = presetActions(ProfileStatus(updates = UpdatesInfo(count = 2, lines = 1, accepted = 2)), res)
         assertEquals(emptyList<String>(), none.hints)
-        assertEquals("Updates", updatesButton(none))
-        assertEquals("Review 1 update", updatesButton(presetActions(ProfileStatus(updates = UpdatesInfo(count = 1)))))
+        assertEquals("Updates", updatesButton(none, res))
+        assertEquals("Review 1 update", updatesButton(presetActions(ProfileStatus(updates = UpdatesInfo(count = 1)), res), res))
+    }
+
+    @Test fun timesAreAgesForTwoDaysThenTheDate() {
+        val built = stampMillis("2026-11-02T01:02:03Z")!!
+        assertEquals("40 s ago", presetAge(res, "2026-11-02T01:02:03Z", built + 40_000))
+        assertEquals("2 min ago", presetAge(res, "2026-11-02T01:02:03Z", built + 150_000))
+        assertEquals("3 h ago", presetAge(res, "2026-11-02T01:02:03Z", built + 3 * 3_600_000 + 5_000))
+        assertEquals(formatStamp("2026-11-02T01:02:03Z"), presetAge(res, "2026-11-02T01:02:03Z", built + 3 * 86_400_000L))
+        assertEquals("soon", presetAge(res, "soon", built))
+        assertEquals("unknown time", presetAge(res, null, built))
     }
 }

@@ -733,8 +733,9 @@ class ScreenSemanticsTest {
         val vm = AddProfileViewModel(FakeCatalog(refuse = false))
         host(catalogTitle()) { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
         rule.waitForIdle()
-        rule.onNodeWithText("Existing lines").assertExists()
-        rule.onNodeWithText("Bambu Studio parent: none").assertExists()
+        // the lines and "Change parent" moved to the Slicer presets screen (S4.14)
+        rule.onNodeWithText("Existing lines").assertDoesNotExist()
+        rule.onNodeWithText("Change parent").assertDoesNotExist()
         auditAllFour("Save to the catalog", CATALOG_SECTIONS)
     }
 
@@ -805,8 +806,7 @@ class ScreenSemanticsTest {
         rule.onNodeWithText("This phone is no longer paired with the Hub.").assertExists()
         rule.onNodeWithText("Save to the catalog").assertIsNotEnabled()
         rule.onNodeWithText("Example Filaments").assertExists()
-        rule.onNodeWithText("Existing lines").assertDoesNotExist()
-        auditAllFour("Save to the catalog", CATALOG_SECTIONS - "Existing lines")
+        auditAllFour("Save to the catalog", CATALOG_SECTIONS)
     }
 
     private fun fillCatalog(vm: AddProfileViewModel) {
@@ -1588,11 +1588,6 @@ class ScreenSemanticsTest {
         private val failure: Exception? = null,
     ) : ProfileApi {
         override suspend fun parents(material: String) = ParentList(listOf("Generic PLA", "Example PLA Basic"), synced = true)
-        override suspend fun profileLines() = listOf(
-            ProfileLine(lineId = "example--polyterra", vendor = "Example Filaments", product = "PolyTerra", material = "PLA", presets = 4, bambuParent = "Generic PLA"),
-            ProfileLine(lineId = "example--silk", vendor = "Example Filaments", product = "Silk", material = "PLA"),
-        )
-        override suspend fun setLineParent(lineId: String, parent: String) = profileLines().first { it.lineId == lineId }
         override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {
             gate?.await()
             failure?.let { throw it }
@@ -1643,6 +1638,6 @@ class ScreenSemanticsTest {
 
     private companion object {
         const val DENSITY_PROBLEM = "fields.filament_density '9' is outside 0.5-3.0 g/cm3"
-        val CATALOG_SECTIONS = listOf("Line", "Temperatures", "Material", "Slicer", "Notes", "Existing lines")
+        val CATALOG_SECTIONS = listOf("Line", "Temperatures", "Material", "Slicer", "Notes")
     }
 }

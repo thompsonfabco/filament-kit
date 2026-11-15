@@ -1,0 +1,439 @@
+package com.thompsonfabco.filamentkit.ui.presets
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.net.ProfileLine
+import com.thompsonfabco.filamentkit.net.UncoveredFilament
+import com.thompsonfabco.filamentkit.ui.components.HubNotice
+import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwIconSize
+import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
+import com.thompsonfabco.filamentkit.ui.components.SwSheet
+import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
+import com.thompsonfabco.filamentkit.ui.home.PresetMark
+import com.thompsonfabco.filamentkit.ui.home.PresetRow
+import com.thompsonfabco.filamentkit.ui.home.presetAge
+import com.thompsonfabco.filamentkit.ui.home.presetLines
+import com.thompsonfabco.filamentkit.ui.printers.FormField
+import com.thompsonfabco.filamentkit.ui.profile.SaveFailure
+import com.thompsonfabco.filamentkit.ui.settings.SettingsPanel
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+
+/**
+ * Slicer presets (05-android-app 11.2): the build status, Build now, the filaments without a preset line (add to a line or
+ * start one), the Product lines panel with "Change parent", and a way to the Filament Catalog and the Hub page. The shell
+ * draws the top bar. [onAddCatalogLine] opens the catalog form (05 8); [setupUrl] is the Hub page's address now (null:
+ * not known). [nowMillis] is the time ages count from (null: the clock).
+ */
+@Composable
+fun PresetsScreen(
+    vm: PresetsViewModel,
+    onPairAgain: () -> Unit,
+    onAddCatalogLine: () -> Unit,
+    setupUrl: () -> String?,
+    modifier: Modifier = Modifier,
+    nowMillis: Long? = null,
+) {
+    val s by vm.state.collectAsStateWithLifecycle()
+    val space = SpoolwardenTheme.space
+    val context = LocalContext.current
+    val toast = LocalToast.current
+    val done = s.done
+    // the card has left the list, so its result is a toast (05-android-app 3.2)
+    LaunchedEffect(done) {
+        if (done != null) {
+            vm.doneShown()
+            toast?.show(context.getString(if (done.created) R.string.presets_created else R.string.presets_added, done.name))
+        }
+    }
+    val now = remember(nowMillis) { nowMillis ?: System.currentTimeMillis() }
+    Column(
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(space.s3),
+        ) {
+            StatusPanel(s, vm, now, onPairAgain)
+            NoticeCard(NoticeKind.Info, stringResource(R.string.presets_info))
+            SettingsPanel {
+                SectionTitle(stringResource(R.string.presets_missing_title))
+                Text(stringResource(R.string.presets_missing_text), style = MaterialTheme.typography.bodyMedium)
+                SwButton(stringResource(R.string.catalog_add_line), onAddCatalogLine, Modifier.fillMaxWidth())
+            }
+            UncoveredPanel(s, vm, onPairAgain)
+            LinesPanel(s, vm, onPairAgain)
+            HubPageLine(setupUrl)
+        }
+    }
+    s.edit?.let { ParentSheet(it, vm, onPairAgain) }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+}
+
+/** The status lines of 11.1 as field rows (Built, Last build, On your PC), then Build now and its answer. */
+@Composable
+private fun StatusPanel(s: PresetsUiState, vm: PresetsViewModel, now: Long, onPairAgain: () -> Unit) {
+    val resources = LocalContext.current.resources
+    val colors = SpoolwardenTheme.colors
+    SettingsPanel {
+        val status = s.status
+        when {
+            !s.statusLoaded -> SwSkeletonRows(2)
+            status == null ->
+                Text(stringResource(R.string.presets_status_unavailable), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            else -> presetLines(status, resources) { presetAge(resources, it, now) }.forEach { line ->
+                val label = stringResource(
+                    when (line.row) {
+                        PresetRow.Built -> R.string.presets_field_built
+                        PresetRow.LastBuild -> R.string.presets_field_last_build
+                        PresetRow.OnPc -> R.string.presets_field_on_pc
+                    },
+                )
+                Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+                    Text(label, color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        line.mark?.let { mark ->
+                            SwIcon(
+                                mark.shape, null, size = SwIconSize.Small,
+                                tint = when (mark) {
+                                    PresetMark.NotYet -> colors.warn
+                                    PresetMark.Installed -> colors.ok
+                                    PresetMark.NotSetUp -> colors.muted
+                                },
+                            )
+                        }
+                        Text(line.text, style = MaterialTheme.typography.bodyMedium, color = if (line.error) colors.bad else colors.text)
+                    }
+                }
+            }
+        }
+        SwButton(
+            stringResource(R.string.presets_build_now), vm::build, Modifier.fillMaxWidth(),
+            kind = SwButtonKind.Main, busy = s.building,
+        )
+        when (val note = s.buildNote) {
+            null -> Unit
+            BuildNote.Asked -> Text(
+                stringResource(R.string.presets_result_build_requested),
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium,
+            )
+            is BuildNote.Failed -> FailureNotice(note.fail, onPairAgain)
+        }
+    }
+}
+
+/** A failed Hub call as a notice; [onTryAgain] adds the button to the ones that are about reaching the Hub. */
+@Composable
+private fun FailureNotice(fail: Fail, onPairAgain: () -> Unit, onTryAgain: (() -> Unit)? = null) {
+    val again = onTryAgain?.let { listOf(SwAction(stringResource(R.string.common_try_again), it)) }.orEmpty()
+    when (fail.kind) {
+        SaveFailure.CertificateChanged -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+        SaveFailure.NotPaired -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+        SaveFailure.Unreachable -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_unreachable), actions = again)
+        SaveFailure.Unknown -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_answer_unknown), actions = again)
+        SaveFailure.Message -> NoticeCard(NoticeKind.Bad, fail.message.orEmpty(), actions = again)
+    }
+}
+
+// ---- filaments without a preset line ----------------------------------------------------------------------------
+
+@Composable
+private fun UncoveredPanel(s: PresetsUiState, vm: PresetsViewModel, onPairAgain: () -> Unit) {
+    val list = s.uncovered
+    SettingsPanel {
+        SectionTitle(stringResource(R.string.presets_without_line))
+        val fail = s.uncoveredFail
+        when {
+            list == null -> SwSkeletonRows(3)
+            fail != null -> FailureNotice(fail, onPairAgain, vm::loadUncovered)
+            list.isEmpty() -> Text(stringResource(R.string.presets_all_done), style = MaterialTheme.typography.bodyMedium)
+            else -> list.forEachIndexed { i, f ->
+                if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+                FilamentCardView(f, s.card(f.id), vm, onPairAgain)
+            }
+        }
+    }
+}
+
+/** One filament without a line: add it to a line of its brand, or start a new line from it. */
+@Composable
+private fun FilamentCardView(f: UncoveredFilament, card: FilamentCard, vm: PresetsViewModel, onPairAgain: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    val idle = card.busy == null
+    Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
+        Text(stringResource(R.string.presets_filament_title, f.vendor, f.name), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            stringResource(R.string.presets_filament_meta, f.material, f.id.toString()),
+            style = MaterialTheme.typography.bodySmall, color = SpoolwardenTheme.colors.muted,
+        )
+        if (f.linesForVendor.isNotEmpty()) {
+            PickField(
+                stringResource(R.string.presets_add_select), card.line ?: f.linesForVendor.first(), f.linesForVendor, idle,
+                onPick = { vm.chooseLine(f.id, it) },
+            )
+            SwButton(
+                stringResource(R.string.presets_add_button), { vm.addToLine(f) }, Modifier.fillMaxWidth(),
+                enabled = idle, busy = card.busy == CardBusy.Adding,
+            )
+        }
+        SwButton(
+            stringResource(if (f.linesForVendor.isNotEmpty()) R.string.presets_new_line_with_lines else R.string.presets_new_line_none),
+            { vm.toggleNewLine(f) }, kind = SwButtonKind.Quiet, enabled = idle,
+        )
+        if (card.newLineOpen) NewLineForm(f, card, vm)
+        // a refusal that names a field of the form is shown under that field
+        val inline = card.newLineOpen && card.fail?.field in INLINE_FIELDS
+        card.fail?.takeIf { !inline }?.let { FailureNotice(it, onPairAgain) }
+    }
+}
+
+private val INLINE_FIELDS = listOf("name", "bs_template")
+
+@Composable
+private fun NewLineForm(f: UncoveredFilament, card: FilamentCard, vm: PresetsViewModel) {
+    val idle = card.busy == null
+    val templates = card.templates
+    val fail = card.fail
+    FormField(
+        card.name, { vm.setName(f.id, it) }, stringResource(R.string.presets_line_name), enabled = idle,
+        hint = stringResource(R.string.presets_line_name_help), error = fail?.takeIf { it.field == "name" }?.message,
+    )
+    when {
+        templates == null -> Text(stringResource(R.string.presets_parent_loading), style = MaterialTheme.typography.bodySmall)
+        !templates.synced -> Text(
+            stringResource(R.string.presets_templates_none), style = MaterialTheme.typography.bodySmall,
+            color = SpoolwardenTheme.colors.muted,
+        )
+        else -> PickField(
+            stringResource(R.string.presets_bs_template), card.template.orEmpty(), templates.parents, idle,
+            onPick = { vm.chooseTemplate(f.id, it) }, error = fail?.takeIf { it.field == "bs_template" }?.message,
+        )
+    }
+    SwButton(
+        stringResource(R.string.presets_create), { vm.createLine(f) }, Modifier.fillMaxWidth(),
+        enabled = idle && card.template != null && card.name.isNotBlank(), busy = card.busy == CardBusy.Creating,
+    )
+}
+
+/** A read-only field that opens the list of [options] (a drop-down); [error] is shown under it. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PickField(
+    label: String,
+    value: String,
+    options: List<String>,
+    enabled: Boolean,
+    onPick: (String) -> Unit,
+    error: String? = null,
+) {
+    var open by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = open && enabled, onExpandedChange = { open = it }) {
+        OutlinedTextField(
+            value = value, onValueChange = {}, readOnly = true, enabled = enabled, singleLine = true,
+            isError = error != null, label = { Text(label) }, supportingText = error?.let { { Text(it) } },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) }, shape = SpoolwardenTheme.shapes.r,
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(
+            expanded = open && enabled, onDismissRequest = { open = false },
+            containerColor = SpoolwardenTheme.colors.surface, shape = SpoolwardenTheme.shapes.r,
+        ) {
+            options.forEach { o -> SwMenuItem(o, { onPick(o); open = false }, checked = o == value) }
+        }
+    }
+}
+
+// ---- product lines ----------------------------------------------------------------------------------------------
+
+@Composable
+private fun LinesPanel(s: PresetsUiState, vm: PresetsViewModel, onPairAgain: () -> Unit) {
+    val lines = s.lines
+    SettingsPanel {
+        SectionTitle(stringResource(R.string.presets_lines_title))
+        if (lines == null) {
+            SwSkeletonRows(3)
+            return@SettingsPanel
+        }
+        s.linesFail?.let { FailureNotice(it, onPairAgain, vm::loadLines) }
+        if (lines.isEmpty() && s.linesFail == null) {
+            Text(stringResource(R.string.presets_lines_empty), style = MaterialTheme.typography.bodyMedium)
+        }
+        lines.take(s.shown).forEachIndexed { i, line ->
+            if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+            LineRow(line, saved = s.savedFor == line.lineId, onChange = { vm.editParent(line) })
+        }
+        if (lines.size > s.shown) SwButton(stringResource(R.string.presets_lines_more), vm::showMore, kind = SwButtonKind.Quiet)
+    }
+}
+
+/** One product line: "<brand> <line>", "<material> · <n> presets", its Bambu Studio parent (a triangle when none), Change parent. */
+@Composable
+private fun LineRow(line: ProfileLine, saved: Boolean, onChange: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    val colors = SpoolwardenTheme.colors
+    val name = stringResource(R.string.presets_line_title, line.vendor, line.product)
+    val changeFor = stringResource(R.string.presets_change_parent_for, name)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(
+                    R.string.presets_line_material, line.material,
+                    pluralStringResource(R.plurals.presets_built_presets, line.presets, line.presets),
+                ),
+                style = MaterialTheme.typography.bodySmall, color = colors.muted,
+            )
+            val parent = line.bambuParent
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space.s1)) {
+                if (parent == null) SwIcon(R.drawable.sw_st_triangle, null, size = SwIconSize.Small, tint = colors.warn)
+                Text(
+                    if (parent == null) stringResource(R.string.presets_line_parent_none)
+                    else stringResource(R.string.presets_line_parent, parent),
+                    style = MaterialTheme.typography.bodySmall, color = colors.muted,
+                )
+            }
+            if (saved) {
+                Text(
+                    stringResource(R.string.presets_line_saved), Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        SwButton(
+            stringResource(R.string.presets_change_parent), onChange,
+            Modifier.semantics { contentDescription = changeFor }, kind = SwButtonKind.Quiet,
+        )
+    }
+}
+
+/** The sheet "Bambu Studio parent of <line>" (05-android-app 11.2): find a parent, pick one, Save or Cancel. */
+@Composable
+private fun ParentSheet(edit: ParentEdit, vm: PresetsViewModel, onPairAgain: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    SwSheet(onDismiss = vm::closeParent, gesturesEnabled = !edit.saving) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4),
+            verticalArrangement = Arrangement.spacedBy(space.s3),
+        ) {
+            SectionTitle(stringResource(R.string.presets_parent_sheet_title, edit.line))
+            val parents = edit.parents
+            val fail = edit.fail
+            when {
+                parents == null && fail != null -> {
+                    FailureNotice(fail, onPairAgain)
+                    SwButton(stringResource(R.string.common_close), vm::closeParent, Modifier.fillMaxWidth())
+                }
+                parents == null -> Text(stringResource(R.string.presets_parent_loading), style = MaterialTheme.typography.bodyMedium)
+                !parents.synced -> {
+                    Text(stringResource(R.string.presets_parent_unreported), style = MaterialTheme.typography.bodyMedium)
+                    SwButton(stringResource(R.string.common_close), vm::closeParent, Modifier.fillMaxWidth())
+                }
+                else -> {
+                    FormField(edit.query, vm::findParent, stringResource(R.string.presets_parent), enabled = !edit.saving)
+                    val matches = edit.matches
+                    Column(Modifier.heightIn(max = SpoolwardenTheme.sizes.qr).verticalScroll(rememberScrollState())) {
+                        if (matches.isEmpty()) {
+                            Text(stringResource(R.string.presets_parent_no_match), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        matches.take(MATCH_CAP).forEach { p ->
+                            val picked = p == edit.picked
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
+                                    .selectable(picked, enabled = !edit.saving, role = Role.RadioButton) { vm.pickParent(p) },
+                                horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(picked, onClick = null)
+                                Text(p, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                    fail?.let { FailureNotice(it, onPairAgain) }
+                    SwButton(
+                        stringResource(R.string.presets_sheet_save), vm::saveParent, Modifier.fillMaxWidth(),
+                        kind = SwButtonKind.Main, enabled = edit.picked != null && edit.picked != edit.current,
+                        busy = edit.saving,
+                    )
+                    SwButton(
+                        stringResource(R.string.common_cancel), vm::closeParent, Modifier.fillMaxWidth(),
+                        kind = SwButtonKind.Quiet, enabled = !edit.saving,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The matches listed at once; typing in "Find a parent" narrows the rest. */
+private const val MATCH_CAP = 50
+
+/** "Attach filaments to lines and build presets now on the Hub page or in the web app." and the button to the Hub page. */
+@Composable
+private fun HubPageLine(setupUrl: () -> String?) {
+    val links = LocalUriHandler.current
+    var problem by remember { mutableStateOf<Int?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2)) {
+        Text(stringResource(R.string.presets_hub_page_line), style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted)
+        SwButton(stringResource(R.string.common_open_hub_page), {
+            val url = setupUrl()
+            problem = when {
+                url == null -> R.string.settings_hub_page_error_address
+                runCatching { links.openUri(url) }.isSuccess -> null
+                else -> R.string.settings_hub_page_error_browser
+            }
+        }, kind = SwButtonKind.Quiet)
+        problem?.let { NoticeCard(NoticeKind.Bad, stringResource(it)) }
+    }
+}

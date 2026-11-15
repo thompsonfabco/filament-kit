@@ -1,0 +1,5 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/presets/PresetsViewModel.kt | Generic $material | the name the Hub gives its generic Bambu Studio preset, matched by that name and picked as the template; the screen's texts are in the catalogue (S4.14)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/presets/PresetsViewModel.kt | field | wire identifier (route, field or error code), never shown; the screen's texts are in the catalogue (S4.14)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/presets/PresetsViewModel.kt | local_network | wire identifier (route, field or error code), never shown; the screen's texts are in the catalogue (S4.14)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/presets/PresetsViewModel.kt | offline | wire identifier (route, field or error code), never shown; the screen's texts are in the catalogue (S4.14)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/presets/PresetsViewModel.kt | unauthorized | wire identifier (route, field or error code), never shown; the screen's texts are in the catalogue (S4.14)

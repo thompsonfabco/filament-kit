@@ -78,6 +78,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.thompsonfabco.filamentkit.nav.AddProfileRoute
 import com.thompsonfabco.filamentkit.nav.AddProfileTitle
+import com.thompsonfabco.filamentkit.nav.PresetsRoute
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.SnackbarResult
 import com.thompsonfabco.filamentkit.nav.AddDoneRoute
@@ -216,6 +217,9 @@ import com.thompsonfabco.filamentkit.ui.printers.PrinterEntry
 import com.thompsonfabco.filamentkit.ui.printers.PrinterSettingsEntry
 import com.thompsonfabco.filamentkit.ui.printers.printerPlaceTitle
 import com.thompsonfabco.filamentkit.ui.printers.PrintersListEntry
+import com.thompsonfabco.filamentkit.ui.presets.PresetsBackend
+import com.thompsonfabco.filamentkit.ui.presets.PresetsScreen
+import com.thompsonfabco.filamentkit.ui.presets.PresetsViewModel
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
@@ -927,7 +931,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             presetsNoteIsError = presetsNoteIsError,
                             presetUpdates = presetUpdates,
                             onPresetsChanged = { presetsReload++ },
-                            onAddCatalogLine = { nav.navigate(AddProfileRoute) },
+                            onOpenPresets = { nav.navigate(PresetsRoute) },
                             localNetworkPanel = { LocalNetworkNotice(localNetwork) },
                             extra = { if (BuildConfig.DEBUG) SimulateTag() },
                         )
@@ -937,6 +941,22 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                     composable<AddReviewRoute> { e -> addStep(e.toRoute<AddReviewRoute>().draftId, AddStep.Check) }
                     composable<AddPreviewRoute> { e -> addStep(e.toRoute<AddPreviewRoute>().draftId, AddStep.Preview) }
                     composable<AddDoneRoute> { e -> addStep(e.toRoute<AddDoneRoute>().draftId, AddStep.Done) }
+
+                    composable<PresetsRoute> {
+                        if (api == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        val presetsVm: PresetsViewModel = viewModel(factory = viewModelFactory {
+                            initializer { PresetsViewModel(PresetsBackend.of(::currentApi)) }
+                        })
+                        PresetsScreen(
+                            vm = presetsVm,
+                            onPairAgain = app.router::pairAgain,
+                            onAddCatalogLine = { nav.navigate(AddProfileRoute) },
+                            setupUrl = { HubPage.url(app.session.baseUrl()) },
+                        )
+                    }
 
                     composable<AddProfileRoute> {
                         val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
@@ -1261,6 +1281,7 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
         destination.inPairing() -> R.string.pair_title
         destination.inAdd() -> R.string.home_add_title
         destination.hasRoute(AddProfileRoute::class) -> AddProfileTitle
+        destination.hasRoute(PresetsRoute::class) -> R.string.nav_slicer_presets
         destination.hasRoute(LicencesRoute::class) -> R.string.settings_licences_title
         destination.hasRoute(SettingsAppearanceRoute::class) -> R.string.appearance_title
         destination.hasRoute(SettingsHubRoute::class) -> R.string.hub_sheet_title

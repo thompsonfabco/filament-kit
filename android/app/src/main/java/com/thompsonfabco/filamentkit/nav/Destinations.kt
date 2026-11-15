@@ -39,6 +39,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object AddProfileRoute
 
+/** `presets`: the Slicer presets screen (05-android-app 11.2), opened from Home's panel. */
+@Serializable data object PresetsRoute
+
 /** The top bar's title on [AddProfileRoute] (05-android-app 8); the shell and the AUT-8 test both read it. */
 @get:StringRes
 internal val AddProfileTitle: Int get() = R.string.catalog_title

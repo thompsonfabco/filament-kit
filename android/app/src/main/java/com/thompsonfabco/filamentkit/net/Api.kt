@@ -438,6 +438,31 @@ class Api(
         return decode(line)
     }
 
+    /** `GET /api/profiles/uncovered`: the filaments without a preset line. */
+    suspend fun uncoveredFilaments(): List<UncoveredFilament> =
+        call(request("api", "profiles", "uncovered").get()).jsonObject["uncovered_filaments"]?.jsonArray.orEmpty().map { decode(it) }
+
+    /** `POST /api/profiles/lines/{line}/filaments`: puts [ids] in the line; 400 `bad_request` names the `field` it refused. */
+    suspend fun addFilamentsToLine(line: String, ids: List<Int>): ProfileLine {
+        val body = buildJsonObject { put("ids", JsonArray(ids.map(::JsonPrimitive))) }
+        return decode(call(request("api", "profiles", "lines", line, "filaments").post(body.toBody())))
+    }
+
+    /** `POST /api/profiles/lines`: makes a line named [name] of [vendor] from [ids], on Bambu Studio parent [bsTemplate]. */
+    suspend fun createLine(name: String, vendor: String, ids: List<Int>, bsTemplate: String): ProfileLine {
+        val body = buildJsonObject {
+            put("name", name)
+            put("vendor", vendor)
+            put("ids", JsonArray(ids.map(::JsonPrimitive)))
+            put("bs_template", bsTemplate)
+        }
+        return decode(call(request("api", "profiles", "lines").post(body.toBody())))
+    }
+
+    /** `POST /api/profiles/build`: asks the Hub for a preset build now (no PC sync rule, unlike [requestBuild]). */
+    suspend fun buildPresets(): BuildRequested =
+        decode(call(request("api", "profiles", "build").post(JsonObject(emptyMap()).toBody())))
+
     /** Saves one of the owner's own library entries; 400 `invalid_entry` carries `problems` in [ApiError.extra]. */
     suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult =
         decode(call(request("api", "library", "local").post(entry.toBody())))
