@@ -1688,7 +1688,7 @@ let down = false;
 window.fetch = (u, o) => (down && String(u).includes("/api/") ? Promise.reject(new TypeError("Failed to fetch")) : real(u, o));
 const chip = () => $(".topbar__offline"), banner = () => $(".offline-banner");
 const seen = { before: !!banner() && !chip().hidden };
-const search = () => press("Search").click();
+const search = () => api("vendors").catch(() => {});   // any request of the page: the app's own helper
 async function lose() { down = true; search(); await until(() => banner(), "the offline banner"); }
 // the Hub stops answering: the shell stays, the chip and the banner show
 await lose();
@@ -1696,9 +1696,9 @@ seen.chip = text(chip()); seen.chipShown = !chip().hidden; seen.banner = text(ba
 seen.icon = !!banner().querySelector("use[href='#i-wifi-off']"); seen.title = text($("h1")); seen.nav = !!$(".nav");
 if (__LEAVE__) return seen;
 // the Hub answers again, Try now: the banner and the chip go and a toast says so
-down = false; press("Try now").click();
+down = false; press("Try now").focus(); press("Try now").click();
 await until(() => !banner(), "the banner to go");
-seen.chipGone = chip().hidden; seen.toast = text($(".toast"));
+seen.focus = document.activeElement === $("h1"); seen.chipGone = chip().hidden; seen.toast = text($(".toast"));
 // the Hub stops again and answers again without a press: the page tries again by itself within 10 s
 if (__AUTO__) { await lose(); down = false; await until(() => !banner(), "the automatic retry", 14000); seen.auto = true; }
 return seen;
@@ -1729,7 +1729,7 @@ def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str |
 @pytest.mark.parametrize("served_web", ["waiting"], indirect=True)
 @pytest.mark.parametrize("width,scheme", LOOKS)
 def test_the_install_sheet_shows_the_three_iphone_steps(served_web, tmp_path, width, scheme):
-    out = _drive(served_web, tmp_path, INSTALL, width, scheme, "install")
+    out = _drive(served_web.url, tmp_path, INSTALL, width, scheme, "install")
     if out.get("prompt"):                                  # the browser's own install prompt, not the sheet
         assert out["label"].startswith("Install app") and not out["sheet"]
         return
@@ -1742,7 +1742,7 @@ def test_the_install_sheet_shows_the_three_iphone_steps(served_web, tmp_path, wi
 @pytest.mark.parametrize("width,scheme", LOOKS)
 def test_the_hub_not_answering_shows_the_chip_and_the_banner_and_the_app_recovers(served_web, tmp_path, width, scheme):
     auto = (width, scheme) == (1280, "light")      # the 10 s wait is done once
-    out = _drive(served_web, tmp_path, OFFLINE.replace("__LEAVE__", "true" if SHOTS else "false").replace("__AUTO__", "false" if SHOTS else str(auto).lower()),
+    out = _drive(served_web.url, tmp_path, OFFLINE.replace("__LEAVE__", "true" if SHOTS else "false").replace("__AUTO__", "false" if SHOTS else str(auto).lower()),
                  width, scheme, "offline")
     assert out["before"] is False
     assert out["chip"] == "Offline" and out["chipShown"] and out["icon"] and out["role"] == "status" and out["nav"]
@@ -1750,4 +1750,37 @@ def test_the_hub_not_answering_shows_the_chip_and_the_banner_and_the_app_recover
     assert out["title"] == "Add spools"                    # the shell and the page stay
     if not SHOTS:
         assert out["chipGone"] and out["toast"] == "Connected to the Hub again."
+        assert out["focus"]                                  # the banner's Try now is gone: focus goes to the heading
         assert out.get("auto", not auto)
+
+
+MIGRATE = r"""
+const log = [], base = BASE, scope = (p) => location.origin + p;
+const fakeSub = (ep) => ({ endpoint: ep, unsubscribe: async () => log.push("unsub " + ep), toJSON: () => ({ endpoint: ep }) });
+const mk = (p, sub) => ({ scope: scope(p), active: {}, unregister: async () => log.push("unregister " + p),
+  pushManager: { getSubscription: async () => sub, subscribe: async (o) => { log.push("subscribe " + o.applicationServerKey.length); return fakeSub("new"); } } });
+const real = window.fetch;
+window.fetch = async (u, o) => {
+  if (!String(u).includes("/api/printers/push/")) return real(u, o);
+  log.push(String(u).split("/api/")[1] + " " + ((o && o.body) || ""));
+  return new Response(JSON.stringify({ key: "AQID", ok: true }), { headers: { "Content-Type": "application/json" } });
+};
+Object.defineProperty(Notification, "permission", { get: () => "granted" });
+const set = (regs) => { navigator.serviceWorker.getRegistrations = async () => regs; };
+const cur = mk(base, null);
+set([mk(base + "/", fakeSub("old")), cur]); await migrateAlerts(); const subscribed = log.splice(0);
+set([mk(base + "/", null), cur]); await migrateAlerts(); const quiet = log.splice(0);
+set([cur]); await migrateAlerts(); const none = log.splice(0);
+set([mk(base + "/", fakeSub("old")), cur]); const own = (await ownReg()) === cur;
+return { subscribed, quiet, none, own, base };
+"""
+
+
+@pytest.mark.parametrize("served_web", ["waiting"], indirect=True)
+def test_a_phone_from_0_5_moves_its_alerts_to_the_registration_of_the_app_path(served_web, tmp_path):
+    out = _drive(served_web.url, tmp_path, MIGRATE, 1280, "light")
+    base = out["base"]
+    assert out["own"]                                           # the lookup for alerts picks the registration whose scope is the path
+    assert out["subscribed"] == ["printers/push/key ", "subscribe 3", 'printers/push/subscribe {"subscription":{"endpoint":"new"}}',
+                                 'printers/push/unsubscribe {"endpoint":"old"}', "unsub old", f"unregister {base}/"]
+    assert out["quiet"] == [f"unregister {base}/"] and out["none"] == []     # no alerts on: only the stale one goes

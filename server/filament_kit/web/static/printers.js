@@ -907,7 +907,7 @@ function alertsPanel(addToHome) {
     await pj("push/subscribe", { subscription: sub.toJSON() });
   }
   async function unsubscribe() {
-    const reg = await navigator.serviceWorker.getRegistration(BASE + "/");
+    const reg = await ownReg();
     const sub = reg && (await reg.pushManager.getSubscription());
     if (sub) { await pj("push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
   }
@@ -928,7 +928,7 @@ function alertsPanel(addToHome) {
       return on ? SW.t("settings_alerts_on") : SW.t("status_off");
     } });
   const slot = h("div", {}, makeToggle(false));
-  navigator.serviceWorker.getRegistration(BASE + "/").then((reg) => reg && reg.pushManager.getSubscription()).then((sub) => {
+  ownReg().then((reg) => reg && reg.pushManager.getSubscription()).then((sub) => {
     if (sub) { slot.replaceChildren(makeToggle(true)); paint(true); }     // this phone is already subscribed
   }).catch(() => {});
   const test = SW.btn(SW.t("settings_alerts_test"), { action: "test", run: async () => {

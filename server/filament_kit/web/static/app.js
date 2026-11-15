@@ -875,7 +875,31 @@ function navigation() {
 // ----- the shell kept by sw.js, and "Cannot reach the Hub" (04 10.2, 10.3) -----
 // A request that gets no answer (SW.configure down/up) shows the Offline chip and the banner under the top bar; the Hub is tried
 // again every 10 s while the page is visible, and at once on Try now; when it answers the banner goes and the open lists are read again.
-if ("serviceWorker" in navigator) navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE }).catch(() => {});
+// The worker's registration is the one whose scope is the app's path. A phone that came from 0.5.x also has one for <path>/: it is
+// replaced (a print-alert subscription moves to the new one first; the Hub forgets the old endpoint), never left to answer for alerts.
+const scopeOf = (r) => new URL(r.scope).pathname;
+const ownReg = async () => (await navigator.serviceWorker.getRegistrations()).find((r) => scopeOf(r) === BASE);
+async function migrateAlerts() {
+  const regs = await navigator.serviceWorker.getRegistrations(), old = regs.find((r) => scopeOf(r) === BASE + "/");
+  if (!old) return;
+  const sub = await old.pushManager.getSubscription();
+  if (sub) {                                                 // keep alerts on: subscribe the new registration the way the old code did
+    if (Notification.permission !== "granted") return;
+    const cur = regs.find((r) => scopeOf(r) === BASE);
+    if (!cur) return;
+    if (!cur.active) await navigator.serviceWorker.ready;
+    const key = (await api("printers/push/key")).key;
+    const pad = "=".repeat((4 - (key.length % 4)) % 4), raw = atob((key + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    const fresh = await cur.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, (c) => c.charCodeAt(0)) });
+    await api("printers/push/subscribe", { method: "POST", body: { subscription: fresh.toJSON() } });
+    await api("printers/push/unsubscribe", { method: "POST", body: { endpoint: sub.endpoint } });
+    await sub.unsubscribe();
+  }
+  await old.unregister();
+}
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE }).then(() => migrateAlerts()).catch(() => {});   // a failure keeps the old one
+}
 {
   const RETRY = 10000;
   const chip = SW.status("offline", { cls: "topbar__offline" });
@@ -915,8 +939,10 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register(BASE + "/sw.j
     down = false;
     clearTimeout(timer);
     chip.hidden = true;
+    const focused = banner && banner.contains(document.activeElement);
     if (banner) banner.remove();
     banner = null;
+    if (focused) pageTitle.focus({ preventScroll: true });   // Try now is gone: focus goes to the page heading
     SW.toast(SW.t("shell_banner_back_online"), "ok");
     const again = ["recent", "presets", "printers"].includes(place) && tabs[place].enter;   // inputs and drafts stay where they are
     if (again) again();
