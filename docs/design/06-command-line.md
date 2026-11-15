@@ -503,7 +503,13 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 - Field names and values are those of the Hub's own replies where the Hub page reads the same data (table
   below), so a script and the Hub page see one shape. Times are ISO 8601 with offset; weights in grams, sizes in
   bytes, temperatures in °C, all as numbers.
-- Secrets never appear: a secret is `{"set": true}` or `{"set": false}`.
+- Stored secrets never appear: an API key, Access Code, passphrase, catalog token, existing Tag Reader token or
+  the current setup code is `{"set": true}` or `{"set": false}`.
+- One exception: a code, link or token that the command was asked to make is in that command's own reply, since
+  handing it over is what the command is for (`pair`, `tag-reader new-token`, `setup-code --new`; table below).
+  It appears in that one reply only; every later `list`, `show` or `status` gives `{"set": ...}` or leaves it out.
+- `pair --json` prints its document and ends: it does not wait for the device. `devices --json` shows whether
+  the device has paired.
 - A command that acts prints the Hub's reply shape: `{"ok": true, ...}`.
 - On an error, standard output gets `{"ok": false, "error": "<text>", "fix": "<text or null>"}`, standard error
   gets the usual text, and the exit code is as in section 6.7.
@@ -532,6 +538,10 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `update --check` | `GET /setup/api/updates` |
 | `logs` | `{unit, text, truncated}` |
 | `weigh-station pairing-state` | `{"state": "paired" \| "unpaired" \| "unchecked", "address": ...}` |
+| `pair` (and the pairing part of `features apply`, as `pair`) | `{"ok": true, "code", "link", "fingerprint", "expires"}` |
+| `tag-reader new-token` | `{"ok": true, "id", "name", "token"}` |
+| `setup-code` | `{"address", "code": {"set": true}}` |
+| `setup-code --new` (needs `--yes`) | `{"ok": true, "address", "code"}` |
 | any other action | `{"ok": true, ...}` with the fields its result line names |
 
 `-q` / `--quiet` prints only what the command exists to print: errors, lists and details asked for, and answers
