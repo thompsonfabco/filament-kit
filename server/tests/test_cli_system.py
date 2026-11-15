@@ -86,6 +86,47 @@ def test_config_set_saves_one_setting_checked_as_the_menu_checks_it(capsys):
     assert rc == 0 and out.startswith("Unchanged: PLA rack is Shelf B.")
 
 
+def test_config_theme_shows_the_theme_for_new_devices_and_needs_no_rights(capsys, monkeypatch):
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    monkeypatch.setattr(cli, "_no_systemd", lambda: False)
+    rc, out, err = run(capsys, ["config", "theme"])
+    assert (rc, out, err) == (0, "Theme for new devices: Console (dense and technical; the default).\n", "")
+    cfg = config.load()
+    cfg["appearance"] = {"theme": "palette"}
+    config.save(cfg)
+    assert run(capsys, ["config", "theme"])[:2] == (0, "Theme for new devices: Palette (colourful and roomy).\n")
+    got = json.loads(run(capsys, ["config", "theme", "--json"])[1])
+    assert got == {"theme": "palette"}       # the one setting, not every general setting
+
+
+def test_config_theme_sets_a_theme_in_any_case_and_says_devices_keep_theirs(capsys):
+    rc, out, err = run(capsys, ["config", "theme", "WorkBench"])
+    assert (rc, out, err) == (0, "Theme for new devices: Workbench (calm cards).\nDevices that already chose a theme keep theirs.\n", "")
+    assert config.load()["appearance"]["theme"] == "workbench" and config.look(config.load()) == "workbench"
+    rc, out, _ = run(capsys, ["config", "theme", "workbench"])
+    assert rc == 0 and out == "Unchanged: Theme for new devices: Workbench (calm cards).\n"
+    assert run(capsys, ["config", "theme", "panes"])[0] == 0 and config.look(config.load()) == "panes"
+
+
+def test_config_theme_an_unknown_name_exits_2_with_the_fix_at_80_columns_and_changes_nothing(capsys):
+    before = config.load()
+    rc, out, err = run(capsys, ["config", "theme", "dark"])
+    assert rc == 2 and out == ""
+    assert err == ('Error: there is no theme called "dark".\n'
+                   "Fix: choose console, workbench, palette or panes. Light and dark are chosen on\n"
+                   "     each device, in Settings > Appearance.\n")
+    assert all(len(line) <= 79 for line in err.splitlines())
+    assert config.load() == before
+
+
+def test_config_theme_setting_without_rights_asks_for_sudo_and_changes_nothing(capsys, monkeypatch):
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    monkeypatch.setattr(cli, "_no_systemd", lambda: False)
+    before = config.load()
+    rc, out, err = run(capsys, ["config", "theme", "palette"])
+    assert rc == output.NEEDS_SUDO and "config theme palette" in err and config.load() == before
+
+
 def test_config_set_takes_the_key_of_the_design_for_the_backup_days(capsys):
     assert run(capsys, ["config", "set", "backups.keep_days", "20"])[:2] == (0, "Saved: Nightly backups are kept for 20 days.\n")
     assert config.load()["backup"]["keep_days"] == 20
@@ -557,7 +598,7 @@ def test_help_aliases_lists_every_old_spelling_with_the_new_one(capsys):
 
 
 # Commands of 06 3.2 this program does not have: they come with their own steps or went away with the migrations.
-NOT_HERE = ("config theme", "label-reader corrections", "migrate-ops", "migrate-scanner")
+NOT_HERE = ("label-reader corrections", "migrate-ops", "migrate-scanner")
 
 
 def _design_commands() -> list[str]:

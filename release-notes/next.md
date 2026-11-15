@@ -103,6 +103,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Phone web app without the Hub:** while the Hub cannot be reached, Add spools, Spools, Recently added, Slicer presets and Printers keep their last data with "Last update <age>: the Hub did not answer." Buttons that need the Hub are greyed with "Needs the Hub." ("Read labels" and "Preview" say "The Hub cannot be reached."), and everything comes back when the Hub answers. Photos, cards and fields in Add spools keep working.
 - **The documents use the new names.** The README, the user guide and the install guides now say Hub, Hub page, web app, app, Features, Weigh Station, Tag Reader, Label Reader, Filament Catalog, Slicer presets and Slicer Sync, and show the commands in their new spellings (the old spellings still work). The user guide's command table is the one `filament-kit help` prints.
 - **The last old names are gone from the texts.** The Android app's messages and the Hub's own words now say Hub, Hub page, Label Reader, Slicer presets and Slicer Sync.
+- **Theme for new devices:** Settings > Appearance on the Hub page has a "Theme for new devices" field with its own Save button, and `filament-kit config theme [<theme>]` shows or sets the same setting. Devices that already chose a theme keep theirs.
 
 ## Still to come
 
