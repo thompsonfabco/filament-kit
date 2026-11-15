@@ -3,7 +3,10 @@
     GET  settings/general                the values of the helper's whitelist (GENERAL), and Spoolman's address redacted
     POST settings/general {code, key, value}   one of them; the helper checks it against its table and saves it
     POST settings/general {code, values: {key: value, ...}}   several of one group: every key checked first, then all
-                                         saved or none; one restarts / applies answer; a refusal's `errors` names each bad key
+                                         saved or none; one restarts / applies answer; a refusal's `errors` names each bad key.
+                                         `label_reader.share_corrections` changing starts the job local_intake_share (answer:
+                                         `jobs`); turning it on without the reader installed here is a field error; turning
+                                         it off with {delete_waiting: true} first deletes the corrections waiting (`deleted`)
     POST settings/spoolman {code, url}  an external Spoolman: only after this server has reached it and it answered as one
     POST remote/firewall {code}          the rules the owner sets up by hand: printed only, and it names their networks
     GET  settings/local-intake           the local label reader's health (local_reader.health): a read, no code
@@ -18,7 +21,7 @@ from __future__ import annotations
 
 import anyio
 
-from .. import config, local_intake_install, local_reader, modules, redact, remote, setup_helper
+from .. import config, local_intake_install, local_reader, modules, redact, remote, setup_helper, share_corrections
 from ..spoolman import Spoolman, SpoolmanError
 
 
@@ -37,12 +40,52 @@ def _view() -> dict:
     on = modules.enabled(cfg)
     values = {k: setup_helper.general_value(cfg, k) for k in setup_helper.GENERAL}
     values["appearance.theme"] = config.look(cfg)       # an unknown stored value reads as Console, as the shells do
+    values[share_corrections.KEY] = share_corrections.saved(cfg)       # off until it is set
     return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
             "ai_intake_on": "ai_intake" in on, "local_intake_on": "local_intake" in on,
             "local_intake_installed": local_intake_install.installed(),
             "spoolman_external": "server" in on and "spoolman" not in on,
             "intake_history": _history_use(),
             "spoolman_url": redact.text(str(cfg.get("spoolman_url") or ""), redact.known_values())}
+
+
+def _deleted(n: int | None) -> dict:
+    return {"deleted": n} if n is not None else {}
+
+
+async def _save_with_delete(page, body, op: dict) -> tuple[dict, int | None]:
+    """The helper's answer to the save, and how many waiting corrections were deleted (None: not asked for).
+    Turning Share corrections off with `delete_waiting: true` goes in this order: the helper checks the whole save (the
+    code, every value, a running job: `dry_run`), then the waiting corrections are deleted, then the save is made. A
+    refusal before the deletion leaves them all waiting; a deletion that stops part-way says how many are gone and that
+    the setting was not changed; a save refused after the deletion says that they are gone."""
+    from ..setup_page import Refused
+    vals = body.get("values") if isinstance(body.get("values"), dict) else (
+        {body.get("key"): body.get("value")} if "key" in body else {})
+    if body.get("delete_waiting") is not True or vals.get(share_corrections.KEY) is not False:
+        return await page._helper(op), None
+    await page._helper({**op, "dry_run": True})
+
+    def delete() -> int | None:
+        cfg = config.load()
+        if not share_corrections.saved(cfg):
+            return None             # it is off already: nothing is being switched
+        try:
+            return share_corrections.delete_waiting(cfg)
+        except share_corrections.DeleteFailed as e:
+            raise Refused(502, f"{e}. The setting was NOT changed: save it again to delete the rest.",
+                          field=share_corrections.KEY, deleted=e.done, waiting=e.total - e.done) from None
+        except local_reader.LocalReaderError as e:
+            raise Refused(502, f"nothing was deleted and nothing was changed: the reader's waiting corrections could "
+                               f"not be read ({e})", field=share_corrections.KEY, deleted=0) from None
+    deleted = await anyio.to_thread.run_sync(delete)
+    try:
+        return await page._helper(op), deleted
+    except Refused as e:
+        if not deleted:
+            raise
+        raise Refused(e.status, f"{deleted} waiting corrections were deleted, but the setting was NOT changed: "
+                                f"{e.message}", deleted=deleted, **e.extra) from None
 
 
 def routes(page) -> list[tuple]:
@@ -53,13 +96,17 @@ def routes(page) -> list[tuple]:
 
     async def write(request, body):
         if "values" in body:
-            r = await page._helper({"op": "general_group", "code": body["code"], "values": body["values"]})
+            r, deleted = await _save_with_delete(page, body, {"op": "general_group", "code": body["code"],
+                                                              "values": body["values"]})
             page.audit(request, f"settings {', '.join(r['keys'])} changed")
-            return {"ok": True, "keys": r["keys"], "restarts": r["restarts"], "applies": r["applies"]}
+            return {"ok": True, "keys": r["keys"], "restarts": r["restarts"], "applies": r["applies"],
+                    **({"jobs": r["jobs"]} if r.get("jobs") else {}), **_deleted(deleted)}
         key = body.get("key")
-        r = await page._helper({"op": "general", "code": body["code"], "key": key, "value": body.get("value")})
+        r, deleted = await _save_with_delete(page, body, {"op": "general", "code": body["code"], "key": key,
+                                                          "value": body.get("value")})
         page.audit(request, f"setting {r['key']} changed")
-        return {"ok": True, "restarts": r["restarts"], "applies": r["applies"]}
+        return {"ok": True, "restarts": r["restarts"], "applies": r["applies"],
+                **({"jobs": r["jobs"]} if r.get("jobs") else {}), **_deleted(deleted)}
 
     async def spoolman(request, body):
         url = body.get("url")
@@ -102,7 +149,8 @@ def routes(page) -> list[tuple]:
             cfg = config.load()
             if "local_intake" not in modules.enabled(cfg):
                 raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
-            return local_reader.health(cfg)
+            h = local_reader.health(cfg)
+            return {**h, "share_corrections": share_corrections.state(cfg, h)}
         return await anyio.to_thread.run_sync(check)
 
     async def reader_test(request, body):
@@ -122,7 +170,9 @@ def routes(page) -> list[tuple]:
             if "local_intake" not in modules.enabled(cfg):
                 raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
             raw = cfg.get("local_intake") if isinstance(cfg.get("local_intake"), dict) else {}
-            return local_reader.health({**cfg, "local_intake": {**raw, "url": url, "tier": tier}})
+            tried = {**cfg, "local_intake": {**raw, "url": url, "tier": tier}}
+            h = local_reader.health(tried)
+            return {**h, "share_corrections": share_corrections.state(tried, h)}
         return await anyio.to_thread.run_sync(check)
 
     async def reader_plan(request, body):
