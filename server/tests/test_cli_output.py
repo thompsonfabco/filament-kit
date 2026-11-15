@@ -863,3 +863,32 @@ def test_backup_list_never_cuts_a_file_name_at_80_columns(capsys, monkeypatch):
     rc, out, err = run(capsys, "backup", "list")
     assert rc == 0 and name in out and "…" not in out, out
     assert all(len(x) <= 79 or " " not in x.strip() for x in out.splitlines()), out
+
+
+@pytest.mark.parametrize("columns", ["80", "40"])
+def test_reader_tokens_never_cuts_an_id_or_a_name(capsys, monkeypatch, columns):
+    from filament_kit import output
+    from filament_kit.web import reader
+    monkeypatch.setattr(output, "_is_tty", lambda stream: True)
+    monkeypatch.setenv("COLUMNS", columns)
+    monkeypatch.setenv("TERM", "xterm")
+    name = "printer-station-in-the-far-corner-of-the-workshop-beside-the-big-door"
+    monkeypatch.setattr(reader.TokenStore, "list",
+                        lambda self: [{"id": "abc123def456", "name": name, "created": "2026-11-14"}])
+    rc, out, err = run(capsys, "reader", "tokens")
+    assert rc == 0 and name in out and "abc123def456" in out and "…" not in out, out
+    assert "Name: " + name in out, out      # too wide at 80, blocks below 60: the name is whole either way
+
+
+@pytest.mark.parametrize("columns", ["80", "40"])
+def test_unpair_list_never_cuts_an_id_or_a_name(capsys, monkeypatch, columns):
+    from filament_kit import output, pairing
+    monkeypatch.setattr(output, "_is_tty", lambda stream: True)
+    monkeypatch.setenv("COLUMNS", columns)
+    monkeypatch.setenv("TERM", "xterm")
+    name = "the-pixel-phone-of-the-person-at-the-far-bench"
+    monkeypatch.setattr(pairing, "devices", lambda: [{"id": "dev-0123456789ab", "name": name, "paired": 1.8e9,
+                                                      "last_seen": 1.8e9}])
+    rc, out, err = run(capsys, "unpair")
+    assert rc == 0 and name in out and "dev-0123456789ab" in out and "…" not in out, out
+    assert "Name: " + name in out, out      # too wide at 80, blocks below 60: the name is whole either way

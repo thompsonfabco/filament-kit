@@ -373,7 +373,7 @@ def cmd_unpair(device_id: str | None) -> int:
             return 0
         output.out_lines(output.table(
             ["Id", "Name", "Paired", "Last seen"],
-            [[d["id"], d["name"], _fmt_time(d["paired"]), _fmt_time(d["last_seen"])] for d in devs], long=1))
+            [[d["id"], d["name"], _fmt_time(d["paired"]), _fmt_time(d["last_seen"])] for d in devs], long=1, whole=True))   # `unpair` takes the id; the name is what tells phones apart
         return 0
     if pairing.revoke(device_id):
         output.result(f"Unpaired {device_id}.")
@@ -2529,7 +2529,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> 
                 output.out("  sudo filament-kit reader token --name printer-station")
                 return 0
             output.out_lines(output.table(["Id", "Name", "Made"], [[t["id"], t["name"], t["created"]] for t in rows],
-                                          long=1))
+                                          long=1, whole=True))   # `reader revoke` takes the id or the name
             return 0
         if store.revoke(ref or ""):
             print(f"revoked {ref}; a reader using it is refused from now on")
