@@ -143,7 +143,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
 | `devices` (same as `devices list`) | Paired devices (9.4) | Devices |
 | `devices forget <device>` | Unpair a device | Revoke |
-| `pair [--slicer-sync \| --weigh-station] [--text]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |
+| `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this machine |
 | `weigh-station flash-display` | Write the Weigh Station display firmware over USB | Flash a device |
 | `weigh-station pairing-state` | Paired, not paired or not checked yet | (none) |
@@ -1326,6 +1326,9 @@ Paired: Shop phone.
   `--weigh-station`: `On the Weigh Station run: sudo spoolwarden weigh-station pair, then paste this link:`.
 - No QR possible: none; the Hub draws the QR code itself (section 13), so no note is needed.
 - `--text` prints the link and code without the QR code.
+- `--no-wait` prints everything and ends without waiting for the device; its last line is
+  `The code works until 14:20.` It is listed in `pair -h` like any option (no hidden switches). The install and
+  `features apply` show the pairing code this way, so they never hang on a phone.
 - Ctrl-C stops waiting; the code stays valid until it expires (`Stopped waiting. The code works until 14:20.`).
 - The pair command on a machine without the Hub service feature: `Error: this machine has no Hub, so it cannot pair
   devices.` with `Fix: run it on the Hub.`
@@ -1384,7 +1387,7 @@ custom choice shows as `custom`.
 |---|---|
 | `features on <feature>` / `off <feature>` | The `Also turn on|off …?` questions (section 7), then the plan, then the setting prompts of 8.5 when needed, then `◐ Applying the changes…` and `Features applied: …` or `Unchanged.` `--hub ADDRESS` answers the Hub's address prompt. Not at a terminal and a question needed: exit 2 with `Fix: add --yes to accept the cascade, or switch the others first.` |
 | `features setup <setup> [--hub ADDRESS]` | `Setup: Weigh Station only.` then the plan and the apply. The Weigh Station only setup needs the Hub's address (`--hub`, or asked). |
-| `features apply [--no-pair]` | `Setup: Hub with Weigh Station (Spoolman, Hub, …).`, `Weigh Station answers at: 192.0.2.10`, the apply, and the pairing code of 9.4 unless `--no-pair` |
+| `features apply [--no-pair]` | `Setup: Hub with Weigh Station (Spoolman, Hub, …).`, `Weigh Station answers at: 192.0.2.10`, the apply, and the pairing code of 9.4 unless `--no-pair`; it does not wait for the phone (`pair --no-wait`) |
 | `features units` | One service file name per line (for the installer) |
 
 Refusals use the Hub's text, for example switching the Hub off from the Hub page's own feature:
