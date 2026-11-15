@@ -33,9 +33,9 @@ RUNNER = ROOT / "tests" / "aut5_run.mjs"
 SAMPLE = ROOT / "tests" / "components-sample.html"
 CATALOGUE = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
 
-# foundations 12 rule 7: "under 40 KB" and "under 60 KB", uncompressed, and each addition "at most 30 KB"; read as
+# foundations 12 rule 7: the core stylesheet "under 60 KB" (raised from 40 for the look profile groups, R62) and the script "under 60 KB", uncompressed, and each addition "at most 30 KB"; read as
 # thousands of bytes (the stricter reading)
-LIMITS = {CSS: 40_000, JS: 60_000, **{a: 30_000 for a in ADDITIONS + [MEDIA_JS, LOCK_JS]}}
+LIMITS = {CSS: 60_000, JS: 60_000, **{a: 30_000 for a in ADDITIONS + [MEDIA_JS, LOCK_JS]}}
 
 CLASS = r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:__[a-z0-9]+(?:-[a-z0-9]+)*)?(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?"
 CLASS_TOKEN = re.compile(rf"^{CLASS}$")
