@@ -595,7 +595,7 @@ def test_ai_off_page_hides_reading_and_manual_add_works(app, env, sm):
         post = {"headers": {"Origin": ORIGIN}}
         assert "data-ai='0'" in c.get("/intake").text
         r = c.post("/intake/api/read", files=[("photos", ("a.jpg", JPEG, "image/jpeg"))], **post)
-        assert r.status_code == 400 and "ai_intake" in r.json()["error"]
+        assert r.status_code == 400 and "Label reading is off" in r.json()["error"]
         item = {"vendor": "Elegoo", "name": "PLA Red", "material": "PLA", "net": "1000", "tare": "160",
                 "density": "1.24", "count": "2", "sealed": True, "location": "", "color_hex": "cc0000"}
         r = c.post("/intake/api/add", json={"items": [item], "dry_run": False}, **post)
