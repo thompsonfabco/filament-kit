@@ -18,7 +18,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -42,6 +41,7 @@ import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
@@ -49,7 +49,6 @@ import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubNoticeOf
 import com.thompsonfabco.filamentkit.ui.spool.hubFailureText
 import com.thompsonfabco.filamentkit.ui.spool.secondsSince
-import com.thompsonfabco.filamentkit.ui.spool.SpoolPanel
 import com.thompsonfabco.filamentkit.ui.spool.SpoolRow
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
 import com.thompsonfabco.filamentkit.ui.spool.hubFailure
@@ -249,11 +248,8 @@ fun SearchScreen(
                     offline = !online,
                     loadedSecondsAgo = secondsSince(ui.loadedAt),
                 ) {
-                    SpoolPanel {
-                        ui.results.forEachIndexed { i, spool ->
-                            if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                            SpoolRow(spool, onClick = { onOpenSpool(spool) })
-                        }
+                    SwCollection(ui.results, inset = SpoolwardenTheme.space.s4) { _, spool ->
+                        SpoolRow(spool, onClick = { onOpenSpool(spool) })
                     }
                 }
             }

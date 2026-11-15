@@ -62,6 +62,7 @@ import com.thompsonfabco.filamentkit.ui.components.StatusKind
 import com.thompsonfabco.filamentkit.ui.components.StatusLabel
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
@@ -173,11 +174,8 @@ private fun ColumnScope.PrinterLists(
     val space = SpoolwardenTheme.space
     val configured = state.configured
     if (configured.isNotEmpty()) {
-        Panel {
-            configured.forEachIndexed { i, p ->
-                if (i > 0) Divider()
-                PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
-            }
+        SwCollection(configured) { _, p ->
+            PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
         }
     }
     val found = state.found
@@ -188,15 +186,12 @@ private fun ColumnScope.PrinterLists(
             style = MaterialTheme.typography.labelSmall,
             color = SpoolwardenTheme.colors.muted,
         )
-        Panel(ground = SpoolwardenTheme.colors.accentSoft) {
-            found.forEachIndexed { i, p ->
-                if (i > 0) Divider()
-                FoundRow(p, enabled = !offline, reason = offline && i == 0) {
-                    if (p.family == "klipper") {
-                        onAddKlipper(p.host ?: p.ip.orEmpty(), PrintersViewModel.DEFAULT_KLIPPER_PORT)
-                    } else {
-                        onAdd(p)
-                    }
+        SwCollection(found, ground = SpoolwardenTheme.colors.accentSoft) { i, p ->
+            FoundRow(p, enabled = !offline, reason = offline && i == 0) {
+                if (p.family == "klipper") {
+                    onAddKlipper(p.host ?: p.ip.orEmpty(), PrintersViewModel.DEFAULT_KLIPPER_PORT)
+                } else {
+                    onAdd(p)
                 }
             }
         }

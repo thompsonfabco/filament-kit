@@ -35,6 +35,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.CollectionStyle
+import com.thompsonfabco.filamentkit.ui.theme.DetailStyle
+import com.thompsonfabco.filamentkit.ui.theme.LocalCollectionStyle
+import com.thompsonfabco.filamentkit.ui.theme.LocalDetailStyle
 import com.thompsonfabco.filamentkit.ui.theme.LocalNavStyle
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.NavStyle
@@ -59,17 +63,38 @@ class ThemePickerTest {
     private fun tile(name: String) = hasText(name) or hasContentDescription("$name, ", substring = true)
     private val radio = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
 
-    @Test fun consoleIsTheChosenTileAndTheOthersAreNotBuiltYet() {
+    @Test fun consoleIsTheChosenTileWorkbenchCanBeChosenAndTheRestAreNotBuiltYet() {
         rule.setContent {
             SpoolwardenTheme(Look.Console, Appearance.Light) { ThemePicker(Look.Console, dark = false, onChoose = {}) }
         }
         rule.onNodeWithText("Theme").assertExists()
         rule.onNode(tile("Console") and radio).assertIsSelected().assertIsEnabled()
         rule.onNode(radio and isSelected()).assertContentDescriptionEquals("Console, Dense and technical, selected")
-        for (other in listOf("Workbench", "Palette", "Panes")) {
+        rule.onNode(tile("Workbench") and radio).assertIsNotSelected().assertIsEnabled()
+        for (other in listOf("Palette", "Panes")) {
             rule.onNode(tile(other) and radio).assertIsNotSelected().assertIsNotEnabled()
         }
-        assertEquals(3, rule.onAllNodesWithTextCount("Not available yet"))
+        assertEquals(2, rule.onAllNodesWithTextCount("Not available yet"))
+    }
+
+    @Test fun choosingTheWorkbenchTileAppliesItsProfile() {
+        var look by mutableStateOf(Look.Console)
+        var navSeen: NavStyle? = null
+        var collectionSeen: CollectionStyle? = null
+        var detailSeen: DetailStyle? = null
+        rule.setContent {
+            SpoolwardenTheme(look, Appearance.Light) {
+                navSeen = LocalNavStyle.current
+                collectionSeen = LocalCollectionStyle.current
+                detailSeen = LocalDetailStyle.current
+                ThemePicker(look, dark = false, onChoose = { look = it })
+            }
+        }
+        rule.onNode(tile("Workbench") and radio).performClick()
+        rule.waitForIdle()
+        assertEquals(Look.Workbench, look)
+        assertEquals(Triple(NavStyle.Sidebar, CollectionStyle.Cards, DetailStyle.Card), Triple(navSeen, collectionSeen, detailSeen))
+        rule.onNode(tile("Workbench") and radio).assertIsSelected()
     }
 
     @Test fun choosingATileAppliesTheThemeAtOnceWithoutARestart() {
