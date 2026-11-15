@@ -130,6 +130,39 @@ return { error: text($(".field__error", field)), result: text($("#set-storage .g
     assert page["result"] and page["result"] != T("common_nothing_changed")
 
 
+def test_theme_for_new_devices_saves_with_its_own_button_only_while_it_differs_and_shows_after_a_reload(hub, tmp_path):
+    assert config.look(config.load()) == "console"
+    page = _drive(hub, tmp_path, PRELUDE + """
+await loaded();
+await unlock();
+const sel = $('#set-appearance select[name="appearance.theme"]'), btn = $('#set-appearance [data-action="save-theme"]');
+const out = { label: text($("label", sel.closest(".field"))), hint: text($(".field__hint", sel.closest(".field"))), options: [...sel.options].map((o) => o.value),
+  start: { value: sel.value, disabled: btn.getAttribute("aria-disabled") }, button: text(btn) };
+sel.value = "palette";
+sel.dispatchEvent(new Event("change", { bubbles: true }));
+out.differs = btn.getAttribute("aria-disabled");
+btn.click();
+await until(() => text($('#set-appearance .settings__choice:last-child .result__text')) === "__SAVED__", "the saved result");
+out.saved = text($('#set-appearance .settings__choice:last-child .result__text'));
+out.after = { disabled: btn.getAttribute("aria-disabled"), state: S.appearance.theme };
+sel.value = "console";
+sel.dispatchEvent(new Event("change", { bubbles: true }));
+out.back = btn.getAttribute("aria-disabled");
+return out;
+""".replace("__SAVED__", T("common_saved")))
+    assert page["label"] == T("appearance_theme_default_title") and page["hint"] == T("settings_appearance_new_devices_hint")
+    assert page["options"] == ["console", "workbench", "palette", "panes"] and page["button"] == T("settings_appearance_save")
+    assert page["start"] == {"value": "console", "disabled": "true"} and page["differs"] is None
+    assert page["saved"] == T("common_saved") and page["after"] == {"disabled": "true", "state": "palette"}
+    assert page["back"] is None
+    assert config.look(config.load()) == "palette"
+    again = _drive(hub, tmp_path, PRELUDE + """
+await loaded();
+return { value: $('#set-appearance select[name="appearance.theme"]').value };
+""")
+    assert again == {"value": "palette"}
+
+
 def test_on_a_phone_settings_opens_on_the_list_of_groups_and_a_group_on_its_own_page(hub, tmp_path):
     page = _drive(hub, tmp_path, PRELUDE + """
 await loaded();

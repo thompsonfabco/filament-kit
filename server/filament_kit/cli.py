@@ -1541,6 +1541,51 @@ def cmd_config_set(key: str, raw: str) -> int:
     return 0
 
 
+_THEME_WORDS = {"console": "dense and technical; the default", "workbench": "calm cards",
+                "palette": "colourful and roomy", "panes": "simple lists"}
+
+
+def cmd_config_theme(raw: str | None) -> int:
+    """`config theme [<theme>]` (06 9.8): the Hub's theme for new devices, shown (no rights needed) or set (root, as
+    `config set` needs). The name in any case; a device that chose its own theme keeps it."""
+    def line(value: str) -> str:
+        return f"Theme for new devices: {value.capitalize()} ({_THEME_WORDS[value]})."
+    if raw is None:
+        value = config.look(config.load())
+        from .setup_console import general_tab
+        output.emit({"values": dict(general_tab._view()["values"]), "theme": value})
+        output.result(line(value))
+        return 0
+    value = raw.strip().lower()
+    if value not in _THEME_WORDS:
+        output.error(f'there is no theme called "{raw.strip()}".',
+                     "choose console, workbench, palette or panes. Light and dark are chosen on each device, in Settings > Appearance.")
+        return output.USAGE
+    if not _no_systemd() and not _is_root():
+        return output.need_sudo(_sudo_command("sudo filament-kit config theme " + shlex.join([value])))
+    session = _ConfigMenu(config.load(), None)
+    if value == config.look(session.cfg):
+        output.emit({"ok": True, "key": "appearance.theme", "changed": False})
+        output.result("Unchanged: " + line(value))
+        return 0
+    session.staged["theme"] = value
+    new = copy.deepcopy(session.cfg)
+    err = session.build(new)
+    if err:
+        output.error(f"nothing was saved: {err.rstrip('.')}.")
+        return 1
+    try:
+        config.save(new)
+    except (GroupMissing, ValueError, library.LibraryError, OSError) as e:
+        output.error(f"nothing was saved: {str(e).rstrip('.')}.")
+        return 1
+    _hub_audit("setting appearance.theme changed")
+    output.emit({"ok": True, "key": "appearance.theme", "changed": True, "restarts": False, "applies": False})
+    output.result(line(value))
+    output.result("Devices that already chose a theme keep theirs.")
+    return 0
+
+
 # ---------- logs and the pointer commands (06 9.14, 10) ----------
 
 def cmd_logs(service: str | None, lines: int = 100) -> int:
@@ -5960,7 +6005,7 @@ def cmd_local_intake_test(photos: list[str], engine: str | None = None, yes: boo
 
 # The groups of the top-level help (06 3.1), then every command (06 3.2) and the old spellings (06 4). `help
 # --markdown` is the guide's command table; a test holds it to the design's table. Commands that are not in this
-# program (migrate-ops, migrate-scanner, config theme, label-reader corrections) are not listed.
+# program (migrate-ops, migrate-scanner, label-reader corrections) are not listed.
 _HELP_GROUPS = [('Everyday',
   [('status', 'What works and what needs a look'),
    ('printer', 'List, test, map and manage printers'),
@@ -6054,6 +6099,7 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`config [--numbered]`', 'The settings menu', '{nav_settings}'),
  ('`config show`', 'All settings, in menu order', '{nav_settings}'),
  ('`config set <key> <value>`', 'Change one setting', '{nav_settings}, one field'),
+ ('`config theme [<theme>]`', 'Show or set the theme for new devices', '{nav_settings} > {settings_group_appearance} > {appearance_theme_default_title}'),
  ('`label-reader status`', 'Label Reader engines and their health', '{nav_settings} > {settings_group_label_reader}'),
  ('`label-reader test <photo>... [--engine cloud\\|local]`', 'Read label photos without adding anything', '{settings_reader_test}'),
  ('`catalog status`', 'Filament Catalog version and last check', '{nav_settings} > {settings_group_catalog}'),
@@ -6453,6 +6499,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     cf = sub.add_parser("config", help="the settings menu; config show and config set read and change one setting")
     cfsub = cf.add_subparsers(dest="config_cmd")
     cfsub.add_parser("show", help="every setting in the menu's order; secrets as set or not set")
+    cft = cfsub.add_parser("theme", help="show or set the theme for new devices (setting it needs root)")
+    cft.add_argument("theme", nargs="?", help="console, workbench, palette or panes, in any case")
     cfs = cfsub.add_parser("set", help="change one setting, checked as the menu checks it (root)")
     cfs.add_argument("key", help="the setting's key, e.g. placement.pla_location")
     cfs.add_argument("value", help="its new value")
@@ -6763,6 +6811,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "config":
         if args.config_cmd == "show":
             return cmd_config_show()
+        if args.config_cmd == "theme":
+            return cmd_config_theme(args.theme)
         return cmd_config_set(args.key, args.value) if args.config_cmd == "set" else cmd_config()
     if args.cmd == "recent":
         return _dispatch_recent(args)
