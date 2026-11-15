@@ -341,8 +341,12 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
         return output.CANCELLED     # every board was declined: "Nothing changed." was said
     finally:
         if was_active:
-            run(["systemctl", "start", service], check=False)
-            output.result("Started the Weigh Station service again.")
+            started = run(["systemctl", "start", service], check=False)
+            if started.returncode == 0:
+                output.result("Started the Weigh Station service again.")
+            else:
+                output.error(f"could not start {service} again (systemctl exit {started.returncode}).",
+                             "see why:", cmd=f"sudo journalctl -u {service} -n 50")
 
 
 def _flash_and_verify(panel, port: str, version: str) -> int:
@@ -2252,9 +2256,7 @@ def _rec_item_arg(item: int | None) -> int | None | bool:
 
 def _history_audit(rid: str, what: str) -> None:
     """The Hub page's audit line for a change to a record, written as its routes write it (intake_tab.py)."""
-    from types import SimpleNamespace
-    from .setup_page import SetupPage
-    SetupPage.audit(SetupPage, SimpleNamespace(client=None), f"recently added record {rid} {what}")
+    _hub_audit(f"recently added record {rid} {what}")
 
 
 def _history_charge():
@@ -3807,9 +3809,12 @@ def _default_spoolman() -> Spoolman:
 
 
 def _hub_audit(what: str) -> None:
-    """The Hub page's audit line for a change, written as its routes write it (setup_page.audit)."""
+    """The Hub page's audit line for a change, written as its routes write it (setup_page.audit), to the place the
+    Hub's lines go: its own logger setup (__main__._log_to_journal), so the line is not dropped without a handler."""
     from types import SimpleNamespace
+    from .__main__ import _log_to_journal
     from .setup_page import SetupPage
+    _log_to_journal()
     SetupPage.audit(SetupPage, SimpleNamespace(client=None), what)
 
 
@@ -3873,12 +3878,14 @@ def cmd_profiles_status() -> int:
     """`presets status`: the Hub page's reply (`--json`) as lines in the page's order."""
     from .setup_console import presets_tab
     v = presets_tab._view()
-    output.emit(v)
-    if not v["on"]:
-        return 0 if output.json_mode() else (1 if not _presets_on() else 0)
-    if v["lines_error"]:
+    if not v["on"] and not _presets_on():               # an error says so, with exit 1, as text and as --json (06 6.8)
+        return 1
+    if v["on"] and v["lines_error"]:
         output.error(v["lines_error"])
         return 1
+    output.emit(v)
+    if not v["on"]:
+        return 0
     output.out(f"Lines: {len(v['lines'])}.")
     b = v["build"]
     if b:
@@ -4038,6 +4045,9 @@ def cmd_profiles_updates(line_id: str | None, accept: bool = False, yes: bool = 
     """`presets updates` lists what would be accepted and changes nothing; `presets accept-updates` lists the same,
     asks, and accepts exactly what it listed: the next Slicer Sync writes them over the presets in the slicers (after
     its backup); nothing else ever writes over an existing preset."""
+    if line_id is not None and not line_id.strip():
+        output.error("--line needs a line ID.", "see the IDs:", cmd="sudo filament-kit presets lines")
+        return 2
     if not _presets_on():
         return 1
     try:
@@ -4361,6 +4371,12 @@ def cmd_modules_set(mode: str, server: str | None = None) -> int:
     try:
         before_cfg = config.load()
         before = modules.enabled(before_cfg)
+        if mode == "station" and not server and _server_addr_missing(before_cfg) and (
+                output.json_mode() or not apply._tty()):     # before any output or change: nobody can be asked
+            output.error("the Weigh Station only setup needs the Hub's address, and there is no terminal to ask.",
+                         "give it with --hub:", cmd=_sudo_command("sudo filament-kit features setup weigh-station")
+                         + " --hub <address>")
+            return output.USAGE
         output.out(f"Setup: {_SETUP_SENTENCE[mode]}.")
         cfg = modules.set_mode(before_cfg, mode)
         if server:
@@ -4370,17 +4386,11 @@ def cmd_modules_set(mode: str, server: str | None = None) -> int:
             if mode == "station":
                 cfg["station"]["allow"] = [server]
         elif mode == "station" and _server_addr_missing(cfg):
-            if output.json_mode():
-                output.error("the Weigh Station only setup needs the Hub's address, and there is no terminal to ask.",
-                             "give it with --hub:", cmd=_sudo_command("sudo filament-kit features setup weigh-station")
-                             + " --hub <address>")
-                return output.USAGE
-            if apply._tty():
-                addr = _ask_station_server()
-                if addr is None:
-                    output.error("the Weigh Station only setup needs the Hub's address; nothing was changed.")
-                    return 1
-                cfg["station"]["allow"] = [addr]
+            addr = _ask_station_server()
+            if addr is None:
+                output.error("the Weigh Station only setup needs the Hub's address; nothing was changed.")
+                return 1
+            cfg["station"]["allow"] = [addr]
         modules.validate(cfg)
     except modules.ModuleError as e:
         _err_line(str(e))
@@ -4720,7 +4730,7 @@ def _wifi_password(a, ask_secret) -> str | None:
     hidden. None after the error (nothing was changed)."""
     if getattr(a, "password", None) == "-":
         try:
-            return sys.stdin.readline().strip()
+            return sys.stdin.readline().rstrip("\r\n")      # only the line ending: spaces can be part of a password
         except (OSError, ValueError):
             return ""
     password = ask_secret("Its Wi-Fi password: ")
@@ -5528,10 +5538,14 @@ def _add_presets(sub, name: str, *, alias: bool) -> None:
         _add_yes(au, "accept without asking (a script has no terminal to ask on)")
         return
     up = pfsub.add_parser("updates", help="list the updates that accept-updates would accept; changes nothing")
-    up.add_argument("--line", dest="line_id", help="only the updates of one product line (see: presets lines)")
+    upg = up.add_mutually_exclusive_group()
+    upg.add_argument("--line", dest="line_id", help="only the updates of one product line (see: presets lines)")
+    upg.add_argument("--all", dest="all_", action="store_true", help="every listed update (also what no switch means)")
     au = pfsub.add_parser("accept-updates", help="write the listed updates over presets already in your slicers "
                                                  "(at the next Slicer Sync run); they are never replaced otherwise")
-    au.add_argument("--line", dest="line_id", help="only the updates of one product line (see: presets lines)")
+    aug = au.add_mutually_exclusive_group()
+    aug.add_argument("--line", dest="line_id", help="only the updates of one product line (see: presets lines)")
+    aug.add_argument("--all", dest="all_", action="store_true", help="every listed update (also what no switch means)")
     _add_yes(au, "accept without asking (a script has no terminal to ask on)")
 
 

@@ -184,6 +184,15 @@ def test_the_weigh_station_setup_under_json_needs_the_hub_option(applied, capsys
     assert rc == 2 and "--hub" in json.loads(out)["fix"] and "modules" not in config.load()
 
 
+def test_the_weigh_station_setup_without_a_terminal_or_hub_stops_first_with_exit_2(applied, capsys, monkeypatch):
+    _stdin(monkeypatch, "")
+    before = config.load()
+    rc, out, err = run(capsys, "features", "setup", "weigh-station")
+    assert rc == 2 and out == "" and config.load() == before and applied == []        # no output, no change, no apply
+    assert flat(err).startswith("Error: the Weigh Station only setup needs the Hub's address, and there is no terminal to ask.")
+    assert "--hub <address>" in err and "pass --server" not in err and "modules set" not in err
+
+
 # ---------------------------------------------------------------- features apply, units, menu
 
 def test_apply_keeps_the_pairing_unless_no_pair(applied, capsys):
@@ -356,6 +365,8 @@ def test_password_dash_reads_one_line_of_standard_input_and_asks_nothing_else(mo
     _stdin(monkeypatch, "my wifi pass\nnext line\n")
     a = types.SimpleNamespace(password="-")
     assert cli._wifi_password(a, lambda prompt: pytest.fail("asked " + prompt)) == "my wifi pass"
+    _stdin(monkeypatch, "  spaced pass \r\nnext\n")                  # spaces are part of a Wi-Fi password; the line ending is not
+    assert cli._wifi_password(a, lambda prompt: pytest.fail("asked " + prompt)) == "  spaced pass "
     asked = []
     a = types.SimpleNamespace(password=None)
     assert cli._wifi_password(a, lambda prompt: asked.append(prompt) or "pw") == "pw"

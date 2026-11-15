@@ -3,6 +3,7 @@ import socket
 
 import pytest
 
+from filament_kit import __main__ as app_main
 from fakes import spoolman_fake
 
 
@@ -14,6 +15,23 @@ def _restore_app_logger():
     saved = (list(log.handlers), log.level, log.propagate)
     yield
     log.handlers[:], log.level, log.propagate = saved
+
+
+_REAL_JOURNAL_SETUP = app_main._log_to_journal
+
+
+@pytest.fixture(autouse=True)
+def _no_journal_handler(monkeypatch):
+    """A command-line audit line gets the Hub's own logger setup (a stderr handler, no propagation) when it is written;
+    tests read the lines through caplog and a quiet standard error, so the setup does nothing unless a test asks for it
+    with `real_journal_logging`."""
+    monkeypatch.setattr(app_main, "_log_to_journal", lambda: None)
+
+
+@pytest.fixture
+def real_journal_logging(monkeypatch):
+    """The Hub's real logger setup for this test (see `_no_journal_handler`)."""
+    monkeypatch.setattr(app_main, "_log_to_journal", _REAL_JOURNAL_SETUP)
 
 
 @pytest.fixture(autouse=True)

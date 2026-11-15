@@ -281,12 +281,29 @@ def test_an_explicit_port_piped_without_yes_exits_2_and_writes_nothing(bench, mo
     assert bench.flashed == [] and "--yes" in capsys.readouterr().err
 
 
-def test_no_blank_board_says_so_with_a_fix_and_the_old_name_is_the_same_command(bench, capsys):
+def test_no_blank_board_says_so_with_a_fix_and_the_old_name_is_the_same_command(bench, capsys, monkeypatch):
     bench.probe.hello = {"/dev/ttyACM0", "/dev/ttyACM1"}
     assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
     err = " ".join(capsys.readouterr().err.split())
     assert err.startswith("Error: no blank display board found on USB. Fix: plug the display in with a data cable, then "
                           "run this again")
+    real = cli.cmd_station_flash_panel
+    monkeypatch.setattr(cli, "cmd_station_flash_panel",
+                        lambda yes=False, only_port=None: real(ask=lambda p: "y", run=bench.run, yes=yes, only_port=only_port))
+    for argv in (["weigh-station", "flash-display"], ["station", "flash-panel"]):   # the new name and the old one
+        assert cli.main(argv) == 1
+        assert " ".join(capsys.readouterr().err.split()) == err
+
+
+def test_a_service_that_will_not_start_again_is_not_reported_as_started(bench, capsys):
+    bench.probe.hello = {"/dev/ttyACM1"}
+    def run(cmd, **kw):
+        bench.calls.append(cmd)
+        return type("R", (), {"returncode": 1 if cmd[1] == "start" else 0})()
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=run) == 0
+    got = capsys.readouterr()
+    assert "Started the Weigh Station service again." not in got.out
+    assert "could not start filament-kit-station.service again (systemctl exit 1)" in " ".join(got.err.split())
 
 
 def test_the_done_line_and_the_service_line_close_a_good_flash(bench, capsys):

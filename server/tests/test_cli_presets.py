@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import builtins
 import json
+import logging
 import re
 
 import pytest
@@ -114,8 +115,9 @@ def test_status_while_the_feature_is_off_says_so_and_json_gives_on_false(capsys)
     rc, out, err = run(capsys, "presets", "status")
     assert rc == 1 and out == "" and err.startswith('Error: the "Slicer presets" Feature is off.')
     assert "sudo filament-kit features on presets" in err
-    rc, out, _ = run(capsys, "presets", "status", "--json")
-    assert rc == 0 and json.loads(out) == {"on": False}
+    rc, out, _ = run(capsys, "presets", "status", "--json")                 # the same exit code and an error document
+    got = json.loads(out)
+    assert rc == 1 and got["ok"] is False and "Slicer presets" in got["error"]
     assert run(capsys, "presets", "restore-deleted")[0] == 1 and run(capsys, "presets", "updates")[0] == 1
 
 
@@ -189,6 +191,25 @@ def test_lines_json_is_the_hubs_line_view(env, capsys):
 
 def _audit(caplog) -> list[str]:
     return [r.getMessage().split(" from ")[0] for r in caplog.records if r.name == "filament_kit.setup_page"]
+
+
+def test_a_lines_error_gives_the_same_exit_code_and_an_error_document_under_json(env, capsys, monkeypatch):
+    v = presets_tab._view()
+    monkeypatch.setattr(presets_tab, "_view", lambda: {**v, "lines_error": "lines.json is unreadable."})
+    assert run(capsys, "presets", "status")[0] == 1
+    rc, out, _ = run(capsys, "presets", "status", "--json")
+    assert rc == 1 and json.loads(out)["ok"] is False and "lines.json" in json.loads(out)["error"]
+
+
+def test_an_audit_line_lands_where_the_hubs_go_without_any_test_handler(capsys, real_journal_logging):
+    """No caplog: the Hub's own logger setup (__main__._log_to_journal) is what puts the line on standard error."""
+    log = logging.getLogger("filament_kit")
+    log.handlers[:], log.propagate = [], True              # a real run: no handler yet (conftest restores it)
+    cli._hub_audit("probe change")
+    cli._history_audit("rid1", "revised")
+    err = capsys.readouterr().err
+    assert "INFO filament_kit.setup_page: setup: probe change from " in err
+    assert "setup: recently added record rid1 revised from " in err
 
 
 def test_restore_deleted_asks_for_a_build_and_is_audited_as_the_hub_page_does(env, capsys, caplog, monkeypatch):
@@ -269,6 +290,26 @@ def test_accept_updates_with_yes_and_one_line_only(env, capsys, terminal):
     got = json.loads(out)
     assert rc == 0 and got["ok"] is True and got["dry_run"] is False and got["count"] == len(got["chosen"]) > 0
     assert set(got["chosen"][0]) == {"line_id", "target", "name", "file", "keys"}      # the Hub's own reply shape
+
+
+def test_all_is_every_update_and_excludes_line(env, capsys, terminal):
+    updated(env)
+    terminal(False)
+    n = builds.status()["updates"]["count"]
+    assert run(capsys, "presets", "updates", "--all")[1] == run(capsys, "presets", "updates")[1]
+    for argv in (["updates", "--all", "--line", LID], ["accept-updates", "--all", "--line", LID, "--yes"]):
+        with pytest.raises(SystemExit) as e:
+            run(capsys, "presets", *argv)
+        assert e.value.code == 2
+    rc, out, _ = run(capsys, "presets", "accept-updates", "--all", "--yes")
+    assert rc == 0 and f"{n} updates accepted" in out and builds.status()["updates"]["accepted"] == n
+
+
+def test_an_empty_line_is_a_usage_error_naming_the_lines_command(env, capsys):
+    updated(env)
+    for which in ("updates", "accept-updates"):
+        rc, out, err = run(capsys, "presets", which, "--line", "")
+        assert rc == 2 and "--all" not in err and "presets lines" in err and builds.status()["updates"]["accepted"] == 0
 
 
 def test_the_updates_changing_while_asked_is_the_hubs_refusal_in_the_specs_words(env, capsys, terminal, monkeypatch):

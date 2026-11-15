@@ -356,9 +356,9 @@ def test_non_root_changes_nothing(applied, monkeypatch, capsys):
 
 
 def test_set_station_without_address_fails(applied, capsys):
-    assert cli.main(["modules", "set", "station"]) == 1
+    assert cli.main(["modules", "set", "station"]) == 2             # no terminal, no address: stops first (06 6.7)
     err = capsys.readouterr().err
-    assert "fix:" in err and "--server" in err
+    assert "Fix:" in err and "--hub" in err
     assert "modules" not in config.load() and applied == []
 
 
