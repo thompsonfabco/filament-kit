@@ -67,11 +67,13 @@ def _system_path(path) -> bool:
 
 
 @pytest.fixture(autouse=True)
-def system_writes(monkeypatch, tmp_path_factory):
+def system_writes(request, monkeypatch, tmp_path_factory):
     """No test writes outside its temp dirs. `apply.execute` and `refresh_station` default to a temp dir as their root
     (they default to `/`), and every write to a system path (/etc, /var/lib, /usr, /opt, /run ...) is refused and
     recorded; the test then fails at its end, naming each one. The list is this fixture's value: a test that
-    plants a write on purpose empties it."""
+    plants a write on purpose empties it. A root-only test that works on real system paths on purpose (testenv --root)
+    carries `@pytest.mark.real_system_paths("reason")` and is not guarded; the marker fails the test when it is not
+    running as root."""
     import builtins
     import io
     from filament_kit import apply
@@ -79,6 +81,12 @@ def system_writes(monkeypatch, tmp_path_factory):
     for fn in (apply.execute, apply.refresh_station):
         monkeypatch.setitem(fn.__kwdefaults__, "root", root)
     attempts: list[str] = []
+    marker = request.node.get_closest_marker("real_system_paths")
+    if marker is not None:
+        if not (hasattr(os, "geteuid") and os.geteuid() == 0):
+            pytest.fail("real_system_paths is for tests that run as root: " + str(marker.args[:1] or "no reason given"))
+        yield attempts
+        return
 
     def refuse(what, path):
         attempts.append(f"{what} {path}")

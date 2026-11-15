@@ -366,6 +366,7 @@ def test_the_helper_unit_may_write_where_a_restore_pins_the_upload():
     assert "install -d -m 700 -o root -g root /var/backups/filament-kit" in install     # so the "-" path exists
 
 
+@pytest.mark.real_system_paths("creates and removes /etc, /var/lib and /var/backups folders to map the helper unit's ReadWritePaths")
 @pytest.mark.skipif(not ROOT or not shutil.which("systemd-run") or not os.path.isdir("/run/systemd/system"),
                     reason="root and a running systemd")
 def test_pin_upload_works_in_the_helper_units_own_sandbox(tmp_path, monkeypatch):
