@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -21,7 +22,12 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.AcceptedUpdates
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.PresetUpdates
+import com.thompsonfabco.filamentkit.net.UpdatesInfo
+import com.thompsonfabco.filamentkit.ui.home.PresetUpdatesBackend
+import com.thompsonfabco.filamentkit.ui.home.PresetUpdatesViewModel
 import com.thompsonfabco.filamentkit.ui.SemanticsAudit
 import com.thompsonfabco.filamentkit.ui.components.LocalTopBarActions
 import com.thompsonfabco.filamentkit.ui.components.MAIN_BUTTON_TAG
@@ -55,11 +61,10 @@ class PresetsScreenTest {
     private val actions = TopBarActions()
     private val title = "Slicer presets"
     private val api = FakePresets()
-    private var openedHubPage = 0
-    private var hubPage: String? = "https://192.0.2.10:8443/setup"
     private var catalog = 0
+    private var pairing by mutableStateOf<Any?>(null)
 
-    private fun show(api: FakePresets = this.api): PresetsViewModel {
+    private fun show(api: FakePresets = this.api, updates: PresetUpdatesViewModel? = null): PresetsViewModel {
         val vm = PresetsViewModel(api)
         rule.setContent {
             val base = LocalDensity.current
@@ -72,7 +77,7 @@ class PresetsScreenTest {
                             Box(Modifier.weight(1f)) {
                                 PresetsScreen(
                                     vm, onPairAgain = {}, onAddCatalogLine = { catalog++ },
-                                    setupUrl = { openedHubPage++; hubPage }, nowMillis = NOW,
+                                    updates = updates, nowMillis = NOW, pairing = pairing,
                                 )
                             }
                         }
@@ -135,18 +140,61 @@ class PresetsScreenTest {
         rule.onNodeWithText("PLA · 4 presets").assertExists()
         rule.onNodeWithText("Bambu Studio parent: Generic PLA").assertExists()
         rule.onNodeWithText("Bambu Studio parent: none").assertExists()
-        rule.onNodeWithText("Attach filaments to lines and build presets now on the Hub page or in the web app.").assertExists()
-        auditAllFour("Build now")
+        rule.onNodeWithText("Attach filaments to lines and build presets now on the Hub page or in the web app.").assertDoesNotExist()
+        auditAllFour("Build presets now")
     }
 
     @Test fun onlyBuildNowIsTheFilledButton() {
         show()
+        // the one filled button is "Build presets now" (not the Hub page's "Build now")
         assertEquals(1, rule.onAllNodes(hasTestTag(MAIN_BUTTON_TAG)).fetchSemanticsNodes().size)
-        rule.onNodeWithText("Build now").performClick()
+        rule.onNode(hasTestTag(MAIN_BUTTON_TAG) and hasText("Build presets now")).assertExists()
+        rule.onNodeWithText("Build now").assertDoesNotExist()
+        rule.onNodeWithText("Build presets now").performClick()
         rule.waitForIdle()
         assertEquals(1, api.builds)
         rule.onNodeWithText("Build requested. The Hub builds the presets within a minute or two.").assertExists()
         auditAllFour("Build requested. The Hub builds the presets within a minute or two.")
+        // and still the one filled button afterwards
+        assertEquals(1, rule.onAllNodes(hasTestTag(MAIN_BUTTON_TAG)).fetchSemanticsNodes().size)
+    }
+
+    @Test fun whileItRunsTheButtonSaysBuildingPresets() {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        api.gate = gate
+        show()
+        rule.onNodeWithText("Build presets now").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Building presets… (a minute or two)").assertExists()
+        gate.complete(Unit)
+        rule.waitForIdle()
+        rule.onNodeWithText("Building presets… (a minute or two)").assertDoesNotExist()
+    }
+
+    @Test fun aHubWithoutTheBuildRouteShowsNoButtonAndSaysSo() {
+        api.failure = ApiError(404, "not_found", "Not Found")
+        show()
+        rule.onNodeWithText("Build presets now").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Building from the phone needs a newer Hub. Update the Hub, or build on the Hub page.").assertExists()
+        rule.onNodeWithText("Build presets now").assertDoesNotExist()
+        assertEquals(0, rule.onAllNodes(hasTestTag(MAIN_BUTTON_TAG)).fetchSemanticsNodes().size)
+    }
+
+    @Test fun theUpdatesPanelIsTheLastAndSaysHowManyWait() {
+        api.updatesInfo = UpdatesInfo(count = 3, lines = 2, accepted = 0)
+        val updates = PresetUpdatesViewModel(object : PresetUpdatesBackend {
+            override suspend fun list() = PresetUpdates()
+            override suspend fun accept(stamp: String, names: List<String>) = AcceptedUpdates()
+            override suspend fun restoreDeleted() = Unit
+        })
+        show(updates = updates)
+        rule.onNodeWithText("3 updates are waiting.").assertExists()
+        rule.onNodeWithText("Review 3 updates").assertExists()
+        val top = { text: String -> rule.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.top }
+        assertTrue(top("Product lines") < top("3 updates are waiting."))
+        assertTrue(top("Filaments without a preset line") < top("Product lines"))
+        auditAllFour("Review 3 updates")
     }
 
     @Test fun theNewLineFormIsAudited() {
@@ -165,7 +213,7 @@ class PresetsScreenTest {
         show()
         rule.onNodeWithText("Add to line").performClick()
         rule.waitForIdle()
-        assertEquals(listOf("Example Filaments PolyTerra" to 7), api.added)
+        assertEquals(listOf("example--polyterra" to 7), api.added)
         assertEquals(0, rule.onAllNodesWithText("Add to line").fetchSemanticsNodes().size)
     }
 
@@ -183,7 +231,61 @@ class PresetsScreenTest {
         rule.onAllNodesWithText("a line named Example Filaments PolyTerra already exists", substring = true).fetchSemanticsNodes().let {
             assertEquals("once, under the field", 1, it.size)
         }
+        // under the Line name field, so above the Create line button (a notice would sit below it)
+        val message = rule.onNodeWithText("a line named Example Filaments PolyTerra already exists", substring = true).fetchSemanticsNode()
+        val create = rule.onNodeWithText("Create line").fetchSemanticsNode()
+        assertTrue("under the field", message.boundsInRoot.bottom <= create.boundsInRoot.top)
         auditAllFour("Create line")
+    }
+
+    private fun parentRefusalIsUnderTheTemplateField(field: String) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        api.failure = ApiError(
+            400, "unknown_parent", "Bambu Studio has no preset Generic PLA",
+            kotlinx.serialization.json.JsonObject(mapOf("field" to kotlinx.serialization.json.JsonPrimitive(field))),
+        )
+        show()
+        rule.onNodeWithText("Or start a new line").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Create line").performClick()
+        rule.waitForIdle()
+        assertEquals(1, rule.onAllNodesWithText("Bambu Studio has no preset Generic PLA", substring = true).fetchSemanticsNodes().size)
+        val message = rule.onNodeWithText("Bambu Studio has no preset Generic PLA", substring = true).fetchSemanticsNode()
+        val create = rule.onNodeWithText("Create line").fetchSemanticsNode()
+        assertTrue("under the template field", message.boundsInRoot.bottom <= create.boundsInRoot.top)
+    }
+
+    @Test fun aParentRefusalIsUnderTheTemplateField() = parentRefusalIsUnderTheTemplateField("parent")
+
+    @Test fun anOrcaParentRefusalIsUnderTheTemplateFieldToo() = parentRefusalIsUnderTheTemplateField("orca_parent")
+
+    @Test fun aRefusalWithoutAFieldIsTheNoticeLineBelowTheForm() {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        api.failure = ApiError(400, "bad_request", "a line named Example Filaments PolyTerra already exists")
+        show()
+        rule.onNodeWithText("Or start a new line").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Create line").performClick()
+        rule.waitForIdle()
+        rule.onAllNodesWithText("a line named Example Filaments PolyTerra already exists", substring = true).fetchSemanticsNodes().let {
+            assertEquals("once, in the notice line", 1, it.size)
+        }
+        val message = rule.onNodeWithText("a line named Example Filaments PolyTerra already exists", substring = true).fetchSemanticsNode()
+        val create = rule.onNodeWithText("Create line").fetchSemanticsNode()
+        assertTrue("below the form", message.boundsInRoot.top >= create.boundsInRoot.bottom)
+        auditAllFour("Create line")
+    }
+
+    @Test fun aFieldTheFormLacksIsTheNoticeLineToo() {
+        api.failure = ApiError(
+            400, "bad_request", "filament 7 is already in a line",
+            kotlinx.serialization.json.JsonObject(mapOf("field" to kotlinx.serialization.json.JsonPrimitive("ids"))),
+        )
+        show()
+        rule.onNodeWithText("Add to line").performClick()
+        rule.waitForIdle()
+        assertEquals(1, rule.onAllNodesWithText("filament 7 is already in a line").fetchSemanticsNodes().size)
+        rule.onNodeWithText("Add to line").assertExists()
     }
 
     @Test fun changeParentOpensTheSheetAndSavesThePickedParent() {
@@ -219,7 +321,7 @@ class PresetsScreenTest {
         show(empty)
         rule.onNodeWithText("No lines yet. They are made from the filaments in Spoolman at the next build or when a spool is added.").assertExists()
         rule.onNodeWithText("Every filament has a preset line.").assertExists()
-        auditAllFour("Build now")
+        auditAllFour("Build presets now")
     }
 
     @Test fun aListThatCannotBeReadSaysSoAndOffersTryAgain() {
@@ -231,7 +333,7 @@ class PresetsScreenTest {
         show(broken)
         rule.onNodeWithText("Slicer preset status is not available right now.").assertExists()
         assertEquals(2, rule.onAllNodesWithText("Try again").fetchSemanticsNodes().size)
-        auditAllFour("Build now")
+        auditAllFour("Build presets now")
     }
 
     @Test fun theLinesAreLoadingThenListed() {
@@ -240,22 +342,26 @@ class PresetsScreenTest {
         show(slow)
         rule.onNodeWithText("Product lines").assertExists()
         rule.onNodeWithText("Example Filaments Silk").assertDoesNotExist()
-        auditAllFour("Build now")
+        auditAllFour("Build presets now")
         gate.complete(Unit)
         rule.waitForIdle()
         rule.onNodeWithText("Example Filaments Silk").assertExists()
     }
 
-    @Test fun theMissingLineButtonOpensTheCatalogAndTheHubPageLinkOpensTheHubPage() {
+    @Test fun theMissingLineButtonOpensTheCatalog() {
         show()
         rule.onNodeWithText("Add a line to the Filament Catalog").performClick()
         assertEquals(1, catalog)
-        rule.onNodeWithText("Open the Hub page").performClick()
-        assertEquals(1, openedHubPage)
-        hubPage = null
-        rule.onNodeWithText("Open the Hub page").performClick()
+        rule.onNodeWithText("Open the Hub page").assertDoesNotExist()
+    }
+
+    @Test fun pairingAgainReadsTheScreenAgain() {
+        pairing = Any()
+        show()
+        val before = api.statusCalls
+        pairing = Any()
         rule.waitForIdle()
-        rule.onNodeWithText("The Hub's address isn't known yet.").assertExists()
+        assertEquals(before + 1, api.statusCalls)
     }
 
     private companion object {

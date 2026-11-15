@@ -29,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -41,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ProfileLine
+import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.UncoveredFilament
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
@@ -57,27 +57,33 @@ import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.home.PresetMark
 import com.thompsonfabco.filamentkit.ui.home.PresetRow
+import com.thompsonfabco.filamentkit.ui.home.PresetUpdatesDialog
+import com.thompsonfabco.filamentkit.ui.home.PresetUpdatesViewModel
+import com.thompsonfabco.filamentkit.ui.home.presetActions
 import com.thompsonfabco.filamentkit.ui.home.presetAge
 import com.thompsonfabco.filamentkit.ui.home.presetLines
+import com.thompsonfabco.filamentkit.ui.home.updatesButton
 import com.thompsonfabco.filamentkit.ui.printers.FormField
 import com.thompsonfabco.filamentkit.ui.profile.SaveFailure
 import com.thompsonfabco.filamentkit.ui.settings.SettingsPanel
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /**
- * Slicer presets (05-android-app 11.2): the build status, Build now, the filaments without a preset line (add to a line or
- * start one), the Product lines panel with "Change parent", and a way to the Filament Catalog and the Hub page. The shell
- * draws the top bar. [onAddCatalogLine] opens the catalog form (05 8); [setupUrl] is the Hub page's address now (null:
- * not known). [nowMillis] is the time ages count from (null: the clock).
+ * Slicer presets (05-android-app 11.2): the build status and Build presets now, the filaments without a preset line (add to
+ * a line or start one), the Product lines panel with "Change parent", the Updates panel, and a way to the Filament Catalog.
+ * The shell draws the top bar. [onAddCatalogLine] opens the catalog form (05 8). [updates] is the Updates list (null: no
+ * Updates panel). [nowMillis] is the time ages count from (null: the clock). [pairing] is the session's client: when the
+ * phone pairs again it is another one and the screen reads everything again.
  */
 @Composable
 fun PresetsScreen(
     vm: PresetsViewModel,
     onPairAgain: () -> Unit,
     onAddCatalogLine: () -> Unit,
-    setupUrl: () -> String?,
     modifier: Modifier = Modifier,
     nowMillis: Long? = null,
+    pairing: Any? = null,
+    updates: PresetUpdatesViewModel? = null,
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
     val space = SpoolwardenTheme.space
@@ -91,6 +97,7 @@ fun PresetsScreen(
             toast?.show(context.getString(if (done.created) R.string.presets_created else R.string.presets_added, done.name))
         }
     }
+    LaunchedEffect(pairing) { vm.pairedWith(pairing) }
     val now = remember(nowMillis) { nowMillis ?: System.currentTimeMillis() }
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
@@ -109,7 +116,7 @@ fun PresetsScreen(
             }
             UncoveredPanel(s, vm, onPairAgain)
             LinesPanel(s, vm, onPairAgain)
-            HubPageLine(setupUrl)
+            if (updates != null) UpdatesPanel(s.status, updates, onChanged = vm::reload)
         }
     }
     s.edit?.let { ParentSheet(it, vm, onPairAgain) }
@@ -160,10 +167,15 @@ private fun StatusPanel(s: PresetsUiState, vm: PresetsViewModel, now: Long, onPa
                 }
             }
         }
-        SwButton(
-            stringResource(R.string.presets_build_now), vm::build, Modifier.fillMaxWidth(),
-            kind = SwButtonKind.Main, busy = s.building,
-        )
+        if (s.buildMissing) {
+            // a Hub without the build route: no button (05 11.2)
+            NoticeCard(NoticeKind.Info, stringResource(R.string.presets_build_elsewhere))
+        } else {
+            SwButton(
+                stringResource(if (s.building) R.string.presets_building else R.string.presets_build), vm::build,
+                Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = s.building,
+            )
+        }
         when (val note = s.buildNote) {
             null -> Unit
             BuildNote.Asked -> Text(
@@ -240,7 +252,10 @@ private fun FilamentCardView(f: UncoveredFilament, card: FilamentCard, vm: Prese
     }
 }
 
-private val INLINE_FIELDS = listOf("name", "bs_template")
+/** The fields a 400 may name that the form has: the line name and the parent (the Hub says `parent` or `orca_parent`). */
+private const val NAME_FIELD = "name"
+private val PARENT_FIELDS = listOf("parent", "orca_parent", "bs_template")
+private val INLINE_FIELDS = listOf(NAME_FIELD) + PARENT_FIELDS
 
 @Composable
 private fun NewLineForm(f: UncoveredFilament, card: FilamentCard, vm: PresetsViewModel) {
@@ -249,7 +264,7 @@ private fun NewLineForm(f: UncoveredFilament, card: FilamentCard, vm: PresetsVie
     val fail = card.fail
     FormField(
         card.name, { vm.setName(f.id, it) }, stringResource(R.string.presets_line_name), enabled = idle,
-        hint = stringResource(R.string.presets_line_name_help), error = fail?.takeIf { it.field == "name" }?.message,
+        hint = stringResource(R.string.presets_line_name_help), error = fail?.takeIf { it.field == NAME_FIELD }?.message,
     )
     when {
         templates == null -> Text(stringResource(R.string.presets_parent_loading), style = MaterialTheme.typography.bodySmall)
@@ -259,7 +274,7 @@ private fun NewLineForm(f: UncoveredFilament, card: FilamentCard, vm: PresetsVie
         )
         else -> PickField(
             stringResource(R.string.presets_bs_template), card.template.orEmpty(), templates.parents, idle,
-            onPick = { vm.chooseTemplate(f.id, it) }, error = fail?.takeIf { it.field == "bs_template" }?.message,
+            onPick = { vm.chooseTemplate(f.id, it) }, error = fail?.takeIf { it.field in PARENT_FIELDS }?.message,
         )
     }
     SwButton(
@@ -419,21 +434,21 @@ private fun ParentSheet(edit: ParentEdit, vm: PresetsViewModel, onPairAgain: () 
 /** The matches listed at once; typing in "Find a parent" narrows the rest. */
 private const val MATCH_CAP = 50
 
-/** "Attach filaments to lines and build presets now on the Hub page or in the web app." and the button to the Hub page. */
+// ---- updates ----------------------------------------------------------------------------------------------------
+
+/** The last panel: how many updates wait and the button that opens the Updates list (accept, restore deleted presets). */
 @Composable
-private fun HubPageLine(setupUrl: () -> String?) {
-    val links = LocalUriHandler.current
-    var problem by remember { mutableStateOf<Int?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2)) {
-        Text(stringResource(R.string.presets_hub_page_line), style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted)
-        SwButton(stringResource(R.string.common_open_hub_page), {
-            val url = setupUrl()
-            problem = when {
-                url == null -> R.string.settings_hub_page_error_address
-                runCatching { links.openUri(url) }.isSuccess -> null
-                else -> R.string.settings_hub_page_error_browser
-            }
-        }, kind = SwButtonKind.Quiet)
-        problem?.let { NoticeCard(NoticeKind.Bad, stringResource(it)) }
+private fun UpdatesPanel(status: ProfileStatus?, updates: PresetUpdatesViewModel, onChanged: () -> Unit) {
+    val resources = LocalContext.current.resources
+    var open by remember { mutableStateOf(false) }
+    SettingsPanel {
+        SectionTitle(stringResource(R.string.presets_updates_title))
+        val actions = status?.let { presetActions(it, resources) }
+        actions?.hints?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        SwButton(
+            actions?.let { updatesButton(it, resources) } ?: stringResource(R.string.presets_updates_title),
+            { updates.load(); open = true }, Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet,
+        )
     }
+    if (open) PresetUpdatesDialog(updates, onClose = { open = false; onChanged() })
 }

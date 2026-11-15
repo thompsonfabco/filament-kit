@@ -81,6 +81,19 @@ class ApiPresetsPhoneTest {
         assertEquals("name", e.extra["field"]!!.jsonPrimitive.content)
     }
 
+    @Test fun theBackendAsksTheCurrentApiOnEveryCall() = runBlocking {
+        val second = Api(pinnedClient(cert.fingerprint()), { server.ipUrl("/").toString().trimEnd('/') }, { "tok-10" })
+        var current = api
+        val backend = com.thompsonfabco.filamentkit.ui.presets.PresetsBackend.of { current }
+        json("""{"requested":true,"last_build":"s1","output":"x"}""")
+        backend.build()
+        assertEquals("Bearer tok-9", server.takeRequest().headers["Authorization"])
+        current = second
+        json("""{"requested":true,"last_build":"s2","output":"x"}""")
+        backend.build()
+        assertEquals("Bearer tok-10", server.takeRequest().headers["Authorization"])
+    }
+
     @Test fun buildNowPostsAnEmptyObjectToTheProfilesBuildRoute() = runBlocking {
         json("""{"requested":true,"last_build":"s1","output":"a build is requested"}""")
         val asked = api.buildPresets()

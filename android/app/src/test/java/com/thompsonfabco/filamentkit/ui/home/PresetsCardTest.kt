@@ -95,16 +95,24 @@ class PresetsCardTest {
         assertEquals("unknown time", formatStamp(null, utc))
     }
 
+    @Test fun aBuildWithoutATimeIsAWholeTextNeverBuiltUnknownTime() {
+        val s = ProfileStatus(lines = 12, presets = 96, build = build.copy(created = null))
+        assertEquals("96 presets for 12 lines", presetLines(s, res, fmt).first().text)
+        assertEquals("96 presets for 12 lines", presetLines(s.copy(build = build.copy(created = " ")), res, fmt).first().text)
+        assertEquals("96 presets for 12 lines, built <soon>", presetLines(s.copy(build = build.copy(created = "soon")), res, fmt).first().text)
+    }
+
     @Test fun buildNowIsOfferedOnlyWhileNoPcSyncIsSetUp() {
         assertEquals(PresetActions(canBuild = true, hints = emptyList()), presetActions(ProfileStatus(), res))
         val withPc = presetActions(ProfileStatus(pc = PcInfo("pc-1", null)), res)
         assertEquals(false, withPc.canBuild)
-        assertEquals(listOf("To build now, open the setup page (Settings, Open the setup page)."), withPc.hints)
+        // no hint about where to build: the card's header opens Slicer presets (R61)
+        assertEquals(emptyList<String>(), withPc.hints)
     }
 
     @Test fun waitingUpdatesAreReviewedOnThePhoneAndAcceptedOnesAreNotCounted() {
         val a = presetActions(ProfileStatus(updates = UpdatesInfo(count = 3, lines = 2, accepted = 1)), res)
-        assertEquals(listOf("2 presets in your slicers can be updated."), a.hints)
+        assertEquals(listOf("2 updates are waiting."), a.hints)
         assertEquals(2, a.waiting)
         assertEquals("Review 2 updates", updatesButton(a, res))
         val none = presetActions(ProfileStatus(updates = UpdatesInfo(count = 2, lines = 1, accepted = 2)), res)
@@ -120,6 +128,6 @@ class PresetsCardTest {
         assertEquals("3 h ago", presetAge(res, "2026-11-02T01:02:03Z", built + 3 * 3_600_000 + 5_000))
         assertEquals(formatStamp("2026-11-02T01:02:03Z"), presetAge(res, "2026-11-02T01:02:03Z", built + 3 * 86_400_000L))
         assertEquals("soon", presetAge(res, "soon", built))
-        assertEquals("unknown time", presetAge(res, null, built))
+        assertEquals("", presetAge(res, null, built))
     }
 }

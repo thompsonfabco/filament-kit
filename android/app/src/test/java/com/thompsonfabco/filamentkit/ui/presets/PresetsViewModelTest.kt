@@ -96,7 +96,7 @@ class PresetsViewModelTest {
         vm.addToLine(vm.state.value.uncovered!!.first())
         assertEquals(CardBusy.Adding, vm.state.value.card(7).busy)
         advanceUntilIdle()
-        assertEquals(listOf("Example Filaments PolyTerra" to 7), api.added)
+        assertEquals("the line's id, never its name", listOf("example--polyterra" to 7), api.added)
         assertEquals(listOf(9), vm.state.value.uncovered?.map { it.id })
         assertEquals(Done(created = false, name = "Example Filaments PolyTerra"), vm.state.value.done)
         assertEquals("the lines are read again", 2, api.linesCalls)
@@ -110,11 +110,35 @@ class PresetsViewModelTest {
         vm.chooseLine(7, "Example Filaments Silk")
         vm.addToLine(vm.state.value.uncovered!!.first())
         advanceUntilIdle()
-        assertEquals(listOf("Example Filaments Silk" to 7), api.added)
+        assertEquals(listOf("example--silk" to 7), api.added)
     }
 
-    @Test fun aRefusalOfAddNamesTheFieldAndKeepsTheCard() = runTest(dispatcher) {
-        // the Hub's real 400 shape: error, message and the field it refused
+    @Test fun aLineThatTheHubsListLacksIsNotSentByName() = runTest(dispatcher) {
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        vm.chooseLine(7, "Example Filaments Gone")
+        vm.addToLine(vm.state.value.uncovered!!.first())
+        advanceUntilIdle()
+        assertTrue(api.added.isEmpty())
+        assertEquals(SaveFailure.Unknown, vm.state.value.card(7).fail?.kind)
+        assertNull(vm.state.value.card(7).busy)
+    }
+
+    @Test fun aRefusalWithoutAFieldIsKeptWithTheCardForTheNoticeLine() = runTest(dispatcher) {
+        // the Hub's 400 today: `error` and `message` only
+        api.failure = ApiError(400, "bad_request", "filament 7 is already in line Example Filaments PolyTerra")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        vm.addToLine(vm.state.value.uncovered!!.first())
+        advanceUntilIdle()
+        val card = vm.state.value.card(7)
+        assertNull(card.busy)
+        assertEquals(Fail(SaveFailure.Message, "filament 7 is already in line Example Filaments PolyTerra", null), card.fail)
+        assertEquals(listOf(7, 9), vm.state.value.uncovered?.map { it.id })
+    }
+
+    @Test fun aRefusalOfAddThatNamesAFieldKeepsTheFieldAndTheCard() = runTest(dispatcher) {
+        // a 400 that also carries the `field` it refused (the Hub may send it)
         api.failure = ApiError(400, "bad_request", "filament 7 is already in a line", JsonObject(mapOf("field" to JsonPrimitive("ids"))))
         val vm = PresetsViewModel(api)
         advanceUntilIdle()
@@ -213,6 +237,53 @@ class PresetsViewModelTest {
         assertNull("typing clears the refusal", vm.state.value.card(7).fail)
     }
 
+    @Test fun aRefusedNewLineWithoutAFieldKeepsTheFormAndTheMessage() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        api.failure = ApiError(400, "bad_request", "a line named Example Filaments PolyTerra exists")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val f = vm.state.value.uncovered!!.first()
+        vm.toggleNewLine(f)
+        advanceUntilIdle()
+        vm.createLine(f)
+        advanceUntilIdle()
+        val card = vm.state.value.card(7)
+        assertEquals(Fail(SaveFailure.Message, "a line named Example Filaments PolyTerra exists", null), card.fail)
+        assertTrue(card.newLineOpen)
+    }
+
+    @Test fun aNewLineIsOfferedAtOnceOnTheOtherCardsOfItsBrand() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val f = vm.state.value.uncovered!!.first()
+        vm.toggleNewLine(f)
+        advanceUntilIdle()
+        vm.setName(7, "Example Filaments Neon")
+        vm.createLine(f)
+        advanceUntilIdle()
+        val other = vm.state.value.uncovered!!.single()
+        assertEquals(9, other.id)
+        assertEquals(listOf("Example Filaments Neon"), other.linesForVendor)
+        // and the card adds to it by its id
+        vm.addToLine(other)
+        advanceUntilIdle()
+        assertEquals(listOf("example-filaments-neon" to 9), api.added)
+    }
+
+    @Test fun aNewLineIsNotOfferedOnAnotherBrand() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA"), synced = true)
+        api.uncoveredList = api.uncoveredList.map { if (it.id == 9) it.copy(vendor = "Other Brand") else it }
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val f = vm.state.value.uncovered!!.first()
+        vm.toggleNewLine(f)
+        advanceUntilIdle()
+        vm.createLine(f)
+        advanceUntilIdle()
+        assertEquals(emptyList<String>(), vm.state.value.uncovered!!.single().linesForVendor)
+    }
+
     @Test fun theSuggestedNameDropsTheLastWordOfTheFilament() {
         val f = UncoveredFilament(1, "Overture", "TPU Blue", "TPU")
         assertEquals("Overture TPU", PresetsViewModel.suggestedName(f))
@@ -248,10 +319,72 @@ class PresetsViewModelTest {
         assertFalse(vm.state.value.building)
     }
 
+    @Test fun aHubWithoutTheBuildRouteIsRememberedUntilThePhonePairsAgain() = runTest(dispatcher) {
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        vm.pairedWith(Any())
+        api.failure = ApiError(404, "not_found", "Not Found")
+        vm.build()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.buildMissing)
+        assertNull("no refusal notice besides the Hub-too-old line", vm.state.value.buildNote)
+        vm.pairedWith(Any())
+        assertFalse(vm.state.value.buildMissing)
+    }
+
     @Test fun anUnpairedPhoneAndAChangedCertificateAreTheHubNoticesNotMessages() {
         assertEquals(SaveFailure.NotPaired, failOf(ApiError(401, "unauthorized", "no")).kind)
         assertEquals(SaveFailure.CertificateChanged, failOf(FingerprintMismatch("a", "b")).kind)
         assertEquals(SaveFailure.Unknown, failOf(IllegalStateException()).kind)
+    }
+
+    // ---- pairing again --------------------------------------------------------------------------------------------
+
+    @Test fun pairingAgainDropsTheOldNoticesAndReadsEverythingAgain() = runTest(dispatcher) {
+        api.linesFailure = ApiError(0, "offline", "x")
+        api.uncoveredFailure = ApiError(0, "offline", "x")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        val first = Any()
+        vm.pairedWith(first)
+        vm.pairedWith(first)
+        advanceUntilIdle()
+        assertEquals("the same pairing reads nothing again", 1, api.linesCalls)
+        api.failure = ApiError(401, "unauthorized", "no")
+        vm.build()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.buildNote)
+        assertNotNull(vm.state.value.linesFail)
+        assertNotNull(vm.state.value.uncoveredFail)
+
+        api.linesFailure = null
+        api.uncoveredFailure = null
+        api.failure = null
+        val statusBefore = api.statusCalls
+        vm.pairedWith(null)
+        vm.pairedWith(Any())
+        advanceUntilIdle()
+        val s = vm.state.value
+        assertNull(s.linesFail)
+        assertNull(s.uncoveredFail)
+        assertNull(s.buildNote)
+        assertEquals(2, s.lines?.size)
+        assertEquals(listOf(7, 9), s.uncovered?.map { it.id })
+        assertEquals(statusBefore + 1, api.statusCalls)
+    }
+
+    @Test fun theOldNoticeOfACardGoesWhenThePhonePairsAgain() = runTest(dispatcher) {
+        api.failure = ApiError(401, "unauthorized", "no")
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        vm.pairedWith(Any())
+        vm.addToLine(vm.state.value.uncovered!!.first())
+        advanceUntilIdle()
+        assertEquals(SaveFailure.NotPaired, vm.state.value.card(7).fail?.kind)
+        api.failure = null
+        vm.pairedWith(Any())
+        advanceUntilIdle()
+        assertNull(vm.state.value.card(7).fail)
     }
 
     // ---- change parent --------------------------------------------------------------------------------------------

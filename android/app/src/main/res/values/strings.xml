@@ -2612,6 +2612,8 @@
     <string name="common_yes">Yes</string>
     <!-- 1=presets 2=lines 3=time -->
     <string name="presets_built">%1$s for %2$s, built %3$s</string>
+    <!-- 1=presets 2=lines -->
+    <string name="presets_built_no_time">%1$s for %2$s</string>
     <!-- 1=count -->
     <plurals name="presets_built_lines">
         <item quantity="one">%1$d line</item>
@@ -2625,7 +2627,6 @@
     <string name="presets_field_built">Built</string>
     <string name="presets_field_last_build">Last build</string>
     <string name="presets_field_on_pc">On your PC</string>
-    <string name="presets_hub_page_line">Attach filaments to lines and build presets now on the Hub page or in the web app.</string>
     <string name="presets_info">Presets are built on the Hub and installed on your PC by Slicer Sync the next time the slicers are closed.</string>
     <!-- 1=time -->
     <string name="presets_installed">Installed on your PC %1$s</string>
@@ -2658,18 +2659,17 @@
     <!-- 1=material 2=id -->
     <string name="presets_filament_meta">%1$s · F%2$s</string>
     <string name="presets_build_failed_plain">The last preset build failed</string>
-    <string name="presets_unknown_time">unknown time</string>
     <!-- 1=count -->
     <plurals name="presets_updates_waiting">
-        <item quantity="one">%1$d preset in your slicers can be updated.</item>
-        <item quantity="other">%1$d presets in your slicers can be updated.</item>
+        <item quantity="one">%1$d update is waiting.</item>
+        <item quantity="other">%1$d updates are waiting.</item>
     </plurals>
     <!-- 1=count -->
     <plurals name="presets_updates_review">
         <item quantity="one">Review %1$d update</item>
         <item quantity="other">Review %1$d updates</item>
     </plurals>
-    <string name="presets_build_elsewhere">To build now, open the setup page (Settings, Open the setup page).</string>
+    <string name="presets_build_elsewhere">Building from the phone needs a newer Hub. Update the Hub, or build on the Hub page.</string>
     <string name="presets_templates_none">Slicer Sync has not reported any parents yet, so a line cannot be started here. It reports them when it runs.</string>
     <string name="printer_add_connecting">Connecting to the printer…</string>
     <!-- 1=model 2=serial -->

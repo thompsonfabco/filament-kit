@@ -954,7 +954,14 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             vm = presetsVm,
                             onPairAgain = app.router::pairAgain,
                             onAddCatalogLine = { nav.navigate(AddProfileRoute) },
-                            setupUrl = { HubPage.url(app.session.baseUrl()) },
+                            pairing = api,
+                            updates = api?.let { a ->
+                                viewModel(key = "preset-updates-${System.identityHashCode(a)}") {
+                                    com.thompsonfabco.filamentkit.ui.home.PresetUpdatesViewModel(
+                                        com.thompsonfabco.filamentkit.ui.home.PresetUpdatesBackend.of(a),
+                                    )
+                                }
+                            },
                         )
                     }
 

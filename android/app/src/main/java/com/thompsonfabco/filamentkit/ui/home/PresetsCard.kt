@@ -48,11 +48,12 @@ fun presetLines(s: ProfileStatus, r: Resources, time: (String?) -> String): List
     val out = mutableListOf<PresetLine>()
     val build = s.build
     if (build != null) {
+        val presets = r.getQuantityString(R.plurals.presets_built_presets, s.presets, s.presets)
+        val lines = r.getQuantityString(R.plurals.presets_built_lines, s.lines, s.lines)
+        // no time from the Hub: a whole text of its own, never "built unknown time"
         out += PresetLine(
-            r.getString(
-                R.string.presets_built, r.getQuantityString(R.plurals.presets_built_presets, s.presets, s.presets),
-                r.getQuantityString(R.plurals.presets_built_lines, s.lines, s.lines), time(build.created),
-            ),
+            if (build.created.isNullOrBlank()) r.getString(R.string.presets_built_no_time, presets, lines)
+            else r.getString(R.string.presets_built, presets, lines, time(build.created)),
         )
     }
     val attempt = s.lastAttempt
@@ -86,9 +87,7 @@ fun presetActions(s: ProfileStatus, r: Resources): PresetActions {
     val hints = mutableListOf<String>()
     val waiting = (s.updates?.let { it.count - it.accepted } ?: 0).coerceAtLeast(0)
     if (waiting > 0) hints += r.getQuantityString(R.plurals.presets_updates_waiting, waiting, waiting)
-    val canBuild = s.pc == null
-    if (!canBuild) hints += r.getString(R.string.presets_build_elsewhere)
-    return PresetActions(canBuild, hints, waiting)
+    return PresetActions(s.pc == null, hints, waiting)
 }
 
 /** The panel's button that opens the Updates dialog. */
@@ -97,7 +96,7 @@ fun updatesButton(a: PresetActions, r: Resources): String =
 
 /** A server time as the catalogue's age ("40 s ago", "3 h ago"), or the phone's date after two days; unreadable text as sent. */
 fun presetAge(r: Resources, raw: String?, nowMillis: Long): String {
-    val ms = stampMillis(raw) ?: return raw?.takeIf { it.isNotBlank() } ?: r.getString(R.string.presets_unknown_time)
+    val ms = stampMillis(raw) ?: return raw?.trim().orEmpty()
     val seconds = ((nowMillis - ms) / MS_PER_SECOND).coerceAtLeast(0)
     return when {
         seconds < SECONDS_PER_MINUTE -> r.getString(R.string.common_age_seconds, seconds)

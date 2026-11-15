@@ -28,7 +28,7 @@ interface PresetsBackend {
     suspend fun uncovered(): List<UncoveredFilament>
     suspend fun parents(material: String): ParentList
     suspend fun setLineParent(lineId: String, parent: String): ProfileLine
-    suspend fun addToLine(line: String, id: Int): ProfileLine
+    suspend fun addToLine(lineId: String, id: Int): ProfileLine
     suspend fun newLine(name: String, vendor: String, id: Int, template: String): ProfileLine
     suspend fun build(): BuildRequested
 
@@ -40,7 +40,7 @@ interface PresetsBackend {
             override suspend fun uncovered() = current().uncoveredFilaments()
             override suspend fun parents(material: String) = current().parents(material)
             override suspend fun setLineParent(lineId: String, parent: String) = current().setLineParent(lineId, parent)
-            override suspend fun addToLine(line: String, id: Int) = current().addFilamentsToLine(line, listOf(id))
+            override suspend fun addToLine(lineId: String, id: Int) = current().addFilamentsToLine(lineId, listOf(id))
             override suspend fun newLine(name: String, vendor: String, id: Int, template: String) =
                 current().createLine(name, vendor, listOf(id), template)
             override suspend fun build() = current().buildPresets()
@@ -119,6 +119,8 @@ data class PresetsUiState(
     val cards: Map<Int, FilamentCard> = emptyMap(),
     val building: Boolean = false,
     val buildNote: BuildNote? = null,
+    /** The Hub has no build route (404): no button, the screen says the Hub is too old. */
+    val buildMissing: Boolean = false,
     val edit: ParentEdit? = null,
     /** The line whose parent was just saved (its row says so). */
     val savedFor: String? = null,
@@ -139,7 +141,28 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
     /** The Bambu Studio parents already read, by material (a card and the sheet ask the same list); only a synced list is kept. */
     private val parentCache = mutableMapOf<String, ParentList>()
 
+    /** The pairing the screen was last shown with (the session's client); null until a paired screen has asked. */
+    private var pairing: Any? = null
+
     init {
+        reload()
+    }
+
+    /**
+     * The screen tells which pairing it is shown with ([key], the session's client; null while unpaired). Another one than
+     * before (the phone paired again) drops the old notices and reads everything again; the first one only notes it.
+     */
+    fun pairedWith(key: Any?) {
+        if (key == null) return
+        val before = pairing
+        pairing = key
+        if (before == null || before == key) return
+        _state.update { s ->
+            s.copy(
+                buildNote = null, buildMissing = false, cards = s.cards.mapValues { it.value.copy(fail = null) },
+                edit = s.edit?.copy(fail = null), linesFail = null, uncoveredFail = null,
+            )
+        }
         reload()
     }
 
@@ -235,7 +258,10 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
     private suspend fun parentsFor(material: String): ParentList =
         parentCache[material] ?: api.parents(material).also { if (it.synced) parentCache[material] = it }
 
-    /** Adds [filament] to the line chosen on its card (the first of its brand's lines when none was chosen). */
+    /**
+     * Adds [filament] to the line chosen on its card (the first of its brand's lines when none was chosen). The call names the
+     * line by its `line_id` from the line view, never by its name.
+     */
     fun addToLine(filament: UncoveredFilament) {
         val card = _state.value.card(filament.id)
         val line = card.line ?: filament.linesForVendor.firstOrNull() ?: return
@@ -243,7 +269,15 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
         updateCard(filament.id) { it.copy(busy = CardBusy.Adding, fail = null) }
         viewModelScope.launch {
             try {
-                api.addToLine(line, filament.id)
+                // the line view in hand, else the Hub's list read now
+                val known = _state.value.lines.orEmpty().firstOrNull { lineName(it) == line }
+                val lineId = (known ?: api.lines().firstOrNull { lineName(it) == line })?.lineId
+                if (lineId == null) {
+                    // the Hub's list has no such line any more: nothing is sent
+                    updateCard(filament.id) { it.copy(busy = null, fail = Fail(SaveFailure.Unknown)) }
+                    return@launch
+                }
+                api.addToLine(lineId, filament.id)
                 left(filament.id, Done(created = false, name = line))
             } catch (e: CancellationException) {
                 throw e
@@ -262,8 +296,8 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
         updateCard(filament.id) { it.copy(busy = CardBusy.Creating, fail = null) }
         viewModelScope.launch {
             try {
-                api.newLine(name, filament.vendor, filament.id, template)
-                left(filament.id, Done(created = true, name = name))
+                val made = api.newLine(name, filament.vendor, filament.id, template)
+                left(filament.id, Done(created = true, name = name), made)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -272,9 +306,25 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
         }
     }
 
-    /** The filament now has a line: its card goes, the toast is said once, and the lines and the status are read again. */
-    private fun left(id: Int, done: Done) {
-        _state.update { s -> s.copy(uncovered = s.uncovered?.filter { it.id != id }, cards = s.cards - id, done = done) }
+    /**
+     * The filament now has a line: its card goes, the toast is said once, and the lines and the status are read again. A line
+     * [made] is listed at once on the other cards of its brand and among the lines.
+     */
+    private fun left(id: Int, done: Done, made: ProfileLine? = null) {
+        _state.update { s ->
+            val name = made?.let { lineName(it) }
+            s.copy(
+                uncovered = s.uncovered?.filter { it.id != id }?.map { f ->
+                    if (name != null && f.vendor.equals(made.vendor, ignoreCase = true) && name !in f.linesForVendor) {
+                        f.copy(linesForVendor = (f.linesForVendor + name).sorted())
+                    } else {
+                        f
+                    }
+                },
+                lines = if (made != null && s.lines?.none { it.lineId == made.lineId } == true) s.lines + made else s.lines,
+                cards = s.cards - id, done = done,
+            )
+        }
         refreshLines()
         loadStatus()
     }
@@ -295,7 +345,10 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(building = false, buildNote = BuildNote.Failed(failOf(e))) }
+                _state.update {
+                    if (e is ApiError && e.status == 404) it.copy(building = false, buildMissing = true)
+                    else it.copy(building = false, buildNote = BuildNote.Failed(failOf(e)))
+                }
             }
         }
     }
@@ -349,6 +402,9 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
     }
 
     companion object {
+        /** A line as the Hub names it in the lists of a brand's lines: "<brand> <line>". */
+        fun lineName(line: ProfileLine): String = "${line.vendor} ${line.product}"
+
         /** "<Brand> <name without its last word>" (the web app's suggestion), the whole name when it has one word. */
         fun suggestedName(f: UncoveredFilament): String {
             val head = f.name.split(" ").dropLast(1).joinToString(" ")
