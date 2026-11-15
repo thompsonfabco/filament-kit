@@ -257,8 +257,13 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote \| update \| uninstall \| station \| setup-code\)\s*$",
-                     text, re.M)
+    # the first case list that runs as root: its words, however the lines are split (S5.8 added the new names)
+    start = text.index('case "${1:-}" in')
+    block = text[start:text.index('run_as_root "$@"', start)]
+    words = set(re.split(r"[|\)\s]+", block.split(" in", 1)[1]))
+    for w in ("config", "cert", "modules", "remote", "update", "uninstall", "station", "setup-code",
+              "certificate", "features", "weigh-station", "logs"):
+        assert w in words, w
 
 
 def test_wrapper_runs_web_passphrase_as_root():
