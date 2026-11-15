@@ -219,6 +219,7 @@ private fun RecordTile(r: HistorySummary, vm: HistoryListViewModel, onClick: () 
         subtitle = meta,
         status = { IntakeStateLabel(r.state) },
         visual = { Thumb(vm, r, SpoolwardenTheme.space.s7 * 2) },
+        detail = RecentValues.time(r.at),
     ) {
         Text(source, color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodySmall)
     }

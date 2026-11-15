@@ -45,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -255,7 +257,7 @@ internal fun contentInsetSides(navVisible: Boolean, phone: Boolean, pills: Boole
  * The navigation of `NavStyle.Pills` (Palette) on a tablet or expanded width (02-components 2.3): the five [Tab]s as a
  * row of pills under the top bar, the current one `accentSoft` ground with `accentText`, each `--ctl` high with an icon
  * (`muted`, `accentText` when current) left of its label (`text`, `--fs-m` at the label weight). The trailing More tab
- * opens a menu of the [more] entries, the part of the app the row does not hold (the System group: a tab that an entry
+ * (its visible label is the current section's name while that section is in More) opens a menu of the [more] entries, the part of the app the row does not hold (the System group: a tab that an entry
  * stands for is no pill); while the screen is one of them it is the current pill and its name is "More, current:
  * <section>". It tells TalkBack that it opens a menu, and whether the menu is open. The row keeps clear of [insets] (the cutout and the bars at the
  * sides). Nothing is drawn on a phone (the bottom bar is there), for another profile, or while [visible] is false.
@@ -288,11 +290,14 @@ internal fun SwPills(
         else -> moreLabel
     }
     var menu by remember { mutableStateOf(false) }
+    // closing the menu returns focus to the control that opened it (02-components 1.x)
+    val moreFocus = remember { FocusRequester() }
+    val closeMenu = { menu = false; moreFocus.requestFocus() }
     val menuState = stringResource(if (menu) R.string.nav_more_expanded else R.string.nav_more_collapsed)
     @Composable
     fun Pill(
         current: Boolean, onClick: () -> Unit, name: String?, icon: Int, label: String, dot: Boolean,
-        popup: Boolean = false, menuContent: (@Composable () -> Unit)? = null,
+        popup: Boolean = false, focus: FocusRequester? = null, menuContent: (@Composable () -> Unit)? = null,
     ) {
         MaterialTab(
             selected = current,
@@ -302,13 +307,14 @@ internal fun SwPills(
                 .height(SpoolwardenTheme.sizes.control)
                 .clip(SpoolwardenTheme.shapes.rL)
                 .background(if (current) colors.accentSoft else Color.Transparent)
+                .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
                 .then(if (name != null) Modifier.semantics { contentDescription = name } else Modifier)
                 .then(
                     // a button that opens a menu: its state and the action that toggles it (the has-popup and expanded of 02 2.3)
                     if (popup) {
                         Modifier.semantics {
                             stateDescription = menuState
-                            if (menu) collapse { menu = false; true } else expand { menu = true; true }
+                            if (menu) collapse { closeMenu(); true } else expand { menu = true; true }
                         }
                     } else {
                         Modifier
@@ -356,10 +362,14 @@ internal fun SwPills(
                     )
                 }
                 if (more.isNotEmpty()) {
-                    Pill(inMore != null, { menu = true }, moreName, R.drawable.sw_ic_more, moreLabel, moreUpdate, popup = true) {
-                        SwMenu(menu, onDismiss = { menu = false }) {
+                    // the visible label is the current section's name while that section is in More
+                    val shown = inMore?.let { it.section ?: it.label } ?: moreLabel
+                    Pill(
+                        inMore != null, { menu = true }, moreName, R.drawable.sw_ic_more, shown, moreUpdate, popup = true, focus = moreFocus,
+                    ) {
+                        SwMenu(menu, onDismiss = { closeMenu() }) {
                             more.forEach { entry ->
-                                SwMenuItem(entry.label, onClick = { menu = false; entry.onClick() }, icon = entry.icon, checked = entry === inMore)
+                                SwMenuItem(entry.label, onClick = { closeMenu(); entry.onClick() }, icon = entry.icon, checked = entry === inMore)
                             }
                         }
                     }

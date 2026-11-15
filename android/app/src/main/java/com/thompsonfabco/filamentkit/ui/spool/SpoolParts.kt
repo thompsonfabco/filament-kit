@@ -41,6 +41,7 @@ import com.thompsonfabco.filamentkit.ui.components.SpoolRing
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.components.TileField
+import com.thompsonfabco.filamentkit.ui.swatchColor
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlin.math.roundToInt
 
@@ -110,9 +111,12 @@ internal fun SpoolTile(spool: SpoolSummary, modifier: Modifier = Modifier, enabl
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val percent = spool.percent
+    // a colour that is no colour (02-components 7.4): the ring is muted and the tile says so
+    val noColour = swatchColor(spool.colorHex) == null
+    val noColourText = stringResource(R.string.common_no_colour)
     SwTile(
         title = spool.title.ifBlank { stringResource(R.string.spool_title, spool.id.toString()) },
-        description = spoolSaid(spool),
+        description = listOfNotNull(spoolSaid(spool), noColourText.takeIf { noColour }).joinToString(", "),
         actionLabel = stringResource(R.string.a11y_action_open),
         onAction = onClick,
         modifier = modifier,
@@ -131,6 +135,7 @@ internal fun SpoolTile(spool: SpoolSummary, modifier: Modifier = Modifier, enabl
                         style = MaterialTheme.typography.bodySmall, color = colors.muted,
                     )
                 }
+                if (noColour) Text(noColourText, style = MaterialTheme.typography.bodySmall, color = colors.muted)
             }
         },
     ) {

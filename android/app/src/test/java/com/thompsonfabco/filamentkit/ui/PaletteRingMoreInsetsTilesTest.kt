@@ -19,8 +19,14 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -76,7 +82,7 @@ import org.robolectric.annotation.GraphicsMode
  * insets the app uses; every collection 02 gives a Palette tile gets one, the printer tile reads its slots and fix line,
  * and a tile's action names its item.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h800dp")
@@ -168,15 +174,23 @@ class PaletteRingMoreInsetsTilesTest {
         }
     }
 
+    /** The More tab, found by what TalkBack calls it. */
+    private fun moreTab() = rule.onNode(hasContentDescription("More", substring = true))
+
+    /** The menu entry called [name]: not the More tab, which shows the current section's name as its label. */
+    private fun entry(name: String) = rule.onNode(hasText(name) and !hasContentDescription("More", substring = true))
+
     private fun settingsIsInMoreNotAPill(selected: Tab, page: Boolean) {
         more(selected, page)
         rule.waitForIdle()
-        assertEquals("Settings is no pill", 0, rule.onAllNodesWithText("Settings").fetchSemanticsNodes().size)
+        // no pill of that name: while Settings is current its name is the label of More, the one node
+        val named = rule.onAllNodesWithText("Settings").fetchSemanticsNodes().size
+        assertEquals("Settings is no pill", if (selected == Tab.Settings) 1 else 0, named)
         rule.onNodeWithText(string(Tab.Home.label)).assertExists()
-        rule.onNodeWithText("More").performClick()
+        moreTab().performClick()
         rule.waitForIdle()
-        rule.onNodeWithText("Settings").assertExists()
-        rule.onNodeWithText("Appearance").assertExists()
+        entry("Settings").assertExists()
+        entry("Appearance").assertExists()
     }
 
     @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
@@ -239,6 +253,109 @@ class PaletteRingMoreInsetsTilesTest {
         rule.onNodeWithContentDescription(string(R.string.nav_more_current_update, "Settings")).assertIsSelected()
     }
 
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun whileASectionIsInMoreItsNameIsMoresVisibleLabel() {
+        more(Tab.Settings)
+        rule.waitForIdle()
+        moreTab().assert(hasText("Settings"))
+        assertEquals("no 'More' text left", 0, rule.onAllNodesWithText("More").fetchSemanticsNodes().size)
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun onAPageOfSettingsMoresVisibleLabelIsTheSection() {
+        more(Tab.Settings, page = true)
+        rule.waitForIdle()
+        moreTab().assert(hasText("Settings"))
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun onAnotherSectionMoresVisibleLabelIsMore() {
+        more(Tab.Printers)
+        rule.waitForIdle()
+        moreTab().assert(hasText("More"))
+    }
+
+    private var opened = 0
+    private var inputMode: androidx.compose.ui.input.InputModeManager? = null
+    private var pageOpened = 0
+
+    private fun moreWithHandlers(selected: Tab?, page: Boolean = false) = themed {
+        inputMode = androidx.compose.ui.platform.LocalInputModeManager.current
+        val pages = listOf(PillMore("Appearance", R.drawable.sw_ic_half_circle, page, section = "Settings") { pageOpened++ })
+        Column(Modifier.fillMaxSize()) {
+            SwPills(
+                selected, true, onSelect = {}, more = paletteMore(selected, "Settings", pages) { opened++ },
+                insets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+            )
+        }
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun theSettingsEntryOfMoreOpensSettingsAndCloses() {
+        moreWithHandlers(Tab.Home)
+        rule.waitForIdle()
+        moreTab().performClick()
+        entry("Settings").performClick()
+        rule.waitForIdle()
+        assertEquals("Settings opened once", 1, opened)
+        assertEquals("the page was not", 0, pageOpened)
+        assertEquals("the menu closed", 0, rule.onAllNodesWithText("Appearance").fetchSemanticsNodes().size)
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun aPageEntryOfMoreOpensThatPage() {
+        moreWithHandlers(Tab.Home)
+        rule.waitForIdle()
+        moreTab().performClick()
+        entry("Appearance").performClick()
+        rule.waitForIdle()
+        assertEquals(1, pageOpened)
+        assertEquals(0, opened)
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun theMenuChecksSettingsAtItsRootAndNothingElse() {
+        moreWithHandlers(Tab.Settings)
+        rule.waitForIdle()
+        moreTab().performClick()
+        rule.waitForIdle()
+        entry("Settings").assertIsSelected()
+        entry("Appearance").assertIsNotSelected()
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun theMenuChecksThePageAndNotSettingsOnAPage() {
+        moreWithHandlers(Tab.Settings, page = true)
+        rule.waitForIdle()
+        moreTab().performClick()
+        rule.waitForIdle()
+        entry("Appearance").assertIsSelected()
+        entry("Settings").assertIsNotSelected()
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun theMenuChecksNothingOnAnotherSection() {
+        moreWithHandlers(Tab.Home)
+        rule.waitForIdle()
+        moreTab().performClick()
+        rule.waitForIdle()
+        entry("Settings").assertIsNotSelected()
+        entry("Appearance").assertIsNotSelected()
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun focusReturnsToMoreWhenTheMenuCloses() {
+        moreWithHandlers(Tab.Home)
+        rule.waitForIdle()
+        // focus is what a keyboard or switch user moves: the keyboard input mode
+        rule.runOnUiThread { inputMode!!.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard) }
+        moreTab().performClick()
+        rule.waitForIdle()
+        entry("Appearance").performClick()
+        rule.waitForIdle()
+        moreTab().assertIsFocused()
+    }
+
     // ----- 3: the default insets, as MainActivity passes none
 
     @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w900dp-h400dp")
@@ -293,7 +410,7 @@ class PaletteRingMoreInsetsTilesTest {
         themed { Column { PrinterLists(printersState(), false, {}, {}, {}, { _, _ -> }) } }
         rule.waitForIdle()
         rule.onNodeWithContentDescription("Open Workshop X1").assertExists()
-        rule.onNodeWithContentDescription("Add Bambu Lab P1S").assertExists()
+        rule.onNodeWithContentDescription("Add Bambu Lab P1S, 192.0.2.41").assertExists()
     }
 
     @Test fun foundPrintersStayRowsInAnotherLook() {
@@ -318,7 +435,59 @@ class PaletteRingMoreInsetsTilesTest {
         rule.onNodeWithContentDescription("Choose Workshop X1").assertExists()
         rule.onNodeWithContentDescription("Choose Garage X1").assertExists()
         // the one that cannot take the load is a dimmed tile, not a button that works
-        rule.onNodeWithContentDescription("Choose Garage Voron").assertExists()
+        rule.onNodeWithContentDescription("Choose Garage Voron").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Choose Workshop X1").assertIsEnabled()
+    }
+
+    @Test fun aLoadTileThatCanTakeTheLoadPicksAndOneThatCannotDoesNot() {
+        val x1 = Printer(id = "X1A", name = "Workshop X1", model = "X1C", serial = "X1A", configured = true, state = "connected")
+        val vm = LoadPrintersViewModel(
+            FakeLoad(
+                listOf(
+                    x1, x1.copy(id = "X2", name = "Garage X1"),
+                    Printer(id = "V2", name = "Garage Voron", serial = "V2", configured = true, state = "offline", family = "klipper"),
+                ),
+            ),
+        )
+        val picked = mutableListOf<String>()
+        themed { LoadPrintersScreen(vm, null, onPick = { p, _ -> picked += p.id }, onOpenPrinters = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Choose Garage Voron").performClick()
+        rule.waitForIdle()
+        assertEquals("nothing picked from the offline printer", emptyList<String>(), picked)
+        rule.onNodeWithContentDescription("Choose Workshop X1").performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("X1A"), picked)
+    }
+
+    @Test fun anOfflineHubGivesTheFoundTilesTheirReasonOnceAndDisablesAdd() {
+        themed { Column { PrinterLists(printersState(), true, {}, {}, {}, { _, _ -> }) } }
+        rule.waitForIdle()
+        assertEquals(
+            "the reason under the first found printer only",
+            1, rule.onAllNodesWithText(string(R.string.common_needs_hub)).fetchSemanticsNodes().size,
+        )
+        rule.onNodeWithContentDescription("Add Bambu Lab P1S, 192.0.2.41").assertIsNotEnabled()
+    }
+
+    @Test fun anOnlineHubGivesNoReason() {
+        themed { Column { PrinterLists(printersState(), false, {}, {}, {}, { _, _ -> }) } }
+        rule.waitForIdle()
+        assertEquals(0, rule.onAllNodesWithText(string(R.string.common_needs_hub)).fetchSemanticsNodes().size)
+    }
+
+    @Test fun twoFoundPrintersOfOneModelAreToldApartByTheirAddress() {
+        val state = PrintersUiState(
+            printers = listOf(
+                Printer(id = "A", name = "A", serial = "A", model = "P1S", ip = "192.0.2.41"),
+                Printer(id = "B", name = "B", serial = "B", model = "P1S", ip = "192.0.2.42"),
+            ),
+            loaded = true,
+        )
+        themed { Column { PrinterLists(state, false, {}, {}, {}, { _, _ -> }) } }
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Add Bambu Lab P1S, 192.0.2.41").assertExists()
+        rule.onNodeWithContentDescription("Add Bambu Lab P1S, 192.0.2.42").assertExists()
     }
 
     private class FakeHistory(val records: List<HistorySummary>) : HistoryBackend {
@@ -346,6 +515,45 @@ class PaletteRingMoreInsetsTilesTest {
         rule.onNode(SemanticsMatcher("an Open button that names its record") {
             it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { d -> d.startsWith("Open ") && d.contains("Polymaker") } == true
         }).assertExists()
+    }
+
+    @Test fun aRecordWithNoPhotoShowsTheNoPhotoBox() {
+        history()
+        rule.onNodeWithContentDescription(string(R.string.photo_none)).assertExists()
+    }
+
+    @Test fun twoRecordsOfTheSameFilamentsAreToldApartByTheirDate() {
+        val spools = listOf(HistorySpool(214, 41, "Polymaker", "PolyTerra Charcoal", "PLA"))
+        val vm = HistoryListViewModel(
+            FakeHistory(
+                listOf(
+                    HistorySummary(id = "a1", at = "2026-11-15T10:00:00Z", source = "web", photos = 0, spools = spools),
+                    HistorySummary(id = "a2", at = "2026-11-14T09:30:00Z", source = "web", photos = 0, spools = spools),
+                ),
+            ),
+        )
+        themed { HistoryListScreen(vm, null, onOpen = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        val names = rule.onAllNodes(SemanticsMatcher("an Open button") {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { d -> d.startsWith("Open ") } == true
+        }).fetchSemanticsNodes().flatMap { it.config[SemanticsProperties.ContentDescription] }.filter { it.startsWith("Open ") }
+        assertEquals("two buttons: $names", 2, names.size)
+        assertEquals("one name each: $names", 2, names.toSet().size)
+    }
+
+    @Test fun aSpoolWithAnInvalidColourSaysNoColour() {
+        val bad = spool(620.0).copy(colorHex = "not a colour")
+        themed { SwCollection(listOf(bad), tile = { _, s -> SpoolTile(s, onClick = {}) }) { _, _ -> } }
+        rule.waitForIdle()
+        rule.onNodeWithText(string(R.string.common_no_colour)).assertExists()
+        rule.onNode(hasContentDescription("No colour", substring = true)).assertExists()
+    }
+
+    @Test fun aSpoolWithAColourDoesNotSayNoColour() {
+        themed { SwCollection(listOf(spool(620.0)), tile = { _, s -> SpoolTile(s, onClick = {}) }) { _, _ -> } }
+        rule.waitForIdle()
+        assertEquals(0, rule.onAllNodesWithText(string(R.string.common_no_colour)).fetchSemanticsNodes().size)
+        assertEquals(0, rule.onAllNodes(hasContentDescription("No colour", substring = true)).fetchSemanticsNodes().size)
     }
 
     @Test fun theRecordsAreRowsInAnotherLook() {

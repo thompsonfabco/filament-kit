@@ -380,6 +380,7 @@ private fun FoundTile(p: Printer, enabled: Boolean, reason: Boolean, onAdd: () -
             modifier = Modifier.weight(1f),
             status = { StatusLabel(kind, small = true) },
             enabled = enabled,
+            detail = address?.takeIf { it.isNotBlank() },
         ) {
             if (!address.isNullOrBlank()) TileField(stringResource(R.string.printers_field_address), address)
         }
