@@ -3,7 +3,8 @@
 lives in the reader; the Hub keeps nothing, and the upload is the reader's own (the Send job, `filament-kit local-intake
 corrections send`, only asks the reader to do it: the Hub names no address and makes no new outbound connection).
 
-    waiting(cfg)          {opt_in, endpoint_configured, count, bytes, bundle_mb, capabilities, entries}
+    waiting(cfg)          {opt_in, endpoint_configured, count, bytes, bundle_mb, capabilities, entries, not_queued}
+    retry(rid)            queue a record's correction again (it was shown as not queued): its new state
     remove(cfg, id)       {ok, removed: id}
     remove_all(cfg)       {ok, removed: n}
     package(cfg)          the zip the reader would send, exactly (bytes) and the name to save it as
@@ -66,7 +67,39 @@ def waiting(cfg: dict) -> dict:
         out = local_reader.feedback_list(cfg)
     except local_reader.LocalReaderError as e:
         raise _wrap(e) from None
-    return {**out, "bytes": round(out["bundle_mb"] * 1048576), "capabilities": caps}
+    return {**out, "bytes": round(out["bundle_mb"] * 1048576), "capabilities": caps, "not_queued": not_queued()}
+
+
+def not_queued() -> list[dict]:
+    """The records whose correction the reader did not take (share_queue "not_queued"), newest first: {record, at,
+    name, reason}. They are not waiting, not counted, not in the package and not sent; each can be retried."""
+    from . import intake_history, share_queue
+    out = []
+    try:
+        for rid in intake_history._ids_newest_first():
+            st = share_queue.state(rid)
+            if st["state"] != "not_queued":
+                continue
+            try:
+                rec = intake_history._summary(intake_history._load(rid))
+            except (intake_history.HistoryError, OSError):
+                continue
+            sp = (rec.get("spools") or [{}])[0]
+            out.append({"record": rid, "at": rec.get("at"), "name": " ".join(
+                str(x) for x in (sp.get("vendor"), sp.get("name")) if x) or None, "reason": st["reason"]})
+    except OSError:
+        pass
+    return out
+
+
+def retry(rid: str) -> dict:
+    """Queue a record's correction again, now; its new share state ({state, reason, entries})."""
+    from . import intake_history, share_queue
+    try:
+        intake_history._load(rid)
+    except intake_history.HistoryError:
+        raise CorrectionsError(404, "not_found", "That record is no longer kept.") from None
+    return share_queue.retry(rid)
 
 
 def remove(cfg: dict, entry_id: str) -> dict:

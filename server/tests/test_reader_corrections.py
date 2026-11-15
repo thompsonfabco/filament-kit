@@ -12,7 +12,8 @@ from fakes import local_reader_fake as lrf
 from starlette.testclient import TestClient
 from test_setup_page import BASE, CODE, H, HOSTNAME, Helper, client, env, make, post  # noqa: F401  (env is a fixture)
 
-from filament_kit import api, cli, config, local_reader, modules, pairing, reader_corrections, setup_helper
+from filament_kit import api, cli, config, intake_history, local_reader, modules, output, pairing, reader_corrections
+from filament_kit import setup_helper, share_queue
 from filament_kit.spoolman import Spoolman
 
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
@@ -225,20 +226,20 @@ def test_the_job_command_keeps_the_corrections_when_the_upload_fails(hub, capsys
     _, data, _ = hub
     add(data, "r1")
     data["submit"] = (502, "feedback_upload_failed")
-    assert cli.cmd_local_intake_corrections_send() == 1
+    assert cli.cmd_local_intake_corrections_send() == output.FAILED
     err = capsys.readouterr().err
-    assert "still waiting" in err and err.startswith("error: ")
+    assert "still waiting" in err and err.startswith("Error: ")
     assert len(data["queue"]) == 1
 
 
 def test_the_job_command_with_nothing_waiting_or_no_reader(hub, capsys):
     _, data, _ = hub
-    assert cli.cmd_local_intake_corrections_send() == 1
+    assert cli.cmd_local_intake_corrections_send() == output.FAILED
     assert "No corrections are waiting." in capsys.readouterr().err
     cfg = config.load()
     cfg["modules"]["local_intake"] = False
     config.save(cfg)
-    assert cli.cmd_local_intake_corrections_send() == 1
+    assert cli.cmd_local_intake_corrections_send() == output.FAILED
     assert "not on" in capsys.readouterr().err
 
 
@@ -411,7 +412,7 @@ def test_cli_list_remove_package(hub, capsys, tmp_path):
     saved = next(tmp_path.glob("spoolwarden-corrections-*.zip"))
     assert saved.read_bytes() == local_reader.feedback_bundle(config.load())
     capsys.readouterr()
-    assert cli.main(["local-intake", "corrections", "remove", a, "fb-99"]) == 1
+    assert cli.main(["local-intake", "corrections", "remove", a, "fb-99"]) == output.FAILED
     cap = capsys.readouterr()
     assert f"Removed {a}. Nothing was sent." in cap.out and "fb-99: That correction is not waiting" in cap.err
     assert [e["id"] for e in data["queue"]] == [b] and data["submits"] == []
@@ -419,22 +420,121 @@ def test_cli_list_remove_package(hub, capsys, tmp_path):
 
 def test_cli_refusals_are_the_routes_texts(hub, capsys, tmp_path):
     _, data, _ = hub
-    assert cli.main(["local-intake", "corrections", "package", str(tmp_path / "x.zip")]) == 1
-    assert reader_corrections.EMPTY in capsys.readouterr().err
+    assert cli.main(["local-intake", "corrections", "package", str(tmp_path / "x.zip")]) == output.FAILED
+    err = capsys.readouterr().err
+    assert err.startswith("Error: ") and reader_corrections.EMPTY in " ".join(err.split())
     cfg = config.load()
     cfg["modules"]["local_intake"] = False
     config.save(cfg)
     for args in (["list"], ["remove", "fb-1"], ["package", str(tmp_path)], ["send"]):
-        assert cli.main(["local-intake", "corrections", *args]) == 1
-        assert reader_corrections.NO_READER in capsys.readouterr().err
+        assert cli.main(["local-intake", "corrections", *args]) == output.FAILED
+        assert reader_corrections.NO_READER in " ".join(capsys.readouterr().err.split())
 
 
-def test_cli_corrections_need_root(hub, capsys, monkeypatch):
+def test_cli_corrections_need_root_exit_3_with_the_sudo_fix(hub, capsys, monkeypatch):
     _, data, _ = hub
     add(data, "r1")
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
     for args in (["list"], ["remove", "fb-1"], ["package", "x.zip"], ["send"]):
-        assert cli.main(["local-intake", "corrections", *args]) == 1
-        assert "run as root" in capsys.readouterr().err
+        assert cli.main(["local-intake", "corrections", *args]) == output.NEEDS_SUDO == 3
+        err = capsys.readouterr().err
+        assert "Error: this needs administrator rights." in err and "sudo filament-kit local-intake corrections" in err
     assert len(data["queue"]) == 1 and data["submits"] == []
+
+
+def test_the_global_json_switch_gives_each_commands_document(hub, capsys, tmp_path):
+    _, data, _ = hub
+    a = add(data, "r1")
+    assert cli.main(["--json", "local-intake", "corrections", "list"]) == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["ok"] is True and doc["count"] == 1 and doc["entries"][0]["id"] == a and doc["not_queued"] == []
+    assert cli.main(["--json", "local-intake", "corrections", "package", str(tmp_path)]) == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["ok"] is True and doc["bytes"] > 0 and doc["file"].endswith(".zip")
+    assert cli.main(["--json", "local-intake", "corrections", "remove", a, "fb-99"]) == output.FAILED
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["ok"] is False and doc["removed"] == [a] and doc["failed"][0]["reason"] == "not_found"
+    assert cli.main(["--json", "local-intake", "corrections", "send"]) == output.FAILED
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["ok"] is False and doc["reason"] == "empty" and "error" in doc
+    add(data, "r2")
+    assert cli.main(["--json", "local-intake", "corrections", "send"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True, "sent": 1}
+
+
+# ---------- V1.3: the not-queued records and Try again ----------
+
+def a_record(failed: str | None = None) -> str:
+    rid = "r1" if failed else "r2"
+    intake_history.stash_read(rid, [JPEG], {"items": [{"vendor": "SUNLU", "name": "PLA+ Grey"}]}, "", None)
+    hid = intake_history.record_save([{"values": {"vendor": "SUNLU", "name": "PLA+ Grey", "material": "PLA"},
+                                       "spool_ids": [7], "filament_id": 3}], source="phone", read_id=rid)
+    if failed:
+        share_queue._write(hid, {"entries": {}, "failed": {"reason": failed, "at": "2026-11-15T12:00:00+00:00"}})
+    return hid
+
+
+def test_the_list_shows_the_records_the_reader_did_not_take_and_does_not_count_them(hub):
+    c, data, _ = hub
+    rid = a_record("the Label Reader did not answer: down")
+    add(data, "x")
+    out = c.get(B).json()
+    assert out["count"] == 1 and [e["id"] for e in out["entries"]] == ["fb-1"]
+    assert out["not_queued"] == [{"record": rid, "at": out["not_queued"][0]["at"], "name": "SUNLU PLA+ Grey",
+                                  "reason": "the Label Reader did not answer: down"}]
+    a_record()                                                      # a record that is fine is not listed
+    assert len(c.get(B).json()["not_queued"]) == 1
+
+
+def test_try_again_needs_the_code_and_answers_the_records_new_state(hub):
+    c, data, _ = hub
+    rid = a_record("the Label Reader did not answer: down")
+    assert post(c, f"label-reader/corrections/{rid}/retry", {}, code=None).status_code == 403
+    assert c.get(B).json()["not_queued"][0]["record"] == rid
+    r = post(c, f"label-reader/corrections/{rid}/retry")
+    assert r.status_code == 200 and r.json() == share_queue.state(rid) and "reason" in r.json()
+    assert data["submits"] == []
+
+
+def test_try_again_of_a_record_that_is_gone_is_not_found(hub):
+    c, _, _ = hub
+    r = post(c, "label-reader/corrections/0123456789ab/retry")
+    assert r.status_code == 404 and r.json()["reason"] == "not_found"
+
+
+def test_the_apps_api_has_no_try_again(phone):
+    pc, _ = phone
+    assert pc.post("/api/label-reader/corrections/abc/retry").status_code in (404, 405)
+
+
+def test_cli_retry_queues_again_with_the_conventions(hub, capsys, monkeypatch):
+    _, data, _ = hub
+    rid = a_record("the Label Reader did not answer: down")
+    assert cli.main(["--json", "local-intake", "corrections", "retry", rid, "0123456789ab"]) == output.FAILED
+    cap = capsys.readouterr()
+    doc = json.loads(cap.out)
+    assert doc["ok"] is False and doc["retried"] == [{"record": rid, "state": "none", "reason": None}]
+    assert doc["failed"][0]["record"] == "0123456789ab" and doc["failed"][0]["reason"] == "not_found"
+    assert "0123456789ab: That record is no longer kept." in cap.err
+    rid2 = a_record("again down")
+    assert cli.main(["local-intake", "corrections", "retry", rid2]) == 0
+    assert f"{rid2}: nothing to share for this record." in capsys.readouterr().out
+    assert data["submits"] == []
+
+
+def test_cli_retry_that_fails_again_exits_1(hub, capsys, monkeypatch):
+    _, _, _ = hub
+    rid = a_record("down")
+    monkeypatch.setattr(share_queue, "retry", lambda r: {"state": "not_queued", "reason": "still down", "entries": 0})
+    assert cli.main(["--json", "local-intake", "corrections", "retry", rid]) == output.FAILED
+    cap = capsys.readouterr()
+    assert json.loads(cap.out)["retried"][0] == {"record": rid, "state": "not_queued", "reason": "still down"}
+    assert "the reader did not take this correction. still down" in cap.err
+
+
+def test_cli_retry_needs_root(hub, capsys, monkeypatch):
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
+    assert cli.main(["local-intake", "corrections", "retry", "abc"]) == output.NEEDS_SUDO
+    assert "sudo filament-kit local-intake corrections retry abc" in capsys.readouterr().err
