@@ -1412,9 +1412,13 @@ When a request gets no answer, or the page was loaded from the copy:
   out as "Needs a look: Cannot reach the Hub. Retrying every 10 s."), and the "Offline" chip in the top bar.
 - When the phone itself has no network (`navigator.onLine` false): "This phone has no network. Your draft is
   kept on this phone."
-- Every group keeps its last data with the line "Last update <age>: the Hub did not answer." Buttons that need the
-  Hub get `aria-disabled` and the reason "Needs the Hub." Add spools keeps working for photos, cards and fields
-  (4.7); "Read labels" and "Preview" say "The Hub cannot be reached."
+- Every group keeps its last data with the line "Last update <age>: the Hub did not answer." A group whose data
+  never loaded (the screen was first opened offline) says "Not loaded: the Hub did not answer." and no age.
+  Controls that need the Hub get `aria-disabled` and the reason "Needs the Hub.": buttons, switches ("Notify this
+  phone"), and the search field and filters of a list (Spools search, "Sealed only"), which send nothing while
+  offline. Rows and links that only open something stay as they are: the sheet or place opens and shows its own
+  error with "Try again". Add spools keeps working for photos, cards and fields (4.7); "Read labels" and
+  "Preview" say "The Hub cannot be reached."
 - Retries every 10 s while the page is visible, at that fixed pace (no growing wait: the banner names the
   pace); "Try now" retries at once.
 - When the Hub answers again: the banner goes, a toast says "Connected to the Hub again.", and the page reloads its
