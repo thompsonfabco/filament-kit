@@ -227,7 +227,7 @@ Tablet (601-1024 px)
 
 Phone (up to 600 px)
 +----------------------------------------------+
-| [mark] Spoolwarden      [lock Locked] [half] |
+| [mark] Spoolwarden             [lock] [half] |
 |        Workshop hub                          |
 +----------------------------------------------+
 ```
@@ -286,7 +286,7 @@ firmware id the page does not know is shown as the Hub names it.
 ### 3.3 Lock chip
 
 The lock chip of `02-components.md` section 3.1: icon, state word and, on tablet and desktop, the hint (texts in
-section 2.1); on phone the icon and the word, without the hint. Its colours per state, accessible names and
+section 2.1); on phone the icon alone (02 3.1). Its colours per state, accessible names and
 announcements are as 02 gives them. Pressing it opens the unlock dialog (Locked) or the lock dialog (section 2.6).
 
 ### 3.4 Appearance control
