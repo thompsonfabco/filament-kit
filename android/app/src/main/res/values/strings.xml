@@ -1442,11 +1442,18 @@
     <!-- 1=name -->
     <string name="settings_appearance_theme_announce">Theme: %1$s.</string>
     <string name="settings_backups_col_kind">Kind</string>
+    <string name="settings_backups_col_made">Made</string>
+    <string name="settings_backups_col_size">Size</string>
+    <string name="settings_backups_days">days</string>
     <string name="settings_backups_desc">One zip with everything filament-kit keeps.</string>
     <string name="settings_backups_done">Backup: done. It is at the top of the list.</string>
+    <!-- 1=name -->
+    <string name="settings_backups_download_of">Download the backup of %1$s</string>
     <!-- 1=folder -->
     <string name="settings_backups_empty">No backups in %1$s yet.</string>
+    <string name="settings_backups_failed">Backup: failed. See the job panel.</string>
     <string name="settings_backups_keep">Keep nightly backups for</string>
+    <string name="settings_backups_keep_error">Enter a whole number from 1 to 365.</string>
     <string name="settings_backups_keep_hint">Backups made here are kept until you delete them.</string>
     <!-- 1=count -->
     <plurals name="settings_backups_keep_saved">
@@ -1462,6 +1469,8 @@
     <string name="settings_backups_preparing">Preparing the zip…</string>
     <string name="settings_backups_running">Backing up… follow it in the job panel.</string>
     <string name="settings_backups_save">Save backup settings</string>
+    <!-- 1=kib -->
+    <string name="settings_backups_size">%1$s KiB</string>
     <string name="settings_backups_warning">The zip is not encrypted and holds the setup secrets (the keys, Access Codes and certificate). Store it somewhere safe.</string>
     <string name="settings_catalog_back">Go back to the version before</string>
     <string name="settings_catalog_back_body">The version before the last update comes back. Your own entries are kept.</string>
@@ -1479,6 +1488,7 @@
     <string name="settings_catalog_entry_added">Added %1$s.</string>
     <string name="settings_catalog_entry_hint">One entry as JSON. It is checked like `filament-kit catalog add` checks it, and a preset build follows.</string>
     <string name="settings_catalog_entry_json">This is not valid JSON: check the brackets, quotes and commas.</string>
+    <string name="settings_catalog_entry_placeholder">{\"brand\": \"…\", \"name\": \"…\", \"material\": \"PLA\"}</string>
     <!-- 1=reason -->
     <string name="settings_catalog_entry_refused">Entry not added: %1$s.</string>
     <string name="settings_catalog_failed">The last check failed.</string>
@@ -1515,6 +1525,7 @@
     <string name="settings_group_passphrase">Web passphrase</string>
     <string name="settings_group_storage">Storage locations</string>
     <string name="settings_group_voice">Weigh Station voice</string>
+    <string name="settings_groups_label">Settings groups</string>
     <string name="settings_intro">One Save per group. Appearance and Weigh Station voice apply as you choose.</string>
     <string name="settings_key_remove_body">Label Reader: Cloud (Claude) stops reading labels until a new key is set.</string>
     <string name="settings_key_remove_confirm">Remove key</string>
@@ -1532,8 +1543,11 @@
     <string name="settings_network_hosts_hint">Separate them with spaces. The Hub\'s own names and addresses always work, and so does a local name from your network (one word, .local, .lan, .home.arpa or your network\'s own domain) that points at this Hub. Add any other name here.</string>
     <string name="settings_network_hosts_placeholder">hub.example</string>
     <string name="settings_network_public">Public address</string>
+    <string name="settings_network_public_hidden">Set (hidden). Type a new address to replace it.</string>
     <string name="settings_network_public_hint">The https address of the web app and Claude\'s connector.</string>
     <string name="settings_network_public_hint_off">Used when Web access is on.</string>
+    <string name="settings_network_public_placeholder">https://hub.example/filament</string>
+    <string name="settings_network_remote">Remote access</string>
     <string name="settings_network_remote_off">Turn on Remote access in Features to get a certificate for the public address.</string>
     <string name="settings_network_remote_text">filament-kit never changes your firewall or router. Getting the certificate needs port 80 on your router to reach this Hub while it runs.</string>
     <string name="settings_network_save">Save network settings</string>
@@ -1554,8 +1568,11 @@
     <string name="settings_read_error">Could not read the settings. %1$s</string>
     <string name="settings_reader_address">Address</string>
     <string name="settings_reader_address_hint">Where the reader answers: this Hub, or another computer at home.</string>
+    <string name="settings_reader_address_placeholder">http://127.0.0.1:7915</string>
     <string name="settings_reader_badge_cloud">Cloud key</string>
     <string name="settings_reader_badge_local">On this Hub</string>
+    <string name="settings_reader_check_install">Check what an install needs</string>
+    <string name="settings_reader_check_upgrade">Check for an upgrade</string>
     <string name="settings_reader_corrections_no">not supported</string>
     <string name="settings_reader_corrections_yes">supported</string>
     <string name="settings_reader_desc">Reads a spool\'s label from a photo.</string>
@@ -1579,7 +1596,12 @@
     <string name="settings_reader_key_set">Set a key</string>
     <string name="settings_reader_key_wait">Wait 3 seconds between checks.</string>
     <string name="settings_reader_local_down">The reader does not answer.</string>
+    <!-- 1=version 2=tier -->
+    <string name="settings_reader_local_installed">Installed on this machine: version %1$s, %2$s tier.</string>
+    <string name="settings_reader_local_not_installed">Not installed on this machine. A reader on another computer at home (one with a graphics card) works too: switch it on in Features and give its address above.</string>
+    <string name="settings_reader_local_remove">Remove the reader</string>
     <string name="settings_reader_model">Claude model</string>
+    <string name="settings_reader_model_error">Enter a model name.</string>
     <string name="settings_reader_model_hint">Leave empty for the default model.</string>
     <string name="settings_reader_model_placeholder">Default model</string>
     <string name="settings_reader_off">The Label Reader is switched off. Spools are then added by hand.</string>
@@ -1592,12 +1614,22 @@
     <string name="settings_reader_order_local_cloud">On this Hub, then Cloud</string>
     <!-- 1=engine -->
     <string name="settings_reader_order_single">Engine: %1$s. Switch on the other one in Features to use both.</string>
+    <!-- 1=label 2=version 3=tier -->
+    <string name="settings_reader_plan_button">%1$s %2$s (%3$s tier)</string>
+    <!-- 1=when -->
+    <string name="settings_reader_plan_checked">Checked %1$s:</string>
+    <string name="settings_reader_plan_install">Install</string>
+    <string name="settings_reader_plan_old">That check is over an hour old: check again to install.</string>
+    <string name="settings_reader_plan_reinstall">Reinstall</string>
+    <string name="settings_reader_plan_tier">The tier is the one under Tier above: change it there and save, then check again.</string>
+    <string name="settings_reader_plan_upgrade">Upgrade</string>
     <string name="settings_reader_reads">Reads per day</string>
     <string name="settings_reader_reads_error">Enter a whole number from 1.</string>
     <string name="settings_reader_reads_hint">Cloud reads allowed per day; reads On this Hub do not count.</string>
     <string name="settings_reader_reads_unit">reads</string>
     <string name="settings_reader_restart_warn">Saving a new model or reads per day restarts the Hub. This page comes back by itself.</string>
     <string name="settings_reader_save">Save Label Reader</string>
+    <string name="settings_reader_test">Test</string>
     <!-- 1=reason -->
     <string name="settings_reader_test_degraded">Answers, but degraded: %1$s.</string>
     <!-- 1=address -->
@@ -1608,9 +1640,13 @@
     <string name="settings_reader_test_save_first">Save the address first, then test it.</string>
     <string name="settings_reader_testing">Asking the reader…</string>
     <string name="settings_reader_tier">Tier</string>
+    <string name="settings_reader_tier_auto">Automatic</string>
     <string name="settings_reader_tier_cpu">Processor (CPU)</string>
     <string name="settings_reader_tier_gpu">Graphics card (GPU)</string>
     <string name="settings_reader_tier_hint">Automatic uses the graphics card when the reader has one.</string>
+    <string name="settings_reader_token">Reader token</string>
+    <string name="settings_reader_token_hint">Only for a reader installed with a token, usually one on another computer. It is sent with each read and never shown again.</string>
+    <string name="settings_reader_token_set">Set a token</string>
     <!-- 1=field -->
     <string name="settings_refused">%1$s was not saved: see the field.</string>
     <string name="settings_restart_body">A new Claude model or number of reads per day takes effect after a restart. The Hub restarts now and this page comes back by itself.</string>
@@ -1623,6 +1659,8 @@
     <string name="settings_restore_error_file">Choose the backup zip first.</string>
     <string name="settings_restore_error_large">The backup is larger than this page can take. Copy it to the Hub and run `sudo filament-kit restore &lt;file>` there.</string>
     <string name="settings_restore_file">Backup zip</string>
+    <string name="settings_restore_first">Do step 1 first.</string>
+    <string name="settings_restore_heading">Restore</string>
     <!-- 1=host 2=created -->
     <string name="settings_restore_short">Backup of %1$s made %2$s</string>
     <string name="settings_restore_step1">Choose a backup zip</string>
@@ -1643,6 +1681,7 @@
         <item quantity="other">Contains %1$d files, and the Spoolman database</item>
     </plurals>
     <string name="common_value_none">none</string>
+    <string name="settings_restore_summary_other_host">The backup is from another computer name: the Hub gets a new certificate, so phones and the PC sync pair again.</string>
     <string name="settings_restore_summary_other_hub">another Hub</string>
     <string name="settings_restore_summary_replaces">This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first.</string>
     <!-- 1=hash -->
@@ -1659,6 +1698,7 @@
     <string name="settings_state_backups">Last: %1$s</string>
     <string name="settings_state_catalog_none">Not downloaded</string>
     <string name="settings_state_no_public">No public address</string>
+    <string name="settings_state_off">Switched off</string>
     <!-- 1=count -->
     <plurals name="settings_state_storage">
         <item quantity="one">%1$d location</item>
@@ -1681,6 +1721,7 @@
     <string name="settings_voice_desc">The voice the Weigh Station speaks with.</string>
     <string name="settings_voice_espeak">espeak-ng</string>
     <string name="settings_voice_espeak_line">Robotic. No download.</string>
+    <string name="settings_voice_label">Voice</string>
     <string name="settings_voice_off">The Weigh Station is switched off on this machine.</string>
     <string name="settings_voice_piper">Piper</string>
     <string name="settings_voice_piper_line">Natural. A 60 to 80 MB download.</string>

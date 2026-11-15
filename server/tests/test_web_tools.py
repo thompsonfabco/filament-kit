@@ -100,7 +100,7 @@ def test_find_spools(tools, sm):
 def test_add_spools_dry_then_real(tools, sm, spoolman_fake_store):
     dry = tools.add_spools([item(count=2)], dry_run=True)
     assert dry["dry"] is True and dry["spool_ids"] == [] and "Would add 2 spools" in dry["output"]
-    assert dry["exit_code"] == 0 and "dry run" in dry["output"]
+    assert dry["exit_code"] == 0 and "dry run" not in dry["output"]
     assert spoolman_fake_store["spools"] == {}
     real = tools.add_spools([item(count=2)], dry_run=False)
     assert real["dry"] is False and len(real["spool_ids"]) == 2
@@ -550,3 +550,39 @@ def test_preset_status_says_the_pc_sync_waits(tools, sm, monkeypatch):
     assert st["pc_waiting"].startswith("PC sync waiting for Bambu Studio to close since 2026-11-0")
     monkeypatch.setattr(builds, "status", real)
     assert tools.preset_status()["pc_waiting"] is None
+
+
+# ---------- the call-again note is for MCP callers only ----------
+
+CALL_AGAIN = "call again with dry_run=false"
+
+
+def test_dry_run_call_again_note_only_with_ai_note(tools, sm, env):
+    """The note tells an AI client what to do next; the web app's preview (no ai_note) is for a person."""
+    _, data, _ = env
+    assert CALL_AGAIN not in tools.add_spools([item()], dry_run=True)["output"]
+    mcp = tools.add_spools([item()], dry_run=True, ai_note=True)["output"]
+    assert "dry run: nothing written" in mcp and CALL_AGAIN in mcp
+    (a,) = add(sm, item(name="PLA+ Red"))
+    tap(data)
+    assert CALL_AGAIN not in tools.open_spool(spool=a, dry_run=True)["output"]
+    mcp = tools.open_spool(spool=a, dry_run=True, ai_note=True)["output"]
+    assert "dry run: nothing changed" in mcp and CALL_AGAIN in mcp
+
+
+def test_set_slot_call_again_note_only_with_ai_note():
+    kit = FakeKit()
+    assert "note" not in slots.bridge_set_slot(kit, 7, "A1", True)
+    assert CALL_AGAIN in slots.bridge_set_slot(kit, 7, "A1", True, ai_note=True)["note"]
+    assert "note" not in slots.bridge_set_slot(kit, 7, "A1", False, ai_note=True)
+
+
+def test_mcp_tools_keep_the_call_again_note(sm, env, spoolman_fake_store):
+    _, data, _ = env
+    tools = mcp_tools.Tools(sm, kit_api=FakeKit())
+    assert CALL_AGAIN in str(_mcp_call(tools, "add_spools", {"items": [item()], "dry_run": True}))
+    (a,) = add(sm, item(name="PLA+ Red"))
+    tap(data)
+    assert CALL_AGAIN in str(_mcp_call(tools, "open_spool", {"spool": a, "dry_run": True}))
+    assert CALL_AGAIN in str(_mcp_call(tools, "printer_set_slot", {"spool": 7, "slot": "A1", "dry_run": True}))
+

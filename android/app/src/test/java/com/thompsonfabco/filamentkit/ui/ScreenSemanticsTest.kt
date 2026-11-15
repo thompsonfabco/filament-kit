@@ -9,6 +9,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.runtime.key
 import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
@@ -68,6 +70,9 @@ import com.thompsonfabco.filamentkit.ui.components.MAIN_BUTTON_TAG
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.click
 
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -863,6 +868,17 @@ class ScreenSemanticsTest {
         rule.waitForIdle()
         rule.onNodeWithText("Read labels (2 photos)").assertExists()
         auditAllFour("Remove", listOf("Photos"))
+    }
+
+    @Test fun addPhotoViewer() {
+        val vm = addVm()
+        vm.addPhoto(byteArrayOf(1))
+        vm.addPhoto(byteArrayOf(2))
+        addHost(vm)
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Photo 2").performTouchInput { click(Offset(width * 0.75f, height * 0.75f)) }
+        rule.waitForIdle()
+        auditWindowsAllFour("Photo 2 of 2")
     }
 
     @Test fun addPhotosWhileTheHubReads() {
