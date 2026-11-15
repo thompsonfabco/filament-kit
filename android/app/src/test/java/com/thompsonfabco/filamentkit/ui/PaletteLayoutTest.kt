@@ -196,19 +196,17 @@ class PaletteLayoutTest {
         assertEquals(0, rule.onAllNodesWithText(text(Tab.Spools.label)).fetchSemanticsNodes().size)
     }
 
-    @Test fun tileColumnsFollowThePhoneRuleAndTheMinimumWidth() {
+    @Test fun tileColumnsFollowTheWebGridRuleAtEveryWidth() {
         val gap = 16.dp
-        // a phone: one column below 420 dp, two from it
-        assertEquals(1, tileColumns(411.dp, gap, WindowClass.Phone))
-        assertEquals(1, tileColumns(419.dp, gap, WindowClass.Phone))
-        assertEquals(2, tileColumns(420.dp, gap, WindowClass.Phone))
-        assertEquals(2, tileColumns(599.dp, gap, WindowClass.Phone))
-        // wider: as many of at least TILE_MIN_WIDTH as fit, one at the least
-        assertEquals(1, tileColumns(200.dp, gap, WindowClass.Tablet))
-        assertEquals(2, tileColumns(464.dp, gap, WindowClass.Tablet))
-        assertEquals(2, tileColumns(479.dp, gap, WindowClass.Tablet))
-        assertEquals(3, tileColumns(720.dp, gap, WindowClass.Tablet))
-        assertEquals(4, tileColumns(1000.dp, gap, WindowClass.Desktop))
+        // as many of at least TILE_MIN_WIDTH as fit, one at the least: 14rem, auto-fill, as the web grid
+        assertEquals(1, tileColumns(200.dp, gap))
+        assertEquals(1, tileColumns(411.dp, gap))
+        assertEquals(1, tileColumns(420.dp, gap))
+        assertEquals(1, tileColumns(463.dp, gap))
+        assertEquals(2, tileColumns(464.dp, gap))
+        assertEquals(2, tileColumns(479.dp, gap))
+        assertEquals(3, tileColumns(720.dp, gap))
+        assertEquals(4, tileColumns(1000.dp, gap))
         assertEquals(224.dp, TILE_MIN_WIDTH)
     }
 

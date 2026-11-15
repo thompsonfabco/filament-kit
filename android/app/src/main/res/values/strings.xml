@@ -550,6 +550,8 @@
     <string name="spool_left_percent">%1$s %% left</string>
     <!-- 1=colour 2=percent 3=grams -->
     <string name="spool_ring_label">%1$s, %2$s %% left, %3$s g</string>
+    <!-- 1=percent -->
+    <string name="spool_ring_percent">%1$s %%</string>
     <string name="status_as_detected">As detected</string>
     <string name="status_connected">Connected</string>
     <string name="status_done">Done</string>
@@ -770,6 +772,8 @@
     <string name="features_applying_again">Applying the features again…</string>
     <string name="features_col_feature">Feature</string>
     <string name="features_col_needs">Needs</string>
+    <!-- 1=name -->
+    <string name="common_field_label">%1$s:</string>
     <string name="common_field_state">State</string>
     <string name="features_col_what">What it does</string>
     <string name="features_drawer_afterwards">On afterwards:</string>

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -35,7 +36,11 @@ import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.RingSize
+import com.thompsonfabco.filamentkit.ui.components.SpoolRing
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwTile
+import com.thompsonfabco.filamentkit.ui.components.TileField
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlin.math.roundToInt
 
@@ -86,17 +91,65 @@ internal fun spoolLine(s: SpoolSummary): String = listOfNotNull(
     stringResource(R.string.spools_result_tagged).takeIf { s.tag != null },
 ).joinToString(DOT)
 
+/** What TalkBack says of a spool in a list: its name, id, material, place and grams left; no grams part for an unknown weight. */
+@Composable
+internal fun spoolSaid(spool: SpoolSummary): String = pluralStringResource(
+    R.plurals.a11y_spool_result, spool.remaining?.roundToInt() ?: 0,
+    spool.title, spool.id.toString(), spool.material, spool.location.orEmpty(),
+    spool.remaining?.roundToInt() ?: 0,
+).split(", ").let { if (spool.remaining == null) it.dropLast(1) else it }
+    .filter { it.isNotBlank() && !it.startsWith(" ") }.joinToString(", ")
+
+/**
+ * A spool as a tile (02-components 6.1, 7.4) for `CollectionStyle.Tiles`: the large spool ring with "62 %" and "620 g
+ * left" under it, "Brand Name" with "Spool 214", the priority 1 fields Material and Location with their names, and
+ * "Open" the full width at the foot. [onClick] opens the spool; [enabled] false dims it.
+ */
+@Composable
+internal fun SpoolTile(spool: SpoolSummary, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val percent = spool.percent
+    SwTile(
+        title = spool.title.ifBlank { stringResource(R.string.spool_title, spool.id.toString()) },
+        description = spoolSaid(spool),
+        actionLabel = stringResource(R.string.a11y_action_open),
+        onAction = onClick,
+        modifier = modifier,
+        subtitle = stringResource(R.string.spool_title, spool.id.toString()).takeIf { spool.title.isNotBlank() },
+        enabled = enabled,
+        visual = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space.s1)) {
+                SpoolRing(spool.colorHex, percent?.let { it / PERCENT_ALL }, RingSize.Large, Modifier.testTag(SPOOL_RING_TAG))
+                Text(
+                    percent?.let { stringResource(R.string.spool_ring_percent, it) } ?: stringResource(R.string.common_unknown),
+                    style = SpoolwardenTheme.type.number, color = if (enabled) colors.text else colors.muted,
+                )
+                spool.remaining?.let {
+                    Text(
+                        monoNumbers(stringResource(R.string.spool_left_grams, formatGrams(it))),
+                        style = MaterialTheme.typography.bodySmall, color = colors.muted,
+                    )
+                }
+            }
+        },
+    ) {
+        if (spool.material.isNotBlank()) TileField(stringResource(R.string.common_field_material), spool.material)
+        spool.location?.takeIf { it.isNotBlank() }?.let { TileField(stringResource(R.string.common_field_location), it) }
+    }
+}
+
+private const val PERCENT_ALL = 100f
+
+/** The test tag of a spool tile's large ring. */
+internal const val SPOOL_RING_TAG = "spool-ring"
+
 /** A spool as a row: the swatch, "Brand Name", and its line; with [onClick] it is a list row with a chevron. */
 @Composable
 internal fun SpoolRow(spool: SpoolSummary, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, enabled: Boolean = true) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
-    val said = pluralStringResource(
-        R.plurals.a11y_spool_result, spool.remaining?.roundToInt() ?: 0,
-        spool.title, spool.id.toString(), spool.material, spool.location.orEmpty(),
-        spool.remaining?.roundToInt() ?: 0,
-    ).split(", ").let { if (spool.remaining == null) it.dropLast(1) else it } // no grams part for an unknown weight
-        .filter { it.isNotBlank() && !it.startsWith(" ") }.joinToString(", ")
+    val said = spoolSaid(spool)
     val click = if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier
     Row(
         modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).semantics(mergeDescendants = true) {

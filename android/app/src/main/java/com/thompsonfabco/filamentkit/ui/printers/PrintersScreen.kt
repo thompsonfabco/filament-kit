@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -57,7 +58,9 @@ import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
+import com.thompsonfabco.filamentkit.ui.components.RingSize
 import com.thompsonfabco.filamentkit.ui.components.ScreenTopBarActions
+import com.thompsonfabco.filamentkit.ui.components.SpoolRing
 import com.thompsonfabco.filamentkit.ui.components.StatusKind
 import com.thompsonfabco.filamentkit.ui.components.StatusLabel
 import com.thompsonfabco.filamentkit.ui.components.SwAction
@@ -72,6 +75,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
+import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 
@@ -174,7 +178,12 @@ private fun ColumnScope.PrinterLists(
     val space = SpoolwardenTheme.space
     val configured = state.configured
     if (configured.isNotEmpty()) {
-        SwCollection(configured) { _, p ->
+        SwCollection(
+            configured,
+            tile = { _, p ->
+                PrinterTile(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
+            },
+        ) { _, p ->
             PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
         }
     }
@@ -265,6 +274,44 @@ private fun PrinterRow(p: Printer, slots: List<SlotLook>, onClick: () -> Unit) {
             }
         }
         SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
+    }
+}
+
+/** The test tag of a printer tile's slot rings. */
+internal const val SLOT_RING_TAG = "slot-ring"
+
+/**
+ * A printer as a tile (02-components 6.1, 7.4) for `CollectionStyle.Tiles`: its name with the model under it and its
+ * status, the priority 1 field Slots with one small spool ring per slot, and "Open" the full width at the foot.
+ */
+@Composable
+internal fun PrinterTile(p: Printer, slots: List<SlotLook>, onClick: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val model = modelLine(p)
+    val kind = statusKind(p.state)
+    val said = listOf(p.name, model, stringResource(kind.word)).joinToString(", ")
+    SwTile(
+        title = p.name,
+        description = said,
+        actionLabel = stringResource(R.string.a11y_action_open),
+        onAction = onClick,
+        subtitle = model,
+        status = { StatusLabel(kind, small = true) },
+    ) {
+        if (slots.isNotEmpty()) {
+            val (shown, more) = shownSlots(slots)
+            Text(stringResource(R.string.common_field_label, stringResource(R.string.printers_col_slots)), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(space.s1), verticalArrangement = Arrangement.spacedBy(space.s1),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                // a slot with a colour is a full ring in it (the Hub gives no level here); a free one is the dashed ring
+                shown.forEach { slot -> SpoolRing(slot.hex, 1f, RingSize.Small, Modifier.testTag(SLOT_RING_TAG), empty = slot.empty) }
+                if (more > 0) Text(stringResource(R.string.printers_slots_more, more), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        fixLine(p.state)?.let { fix -> Text(stringResource(fix), style = MaterialTheme.typography.bodySmall, color = colors.muted) }
     }
 }
 

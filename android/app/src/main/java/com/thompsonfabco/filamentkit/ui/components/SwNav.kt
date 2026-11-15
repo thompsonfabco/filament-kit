@@ -1,6 +1,17 @@
 package com.thompsonfabco.filamentkit.ui.components
 
 import androidx.compose.foundation.background
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -198,59 +209,109 @@ internal fun navLayout(visible: Boolean, window: WindowClass, style: NavStyle): 
     else -> NavigationSuiteType.NavigationRail
 }
 
+/** One entry of the More menu of the pills: [current] when the screen shown belongs to it. */
+internal class PillMore(val label: String, @DrawableRes val icon: Int, val current: Boolean, val onClick: () -> Unit)
+
+/**
+ * The sides of the display the content of the main scaffold keeps clear of (the status bar belongs to the top bar):
+ * all of them while the navigation is hidden; on a phone the horizontal ones (the bar below takes the bottom); with
+ * `Pills` the pill row under the top bar takes the top, and there is no rail, so the horizontal ones and the bottom; else
+ * the end and the bottom (the rail takes the start).
+ */
+internal fun contentInsetSides(navVisible: Boolean, phone: Boolean, pills: Boolean): WindowInsetsSides = when {
+    !navVisible -> WindowInsetsSides.Horizontal + WindowInsetsSides.Vertical
+    phone -> WindowInsetsSides.Horizontal
+    pills -> WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+    else -> WindowInsetsSides.End + WindowInsetsSides.Bottom
+}
+
 /**
  * The navigation of `NavStyle.Pills` (Palette) on a tablet or expanded width (02-components 2.3): the five [Tab]s as a
- * row of pills under the top bar, the current one `accentSoft` with `accentText`, each `--ctl` high with an icon left of
- * its label. Nothing is drawn on a phone (the bottom bar is there), for another profile, or while [visible] is false.
- * Every destination fits the row, so the trailing "More" of the web has nothing to hold here.
+ * row of pills under the top bar, the current one `accentSoft` ground with `accentText`, each `--ctl` high with an icon
+ * (`muted`, `accentText` when current) left of its label (`text`, `--fs-m` at the label weight). The trailing More tab
+ * opens a menu of the [more] entries, the part of the app the row does not hold; while the screen is one of them it is the
+ * current pill and its name is "More, current: ...". The row keeps clear of [insets] (the cutout and the bars at the
+ * sides). Nothing is drawn on a phone (the bottom bar is there), for another profile, or while [visible] is false.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SwPills(selected: Tab?, visible: Boolean, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier, settingsUpdate: Boolean = false) {
+internal fun SwPills(
+    selected: Tab?,
+    visible: Boolean,
+    onSelect: (Tab) -> Unit,
+    modifier: Modifier = Modifier,
+    settingsUpdate: Boolean = false,
+    more: List<PillMore> = emptyList(),
+    insets: WindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
+) {
     if (!visible || LocalNavStyle.current != NavStyle.Pills || SpoolwardenTheme.window == WindowClass.Phone) return
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val updateName = stringResource(R.string.nav_settings_update)
-    Column(modifier) {
-        PrimaryScrollableTabRow(
-            selectedTabIndex = Tab.entries.indexOf(selected).coerceAtLeast(0),
-            containerColor = colors.surface,
-            contentColor = colors.muted,
-            edgePadding = space.s4,
-            indicator = {},
-            divider = {},
+    val inMore = more.firstOrNull { it.current }
+    val moreLabel = stringResource(R.string.nav_more)
+    val moreName = if (inMore != null) stringResource(R.string.nav_more_current, inMore.label) else moreLabel
+    var menu by remember { mutableStateOf(false) }
+    val everyTab = Tab.entries.size + if (more.isEmpty()) 0 else 1
+    @Composable
+    fun Pill(current: Boolean, onClick: () -> Unit, name: String?, icon: Int, label: String, dot: Boolean, menuContent: (@Composable () -> Unit)? = null) {
+        MaterialTab(
+            selected = current,
+            onClick = onClick,
+            modifier = Modifier
+                .padding(vertical = space.s1, horizontal = space.s1)
+                .height(SpoolwardenTheme.sizes.control)
+                .clip(SpoolwardenTheme.shapes.rL)
+                .background(if (current) colors.accentSoft else Color.Transparent)
+                .then(if (name != null) Modifier.semantics { contentDescription = name } else Modifier),
+            selectedContentColor = colors.accentText,
+            unselectedContentColor = colors.text,
         ) {
-            Tab.entries.forEach { tab ->
-                val current = tab == selected
-                val withDot = tab == Tab.Settings && settingsUpdate
-                MaterialTab(
-                    selected = current,
-                    onClick = { onSelect(tab) },
-                    modifier = Modifier
-                        .padding(vertical = space.s1, horizontal = space.s1)
-                        .height(SpoolwardenTheme.sizes.control)
-                        .clip(SpoolwardenTheme.shapes.rL)
-                        .background(if (current) colors.accentSoft else Color.Transparent)
-                        .then(if (withDot) Modifier.semantics { contentDescription = updateName } else Modifier),
-                    selectedContentColor = colors.accentText,
-                    unselectedContentColor = colors.text,
-                ) {
-                    Row(
-                        Modifier.padding(start = space.s3, end = space.s4),
-                        horizontalArrangement = Arrangement.spacedBy(space.s2),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (withDot) {
-                            BadgedBox(badge = { Box(Modifier.size(space.s2).background(colors.accentText, CircleShape)) }) {
-                                SwIcon(tab.icon, null)
+            Row(
+                Modifier.padding(start = space.s3, end = space.s4),
+                horizontalArrangement = Arrangement.spacedBy(space.s2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val tint = if (current) colors.accentText else colors.muted
+                if (dot) {
+                    BadgedBox(badge = { Box(Modifier.size(space.s2).background(colors.accentText, CircleShape)) }) {
+                        SwIcon(icon, null, tint = tint)
+                    }
+                } else {
+                    SwIcon(icon, null, tint = tint)
+                }
+                Text(
+                    label, style = MaterialTheme.typography.labelLarge,
+                    color = if (current) colors.accentText else colors.text,
+                )
+                menuContent?.invoke()
+            }
+        }
+    }
+    Column(modifier.fillMaxWidth().background(colors.surface)) {
+        Box(Modifier.windowInsetsPadding(insets)) {
+            PrimaryScrollableTabRow(
+                selectedTabIndex = if (inMore != null) everyTab - 1 else Tab.entries.indexOf(selected).coerceAtLeast(0),
+                containerColor = Color.Transparent,
+                contentColor = colors.muted,
+                edgePadding = space.s4,
+                indicator = {},
+                divider = {},
+            ) {
+                Tab.entries.forEach { tab ->
+                    val withDot = tab == Tab.Settings && settingsUpdate
+                    Pill(
+                        tab == selected && inMore == null, { onSelect(tab) }, if (withDot) updateName else null,
+                        tab.icon, stringResource(tab.label), withDot,
+                    )
+                }
+                if (more.isNotEmpty()) {
+                    Pill(inMore != null, { menu = true }, moreName, R.drawable.sw_ic_more, moreLabel, false) {
+                        SwMenu(menu, onDismiss = { menu = false }) {
+                            more.forEach { entry ->
+                                SwMenuItem(entry.label, onClick = { menu = false; entry.onClick() }, icon = entry.icon, checked = entry.current)
                             }
-                        } else {
-                            SwIcon(tab.icon, null)
                         }
-                        Text(
-                            stringResource(tab.label), style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = MaterialTheme.typography.titleMedium.fontWeight,
-                        )
                     }
                 }
             }

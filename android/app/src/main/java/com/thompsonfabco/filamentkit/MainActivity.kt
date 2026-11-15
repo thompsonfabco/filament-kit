@@ -186,7 +186,9 @@ import com.thompsonfabco.filamentkit.ui.components.SwConnectionChip
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwNav
+import com.thompsonfabco.filamentkit.ui.components.PillMore
 import com.thompsonfabco.filamentkit.ui.components.SwPills
+import com.thompsonfabco.filamentkit.ui.components.contentInsetSides
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
@@ -232,6 +234,9 @@ import com.thompsonfabco.filamentkit.ui.settings.SettingsGroupPage
 import com.thompsonfabco.filamentkit.ui.settings.SettingsHub
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
 import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
+import com.thompsonfabco.filamentkit.ui.settings.icon
+import com.thompsonfabco.filamentkit.ui.settings.settingsGroups
+import com.thompsonfabco.filamentkit.ui.settings.title
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindScreen
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindViewModel
 import com.thompsonfabco.filamentkit.ui.spool.LinkPreviewScreen
@@ -768,17 +773,28 @@ private fun FilamentKitApp(
                         AppearanceMenu(appearance, app::setAppearance)
                         topBarActions.content?.invoke(this)
                     }
-                    SwPills(tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null)
+                    SwPills(
+                        tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
+                        more = settingsGroups(BuildConfig.DEBUG).map { group ->
+                            val route = group.route()
+                            PillMore(
+                                stringResource(group.title), group.icon, destination?.hasRoute(route::class) == true,
+                            ) {
+                                if (destination?.hasRoute(route::class) != true) {
+                                    nav.selectTab(Tab.Settings)
+                                    nav.navigate(route) { launchSingleTop = true }
+                                }
+                            }
+                        },
+                    )
                 }
             },
             snackbarHost = { SwToastHost(toast) },
             containerColor = SpoolwardenTheme.colors.bg,
-            contentWindowInsets = when {
-                scanning -> WindowInsets(0)
-                !navVisible -> WindowInsets.safeDrawing
-                phone -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-                LocalNavStyle.current == NavStyle.Pills -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-                else -> WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom)
+            contentWindowInsets = if (scanning) {
+                WindowInsets(0)
+            } else {
+                WindowInsets.safeDrawing.only(contentInsetSides(navVisible, phone, LocalNavStyle.current == NavStyle.Pills))
             },
         ) { padding ->
             NavHost(nav, startDestination = if (paired) HomeGraph else PairGraph, modifier = Modifier.padding(padding)) {
@@ -1199,15 +1215,7 @@ private fun FilamentKitApp(
                         SettingsScreen(
                             facts = settingsFacts,
                             onOpen = { group ->
-                                nav.navigate(
-                                    when (group) {
-                                        SettingsGroup.Appearance -> SettingsAppearanceRoute
-                                        SettingsGroup.Hub -> SettingsHubRoute
-                                        SettingsGroup.Updates -> SettingsUpdatesRoute
-                                        SettingsGroup.Licences -> LicencesRoute
-                                        SettingsGroup.Developer -> SettingsDeveloperRoute
-                                    },
-                                )
+                                nav.navigate(group.route())
                             },
                             detail = { group -> SettingsGroupPage(group, settingsFacts, settingsActions) },
                         )
@@ -1381,6 +1389,15 @@ private fun SimulateTag() {
         )
         Button(onClick = { TagEvents.emit(uid.trim()) }) { Text("Simulate tag") }
     }
+}
+
+/** The destination of a Settings group's own page. */
+private fun SettingsGroup.route(): Any = when (this) {
+    SettingsGroup.Appearance -> SettingsAppearanceRoute
+    SettingsGroup.Hub -> SettingsHubRoute
+    SettingsGroup.Updates -> SettingsUpdatesRoute
+    SettingsGroup.Licences -> LicencesRoute
+    SettingsGroup.Developer -> SettingsDeveloperRoute
 }
 
 /** The saved-state key under which an add's panel hands brand, line and material to the Filament Catalog form. */

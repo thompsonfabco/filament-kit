@@ -63,6 +63,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import com.thompsonfabco.filamentkit.ui.spool.SpoolTile
 
 /**
  * Spools (05 7.1). [searched] is the query the [results] answer, for "No spools match "petg"."; [busy] is a search
@@ -248,7 +249,10 @@ fun SearchScreen(
                     offline = !online,
                     loadedSecondsAgo = secondsSince(ui.loadedAt),
                 ) {
-                    SwCollection(ui.results, inset = SpoolwardenTheme.space.s4, surface = true) { _, spool ->
+                    SwCollection(
+                        ui.results, inset = SpoolwardenTheme.space.s4, surface = true,
+                        tile = { _, spool -> SpoolTile(spool, onClick = { onOpenSpool(spool) }) },
+                    ) { _, spool ->
                         SpoolRow(spool, onClick = { onOpenSpool(spool) })
                     }
                 }

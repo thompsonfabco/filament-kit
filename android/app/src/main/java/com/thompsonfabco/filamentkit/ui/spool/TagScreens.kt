@@ -151,7 +151,12 @@ fun LinkFindScreen(
         ) {
             // the rows are off while the weight is wrong; the reason is above them
             if (ui.weightInvalid) Text(stringResource(R.string.field_error_grams), style = MaterialTheme.typography.bodySmall, color = colors.muted)
-            SwCollection(ui.results, inset = SpoolwardenTheme.space.s4, surface = true) { _, spool ->
+            SwCollection(
+                ui.results, inset = SpoolwardenTheme.space.s4, surface = true,
+                tile = { _, spool ->
+                    SpoolTile(spool, enabled = !ui.weightInvalid, onClick = { onPick(spool, ui.weight.trim().ifEmpty { null }) })
+                },
+            ) { _, spool ->
                 SpoolRow(spool, enabled = !ui.weightInvalid, onClick = { onPick(spool, ui.weight.trim().ifEmpty { null }) })
             }
         }

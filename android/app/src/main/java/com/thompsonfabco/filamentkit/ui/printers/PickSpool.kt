@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import java.math.BigDecimal
+import com.thompsonfabco.filamentkit.ui.spool.SpoolTile
 
 /** The calls "Pick a spool for a slot" makes; [ApiPickBackend] adapts the Api, tests pass a fake. */
 interface PickBackend {
@@ -397,7 +398,9 @@ fun PickSpoolScreen(
             )
         }
         if (s.results.isNotEmpty()) {
-            SwCollection(s.results) { _, spool -> SpoolRow(spool) { viewModel.pick(spool) } }
+            SwCollection(s.results, tile = { _, spool -> SpoolTile(spool) { viewModel.pick(spool) } }) { _, spool ->
+                SpoolRow(spool) { viewModel.pick(spool) }
+            }
         }
     }
     // leaving the preview by leaving the screen hands the held tag on to where the screen went back to
