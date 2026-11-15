@@ -559,7 +559,7 @@ Hub page · L · Depends on: S2.13 (same file), S2.17; S2.18 when present · Bes
 The web app shares tokens, words, icons and components with the Hub page (Stage 0), so this stage can start as soon
 as Stage 0 is done; it does not wait for Stages 1 and 2 except for the Hub steps it names. From S3.3 on, each
 rebuilt screen reads its texts from the catalogue (`strings.js`) and removes its literals from
-`tests/strings_allowlist.txt`, so 08 test 7 covers it. S3.8, S3.10, S3.12, S3.13 and S3.15 all edit
+`tests/strings_allowlist.txt`, so 08 test 7 covers it. S3.8, S3.10, S3.12, S3.13, S3.15 and S3.17 all edit
 `web/static/app.js`, so they run one after another.
 
 ### S3.1 Hub: web app page attributes, manifests, status bar
@@ -1242,7 +1242,7 @@ Stage 2   S1.11 > every Hub page section step
           Printers (S2.4, S2.5), Recently added (S2.7), Slicer presets (S2.10) and Logs (S2.14) run beside each other
 
 Stage 3   S0.10 > S3.1 > S3.2 > S3.3 > S3.4 > S3.5 > S3.6 > S3.8 / S3.10 / S3.12 / S3.13, S3.11
-          S0.11 > S3.2      S3.7 > S3.8      S3.9 > S3.10, S3.11      S3.13 + S3.14 > S3.15      S3.2 > S3.16
+          S0.11 > S3.2      S3.7 > S3.8      S3.9 > S3.10, S3.11      S3.13 + S3.14 > S3.15 > S3.17      S3.2 > S3.16
 
 Stage 4   S0.4 + S0.9 > S4.1 > S4.2 > S4.3 > S4.4 > each of S4.5 to S4.12 and S4.15 (S4.5 / S4.8)
           S4.6 + S4.13 > S4.14      S3.7 > S4.7      S3.9 > S4.8, S4.11      S4.10 > S4.11
@@ -1365,7 +1365,7 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 7 Recently added | S3.12 |
 | 8 Slicer presets | S3.13 |
 | 9 More and Settings | S3.3; theme S6.2 |
-| 10 Home screen, offline and "Cannot reach the Hub" | S3.6, S3.14, S3.15 |
+| 10 Home screen, offline and "Cannot reach the Hub" | S3.6, S3.14, S3.15, S3.17 |
 | 11 The refusal page and the sign-in page | S3.16 |
 | 12 Dialogs that replace the browser's own | S3.5 |
 | 13 Touch targets | S0.11, S3.4 (AUT-5 checks hit areas) |
