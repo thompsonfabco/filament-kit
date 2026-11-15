@@ -599,6 +599,7 @@ READY = {
   $('.add__bar-btn').click();
   await until('the preview', () => $('.add__result-row'));
   need('the result group', text('.add__results').includes('Existing filament F') && text('.add__results').includes('1 spool') && text('.add__results').includes('Sealed'));
+  await until('the line under the button', () => text('.add').includes('Preview ready. Nothing is saved yet.'));      // the shared result line is drawn a moment after the rows
   need('nothing is saved yet', text('.add').includes('Nothing is saved yet.') && text('.add').includes('Preview ready. Nothing is saved yet.'));
   need('the bar offers Add', text('.add__bar-text') === 'Preview ready: 1 spool.' && $('.add__bar-btn').textContent.trim() === 'Add 1 spool');
   need('the Hub text is under the line', $('.add__results').closest('.group').querySelector('.code'));
@@ -805,6 +806,9 @@ READY = {
   need('in a decimal field the comma is the point: 1,240 is 1.24', field('Density', card).querySelector('.field__error').hidden);
   typeIn(field('Net weight', card).querySelector('input'), '1.000');
   need('1.000 g is flagged, not read as 1 g', !field('Net weight', card).querySelector('.field__error').hidden && field('Net weight', card).querySelector('.field__error').textContent.includes('Enter grams as a plain number, e.g. 1000.'));
+  need('the bar says the same as the field', text('.add__bar-text') === 'Spool 1, Net weight: Enter grams as a plain number, e.g. 1000.');
+  typeIn(field('Net weight', card).querySelector('input'), '2.500');
+  need('2.500 g is flagged too, not read as 2.5 g', !field('Net weight', card).querySelector('.field__error').hidden && text('.add__bar-text').includes('Enter grams as a plain number'));
   typeIn(field('Net weight', card).querySelector('input'), '0,500');
   need('0,500 g is a half gram, not 500', $('.add__sum', card).textContent.includes('0.5 g'));
   typeIn(field('Spools', card).querySelector('input'), '1,000');
@@ -875,6 +879,35 @@ READY = {
   need('a count of true is not shown as "true"', field('Spools', four).querySelector('input').value === '');
   need('the bar names the first spool', text('.add__bar-text').startsWith('3 spools need fields. Spool 1 is first.'));
 """,
+    "draft_number_text": r"""
+  await waitPage(); spyAdd(); const KEY = 'spoolwarden.draft.add';
+  const base = { vendor: 'Elegoo', name: 'PLA Red', material: 'PLA', sealed: true, location: 'Sealed stock', hand: true, match: 'new filament', estimates: [], photos: [], color_hex: '', price_per_kg: '' };
+  if (!sessionStorage.getItem('s38-numtext')) {                         // numbers kept as text, and a draft whose Spools are all cleared
+    sessionStorage.setItem('s38-numtext', '1');
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, started: Date.now(), changed: Date.now(), note: '', readId: null, tag: null, found: null, items: [
+      { ...base, count: '3', net: '1000', tare: '160', density: '1,24' },
+      { ...base, name: 'PLA Blue', count: null, _text: { count: '' }, net: 1000, tare: 160, density: 1.24 }] }));
+    return;
+  }
+  need('the banner counts the spools of the cards that have a count (3, then 4 once restored and saved)', /You have a draft from .*: [1-9]\d* spools\./.test(text('.add__draft')));
+  button('Restore them').click(); await until('two cards', () => $$('.add__card').length === 2);
+  const one = $$('.add__card')[0];
+  need('the text numbers are numbers on the card', field('Spools', one).querySelector('input').value === '3' && field('Density', one).querySelector('input').value === '1,24');
+  typeIn(field('Spools', $$('.add__card')[1]).querySelector('input'), '1');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row') || $('.add__card .field__error:not([hidden])'));
+  need('the Hub got the numbers the card shows', sent.length === 1 && sent[0].items[0].count === 3 && sent[0].items[0].net === 1000 && sent[0].items[0].tare === 160 && sent[0].items[0].density === 1.24);
+""",
+    "draft_no_counts": r"""
+  await waitPage(); const KEY = 'spoolwarden.draft.add';
+  if (!sessionStorage.getItem('s38-nocount')) {                         // a draft whose only card has no count
+    sessionStorage.setItem('s38-nocount', '1');
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, started: Date.now(), changed: Date.now(), note: '', readId: null, tag: null, found: null, items: [
+      { vendor: 'Elegoo', name: 'PLA Red', material: 'PLA', sealed: true, location: 'Sealed stock', hand: true, estimates: [], photos: [], count: null, _text: { count: '' }, net: 1000, tare: 160, density: 1.24 }] }));
+    return;
+  }
+  need('the banner says 1 spool, not 0', /: 1 spool\./.test(text('.add__draft')) && !text('.add__draft').includes('0 spool'));
+  need('the Add destination shows the badge', $('.nav__item[href="#add"] .nav__badge').textContent === '1');
+""",
     "card_fields": r"""
   await waitPage(); const card = await newFilament('', '', '');
   need('six groups', $$('.add__legend', card).map((l) => l.textContent).join('|') === 'Identity|Amount|State|Print settings|Storage|Other');
@@ -911,7 +944,7 @@ def _states(url: str, name: str, *extra: str) -> dict:
     return out
 
 
-MULTI_PASS = ("draft", "draft_restored", "draft_discard", "draft_waiting", "draft_corrupt", "draft_partial", "restore_during_add", "draft_text_in_progress")
+MULTI_PASS = ("draft", "draft_restored", "draft_discard", "draft_waiting", "draft_corrupt", "draft_partial", "restore_during_add", "draft_text_in_progress", "draft_number_text", "draft_no_counts")
 
 
 @pytest.mark.parametrize("name", [n for n in READY if n not in MULTI_PASS])

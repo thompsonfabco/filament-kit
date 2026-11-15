@@ -971,6 +971,7 @@ function addTab() {
     SW.shape({ ok: "s-filled", bad: "s-octagon", warn: "s-triangle", info: "s-diamond", neutral: "s-hollow" }[kind]), h("span", {}, text));
   const group = (title, ...kids) => { const id = SW.uid("g"); return h("section", { class: "group add__group", "aria-labelledby": id }, h("header", { class: "group__head" },
     h("h2", { class: "group__title", id }, title)), h("div", { class: "group__body" }, ...kids)); };
+  const heldOf = (list) => spoolsOf(list) || list.length;      // what a waiting draft holds: its spools, or its cards when none has a count
   const spoolsOf = (list = items) => list.reduce((n, it) => n + (Number.isInteger(Number(it.count)) && Number(it.count) > 0 ? Number(it.count) : 0), 0);
 
   // ---- the Hub, and what it does to the action bar when it does not answer ----
@@ -995,7 +996,7 @@ function addTab() {
     if (k === "density") return n > 0 ? null : SW.t("add_review_error_density");
     if (k === "nozzle" || k === "bed") return Number.isInteger(n) && n > 0 ? null : SW.t("add_review_error_degrees");
     if (k === "price_per_kg") return n > 0 ? null : SW.t("add_card_price_error");
-    if (ADD_GRAMS.has(k) && /^\d+\.0{3}$|^\d+[.,]0{4,}$/.test(t)) return SW.t("add_card_grams_plain");
+    if (ADD_GRAMS.has(k) && /^\d+\.\d{3}$|^\d+[.,]0{4,}$/.test(t)) return SW.t("add_card_grams_plain");
     return n > 0 ? null : SW.t(k === "gross" ? "field_error_grams" : "common_error_grams");
   }
   const sentence = (it, k) => it._problems[k] || wrong(it, k);
@@ -1040,8 +1041,11 @@ function addTab() {
     for (const k of ADD_NUMBER) {
       const v = out[k];
       if (v == null || v === "" || (typeof v === "number" && Number.isFinite(v))) continue;
-      if (typeof v === "string" && !(k in typed)) typed[k] = v;
-      out[k] = null;                                            // checked at Preview, like any empty or unparsable value
+      if (typeof v === "string") {
+        if (!(k in typed)) typed[k] = v;
+        const n = addParse(v, k);
+        out[k] = Number.isFinite(n) ? n : null;                 // an unparsable text stays as typed and is checked at Preview
+      } else out[k] = null;
     }
     out._text = typed;
     return out;
@@ -1091,7 +1095,7 @@ function addTab() {
   function drawDraft() {
     draftBox.replaceChildren();
     if (!pending) return;
-    const n = spoolsOf(pending.items || []);
+    const n = heldOf(pending.items || []);
     draftBox.append(SW.banner({ kind: "info", inline: true, text: SW.t("add_draft_banner", { age: ageText(pending.changed || pending.started || Date.now()), count: n }),
       actions: [SW.btn(SW.t("common_restore_them"), { cls: "btn--primary", run: restore }), SW.btn(SW.t("common_discard"), { run: discard })] }));
   }
@@ -1112,11 +1116,11 @@ function addTab() {
     started = d.started || Date.now();
     if (d.readId || d.found) draftBox.append(line("info", SW.t("add_draft_photos_not_kept")));
     drawFound(); drawList(); changed(); save();
-    SW.announce(SW.t("add_draft_banner", { age: ageText(d.changed || started), count: spoolsOf(d.items || []) }));
+    SW.announce(SW.t("add_draft_banner", { age: ageText(d.changed || started), count: heldOf(d.items || []) }));
   }
   async function discard(e) {
     if (working === "add" || !pending) return;
-    const ok = await SW.ask({ kind: "destructive", title: SW.t("home_draft_discard_title"), text: SW.t("add_draft_discard_body", { count: spoolsOf(pending.items || []) }),
+    const ok = await SW.ask({ kind: "destructive", title: SW.t("home_draft_discard_title"), text: SW.t("add_draft_discard_body", { count: heldOf(pending.items || []) }),
       confirm: SW.t("common_discard"), cancel: SW.t("common_keep"), open: openHere, opener: e && e.currentTarget });
     if (!ok) return;
     pending = null; store.drop(); draftBox.replaceChildren(); paintBadge();
@@ -1127,7 +1131,7 @@ function addTab() {
   function paintBadge() {
     const a = document.querySelector('.nav__item[href="#add"]');
     if (!a) return;
-    const n = spoolsOf() + (pending ? spoolsOf(pending.items || []) : 0);
+    const n = spoolsOf() + (pending ? heldOf(pending.items || []) : 0);
     a.querySelector(".nav__badge")?.remove();
     if (n > 0) { a.append(h("span", { class: "nav__badge", "aria-hidden": "true", textContent: String(n) })); a.setAttribute("aria-label", SW.t("nav_add_waiting", { count: n })); }
     else a.removeAttribute("aria-label");
@@ -1515,7 +1519,7 @@ function addTab() {
     else if (block) {
       const num = items.indexOf(block.it) + 1;
       if (block.kind === "missing") text = block.many > 1 ? SW.t("add_bar_missing_many", { count: block.many, number: num }) : SW.t("add_bar_missing", { number: num, fields: block.keys.map((k) => SW.t(ADD_LABEL[k])).join(", ") });
-      else { const k = block.keys[0]; text = ["net", "tare", "gross"].includes(k) ? SW.t("add_bar_invalid", { number: num, field: SW.t(ADD_LABEL[k]) })
+      else { const k = block.keys[0]; text = ["net", "tare", "gross"].includes(k) && wrong(block.it, k) !== SW.t("add_card_grams_plain") ? SW.t("add_bar_invalid", { number: num, field: SW.t(ADD_LABEL[k]) })
         : SW.t("add_bar_field_error", { number: num, field: SW.t(ADD_LABEL[k]), message: wrong(block.it, k) }); }
       off = true;
     } else if (hubDown) { text = SW.t("add_bar_offline"); off = true; }
