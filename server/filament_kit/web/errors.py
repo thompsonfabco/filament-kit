@@ -11,3 +11,9 @@ class Problem(ValueError):
         super().__init__(message)
         self.field = field
         self.param = param
+
+
+class TapChanged(Problem):
+    """The readers' last tap is no longer the one the caller looked at (a spool opened with `nfc_id` / `read_at`): the web app
+    answers 409 with `code` "tap_changed" and shows the text at the tag line."""
+    code = "tap_changed"

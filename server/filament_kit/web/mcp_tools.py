@@ -24,7 +24,7 @@ from ..inventory import AddFailed, TagConflict
 from ..profiles.errors import ProfileError
 from ..spoolman import Spoolman, SpoolmanError
 from . import presets, slots
-from .errors import Problem
+from .errors import Problem, TapChanged
 
 log = logging.getLogger(__name__)
 
@@ -188,9 +188,11 @@ class Tools:
 
     def open_spool(self, spool: int | None = None, filament: int | None = None, location: str | None = None,
                    gross: float | None = None, remaining: float | None = None, humidity: float | None = None,
-                   force: bool = False, dry_run: bool = True, ai_note: bool = False) -> dict:
+                   force: bool = False, dry_run: bool = True, ai_note: bool = False,
+                   nfc_id: str | None = None, read_at: float | None = None) -> dict:
         """Link the readers' last tap to a spool (or a filament's lowest-id sealed spool) and mark it opened.
-        `ai_note`: the MCP path adds the call-again instruction to a dry run (see add_spools)."""
+        `ai_note`: the MCP path adds the call-again instruction to a dry run (see add_spools). `nfc_id` / `read_at` (the web
+        app, optional): the tap the caller looked at; the call is refused when the last tap is another one."""
         if (spool is None) == (filament is None):
             raise Problem("give exactly one of spool or filament")
         t = tagsources.latest(self.cfg())
@@ -199,6 +201,8 @@ class Tools:
         uid = _uid(t["nfc_id"])
         if uid is None:
             raise Problem(f"the last tap {t['nfc_id']!r} is not a tag UID: tap again")
+        if (nfc_id is not None and _uid(nfc_id) != uid) or (read_at is not None and t.get("read_at_unix") != read_at):
+            raise TapChanged("A new tag was tapped. Preview again.")
         if spool is None:
             spool = inventory.pick_sealed(self.sm, filament)
             if spool is None:

@@ -1136,6 +1136,7 @@ const need = (what, ok) => { if (!ok) throw new Error('Spools: ' + what); };
 const typeIn = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
 const reply = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
 const stub = (re, answer) => { const real = window.fetch.bind(window); window.fetch = (u, i) => (re.test(String(u).split('/api/')[1] || '') ? answer(u, i || {}) : real(u, i)); };
+const fetchReal = window.fetch.bind(window);
 const stubPost = (re, answer) => { const real = window.fetch.bind(window); window.fetch = (u, i) => (re.test(String(u).split('/api/')[1] || '') && (i || {}).method === 'POST' ? answer(u, i) : real(u, i)); };
 const spy = (re, log) => { const real = window.fetch.bind(window); window.fetch = (u, i) => { if (re.test(String(u).split('/api/')[1] || '') && (i || {}).method === 'POST') log.push(JSON.parse(i.body)); return real(u, i); }; };
 const repoll = () => document.dispatchEvent(new Event('visibilitychange'));       // the page polls the tag at once when it is shown again
@@ -1261,7 +1262,7 @@ SP_READY = {
   button('Preview').click();
   await until('the preview', () => out('Preview ready. Nothing is saved yet.'));
   need('the Hub text sits under it in a code block', $('.spools__sheet .code') && $('.spools__sheet .code').textContent.includes('dry run: nothing changed'));
-  need('the request is the one of today', JSON.stringify(window.__open[0]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', dry_run: true }));
+  need('the request is the one of today', JSON.stringify(window.__open[0]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', nfc_id: '04:77:90:E1', read_at: 1700000000, dry_run: true }));
   need('Link is available', reason(button('Link tag and open')) === null && button('Link tag and open').getAttribute('aria-disabled') !== 'true');
   typeIn(field('Weight with spool', d).querySelector('input'), '1300');
   need('an edit asks for a new preview', reason(button('Link tag and open')) === 'You changed the weight. Preview again.');
@@ -1283,7 +1284,7 @@ SP_READY = {
   button('Link tag and open').click();
   await until('the link', () => out('Spool __ID__ is open'));
   need('the Hub text follows it', $('.spools__sheet .code').textContent.includes('tag 04:77:90:E1 linked'));
-  need('the real request is the one of today', JSON.stringify(window.__open[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: 'Rack 1', humidity: '41.5', dry_run: false }));
+  need('the real request is the one of today', JSON.stringify(window.__open[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: 'Rack 1', humidity: '41.5', nfc_id: '04:77:90:E1', read_at: 1700000000, dry_run: false }));
   need('a toast says it', text('.toasts').includes('Spool __ID__ opened.'));
   need('the fields are clear and Link waits again', ['Weight with spool', 'Location', 'Box humidity'].every((l) => field(l, $('dialog[open]')).querySelector('input').value === '') && reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.');
 """,
@@ -1336,7 +1337,7 @@ SP_READY = {
   const pick = items.find((i) => i.getAttribute('aria-disabled') !== 'true'), to = pick.querySelector('.menu__label').firstChild.textContent;
   pick.click();
   await until('moved', () => out('Moved to ' + to + '.'));
-  need('Undo is offered', $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Undo') && text('.spools__sum-text').includes(to));
+  need('Undo is offered, and says where it goes', $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Undo') && text('.spools__sum-text').includes(to) && out('Undo returns it to'));
 """,
     "sheet_move_undo": r"""
   const d = await sheetReady(); button('Move').click();
@@ -1386,7 +1387,7 @@ SP_READY = {
   await tap({ nfc_id: '04:AA:BB:CC', read_at: 1700000500 });
   await until('the sheet names the newer tag', () => text('.spools__sheet-tag').includes('04:AA:BB:CC'));
   release();
-  await until('the old answer is dropped', () => reason(button('Link tag and open')) === 'You changed the weight. Preview again.' && !button('Preview').getAttribute('aria-busy'));
+  await until('the old answer is dropped, for the tag', () => reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.' && !button('Preview').getAttribute('aria-busy'));
   button('Link tag and open').click(); await sleep(300);
   need('Link sends nothing for a tag that was not previewed', bodies.length === 1);
 """,
@@ -1403,7 +1404,7 @@ SP_READY = {
   release();
   await until('opened', () => out('Spool __ID__ is open'));
   await sleep(300);
-  need('two requests in all, the real one with what was previewed', bodies.length === 2 && JSON.stringify(bodies[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', dry_run: false }));
+  need('two requests in all, the real one with what was previewed', bodies.length === 2 && JSON.stringify(bodies[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', nfc_id: '04:77:90:E1', read_at: 1700000000, dry_run: false }));
   need('Link waits again', reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.');
 """,
     "sheet_race_save": r"""
@@ -1442,13 +1443,65 @@ SP_READY = {
   await until('back where it was before the first move', () => where() === orig && out('Moved to ' + orig + '.') && !undo());
   need('the requests are the two moves and the undo', log.length === 3 && log[2].location === orig && log.every((b) => b.dry_run === false));
 """,
+    "sheet_tap_refused": r"""
+  const d = await sheetReady(); await tap({});
+  const bodies = [];
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b);
+    return b.dry_run ? reply({ output: 'dry run: nothing changed', exit_code: 0 }) : reply({ error: 'A new tag was tapped. Preview again.', code: 'tap_changed' }, 409); });
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null);
+  need('Preview names the tap it looked at', bodies[0].nfc_id === '04:77:90:E1' && bodies[0].read_at === 1700000000);
+  button('Link tag and open').click();
+  await until('refused', () => text('.spools__sheet-note') === 'A new tag was tapped. Preview again.' && reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.');
+  need('Link named the same tap', bodies[1].nfc_id === '04:77:90:E1' && bodies[1].read_at === 1700000000 && bodies[1].dry_run === false);
+  button('Link tag and open').click(); await sleep(300);
+  need('Link sends nothing until a new Preview', bodies.length === 2);
+""",
+    "sheet_unread": r"""
+  await waitPage();
+  let release; const log = []; const real = window.fetch.bind(window);
+  window.fetch = (u, i) => { const p = String(u).split('/api/')[1] || '';
+    if ((i || {}).method === 'POST') log.push(p);
+    return /^spools\/\d+$/.test(p) && !(i && i.method === 'POST') ? new Promise((ok) => { release = () => ok(real(u, i)); }) : real(u, i); };
+  location.hash = '#spools/__ID__';
+  await until('the sheet', () => $('dialog[open].sheet') && release);
+  need('Preview and Link say the spool is being read', reason(button('Preview')) === 'Loading Spool __ID__…' && reason(button('Link tag and open')) === 'Loading Spool __ID__…');
+  button('Preview').click(); button('Link tag and open').click(); await sleep(300);
+  need('nothing is sent before the spool is read', log.length === 0);
+  release();
+  await until('read', () => !$('.spools__sum .skeleton') && reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.' && !button('Preview').getAttribute('aria-disabled'));
+""",
+    "sheet_move_wait": r"""
+  const d = await sheetReady(); let release = null;
+  stubPost(/^spools\/\d+$/, (u, i) => { const b = JSON.parse(i.body); return new Promise((ok) => { release = () => ok(fetchReal(u, i)); }); });
+  button('Move').click();
+  let menu = await until('the menu', () => $('dialog[open] .menu'));
+  const first = $$('.menu__item', menu).find((x) => x.getAttribute('aria-disabled') !== 'true'); first.click();
+  await until('the move is out', () => release);
+  button('Move').click();
+  menu = await until('the menu again', () => $('dialog[open] .menu'));
+  need('every place says it waits', $$('.menu__item', menu).every((x) => x.getAttribute('aria-disabled') === 'true' && x.textContent.includes('Moving…')));
+  release();
+""",
+    "sheet_undo_failed": r"""
+  const d = await sheetReady();
+  button('Move').click();
+  const menu = await until('the menu', () => $('dialog[open] .menu'));
+  const pick = $$('.menu__item', menu).find((i) => i.getAttribute('aria-disabled') !== 'true'), to = pick.querySelector('.menu__label').firstChild.textContent, was = text('.spools__sum-text .muted').split(' · ')[0];
+  pick.click();
+  await until('moved, with where Undo goes', () => out('Moved to ' + to + '. Undo returns it to ' + was + '.'));
+  stubPost(/^spools\/\d+$/, () => reply({ error: 'boom' }, 500));
+  $$('.spools__sheet .result .btn').find((b) => b.textContent.trim() === 'Undo').click();
+  await until('the failure', () => out('The Hub hit an error') && $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Try again'));
+  await sleep(5600);
+  need('the error and Try again stay after the Undo window', !!out('The Hub hit an error') && !out('Moved to ' + was + '.') && $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Try again'));
+""",
     "sheet_missing": r"""
   await until('the line', () => $('dialog[open] .result[data-state=bad]') && text('dialog[open]').includes('was not found'));
   const seen = (l) => { const b = button(l); return !!b && b.getClientRects().length > 0; };
   need('the Hub text, and nothing to act on', text('dialog[open]').includes('spool 99999 was not found') && !seen('Preview') && !seen('Mark empty'));
 """,
 }
-SP_AT = {"sheet_from_row": "#spools", "sheet_missing": "#spools/99999", "sheet_empty_ask": 3, "sheet_empty_done": 2}   # the view, or which spool's sheet it opens
+SP_AT = {"sheet_from_row": "#spools", "sheet_unread": "#spools", "sheet_missing": "#spools/99999", "sheet_empty_ask": 3, "sheet_empty_done": 2}   # the view, or which spool's sheet it opens
 SP_PAGED = {
     "paging": r"""
   await waitPage();

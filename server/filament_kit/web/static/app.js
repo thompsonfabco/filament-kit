@@ -1802,7 +1802,7 @@ function openTab() {
     }, { quiet: !!view, items: 1 });
 
     // -- Open it and link the tag --
-    const tagText = h("p", { class: "spools__sheet-tag" });
+    const tagText = h("p", { class: "spools__sheet-tag" }), tagNote = h("p", { class: "spools__sheet-tag spools__sheet-note" });   // the note: the Hub refused for a newer tap
     const paintTag = (t) => { tagText.textContent = t && t.nfc_id ? SW.t("spool_sheet_tag_line", { tag: t.nfc_id, age: t.age_seconds != null ? ageText(t.age_seconds) : "", reader: readerOf(t, true) })
       : SW.t("spool_sheet_no_tag"); };
     const within = (lo, hi) => (v) => { const n = Number(v.trim().replace(",", ".")); return !v.trim() || (n >= lo && n <= hi) ? null : ""; };
@@ -1819,19 +1819,25 @@ function openTab() {
     // Link sends exactly the body that was previewed (R345)
     let linkKey = "spool_sheet_reason_preview_first", rev = 0, working = false, shot = null;   // shot: { rev, body } of the last good Preview
     const gone = () => !!view && view.state === "empty";
-    const link = (key) => { linkKey = key; disabled(linkBtn, gone() ? SW.t("spool_sheet_reason_empty") : key ? SW.t(key) : null, () => previewBtn); };
-    const outOfDate = (edit) => { rev++; const was = previewed || problem; previewed = false; link(edit && was ? "spool_sheet_reason_weight_changed" : "spool_sheet_reason_preview_first"); };
-    weight._control.addEventListener("input", () => { weightTyped = true; weight._hint.textContent = ""; outOfDate(true); problem = false; });
-    for (const f of [loc, hum]) f._control.addEventListener("input", () => { outOfDate(false); problem = false; });
+    // Preview and Link stay off until the spool is read, and for an empty one
+    const holdWhy = () => (!view ? SW.t("common_loading_thing", { thing: SW.t("spool_title", { id }) }) : gone() ? SW.t("spool_sheet_reason_empty") : null);
+    const link = (key) => { linkKey = key; disabled(linkBtn, holdWhy() || (key ? SW.t(key) : null), () => previewBtn); };
+    // what made the last Preview out of date, and what Link says about it
+    const STALE = { weight: "spool_sheet_reason_weight_changed", tag: "spool_sheet_reason_tag_changed", fields: "spool_sheet_reason_preview_first" };
+    let lastKind = "fields";
+    const outOfDate = (kind) => { rev++; lastKind = kind; const was = previewed || problem || working; previewed = false; link(was ? STALE[kind] : "spool_sheet_reason_preview_first"); };
+    weight._control.addEventListener("input", () => { weightTyped = true; weight._hint.textContent = ""; outOfDate("weight"); problem = false; });
+    for (const f of [loc, hum]) f._control.addEventListener("input", () => { outOfDate("fields"); problem = false; });
     async function submit(dry, button) {
-      if (working) return;                                     // one request at a time: Preview and Link
+      if (working || holdWhy()) return;                        // one request at a time: Preview and Link; not before the spool is read
       let body;
       if (dry) {
         const bad = [weight, hum].filter((f) => { const err = f._check(); SW.fieldError(f, err || null); return !!err; });
         if (bad.length) return bad[0]._control.focus();
-        body = { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), dry_run: true };
+        const tap = lastTag && lastTag.nfc_id ? { nfc_id: lastTag.nfc_id, read_at: lastTag.read_at } : {};   // the tap the Hub is asked to link
+        body = { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), ...tap, dry_run: true };
       } else {
-        if (!shot || shot.rev !== rev) { link("spool_sheet_reason_weight_changed"); return; }
+        if (!shot || shot.rev !== rev) { link(STALE[lastKind]); return; }
         body = { ...shot.body, dry_run: false };              // what was previewed, not what the fields say now
       }
       const mine = rev;
@@ -1840,8 +1846,13 @@ function openTab() {
         await act(ans, SW.t(dry ? "common_checking" : "common_working"), async () => {
           let res;
           try { res = await api("open", { body }); }
-          catch (e) { if (dry && mine === rev) { previewed = false; problem = true; link("spool_sheet_reason_problem"); } throw e; }
-          if (dry && mine !== rev) { link("spool_sheet_reason_weight_changed"); return null; }   // an edit or a newer tag came meanwhile: this answer is for what was
+          catch (e) {
+            if (e instanceof SW.HubError && e.data && e.data.code === "tap_changed") {   // another tap reached the Hub since the page last asked
+              previewed = false; problem = false; shot = null; rev++; lastKind = "tag"; link(STALE.tag); tagNote.textContent = says(e); poll();
+            } else if (dry && mine === rev) { previewed = false; problem = true; link("spool_sheet_reason_problem"); }
+            throw e;
+          }
+          if (dry && mine !== rev) { link(STALE[lastKind]); return null; }   // an edit or a newer tag came meanwhile: this answer is for what was
           previewed = dry && !res.exit_code; problem = !!res.exit_code;
           shot = previewed ? { rev: mine, body } : null;
           link(previewed ? null : problem ? "spool_sheet_reason_problem" : "spool_sheet_reason_preview_first");
@@ -1857,8 +1868,8 @@ function openTab() {
       } finally { working = false; }
       link(linkKey);                                           // the busy button gave back the state it had before the press
     }
-    const openPart = part(SW.t("spool_sheet_open_title"), tagText, weight, loc, hum, h("div", { class: "spools__buttons" }, previewBtn, linkBtn), ans.el);
-    link(linkKey);
+    const openPart = part(SW.t("spool_sheet_open_title"), tagText, tagNote, weight, loc, hum, h("div", { class: "spools__buttons" }, previewBtn, linkBtn), ans.el);
+    disabled(previewBtn, holdWhy()); link(linkKey);
 
     // -- Other actions: Update weight, Move, Load into a printer, and Mark empty kept apart --
     const actAns = resultLine();      // the answer to Move, Mark empty and Load; Update weight has its own line while it is open
@@ -1868,7 +1879,7 @@ function openTab() {
     const emptyBtn = SW.btn(SW.t("spool_mark_empty"), { cls: "btn--danger", run: (e) => markEmpty(e.currentTarget) });
     function paintActions() {
       const empty = gone(), why = SW.t("spool_sheet_reason_empty");
-      disabled(previewBtn, empty ? why : null); link(linkKey);   // an empty spool is not opened
+      disabled(previewBtn, holdWhy()); link(linkKey);            // an empty spool is not opened
       if (!other) return;
       other.hidden = false;
       disabled(weightBtn, empty ? why : null); disabled(emptyBtn, empty ? why : null); disabled(loadBtn, empty ? why : null);
@@ -1922,21 +1933,23 @@ function openTab() {
       wLock(wKey);
     }
     // Move: a menu of locations; choosing one moves the spool at once, with Undo for 5 s
+    let moving = false;
     SW.menu(moveBtn, () => LOCATIONS.map((l) => { const here = !!view && l === view.location;
-      return { label: l, disabled: here, reason: here ? SW.t("spool_move_here") : null, run: () => moveTo(l, false) }; }), { label: SW.t("spool_move_title") });
-    let moving = false, undoFrom = null;                       // undoFrom: the place before the first move of the Undo window
+      return { label: l, disabled: here || moving, reason: moving ? SW.t("spool_move_moving") : here ? SW.t("spool_move_here") : null, run: () => moveTo(l, false) }; }), { label: SW.t("spool_move_title") });
+    let undoFrom = null, undoUntil = 0;                        // undoFrom: the place before the first move of the Undo window
     async function moveTo(l, back) {
-      if (moving || (!back && view && l === view.location)) return;   // one move at a time; not to where it is
+      if (moving || (!back && view && l === view.location)) return;   // one move at a time (the menu says so); not to where it is
       moving = true;
+      const stamp = ++undoStamp;                               // any move or Undo ends the timer of an earlier Undo line
       try {
         await act(actAns, SW.t("spool_move_moving"), async () => {
           const r = await api(`spools/${id}`, { body: { location: l, dry_run: false } });
-          const text = SW.t("spool_result_moved", { location: l }), stamp = ++undoStamp;
-          if (!back && undoFrom == null) undoFrom = r.before.location || null;   // a second move in the window keeps the first place
+          if (!back) { if (undoFrom == null || Date.now() > undoUntil) undoFrom = r.before.location || null; undoUntil = Date.now() + 5000; }   // a second move in the window keeps the first place
           changed = true; applyView(r.view);
+          const text = SW.t("spool_result_moved", { location: l });
           if (back || !undoFrom) { undoFrom = null; return text; }
-          setTimeout(() => { if (stamp === undoStamp) { undoFrom = null; if (actAns.querySelector(".btn")) SW.result(actAns, "ok", text); } }, 5000);   // Undo goes after 5 s
-          return { text, action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
+          setTimeout(() => { if (stamp === undoStamp && actAns.querySelector(".btn")) SW.result(actAns, "ok", text); }, 5000);   // Undo goes after 5 s
+          return { text: SW.t("spool_result_moved_undo", { location: l, was: undoFrom }), action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
         });
       } finally { moving = false; }
     }
@@ -2019,10 +2032,11 @@ function openTab() {
     sheet = { id, dlg, rec, tag(t, fresh, key) {
       paintTag(t);
       if (!fresh) return;
+      tagNote.textContent = "";
       if (key !== spentKey && onScale(t) && !weightTyped) {   // a new station tap: that spool is on the scale (04 5.2)
         weight._control.value = t.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: t.scale.age_seconds });
       }
-      outOfDate(false);
+      outOfDate("tag");
     } };
     paintTag(lastTag);
     if (lastTag && onScale(lastTag)) { weight._control.value = lastTag.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: lastTag.scale.age_seconds }); }

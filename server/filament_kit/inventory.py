@@ -518,6 +518,8 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
         raise ValueError("humidity must be a percentage (0-100)")
     with _LOCK:
         spool = sm.get(f"spool/{spool_id}")
+        if spool.get("archived"):
+            raise ValueError(f"spool {spool_id} is marked empty (archived): it cannot be opened")
         patch: dict = {}
         if gross is not None:
             tare = spool.get("spool_weight") or (spool.get("filament") or {}).get("spool_weight") or 0
@@ -631,6 +633,9 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
         if remaining < 0:
             raise SpoolEditError("remaining cannot be negative", "remaining")
         patch["remaining_weight"] = remaining
+    full = spool.get("initial_weight") or (spool.get("filament") or {}).get("weight")
+    if "remaining_weight" in patch and isinstance(full, (int, float)) and full > 0:
+        patch["remaining_weight"] = min(patch["remaining_weight"], full)    # Spoolman holds no more than a full spool: so does the preview
     if empty:
         patch.update(remaining_weight=0, archived=True)
     if location is not None:
