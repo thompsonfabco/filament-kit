@@ -6,6 +6,7 @@
 //
 //   node tests/page_drive.mjs --url http://127.0.0.1:8799/setup --script tests/hub_presets_drive.js [--width 1280] [--browser <path>]
 import { spawn } from "node:child_process";
+import { endOwnBrowser } from "./aut5_browser_end.mjs";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,7 +43,7 @@ async function main() {
   proc.on("exit", (code, signal) => { browserExit = signal || code; });
   proc.on("error", (e) => { browserExit = e.code || e.message; });
   const cleanup = () => {
-    try { proc.kill(); } catch { /* gone */ }
+    endOwnBrowser(proc);
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
   };
   process.once("exit", cleanup);
