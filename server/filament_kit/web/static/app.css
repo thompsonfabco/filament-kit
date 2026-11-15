@@ -278,7 +278,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .add__read { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .add__read > .btn { flex: 1 1 100%; }
 .add__read > div { flex: 1 1 100%; min-width: 0; }
-.add__big { display: block; width: 100%; height: auto; border-radius: var(--r); }
+.add__big { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(var(--s7) * 9); margin: 0 auto; border-radius: var(--r); }
 
 /* by hand: the search, the rows, the pager */
 .add__search .field__box { position: relative; }

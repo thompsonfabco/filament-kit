@@ -2558,6 +2558,11 @@
     <string name="add_found_not_rated_hint">This reader does not say how sure it is. Check the values against the label.</string>
     <!-- 1=seconds -->
     <string name="add_found_usage_time">Read in %1$s s</string>
+    <!-- 1=name -->
+    <string name="add_read_colour_name">Colour: %1$s</string>
+    <!-- 1=name 2=family -->
+    <string name="add_read_colour_family">Colour: %1$s (%2$s)</string>
+    <string name="add_read_colour_none">Colour: no name found</string>
     <string name="add_row_no_brand">No brand</string>
     <string name="add_card_colour_pick">Pick a colour</string>
     <string name="add_card_price_error">Enter a price above 0.</string>

@@ -880,7 +880,7 @@ function addTab() {
   // the constants and helpers are inside: this function runs while the page's script is still building the tabs, before the
   // top-level constants below it exist
   const ADD_MAX_PHOTOS = 8, ADD_PAGE = 50, ADD_FIND_LIMIT = 60;
-  const ADD_DRAFT = "spoolwarden.draft.add";
+  const ADD_DRAFT = "spoolwarden.draft.add", ADD_NEW = "spoolwarden.draft.add-new";   // the second slot holds work started while a draft waits
   // the fields a read rates that the card shows, in the order of the card; and the names of the fields in sentences
   const ADD_RATED = "vendor name material color_hex net tare density nozzle bed price_per_kg".split(" "), COL = ADD_RATED[3];
   const ADD_LABEL = { vendor: "common_field_brand", name: "common_field_name", material: "common_field_material", color_hex: "common_field_colour",
@@ -889,9 +889,15 @@ function addTab() {
     lot: "common_field_lot", line: "common_field_line", note: "common_field_note", location: "common_field_location" };
   const ADD_REQUIRED = ["vendor", "name", "material", "count", "net"];     // a label without "(optional)"
   const ADD_NUMBER = new Set(["count", "net", "tare", "density", "nozzle", "bed", "gross", "price_per_kg"]);
-  const ADD_HEX = /^#?[0-9a-f]{6}$/i;
-  const addHex = (s) => (ADD_HEX.test(String(s || "")) ? "#" + String(s).replace("#", "").toUpperCase() : "");   // for a swatch
-  const addParse = (text) => { const t = String(text).trim().replace(",", "."), n = Number(t); return t !== "" && Number.isFinite(n) ? n : NaN; };
+  const ADD_HEX = /^#?([0-9a-f]{6}|[0-9a-f]{8})$/i;                  // 6 digits, or 8 with the alpha pair last, as the Hub takes them
+  const addHex = (s) => { const m = ADD_HEX.exec(String(s || "")); return m ? "#" + m[1].slice(0, 6).toUpperCase() : ""; };   // for a swatch
+  const addParse = (text) => {                                   // "1,000" is a thousand, "1,5" one and a half; anything else that is not a number is NaN
+    let t = String(text).trim();
+    t = /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t) ? t.replace(/,/g, "") : t.replace(",", ".");
+    const n = Number(t);
+    return t !== "" && Number.isFinite(n) ? n : NaN;
+  };
+  const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 
   // the record summary of 02 7.2, for the levels of one or more items: the level, then the fields at each level
   function addSummary(levelsList) {
@@ -931,10 +937,10 @@ function addTab() {
   })();
   let items = [], photos = [], readId = null, tag = null, found = null;      // photos: { blob, url }
   let previewed = false, edited = null, problemsShown = false, working = null, hubDown = false, hubTimer = 0;   // working: read, preview, add
-  let started = 0, changedAt = 0, pending = null, keeping = true, wrote = false, saveTimer = 0, nextId = 1, memo = null;
+  let rev = 0, started = 0, changedAt = 0, pending = null, keeping = true, wrote = false, saveTimer = 0, nextId = 1, memo = null;
   const cards = new Map();                                      // item _id -> its card
   let vendorTare = new Map();                                   // vendor name (lower case) -> empty spool weight
-  let rows = [], page = 1, findStamp = 0;                       // the filament search results, and the page shown
+  let rows = [], more = false, page = 1, findStamp = 0;                       // the filament search results, and the page shown
 
   // ---- the page: title area, groups, list, action bar ----
   const lines = h("div", { class: "add__notes" });              // this add is open in another tab; no draft can be kept
@@ -997,33 +1003,53 @@ function addTab() {
   }
   const wire = (it) => {                                        // what the Hub gets: the item without the page's own keys
     const w = Object.fromEntries(Object.entries(it).filter(([k]) => k[0] !== "_"));
-    if (Number(w.count) > 1) delete w.gross;                    // a weight with the spool counts for one opened spool only (04 4.5)
+    if (Number(w.count) > 1 || w.sealed !== false) delete w.gross;   // a weight with the spool counts for one opened spool only (04 4.5)
     return w;
+  };
+  // what the local reader said about the colour, as a read fact (02 7.2); it goes when the colour is edited
+  const colourFact = (it) => {
+    if (!it.color_name && !it.color_family) return "";
+    const name = it.color_name && it.color_name !== "unknown" ? it.color_name : "";
+    return !name ? SW.t("add_read_colour_none") : it.color_family ? SW.t("add_read_colour_family", { name, family: it.color_family }) : SW.t("add_read_colour_name", { name });
   };
   const adopt = (it, read) => {
     const levels = it.confidence_levels || {};
     delete it.confidence_levels; delete it.confidence_filled;
     return Object.assign(it, { _id: it._id || nextId++, _levels: { ...levels }, _est: [...(it.estimates || [])], _fill: {}, _text: {}, _problems: {},
-      _open: undefined, _read: !!read, _edited: false });
+      _open: undefined, _read: !!read, _edited: false, _fact: colourFact(it) });
   };
 
   // ============ the draft (04 4.7) ============
   const store = {
-    get() { try { const v = localStorage.getItem(ADD_DRAFT); return v ? JSON.parse(v) : null; } catch { return null; } },
-    put(text) { try { localStorage.setItem(ADD_DRAFT, text); return true; } catch { return false; } },
-    drop() { try { localStorage.removeItem(ADD_DRAFT); } catch { /* nothing to drop */ } },
+    get(key = ADD_DRAFT) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } },
+    put(text, key = ADD_DRAFT) { try { localStorage.setItem(key, text); return true; } catch { return false; } },
+    drop(key = ADD_DRAFT) { try { localStorage.removeItem(key); } catch { /* nothing to drop */ } },
     works() { try { localStorage.setItem(ADD_DRAFT + ".probe", "1"); localStorage.removeItem(ADD_DRAFT + ".probe"); return true; } catch { return false; } },
   };
+  // a stored draft is only used when it has the shape this page writes; whatever else is in it is left out (04 4.7)
+  function clean(d) {
+    if (!isObj(d) || d.v !== 1 || !Array.isArray(d.items)) return null;
+    const its = d.items.filter(isObj), note = typeof d.note === "string" ? d.note : "";
+    if (!its.length && !note.trim()) return null;
+    const f = isObj(d.found) ? d.found : null, list = (v) => (Array.isArray(v) ? v : []), sum = f && isObj(f.summary) ? f.summary : null;
+    return { ...d, items: its, note, readId: typeof d.readId === "string" ? d.readId : null, tag: isObj(d.tag) ? d.tag : null,
+      found: f && { ...f, count: Number(f.count) || 0, photos: Number(f.photos) || 0, reader: String(f.reader || ""), model: String(f.model || ""), tier: String(f.tier || ""),
+        note: typeof f.note === "string" ? f.note : "", questions: list(f.questions).filter((q) => typeof q === "string"), tag: isObj(f.tag) ? f.tag : null,
+        scale: isObj(f.scale) ? f.scale : null, usage: isObj(f.usage) ? f.usage : null,
+        summary: sum && ["low", "medium", "not_on_label"].every((k) => Array.isArray(sum[k])) ? sum : null } };
+  }
   function noStorage(on) {
     lines.querySelector(".add__nostore")?.remove();
     if (on) lines.append(Object.assign(line("warn", SW.t("add_draft_no_storage")), { className: "add__line add__nostore" }));
   }
   function save() {
     clearTimeout(saveTimer);
-    if (!keeping || pending) return;
-    if (!items.length && !noteField._control.value.trim()) { if (wrote) store.drop(); paintBadge(); return; }   // a tab that never wrote leaves another one's draft alone
+    if (!keeping) return;
+    const slot = pending ? ADD_NEW : ADD_DRAFT;                  // a draft that waits for Restore or Discard is never written over
+    if (!items.length && !noteField._control.value.trim()) { if (wrote) store.drop(slot); paintBadge(); return; }   // a tab that never wrote leaves another one's draft alone
     started = started || Date.now(); changedAt = Date.now();
-    const ok = store.put(JSON.stringify({ v: 1, tab: tabId, started, changed: changedAt, items, note: noteField._control.value, readId, tag, found }));
+    const ok = store.put(JSON.stringify({ v: 1, tab: tabId, started, changed: changedAt, items, note: noteField._control.value, readId, tag, found }), slot);
+    if (ok && !pending) store.drop(ADD_NEW);
     wrote = wrote || ok;
     noStorage(!ok);
     paintBadge();
@@ -1032,11 +1058,11 @@ function addTab() {
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") save(); });
   window.addEventListener("pagehide", save);
   window.addEventListener("storage", (e) => {                   // another tab keeps the draft now
-    if (e.key !== ADD_DRAFT || e.storageArea !== localStorage || !keeping) return;
+    if ((e.key !== ADD_DRAFT && e.key !== ADD_NEW) || e.storageArea !== localStorage || !keeping) return;
     keeping = false;
     lines.append(Object.assign(line("warn", SW.t("add_draft_other_tab")), { className: "add__line add__other" }));
   });
-  const clearDraft = () => { started = 0; if (keeping && !pending) store.drop(); paintBadge(); };
+  const clearDraft = () => { started = 0; if (keeping) store.drop(pending ? ADD_NEW : ADD_DRAFT); paintBadge(); };
   function ageText(ms) {
     const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
     if (s < 3600) return SW.t("common_age_minutes", { count: Math.max(1, Math.round(s / 60)) });
@@ -1055,7 +1081,8 @@ function addTab() {
     const mine = items;
     items = [];
     for (const raw of d.items || []) {
-      const it = Object.assign(raw, { _id: nextId++, _problems: {}, _levels: raw._levels || {}, _est: raw._est || raw.estimates || [], _fill: raw._fill || {}, _text: raw._text || {} });
+      const it = Object.assign(raw, { _id: nextId++, _problems: {}, _levels: isObj(raw._levels) ? raw._levels : {}, _fill: isObj(raw._fill) ? raw._fill : {}, _text: isObj(raw._text) ? raw._text : {},
+        _est: Array.isArray(raw._est) ? raw._est : Array.isArray(raw.estimates) ? raw.estimates : [] });
       items.push(it);
     }
     items.push(...mine);
@@ -1087,7 +1114,9 @@ function addTab() {
 
   // ============ an edit, an added or removed card, a new read: the preview is out of date ============
   function changed(it) {
-    if (previewed) { previewBox.replaceChildren(); memo = null; edited = it ? it._id : null; }
+    rev++;
+    if (previewed) { if (!working) { previewBox.replaceChildren(); memo = null; } edited = it ? it._id : null; }   // a request under way keeps its answer's place
+    else if (working && it) edited = it._id;
     previewed = false; problemsShown = false;
     changedAt = Date.now();
     paintBar(); saveSoon(); paintBadge();
@@ -1206,7 +1235,7 @@ function addTab() {
       addedBox.replaceChildren();
       drawFound(); drawList(); changed();
       return null;
-    }, { button: readBtn, kept: true, busy: SW.t("common_reading") });
+    }, { button: readBtn, kept: true, busy: SW.t("common_reading"), again: read });
     working = null; paintBar(); readable();
   }
   // what the Label Reader said, above the cards (04 4.4)
@@ -1219,8 +1248,8 @@ function addTab() {
     const sum = addSummaryLine(f.summary);
     if (sum) kids.push(sum);
     if (f.count && !f.rated) kids.push(h("p", { class: "muted", textContent: SW.t("add_found_not_rated_hint") }));
-    if (f.questions.length) kids.push(h("div", { class: "add__asks" }, h("h3", { class: "add__asks-title", textContent: SW.t("add_found_questions") }),
-      h("ul", {}, ...f.questions.map((q) => h("li", { textContent: q })))));
+    if ((f.questions || []).length) kids.push(h("div", { class: "add__asks" }, h("h3", { class: "add__asks-title", textContent: SW.t("add_found_questions") }),
+      h("ul", {}, ...(f.questions || []).map((q) => h("li", { textContent: q })))));
     if (f.tag) kids.push(SW.banner({ kind: "info", inline: true, text: SW.t("add_found_tag_notice", { tag: f.tag.nfc_id, seconds: f.tag.age_seconds,
       reader: SW.t(/^station$/.test(f.tag.reader) ? "common_reader_the_weigh_station" : "common_reader_the_tag_reader") }) }));
     if (f.scale) kids.push(SW.banner({ kind: "info", inline: true, text: SW.t(f.filled ? "add_found_scale_used" : "add_found_scale_unused", { grams: f.scale.grams, seconds: f.scale.age_seconds }) }));
@@ -1264,7 +1293,7 @@ function addTab() {
     try {
       const res = await call(`filaments?q=${encodeURIComponent(q)}&limit=${ADD_FIND_LIMIT}`);
       if (stamp !== findStamp) return;
-      clear(findLine); rows = res.filaments; page = 1; drawRows(false);
+      clear(findLine); rows = res.filaments; more = !!res.has_more || (res.total != null && res.total > rows.length); page = 1; drawRows(false);
       if (!rows.length) SW.announce(SW.t("add_picker_none"));
     } catch (e) { if (stamp === findStamp) { rows = []; findBox.replaceChildren(); failed(findLine, e, () => find(q)); } }
     finally { if (stamp === findStamp) searchField._busy(false); }
@@ -1281,7 +1310,7 @@ function addTab() {
       h("span", { class: "sr", textContent: SW.t("a11y_swatch", { hex: addHex(f.color_hex) || SW.t("common_no_colour") }) }))))));
     if (rows.length > ADD_PAGE) kids.push(SW.pager({ from: (page - 1) * ADD_PAGE + 1, to: Math.min(rows.length, page * ADD_PAGE), total: rows.length, page, pages: Math.ceil(rows.length / ADD_PAGE),
       go: (p) => { page = p; drawRows(true); } }));
-    if (rows.length >= ADD_FIND_LIMIT) kids.push(h("p", { class: "muted", textContent: SW.t("add_results_cut", { count: ADD_FIND_LIMIT }) }));
+    if (more) kids.push(h("p", { class: "muted", textContent: SW.t("add_results_cut", { count: rows.length }) }));
     findBox.replaceChildren(...kids);
     if (focus) findBox.querySelector(".add__row")?.focus();
   }
@@ -1333,6 +1362,7 @@ function addTab() {
       else if (key === COL) it.color_hex = value.trim().replace(/^#/, "");
       else it[key] = value;
       it._edited = true; delete it._levels[key]; delete it._fill[key]; delete it._problems[key];
+      if (key === COL) it._fact = "";
       it._est = it._est.filter((x) => x !== key);
       if (key === "material") fill("density", densityFor(it.material), it.material.trim());
       if (key === "vendor") fill("tare", vendorTare.get(it.vendor.trim().toLowerCase()), "brand");
@@ -1346,6 +1376,10 @@ function addTab() {
     }
     const mark = (key) => { const lv = it._levels[key]; return lv === "medium" || lv === "low" || lv === "not_on_label" ? SW.status(lv, { small: true, cls: "add__mark" }) : null; };
     const hintOf = (key) => {
+      const base = hintBase(key);
+      return key === COL && it._fact ? [base, it._fact].filter(Boolean).join(" ") : base;
+    };
+    const hintBase = (key) => {
       if (it._fill[key]) return it._fill[key] === "brand" ? SW.t("add_hint_from_brand_list") : SW.t("add_hint_typical_for", { material: it._fill[key] });
       if (it._est.includes(key)) return SW.t("add_hint_estimated");
       if (it._levels[key] === "medium" || it._levels[key] === "low") return SW.t("confidence_unsure_hint");
@@ -1483,9 +1517,11 @@ function addTab() {
   }
   async function submit(dry) {
     if (working || barBtn.getAttribute("aria-disabled") === "true") return;
-    working = dry ? "preview" : "add"; edited = null; paintBar();
+    working = dry ? "preview" : "add"; edited = null; previewed = false; paintBar();   // only a preview that answers well makes the bar offer Add
     ans.code.replaceChildren(); itemsBox.replaceChildren(); extras.replaceChildren();
-    previewBox.replaceChildren(resultGroup(dry ? SW.t("add_preview_title") : SW.t("common_add"), dry));
+    const mine = resultGroup(dry ? SW.t("add_preview_title") : SW.t("common_add"), dry), sent = rev;
+    previewBox.replaceChildren(mine);
+    for (const part of [inputs, foundBox, listGroup]) part.inert = !dry;     // while an Add is written nothing is edited
     const n = spoolsOf();
     try {
       await act(ans, dry ? SW.t("add_preview_checking") : SW.t("add_preview_adding"), async () => {
@@ -1493,6 +1529,7 @@ function addTab() {
         try { res = await call("add", { body: { items: items.map(wire), dry_run: dry, link_tag: tag ? tag.nfc_id : null, read_id: readId } }); }
         catch (e) {
           if (e instanceof SW.HubError && e.data && Array.isArray(e.data.problems)) {
+            if (rev !== sent) { previewBox.replaceChildren(); memo = null; return null; }      // edited since: these sentences are about the old cards
             showProblems(e.data.problems);
             return shown({ kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change") });
           }
@@ -1501,25 +1538,26 @@ function addTab() {
         }
         if (res.exit_code) { previewed = false; problemsShown = true; return shown({ kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output }); }
         if (dry) {
+          if (rev !== sent) { previewBox.replaceChildren(); memo = null; return null; }          // edited while it was checked: not previewed
           previewed = true; problemsShown = false;
           for (const it of items) cards.get(it._id).problems([]);
           drawResults(res.items || []);
           return shown({ text: SW.t("add_summary_preview_ok"), code: res.output });
         }
         const ids = res.spool_ids || [], made = (res.items || []).filter((r) => r.filament === "new").length;
-        const done = previewBox.firstElementChild;
-        previewBox.replaceChildren(); addedBox.replaceChildren(done);
-        done.querySelector(".group__title").textContent = SW.t("add_done_title");
-        done.querySelector(".add__sub")?.remove();
+        previewBox.replaceChildren(); addedBox.replaceChildren(mine);
+        mine.querySelector(".group__title").textContent = SW.t("add_done_title");
+        mine.querySelector(".add__sub")?.remove();
         everything(); SW.toast(SW.t("add_added_toast", { count: ids.length || n }));
         if (HISTORY && res.history_id) extras.append(SW.btn(SW.t("add_added_check_recent"), { run: () => { location.hash = "#recent/" + encodeURIComponent(res.history_id); } }));
         if (made || !res.items) extras.append(h("p", {}, made ? SW.t("add_added_new_filaments", { count: made }) : null),
           SW.btn(SW.t("add_added_set_up_presets"), { run: () => { location.hash = "#presets"; } }));
-        done.scrollIntoView({ behavior: "smooth", block: "start" });
+        mine.scrollIntoView({ behavior: "smooth", block: "start" });
         return shown({ text: ids.length ? SW.t("add_summary_added", { count: ids.length, ids: ids.join(", ") }) : SW.t("add_done_none"), code: res.output });
-      }, { button: barBtn, busy: dry ? SW.t("common_checking") : SW.t("common_adding") });
+      }, { button: barBtn, busy: dry ? SW.t("common_checking") : SW.t("common_adding"), again: () => submit(true) });
     } finally {
       working = null; paintBar();
+      for (const part of [inputs, foundBox, listGroup]) part.inert = false;
       if (previewBox.firstElementChild) previewBox.firstElementChild.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }
@@ -1546,8 +1584,14 @@ function addTab() {
   listHead.replaceChildren(SW.t("add_group_list"), " ", count);
   const el = h("section", { class: "add hidden" }, intro, lines, draftBox, addedBox, inputs, foundBox, listGroup, previewBox, bar);
   if (!store.works()) noStorage(true);
-  pending = store.get();
-  if (pending && (!Array.isArray(pending.items) || !(pending.items.length || pending.note))) { store.drop(); pending = null; }
+  pending = clean(store.get());
+  if (!pending) store.drop();                                   // a draft this page cannot use is dropped
+  const extra = clean(store.get(ADD_NEW));
+  if (extra) {                                                  // work started while a draft waited, in an earlier visit: it joins that draft
+    pending = pending ? { ...pending, items: [...pending.items, ...extra.items], note: [pending.note, extra.note].filter(Boolean).join("\n"), changed: extra.changed || pending.changed,
+      found: extra.found || pending.found, readId: extra.readId || pending.readId, tag: extra.tag || pending.tag } : extra;
+    if (store.put(JSON.stringify(pending))) store.drop(ADD_NEW);
+  } else store.drop(ADD_NEW);
   drawDraft(); drawPhotos(); drawList(); paintBar();
   setTimeout(paintBadge, 0);                                    // the bottom bar is built after this tab
   return { el, enter: () => {

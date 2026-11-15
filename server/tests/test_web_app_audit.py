@@ -414,7 +414,7 @@ READING = {"read_id": "r-1", "reader": "cloud", "tier": None, "confidence": None
            "tag": {"nfc_id": "04:77:90:E", "age_seconds": 40, "reader": "station"}, "scale": {"grams": 1212, "age_seconds": 8},
            "items": [
                {"vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black", "material": "PLA", "net": 1000, "tare": 200, "density": 1.24,
-                "count": 1, "color_hex": "2B2B2E", "sealed": False, "gross": 1212, "photos": [0], "estimates": ["density"],
+                "count": 1, "color_hex": "2B2B2E", "color_name": "Charcoal", "color_family": "black", "sealed": False, "gross": 1212, "photos": [0], "estimates": ["density"],
                 "price_line": "Price: $19.99/kg - order of 2026-10-02", "price_per_kg": 19.99, "existing_filament_id": None,
                 "confidence_levels": {"vendor": "high", "name": "high", "material": "high", "color_hex": "medium", "net": "high",
                                       "tare": "high", "density": "medium", "nozzle": "high", "bed": "high", "price_per_kg": "high"}},
@@ -451,6 +451,13 @@ const newFilament = async (vendor, name, material, tare) => {
   if (tare) typeIn(field('Empty spool weight', card).querySelector('input'), tare);
   return card;
 };
+const sent = [];                                                         // the bodies of the calls to `add`, in order
+const gate = () => { let release; const wait = new Promise((r) => { release = r; }); return { wait, release }; };
+const ITEMS = [{ index: 0, vendor: 'Elegoo', name: 'PLA Red', filament: 'new', filament_id: null, new_vendor: false, spools: 1, spool_ids: [], location: 'Sealed stock', placements: [{ location: 'Sealed stock', spools: 1, placed_by: null }], opened: false, remaining_g: 1000, problems: [] }];
+const PREVIEWED = () => reply({ exit_code: 0, output: 'Would add 1 spool of Elegoo PLA Red', items: ITEMS, dry: true });
+const ADDED = () => reply({ exit_code: 0, output: 'Added 1 spool of Elegoo PLA Red', spool_ids: [7], items: ITEMS.map((i) => ({ ...i, spool_ids: [7] })) });
+const spyAdd = (answer) => { const real = window.fetch.bind(window); window.fetch = (u, i) => { if (String(u).includes('/api/add')) { sent.push(JSON.parse(i.body)); return answer ? answer(sent.length) : real(u, i); } return real(u, i); }; };
+const busy = () => $('.add__bar-btn').getAttribute('aria-busy') === 'true';
 const reading = async (answer) => { stub('read', answer); await give(2); button('Read labels').click(); };
 """
 
@@ -543,6 +550,7 @@ READY = {
   const [one, two] = $$('.add__card');
   need('both cards open: both need a look', !one.querySelector('.add__body').hidden && !two.querySelector('.add__body').hidden);
   need('the colour carries its Medium mark', field('Colour', one).querySelector('.add__mark').textContent.includes('Medium'));
+  need('the reader\'s colour name and family are read facts', field('Colour', one).textContent.includes('Colour: Charcoal (black)'));
   need('a medium field says to check it', field('Colour', one).textContent.includes('The Label Reader was not sure: check this.'));
   need('an estimate says so', field('Density', one).textContent.includes('Estimated by the Label Reader: not printed on the label.'));
   need('a low field has the Low mark', field('Empty spool weight', two).querySelector('.add__mark').textContent.includes('Low: check this'));
@@ -677,6 +685,118 @@ READY = {
   button('Undo', $('.toasts')).click();
   need('Undo puts it back', $$('.add__card').length === 1);
 """,
+    "sends": r"""
+  await waitPage(); spyAdd(); const stamp = String(Date.now());
+  const card = await newFilament('Elegoo' + stamp, 'PLA Red' + stamp, 'PLA', '160');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  need('the preview sends dry_run true, no tag and no read', sent.length === 1 && sent[0].dry_run === true && sent[0].link_tag === null && sent[0].read_id === null && sent[0].items.length === 1);
+  const it = sent[0].items[0];
+  need('the page\'s own keys stay home', !Object.keys(it).some((k) => k[0] === '_'));
+  need('the values are the card\'s', it.vendor === 'Elegoo' + stamp && it.name === 'PLA Red' + stamp && it.material === 'PLA' && it.count === 1 && it.net === 1000 && it.tare === 160 && it.density === 1.24 && it.sealed === true && it.location === 'Sealed stock' && it.hand === true && it.match === 'new filament');
+  $('.add__bar-btn').click(); await until('the add', () => text('.add__added').includes('Added 1 spool:'));
+  need('the add sends the same items with dry_run false', sent.length === 2 && sent[1].dry_run === false && JSON.stringify(sent[1].items) === JSON.stringify(sent[0].items));
+""",
+    "edit_during_add": r"""
+  await waitPage(); const g = gate(); let n = 0;
+  stub('add', async () => { n++; if (n === 2) await g.wait; return n === 1 ? PREVIEWED() : ADDED(); });
+  await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  $('.add__bar-btn').click(); await until('the add is under way', busy);
+  typeIn(field('Net weight', $('.add__card')).querySelector('input'), '900');          // an edit while the Hub writes
+  button('New filament').click();
+  g.release();
+  await until('the result', () => text('.add__added').includes('Added 1 spool:'));
+  need('the result is the Add\'s, not "null"', text('.add__added').includes('Spools added') && !text('.add__added').split(' ').includes('null') && !text('.add').includes('null'));
+  need('the cards and the draft are cleared', !$$('.add__card').length && !localStorage.getItem('spoolwarden.draft.add'));
+  need('the bar starts again; nothing offers a second Add', text('.add__bar-text') === 'Add a spool first: photograph a label or find a filament.' && $('.add__bar-btn').textContent.trim() === 'Preview' && n === 2);
+""",
+    "edit_during_preview": r"""
+  await waitPage(); const g = gate(); let n = 0; const bodies = [];
+  stub('add', async (u, i) => { bodies.push(JSON.parse(i.body)); n++; if (n === 1) await g.wait; return PREVIEWED(); });
+  await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  $('.add__bar-btn').click(); await until('the preview is under way', busy);
+  typeIn(field('Spools', $('.add__card')).querySelector('input'), '3');
+  g.release(); await until('the answer', () => !busy());
+  need('what was checked is not taken as previewed', text('.add__bar-text') === 'You changed spool 1. Preview again.' && $('.add__bar-btn').textContent.trim() === 'Preview' && !$('.add__result-row'));
+  $('.add__bar-btn').click(); await until('the second preview', () => $('.add__result-row'));
+  need('it checks the spools as they are now, and still only previews', bodies.length === 2 && bodies[1].dry_run === true && bodies[1].items[0].count === 3 && text('.add__bar-text') === 'Preview ready: 3 spools.');
+""",
+    "add_failed": r"""
+  await waitPage(); const bodies = [];
+  stub('add', (u, i) => { bodies.push(JSON.parse(i.body)); return bodies.length === 2 ? reply({ error: 'Spoolman is down.' }, 502) : PREVIEWED(); });
+  await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  need('Add is offered', $('.add__bar-btn').textContent.trim() === 'Add 1 spool');
+  $('.add__bar-btn').click(); await until('the failure', () => $('.add__added, .add [data-state=bad]') && text('.add').includes('Spoolman is down.'));
+  need('the bar goes back to Preview, with the cards as they were', $('.add__bar-btn').textContent.trim() === 'Preview' && text('.add__bar-text') !== 'Preview ready: 1 spool.' && $$('.add__card').length === 1);
+  $('.add__bar-btn').click(); await until('the next press', () => bodies.length === 3);
+  need('that press is a preview, not an Add', bodies[1].dry_run === false && bodies[2].dry_run === true);
+""",
+    "sealed_gross": r"""
+  await waitPage(); spyAdd(); const stamp = String(Date.now());
+  const card = await newFilament('Elegoo' + stamp, 'PLA Red' + stamp, 'PLA', '160');
+  const toggle = $('.toggle__input', card);
+  toggle.click(); typeIn(field('Weight with spool', card).querySelector('input'), '700'); toggle.click();         // opened, a weight, sealed again
+  need('sealed again hides the weight', toggle.checked && field('Weight with spool', card).hidden);
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  need('a sealed card sends no weight', sent.length === 1 && !('gross' in sent[0].items[0]) && !text('.add__results').includes('700'));
+""",
+    "numbers_and_colours": r"""
+  await waitPage(); spyAdd(); const stamp = String(Date.now());
+  const card = await newFilament('Elegoo' + stamp, 'PLA Red' + stamp, 'PLA', '160');
+  typeIn(field('Net weight', card).querySelector('input'), '1,000');
+  typeIn(field('Colour', card).querySelector('input'), 'F2762EFF');
+  need('1,000 is a thousand and has no error', field('Net weight', card).querySelector('.field__error').hidden && field('Colour', card).querySelector('.field__error').hidden);
+  need('the summary line says 1000 g', $('.add__sum', card).textContent.includes('1000 g'));
+  typeIn(field('Net weight', card).querySelector('input'), '1,5');
+  need('1,5 is one and a half', $('.add__sum', card).textContent.includes('1.5 g'));
+  typeIn(field('Net weight', card).querySelector('input'), '1,000');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  need('the Hub got net 1000 and the 8-digit colour', sent[0].items[0].net === 1000 && sent[0].items[0].color_hex === 'F2762EFF');
+""",
+    "draft_waiting": r"""
+  await waitPage(); const KEY = 'spoolwarden.draft.add', NEW = KEY + '-new';
+  if (!localStorage.getItem(KEY)) { await newFilament('Elegoo', 'PLA Red', 'PLA', '160'); await until('the draft is kept', () => localStorage.getItem(KEY)); return; }
+  const before = localStorage.getItem(KEY), waiting = JSON.parse(before).items.length;
+  need('the draft banner waits', text('.add__draft').includes('You have a draft from'));
+  await newFilament('Extra', 'Spool', 'PLA', '160');
+  await until('the new work is kept in a slot of its own', () => localStorage.getItem(NEW));
+  need('the waiting draft is not written over', localStorage.getItem(KEY) === before && JSON.parse(localStorage.getItem(NEW)).items.length === 1);
+  need('the badge counts both', $('.nav__item[href="#add"] .nav__badge').textContent === String(waiting + 1));
+""",
+    "draft_corrupt": r"""
+  await waitPage(); const KEY = 'spoolwarden.draft.add';
+  if (!sessionStorage.getItem('s38-corrupt')) {                         // the first pass leaves bad drafts; the next ones load the page with them
+    sessionStorage.setItem('s38-corrupt', '1');
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, items: [null] })); localStorage.setItem(KEY + '-new', 'not json');
+    return;
+  }
+  need('the page started and says nothing of the bad drafts', $('.add__bar-text') && !$('.add__draft .banner'));
+  need('they are dropped', !localStorage.getItem(KEY) && !localStorage.getItem(KEY + '-new'));
+""",
+    "draft_partial": r"""
+  await waitPage(); const KEY = 'spoolwarden.draft.add';
+  if (!sessionStorage.getItem('s38-partial')) {                         // a draft of a read whose summary has no questions
+    sessionStorage.setItem('s38-partial', '1');
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, started: Date.now(), changed: Date.now(), readId: 'r-1', tag: null, note: '',
+      items: [null, { vendor: 'Elegoo', name: 'PLA Red', material: 'PLA', count: 1, net: 1000, tare: 160, density: 1.24, sealed: true, location: 'Sealed stock', hand: true, estimates: [], photos: [], _levels: 'x' }],
+      found: { count: 1, photos: 1, reader: 'cloud', model: 'model-name' } }));
+    return;
+  }
+  need('the draft is offered', text('.add__draft').includes('You have a draft from') && /1 spool\./.test(text('.add__draft')));
+  button('Restore them').click(); await until('the card', () => $$('.add__card').length === 1);
+  need('the summary is back, without questions', text('.group:has(.add__summary), .add').includes('What the Label Reader found') || $$('.group').some((g) => g.textContent.includes('What the Label Reader found')));
+""",
+    "read_retry": r"""
+  await waitPage(); const reads = [];
+  stub('read', (u, i) => { reads.push(i.body.getAll('photos').length); return reads.length === 1 ? reply({ error: 'The Label Reader did not answer.', read_id: null }, 502) : new Promise(() => {}); });
+  await give(2); button('Read labels').click();
+  await until('the failure', () => button('Try again', $('.add__read')));
+  $$('.add__photo .btn--icon')[0].click();                              // a photo goes before trying again
+  button('Try again', $('.add__read')).click();
+  await until('the second read', () => reads.length === 2);
+  need('it is a read again: the bar waits, with the photos there now', reads[1] === 1 && text('.add__bar-text') === 'Wait for the Label Reader.' && button('Reading…'));
+""",
     "card_fields": r"""
   await waitPage(); const card = await newFilament('', '', '');
   need('six groups', $$('.add__legend', card).map((l) => l.textContent).join('|') === 'Identity|Amount|State|Print settings|Storage|Other');
@@ -713,13 +833,16 @@ def _states(url: str, name: str, *extra: str) -> dict:
     return out
 
 
-@pytest.mark.parametrize("name", [n for n in READY if n not in ("draft", "draft_restored", "draft_discard")])
+MULTI_PASS = ("draft", "draft_restored", "draft_discard", "draft_waiting", "draft_corrupt", "draft_partial")
+
+
+@pytest.mark.parametrize("name", [n for n in READY if n not in MULTI_PASS])
 def test_add_spools_state_passes_the_audit(served_add, name):
     out = _states(served_add, name)
     assert out["views"] == 4
 
 
-@pytest.mark.parametrize("name", ["draft", "draft_restored", "draft_discard"])
+@pytest.mark.parametrize("name", MULTI_PASS)
 def test_add_spools_draft_states_pass_the_audit(served_add, name):
     """The first pass of the run keeps a draft in the browser's storage; the next three load the page with it."""
     assert _states(served_add, name)["views"] == 4
