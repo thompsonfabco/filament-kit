@@ -2132,11 +2132,12 @@ def cmd_uninstall(purge: bool, run=None, yes: bool = False) -> int:
                   f"(tar xzf filament-kit-{ver}.tar.gz), then in its folder run: "
                   + "sudo ./uninstall.sh" + (" --purge" if purge else ""))
         return 1
-    stop = _confirm("Remove filament-kit from this machine?" + ("" if purge else " Its data stays unless you add --purge."),
-                    "removing filament-kit", yes=yes)
-    if stop is None and purge:
-        stop = _confirm("This also deletes everything filament-kit keeps on this machine. Type purge to go on: ",
-                        "deleting everything filament-kit keeps", yes=yes, word="purge")
+    if purge:
+        stop = _confirm("Remove filament-kit and delete everything it keeps on this machine? Type purge to go on: ",
+                        "removing filament-kit and deleting everything it keeps", yes=yes, word="purge")
+    else:
+        stop = _confirm("Remove filament-kit from this machine? Its data stays unless you add --purge.",
+                        "removing filament-kit", yes=yes)
     if stop is not None:
         return stop
     ver, tarball = kept

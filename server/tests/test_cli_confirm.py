@@ -347,19 +347,19 @@ def test_the_fix_line_names_the_command_again_with_yes(rec, monkeypatch, termina
     assert err.splitlines()[-1].strip() == "sudo filament-kit unpair d1 --yes"
 
 
-def test_purge_asks_the_question_and_then_a_typed_word(rec, monkeypatch, terminal, capsys, tmp_path):
+def test_purge_asks_only_for_the_typed_word(rec, monkeypatch, terminal, capsys, tmp_path):
     argv, _ = _uninstall(monkeypatch, rec, tmp_path)
-    asked = terminal(True, "y", " PURGE ")
+    asked = terminal(True, " PURGE ")
     rc, out, _ = run(capsys, [*argv, "--purge"])
     assert rc == 0 and rec.acted == ["uninstall"]
-    assert asked[0].endswith("[y/N] ") and asked[1].endswith("go on: ")
+    assert len(asked) == 1 and asked[0].endswith("go on: ") and "[y/N]" not in out
     assert "Type purge to go on:" in " ".join(out.split())
 
 
 @pytest.mark.parametrize("typed", ["", "y", "yes", "purg"])
 def test_purge_takes_only_its_word(rec, monkeypatch, terminal, capsys, tmp_path, typed):
     argv, _ = _uninstall(monkeypatch, rec, tmp_path)
-    terminal(True, "y", typed)
+    terminal(True, typed)
     rc, out, _ = run(capsys, [*argv, "--purge"])
     assert rc == 5 and rec.acted == [] and out.rstrip().endswith("Nothing changed.")
 
