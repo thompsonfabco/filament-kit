@@ -248,3 +248,15 @@ dialog > .detail .detail__foot { margin-top: var(--s2); }
   .coll--checks .coll__detail { margin-left: 0; }
 }
 .coll--checks .coll__head .coll__cell { display: flex; }
+
+/* Printers add (S2.5) */
+.printers-add { display: grid; gap: var(--s3); }
+.printers-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s3); margin: var(--s3) 0; align-items: start; }
+.printers-tools > .card { margin: 0; display: grid; gap: var(--s3); min-width: 0; }
+.printers-tools > .card > * { margin: 0; min-width: 0; }
+.printers-addon:not(:empty) { max-width: 100%; }
+.printers-addon .code { max-width: 100%; }
+.printers-addon__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); margin-bottom: var(--s1); min-width: 0; }
+.printers-addon__bar .code__caption { margin-right: auto; min-width: 0; overflow-wrap: anywhere; }
+.printers-addon .code__text { max-height: calc(var(--s7) * 8); }
+@media (min-width: 1025px) { .printers-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -1,6 +1,6 @@
 // The console's Printers section (03 5; 09 S2.4). Loaded after setup.js; everything from the server goes in through textContent, as there.
 // A Klipper printer has no Access Code and a Bambu printer no API key: each family's words and controls appear only with its module on.
-// The collection, its rows and the two drawers are this file's; the add form, the scan and the add-on card (03 5.6) are step S2.5's and stay as they were.
+// The collection, its rows and the drawers are this file's, and so are the Add a printer drawer (03 5.6), the scan (5.4, 5.8) and the Klipper add-on card.
 "use strict";
 
 const PRINTERS = "printers";       // the section's name in TABS; its catalogue keys start with it
@@ -35,6 +35,7 @@ let pollTimer = 0;
 const expanded = new Set();        // the rows that are open: kept across the redraw a change brings
 let rowViews = new Map();          // the parts of a drawn row that a read patches
 let listEl = null;                 // the collection's region
+let addonOut = null;               // the add-on card's commands: kept across a redraw of the cards (made when first wanted: SW loads after this script)
 let drawnLocked = false;           // whether the list on the page was drawn Locked (addresses and serials left out)
 const stateOf = (p) => (live && live[p.serial] ? live[p.serial].state : p.state);
 const slotsOf = (p) => (live && live[p.serial] && live[p.serial].slots ? live[p.serial].slots.flatMap((u) => u.slots || []) : null);
@@ -283,11 +284,12 @@ function openDrawer(kind, p, title, body, foot, o = {}) {
     E("header", "detail__head", X("h2", { class: "detail__title", id: id + "-title", tabindex: "-1", text: title }), close),
     E("div", "drawer__body", body), foot ? E("div", "detail__foot", foot) : null);
   const dlg = X("dialog", { class: "dialog dialog--drawer", "aria-labelledby": id + "-title" }, region);
-  drawer = { kind, serial: p.serial, region, running: () => false, reload() {}, end() {}, ...o };
+  const address = o.address || `#printers/${encodeURIComponent(p.serial)}/${kind}`, back = o.back || addressHash(p);
+  drawer = { kind, serial: p.serial, address, region, running: () => false, busy: () => false, dirty: () => 0, reload() {}, end() {}, ...o };
   setTitle(title);
   SW.modal(dlg, { temp: true, scrim: true });
   dlg.addEventListener("cancel", (e) => {       // Escape and the scrim ask first while a mapping runs, or a form has changes
-    if (drawer && drawer.region === region && drawer.running()) { e.preventDefault(); requestClose(); }
+    if (drawer && drawer.region === region && (drawer.running() || drawer.busy() || drawer.dirty())) { e.preventDefault(); requestClose(); }
     else if (region.querySelector('form[data-state="dirty"]')) { e.preventDefault(); SW.closeDetail(region); }
   });
   dlg.addEventListener("close", () => {
@@ -296,8 +298,8 @@ function openDrawer(kind, p, title, body, foot, o = {}) {
     if (!d || d.region !== region) return;
     d.end();
     drawer = null;
-    if (location.hash === `#printers/${encodeURIComponent(p.serial)}/${kind}`) {      // closed by the person: the address goes back to the row
-      history.replaceState(null, "", addressHash(p));
+    if (location.hash === address) {      // closed by the person: the address goes back to the row (or the section)
+      history.replaceState(null, "", back);
       setTitle(expandedTitle());
     }
   }, { once: true });
@@ -317,13 +319,14 @@ function closeDrawerAsync() {
 async function requestClose() {
   const d = drawer;
   if (!d) return;
+  if (d.busy()) { say(d.result, SW.t("printers_add_wait"), "warn"); return; }
   if (d.running()) {
     const p = (S.printers.list.find((x) => x.serial === d.serial)) || { name: d.serial };
     const stopIt = await SW.ask({ kind: "destructive", title: SW.t("printers_load_stop_title", { name: p.name }), text: SW.t("printers_load_stop_body"),
       confirm: SW.t("printers_load_stop"), cancel: SW.t("printers_load_keep") });
     if (!stopIt) return;
     if (d.stop) await d.stop();
-  }
+  } else if (d.dirty() && !(await SW.leaveAsk(SW.t("form_leave_first", { count: d.dirty(), group: SW.t("printers_add") })))) return;
   if (drawer === d) SW.closeDetail(d.region);
 }
 // the address names a place inside the section: a row, a drawer on it
@@ -687,7 +690,7 @@ function setTitle(page) {
 }
 new MutationObserver(() => { if (titleOverride && tabNow() === PRINTERS && document.title !== titleOverride) document.title = titleOverride; })
   .observe(document.querySelector("title") || document.head, { childList: true, characterData: true, subtree: true });
-window.addEventListener("hashchange", () => { if (tabNow() !== PRINTERS) titleOverride = null; });
+window.addEventListener("hashchange", () => { if (tabNow() !== PRINTERS) { titleOverride = null; if (addonOut) addonOut.replaceChildren(); } });
 
 // the live printer view is the web app's Printers tab, served by the same Hub
 const liveUrl = () => location.pathname.replace(/\/setup\/?$/, "") + "/intake#printers";
@@ -711,11 +714,11 @@ function goTo(make) {
 function header(found) {
   const P = S.printers;
   const url = liveUrl();
-  const find = P.klipper ? SW.btn(SW.t("printers_find"), { run: () => goTo(scanCard) }) : null;
+  const find = P.klipper ? SW.btn(SW.t("printers_find"), { run: () => goTo(toolCards) }) : null;
   return E("div", "printers-head", printersMeta(P.list, found),
     E("div", "page-head__actions",
       P.bambu ? X("a", { class: "btn btn--ghost", href: url, target: "_blank", rel: "noopener" }, SW.icon("camera", "icon--s"), SW.t("printers_live_view")) : null,
-      find, SW.btn([SW.icon("plus", "icon--s"), SW.t("printers_add")], { cls: "btn--primary", run: () => goTo(addCard) })));
+      find, SW.btn([SW.icon("plus", "icon--s"), SW.t("printers_add")], { cls: "btn--primary", run: () => openAdd() })));
 }
 
 function drawList(body) {
@@ -729,7 +732,7 @@ function drawList(body) {
     body.replaceChildren(E("div", "printers-head", E("div", "page-head__actions", P.bambu ? X("a", { class: "btn btn--ghost", href: liveUrl(), target: "_blank", rel: "noopener" },
       SW.icon("camera", "icon--s"), SW.t("printers_live_view")) : null)),
     SW.empty({ icon: "printer", title: SW.t("printers_empty_title"), text: [P.bambu ? SW.t("printers_empty_bambu") : null, P.klipper ? SW.t("printers_empty_klipper") : null].filter(Boolean).join(" "),
-      level: 2, actions: [SW.btn(SW.t("printers_add"), { cls: "btn--primary", run: () => goTo(addCard) }), P.klipper ? SW.btn(SW.t("printers_find"), { run: () => goTo(scanCard) }) : null].filter(Boolean) }));
+      level: 2, actions: [SW.btn(SW.t("printers_add"), { cls: "btn--primary", run: () => openAdd() }), P.klipper ? SW.btn(SW.t("printers_find"), { run: () => goTo(toolCards) }) : null].filter(Boolean) }));
     return;
   }
   body.replaceChildren(header(found), printerTable(found, configured));
@@ -782,59 +785,166 @@ document.addEventListener("visibilitychange", () => {
   poll();
 });
 
-// ----- adding a printer: the form follows the family, so a Klipper printer is never asked for an Access Code (S2.5 rebuilds it) -----
-let addFamily = null;       // a change redraws the card: the form stays on the type you chose
-const added = (r) => `Added ${r.serial}.${r.note ? ` ${r.note}.` : ""}`;   // the note: the server's unit doesn't reach that address
-function addCard() {
-  const P = S.printers, box = boxFor("printer-add");
-  const family = h("select", { ariaLabel: "Printer type", on: { change: () => { addFamily = family.value; show(); } } },
-    ...(P.bambu ? [h("option", { value: "bambu", textContent: "Bambu" })] : []),
-    ...(P.klipper ? [h("option", { value: "klipper", textContent: "Klipper" })] : []));
-  if (addFamily && P[addFamily]) family.value = addFamily;
-  const fields = h("div", { "data-group": "" });     // one form: what Add sends (sentWith)
-  const name = h("input", { placeholder: "name (optional)" });
-  function show() {
-    const address = h("input", { placeholder: "IP address or name, e.g. 192.0.2.40 or printer.local" });
-    if (family.value === "klipper") {
-      const port = h("input", { placeholder: "port", value: "7125", inputMode: "numeric", size: 6 });
-      const key = secret("Moonraker API key (optional)");
-      fill(fields, h("div", { class: "row" }, address, port), h("div", { class: "row" }, name, key,
-        h("button", { textContent: "Add", on: { click: () => change(box, "printers/klipper", { host: address.value, port: port.value, name: name.value, api_key: key.value },
-          (r) => say(box, added(r), true), [key]) } })));
-    } else {
-      const ac = secret("Access Code (printer: Settings > Network/LAN)");
-      const serial = h("input", { placeholder: "serial (optional: read from the printer)", autocapitalize: "characters" });
-      fill(fields, h("div", { class: "row" }, address, ac), h("div", { class: "row" }, name, serial,
-        h("button", { textContent: "Add", on: { click: () => change(box, "printers", { address: address.value, access_code: ac.value, name: name.value, serial: serial.value },
-          (r) => say(box, added(r), true), [ac]) } })));
-    }
+// ----- Add a printer (03 5.6): a drawer at #printers/add; its fields are the field component's, so a refusal shows at the field it names -----
+const needed = (key) => (v) => (v.trim() ? null : SW.t(key));
+const portCheck = (v) => (/^\d+$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= 65535 ? null : SW.t("common_error_port"));
+const secretAttrs = { autocapitalize: "off", spellcheck: "false" };
+const addressAttrs = { inputmode: "url", autocapitalize: "off", autocorrect: "off", spellcheck: "false" };
+// the Hub's refusals of an add, in the words of 03 5.6; any other text is shown as sent
+function addError(field, message) {
+  let x;
+  if ((x = /^the printer at (.+) names itself (.+), not (.+): check the address$/.exec(message))) return SW.t("printers_add_error_itself", { address: x[1], reported: x[2], expected: x[3] });
+  if (field === "serial" && /type the serial number/.test(message)) return SW.t("printers_add_error_serial");
+  if ((x = /^(.+) \(on the printer: Settings > Network\)$/.exec(message))) return `${hubText(x[1])} ${SW.t("printers_add_error_network")}`;
+  return hubText(message);
+}
+function openAdd() {
+  const opener = document.activeElement;
+  if (location.hash !== "#printers/add") history.pushState(null, "", "#printers/add");
+  return closeDrawerAsync().then(() => openAddDrawer(opener));
+}
+function openAddDrawer(opener) {
+  const P = S.printers, id = SW.uid("add");
+  let family = P.bambu ? "bambu" : "klipper", adding = false, sending = false;
+  const f = {
+    address: SW.field({ label: SW.t("printers_field_address"), name: "address", mono: true, placeholder: SW.t("printers_add_address_placeholder"), attrs: addressAttrs, check: needed("common_error_address") }),
+    access_code: SW.field({ type: "secret", label: SW.t("common_field_access_code"), name: "access_code", mono: true, hint: SW.t("printers_access_code_hint"), attrs: secretAttrs, check: needed("common_error_access_code") }),
+    serial: SW.field({ label: SW.t("printers_fact_serial"), optional: true, name: "serial", mono: true, hint: SW.t("printers_add_serial_hint"), attrs: { autocapitalize: "characters", spellcheck: "false" } }),
+    host: SW.field({ label: SW.t("common_address"), name: "host", mono: true, placeholder: SW.t("printers_add_klipper_placeholder"), attrs: addressAttrs, check: needed("common_error_address") }),
+    port: SW.field({ type: "number", label: SW.t("printer_field_port"), name: "port", mono: true, short: true, value: "7125", attrs: { pattern: "[0-9]*" }, check: portCheck }),
+    api_key: SW.field({ type: "secret", label: SW.t("common_moonraker_key"), optional: true, name: "api_key", mono: true, hint: SW.t("printers_key_hint"), attrs: secretAttrs }),
+    name: SW.field({ label: SW.t("common_field_name"), optional: true, name: "name" }),
+  };
+  const bambuOnly = [f.address, f.access_code, f.serial], klipperOnly = [f.host, f.port, f.api_key];
+  const visible = () => (family === "klipper" ? [f.host, f.port, f.name, f.api_key] : [f.address, f.access_code, f.name, f.serial]);
+  const paint = () => { for (const x of bambuOnly) x.hidden = family !== "bambu"; for (const x of klipperOnly) x.hidden = family !== "klipper"; };
+  const type = P.bambu && P.klipper ? SW.segmented({ legend: SW.t("printers_add_type"), name: "add-type", value: family,
+    options: [{ value: "bambu", label: SW.t("common_bambu_lab") }, { value: "klipper", label: SW.t("common_klipper") }] }) : null;
+  if (type) type.addEventListener("change", (e) => { family = e.target.value; paint(); });
+  paint();
+  const all = [...bambuOnly, ...klipperOnly, f.name], was = new Map(all.map((x) => [x, x._control.value]));
+  const dirty = () => all.filter((x) => x._control.value !== was.get(x)).length;
+  const result = E("p", "result result--block", { role: "status" });
+  const form = X("form", { class: "printers-add", id, novalidate: true, on: { submit: (e) => { e.preventDefault(); submit(); } } },
+    type, f.address, f.access_code, f.host, f.port, f.name, f.serial, f.api_key);
+  const add = SW.btn(SW.t("common_add_printer"), { cls: "btn--primary", type: "submit" });
+  add.setAttribute("form", id);
+  const cancel = SW.btn(SW.t("common_cancel"), { run: () => requestClose() });
+  async function submit() {
+    if (sending) return;      // from the press until the answer: guard() starts the add a moment later, and a second press must not send another
+    SW.result(result, null);
+    const mine = visible(), bad = mine.filter((x) => { const err = x._check && x._check(); SW.fieldError(x, err || null); return !!err; });
+    if (bad.length) { bad[0]._control.focus(); return; }
+    const v = (x) => x._control.value.trim();
+    const [path, body] = family === "klipper" ? ["printers/klipper", { host: v(f.host), port: v(f.port), name: v(f.name), api_key: v(f.api_key) }]
+      : ["printers", { address: v(f.address), access_code: f.access_code._control.value, name: v(f.name), serial: v(f.serial) }];
+    let r = null;
+    sending = true;
+    try { await SW.guard(SW.t("common_add_printer").toLowerCase(), async () => {
+      adding = true;
+      SW.busy(add, SW.t("common_working"));
+      for (const x of mine) x._control.readOnly = true;
+      try { r = await api(path, { ...body, code: theCode() }); } catch (e) {
+        if (e.locked) throw e;
+        const at = e.data && e.data.field && mine.find((x) => x._control.name === e.data.field);
+        if (at) { SW.fieldError(at, addError(e.data.field, e.message)); at._control.focus(); } else SW.result(result, "bad", addError(e.data && e.data.field, e.message));
+      } finally { adding = false; SW.idle(add); for (const x of mine) x._control.readOnly = false; }
+    }); } finally { sending = false; }
+    if (r) await afterAdd(r);
   }
-  show();
-  return card("Add a printer", P.bambu && P.klipper ? h("label", {}, "Type ", family) : null, fields, box);
+  const d = openDrawer("add", { serial: "add" }, SW.t("printers_add"), form, [result, cancel, add],
+    { opener, address: "#printers/add", back: "#printers", busy: () => adding, dirty, result });
+  visible()[0]._control.focus();
+  return d;
+}
+// 03 5.6 Success: the drawer closes, a toast, the new row open with its message and Test connection focused
+async function afterAdd(r) {
+  if (SW.phone()) expanded.clear();
+  expanded.add(r.serial);
+  history.replaceState(null, "", `#printers/${encodeURIComponent(r.serial)}`);
+  await closeDrawerAsync();
+  await refresh(listEl && listEl.isConnected ? listEl : undefined);
+  const p = S.printers.list.find((x) => x.serial === r.serial);
+  SW.toast(SW.t("printers_added", { name: p ? p.name : r.serial }), "ok");
+  say(boxFor("printer:" + r.serial), SW.t("printers_added_connecting") + (r.note ? " " + hubText(r.note) : ""), true);
+  setTitle(expandedTitle());
+  const it = listEl && listEl.querySelector(`.coll__item[data-id="${CSS.escape(r.serial)}"]`);
+  if (!it) return;
+  it.scrollIntoView({ block: "nearest" });
+  const test = it.querySelector('.coll__cell[data-col="actions"] .btn');
+  if (test) test.focus({ preventScroll: true });
 }
 
-function scanCard() {
-  const box = boxFor("printer-scan"), subnet = h("input", { placeholder: "subnet (optional: this server's own), e.g. 192.168.1.0/24" });
-  return card("Find Klipper printers",
-    h("p", { class: "muted", textContent: "Looks for Moonraker on your network and lists what answers above, for you to pick." }),
-    h("div", { class: "row" }, subnet,
-      h("button", { class: "secondary", textContent: "Scan", on: { click: () => change(box, "printers/scan", { subnet: subnet.value.trim() },
-        (r) => say(box, r.found.length ? `Found on ${r.subnet}: ${r.found.map((f) => `${f.host}:${f.port}`).join(", ")}` : `No Moonraker found on ${r.subnet}.`, true)) } })),
-    box);
+// ----- Find Klipper printers (03 5.4, 5.8): one scan; what it finds joins the list's found group -----
+function scanRefused(box, subnet, e) {
+  const m = e.message, d = e.data || {};
+  let x;
+  if (e.status === 429 && /^a scan is running/.test(m)) say(box, SW.t("printers_result_scan_running"), "warn");
+  else if (e.status === 429 && (x = /^wait (\d+) s between scans/.exec(m))) say(box, SW.t("printers_result_scan_soon", { count: Number(x[1]) }), "warn");
+  else if (d.field === "subnet") {
+    SW.fieldError(subnet, /^can't tell/.test(m) ? hubText(m) : SW.t("printers_result_scan_refused"));
+    subnet._control.focus();
+  } else say(box, hubText(m), false);
+}
+async function runScan(box, subnet, button) {
+  const typed = subnet._control.value.trim();
+  let out = null;
+  SW.fieldError(subnet, null);
+  await needCode(async () => {
+    if (!SW.busy(button, SW.t("common_working"))) return;
+    working(box, typed ? SW.t("printers_scanning", { subnet: typed }) : SW.t("printers_scanning_own"));
+    try { out = await api("printers/scan", { subnet: typed, code: theCode() }); } catch (e) {
+      if (e.locked) { SW.result(box, null); throw e; }
+      SW.result(box, null);
+      scanRefused(box, subnet, e);
+    } finally { SW.idle(button); }
+  });
+  if (!out) return;
+  if (listEl && listEl.isConnected) await refresh(listEl);       // what it found joins the found group
+  const fresh = out.found.filter((r) => !r.configured).map((r) => S.printers.list.find((p) => p.serial === r.serial)).filter(Boolean);
+  if (!out.found.length) { say(box, SW.t("printers_result_scan_none", { subnet: out.subnet }), "info"); return; }
+  say(box, [SW.t("printers_result_scan_found", { subnet: out.subnet, found: out.found.map(hostPort).join(", ") }),
+    fresh.length ? E("div", "actions", fresh.map((p) => SW.btn(SW.t("printers_use"), { name: SW.t("printers_use_name", { name: p.name }), run: () => usePrinter(p, boxFor("printer:" + p.serial)) }))) : null], true);
+}
+function scanBlock() {
+  const box = boxFor("printer-scan");
+  const subnet = SW.field({ label: SW.t("printers_subnet_label"), name: "subnet", mono: true, placeholder: SW.t("printers_subnet_placeholder"), hint: SW.t("printers_subnet_hint"),
+    attrs: { autocapitalize: "off", spellcheck: "false", "aria-required": "false" } });
+  const go = SW.btn(SW.t("printers_scan"), { run: () => runScan(box, subnet, go) });
+  subnet._control.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go.click(); } });
+  return card(SW.t("printers_find"), E("p", "muted", SW.t("printers_find_text")), subnet, E("div", "actions", go), box);
 }
 
-function packCard() {
-  const box = boxFor("printer-pack");
-  return card("Printer pack",
-    h("p", { class: "muted", textContent: "Installs the spool macros and the kit's Moonraker settings on a Klipper printer. Run these on the printer." }),
-    h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Show the commands", on: { click: async () => {
-      working(box, "Checking the signed release…");
-      try {
-        const r = await api("printers/pack", {}), text = r.lines.join("\n");
-        say(box, [h("pre", { class: "ok", textContent: text }),
-          navigator.clipboard ? h("button", { class: "secondary", textContent: "Copy", on: { click: () => navigator.clipboard.writeText(text) } }) : null], "info");
-      } catch (e) { say(box, e.message, false); }
-    } } })), box);
+// ----- the Klipper add-on card: the commands, checked against the signed release, in a code block with Copy -----
+async function showCommands(box, button) {
+  if (!addonOut) addonOut = E("div", "printers-addon");
+  if (!SW.busy(button, SW.t("common_checking"))) return;
+  SW.result(box, null);
+  addonOut.replaceChildren(E("div", "code", E("p", "code__wait", { role: "status" }, SW.spinner(), SW.t("code_checking_release"))));
+  try {
+    const r = await api("printers/pack", {}), cap = SW.uid("addon"), text = r.lines.join("\n");
+    // the caption and Copy sit above the block, not in it: the block scrolls, and its bar would scroll away with the lines
+    const copy = SW.btn(SW.t("common_copy"), { cls: "btn--ghost", icon: "copy", action: "copy", name: SW.t("printers_addon_copy_name") });
+    copy.dataset.copy = text;
+    addonOut.replaceChildren(E("div", "printers-addon__bar", E("span", "code__caption mono", { id: cap }, SW.t("printers_addon_caption", { version: r.version })),
+      E("span", "result", { role: "status" }), copy),
+    E("div", "code", X("pre", { class: "code__text", tabindex: "0", "aria-labelledby": cap, text })));
+  } catch (e) {
+    addonOut.replaceChildren();
+    const m = e.status === 409 && /^no printer pack command: ([\s\S]*)$/.exec(e.message);
+    if (m) sayWith(box, "bad", SW.t("printers_result_addon_unavailable", { reason: hubText(m[1]) }),
+      { label: SW.t("common_try_again"), name: `${SW.t("common_try_again")}: ${SW.t("printers_addon_title")}`, run: () => showCommands(box, button) });
+    else say(box, hubText(e.message), false);
+  } finally { SW.idle(button); }
+}
+function addonBlock() {
+  const box = boxFor("printer-addon");
+  const show = SW.btn(SW.t("printers_addon_show"), { run: () => showCommands(box, show) });
+  return card(SW.t("printers_addon_title"), E("p", "muted", SW.t("printers_addon_text")), E("div", "actions", show), box, addonOut || (addonOut = E("div", "printers-addon")));
+}
+// the two tool cards, side by side on a desktop (03 5.1); only with Klipper on
+function toolCards() {
+  return S.printers.klipper ? E("div", "printers-tools", scanBlock(), addonBlock()) : null;
 }
 
 // only one family is on: the other one's words are not on the page, and one quiet line says so (03 5.9)
@@ -849,9 +959,7 @@ function printersOff() {
 }
 // where the address points: a row open, a drawer on it (03 1.2); the address is read after the regions are in the page
 async function followAddress() {
-  const a = addressNow(), p = a.id && S.printers.list.find((x) => x.serial === a.id);
-  if (a.id === "find") { goTo(scanCard); return; }
-  if (a.id === "add") { goTo(addCard); return; }
+  const a = addressNow(), p = a.id && S.printers.list.find((x) => x.serial === a.id), wantsAdd = a.id === "add";
   if (p) {
     expanded.add(p.serial);
     const it = listEl && listEl.querySelector(`.coll__item[data-id="${CSS.escape(keyOf(p.serial))}"]`);
@@ -859,10 +967,12 @@ async function followAddress() {
     if (x && x.getAttribute("aria-expanded") !== "true") x.click();
     if (it && !a.what && !drawer) it.scrollIntoView({ block: "start" });
   }
-  if (drawer && (!p || a.what !== drawer.kind || p.serial !== drawer.serial)) {
-    if (drawer.running()) { history.pushState(null, "", `#printers/${encodeURIComponent(drawer.serial)}/${drawer.kind}`); requestClose(); return; }
+  if (drawer && !(wantsAdd && drawer.kind === "add") && (!p || a.what !== drawer.kind || p.serial !== drawer.serial)) {
+    if (drawer.running() || drawer.busy() || drawer.dirty()) { history.pushState(null, "", drawer.address); requestClose(); return; }
     await closeDrawerAsync();
   }
+  if (wantsAdd) { if (!drawer) openAddDrawer(document.activeElement); return; }
+  if (a.id === "find") { goTo(toolCards); return; }
   if (p && a.what === "load-map" && !drawer && p.configured) manualMap(p, boxFor("printer:" + p.serial), false).catch(() => {});
   else if (p && a.what === "reports" && !drawer && !klipperOf(p)) openReports(p);
   else if (!drawer) setTitle(expandedTitle());
@@ -876,6 +986,5 @@ function printersTab() {
   if (a.id && a.id !== "add" && a.id !== "find") { expanded.add(a.id); pendingScroll = a.what ? null : a.id; }
   poll();
   setTimeout(followAddress);
-  return [printersList, addCard, P.klipper ? scanCard : null, P.klipper ? packCard : null, familyNote];
+  return [printersList, toolCards, familyNote];
 }
-addCard.also = scanCard.also = printersList;

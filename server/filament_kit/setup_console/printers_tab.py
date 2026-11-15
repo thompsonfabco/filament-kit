@@ -164,16 +164,16 @@ def routes(page) -> list[tuple]:
             if not subnet:
                 net = discovery.own_subnet()
                 if net is None:
-                    raise Refused(400, "can't tell this server's network; give a subnet such as 192.168.1.0/24")
+                    raise Refused(400, "can't tell this server's network; give a subnet such as 192.168.1.0/24", field="subnet")
                 return net
             try:
                 net = ipaddress.ip_network(str(subnet).strip(), strict=False)
             except ValueError:
-                raise Refused(400, "give a subnet such as 192.168.1.0/24") from None
+                raise Refused(400, "give a subnet such as 192.168.1.0/24", field="subnet") from None
             if net.version != 4 or not net.is_private or net.is_loopback or net.is_link_local or net.is_multicast:
-                raise Refused(400, "scan your own network: a private IPv4 subnet such as 192.168.1.0/24") from None
+                raise Refused(400, "scan your own network: a private IPv4 subnet such as 192.168.1.0/24", field="subnet") from None
             if net.prefixlen < 24:
-                raise Refused(400, "scan at most a /24 (256 addresses)")
+                raise Refused(400, "scan at most a /24 (256 addresses)", field="subnet")
             return net
 
         def run() -> dict:
