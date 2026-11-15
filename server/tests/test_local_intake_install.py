@@ -483,3 +483,39 @@ def test_the_modules_release_key_and_repo_are_pinned():
     assert len(release.public_key(lii.MODULE_PUBKEY)) == 32
     assert lii.MODULE_REPO == "thompsonfabco/filament-kit-vision"
     assert lii.settings({"local_intake": {"pubkey": "x"}})["pubkey"] == lii.MODULE_PUBKEY    # never from config
+
+
+def test_an_installer_that_prints_nothing_for_too_long_is_stopped(tmp_path):
+    """K1 (vision 0.2.0 install test): the module's health wait hung for ~29 min with no output; the kit's runner
+    now stops a silent installer with its process group and gives TIMED_OUT."""
+    import sys
+    import time as _t
+    from filament_kit import local_intake_install as lii
+    script = tmp_path / "hang.py"
+    script.write_text("import sys, time\nprint('started', flush=True)\ntime.sleep(60)\n", encoding="utf-8")
+    out = []
+    t0 = _t.monotonic()
+    rc = lii.default_run([sys.executable, str(script)], out.append, idle=1.5, total=30)
+    assert rc == lii.TIMED_OUT
+    assert _t.monotonic() - t0 < 25
+    assert out[0] == "started" and "printed nothing" in out[-1] and "stopped it" in out[-1]
+
+
+def test_an_installer_that_runs_too_long_is_stopped_even_while_it_prints(tmp_path):
+    import sys
+    from filament_kit import local_intake_install as lii
+    script = tmp_path / "chatty.py"
+    script.write_text("import time\nwhile True:\n    print('.', flush=True)\n    time.sleep(0.2)\n", encoding="utf-8")
+    out = []
+    rc = lii.default_run([sys.executable, str(script)], out.append, idle=10, total=1.5)
+    assert rc == lii.TIMED_OUT and "ran longer than" in out[-1]
+
+
+def test_a_normal_installer_keeps_its_exit_code_and_every_line(tmp_path):
+    import sys
+    from filament_kit import local_intake_install as lii
+    script = tmp_path / "ok.py"
+    script.write_text("print('a')\nprint('b')\nraise SystemExit(3)\n", encoding="utf-8")
+    out = []
+    assert lii.default_run([sys.executable, str(script)], out.append, idle=10, total=30) == 3
+    assert out == ["a", "b"]

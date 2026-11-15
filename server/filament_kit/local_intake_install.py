@@ -321,14 +321,67 @@ def _extract_code(tarball: Path, version: str, dest: Path) -> Path:
     return root
 
 
-def default_run(cmd: list[str], log: Callable[[str], None]) -> int:
-    """Run the installer with its output going to `log`, line by line (the page's job log, the terminal)."""
+IDLE_LIMIT = 15 * 60          # the installer printed nothing for this long: it is stuck (a download or a wait hung)
+TOTAL_LIMIT = 4 * 60 * 60     # a GPU tier downloads gigabytes; past this the run is stopped all the same
+TIMED_OUT = 124               # the exit code of a stopped run (as timeout(1) gives)
+
+
+def default_run(cmd: list[str], log: Callable[[str], None], *, idle: float = IDLE_LIMIT,
+                total: float = TOTAL_LIMIT) -> int:
+    """Run the installer with its output going to `log`, line by line (the page's job log, the terminal). A run that
+    prints nothing for `idle` seconds, or runs longer than `total`, is stopped with its whole process group (the
+    installer's own children, such as a hung curl, go with it) and gives TIMED_OUT, so a job never waits forever."""
+    import queue
+    import signal
+    import threading
+
+    posix = os.name == "posix"
     p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                         errors="replace")
+                         errors="replace", start_new_session=posix)
     assert p.stdout is not None
-    for line in p.stdout:
-        log(line.rstrip("\n"))
-    return p.wait()
+    lines: queue.Queue = queue.Queue()
+
+    def pump():
+        for line in p.stdout:
+            lines.put(line)
+        lines.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    start = last = time.monotonic()
+    while True:
+        now = time.monotonic()
+        wait = max(0.0, min(idle - (now - last), total - (now - start)))
+        try:
+            line = lines.get(timeout=wait if wait > 0 else 0.001)
+        except queue.Empty:
+            line = ""
+        now = time.monotonic()
+        if line is None:
+            return p.wait()
+        if line:
+            log(line.rstrip("\n"))
+            last = now
+            continue
+        if now - last >= idle or now - start >= total:
+            why = (f"printed nothing for {int(idle // 60)} minutes" if now - last >= idle else
+                   f"ran longer than {int(total // 60)} minutes")
+            log(f"error: the reader's installer {why}; the kit stopped it")
+            try:
+                if posix:
+                    os.killpg(p.pid, signal.SIGTERM)
+                else:
+                    p.terminate()
+                p.wait(timeout=20)
+            except Exception:  # noqa: BLE001 - it did not go: make sure
+                try:
+                    if posix:
+                        os.killpg(p.pid, signal.SIGKILL)
+                    else:
+                        p.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+                p.wait()
+            return TIMED_OUT
 
 
 def _port(cfg: dict) -> int:
@@ -389,6 +442,9 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
            "--user", SERVICE_USER, "--prefix", PREFIX, "--assets", str(final / "assets")]
     say("Running the reader's own installer (this can take a while)...")
     rc = run(cmd, say)
+    if rc == TIMED_OUT:
+        raise InstallError("the reader's installer stopped answering and the kit stopped it; its output is above. The "
+                           "kit's settings were not changed")
     if rc != 0:
         raise InstallError(f"the reader's installer failed (exit {rc}); its output is above. The kit's settings were "
                            "not changed")

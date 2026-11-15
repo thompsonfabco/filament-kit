@@ -21,6 +21,9 @@ and its rollback, setting up a reader, and pairing a station. Each prints lines 
 doing>` as a step starts, on the command line and in the setup page's job log. The setup page can use them to show
 "Step 2 of 3" and a progress bar that fills step by step; until the new pages arrive, the bar behaves as before.
 
+Setting up the Label Reader on this Hub no longer waits forever when the reader's own installer hangs: after 15
+minutes without any output (or 4 hours in all) the kit stops it, says so in the log, and leaves its settings as they were.
+
 ## The setup page and the phone web app are on the new look
 
 - **The setup page uses the shared design values and components.** Its colours, sizes and buttons come from the same tokens as the other interfaces.
