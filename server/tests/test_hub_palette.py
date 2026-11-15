@@ -88,7 +88,7 @@ def _check_styles(wide, tablet, phone):
         assert console["cardPad"] != "16px" and console["titleSize"] != pal["titleSize"], (w, console)
         assert got["wb"]["cardRadius"] != pal["cardRadius"] and got["wb"]["font"] != pal["font"], (w, "Workbench and Palette differ")
     for w, got in ((1280, wide["palette"]), (768, tablet["palette"])):
-        assert got["itemDir"] == "row" and got["navPos"] == "static" and got["navBelowTop"] and got["navW"] >= w - 32, (w, got)       # pills under the top bar, full width
+        assert got["itemDir"] == "row" and got["navPos"] == "sticky" and got["navBelowTop"] and got["navW"] >= w - 32, (w, got)       # pills under the top bar, full width
         assert got["cols"].count(" ") == 0 and got["headingW"] <= 1 and got["itemRadius"] == "20px", (w, got)
         assert got["currentBg"] not in (None, "rgba(0, 0, 0, 0)") and got["currentMark"] in ("none", "normal"), (w, got)
     assert wide["first"]["itemDir"] == "column" and wide["first"]["cols"].split(" ")[0] == wide["first"]["rail"]
@@ -98,6 +98,40 @@ def _check_styles(wide, tablet, phone):
 
 def test_palette_shows_in_the_hub_page_at_three_widths_and_console_is_unchanged(hub, tmp_path):
     _check_styles(*(_drive(hub, tmp_path, STYLES, width=w) for w in (1280, 768, 320)))
+
+
+# the rework items: the tablet top bar keeps the light/dark switch on one row (02 4.3), an open in-row detail spans the grid, the pill
+# row stays under the top bar while the page scrolls (02 2.3), and the active pill is not bolder than the others (02 2.3 table)
+REWORK = """
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(look, what) { for (let i = 0; i < 300; i++) { const v = look(); if (v) return v; await sleep(100); } throw new Error("waited for " + what); }
+const d = document, r = d.documentElement, $ = (s) => d.querySelector(s), box = (el) => el.getBoundingClientRect();
+r.setAttribute("data-look", "palette");
+location.hash = "#printers";
+await until(() => $(".coll--printers .coll__expand"), "the printers list");
+await sleep(300);
+const tops = [...d.querySelectorAll(".topbar .appearance .segmented__option")].filter((o) => o.offsetParent).map((o) => Math.round(box(o).top));
+const cur = $('.shell .nav__item[aria-current="page"] .nav__label'), other = $('.shell .nav__item:not([aria-current]) .nav__label');
+const out = { topbarH: Math.round(box($(".topbar")).height), segTops: tops, weights: [getComputedStyle(cur).fontWeight, getComputedStyle(other).fontWeight],
+  scrollW: r.scrollWidth, clientW: r.clientWidth };
+$(".coll--printers .coll__expand").click();
+await sleep(500);
+const region = $(".coll--printers .coll__row--detail:not([hidden]) .detail"), coll = $(".coll--printers");
+out.detailW = Math.round(box(region).width); out.collW = Math.round(box(coll).width);
+scrollTo(0, 400); await sleep(400);
+out.navGap = Math.round(box($(".shell > .nav")).top - box($(".topbar")).bottom); out.scrolled = Math.round(scrollY);
+return out;
+"""
+
+
+def test_the_palette_tablet_top_bar_stays_one_row_the_detail_spans_the_grid_and_the_pills_stay_with_the_top_bar(hub, tmp_path):
+    tablet = _drive(hub, tmp_path, REWORK, width=768)
+    assert len(tablet["segTops"]) == 3 and len(set(tablet["segTops"])) == 1, tablet           # the three options on one row
+    assert tablet["topbarH"] <= 80 and tablet["scrollW"] <= tablet["clientW"], tablet          # not 139 px; no sideways scroll
+    assert tablet["detailW"] >= tablet["collW"] - 48 and tablet["navGap"] in (0, 1) and tablet["scrolled"] > 100, tablet
+    assert tablet["weights"][0] == tablet["weights"][1], tablet
+    wide = _drive(hub, tmp_path, REWORK, width=1280)
+    assert wide["detailW"] >= wide["collW"] - 48 and wide["navGap"] in (0, 1) and wide["scrolled"] > 100, wide
 
 
 # the web app's body carries data-ai: pills under the top bar from tablet up (no side column at any width), the bottom bar on a phone
@@ -120,7 +154,7 @@ def test_the_web_app_shows_palette_pills_and_font_and_console_is_the_same_after(
     for width in (1280, 768):
         app = _drive(served, tmp_path, APP, width=width)
         assert app["ai"] is True and app["back"] == app["console"] and app["console"]["dir"] == "column"
-        assert app["palette"]["dir"] == "row" and app["palette"]["navPos"] == "static" and app["palette"]["cols"].count(" ") == 0
+        assert app["palette"]["dir"] == "row" and app["palette"]["navPos"] == "sticky" and app["palette"]["cols"].count(" ") == 0
         assert app["palette"]["navW"] >= width - 32 and app["palette"]["radius"] == "20px" and "ui-rounded" in app["palette"]["font"]
         assert app["workbench"]["font"] != app["palette"]["font"] and app["workbench"]["cols"].count(" ") == 1
     phone = _drive(served, tmp_path, APP, width=320)
