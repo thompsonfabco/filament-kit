@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
@@ -37,8 +38,15 @@ import com.thompsonfabco.filamentkit.nav.PrinterSettingsRoute
 import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.Tab
 import com.thompsonfabco.filamentkit.nav.settingsOverPairing
+import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
+import androidx.compose.ui.test.onAllNodesWithText
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -49,6 +57,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import com.thompsonfabco.filamentkit.ui.spool.LoadGate
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -78,7 +89,20 @@ class PickSpoolViewModelTest {
         /** A dry run for these spools fails with this once its gate opens. */
         val dryErrors = mutableMapOf<Int, Exception>()
         val loads = mutableListOf<Pair<Int, Boolean>>()
+
+        /** The spool each tag is linked to; a tag not in here is linked to none. */
+        val tags = mutableMapOf<String, JsonObject>()
+        var tagError: Exception? = null
+        /** The lookup of this tag waits here, and ignores being cancelled, so a late answer really arrives. */
+        val tagGates = mutableMapOf<String, CompletableDeferred<Unit>>()
         override suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject> = emptyList()
+        override suspend fun tag(uid: String): JsonObject? {
+            tagGates[uid]?.let { withContext(NonCancellable) { it.await() } }
+            // a real call that was cancelled does not return an answer
+            currentCoroutineContext().ensureActive()
+            tagError?.let { throw it }
+            return tags[uid]
+        }
         override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
             loads += spoolId to dryRun
             if (dryRun) {
@@ -95,7 +119,12 @@ class PickSpoolViewModelTest {
     }
 
     private val fake = Fake()
-    private fun vm() = PickSpoolViewModel(fake, "ABC123", "A4")
+    private val gate = LoadGate()
+    private fun vm() = PickSpoolViewModel(fake, "ABC123", "A4", gate)
+    private fun spoolJson(id: Int) = buildJsonObject {
+        put("id", id)
+        put("filament", buildJsonObject { put("name", "PolyTerra $id") })
+    }
     private fun spool(id: Int) = SpoolSummary(id, "Example", "PolyTerra $id", "PLA", "2B2B2E", null, 620.0)
 
     @Test fun pickingAsksTheHubForADryRunThenLoadsForReal() = runTest(dispatcher) {
@@ -106,6 +135,217 @@ class PickSpoolViewModelTest {
         assertEquals(listOf(1 to true, 1 to false), fake.loads)
         assertNull(v.state.value.preview)
         assertEquals(true, v.state.value.loaded)
+    }
+
+    @Test fun aTagTapPicksThePreviewOfItsSpool() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val v = vm()
+        v.onTag("4:77:90:e"); runCurrent()
+        assertEquals(7, v.state.value.preview!!.spool.id)
+        assertEquals(listOf(7 to true), fake.loads)
+        assertEquals(7.0, v.state.value.preview!!.result!!.nozzleMm!!, 0.0)
+    }
+
+    @Test fun aTagLinkedToNoSpoolPicksNothingAndSaysSo() = runTest(dispatcher) {
+        val v = vm()
+        v.onTag("4:77:90:f"); runCurrent()
+        assertNull(v.state.value.preview)
+        assertEquals("4:77:90:f", v.state.value.unlinkedTag)
+        assertTrue(fake.loads.isEmpty())
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        v.onTag("4:77:90:e"); runCurrent()
+        assertNull("the next tap clears the message", v.state.value.unlinkedTag)
+    }
+
+    @Test fun aTagTapThatCannotReachTheHubShowsTheProblem() = runTest(dispatcher) {
+        fake.tagError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.onTag("4:77:90:e"); runCurrent()
+        assertNull(v.state.value.preview)
+        assertEquals(Problem.Unreachable, v.state.value.problem)
+    }
+
+    @Test fun aTagTapWhileTheLoadIsWrittenIsHeldAndTheLastTapWins() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        fake.writeGate = CompletableDeferred()
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        v.onTag("4:77:90:f"); runCurrent()
+        assertEquals(1, v.state.value.preview!!.spool.id)
+        assertEquals("no lookup while the load is written", listOf(1 to true, 1 to false), fake.loads)
+        assertEquals("4:77:90:f", v.state.value.heldTag)
+        assertNull("no message appears over the load being written", v.state.value.unlinkedTag)
+    }
+
+    @Test fun aHeldTagWaitsInARefusedPreviewAndOpensWhenItIsLeft() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(409, "printer_busy", "The printer is printing.")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        assertEquals("the refusal stays on screen", 1, v.state.value.preview!!.spool.id)
+        assertNotNull(v.state.value.preview!!.problem)
+        assertEquals("the tag is kept", "4:77:90:e", v.state.value.heldTag)
+        v.back(); runCurrent()
+        assertNull("used once", v.state.value.heldTag)
+        assertEquals("the tag's spool opens on leaving", 7, v.state.value.preview!!.spool.id)
+    }
+
+    @Test fun aHeldTagWaitsAfterALostAnswerAndIsTakenByDoneOrOpenThePrinter() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        assertEquals("the unknown load stays on screen", 1, v.state.value.preview!!.spool.id)
+        assertTrue(v.state.value.preview!!.dropped)
+        assertEquals("the tag is kept", "4:77:90:e", v.state.value.heldTag)
+        assertEquals("4:77:90:e", v.takeHeldTag())
+        assertNull("used once", v.state.value.heldTag)
+        assertNull(v.takeHeldTag())
+    }
+
+    @Test fun aHeldTagWaitingAfterALostAnswerOpensOnBack() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        v.back(); runCurrent()
+        assertEquals(7, v.state.value.preview!!.spool.id)
+    }
+
+    @Test fun aHeldTagOfTheSpoolWhoseLoadAnswerWasLostDoesNotReopenItsPreview() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(1)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        assertTrue(v.state.value.preview!!.dropped)
+        v.back(); runCurrent()
+        assertNull("Load is not offered again (7.6)", v.state.value.preview)
+        assertNull("dropped once the person leaves", v.state.value.heldTag)
+        assertEquals("no second dry run", listOf(1 to true, 1 to false), fake.loads)
+        assertNull(v.state.value.unlinkedTag)
+    }
+
+    @Test fun aNewerTapReplacesATagStillHeldAfterARefusal()= runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        fake.tags["4:77:90:f"] = spoolJson(8)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(409, "printer_busy", "The printer is printing.")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        v.onTag("4:77:90:f"); runCurrent()
+        assertNull(v.state.value.heldTag)
+        assertEquals(8, v.state.value.preview!!.spool.id)
+        v.back(); runCurrent()
+        assertNull("the older tag does not come back", v.state.value.preview)
+    }
+
+    @Test fun theWaitSaidAboutAHeldTagIsOneShot() = runTest(dispatcher) {
+        fake.writeGate = CompletableDeferred()
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        assertTrue(v.state.value.tagWaitPending)
+        v.tagWaitShown()
+        assertFalse("said once, not again when the screen comes up anew", v.state.value.tagWaitPending)
+        v.onTag("4:77:90:f"); runCurrent()
+        assertTrue("each new tap says it is waiting", v.state.value.tagWaitPending)
+    }
+
+    @Test fun aSlowTagLookupDoesNotReplaceALaterRowTap() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val slow = CompletableDeferred<Unit>()
+        fake.tagGates["4:77:90:e"] = slow
+        val v = vm()
+        v.onTag("4:77:90:e"); runCurrent()
+        v.pick(spool(2)); runCurrent()
+        slow.complete(Unit); runCurrent()
+        assertEquals(2, v.state.value.preview!!.spool.id)
+        assertEquals(listOf(2 to true), fake.loads)
+    }
+
+    @Test fun aBadGatewayPageInAnswerToTheLoadIsUnknownToo() = runTest(dispatcher) {
+        fake.writeError = ApiError(502, "bad_response", "Bad Gateway")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertTrue("not the Hub speaking: nobody knows if it worked", v.state.value.preview!!.dropped)
+        assertEquals(Say.Words(R.string.spool_load_dropped), v.state.value.preview!!.problem)
+    }
+
+    @Test fun theLoadGateIsHeldWhileTheLoadIsWritten() = runTest(dispatcher) {
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        assertFalse("the dry run is not a write", gate.writing.value)
+        v.confirm(); runCurrent()
+        assertTrue(gate.writing.value)
+        open.complete(Unit); runCurrent()
+        assertFalse(gate.writing.value)
+    }
+
+    @Test fun theLoadGateIsReleasedWhenTheLoadFails() = runTest(dispatcher) {
+        fake.writeError = ApiError(409, "printer_busy", "The printer is printing.")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertFalse(gate.writing.value)
+        assertFalse("a printer's own refusal is a known answer", v.state.value.preview!!.dropped)
+    }
+
+    @Test fun aLostAnswerToTheLoadIsUnknownAndLoadIsNotOfferedAgain() = runTest(dispatcher) {
+        fake.writeError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertTrue(v.state.value.preview!!.dropped)
+        assertEquals(Say.Words(R.string.spool_load_dropped), v.state.value.preview!!.problem)
+        v.confirm(); runCurrent()
+        assertEquals("Load does nothing once the answer is unknown", listOf(1 to true, 1 to false), fake.loads)
+    }
+
+    @Test fun anUnreadableAnswerToTheLoadIsUnknownToo() = runTest(dispatcher) {
+        fake.writeError = IllegalStateException("not json")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertTrue(v.state.value.preview!!.dropped)
+        assertEquals(Say.Words(R.string.spool_load_dropped), v.state.value.preview!!.problem)
+    }
+
+    @Test fun aRefusedPairingIsKnownSoLoadStaysOffered() = runTest(dispatcher) {
+        fake.writeError = ApiError(401, "unauthorized", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertFalse(v.state.value.preview!!.dropped)
     }
 
     @Test fun backIsBlockedWhileTheLoadIsWritten() = runTest(dispatcher) {
@@ -260,7 +500,7 @@ class PrinterShellPartsTest {
         }
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
-        rule.onNodeWithText(rule.activity.getString(R.string.common_working)).assertExists()
+        rule.onNodeWithText(rule.activity.getString(R.string.common_busy_wait)).assertExists()
         assertFalse("Back was taken by the busy screen", rule.activity.isFinishing)
     }
 
@@ -270,5 +510,237 @@ class PrinterShellPartsTest {
         }
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
+    }
+}
+
+/** The pick screen's wiring of tag taps (05-android-app 2.6, 9.6), in a real activity. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S])
+class PickSpoolScreenTapsTest {
+    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+
+    private class Backend : PickBackend {
+        val linked = buildJsonObject {
+            put("id", 7)
+            put("filament", buildJsonObject { put("name", "PolyTerra 7") })
+        }
+        var writeGate: CompletableDeferred<Unit>? = null
+        var writeError: Exception? = null
+        override suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject> = emptyList()
+        override suspend fun tag(uid: String): JsonObject? = if (uid == "04:aa") linked else null
+        override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
+            if (!dryRun) {
+                writeGate?.await()
+                writeError?.let { throw it }
+            }
+            return LoadResult(slot = LoadSlot(label, 0, 0), nozzleMm = 0.4, confirmed = !dryRun)
+        }
+    }
+
+    private val backend = Backend()
+    private val opened = mutableListOf<String>()
+    private val loaded = mutableListOf<Boolean>()
+    private val left = mutableListOf<Unit>()
+    private val toast = SwToastState()
+    private var onScreen by mutableStateOf(true)
+
+    private fun show(): PickSpoolViewModel {
+        val vm = PickSpoolViewModel(backend, "ABC123", "A4", LoadGate())
+        rule.setContent {
+            SpoolwardenTheme(Look.Console, Appearance.Light) {
+                CompositionLocalProvider(LocalToast provides toast) {
+                    Box {
+                        if (onScreen) PickSpoolScreen(
+                            vm, "Workshop X1", "A4", onLoaded = { loaded += it }, onPairAgain = {}, onLeave = { left += Unit },
+                            onOpenTag = { opened += it },
+                        )
+                        SwToastHost(toast)
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        return vm
+    }
+
+    private fun text(id: Int) = rule.activity.getString(id)
+
+    /** A tag is tapped while the load is written, and the load's answer is then lost: the preview shows its two ways out. */
+    private fun holdATagThroughALostLoad(): PickSpoolViewModel {
+        val open = CompletableDeferred<Unit>()
+        backend.writeGate = open
+        backend.writeError = ApiError(0, "offline", "x")
+        val vm = show()
+        vm.pick(SpoolSummary(1, "Example", "PolyTerra 1", "PLA", "2B2B2E", null, 620.0))
+        rule.waitForIdle()
+        vm.confirm()
+        rule.waitForIdle()
+        TagEvents.emit("04:cc")
+        rule.waitForIdle()
+        open.complete(Unit)
+        rule.waitForIdle()
+        assertTrue(vm.state.value.preview!!.dropped)
+        assertTrue("nothing opens while the preview stays", opened.isEmpty())
+        return vm
+    }
+
+    @Test fun doneAfterALostLoadHandsTheHeldTagOn() {
+        holdATagThroughALostLoad()
+        rule.onNodeWithText(text(R.string.status_done)).performClick()
+        rule.waitForIdle()
+        assertEquals(1, left.size)
+        assertEquals(listOf("04:cc"), opened)
+    }
+
+    @Test fun openThePrinterAfterALostLoadHandsTheHeldTagOn() {
+        holdATagThroughALostLoad()
+        rule.onNodeWithText(text(R.string.spool_load_open_printer)).performClick()
+        rule.waitForIdle()
+        assertEquals(1, left.size)
+        assertEquals(listOf("04:cc"), opened)
+    }
+
+    @Test fun theWaitTextShowsOncePerTapAndNotAgainWhenTheScreenComesBack() {
+        backend.writeGate = CompletableDeferred()
+        val vm = show()
+        vm.pick(SpoolSummary(1, "Example", "PolyTerra 1", "PLA", "2B2B2E", null, 620.0))
+        rule.waitForIdle()
+        vm.confirm()
+        rule.waitForIdle()
+        TagEvents.emit("04:cc")
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.tag_read_wait)).assertExists()
+        assertFalse("the screen said it", vm.state.value.tagWaitPending)
+        rule.runOnUiThread { toast.host.currentSnackbarData?.dismiss() }
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.tag_read_wait)).assertDoesNotExist()
+        // a rotation or a tab switch builds the screen anew
+        rule.runOnUiThread { onScreen = false }
+        rule.waitForIdle()
+        rule.runOnUiThread { onScreen = true }
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.tag_read_wait)).assertDoesNotExist()
+    }
+
+    @Test fun aTagTapOnTheScreenPicksItsSpool() {
+        val vm = show()
+        TagEvents.emit("04:aa")
+        rule.waitForIdle()
+        assertEquals(7, vm.state.value.preview!!.spool.id)
+    }
+
+    @Test fun aTapOfAnUnlinkedTagSaysSoEvenWithThePreviewOpen() {
+        val vm = show()
+        TagEvents.emit("04:bb")
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.printer_pick_tag_unlinked)).assertExists()
+        TagEvents.emit("04:aa")
+        rule.waitForIdle()
+        assertNull("the preview of the linked tag is open", vm.state.value.unlinkedTag)
+        TagEvents.emit("04:bb")
+        rule.waitForIdle()
+        assertEquals("04:bb", vm.state.value.unlinkedTag)
+        assertNotNull(vm.state.value.preview)
+        // the dialog and the page both carry it: one of the two is behind the dialog's scrim
+        assertEquals(2, rule.onAllNodesWithText(text(R.string.printer_pick_tag_unlinked), useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    @Test fun aTapDuringTheWriteSaysItWaitsAndOpensWhenTheLoadEnds() {
+        val open = CompletableDeferred<Unit>()
+        backend.writeGate = open
+        val vm = show()
+        vm.pick(SpoolSummary(1, "Example", "PolyTerra 1", "PLA", "2B2B2E", null, 620.0))
+        rule.waitForIdle()
+        vm.confirm()
+        rule.waitForIdle()
+        TagEvents.emit("04:cc")
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.tag_read_wait)).assertExists()
+        assertTrue("nothing opens while the load is written", opened.isEmpty())
+        open.complete(Unit)
+        rule.waitForIdle()
+        assertEquals(listOf(true), loaded)
+        assertEquals(listOf("04:cc"), opened)
+    }
+}
+
+/** A tap handed on to a screen that is not listening yet. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class TagEventsHandOnTest {
+    @Test fun aHandedOnTapReachesTheNextListener() = runTest {
+        val got = mutableListOf<String>()
+        TagEvents.emitWhenListening("04:dd", this)
+        runCurrent()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        assertEquals(listOf("04:dd"), got)
+    }
+
+    @Test fun aHandedOnTapIsKeptUntilSomethingListens() = runTest {
+        val got = mutableListOf<String>()
+        TagEvents.emitWhenListening("04:ff", backgroundScope, waitMs = 500)
+        advanceTimeBy(2000); runCurrent()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        assertEquals(listOf("04:ff"), got)
+    }
+
+    @Test fun aNewerTapIsNotOverriddenByAnOlderHandedOnTap() = runTest {
+        val got = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        TagEvents.emitWhenListening("04:old", backgroundScope, waitMs = 500)
+        TagEvents.emit("04:new")
+        advanceTimeBy(2000); runCurrent()
+        assertEquals(listOf("04:new"), got)
+    }
+
+    @Test fun aHandedOnTapNobodyListensForIsDroppedAfterItsHoldingTime() = runTest {
+        val got = mutableListOf<String>()
+        TagEvents.emitWhenListening("04:gg", backgroundScope, waitMs = 500, holdMs = 5000)
+        advanceTimeBy(6000); runCurrent()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        assertTrue("it does not open long after", got.isEmpty())
+    }
+
+    @Test fun theNewestTapAlwaysArrivesLastEvenWhenItComesBetweenClaimAndEmit() = runTest {
+        val got = java.util.Collections.synchronizedList(mutableListOf<String>())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        var tap: Thread? = null
+        TagEvents.beforeHandOnEmit = {
+            // the NFC thread's tap lands right here; it has to wait for this step to finish
+            tap = Thread { TagEvents.emit("04:new") }.also { it.start(); it.join(300) }
+        }
+        try {
+            TagEvents.emitWhenListening("04:old", this, waitMs = 500)
+            advanceTimeBy(600); runCurrent()
+            tap!!.join(5000)
+        } finally {
+            TagEvents.beforeHandOnEmit = {}
+        }
+        assertEquals(listOf("04:old", "04:new"), got.toList())
+    }
+
+    @Test fun aHandedOnTapComesAnywayWhenNobodyListens()= runTest {
+        val got = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        // the old listener never leaves: the wait is over after its time
+        TagEvents.emitWhenListening("04:ee", this, waitMs = 500)
+        advanceTimeBy(600); runCurrent()
+        assertEquals(listOf("04:ee"), got)
+    }
+}
+
+/** The load gate comes from the app's activity; there is no private one. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S])
+class LoadGateSourceTest {
+    @Test fun withoutTheAppsActivityTheGateIsAnError() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val e = runCatching { context.appLoadGate() }.exceptionOrNull()
+        assertTrue(e is IllegalStateException)
     }
 }

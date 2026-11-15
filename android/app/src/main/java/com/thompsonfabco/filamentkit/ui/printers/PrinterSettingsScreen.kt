@@ -213,7 +213,7 @@ private fun EditFieldDialog(printer: Printer, d: EditDialog, edit: PrinterEditVi
             if (d.error == which) stringResource(words) else null
         when (d.field) {
             EditField.NAME -> FormField(
-                value, { value = it }, stringResource(R.string.printer_field_name), enabled = !d.busy,
+                value, { value = it }, stringResource(R.string.common_field_name), enabled = !d.busy,
                 error = error(FieldError.Name, R.string.printer_error_name),
             )
             EditField.ADDRESS -> {

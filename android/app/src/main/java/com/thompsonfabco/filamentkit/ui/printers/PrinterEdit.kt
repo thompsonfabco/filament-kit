@@ -174,11 +174,11 @@ class PrinterEditViewModel(
             EditField.NAME -> Note(Say.Words(R.string.printer_set_renamed, listOf(r.printer.name.ifBlank { value })))
             EditField.ADDRESS ->
                 if (connected) Note(Say.Words(R.string.printer_set_address_done))
-                else fixLine(r.printer.state)?.let { Note(Say.Words(it), ok = false) } ?: Note(Say.Words(R.string.printer_set_saved))
+                else fixLine(r.printer.state)?.let { Note(Say.Words(it), ok = false) } ?: Note(Say.Words(R.string.common_saved))
             EditField.ACCESS_CODE ->
                 if (connected || fixLine(r.printer.state) == null) Note(Say.Words(R.string.printer_set_code_done, listOf(r.printer.name)))
                 else Note(Say.Words(fixLine(r.printer.state)!!), ok = false)
-            EditField.API_KEY, EditField.TRUST_CERT -> Note(Say.Words(R.string.printer_set_saved))
+            EditField.API_KEY, EditField.TRUST_CERT -> Note(Say.Words(R.string.common_saved))
         }
     }
 

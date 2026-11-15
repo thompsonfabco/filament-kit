@@ -55,6 +55,7 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **One addition opens as a record:** its photos (tap one to enlarge), its values shown before you edit them, **Edit by hand** with **Save changes**, and **Ask the Label Reader to correct it**, which shows a before-and-after list of what it would change and waits for **Accept**. Every correction is listed with **Undo**.
 - **QR codes:** the Hub now draws its QR codes itself, on the Hub page (the pairing code and the phone web app's address) and in the terminal, so the `qrencode` package is no longer needed (the pairing link is shown when it cannot fit one).
 - **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `filament-kit modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
+- **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
 
 ## Still to come
 
