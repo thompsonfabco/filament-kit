@@ -146,6 +146,7 @@ progress { width: 100%; height: var(--s3); accent-color: var(--accent-text); }
 .detail__title { flex: 1 1 calc(var(--s7) * 4); min-width: 0; margin: 0; }
 @media (max-width: 600px) { .coll--recent .coll__item .coll__cell[data-col="visual"] { width: auto; } }
 .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--s7) * 2), 1fr)); gap: var(--s2); }
+.photos > .thumb { width: 100%; height: auto; aspect-ratio: 1; }         /* square tiles: the shared 40 px thumb is under the 44 px hit area */
 .recent__newer .icon { transform: rotate(-90deg); }
 .recent__older .icon { transform: rotate(90deg); }
 .recent__state { display: inline-flex; margin-right: auto; }
