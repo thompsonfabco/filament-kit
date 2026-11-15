@@ -208,12 +208,32 @@ def cmd_station_pair(ask=input) -> int:
     return 1 if result.status in ("failed", "declined") else 0
 
 
-def cmd_station_flash_panel(ask=input, run=subprocess.run) -> int:
+def _port_check(port: str, boards: list[tuple[str, ...]], what: str) -> str | None:
+    """`--port` names a board the command would itself offer: its own scan's boards, each a port and its other names.
+    The board's port when it is one of them; otherwise the Error and Fix are said and None is returned (exit 2)."""
+    if not port.strip():
+        output.error("--port needs the board's port name; nothing was written.",
+                     ("use one of: " + ", ".join(b[0] for b in boards) + ".") if boards else
+                     "no board was found; plug it into this PC with a data cable (a charge-only cable shows nothing).")
+        return None
+    want = os.path.realpath(port)
+    for names in boards:
+        if any(n == port or os.path.realpath(n) == want for n in names):
+            return names[0]
+    output.error(f"{port} is not one of the boards {what}; nothing was written.",
+                 ("use one of: " + ", ".join(b[0] for b in boards) + ".") if boards else
+                 "no such board was found; plug it into this PC with a data cable (a charge-only cable shows nothing).")
+    return None
+
+
+def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, only_port: str | None = None) -> int:
     """On the station PC: write the panel firmware to a blank ESP32-C3 board. A Printer Station plugged in for power looks
     the same as a blank panel, so each candidate port is flashed only after the owner says yes to that port."""
     from .station import panel
     if not _is_root():
         return output.need_sudo(_sudo_command("sudo filament-kit station flash-panel"))
+    if not yes and ask is input and not output.terminal():     # nobody to ask which board: nothing is stopped or written
+        return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit station flash-panel") + " --yes")
     service = "filament-kit-station.service"
     was_active = run(["systemctl", "is-active", service], check=False).returncode == 0  # only restart what was running
     try:
@@ -227,25 +247,31 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run) -> int:
             _err_line("this station has no panel firmware bundled; nothing was flashed.")
             return 1
         ports = panel.blank_c3_ports()
+        if only_port is not None:       # only a board this scan would offer: not the PN532, a running panel or a path that is no board
+            only_port = _port_check(only_port, [(p,) for p in ports], "station flash-panel would write")
+            if only_port is None:
+                return output.USAGE
+            ports = [only_port]
         if not ports:
             _err_line("no blank ESP32-C3 board found. Nothing was flashed.\nfix: plug the board's USB port into this PC (a "
                       "board that already runs the panel firmware doesn't need flashing).")
             return 1
+        if yes and len(ports) > 1:      # --yes answers for one named board, never for a pick among several (06 7)
+            output.error("more than one board could be the intake panel: " + ", ".join(ports) + "; nothing was written.",
+                         "name the board with --port, for example --port " + ports[0] + ".")
+            return output.USAGE
         for port in ports:
-            print(f"Found a USB serial board on {port} that does not answer as the intake panel.")
+            if only_port is None:
+                print(f"Found a USB serial board on {port} that does not answer as the intake panel.")
             try:
-                answer = ask(f"Flash the intake panel firmware to {port}? [y/N] ")
-            except (EOFError, RuntimeError, OSError):  # no terminal: no answer is a no
-                _err_line("sudo filament-kit station flash-panel needs a terminal to ask you. Nothing was "
-                          "flashed.")
-                return 1
+                stop = _confirm(f"Write the intake panel firmware to {port}?",
+                                "writing the firmware", yes=yes, ask=None if ask is input else ask)
             except KeyboardInterrupt:
                 print("\nNothing was flashed.")
                 return 1
-            if answer.strip().lower() in ("y", "yes"):
+            if stop is None:
                 return _flash_and_verify(panel, port, version)
-        print("Nothing was flashed.")
-        return 1
+        return output.CANCELLED     # every board was declined: "Nothing changed." was said
     finally:
         if was_active:
             run(["systemctl", "start", service], check=False)
@@ -328,6 +354,8 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
     from . import backup
     if not _is_root():
         return output.need_sudo(_sudo_command("sudo filament-kit restore <backup.zip>"))
+    if not yes and not output.terminal():           # the typed word cannot be asked: nothing is read or changed
+        return output.no_terminal("restoring a backup", _sudo_command("sudo filament-kit restore <backup.zip>") + " --yes")
     if uploaded:
         try:
             path = backup.take_upload()
@@ -366,7 +394,14 @@ def _fmt_time(t) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "never"
 
 
-def cmd_unpair(device_id: str | None) -> int:
+def _confirm(question: str, doing: str, *, yes: bool, word: str | None = None, ask=None) -> int | None:
+    """06 7: None to go on, else the exit code (5 after no, 2 with no terminal and no --yes, which names the command
+    again with --yes)."""
+    return output.confirm(question, yes=yes, doing=doing, rerun=_sudo_command("sudo filament-kit <command>") + " --yes",
+                          word=word, ask=ask)
+
+
+def cmd_unpair(device_id: str | None, yes: bool = False) -> int:
     if device_id is None:
         devs = pairing.devices()
         if not devs:
@@ -376,6 +411,17 @@ def cmd_unpair(device_id: str | None) -> int:
             ["Id", "Name", "Paired", "Last seen"],
             [[d["id"], d["name"], _fmt_time(d["paired"]), _fmt_time(d["last_seen"])] for d in devs], long=1, whole=True))   # `unpair` takes the id; the name is what tells phones apart
         return 0
+    dev = next((d for d in pairing.devices() if d["id"] == device_id), None)
+    if dev is None:     # a pairing token nobody has claimed yet is removed too (`unpair <id>` always did)
+        dev = next((d for d in pairing._read("devices.json") if d.get("id") == device_id), None)
+    if dev is None:
+        _err_line(f"no paired device {device_id}")
+        return output.USAGE
+    name = dev.get("name") or device_id
+    stop = _confirm(f"Unpair {name}? It can no longer reach the kit server until it is paired again.",
+                    f"unpairing {name}", yes=yes)
+    if stop is not None:
+        return stop
     if pairing.revoke(device_id):
         output.result(f"Unpaired {device_id}.")
         return 0
@@ -558,8 +604,10 @@ def _printers_action(choice: str, printers: list) -> None:
                 registry.rename(p.serial, name)
                 print(f"Renamed {p.name} to {name}.")
         else:
-            if (_ask(f"Remove {p.name}? [y/N] ") or "").strip().lower() not in ("y", "yes"):
-                print("Not removed.")
+            what = ("its Moonraker API key, if one is saved." if p.family == "klipper" else
+                    "its Access Code. To use it again, add it again.")
+            if _confirm(f"Forget {p.name}? filament-kit stops connecting to it and deletes {what}",
+                        f"forgetting {p.name}", yes=False, ask=lambda prompt: _ask(prompt)) is not None:
                 return
             registry.remove(p.serial)
             print(f"Removed {p.name}.")
@@ -765,6 +813,8 @@ def cmd_intake(args) -> int:
                 _err_line("label reading (ai_intake or local_intake) is off on this server: use "
                           + "filament-kit intake edit")
                 return 1
+            if not args.yes and not output.terminal():      # before the read is spent: nobody can accept it
+                return output.no_terminal("applying the revision", _sudo_command("sudo filament-kit <command>") + " --yes")
             p = intake_history.revise(sm, args.id, args.note, args.item)
             if p.get("reader"):
                 print(f"Read again by {'the local reader' if p['reader'] == 'local' else 'Claude'}"
@@ -775,11 +825,9 @@ def cmd_intake(args) -> int:
                 print("The AI changed nothing.")
                 return 0
             print("Changes: " + ", ".join(p["changes"]) + (" (no photo was kept for this record)" if p["no_photo"] else ""))
-            if not args.yes:
-                a = _ask("Apply this? [y/N] ")
-                if not a or a.strip().lower() not in ("y", "yes"):
-                    print("Not applied.")
-                    return 0
+            stop = _confirm("Accept these changes?", "applying the revision", yes=args.yes)
+            if stop is not None:
+                return stop
             r = intake_history.apply(sm, args.id, proposal=p["proposal"], device="command line")
             return _say_revision(r)
         if args.intake_cmd == "edit":
@@ -1191,7 +1239,7 @@ def _manual_map_via_server(api, serial: str, lines=None) -> int:
     return 0
 
 
-def cmd_printer_map(serial: str, manager_factory, manual: bool = False) -> int:
+def cmd_printer_map(serial: str, manager_factory, manual: bool = False, yes: bool = False) -> int:
     from .bridge import mapping
     from .bridge.connection import PrinterOffline, UnknownPrinter
     from .bridge.slottest import PrinterBusy
@@ -1209,7 +1257,12 @@ def cmd_printer_map(serial: str, manager_factory, manual: bool = False) -> int:
         _err_line(f"{registry.display_name(p)} is a Klipper printer; Klipper printers are mapped by loading filament: "
                   f"filament-kit printer map --manual {serial}")
         return 1
-    print(f"Mapping the slots of {registry.display_name(p)}. Each slot's colour changes briefly and the printer runs a "
+    name = registry.display_name(p)
+    stop = _confirm(f"Map the slots of {name}? The printer changes its slot colours briefly and runs a short job with "
+                    "no motion. The colours are put back afterwards.", f"mapping the slots of {name}", yes=yes)
+    if stop is not None:
+        return stop
+    print(f"Mapping the slots of {name}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
     api = _server_api()
     if api is not None:                 # the running server holds the printer: it maps, this follows
@@ -1308,7 +1361,7 @@ def _report_said(r: dict) -> int:
     return 0
 
 
-def cmd_printer_unpin(serial: str) -> int:
+def cmd_printer_unpin(serial: str, yes: bool = False) -> int:
     """`printer unpin <serial>`: asks for the Access Code, as the API does (R103), and saves it with the cleared pin."""
     p = registry.load().get(serial)
     if p is None:
@@ -1320,6 +1373,12 @@ def cmd_printer_unpin(serial: str) -> int:
     if not p.configured:
         _err_line(f"{serial} is not set up here; add it with its Access Code first")
         return 1
+    name = p.name or serial
+    stop = _confirm(f"Forget the certificate of {name}? The next connection trusts whatever certificate answers at "
+                    f"{p.ip or 'its address'} and remembers it. Do this only after the printer was reset or replaced.",
+                    f"forgetting the certificate of {name}", yes=yes)
+    if stop is not None:
+        return stop
     try:
         code = secret_input.ask("Access Code: ").strip()
     except (EOFError, RuntimeError, OSError):      # no terminal to ask on
@@ -1423,7 +1482,11 @@ def cmd_library_adopt(folder: str) -> int:
     return 0
 
 
-def cmd_library_rollback() -> int:
+def cmd_library_rollback(yes: bool = False) -> int:
+    stop = _confirm("Go back to the previous Filament Catalog? The version before the last update comes back. Your own "
+                    "entries are kept.", "going back to the previous Filament Catalog", yes=yes)
+    if stop is not None:
+        return stop
     job = steps.Steps(2)
     job.next("Putting the previous Filament Catalog back")
     try:
@@ -1603,11 +1666,11 @@ def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> in
     return 0
 
 
-def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool) -> int:
+def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool, yes: bool = False) -> int:
     """Accept the listed updates of one line or all: the next PC sync writes them over the presets in the slicers
     (after its backup); nothing else ever writes over an existing preset."""
     try:
-        r = builds.apply_updates(line_id=line_id, all_=all_, dry_run=dry_run)
+        r = builds.apply_updates(line_id=line_id, all_=all_, dry_run=True)      # what would be accepted, before asking
     except ValueError as e:
         _err_line(str(e))
         return 1
@@ -1619,6 +1682,8 @@ def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool) -
         output.out(f"no updates for line {line_id} (see: sudo filament-kit profiles status)" if line_id
                    else "no updates available")
         return 1 if line_id else 0
+    if not dry_run and not yes and not output.terminal():       # nothing is listed or accepted when nobody can answer
+        return output.no_terminal("accepting the updates", _sudo_command("sudo filament-kit <command>") + " --yes")
     for u in chosen:
         app = "Orca Slicer" if u["target"] == "orca" else "Bambu Studio"
         keys = ", ".join(u["keys"][:6]) + (", ..." if len(u["keys"]) > 6 else "")
@@ -1626,6 +1691,22 @@ def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool) -
         print(f"  {u['line_id']}  {app}: {u['name']}{where}: {keys}")
     lines = len({u["line_id"] for u in chosen})
     what = f"{len(chosen)} update{'' if len(chosen) == 1 else 's'} ({lines} line{'' if lines == 1 else 's'})"
+    if not dry_run:
+        stop = _confirm(f"Accept {'this' if len(chosen) == 1 else f'these {len(chosen)}'} update"
+                        f"{'' if len(chosen) == 1 else 's'}? The PC sync writes {'it' if len(chosen) == 1 else 'them'} at "
+                        "its next run, after its backup.", "accepting the updates", yes=yes)
+        if stop is not None:
+            return stop
+        try:        # exactly what was shown: a build that landed while the question was open is accepted unseen by no one
+            builds.apply_updates(line_id=line_id, all_=all_, dry_run=False, only={u["name"] for u in chosen},
+                                 expect_stamp=r["stamp"])
+        except builds.UpdatesChanged:
+            output.error("the updates changed while you were asked; nothing was accepted.",
+                         "run it again to see them as they are now.")
+            return 1
+        except ValueError as e:
+            _err_line(str(e))
+            return 1
     if dry_run:
         print(f"dry run: {what} would be accepted; nothing was changed")
     else:
@@ -2011,13 +2092,38 @@ def _kept_release() -> tuple[str, Path] | None:
     return None
 
 
-def cmd_uninstall(purge: bool, run=None) -> int:
+def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
+    """06 7 for `update` and `update --rollback`: asked once there is something to install, with its version. Nobody
+    to ask (no terminal, no --yes) stops only then: without root, with an up-to-date kit, no kept version or a release
+    that cannot be read the command says so itself, as it does at a terminal."""
+    from . import release, updates
+    if yes:
+        return None
+    if not _no_systemd() and not _is_root():
+        return None
+    if rollback:
+        target = updates._read_state().get("previous")
+        if not isinstance(target, str) or not updates._kept(target):
+            return None
+        return _confirm(f"Roll back to {target}? filament-kit stops while it installs and starts again by itself. "
+                        "Settings and data stay.", "rolling back", yes=False)
+    try:
+        info = updates.check_info(cfg)
+    except release.ReleaseError:
+        return None
+    if not info["newer"]:
+        return None
+    return _confirm(f"Update to {info['latest']}? filament-kit stops while it installs and starts again by itself. "
+                    "Settings and data stay. The version before is kept, so you can roll back.", "updating", yes=False)
+
+
+def cmd_uninstall(purge: bool, run=None, yes: bool = False) -> int:
     """Run uninstall.sh of the kept release (/opt/filament-kit/releases/<version>/), unpacked outside /opt, which
-    it removes. Its own confirmation for --purge stays: it reads the terminal as `./uninstall.sh --purge` does."""
+    it removes. The question and, for --purge, the typed word are asked here (06 7); uninstall.sh asks its own for
+    `./uninstall.sh --purge` too, which this answers with the word it was just given."""
     from . import release, updates
     if not _no_systemd() and not _is_root():
         return output.need_sudo(_sudo_command("sudo filament-kit uninstall"))
-    run = run or subprocess.call
     kept = _kept_release()
     if kept is None:
         ver = updates.current_version()
@@ -2026,6 +2132,14 @@ def cmd_uninstall(purge: bool, run=None) -> int:
                   f"(tar xzf filament-kit-{ver}.tar.gz), then in its folder run: "
                   + "sudo ./uninstall.sh" + (" --purge" if purge else ""))
         return 1
+    if purge:
+        stop = _confirm("Remove filament-kit and delete everything it keeps on this machine? Type purge to go on: ",
+                        "removing filament-kit and deleting everything it keeps", yes=yes, word="purge")
+    else:
+        stop = _confirm("Remove filament-kit from this machine? Its data stays unless you add --purge.",
+                        "removing filament-kit", yes=yes)
+    if stop is not None:
+        return stop
     ver, tarball = kept
     running = updates.current_version()
     if ver != running:
@@ -2035,7 +2149,15 @@ def cmd_uninstall(purge: bool, run=None) -> int:
     work = Path(tempfile.mkdtemp(prefix="filament-kit-uninstall-"))
     try:
         root = release.extract(tarball, ver, work)
-        return run(["bash", str(root / "uninstall.sh")] + (["--purge"] if purge else []))
+        cmd = ["bash", str(root / "uninstall.sh")] + (["--purge"] if purge else [])
+        if run is not None:
+            return run(cmd)
+        if not purge:
+            return subprocess.call(cmd)
+        kept_word = work / "purge-answer"       # uninstall.sh's own typed word, answered from here
+        kept_word.write_text("purge\n")
+        with open(kept_word) as answer:
+            return subprocess.call(cmd, stdin=answer)
     except (release.ReleaseError, OSError) as e:
         _err_line(f"cannot unpack the kept release {ver}: {e}")
         return 1
@@ -2104,6 +2226,42 @@ def _answers_as_panel(port: str) -> bool:
     return ser is not None
 
 
+@contextlib.contextmanager
+def _service_paused(run):
+    """The station service stopped for the block when it runs, as `reader setup`'s write does it, and started again."""
+    service = "filament-kit-station.service"
+    was_active = run(["systemctl", "is-active", service], check=False, capture_output=True).returncode == 0
+    if was_active:
+        run(["systemctl", "stop", service], check=False, capture_output=True)
+    try:
+        yield
+    finally:
+        if was_active:
+            run(["systemctl", "start", service], check=False, capture_output=True)
+
+
+def _refuse_panel_board(port: str, explicit: bool, found, run=None) -> int | None:
+    """The board on port is asked for its HELLO (the station stopped meanwhile) before anything is asked or made: None
+    when it is no panel, else the exit code. The station's button panel is an ESP32-C3 too, and with the reader
+    unplugged it is the lone board (FA-040); a named --port gets the same check as a found board."""
+    try:
+        with (_service_paused(run) if run else _station_stopped()):    # the service would hold the port, a probe resets it
+            is_panel = _answers_as_panel(port)
+    except _StationBusy as e:
+        _err_line(str(e))
+        return 1
+    if not is_panel:
+        return None
+    said = f"{port} answers as the intake station's button panel, not a reader; nothing was written."
+    if explicit:
+        others = [r.port for r in found if r.port != port]
+        output.error(said, ("use one of: " + ", ".join(others) + ".") if others else
+                     "plug the reader into this PC with a data cable (a charge-only cable shows nothing).")
+        return output.USAGE
+    _err_line(said + " Plug the reader in, or name its port with --port.")
+    return 1
+
+
 def _ask_choice(ask, prompt: str, choices: dict[str, str], default: str) -> str | None:
     """One of `choices` (answer -> value) from the owner; the default on an empty answer; None when it can't ask."""
     for _ in range(3):
@@ -2146,10 +2304,14 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     job = steps.Steps(5)
     job.next("Finding the board")
     found = rs.find_readers()
-    if a.port:
-        port = a.port
+    yes = bool(getattr(a, "yes", False))
+    explicit = a.port is not None
+    if explicit:
+        port = _port_check(a.port, [(r.port, r.by_id or r.port) for r in found], "reader setup would write")
+        if port is None:
+            return output.USAGE
     elif not found:
-        _err_line("no ESP32 board on this server's USB. Plug the Printer Station in with a data cable (a "
+        _err_line("no ESP32 board on this server's USB. Plug the reader in with a data cable (a "
                   "charge-only cable shows nothing), or name the port with --port.")
         return 1
     elif len(found) == 1:
@@ -2159,15 +2321,23 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         _err_line("there are several ESP32 boards on this server's USB: pick the Printer Station's port on the "
                   "setup page; nothing was changed")
         return 1
+    elif yes:       # --yes answers for one named board, never for a pick among several (06 7)
+        output.error("there are several ESP32 boards on this server's USB: " + ", ".join(r.port for r in found)
+                     + "; nothing was written.", "name the reader's board with --port, for example --port "
+                     + found[0].port + ".")
+        return output.USAGE
     else:
         for i, r in enumerate(found, 1):
             print(f"  {i}. {r.by_id or r.port} ({r.product})")
-        pick = _ask_choice(ask, "Which one is the Printer Station? [number] ",
+        pick = _ask_choice(ask, "Which one is the reader? [number] ",
                            {str(i): r.port for i, r in enumerate(found, 1)}, "")
         if not pick:
             _err_line("no board picked; nothing was changed")
             return 1
         port = pick
+    refused = _refuse_panel_board(port, explicit, found, run)       # before any question or token
+    if refused is not None:
+        return refused
     try:
         base = a.base.rstrip("/") if a.base else rs.reader_base(config.load())
         if not base.startswith("https://"):
@@ -2178,7 +2348,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         _err_line(str(e))
         return 1
     try:
-        ssid = a.ssid or ask("Wi-Fi name the Printer Station joins: ").strip()
+        ssid = a.ssid or ask("Wi-Fi name the reader joins: ").strip()
     except (EOFError, RuntimeError, OSError):
         _err_line("reader setup needs a terminal to ask you; nothing was changed")
         return 1
@@ -2197,6 +2367,17 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     except rs.SetupError as e:
         _err_line(f"{e}; nothing was changed")
         return 1
+    if not getattr(a, "pending", False):     # the setup page's job was asked there: it has no terminal
+        if not yes and ask is input and not output.terminal():      # nobody to ask: nothing is written
+            return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit reader setup") + " --yes")
+        try:
+            stop = _confirm(f"Write the reader firmware to {port}? What is on the board now is replaced.",
+                            "writing the firmware", yes=yes, ask=None if ask is input else ask)
+        except KeyboardInterrupt:
+            print("\nNothing was flashed.")
+            return 1
+        if stop is not None:
+            return stop
     tid = None
     if token is None:
         try:
@@ -2212,15 +2393,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     if was_active:
         run(["systemctl", "stop", service], check=False, capture_output=True)
     try:
-        # the station's button panel is an ESP32-C3 too, and with the Printer Station unplugged it is the lone board
-        # (FA-040): one that answers as the panel is never written
-        if _answers_as_panel(port):
-            result = rf.Result(False, f"the board on {port} answers as the intake station's button panel, not a "
-                                      "Printer Station; nothing was written. Plug the Printer Station in, or name its "
-                                      "port with --port.")
-        else:
-            result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run,
-                              step=job.next)
+        result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run, step=job.next)
     finally:
         if was_active:
             run(["systemctl", "start", service], check=False, capture_output=True)
@@ -2270,43 +2443,39 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     port = None
     if flashing:
         found = rs.find_readers()
-        if a.port:
-            port = a.port
+        explicit = a.port is not None
+        if explicit:
+            port = _port_check(a.port, [(r.port, r.by_id or r.port) for r in found], "reader setup would write")
+            if port is None:
+                return output.USAGE
         elif len(found) == 1:
             port = found[0].port
-            what = f"{found[0].by_id or port} ({found[0].product})"
-            try:
-                with _station_stopped():    # the service would hold the panel's port, and a probe would reset it
-                    is_panel = _answers_as_panel(port)
-            except _StationBusy as e:
-                _err_line(str(e))
-                return 1
-            if is_panel:
-                _err_line(f"{what} answers as the Printer Station's button panel, not a reader; it was not "
-                          "flashed. Plug the reader in, or name its port with --port.")
-                return 1
-            # A station's button panel is an ESP32-C3 too: with the reader unplugged it is the lone board.
-            print(f"Found a USB board: {what}")
-            try:
-                answer = ask(f"Flash the reader firmware to {port}? [y/N] ")
-            except (EOFError, RuntimeError, OSError):  # no terminal: no answer is a no
-                _err_line("reader setup --source needs a terminal to ask which board to flash, or name the "
-                          "reader's port with --port. Nothing was flashed.")
-                return 1
-            except KeyboardInterrupt:
-                print("\nNothing was flashed.")
-                return 1
-            if answer.strip().lower() not in ("y", "yes"):
-                print("Nothing was flashed.")
-                return 1
         elif not found:
             _err_line("no ESP32 board on USB here. Plug the reader in with a data cable (a charge-only cable "
                       "shows nothing), or name the port with --port.")
             return 1
         else:
-            _err_line("more than one ESP32 board on USB; name the reader's with --port: "
-                      + ", ".join(r.by_id or r.port for r in found))
+            output.error("there are several ESP32 boards on USB: " + ", ".join(r.port for r in found)
+                         + "; nothing was written.", "name the reader's board with --port, for example --port "
+                         + found[0].port + ".")
+            return output.USAGE
+        refused = _refuse_panel_board(port, explicit, found)        # a named port too, before any question or token
+        if refused is not None:
+            return refused
+        shown = next((r for r in found if r.port == port), None)
+        yes = bool(getattr(a, "yes", False))        # --port names the board; it never answers the question
+        if not yes and ask is input and not output.terminal():      # nobody to ask: nothing is written
+            return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit reader setup") + " --yes")
+        if not explicit and shown:
+            print(f"Found a USB board: {shown.by_id or port} ({shown.product})")
+        try:
+            stop = _confirm(f"Write the reader firmware to {port}? What is on the board now is replaced.",
+                            "writing the firmware", yes=yes, ask=None if ask is input else ask)
+        except KeyboardInterrupt:
+            print("\nNothing was flashed.")
             return 1
+        if stop is not None:
+            return stop
     if a.secrets:
         try:
             text = Path(a.secrets).read_text(encoding="utf-8")
@@ -2476,7 +2645,7 @@ def cmd_web_passphrase() -> int:
     return 0
 
 
-def cmd_setup_code(new: bool, revoke_trusted: bool = False) -> int:
+def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -> int:
     """`setup-code [--new] [--revoke-trusted]` (root): the code the server's /setup page asks for before any change,
     made when there is none. At a terminal it is printed with the page's address; without one (a log) only the address
     and how to see it, as no secret may end up in a log. A new code keeps trusted computers trusted (the owner's
@@ -2484,6 +2653,13 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False) -> int:
     from . import setup_code, trusted
     if not _is_root():
         return output.need_sudo(_sudo_command("sudo filament-kit setup-code"))
+    for asked, question, doing in ((new, "Make a new setup code? The old one stops working.", "making a new setup code"),
+                                   (revoke_trusted, "Revoke every trusted computer? Each one needs the setup code "
+                                    "again.", "revoking every trusted computer")):
+        if asked:
+            stop = _confirm(question, doing, yes=yes)
+            if stop is not None:
+                return stop
     if new:
         code = setup_code.generate()
         setup_code.write(code)
@@ -2507,7 +2683,7 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False) -> int:
     return 0
 
 
-def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> int:
+def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes: bool = False) -> int:
     """`reader token [--name X]` (root): a new reader token, printed once for the reader's secrets.h (only its
     sha256 is kept); `reader tokens`: the tokens (id, name, made); `reader revoke <id|name>` (root)."""
     try:
@@ -2536,6 +2712,12 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> 
             output.out_lines(output.table(["Id", "Name", "Made"], [[t["id"], t["name"], t["created"]] for t in rows],
                                           long=1, whole=True))   # `reader revoke` takes the id or the name
             return 0
+        rows = store.list()
+        if len([t for t in rows if t["id"] == ref] or [t for t in rows if t["name"] == ref]) == 1:   # one that is there
+            stop = _confirm(f"Revoke the token {ref}? A reader using it is refused from now on. Set it up again with "
+                            "sudo filament-kit reader setup to give it a new token.", f"revoking the token {ref}", yes=yes)
+            if stop is not None:
+                return stop
         if store.revoke(ref or ""):
             print(f"revoked {ref}; a reader using it is refused from now on")
             return 0
@@ -2660,14 +2842,11 @@ def cmd_local_intake_remove(yes: bool, run=None) -> int:
         print("The local label reader is not installed and local_intake is off: nothing to do.")
         return 0
     new_on, notes = modules.toggle(on, "local_intake") if "local_intake" in on else (on, [])
-    print(("Remove the local label reader " + have["version"] + " from this machine" if have else
-           "Switch local_intake off (no reader is installed on this machine)") + "; its settings are kept."
-          + (" " + " ".join(notes) if notes else ""))
-    if not yes:
-        a = _ask("Go ahead? [y/N] ")
-        if not a or a.strip().lower() not in ("y", "yes"):
-            print("Nothing was changed.")
-            return 0
+    stop = _confirm(("Remove the local label reader " + have["version"] + " from this machine?" if have else
+                     "Switch local_intake off? No reader is installed on this machine.") + " Its settings are kept."
+                    + (" " + " ".join(notes) if notes else ""), "removing the local label reader", yes=yes)
+    if stop is not None:
+        return stop
     if have is not None:
         try:
             lii.remove(run=run, say=lambda s: print(s, flush=True))
@@ -2767,6 +2946,10 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         return output.INTERRUPTED
 
 
+def _add_yes(parser, help: str = "answer yes to the question this command asks (a script has no terminal to ask on)") -> None:
+    parser.add_argument("-y", "--yes", action="store_true", help=help)
+
+
 class _Parser(argparse.ArgumentParser):
     """A wrong command or option is an error in the words of 06 6.5 (exit code 2), not argparse's own."""
 
@@ -2795,11 +2978,15 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
     stpp = stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
     stpp.add_argument("--local", action="store_true", help="the kit server is this machine: no link, nothing to compare")
-    stp_sub.add_parser("flash-panel", help="write the panel firmware to a blank ESP32-C3 board, after you confirm the port")
+    fpp = stp_sub.add_parser("flash-panel", help="write the panel firmware to a blank ESP32-C3 board, after you "
+                                                 "confirm the port")
+    fpp.add_argument("--port", help="the board's serial port (/dev/ttyACM0): only that one is offered")
+    _add_yes(fpp)
     stp_sub.add_parser("pairing-state", help="print whether the button flow is paired, as one line")
     pkind.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
     up.add_argument("device_id", nargs="?")
+    _add_yes(up)
     sub.add_parser("config", help="interactive settings menu")
     sub.add_parser("cert", help="create the server certificate if missing")
     ih = sub.add_parser("intake", help="the intake history: the last spool additions, their photos, revisions")
@@ -2811,7 +2998,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     irv.add_argument("id")
     irv.add_argument("--note", required=True)
     irv.add_argument("--item", type=int, default=None)
-    irv.add_argument("--yes", action="store_true", help="apply the proposal without asking")
+    _add_yes(irv, "apply the proposal without asking")
     ied = isub.add_parser("edit", help="change saved values by hand: field=value ...")
     ied.add_argument("id")
     ied.add_argument("values", nargs="+", metavar="field=value")
@@ -2827,16 +3014,18 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     pm.add_argument("--manual", action="store_true",
                     help="map by loading filament: you load each slot, the printer says which one it sees (needs the "
                          "running server; the same session as the setup page and the phone apps)")
+    _add_yes(pm, "answer yes to the question before mapping (not asked with --manual)")
     prp = psub.add_parser("report", help="make a report that helps add a printer or AMS the kit doesn't know yet")
     prp.add_argument("serial")
     pu = psub.add_parser("unpin", help="forget a Bambu printer's pinned TLS certificate (asks for its Access Code)")
     pu.add_argument("serial")
+    _add_yes(pu)
     lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
     lsub = lb.add_subparsers(dest="library_cmd", required=True)
     lsub.add_parser("status", help="show the library version, local additions and the last update check")
     lu = lsub.add_parser("update", help="download or update the library (library.url)")
     lu.add_argument("--scheduled", action="store_true", help="only if config library.schedule says it is due")
-    lsub.add_parser("rollback", help="go back to the library version before the last update")
+    _add_yes(lsub.add_parser("rollback", help="go back to the library version before the last update"))
     la = lsub.add_parser("adopt", help="keep the library an older program version bundled (used by the installer)")
     la.add_argument("folder", help="the old library_data folder (index.json and library/)")
     la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
@@ -2860,6 +3049,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     aug.add_argument("--line", dest="line_id", help="the updates of one product line (see: profiles lines)")
     aug.add_argument("--all", dest="all_", action="store_true", help="every listed update")
     au.add_argument("--dry-run", action="store_true", help="only show what would be accepted")
+    _add_yes(au, "accept without asking (a script has no terminal to ask on)")
     md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
     mda = mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
@@ -2887,7 +3077,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                                            "machine (root; sizes are shown first)")
     lii.add_argument("--tier", choices=["auto", "cpu", "gpu"], help="default: local_intake.tier (auto)")
     lii.add_argument("--version", help="a release version instead of the latest")
-    lii.add_argument("--yes", action="store_true", help="do not ask (the sizes are still printed)")
+    _add_yes(lii, "do not ask (the sizes are still printed)")
     lii.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
                                                             "saved (the setup page's job)")
     litk = lisub.add_parser("token", help="set the local reader's bearer token (root; asked hidden, never shown)")
@@ -2896,7 +3086,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                                   "page when run as root)")
     lir = lisub.add_parser("remove", help="uninstall the local reader from this machine and switch local_intake off "
                                           "(root; its settings are kept)")
-    lir.add_argument("--yes", action="store_true", help="do not ask")
+    _add_yes(lir, "do not ask")
     lit = lisub.add_parser("test", help="read photos with the local reader only and print the result (no Claude, "
                                         "no daily read used, nothing saved)")
     lit.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
@@ -2907,10 +3097,12 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rdsub.add_parser("tokens", help="list the reader tokens (never the tokens themselves)")
     rdr = rdsub.add_parser("revoke", help="remove a reader token (root)")
     rdr.add_argument("ref", help="its id (r1 ...) or name")
+    _add_yes(rdr)
     rds = rdsub.add_parser("setup", help="set up the Printer Station plugged into this server's USB: the kit's "
                                          "firmware, then its Wi-Fi and token (root to make the token). --source or "
                                          "--out build it with PlatformIO instead")
     rds.add_argument("--name", help="what its token is for, e.g. printer-station")
+    _add_yes(rds, "answer yes to the question before writing the firmware to the board (the one found, or --port)")
     rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
     rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
     rds.add_argument("--port", help="its USB serial port (found when one ESP32 board is plugged in, which you are asked to confirm)")
@@ -2936,13 +3128,14 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rs_what = rs.add_mutually_exclusive_group(required=True)
     rs_what.add_argument("zip", nargs="?", help="the backup zip")
     rs_what.add_argument("--uploaded", action="store_true", help="the zip the setup page received")
-    rs.add_argument("--yes", action="store_true", help="ask nothing (no terminal: the installer, the setup page)")
+    _add_yes(rs, "ask nothing, the typed word included (no terminal: the installer, the setup page)")
     rm_ = sub.add_parser("remote", help="remote access: get the certificate, show the firewall rules")
     rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
-    rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)")
+    _add_yes(rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)"))
     rmsub.add_parser("firewall", help="print the firewall and port-forward rules to set up by hand")
     ud = sub.add_parser("update", help="install the latest signed release (root); --check only looks, --rollback "
                                        "goes back to the version before the last update")
+    _add_yes(ud, "answer yes to the question before installing (a script has no terminal to ask on)")
     udx = ud.add_mutually_exclusive_group()
     udx.add_argument("--check", action="store_true", help="say whether a newer release exists; change nothing")
     udx.add_argument("--rollback", action="store_true", help="reinstall the version the last update replaced")
@@ -2952,12 +3145,14 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     un = sub.add_parser("uninstall", help="remove the kit with the kept release's uninstall.sh (root); --purge "
                                           "also deletes the data, after a typed confirmation")
     un.add_argument("--purge", action="store_true", help="also delete settings, spool data, paired phones, backups")
+    _add_yes(un, "answer yes to both questions, the typed word of --purge included (a script has no terminal)")
     sc = sub.add_parser("setup-code", help="show the setup page's address and its setup code (root); --new "
                                            "replaces the code")
     sc.add_argument("--new", action="store_true", help="make a new setup code; the old one stops working (trusted "
                                                         "computers stay trusted)")
     sc.add_argument("--revoke-trusted", action="store_true",
                     help="forget every trusted computer, so each needs the setup code again (alone, or with --new)")
+    _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     args = ap.parse_args(argv)
 
@@ -2970,11 +3165,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "station" and args.station_cmd == "pair" and args.local:
         return cmd_station_pair_local()
     if args.cmd == "station" and args.station_cmd == "flash-panel":
-        return cmd_station_flash_panel()
+        return cmd_station_flash_panel(yes=args.yes, only_port=args.port)
     if args.cmd == "station":
         return cmd_station_pairing_state() if args.station_cmd == "pairing-state" else cmd_station_pair()
     if args.cmd == "unpair":
-        return cmd_unpair(args.device_id)
+        return cmd_unpair(args.device_id, yes=args.yes)
     if args.cmd == "config":
         return cmd_config()
     if args.cmd == "intake":
@@ -2983,17 +3178,17 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_cert()
     if args.cmd == "printer":
         if args.printer_cmd == "map":
-            return cmd_printer_map(args.serial, manager_factory or _default_manager, manual=args.manual)
+            return cmd_printer_map(args.serial, manager_factory or _default_manager, manual=args.manual, yes=args.yes)
         if args.printer_cmd == "report":
             return cmd_printer_report(args.serial, manager_factory or _default_manager)
-        return cmd_printer_unpin(args.serial)
+        return cmd_printer_unpin(args.serial, yes=args.yes)
     if args.cmd == "library":
         if args.library_cmd == "status":
             return cmd_library_status()
         if args.library_cmd == "update":
             return cmd_library_update(args.scheduled)
         if args.library_cmd == "rollback":
-            return cmd_library_rollback()
+            return cmd_library_rollback(yes=args.yes)
         if args.library_cmd == "adopt":
             return cmd_library_adopt(args.folder)
         return cmd_library_add(args.file)
@@ -3007,7 +3202,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         if args.profiles_cmd == "set-parent":
             return cmd_profiles_set_parent(args.line_id, args.parent, orca=args.orca)
         if args.profiles_cmd == "apply-updates":
-            return cmd_profiles_apply_updates(args.line_id, args.all_, args.dry_run)
+            return cmd_profiles_apply_updates(args.line_id, args.all_, args.dry_run, yes=args.yes)
         return cmd_profiles_restore_deleted()
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
@@ -3024,7 +3219,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "reader" and args.reader_cmd == "setup":
         return cmd_reader_setup(args)
     if args.cmd == "reader":
-        return cmd_reader(args.reader_cmd, getattr(args, "name", None), getattr(args, "ref", None))
+        return cmd_reader(args.reader_cmd, getattr(args, "name", None), getattr(args, "ref", None),
+                          yes=getattr(args, "yes", False))
     if args.cmd == "backup":
         return cmd_backup(args.backup_cmd, args.out if args.backup_cmd == "create" else None)
     if args.cmd == "restore":
@@ -3032,18 +3228,30 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "remote":
         from . import remote
         cfg = config.load()
-        return remote.issue(cfg) if args.remote_cmd == "issue" else remote.firewall(cfg)
+        if args.remote_cmd != "issue":
+            return remote.firewall(cfg)
+        if "remote" in modules.enabled(cfg) and (_no_systemd() or _is_root()):     # else `issue` says what is wrong
+            stop = _confirm("Get the certificate now? Port 80 on your router must reach this kit server while it runs. "
+                            "filament-kit never changes your firewall or router.", "getting the certificate",
+                            yes=args.yes)
+            if stop is not None:
+                return stop
+        return remote.issue(cfg)
     if args.cmd == "uninstall":
-        return cmd_uninstall(args.purge)
+        return cmd_uninstall(args.purge, yes=args.yes)
     if args.cmd == "update":
         from . import updates
         cfg = config.load()
         if args.check:
             return updates.check(cfg)
-        if args.rollback:
-            return updates.rollback(cfg)
         if args.feed:
             return updates.feed_now(cfg)
+        if not args.scheduled:
+            stop = _confirm_update(cfg, rollback=args.rollback, yes=args.yes)
+            if stop is not None:
+                return stop
+        if args.rollback:
+            return updates.rollback(cfg)
         return updates.update(cfg, scheduled=args.scheduled)
     if args.cmd == "modules":
         if args.modules_cmd == "units":
@@ -3059,5 +3267,5 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                                       getattr(args, "server", None))
         return cmd_modules_apply(pair=not args.no_pair)
     if args.cmd == "setup-code":
-        return cmd_setup_code(args.new, args.revoke_trusted)
+        return cmd_setup_code(args.new, args.revoke_trusted, yes=args.yes)
     return cmd_ensure_fields()

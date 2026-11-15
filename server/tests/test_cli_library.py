@@ -128,13 +128,13 @@ def test_update_unchanged_no_rebuild(capsys, monkeypatch, rebuilds):
 
 
 def test_rollback_nothing(capsys, no_library):
-    assert cli.main(["library", "rollback"]) == 1
+    assert cli.main(["library", "rollback", "--yes"]) == 1
     assert "Error" in capsys.readouterr().err
 
 
 def test_rollback_ok(capsys, monkeypatch, rebuilds):
     monkeypatch.setattr(library, "rollback", lambda: 3)
-    assert cli.main(["library", "rollback"]) == 0
+    assert cli.main(["library", "rollback", "--yes"]) == 0
     assert "library version 3" in capsys.readouterr().out
     assert len(rebuilds) == 1
 
@@ -142,7 +142,7 @@ def test_rollback_ok(capsys, monkeypatch, rebuilds):
 def test_rollback_says_scheduled_updates_skip_it(capsys, monkeypatch, rebuilds):
     monkeypatch.setattr(library, "rollback", lambda: 3)
     monkeypatch.setattr(library, "rolled_back_from", lambda: 4)
-    assert cli.main(["library", "rollback"]) == 0
+    assert cli.main(["library", "rollback", "--yes"]) == 0
     assert "skip version 4" in capsys.readouterr().out
 
 
@@ -249,6 +249,6 @@ def test_an_update_with_nothing_new_stops_after_two_steps(capsys, monkeypatch, r
 
 def test_the_rollback_command_writes_its_two_steps(capsys, monkeypatch, rebuilds):
     monkeypatch.setattr(library, "rollback", lambda: 3)
-    assert cli.main(["library", "rollback"]) == 0
+    assert cli.main(["library", "rollback", "--yes"]) == 0
     assert sentences(capsys.readouterr().out, 2) == [
         "Putting the previous Filament Catalog back", "Asking for a preset build"]

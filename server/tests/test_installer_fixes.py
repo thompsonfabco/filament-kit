@@ -191,7 +191,7 @@ def test_uninstall_runs_the_kept_releases_uninstall_sh(tmp_path, fake_release):
     _kept(tmp_path, "1.2.0")
     _kept(tmp_path, "1.1.0")
     ran = []
-    assert cli.cmd_uninstall(purge=True, run=lambda cmd: ran.append(
+    assert cli.cmd_uninstall(purge=True, yes=True, run=lambda cmd: ran.append(
         (cmd, Path(cmd[1]).read_text())) or 0) == 0
     (cmd, text), = ran
     assert cmd[0] == "bash" and Path(cmd[1]).name == "uninstall.sh" and cmd[2:] == ["--purge"]
@@ -204,7 +204,7 @@ def test_uninstall_falls_back_to_the_newest_kept_release_and_says_so(tmp_path, f
     _kept(tmp_path, "1.0.0")
     _kept(tmp_path, "1.1.0")
     ran = []
-    assert cli.cmd_uninstall(purge=False, run=lambda cmd: ran.append(Path(cmd[1]).read_text()) or 3) == 3
+    assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: ran.append(Path(cmd[1]).read_text()) or 3) == 3
     assert ran == ["# 1.1.0\n"]
     out = capsys.readouterr().out
     assert "no kept copy of 1.2.0" in out and "uninstall.sh of 1.1.0" in out
@@ -212,12 +212,12 @@ def test_uninstall_falls_back_to_the_newest_kept_release_and_says_so(tmp_path, f
 
 def test_uninstall_with_the_running_versions_copy_says_nothing_extra(tmp_path, fake_release, capsys):
     _kept(tmp_path, "1.2.0")
-    assert cli.cmd_uninstall(purge=False, run=lambda cmd: 0) == 0
+    assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: 0) == 0
     assert capsys.readouterr().out == ""
 
 
 def test_uninstall_without_a_kept_release_says_how_to_get_one(tmp_path, fake_release, capsys):
-    assert cli.cmd_uninstall(purge=False, run=lambda cmd: 0) == 1
+    assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: 0) == 1
     err = capsys.readouterr().err
     assert "no kept copy" in err and "filament-kit-1.2.0.tar.gz" in err and "./uninstall.sh" in err
 
@@ -238,7 +238,7 @@ def test_uninstall_skips_a_kept_copy_that_does_not_verify_and_uses_the_next(tmp_
     _kept(tmp_path, "1.0.0")
     _verify_fails_for(monkeypatch, "1.2.0")                   # the running version's copy was tampered with
     ran = []
-    assert cli.cmd_uninstall(purge=False, run=lambda cmd: ran.append(Path(cmd[1]).read_text()) or 0) == 0
+    assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: ran.append(Path(cmd[1]).read_text()) or 0) == 0
     assert ran == ["# 1.1.0\n"]                              # never the tampered one, not the older one either
     assert "uninstall.sh of 1.1.0" in capsys.readouterr().out
 
@@ -247,7 +247,7 @@ def test_uninstall_runs_nothing_when_no_kept_copy_verifies(tmp_path, fake_releas
     _kept(tmp_path, "1.2.0")
     _kept(tmp_path, "1.1.0")
     _verify_fails_for(monkeypatch, "1.2.0", "1.1.0")
-    assert cli.cmd_uninstall(purge=True, run=lambda cmd: pytest.fail("ran an unverified uninstall.sh")) == 1
+    assert cli.cmd_uninstall(purge=True, yes=True, run=lambda cmd: pytest.fail("ran an unverified uninstall.sh")) == 1
     assert "no kept copy" in capsys.readouterr().err
 
 
@@ -255,7 +255,7 @@ def test_uninstall_refuses_when_not_root(tmp_path, fake_release, monkeypatch, ca
     _kept(tmp_path, "1.2.0")
     monkeypatch.delenv("FK_NO_SYSTEMD")
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.cmd_uninstall(purge=False, run=lambda cmd: pytest.fail("ran uninstall.sh as a normal user")) == 3
+    assert cli.cmd_uninstall(purge=False, yes=True, run=lambda cmd: pytest.fail("ran uninstall.sh as a normal user")) == 3
     assert "administrator rights" in capsys.readouterr().err
 
 

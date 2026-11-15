@@ -190,7 +190,7 @@ def test_the_helper_refuses_a_spoolman_address_with_the_module_on(env):  # noqa:
 
 
 def test_remote_issue_is_a_job_running_the_command():
-    assert setup_helper.JOBS["remote_issue"] == ("remote", "issue") and "remote_issue" in setup_helper.BUSY
+    assert setup_helper.JOBS["remote_issue"] == ("remote", "issue", "--yes") and "remote_issue" in setup_helper.BUSY
 
 
 def test_firewall_text_takes_the_code_and_the_module(app, monkeypatch):

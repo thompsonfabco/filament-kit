@@ -216,8 +216,8 @@ def test_a_good_flash_keeps_the_token(tmp_path, monkeypatch, capsys):
 
 def test_two_boards_need_a_port_and_none_says_check_the_cable(tmp_path, monkeypatch, capsys):
     _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 1
-    assert "--port" in capsys.readouterr().err
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 2
+    assert "Fix: name the reader's board with --port" in " ".join(capsys.readouterr().err.split())
     _flash_env(monkeypatch, tmp_path, rc=0, readers=0)
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 1
     assert "data cable" in capsys.readouterr().err and reader_tokens.TokenStore().list() == []
@@ -345,23 +345,36 @@ def test_the_buzzer_option_defaults_to_high(monkeypatch):
     assert cli.main(["reader", "setup", "--out", "s.h", "--buzzer", "low"]) == 0 and got["buzzer"] == "low"
 
 
-def _refused(monkeypatch, tmp_path, capsys, **kw):
+def _refused(monkeypatch, tmp_path, capsys, rc=1, **kw):
     calls = _flash_env(monkeypatch, tmp_path, rc=0)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p"), **kw) == 1
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p"), **kw) == rc
     assert calls == [] and reader_tokens.TokenStore().list() == []
     return capsys.readouterr()
 
 
 def test_a_lone_board_is_not_flashed_unless_the_owner_says_yes(tmp_path, monkeypatch, capsys):
     for answer in ("", "n", "no"):
-        out = _refused(monkeypatch, tmp_path, capsys, ask=lambda p, a=answer: a)
-        assert "Nothing was flashed" in out.out
+        out = _refused(monkeypatch, tmp_path, capsys, rc=5, ask=lambda p, a=answer: a)
+        assert "Nothing changed." in out.out
 
 
-def test_a_lone_board_with_no_terminal_is_not_flashed(tmp_path, monkeypatch, capsys):
-    def no_tty(prompt):
+def test_the_end_of_input_at_the_question_is_a_no(tmp_path, monkeypatch, capsys):
+    def no_answer(prompt):
         raise EOFError
-    assert "--port" in _refused(monkeypatch, tmp_path, capsys, ask=no_tty).err
+    assert "Nothing changed." in _refused(monkeypatch, tmp_path, capsys, rc=5, ask=no_answer).out
+
+
+def test_a_lone_board_with_no_terminal_and_no_yes_is_not_flashed_exit_2(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    out = _refused(monkeypatch, tmp_path, capsys, rc=2)
+    assert out.out == "" and out.err.startswith("Error: ") and "--yes" in out.err
+
+
+def test_yes_writes_a_lone_board_without_asking(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), yes=True), ask_secret=_secret("p", "p")) == 0
+    assert calls and "[y/N]" not in capsys.readouterr().out
 
 
 def test_a_lone_board_that_answers_as_the_panel_is_never_asked_about(tmp_path, monkeypatch, capsys):
@@ -373,13 +386,53 @@ def test_a_lone_board_that_answers_as_the_panel_is_never_asked_about(tmp_path, m
     assert calls == [] and "button panel" in capsys.readouterr().err
 
 
-def test_an_explicit_port_is_flashed_without_asking(tmp_path, monkeypatch):
+def test_an_explicit_port_still_asks_at_a_terminal(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    monkeypatch.setattr(cli.output, "terminal", lambda: True)
+    asked = []
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0"),
+                                ask=lambda p: asked.append(p) or "n", ask_secret=_secret("p", "p")) == 5
+    assert len(asked) == 1 and calls == []
+    assert "Write the reader firmware to /dev/ttyACM0?" in " ".join(capsys.readouterr().out.split())
+    assert reader_tokens.TokenStore().list() == []
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0"),
+                                ask=lambda p: "y", ask_secret=_secret("p", "p")) == 0
+    assert calls[0][0] == "/dev/ttyACM0"
+
+
+def test_an_explicit_port_piped_without_yes_exits_2_with_yes_writes(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0"),
+                                ask_secret=_secret("p", "p")) == 2
+    assert calls == [] and "--yes" in capsys.readouterr().err and reader_tokens.TokenStore().list() == []
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0", yes=True),
+                                ask_secret=_secret("p", "p")) == 0 and calls[0][0] == "/dev/ttyACM0"
+
+
+def test_a_port_that_answers_as_the_panel_is_refused_first_exit_2(tmp_path, monkeypatch, capsys):
+    """The scan checked a lone board's HELLO; a named --port gets the same check, before any question or token."""
+    calls = _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: port == "/dev/ttyACM0")
     def boom(prompt):
         raise AssertionError("asked")
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM9"), ask=boom,
-                                ask_secret=_secret("p", "p")) == 0
-    assert calls[0][0] == "/dev/ttyACM9"
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0", yes=True), ask=boom,
+                                ask_secret=boom) == 2
+    err = " ".join(capsys.readouterr().err.split())
+    assert calls == [] and reader_tokens.TokenStore().list() == []
+    assert err.startswith("Error: /dev/ttyACM0 answers as the intake station's button panel") and "use one of: /dev/ttyACM1" in err
+
+
+def test_an_empty_port_is_an_error_exit_2(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="", yes=True), ask_secret=_secret("p", "p")) == 2
+    assert calls == [] and "--port needs" in capsys.readouterr().err
+
+
+def test_a_port_written_with_dots_is_the_board_found(tmp_path, monkeypatch):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/../dev/ttyACM1", yes=True),
+                                ask_secret=_secret("p", "p")) == 0 and calls[0][0] == "/dev/ttyACM1"
 
 
 class _FakeSerial:
@@ -552,12 +605,28 @@ def test_a_lone_board_is_not_probed_or_flashed_when_the_station_will_not_stop(tm
     assert "could not stop" in capsys.readouterr().err
 
 
-def test_with_a_port_a_station_that_will_not_stop_leaves_no_token(tmp_path, monkeypatch, capsys):
+def test_with_a_port_a_station_that_will_not_stop_makes_no_token(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=0)
     run, log = _systemctl(monkeypatch, stop_exc=OSError("denied"))
     monkeypatch.setattr(cli, "_station_stopped", lambda real=cli._station_stopped: real(run))
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM9"),
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0"),
                                 ask_secret=_secret("p", "p")) == 1
     err = capsys.readouterr().err
     assert calls == [] and reader_tokens.TokenStore().list() == []
-    assert "could not stop" in err and "token was removed" in err
+    assert "could not stop" in err and "token" not in err        # the probe stops it first: no token was made
+
+
+def test_source_with_yes_and_several_boards_stops_and_names_port(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), yes=True), ask_secret=_secret("p", "p")) == 2
+    assert "--port /dev/ttyACM0" in " ".join(capsys.readouterr().err.split()) and calls == []
+
+
+def test_source_port_that_is_no_found_board_flashes_nothing(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyUSB0", yes=True),
+                                ask_secret=_secret("p", "p")) == 2
+    err = " ".join(capsys.readouterr().err.split())
+    assert "/dev/ttyUSB0" in err and "use one of: /dev/ttyACM0, /dev/ttyACM1." in err and calls == []
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM1", yes=True),
+                                ask_secret=_secret("p", "p")) == 0 and calls[0][0] == "/dev/ttyACM1"

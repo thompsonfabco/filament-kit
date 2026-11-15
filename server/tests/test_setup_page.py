@@ -652,7 +652,7 @@ def test_setup_code_cli_prints_it_at_a_terminal_only(env, monkeypatch, capsys):
 def test_setup_code_new_replaces_it(env, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     _stdin(monkeypatch, True)
-    assert cli.main(["setup-code", "--new"]) == 0
+    assert cli.main(["setup-code", "--new", "--yes"]) == 0
     new = setup_code.read()
     assert new != CODE and setup_code.check(new) and not setup_code.check(CODE)
     assert setup_code.shown(new) in capsys.readouterr().out
@@ -871,7 +871,7 @@ def test_r2_new_code_clears_the_lockout(env, monkeypatch, capsys):
         setup_helper.handle({"op": "check", "code": "00000000", "client": "192.0.2.20"})
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     _stdin(monkeypatch, True)
-    assert cli.main(["setup-code", "--new"]) == 0
+    assert cli.main(["setup-code", "--new", "--yes"]) == 0
     new = setup_code.read()
     assert setup_helper.handle({"op": "check", "code": new, "client": "192.0.2.20"})["status"] == 200
 

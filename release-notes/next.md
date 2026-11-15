@@ -74,6 +74,8 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Progress for waits, documented exit codes, plain output.** A wait longer than 2 seconds shows a progress line, each command ends with a documented exit code, and `--plain`, `--color` and `NO_COLOR` control the look for screen readers and pipes.
 - **Orca Slicer parents for a phone:** a paired phone can list the Orca Slicer parents a new preset line can use, as the setup page and the phone web app do.
 
+- **The command line asks before destructive commands.** Commands that delete, replace or overwrite something (forgetting a printer, unpairing a phone, flashing a board, updating, rolling back, removing the kit) now ask for a yes first. Answering no changes nothing and exits with 5. Scripts and anything run without a terminal need `--yes` from this version on; without it the command stops with exit 2 and says so.
+
 ## Still to come
 
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the

@@ -284,9 +284,10 @@ def test_at_a_terminal_it_takes_the_typed_word(kit, capsys):
     z = backup.create()
     _wipe_and_change(kit)
     run = Runner()
-    assert backup.restore(z, ask=lambda q: "yes", run=run) == 1
+    assert backup.restore(z, ask=lambda q: "yes", run=run) == 5          # only the word goes on
     assert run.cmds == [] and (kit / "state" / "devices.json").read_text() == "[]\n"
-    assert backup.restore(z, ask=lambda q: "restore", run=run) == 0
+    assert "Nothing changed." in capsys.readouterr().out
+    assert backup.restore(z, ask=lambda q: " RESTORE ", run=run) == 0    # without case and surrounding spaces
 
 
 def test_no_terminal_and_no_yes_changes_nothing(kit):
@@ -295,7 +296,7 @@ def test_no_terminal_and_no_yes_changes_nothing(kit):
     def eof(q):
         raise EOFError
     run = Runner()
-    assert backup.restore(z, ask=eof, run=run) == 1 and run.cmds == []
+    assert backup.restore(z, ask=eof, run=run) == 5 and run.cmds == []        # the end of input is a no
 
 
 def test_a_damaged_zip_changes_nothing(kit, tmp_path, capsys):
@@ -443,7 +444,35 @@ def test_backup_create_and_restore_through_the_cli(kit, monkeypatch, capsys):
     z = next((kit / "elsewhere").glob("*.zip"))
     assert cli.main(["backup", "list"]) == 0
     assert cli.main(["restore", "--yes", str(z)]) == 0
-    assert cli.main(["restore", str(kit / "missing.zip")]) == 1
+    assert cli.main(["restore", "--yes", str(kit / "missing.zip")]) == 1
+
+
+def test_restore_piped_without_yes_is_refused_with_exit_2_and_changes_nothing(kit, monkeypatch, capsys):
+    """S5.2 / AUT-9: the typed word cannot be asked, so nothing is read, printed on standard output or changed."""
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    z = backup.create()
+    run = Runner()
+    monkeypatch.setattr(backup, "default_run", run)
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    capsys.readouterr()
+    assert cli.main(["restore", str(z)]) == 2
+    out, err = capsys.readouterr()
+    assert out == "" and err.startswith("Error: ") and "\nFix: run it again with --yes" in err
+    assert err.rstrip().endswith("--yes") and run.cmds == []
+    assert cli.main(["restore", "-y", str(z)]) == 0 and run.cmds
+
+
+def test_restore_at_a_terminal_goes_on_only_for_its_word_and_otherwise_exits_5(kit, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    z = backup.create()
+    run = Runner()
+    monkeypatch.setattr(backup, "default_run", run)
+    monkeypatch.setattr(cli.output, "terminal", lambda: True)
+    answers = iter(["yes", "RESTORE"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert cli.main(["restore", str(z)]) == 5 and run.cmds == []
+    assert "Nothing changed." in capsys.readouterr().out
+    assert cli.main(["restore", str(z)]) == 0 and run.cmds
 
 
 def _uploaded(kit):

@@ -10,6 +10,8 @@ the environment and from what `configure` was given, so a test that sets `NO_COL
     err(text)                                 a line of running text on standard error
     note(text) / error(what, fix=, cmd=)      standard error: `Note: ...`, `Error: ...` and its `Fix: ...` line
     need_sudo(cmd) -> 3                       the error of a command that needs root, and its exit code
+    confirm(question, yes=, doing=, rerun=)   the question of 06 7: None to go on, else the exit code (5 after no, 2 with
+                                              no terminal and no --yes)
     state(word) -> str                        a status word with its glyph and colour (`● OK`)
     status_row(word, text, fix) -> [str]      the lines of one status row (06 9.1)
     table(headers, rows, long=, right=)       a table as lines (06 6.3)
@@ -451,6 +453,49 @@ def need_sudo(cmd: str) -> int:
     """The error of a command that needs root, with the full command to run; the exit code to return (3)."""
     error("this needs administrator rights.", "run it with sudo:", cmd=cmd)
     return NEEDS_SUDO
+
+
+# ---------- confirmations (06 7) ----------
+
+def terminal() -> bool:
+    """Is standard input a terminal: can a question be answered."""
+    return _is_tty(sys.stdin)
+
+
+def no_terminal(doing: str, rerun: str | None = None) -> int:
+    """Nothing was asked and nothing is done: `doing` (`forgetting Workshop X1`) needs a yes and there is no terminal.
+    The Fix line names the command again with --yes. Returns the exit code (2)."""
+    error(f"{doing} needs a yes, and there is no terminal to ask.", "run it again with --yes:" if rerun else
+          "run it again with --yes.", cmd=rerun)
+    return USAGE
+
+
+def confirm(question: str, *, yes: bool = False, doing: str = "", rerun: str | None = None, word: str | None = None,
+            ask=None) -> int | None:
+    """Ask `question` and a ` [y/N] `: `y` or `yes` (any case) goes on, anything else, an empty answer or the end of
+    input is no. With `word`, `question` ends with the prompt (`Type purge to go on: `) and only that word, compared
+    without case and surrounding spaces, goes on. Returns None to go on, or the exit code to stop with: 5 after no
+    (`Nothing changed.` is printed), 2 when there is no terminal and no `yes` (`no_terminal`, standard output stays
+    empty). `yes` answers without printing the question. `ask` stands in for the terminal's input (the caller's
+    own, or a test's): it is not checked for a terminal."""
+    if yes:
+        return None
+    if ask is None:
+        if not terminal():
+            return no_terminal(doing, rerun)
+        ask = input
+    lines = wrap(question if word else question + " [y/N]")
+    _write(sys.stdout, lines[:-1])
+    try:
+        answer = ask(lines[-1].rstrip() + " ")
+    except (EOFError, RuntimeError, OSError):       # the end of input is a no
+        answer = ""
+        _write(sys.stdout, [""])
+    answer = (answer or "").strip().lower()
+    if answer == word.lower() if word else answer in ("y", "yes"):
+        return None
+    out("Nothing changed.")
+    return CANCELLED
 
 
 # ---------- status rows (06 9.1) ----------

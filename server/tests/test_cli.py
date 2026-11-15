@@ -114,7 +114,7 @@ def test_unpair_lists_and_revokes(capsys):
     dev = pairing.devices()[0]
     assert cli.main(["unpair"]) == 0
     assert dev["id"] in capsys.readouterr().out
-    assert cli.main(["unpair", dev["id"]]) == 0
+    assert cli.main(["unpair", dev["id"], "--yes"]) == 0
     assert pairing.devices() == []
     assert cli.main(["unpair", "nope"]) == 2
 
@@ -317,7 +317,7 @@ def test_printers_add_rename_remove(capsys, monkeypatch):
 
     assert _printers_session(monkeypatch, "5\n4\n1\n\n0\n0\n") == 0      # a bare Enter is a no
     assert "SER1" in registry.load()
-    assert "Not removed." in capsys.readouterr().out
+    assert "Nothing changed." in capsys.readouterr().out
     assert _printers_session(monkeypatch, "5\n4\n1\ny\n0\n0\n") == 0
     assert registry.load() == {}
     out = capsys.readouterr().out

@@ -65,14 +65,48 @@ def test_no_blank_board_flashes_nothing_and_restarts_service(bench):
     assert services(bench) == ["stop", "start"]
 
 
-def test_declined_port_is_not_flashed(bench):
-    asked = []
+def test_declined_port_is_not_flashed(bench, capsys):
     answers = iter(["", "no"])
-    assert cli.cmd_station_flash_panel(ask=lambda p: asked.append(p) or next(answers), run=bench.run) == 1
+
+    def ask(prompt):
+        print(prompt, end="")               # what the real input() writes at a terminal
+        return next(answers)
+    assert cli.cmd_station_flash_panel(ask=ask, run=bench.run) == 5
     assert bench.flashed == []
-    assert asked == ["Flash the intake panel firmware to /dev/ttyACM0? [y/N] ",
-                     "Flash the intake panel firmware to /dev/ttyACM1? [y/N] "]
+    said = " ".join(capsys.readouterr().out.split())
+    assert "Write the intake panel firmware to /dev/ttyACM0? [y/N]" in said
+    assert "Write the intake panel firmware to /dev/ttyACM1? [y/N]" in said
+    assert said.count("Nothing changed.") == 2
     assert services(bench) == ["stop", "start"]
+
+
+def test_no_terminal_and_no_yes_stops_before_the_service_is_touched(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run) == 2
+    out, err = capsys.readouterr()
+    assert out == "" and err.startswith("Error: ") and "--yes" in err
+    assert bench.calls == [] and bench.flashed == []
+
+
+def test_yes_writes_the_one_blank_board_without_asking(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    bench.probe.hello = {"/dev/ttyACM1"}                # one blank board left
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True) == 0
+    assert bench.flashed == [("/dev/ttyACM0", "10")] and "[y/N]" not in capsys.readouterr().out
+
+
+def test_yes_with_several_blank_boards_stops_and_names_port(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True) == 2      # two blank boards: --yes does not pick
+    out, err = capsys.readouterr()
+    assert bench.flashed == [] and out == "" and "--port" in err and "/dev/ttyACM0" in err
+    assert services(bench) == ["stop", "start"]
+
+
+def test_yes_with_port_writes_that_board_only(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="/dev/ttyACM1") == 0
+    assert bench.flashed == [("/dev/ttyACM1", "10")] and "[y/N]" not in capsys.readouterr().out
 
 
 def test_confirmed_port_is_flashed_with_c3_command(bench):
@@ -181,7 +215,7 @@ def test_ctrl_c_at_the_prompt_flashes_nothing_and_restarts(bench, capsys):
 
 
 def test_service_that_was_active_is_started_again(bench):
-    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=bench.run) == 1
+    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=bench.run) == 5
     assert [c[1] for c in bench.calls] == ["is-active", "stop", "start"]
 
 
@@ -189,5 +223,57 @@ def test_service_that_was_inactive_is_not_started(bench):
     def run(cmd, **kw):
         bench.calls.append(cmd)
         return type("R", (), {"returncode": 3 if cmd[1] == "is-active" else 0})()
-    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=run) == 1
+    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=run) == 5
     assert [c[1] for c in bench.calls] == ["is-active", "stop"]
+
+
+@pytest.mark.parametrize("port", ["/dev/ttyUSB0", "/dev/ttyACM0", "/etc/passwd"])
+def test_port_the_scan_would_not_offer_writes_nothing_and_exits_2(bench, monkeypatch, capsys, port):
+    """ttyUSB (the PN532), a board that answers HELLO (a running panel), a path that is no board."""
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    bench.probe.hello = {"/dev/ttyACM0"}
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port=port) == 2
+    err = " ".join(capsys.readouterr().err.split())
+    assert bench.flashed == [] and err.startswith("Error: " + port) and "Fix: use one of: /dev/ttyACM1." in err
+    assert services(bench) == ["stop", "start"]
+
+
+def test_port_with_no_blank_board_says_none_were_found(bench, monkeypatch, capsys):
+    bench.probe.hello = {"/dev/ttyACM0", "/dev/ttyACM1"}
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="/dev/ttyACM0") == 2
+    assert "no such board was found" in " ".join(capsys.readouterr().err.split()) and bench.flashed == []
+
+
+def test_port_with_an_empty_name_writes_nothing_and_exits_2(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="") == 2
+    err = " ".join(capsys.readouterr().err.split())
+    assert bench.flashed == [] and err.startswith("Error: --port needs") and "/dev/ttyACM0" in err
+
+
+def test_port_written_another_way_is_the_board_the_scan_found(bench):
+    """`..` and links resolve to the scanned name, and that name is the one written."""
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="/dev/ttyUSB0/../ttyACM1") == 0
+    assert bench.flashed == [("/dev/ttyACM1", "10")]
+
+
+def test_port_check_matches_a_link_to_the_board(monkeypatch):
+    real = {"/dev/serial/by-id/usb-x": "/dev/ttyACM0", "/dev/link": "/dev/ttyACM0"}
+    monkeypatch.setattr(cli.os.path, "realpath", lambda p: real.get(p, p))
+    boards = [("/dev/ttyACM0", "/dev/serial/by-id/usb-x")]
+    assert cli._port_check("/dev/serial/by-id/usb-x", boards, "x") == "/dev/ttyACM0"
+    assert cli._port_check("/dev/link", [("/dev/ttyACM0",)], "x") == "/dev/ttyACM0"   # only the link resolves to it
+    assert cli._port_check("/dev/ttyACM9", boards, "x") is None
+
+
+def test_an_explicit_port_still_asks_at_a_terminal(bench, capsys):
+    asked = []
+    assert cli.cmd_station_flash_panel(ask=lambda p: asked.append(p) or "n", run=bench.run,
+                                       only_port="/dev/ttyACM1") == 5
+    assert len(asked) == 1 and bench.flashed == []
+
+
+def test_an_explicit_port_piped_without_yes_exits_2_and_writes_nothing(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, only_port="/dev/ttyACM1") == 2
+    assert bench.flashed == [] and "--yes" in capsys.readouterr().err

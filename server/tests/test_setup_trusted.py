@@ -287,20 +287,20 @@ def test_a_new_setup_code_keeps_trusted_computers_and_says_so(app, helper, monke
     c = client(app)
     _trust(c)
     capsys.readouterr()
-    assert cli.main(["setup-code", "--new"]) == 0
+    assert cli.main(["setup-code", "--new", "--yes"]) == 0
     out = capsys.readouterr().out
     assert "The old setup code no longer works." in out
     # the line wraps at the terminal width (06 6.3); compare the words, and keep the command on one line
     assert "Trusted computers stay trusted (1): revoke them in Devices on the setup page, or with sudo filament-kit setup-code --revoke-trusted." in " ".join(out.split())
     assert any("sudo filament-kit setup-code --revoke-trusted" in line for line in out.splitlines())
     assert _change(c).status_code == 200 and _change(c, code=CODE).status_code == 403     # cookie yes, old code no
-    assert cli.main(["setup-code", "--new", "--revoke-trusted"]) == 0
+    assert cli.main(["setup-code", "--new", "--revoke-trusted", "--yes"]) == 0
     out = capsys.readouterr().out
     assert "1 trusted computer revoked: each needs the setup code again." in out and "stay trusted" not in out
     assert _change(c).status_code == 403 and trusted.listing() == []
-    assert cli.main(["setup-code", "--new"]) == 0
+    assert cli.main(["setup-code", "--new", "--yes"]) == 0
     assert "trusted" not in capsys.readouterr().out.lower()                                 # nobody trusted: no line
-    assert cli.main(["setup-code", "--revoke-trusted"]) == 0
+    assert cli.main(["setup-code", "--revoke-trusted", "--yes"]) == 0
     assert "0 trusted computers revoked" in capsys.readouterr().out
 
 
