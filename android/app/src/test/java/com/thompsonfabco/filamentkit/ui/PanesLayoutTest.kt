@@ -3,7 +3,9 @@ package com.thompsonfabco.filamentkit.ui
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.annotation.StringRes
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +17,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -23,6 +26,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -40,6 +44,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.Density
@@ -47,6 +54,8 @@ import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.nav.Tab
 import com.thompsonfabco.filamentkit.ui.components.ROW_DIVIDER_TAG
 import com.thompsonfabco.filamentkit.ui.components.SECTION_DIVIDER_TAG
+import com.thompsonfabco.filamentkit.ui.components.SECTION_DOT_TAG
+import com.thompsonfabco.filamentkit.ui.components.SectionDrill
 import com.thompsonfabco.filamentkit.ui.components.SECTION_ROW_TAG
 import com.thompsonfabco.filamentkit.ui.components.SECTION_TILE_TAG
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
@@ -54,6 +63,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwLazyCollection
 import com.thompsonfabco.filamentkit.ui.components.SwNav
 import com.thompsonfabco.filamentkit.ui.components.SwSectionDrill
 import com.thompsonfabco.filamentkit.ui.components.SwSectionList
+import com.thompsonfabco.filamentkit.ui.components.SwSectionPane
 import com.thompsonfabco.filamentkit.ui.components.contentInsetSides
 import com.thompsonfabco.filamentkit.ui.components.navLayout
 import com.thompsonfabco.filamentkit.ui.components.rememberSectionDrill
@@ -76,6 +86,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.GraphicsMode
 
 /**
@@ -232,6 +243,27 @@ class PanesLayoutTest {
         }
     }
 
+    @Test fun theUpdateDotIsSeenOnTheCurrentAccentTileAndOnAPlainOne() {
+        sectionList(selected = Tab.Settings, update = true)
+        for (isDark in listOf(false, true)) {
+            dark = isDark
+            rule.waitForIdle()
+            val c = colors()
+            val dot = rule.onNodeWithTag(SECTION_DOT_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val image = rule.onRoot().captureToImage().toPixelMap()
+            assertEquals("dark=$isDark: onAccent, ringed in accent, where the dot sits on the accent tile", c.onAccent,
+                image[dot.center.x.toInt(), dot.center.y.toInt()])
+        }
+    }
+
+    @Test fun theUpdateDotOnAnotherRowIsAccentText() {
+        sectionList(selected = Tab.Spools, update = true)
+        rule.waitForIdle()
+        val dot = rule.onNodeWithTag(SECTION_DOT_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val image = rule.onRoot().captureToImage().toPixelMap()
+        assertEquals(colors().accentText, image[dot.center.x.toInt(), dot.center.y.toInt()])
+    }
+
     @Test fun theNameIsAtTheLabelWeightInTheBodySizeAndTheSummaryIsSmallAndMuted() {
         sectionList(summaries = mapOf(Tab.Printers to "2 connected"))
         rule.waitForIdle()
@@ -256,6 +288,14 @@ class PanesLayoutTest {
         val name = rule.onNodeWithText(text(Tab.Spools.label), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(name.left, dividers[0].boundsInRoot.left, 1f)
         assertEquals("a hairline is 1 dp", 1f, dividers[0].boundsInRoot.height / density, 0.5f)
+    }
+
+    @Test fun theGroupHeadingsAreHeadingsForReaders() {
+        sectionList()
+        rule.waitForIdle()
+        for (name in listOf("EVERYDAY", "SYSTEM")) {
+            assertTrue(name, rule.onNodeWithText(name, useUnmergedTree = true).fetchSemanticsNode().config.contains(SemanticsProperties.Heading))
+        }
     }
 
     /** AUT-8 on the list: every row 48 dp or more, named, and nothing the audit finds, in light and dark at font scale 1 and 2. */
@@ -322,6 +362,27 @@ class PanesLayoutTest {
         assertEquals(Tab.Recent, chosen)
     }
 
+    private fun pane(insets: WindowInsets) = themed {
+        SwSectionPane(Tab.Spools, {}, insets = insets) { Box(Modifier.fillMaxSize()) }
+    }
+
+    @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
+    @Test fun thePaneGroundIsBgEvenWhereTheBarsPadItAndItsEdgeIsOneDpOfBorder() {
+        pane(WindowInsets(bottom = 40.dp))
+        for (isDark in listOf(false, true)) {
+            dark = isDark
+            rule.waitForIdle()
+            val c = colors()
+            val image = rule.onRoot().captureToImage().toPixelMap()
+            val edge = (sectionPaneWidth(tokens.sizes.listW, 700.dp).value * density).toInt()
+            val y = image.height - 5
+            assertEquals("dark=$isDark: the pane's ground under the list, in the bottom inset", c.bg, image[edge / 2, y])
+            assertEquals("dark=$isDark: the edge", c.border, image[edge + (density / 2).toInt(), y])
+            assertEquals("dark=$isDark: the pane just before its edge", c.bg, image[edge - 1, y])
+            assertTrue("dark=$isDark: the edge is not the pane's ground", image[edge + (density / 2).toInt(), y] != image[edge - 1, y])
+        }
+    }
+
     @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h900dp")
     @Test fun otherLooksKeepTheirNavigationAndDrawNoPane() {
         shell()
@@ -339,21 +400,23 @@ class PanesLayoutTest {
 
     // ----- the drill-in on a phone
 
-    private var left = 0
     private var behind = 0
     private var tabNow by mutableStateOf(Tab.Home)
     private var atRoot by mutableStateOf(true)
     private var active by mutableStateOf(true)
     private var inputMode: androidx.compose.ui.input.InputModeManager? = null
+    private var view: android.view.View? = null
+    private var taps = 0
 
     /** The screens (a node of the section shown), then the drill-in over them as the shell composes it. */
     private fun drillShell() = themed {
         inputMode = LocalInputModeManager.current
+        view = LocalView.current
         val drill = rememberSectionDrill()
         BackHandler { behind++ }
         Box(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxSize().underSectionList(drill.showsPage(active, atRoot))) { Text("screen ${tabNow.name}") }
-            SwSectionDrill(drill, active, atRoot, tabNow, { tabNow = it }, onLeave = { left++ })
+            Box(Modifier.fillMaxSize().clickable { taps++ }.underSectionList(drill.showsPage(active, atRoot))) { Text("screen ${tabNow.name}") }
+            SwSectionDrill(drill, active, atRoot, tabNow, { tabNow = it; drill.enter() })
         }
     }
 
@@ -383,15 +446,62 @@ class PanesLayoutTest {
         for (tab in Tab.entries) rowOf(tab).assertExists()
         rowOf(Tab.Spools).assertIsFocused()
         assertEquals("the screens under it did not get Back", 0, behind)
-        assertEquals("and the app was not left", 0, left)
     }
 
-    @Test fun backOnTheListLeavesAndTheScreensNeverSeeIt() {
+    @Test fun backOnTheListIsNotHandledByTheListSoItGoesOnToTheSystem() {
         drillShell()
         rule.waitForIdle()
         pressBack()
-        assertEquals(1, left)
-        assertEquals(0, behind)
+        // the list has no callback of its own: Back reaches whatever is next (in the app the NavHost, then the system)
+        assertEquals(1, behind)
+        for (tab in Tab.entries) rowOf(tab).assertExists()
+    }
+
+    @Test fun aTouchOnTheListNeverReachesTheScreenUnderIt() {
+        drillShell()
+        rule.waitForIdle()
+        // below the last row, where nothing of the list is
+        rule.onRoot().performTouchInput { click(Offset(width / 2f, height - 20f)) }
+        rule.waitForIdle()
+        assertEquals(0, taps)
+        rowOf(Tab.Home).assertExists()
+        // the same touch, with the list gone, reaches the screen: the test can see a tap
+        active = false
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { click(Offset(width / 2f, height - 20f)) }
+        rule.waitForIdle()
+        assertEquals(1, taps)
+    }
+
+    private fun readerFocusAfterBack(touchExploration: Boolean): Boolean {
+        val manager = shadowOf(RuntimeEnvironment.getApplication().getSystemService(android.view.accessibility.AccessibilityManager::class.java))
+        manager.setEnabled(true)
+        manager.setTouchExplorationEnabled(touchExploration)
+        drillShell()
+        rule.waitForIdle()
+        rowOf(Tab.Spools).performClick()
+        rule.waitForIdle()
+        pressBack()
+        rule.waitForIdle()
+        val id = rowOf(Tab.Spools).fetchSemanticsNode().id
+        return view!!.accessibilityNodeProvider!!.createAccessibilityNodeInfo(id)!!.isAccessibilityFocused
+    }
+
+    @Test fun afterBackTheRowGetsAccessibilityFocusWithAScreenReader() {
+        assertTrue(readerFocusAfterBack(touchExploration = true))
+    }
+
+    @Test fun withoutAScreenReaderBackLeavesNoAccessibilityFocus() {
+        assertFalse(readerFocusAfterBack(touchExploration = false))
+    }
+
+    @Test fun theDrillIsKeptAcrossARecreation() {
+        val saver = SectionDrill.Saver
+        val scope = SaverScope { true }
+        for (open in listOf(true, false)) {
+            val saved = with(saver) { scope.save(SectionDrill(open)) }
+            assertEquals("open=$open", open, saver.restore(saved!!)!!.open)
+        }
     }
 
     @Test fun backDeeperInASectionIsTheScreensOwn() {
@@ -404,7 +514,6 @@ class PanesLayoutTest {
         pressBack()
         assertEquals("a screen inside the section keeps its Back", 1, behind)
         assertEquals(0, rule.onAllNodesWithTag(SECTION_ROW_TAG).fetchSemanticsNodes().size)
-        assertEquals(0, left)
     }
 
     @Test fun theDrillDoesNothingInAnotherLookOrAWiderWindow() {

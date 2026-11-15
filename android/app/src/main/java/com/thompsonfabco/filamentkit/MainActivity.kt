@@ -1,6 +1,5 @@
 package com.thompsonfabco.filamentkit
 
-import android.app.Activity
 import android.app.UiModeManager
 import android.graphics.Color as AndroidColor
 import android.os.Build
@@ -330,7 +329,7 @@ class MainActivity : ComponentActivity() {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun FilamentKitApp(
+internal fun FilamentKitApp(
     app: AppViewModel, paired: Boolean, appearance: Appearance, look: Look, toast: SwToastState, topBarActions: TopBarActions,
 ) {
     // API 37: every LAN socket needs ACCESS_LOCAL_NETWORK. Asked once at start; the session waits for it.
@@ -506,6 +505,8 @@ private fun FilamentKitApp(
     val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
 
     val tabTapped: (Tab) -> Unit = { tapped ->
+        // from the list page, or from a sheet over it (the Hub sheet's Hub settings): the section opens, so the list goes
+        if (drillActive) drill.enter()
         val here = nav.currentDestination
         when (tabTap(here.tab(), tapped, here.isTabRoot())) {
             TabTap.Switch -> nav.selectTab(tapped)
@@ -784,7 +785,8 @@ private fun FilamentKitApp(
                     ) {
                         if (!inPairing && !settingsOverPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
                         AppearanceMenu(appearance, app::setAppearance)
-                        topBarActions.content?.invoke(this)
+                        // on the list page only the list's own actions show, not the screen's under it
+                        if (!sectionPage) topBarActions.content?.invoke(this)
                     }
                     SwPills(
                         tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
@@ -1249,10 +1251,9 @@ private fun FilamentKitApp(
                     sharedRoutes()
                 }
             }
-            // composed after the NavHost, so its Back handlers go first; on the list itself Back leaves the app, as at the first screen of the other looks
-            val activity = context as? Activity
+            // composed after the NavHost, so its Back handler goes first; on the list itself Back is left to the system, as at the first screen of the other looks
             SwSectionDrill(
-                drill, drillActive, atTabRoot, tab, tabTapped, onLeave = { activity?.finish() }, modifier = Modifier.padding(padding),
+                drill, drillActive, atTabRoot, tab, tabTapped, modifier = Modifier.padding(padding),
                 settingsUpdate = update.available != null,
             )
         }

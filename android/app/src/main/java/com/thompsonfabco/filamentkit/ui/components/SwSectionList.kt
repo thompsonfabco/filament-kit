@@ -1,5 +1,8 @@
 package com.thompsonfabco.filamentkit.ui.components
 
+import android.view.View
+import android.view.accessibility.AccessibilityManager
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,15 +41,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -67,6 +77,13 @@ internal const val SECTION_TILE_TAG = "section-tile"
 
 /** The test tag of the hairline between two rows of a group. */
 internal const val SECTION_DIVIDER_TAG = "section-divider"
+
+/** The test tag of the update dot on Settings' row. */
+internal const val SECTION_DOT_TAG = "section-dot"
+
+/** Marks a row with the section it opens, so the list can find it to hand it accessibility focus. */
+private val SectionRowTab = SemanticsPropertyKey<Tab>("SectionRowTab")
+private var SemanticsPropertyReceiver.sectionRowTab by SectionRowTab
 
 /** The two groups of the list (02-components 2.3, foundations 8): Everyday, then System, which on Android is Settings. */
 internal val SECTION_GROUPS: List<Pair<Int, List<Tab>>> = listOf(
@@ -101,7 +118,15 @@ internal fun SwSectionList(
     val space = SpoolwardenTheme.space
     val shape = SpoolwardenTheme.shapes.r
     val requesters = remember { Tab.entries.associateWith { FocusRequester() } }
-    if (focusOn != null) LaunchedEffect(focusOn) { requesters.getValue(focusOn).requestFocus() }
+    val view = LocalView.current
+    if (focusOn != null) LaunchedEffect(focusOn) {
+        // input focus for a keyboard or a switch (Compose shows none in touch mode), accessibility focus for a screen reader
+        requesters.getValue(focusOn).requestFocus()
+        if (view.context.getSystemService(AccessibilityManager::class.java)?.isTouchExplorationEnabled == true) {
+            repeat(2) { withFrameNanos { } } // the rows are laid out and in the semantics tree
+            focusForReader(view, focusOn)
+        }
+    }
     Column(
         modifier.background(colors.bg).verticalScroll(rememberScrollState()).padding(start = space.s3, end = space.s3, top = space.s3, bottom = space.s5),
     ) {
@@ -155,7 +180,12 @@ private fun SectionRow(tab: Tab, current: Boolean, summary: String?, update: Boo
                 .background(if (current) colors.accent else colors.surface3, SpoolwardenTheme.shapes.rS).padding(space.s1)
             val tint = if (current) colors.onAccent else colors.text
             if (update) {
-                BadgedBox(badge = { Box(Modifier.size(space.s2).background(colors.accentText, CircleShape)) }) {
+                // half of the dot lies on the tile: on the current row's accent tile it is `onAccent` with an `accent` ring
+                val dot = Modifier.size(space.s2).testTag(SECTION_DOT_TAG).let {
+                    if (current) it.background(colors.accent, CircleShape).padding(SpoolwardenTheme.sizes.hairline).background(colors.onAccent, CircleShape)
+                    else it.background(colors.accentText, CircleShape)
+                }
+                BadgedBox(badge = { Box(dot) }) {
                     SwIcon(tab.icon, null, tile, tint = tint)
                 }
             } else {
@@ -169,8 +199,18 @@ private fun SectionRow(tab: Tab, current: Boolean, summary: String?, update: Boo
         ),
         modifier = modifier.heightIn(min = space.s7 + space.s1).testTag(SECTION_ROW_TAG)
             .selectable(selected = current, role = Role.Tab, onClick = onClick)
+            .semantics { sectionRowTab = tab }
             .then(if (update) Modifier.semantics { contentDescription = updateName } else Modifier),
     )
+}
+
+/** Gives the row of [tab] accessibility focus (the screen reader's cursor), which Compose has no modifier for. */
+@OptIn(InternalComposeUiApi::class)
+private fun focusForReader(view: View, tab: Tab) {
+    val root = (view as? RootForTest)?.semanticsOwner?.rootSemanticsNode ?: return
+    val row = generateSequence(listOf(root)) { level -> level.flatMap { it.children }.takeIf { it.isNotEmpty() } }
+        .flatten().firstOrNull { it.config.getOrNull(SectionRowTab) == tab } ?: return
+    view.accessibilityNodeProvider?.performAction(row.id, AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null)
 }
 
 /**
@@ -243,6 +283,18 @@ internal class SectionDrill(open: Boolean = true) {
     /** A section's root is the page, and Back goes to the list. */
     fun drilledIn(active: Boolean, atRoot: Boolean) = active && atRoot && !open
 
+    /** A section was chosen, from the list or from a sheet over it: the list closes and no row is to take focus. */
+    fun enter() {
+        open = false
+        focus = false
+    }
+
+    /** Back from a section: the list opens and its row of that section takes focus. */
+    fun back() {
+        open = true
+        focus = true
+    }
+
     companion object {
         val Saver = androidx.compose.runtime.saveable.Saver<SectionDrill, Boolean>(save = { it.open }, restore = { SectionDrill(it) })
     }
@@ -257,9 +309,11 @@ internal fun Modifier.underSectionList(hidden: Boolean): Modifier =
 
 /**
  * The drill-in of a phone in Panes over the screens: while [drill] shows the page, the section list covers [modifier]'s area
- * and choosing a section runs [onSelect] and opens it; while a section's root is the page, Back (the top bar's arrow too)
- * returns to the list, focus on that section's row; on the list Back runs [onLeave]. Composed after the screens, so its Back
- * handlers go before theirs. Nothing while the drill is not [active] (another look, a wider window, the navigation hidden).
+ * and choosing a section runs [onSelect], which opens it and calls [SectionDrill.enter] (the shell does so in every path that
+ * opens a section, a row or a sheet's action alike); while a section's root is the page, Back (the top bar's arrow too)
+ * returns to the list, focus on that section's row (input focus, and accessibility focus with a screen reader); on the
+ * list Back is not handled here, so it goes on to the system as at the first screen of the other looks. Composed after the
+ * screens, so its Back handler goes before theirs. Nothing while the drill is not [active] (another look, a wider window, the navigation hidden).
  */
 @Composable
 internal fun SwSectionDrill(
@@ -268,7 +322,6 @@ internal fun SwSectionDrill(
     atRoot: Boolean,
     selected: Tab?,
     onSelect: (Tab) -> Unit,
-    onLeave: () -> Unit,
     modifier: Modifier = Modifier,
     summaries: Map<Tab, String> = emptyMap(),
     settingsUpdate: Boolean = false,
@@ -276,10 +329,9 @@ internal fun SwSectionDrill(
     val page = drill.showsPage(active, atRoot)
     if (page) {
         SwSectionPage(
-            selected, { chosen -> onSelect(chosen); drill.open = false; drill.focus = false }, modifier,
+            selected, onSelect, modifier,
             summaries, settingsUpdate, focusOn = if (drill.focus) selected else null,
         )
     }
-    BackHandler(enabled = drill.drilledIn(active, atRoot)) { drill.open = true; drill.focus = true }
-    BackHandler(enabled = page) { onLeave() }
+    BackHandler(enabled = drill.drilledIn(active, atRoot)) { drill.back() }
 }

@@ -1,3 +1,5 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwSectionList.kt | SectionRowTab | name of the semantics key that marks a row with its section, never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwSectionList.kt | section-divider | test tag of the hairline between two section rows, never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwSectionList.kt | section-dot | test tag of the update dot on the Settings row, never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwSectionList.kt | section-row | test tag of a section row, never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwSectionList.kt | section-tile | test tag of a section row's icon tile, never shown
