@@ -995,7 +995,7 @@ class ScreenSemanticsTest {
         addApi.addFailures += ApiError(0, "offline", "x")
         vm.confirm()
         rule.waitForIdle()
-        rule.onNodeWithText("These spools may have been added already", substring = true).assertExists()
+        rule.onNodeWithText("These spools may have been added already: the connection was lost before the Hub answered. Check Spoolman before adding them again.").assertExists()
         auditAllFour("Back to photos", listOf("Check the spools"))
     }
 

@@ -1159,7 +1159,6 @@
     <string name="printers_add_serial_hint">Read from the printer when left empty.</string>
     <string name="printers_add_serial_optional">Serial (optional)</string>
     <string name="printers_add_type">Printer type</string>
-    <string name="printers_add_wait">The Hub is adding the printer. Wait for its answer.</string>
     <!-- 1=name -->
     <string name="printers_added">Added %1$s.</string>
     <string name="printers_added_next">Added. Test the connection next.</string>
@@ -1352,7 +1351,6 @@
     <!-- 1=serial -->
     <string name="printers_serial_line">SN %1$s</string>
     <string name="printers_set_key">Set Moonraker API key</string>
-    <string name="printers_set_code_wait">The Hub is saving the Access Code. Wait for its answer.</string>
     <string name="printers_slots_ams">AMS slots</string>
     <!-- 1=loaded 2=total -->
     <string name="printers_slots_loaded">%1$s/%2$s loaded</string>
@@ -2073,6 +2071,8 @@
     <string name="spool_load_plan">Load %1$s into %2$s</string>
     <!-- 1=id 2=slot 3=location -->
     <string name="spool_load_plan_goes_back">Spool %1$s now in %2$s goes back to %3$s</string>
+    <!-- 1=id 2=slot -->
+    <string name="spool_load_plan_goes_back_noplace">Spool %1$s now in %2$s goes back to its previous place</string>
     <!-- 1=mm -->
     <string name="spool_load_plan_nozzle">Nozzle: %1$s mm</string>
     <!-- 1=mm -->
@@ -2226,8 +2226,6 @@
     <string name="printer_set_address_changed">Address changed to %1$s. The Hub reconnects now.</string>
     <string name="printer_set_cert_forgotten">Certificate forgotten. The next connection pins a new one.</string>
     <string name="printer_set_code_replaced">Access Code replaced.</string>
-    <!-- 1=name -->
-    <string name="printer_set_code_done">Access Code replaced for %1$s.</string>
     <string name="printer_set_home_note">Anyone on the home network can use this page.</string>
     <string name="printer_set_key_saved">API key saved.</string>
     <string name="printer_set_not_pinned">Not pinned</string>
@@ -2466,6 +2464,7 @@
     <string name="add_read_without_tag">Add without the tag</string>
     <!-- 1=note -->
     <string name="add_review_added_before">These spools may have been added already: %1$s. Check Spoolman before adding them again.</string>
+    <string name="add_review_added_before_lost">These spools may have been added already: the connection was lost before the Hub answered. Check Spoolman before adding them again.</string>
     <string name="add_review_blocked_count">Enter a spool count for every spool.</string>
     <!-- 1=id 2=fields -->
     <string name="add_review_blocked_fields">Spool %1$s still needs: %2$s.</string>
@@ -2478,7 +2477,7 @@
     <string name="add_review_empty_text">Go back to the photos and read them again, or add by hand.</string>
     <string name="add_review_empty_title">No spools found in these photos</string>
     <string name="add_review_expanded">Expanded</string>
-    <string name="add_review_error_at">No @ (leave out the printer part)</string>
+    <string name="add_review_error_at">Leave out the @ and the printer part.</string>
     <string name="add_review_error_degrees">Enter degrees above 0.</string>
     <string name="add_review_error_density">Enter a density above 0.</string>
     <string name="add_review_error_whole">Enter a whole number.</string>
@@ -2492,7 +2491,6 @@
     <string name="add_review_hand_empty">Pick a filament above, or tap New filament.</string>
     <string name="add_review_line_hint">Presets are made per line.</string>
     <string name="add_review_line_limit">Up to 100 characters.</string>
-    <string name="add_review_lost_note">the connection was lost before the Hub answered</string>
     <string name="add_review_mark_estimated">Estimated: check this</string>
     <!-- 1=fields -->
     <string name="add_review_needs">Needs: %1$s</string>
@@ -3029,6 +3027,7 @@
     <!-- 1=tag -->
     <string name="tag_find_title">Link tag %1$s to a sealed spool</string>
     <string name="tag_in_use">This tag is already linked to another spool:</string>
+    <string name="tag_own_replaced">This spool already has a tag. Linking this one replaces it.</string>
     <string name="tag_link_button">Link tag</string>
     <!-- 1=tag -->
     <string name="tag_link_line">Tag %1$s is linked to this spool.</string>

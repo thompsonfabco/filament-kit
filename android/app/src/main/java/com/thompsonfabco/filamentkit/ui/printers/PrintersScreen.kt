@@ -376,7 +376,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             placeholder = stringResource(R.string.printer_add_name_placeholder),
         )
         d.problem?.let { ProblemNotice(it, onPairAgain) }
-        if (d.busy) BusyReason(R.string.printers_add_wait)
+        if (d.busy) BusyReason(R.string.common_busy_wait)
     }
 }
 
@@ -418,7 +418,7 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
             error = d.keyProblem?.let { problemText(it) },
         )
         d.problem?.let { ProblemNotice(it, onPairAgain) }
-        if (d.busy) BusyReason(R.string.printers_add_wait)
+        if (d.busy) BusyReason(R.string.common_busy_wait)
     }
 }
 

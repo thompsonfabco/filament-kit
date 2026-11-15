@@ -189,6 +189,8 @@ fun LinkPreviewScreen(
                 NoticeCard(NoticeKind.Warn, stringResource(R.string.tag_in_use))
                 SpoolRow(ui.other!!)
             }
+            // the tapped tag is free and the chosen spool has a tag of its own: the move replaces it
+            if (conflict == ConflictReason.SpoolHasOtherTag && ui.other == null) NoticeCard(NoticeKind.Warn, stringResource(R.string.tag_own_replaced))
             // the chosen spool has a tag of its own: moving the tag here replaces it
             val replaces = conflict == ConflictReason.SpoolHasOtherTag || ui.spool?.tag != null
             Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {

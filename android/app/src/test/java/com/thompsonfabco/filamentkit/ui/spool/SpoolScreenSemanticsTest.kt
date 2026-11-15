@@ -410,6 +410,7 @@ class SpoolScreenSemanticsTest {
         val vm = LinkPreviewViewModel("04A1B2", 212, 1240.0, backend)
         host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}) }
         auditAllFour(listOf("Link this tag?", "Tag 04A1B2 is linked to this spool.", "Weight with spool is recorded as 1240 g.", "Link tag", "Back"))
+        rule.onNodeWithText("This spool already has a tag. Linking this one replaces it.").assertDoesNotExist()
     }
 
     @Test fun linkPreviewWithTheTagInUse() {
@@ -425,6 +426,7 @@ class SpoolScreenSemanticsTest {
         val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
         host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}) }
         auditAllFour(listOf("This tag is already linked to another spool:", "Spool 90", "Move the tag to this spool", "Cancel"))
+        rule.onNodeWithText("This spool already has a tag. Linking this one replaces it.").assertDoesNotExist()
     }
 
     // ---- Load into a printer ----
@@ -552,6 +554,11 @@ class SpoolScreenSemanticsTest {
                 "This sets the slot on the printer and moves the spool there in the inventory.", "Back", "Load",
             ),
         )
+    }
+
+    @Test fun loadPreviewWithNoPlaceToGoBackToSaysItInOneText() {
+        previewScreen(FakeLoad(listOf(x1), PrinterDetail(x1, status), plan.copy(movedBack = listOf(MovedBack(212, "")))))
+        auditAllFour(listOf("Spool 212 now in A2 goes back to its previous place"))
     }
 
     @Test fun loadPreviewDroppedConnection() {
@@ -695,6 +702,8 @@ class SpoolScreenSemanticsTest {
         host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}) }
         auditAllFour(listOf("This tag is already linked to another spool:", "Spool 90", "Move the tag here and replace this spool's tag", "Cancel"))
         rule.onNodeWithText("Move the tag to this spool").assertDoesNotExist()
+        // the tapped tag is not free: the line about the spool's own tag is for a free tag only
+        rule.onNodeWithText("This spool already has a tag. Linking this one replaces it.").assertDoesNotExist()
     }
 
     @Test fun aSpoolThatHasAnotherTagIsNotToldTheTagIsLinkedElsewhere() {
@@ -706,7 +715,7 @@ class SpoolScreenSemanticsTest {
         )
         val vm = LinkPreviewViewModel("04A1B2", 212, null, backend)
         host("Tag 04A1B2") { LinkPreviewScreen(vm, "04A1B2", onBack = {}, onDone = {}, onPairAgain = {}) }
-        auditAllFour(listOf("Move the tag here and replace this spool's tag", "Cancel"))
+        auditAllFour(listOf("This spool already has a tag. Linking this one replaces it.", "Move the tag here and replace this spool's tag", "Cancel"))
         rule.onNodeWithText("This tag is already linked to another spool:").assertDoesNotExist()
     }
 

@@ -67,11 +67,11 @@ class PrintersBusyFormTest {
         vm.submitAdd("12345678", "")
         rule.waitForIdle()
         rule.onNodeWithText("Cancel").assertIsNotEnabled()
-        rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").assertExists()
+        rule.onNodeWithText("Still working. Wait for it to finish.").assertExists()
         rule.onNodeWithText("Add Bambu Lab P1S").performTouchInput { swipeDown() }
         rule.waitForIdle()
         assertNotNull("the form is still open", vm.state.value.dialog)
-        assertTrue("and still shown", rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").isDisplayed())
+        assertTrue("and still shown", rule.onNodeWithText("Still working. Wait for it to finish.").isDisplayed())
         gate.completeExceptionally(ApiError(400, "bad_request", "Refused by the Hub"))
         rule.waitForIdle()
         assertTrue("the later refusal is shown", rule.onNodeWithText("Refused by the Hub").isDisplayed())
@@ -89,7 +89,7 @@ class PrintersBusyFormTest {
         rule.runOnUiThread { (ShadowDialog.getLatestDialog() as ComponentDialog).onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
         assertNotNull("the form is still open", vm.state.value.dialog)
-        assertTrue("and still shown", rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").isDisplayed())
+        assertTrue("and still shown", rule.onNodeWithText("Still working. Wait for it to finish.").isDisplayed())
         gate.completeExceptionally(ApiError(400, "bad_request", "Refused by the Hub"))
         rule.waitForIdle()
         assertTrue("the later refusal is shown", rule.onNodeWithText("Refused by the Hub").isDisplayed())

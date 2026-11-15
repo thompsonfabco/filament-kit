@@ -167,7 +167,7 @@ class PrinterEditTest {
         v.open(EditField.ACCESS_CODE)
         v.submit("12345678")
         runCurrent()
-        assertEquals(Note(Say.Words(R.string.printer_set_code_done, listOf("Garage H2D"))), v.state.value.note)
+        assertEquals(Note(Say.Words(R.string.printer_set_code_replaced)), v.state.value.note)
     }
 
     @Test fun theHubsNoteIsKeptForTheScreen() = runTest(dispatcher) {
