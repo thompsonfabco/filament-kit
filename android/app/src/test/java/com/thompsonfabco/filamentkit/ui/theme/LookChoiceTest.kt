@@ -25,8 +25,8 @@ class LookChoiceTest {
     }
 
     @Test fun aLookWithNoBuiltLayoutIsNotDrawn() {
-        assertEquals(listOf(Look.Console, Look.Workbench), BUILT_LOOKS)
-        assertEquals(Look.Console, resolveLook(chosen = null, hub = Look.Palette))
+        assertEquals(listOf(Look.Console, Look.Workbench, Look.Palette), BUILT_LOOKS)
+        assertEquals(Look.Console, resolveLook(chosen = null, hub = Look.Panes))
         assertEquals(Look.Console, resolveLook(chosen = Look.Panes, hub = null))
         assertEquals("the Hub's look is the fallback of an unbuilt choice", Look.Workbench, resolveLook(Look.Panes, Look.Workbench))
     }
@@ -35,6 +35,12 @@ class LookChoiceTest {
         assertEquals(Look.Workbench, resolveLook(chosen = Look.Workbench, hub = null))
         assertEquals("the phone's own Console wins over the Hub's Workbench", Look.Console, resolveLook(Look.Console, Look.Workbench))
         assertEquals("nothing stored: the Hub's look", Look.Workbench, resolveLook(chosen = null, hub = lookFromWire("workbench")))
+    }
+
+    @Test fun thePaletteIsDrawnWhenChosenOrWhenTheHubNamesItAndNothingIsStored() {
+        assertEquals(Look.Palette, resolveLook(chosen = Look.Palette, hub = null))
+        assertEquals("the phone's own Console wins over the Hub's Palette", Look.Console, resolveLook(Look.Console, Look.Palette))
+        assertEquals("nothing stored: the Hub's look", Look.Palette, resolveLook(chosen = null, hub = lookFromWire("palette")))
     }
 
     @Test fun lookNamesAreTheHubsWords() {

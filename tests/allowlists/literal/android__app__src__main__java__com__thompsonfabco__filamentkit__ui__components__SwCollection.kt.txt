@@ -1,1 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwCollection.kt | 224.dp | 1 | the tile grid column of 02 6.1, minmax(14rem, 1fr) at 16 dp to the rem; no size token holds it
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwCollection.kt | 288.dp | 1 | the card grid column of 02 6.1, minmax(18rem, 1fr) at 16 dp to the rem; no size token holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwCollection.kt | 420.dp | 1 | the width from which phone tiles are two columns (02 6.1, Phones); no size token holds it

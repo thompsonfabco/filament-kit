@@ -1,12 +1,17 @@
 package com.thompsonfabco.filamentkit.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.NavigationBar
@@ -18,12 +23,16 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Tab as MaterialTab
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -42,7 +51,7 @@ import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 /**
  * The shell around the main graph (05-android-app 2.1, 2.3): the bottom bar on a phone, the rail on a wider window,
  * the same five [Tab]s in both. The `nav` profile of the look (02-components 2.3) changes only the wide form: `Sidebar`
- * (Workbench) is the rail on a tablet and a permanent drawer `sideW` wide on expanded width. [selected] is the current destination, null while a screen outside the five is on top
+ * (Workbench) is the rail on a tablet and a permanent drawer `sideW` wide on expanded width; `Pills` (Palette) leaves the wide form to [SwPills]. [selected] is the current destination, null while a screen outside the five is on top
  * (the bar is then [visible] = false). A dot on Settings tells that an app update is ready ([settingsUpdate]).
  *
  * The bar and the rail keep Material's own geometry (80 dp high, 80 dp wide at least); [content] gets a 1 dp
@@ -183,8 +192,71 @@ internal fun SwNav(
 internal fun navLayout(visible: Boolean, window: WindowClass, style: NavStyle): NavigationSuiteType = when {
     !visible -> NavigationSuiteType.None
     window == WindowClass.Phone -> NavigationSuiteType.NavigationBar
+    // the pills are a row under the top bar ([SwPills]), so no side navigation is left
+    style == NavStyle.Pills -> NavigationSuiteType.None
     style == NavStyle.Sidebar && window == WindowClass.Desktop -> NavigationSuiteType.NavigationDrawer
     else -> NavigationSuiteType.NavigationRail
+}
+
+/**
+ * The navigation of `NavStyle.Pills` (Palette) on a tablet or expanded width (02-components 2.3): the five [Tab]s as a
+ * row of pills under the top bar, the current one `accentSoft` with `accentText`, each `--ctl` high with an icon left of
+ * its label. Nothing is drawn on a phone (the bottom bar is there), for another profile, or while [visible] is false.
+ * Every destination fits the row, so the trailing "More" of the web has nothing to hold here.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SwPills(selected: Tab?, visible: Boolean, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier, settingsUpdate: Boolean = false) {
+    if (!visible || LocalNavStyle.current != NavStyle.Pills || SpoolwardenTheme.window == WindowClass.Phone) return
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val updateName = stringResource(R.string.nav_settings_update)
+    Column(modifier) {
+        PrimaryScrollableTabRow(
+            selectedTabIndex = Tab.entries.indexOf(selected).coerceAtLeast(0),
+            containerColor = colors.surface,
+            contentColor = colors.muted,
+            edgePadding = space.s4,
+            indicator = {},
+            divider = {},
+        ) {
+            Tab.entries.forEach { tab ->
+                val current = tab == selected
+                val withDot = tab == Tab.Settings && settingsUpdate
+                MaterialTab(
+                    selected = current,
+                    onClick = { onSelect(tab) },
+                    modifier = Modifier
+                        .padding(vertical = space.s1, horizontal = space.s1)
+                        .height(SpoolwardenTheme.sizes.control)
+                        .clip(SpoolwardenTheme.shapes.rL)
+                        .background(if (current) colors.accentSoft else Color.Transparent)
+                        .then(if (withDot) Modifier.semantics { contentDescription = updateName } else Modifier),
+                    selectedContentColor = colors.accentText,
+                    unselectedContentColor = colors.text,
+                ) {
+                    Row(
+                        Modifier.padding(start = space.s3, end = space.s4),
+                        horizontalArrangement = Arrangement.spacedBy(space.s2),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (withDot) {
+                            BadgedBox(badge = { Box(Modifier.size(space.s2).background(colors.accentText, CircleShape)) }) {
+                                SwIcon(tab.icon, null)
+                            }
+                        } else {
+                            SwIcon(tab.icon, null)
+                        }
+                        Text(
+                            stringResource(tab.label), style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = MaterialTheme.typography.titleMedium.fontWeight,
+                        )
+                    }
+                }
+            }
+        }
+        HorizontalDivider(thickness = SpoolwardenTheme.sizes.hairline, color = colors.border)
+    }
 }
 
 /** The hairline between the content and the bar below it, or the rail or drawer before it. */

@@ -186,6 +186,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwConnectionChip
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwNav
+import com.thompsonfabco.filamentkit.ui.components.SwPills
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
@@ -254,7 +255,9 @@ import com.thompsonfabco.filamentkit.ui.spool.toSpoolSummary
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.BUILT_LOOKS
+import com.thompsonfabco.filamentkit.ui.theme.LocalNavStyle
 import com.thompsonfabco.filamentkit.ui.theme.Look
+import com.thompsonfabco.filamentkit.ui.theme.NavStyle
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 import com.thompsonfabco.filamentkit.ui.theme.lookFromWire
@@ -753,15 +756,19 @@ private fun FilamentKitApp(
         Scaffold(
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
             topBar = {
-                if (!scanning) SwTopBar(
-                    title = printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
-                    subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
-                    onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
-                    scrollBehavior = scroll,
-                ) {
-                    if (!inPairing && !settingsOverPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
-                    AppearanceMenu(appearance, app::setAppearance)
-                    topBarActions.content?.invoke(this)
+                // the pills of Palette are a row under the top bar on a tablet and wider; nothing on a phone or in another look
+                Column {
+                    if (!scanning) SwTopBar(
+                        title = printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
+                        subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
+                        onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
+                        scrollBehavior = scroll,
+                    ) {
+                        if (!inPairing && !settingsOverPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
+                        AppearanceMenu(appearance, app::setAppearance)
+                        topBarActions.content?.invoke(this)
+                    }
+                    SwPills(tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null)
                 }
             },
             snackbarHost = { SwToastHost(toast) },
@@ -770,6 +777,7 @@ private fun FilamentKitApp(
                 scanning -> WindowInsets(0)
                 !navVisible -> WindowInsets.safeDrawing
                 phone -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+                LocalNavStyle.current == NavStyle.Pills -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
                 else -> WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom)
             },
         ) { padding ->
