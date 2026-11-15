@@ -75,6 +75,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Orca Slicer parents for a phone:** a paired phone can list the Orca Slicer parents a new preset line can use, as the setup page and the phone web app do.
 
 - **The command line asks before destructive commands.** Commands that delete, replace or overwrite something (forgetting a printer, unpairing a phone, flashing a board, updating, rolling back, removing the kit) now ask for a yes first. Answering no changes nothing and exits with 5. Scripts and anything run without a terminal need `--yes` from this version on; without it the command stops with exit 2 and says so.
+- **`--json` and `--quiet` on the command line.** Every command that prints data or a result takes `--json` (one JSON document on standard output, the Hub's own field names; errors as `{"ok": false, "error", "fix"}`; it never asks, so a command that would ask needs `--yes`) and `-q` / `--quiet` (only errors, lists you asked for and answers; no result lines, notes or progress).
 
 ## Still to come
 

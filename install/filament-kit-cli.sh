@@ -35,13 +35,13 @@ if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; t
     fi
 fi
 
-# The switches every command takes (`--plain`, `--no-progress`, `--color <when>`) may stand before the command, as in
-# `sudo filament-kit --plain backup create`: they are set aside here, so the route below is chosen on the command
-# itself, and they go on to the program in front of it.
+# The switches every command takes (`--plain`, `--no-progress`, `--json`, `--quiet`, `-q`, `--color <when>`) may stand
+# before the command, as in `sudo filament-kit --plain backup create`: they are set aside here, so the route below is
+# chosen on the command itself, and they go on to the program in front of it.
 SWITCHES=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --plain | --no-progress | --color=*) SWITCHES+=("$1"); shift ;;
+        --plain | --no-progress | --json | --quiet | -q | --color=*) SWITCHES+=("$1"); shift ;;
         --color) SWITCHES+=("$1"); shift; if [ "$#" -gt 0 ]; then SWITCHES+=("$1"); shift; fi ;;
         *) break ;;
     esac

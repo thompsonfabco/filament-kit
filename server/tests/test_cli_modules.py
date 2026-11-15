@@ -68,6 +68,17 @@ def test_disable_with_dependents_noninteractive_fails(applied, capsys, monkeypat
     assert "modules" not in config.load()
 
 
+def test_json_stops_with_exit_2_where_it_would_ask(applied, capsys, monkeypatch):
+    # at a terminal this asks; --json never asks: exit 2, nothing changed (06 6.8)
+    _stdin(monkeypatch, "y\n", tty=True)
+    assert cli.main(["modules", "disable", "server", "--json"]) == 2
+    assert "needs a yes" in capsys.readouterr().out
+    assert applied == [] and "modules" not in config.load()
+    config.save(modules.set_mode(config.load(), "station"))
+    assert cli.main(["modules", "enable", "printers", "--json"]) == 2     # the offer to turn on server too
+    assert "needs a yes" in capsys.readouterr().out
+
+
 def test_disable_with_dependents_tty_asks(applied, monkeypatch):
     # server-less needs a remote Spoolman (validate)
     cfg = config.load()

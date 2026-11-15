@@ -100,14 +100,14 @@ def test_cli_add_offline_still_adds(capsys):
 
 
 def test_cli_add_says_when_the_service_cannot_reach_it(capsys, monkeypatch):
-    monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
+    monkeypatch.setattr(klipper_cli, "_describe", lambda p, added=None: 0)
     assert klipper_cli.main(["add", "Far", "203.0.113.7"]) == 0
     assert any("IPAddressAllow=203.0.113.0/24" in x for x in capsys.readouterr().err.splitlines())
     assert registry.load()["far"].host == "203.0.113.7"
 
 
 def test_cli_add_says_nothing_for_a_home_address(capsys, monkeypatch):
-    monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
+    monkeypatch.setattr(klipper_cli, "_describe", lambda p, added=None: 0)
     assert klipper_cli.main(["add", "Near", "192.168.50.7"]) == 0
     assert "Note:" not in capsys.readouterr().err
 
@@ -117,7 +117,7 @@ def test_cli_add_saves_a_name_that_does_not_resolve_and_says_so(capsys, monkeypa
     def nope(*a, **kw):
         raise socket.gaierror("no such host")
     monkeypatch.setattr(socket, "getaddrinfo", nope)
-    monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
+    monkeypatch.setattr(klipper_cli, "_describe", lambda p, added=None: 0)
     assert klipper_cli.main(["add", "Off", "off.local"]) == 0
     assert "off.local did not answer" in " ".join(capsys.readouterr().err.split())
     assert registry.load()["off"].host == "off.local"
@@ -130,7 +130,7 @@ def test_cli_add_refuses_what_cannot_be_an_address(capsys):
 
 
 def test_cli_add_keeps_an_ipv6_address_without_its_brackets(monkeypatch):
-    monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
+    monkeypatch.setattr(klipper_cli, "_describe", lambda p, added=None: 0)
     assert klipper_cli.main(["add", "Six", "[fd00::7]"]) == 0
     assert registry.load()["six"].host == "fd00::7"
 
