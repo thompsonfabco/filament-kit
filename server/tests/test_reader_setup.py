@@ -316,7 +316,7 @@ def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, ca
     monkeypatch.setattr(rs, "owner", lambda: rs.Owner("someone", os.getuid() + 1, os.getgid(), tmp_path))
     victim = tmp_path / "hosts"
     victim.write_text("127.0.0.1 localhost\n")
-    assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 3
+    assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
     assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
     assert "not a file of yours" in capsys.readouterr().err
 
