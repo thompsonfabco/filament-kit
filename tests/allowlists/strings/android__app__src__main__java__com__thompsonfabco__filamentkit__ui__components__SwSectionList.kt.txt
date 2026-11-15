@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwSectionList.kt | section-divider | test tag of the hairline between two section rows, never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwSectionList.kt | section-row | test tag of a section row, never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwSectionList.kt | section-tile | test tag of a section row's icon tile, never shown

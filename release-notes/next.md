@@ -58,9 +58,10 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `filament-kit modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
 - **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
 - **Hub page, Printers:** pressing Add again while the Hub is still adding a printer says "Still working. Wait for it to finish.", the same words as the app.
-- **Theme picker in the Android app:** Settings > Appearance has a Theme group with a tile for each theme; Console, Workbench and Palette can be chosen; Panes says "Not available yet" and arrives in a later release. A phone that has not chosen follows the Hub's theme for new devices when the app has it (Console, Workbench or Palette today); its own choice always wins.
+- **Theme picker in the Android app:** Settings > Appearance has a Theme group with a tile for each theme; all four themes can be chosen. A phone that has not chosen follows the Hub's theme for new devices when the app has it; its own choice always wins.
 - **Workbench theme in the Android app:** the calm indigo look with a sidebar on wide screens (the rail on a tablet), and the lists of spools, printers and records as cards, in a grid on wide screens. The screens and routes are the same as in Console.
 - **Palette theme in the Android app:** the warm orange look with the five destinations as a row of pills under the top bar on a tablet and wider (the bottom bar on a phone), and the lists of spools, printers and records as tiles, in a grid of several to a line on wide screens. The screens and routes are the same as in Console.
+- **Panes theme in the Android app:** the simple grey-and-green look where the five destinations are a list of sections: the first page on a phone (choosing one opens it, and Back returns to the list with focus on its row), a pane beside the page on a tablet and wider. Lists of spools, printers and records are plain rows with a chevron. The screens and routes are the same as in Console.
 
 ## Still to come
 
