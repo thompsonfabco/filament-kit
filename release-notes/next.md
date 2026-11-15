@@ -59,7 +59,7 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
 - **Hub page, Printers:** pressing Add again while the Hub is still adding a printer says "Still working. Wait for it to finish.", the same words as the app.
 - **Theme picker in the Android app:** Settings > Appearance has a Theme group with a tile for each theme; Console and Workbench can be chosen; the others say "Not available yet" and arrive in later releases. A phone that has not chosen follows the Hub's theme for new devices when the app has it (Console or Workbench today); its own choice always wins.
-- **Workbench theme in the Android app:** the calm indigo look with a sidebar on wide screens (the rail on a tablet), and each printer, spool and recent record as a card of its own. The screens and routes are the same as in Console.
+- **Workbench theme in the Android app:** the calm indigo look with a sidebar on wide screens (the rail on a tablet), and the lists of spools, printers and records as cards, in a grid on wide screens. The screens and routes are the same as in Console.
 
 ## Still to come
 

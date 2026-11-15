@@ -18,7 +18,7 @@ class WorkbenchScreenSemanticsTest : ScreenSemanticsTest() {
     override val look: Look = Look.Workbench
 }
 
-/** The same audit on a tablet window (600 to 839 dp wide), where the Workbench lays cards two to a line. */
+/** The same audit on a tablet window (600 to 839 dp wide), with no navigation around the screen (in the app the rail leaves room for one card to a line). */
 @OptIn(ExperimentalMaterial3Api::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h8000dp")
