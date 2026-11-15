@@ -37,8 +37,9 @@ from . import config
 
 try:
     import fcntl
-except ImportError:  # Windows dev PCs: no cross-process lock (the helper only runs on Linux)
+except ImportError:  # Windows: msvcrt byte lock instead (the helper itself only runs on Linux)
     fcntl = None
+    import msvcrt
 
 HASH_FILE = "setup_code"
 PLAIN_FILE = "setup_code.plain"
@@ -113,7 +114,7 @@ def _gid(group: str | None) -> int:
 
 def _write(dest: Path, data: bytes, mode: int, group: str | None) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(dest.name + ".tmp")
+    tmp = dest.with_name(f"{dest.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
     try:
         if os.name == "nt":
             tmp.write_bytes(data)
@@ -126,7 +127,14 @@ def _write(dest: Path, data: bytes, mode: int, group: str | None) -> None:
                 os.fsync(fh.fileno())
                 if os.geteuid() == 0:
                     os.fchown(fh.fileno(), 0, _gid(group))
-        os.replace(tmp, dest)
+        for tries in range(50):   # Windows: a reader or scanner may hold the destination for a moment
+            try:
+                os.replace(tmp, dest)
+                break
+            except PermissionError:
+                if os.name != "nt" or tries == 49:
+                    raise
+                time.sleep(0.02)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
@@ -227,6 +235,20 @@ class Lockout:
             st["level"] = max(0, st["level"] - steps)
             st["since"] = base + steps * DECAY
 
+    @staticmethod
+    def _win_lock(lk) -> None:
+        """Windows: lock byte 0 of the .lock file, retrying for up to a minute (LK_LOCK alone gives up after 10 s)."""
+        deadline = time.monotonic() + 60
+        while True:
+            lk.seek(0)
+            try:
+                msvcrt.locking(lk.fileno(), msvcrt.LK_NBLCK, 1)
+                return
+            except OSError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.005)
+
     def _update(self, fn):
         """Run fn(state, now) -> result on the pruned state, under the thread lock and a flock on the .lock file
         beside it; the new state goes to a temp file (O_NOFOLLOW, fchmod 600) renamed over the old one."""
@@ -237,13 +259,20 @@ class Lockout:
             with os.fdopen(fd, "r+b") as lk:
                 if fcntl is not None:
                     fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
-                now = time.time()
-                st = self._parse(self._read())
-                st["fails"] = [f for f in st["fails"] if f[0] > now - self.window]
-                self._decay(st, now)
-                out = fn(st, now)
-                _write(self.path, self._render(st), 0o600, None)
-                return out
+                else:
+                    self._win_lock(lk)
+                try:
+                    now = time.time()
+                    st = self._parse(self._read())
+                    st["fails"] = [f for f in st["fails"] if f[0] > now - self.window]
+                    self._decay(st, now)
+                    out = fn(st, now)
+                    _write(self.path, self._render(st), 0o600, None)
+                    return out
+                finally:
+                    if fcntl is None:
+                        lk.seek(0)
+                        msvcrt.locking(lk.fileno(), msvcrt.LK_UNLCK, 1)
 
     def attempt(self, client: str) -> str | None:
         client = str(client or "?")[:64]
