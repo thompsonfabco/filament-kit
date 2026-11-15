@@ -26,8 +26,8 @@ COMMAND = re.compile(
     r"python3?|tar|pio|curl|tee|cp|mv)\b)|\bsystemctl (?:start|stop|restart|status|enable|disable|mask|daemon-reload|reload)\b|"
     r"\bjournalctl -|\bapt(?:-get)? (?:install|remove)\b|\bpip install|\bpython3? -m\b|\btar xzf|\bcurl -|\busermod\b|"
     r"\bgroupadd\b|\bpio run\b|\./\S+\.sh|\bcertbot (?:certonly|renew)\b|"
-    r"\bfilament-kit (?:apply|backup|cert|config|ensure-fields|intake|klipper|library|local-intake|modules|pair|"
-    r"printer|profiles|reader|remote|restore|setup-code|station|status|uninstall|unpair|update|web)\b")
+    r"\bfilament-kit (?:apply|backup|cert|config|devices|ensure-fields|intake|klipper|library|local-intake|modules|pair|"
+    r"printer|profiles|reader|recent|remote|restore|setup-code|station|status|uninstall|unpair|update|web)\b")
 # a quoted argument, spaces and commas inside it: from a quote to the same quote
 QUOTED = re.compile(r"""(["'])(?:(?!\1).)*\1""")
 # where a command ends in these texts, written the other way round: at the first of a closing bracket, a comma, a
@@ -188,7 +188,7 @@ def test_every_command_in_the_cli_texts_stays_whole_when_the_text_is_wrapped(col
 
 def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkeypatch):
     """The real texts of the reviews' items: the printer's not-connected hints, the serial-port hint, the two intake
-    commands and the status rows' fixes."""
+    commands (recent show, local-intake status) and the status rows' fixes."""
     class Who:
         name = "alice"
     cli_texts = [t for _, t in texts(ROOT / "cli.py")]
@@ -197,7 +197,7 @@ def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkey
         "wrong_code": cli.NOT_CONNECTED["wrong_code"],
         "cert_changed": cli.NOT_CONNECTED["cert_changed"],
         "port": "could not flash" + cli._port_hint(Who()),
-        "intake": next(t for t in cli_texts if "intake edit" in t),
+        "recent": next(t for t in cli_texts if "low confidence: filament-kit recent show" in t),
         "local-intake": next(t for t in cli_texts if "local-intake status" in t),
         "web": next(t for t in status if "filament-kit-web" in t and "journalctl" in t),
         "config": next(t for t in status if "option 4" in t and "internet" in t),

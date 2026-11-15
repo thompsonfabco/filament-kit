@@ -254,7 +254,7 @@ def test_pair_text_prints_the_link_not_a_qr_code(monkeypatch, capsys):
     _save(modules.MODES["server"])
     pairing.make_cert("fk-test", ["192.0.2.5"], config.paths().etc)
     monkeypatch.setattr(cli, "_qr_text", lambda payload: pytest.fail("no QR code with --text"))
-    assert cli.main(["pair", "--text"]) == 0
+    assert cli.main(["pair", "--text", "--no-wait"]) == 0
     out = capsys.readouterr().out
     assert "fkit://pair?" in out and "Pairing code:" in out
 
@@ -419,7 +419,7 @@ def test_finish_shows_the_app_qr_then_waits_then_pairs(finish_env, monkeypatch, 
     assert i_app < i_wait < i_pair
     assert "Android app" in out[:i_app]
     assert "or s to skip" in out
-    assert [c for c in calls if c[-1] == "pair" or "pair" in c] == [[apply.WRAPPER, "pair"]]
+    assert [c for c in calls if c[-1] == "pair" or "pair" in c] == [[apply.WRAPPER, "pair", "--no-wait"]]
 
 
 def test_finish_s_skips_the_pairing_code(finish_env, monkeypatch, capsys):
@@ -452,7 +452,7 @@ def test_finish_without_an_apk_goes_straight_to_pairing(finish_env, monkeypatch,
     apply.finish(config.load(), run=run)
     out = capsys.readouterr().out
     assert "app.apk" not in out and "Press Enter" not in out
-    assert [apply.WRAPPER, "pair"] in calls
+    assert [apply.WRAPPER, "pair", "--no-wait"] in calls
 
 
 def test_app_url_falls_back_to_the_local_name_without_an_address(monkeypatch):

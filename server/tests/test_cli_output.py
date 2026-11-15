@@ -380,10 +380,10 @@ def test_unpair_list_and_backup_list_are_tables(cfg, capsys, monkeypatch):
         {"id": "d1", "name": "Bench phone", "paired": 1790000000, "last_seen": None}])
     rc, out, _ = run(capsys, "unpair")
     lines = lines_of(out)
-    assert rc == 0 and lines[0].split() == ["ID", "NAME", "PAIRED", "LAST", "SEEN"]
-    assert lines[1].startswith("d1  Bench phone  ") and lines[1].endswith("never")
+    assert rc == 0 and lines[0].split() == ["NAME", "PAIRED", "LAST", "SEEN", "ID"]
+    assert lines[1].startswith("Bench phone  ") and lines[1].split()[-2:] == ["never", "d1"]
     monkeypatch.setattr(cli.pairing, "devices", lambda: [])
-    assert run(capsys, "unpair")[1] == "No paired devices.\n"
+    assert run(capsys, "unpair")[1] == "Nothing paired yet.\nPair a phone: sudo filament-kit pair\n"
 
 
 def test_switches_are_taken_out_of_any_place_before_a_bare_dash_dash():

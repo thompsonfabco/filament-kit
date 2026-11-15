@@ -135,7 +135,7 @@ def test_an_action_prints_ok_true_and_its_result(capsys, monkeypatch, tmp_path):
     _pair_device(monkeypatch, tmp_path)
     monkeypatch.setattr(cli.pairing, "revoke", lambda i: True)
     rc, out, _ = run(capsys, ["unpair", "d1", "--yes", "--json"])
-    assert rc == 0 and doc(out) == {"ok": True, "message": "Unpaired d1."}
+    assert rc == 0 and doc(out) == {"ok": True, "id": "d1", "name": "Shop phone"}
 
 
 def test_backup_list_has_the_hubs_fields(capsys):
@@ -195,8 +195,8 @@ def test_revoking_trusted_computers_gives_ok_with_json(capsys):
 
 def test_an_error_is_the_document_the_text_and_the_exit_code(capsys):
     rc, out, err = run(capsys, ["unpair", "nosuch", "--json"])
-    assert rc == output.USAGE and doc(out) == {"ok": False, "error": "no paired device nosuch", "fix": None}
-    assert err.startswith("Error: no paired device nosuch")
+    assert rc == output.USAGE and doc(out)["ok"] is False and doc(out)["error"] == '"nosuch" does not name one device.'
+    assert doc(out)["fix"] == "use a name or id from filament-kit devices." and err.startswith('Error: "nosuch" does not name')
 
 
 def test_an_error_with_a_fix_gives_both(capsys, monkeypatch):
@@ -408,11 +408,11 @@ def test_status_quiet_with_nothing_to_look_at_prints_nothing(capsys, monkeypatch
 def test_a_result_line_is_dropped_and_an_error_is_kept(capsys, monkeypatch):
     _pair_device(monkeypatch, None)
     monkeypatch.setattr(cli.pairing, "revoke", lambda i: True)
-    assert run(capsys, ["unpair", "d1", "--yes"])[1] == "Unpaired d1.\n"
+    assert run(capsys, ["unpair", "d1", "--yes"])[1] == "Unpaired Shop phone.\n"
     rc, out, err = run(capsys, ["unpair", "d1", "--yes", "--quiet"])
     assert (rc, out, err) == (0, "", "")
     rc, out, err = run(capsys, ["unpair", "nosuch", "-q", "--yes"])
-    assert rc == 2 and out == "" and err.startswith("Error: no paired device nosuch")
+    assert rc == 2 and out == "" and err.startswith('Error: "nosuch" does not name one device.')
 
 
 def test_a_list_that_was_asked_for_is_kept(capsys, monkeypatch):
@@ -440,12 +440,12 @@ def test_a_question_is_still_asked_and_shown_with_quiet(capsys, monkeypatch, tmp
 
 def test_quiet_drops_the_saved_revision_lines(capsys):
     r = {"revisions": [{"n": 2, "changes": [{"field": "net", "old": 1000, "new": 750}], "spool_ids": [4],
-                        "filaments": {"from": 1, "to": 2, "created": True, "orphaned": 1}}]}
+                        "filaments": {"from": 1, "to": 2, "created": True, "orphaned": [1]}}]}
     output.configure(quiet=True)
     assert cli._say_revision(r) == 0
     assert capsys.readouterr() == ("", "")
     output.configure(quiet=False)
-    assert "Saved as revision 2: net 1000 -> 750" in (cli._say_revision(r), capsys.readouterr().out)[1]
+    assert "Saved as revision 2: Net weight 1000 g -> 750 g." in (cli._say_revision(r), capsys.readouterr().out)[1]
 
 
 def test_quiet_setup_code_new_prints_the_code_and_no_other_line(capsys, monkeypatch):

@@ -393,13 +393,15 @@ def test_cli_lists_records_with_their_photo_paths(sm, capsys, monkeypatch):
     _, hid = add(sm, read_id=read(sm)["read_id"])
     assert cli.main(["intake", "history"]) == 0
     out = capsys.readouterr().out
-    assert hid in out and "photo1.jpg" in out and "SUNLU PLA+ Grey" in out
+    assert hid in out and "SUNLU PLA+ Grey" in out
+    assert cli.main(["intake", "show", hid, "--photos"]) == 0
+    assert "photo1.jpg" in capsys.readouterr().out
     assert cli.main(["intake", "edit", hid, "nozzle=230"]) == 0
-    assert "nozzle 220 -> 230" in capsys.readouterr().out
+    assert "Nozzle 220 C -> 230 C" in capsys.readouterr().out
     assert cli.main(["intake", "show", hid]) == 0
-    assert "revision 1" in capsys.readouterr().out
+    assert "  1  " in capsys.readouterr().out
     assert cli.main(["intake", "undo", hid]) == 0
-    assert cli.main(["intake", "edit", hid, "nozzle"]) == 1
+    assert cli.main(["intake", "edit", hid, "nozzle"]) == 2
 
 
 def test_cli_edits_some_of_the_spools(sm, capsys, monkeypatch):
@@ -409,7 +411,7 @@ def test_cli_edits_some_of_the_spools(sm, capsys, monkeypatch):
     assert cli.main(["intake", "edit", hid, "color_hex=FF0000", "--spools", str(r.spool_ids[1])]) == 0
     assert sm.get(f"spool/{r.spool_ids[0]}")["filament"]["color_hex"] == "8A8C8E"
     assert sm.get(f"spool/{r.spool_ids[1]}")["filament"]["color_hex"] == "FF0000"
-    assert cli.main(["intake", "edit", hid, "color_hex=00FF00", "--spools", "x"]) == 1
+    assert cli.main(["intake", "edit", hid, "color_hex=00FF00", "--spools", "x"]) == 2
 
 
 def test_a_corrected_brand_joins_the_filament_that_has_it_and_takes_its_values(sm):
