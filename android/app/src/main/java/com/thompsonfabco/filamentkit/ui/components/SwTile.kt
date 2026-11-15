@@ -30,7 +30,7 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
  * `border`, padded `--s4`. At the top the [visual] (the spool ring) centred, at least `--s7` x 2 high; then the [title]
  * in `--fs-l` at the title weight with its [subtitle] and [status]; then the priority 1 fields ([fields], each a
  * [TileField] with its name); at the foot the main action, [actionLabel], the full width of the tile. The tile is as high
- * as its line of tiles, the action at the bottom. The part above the action is one node for TalkBack ([description]) and
+ * as its line of tiles, the action at the bottom and named for its item ("Open Workshop X1"). The part above the action is one node for TalkBack ([description]) and
  * opens the item like the action does.
  */
 @Composable
@@ -49,6 +49,7 @@ internal fun SwTile(
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val open = stringResource(R.string.a11y_action_open)
+    val named = stringResource(R.string.a11y_action_named, actionLabel, title)
     Card(
         modifier.fillMaxWidth().fillMaxHeight(),
         shape = SpoolwardenTheme.shapes.r,
@@ -74,7 +75,8 @@ internal fun SwTile(
                 fields()
             }
             Spacer(Modifier.weight(1f))
-            SwButton(actionLabel, onAction, Modifier.fillMaxWidth(), enabled = enabled)
+            // the button says what it acts on: "Open Workshop X1", not "Open" once for each tile of the grid
+            SwButton(actionLabel, onAction, Modifier.fillMaxWidth().semantics { contentDescription = named }, enabled = enabled)
         }
     }
 }

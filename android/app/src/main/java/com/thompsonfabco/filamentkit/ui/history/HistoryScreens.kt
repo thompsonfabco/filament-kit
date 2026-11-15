@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -42,6 +43,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwLazyCollection
+import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
@@ -130,7 +132,10 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (
                             text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
                         )
                     } else {
-                        SwLazyCollection(h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false)) { r ->
+                        SwLazyCollection(
+                            h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
+                            tile = { r -> RecordTile(r, vm) { onOpen(r.id) } },
+                        ) { r ->
                             RecordRow(r, vm) { onOpen(r.id) }
                         }
                     }
@@ -190,10 +195,38 @@ private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, onClick: () -
     }
 }
 
+/**
+ * One record as a tile (02-components 6.1) for `CollectionStyle.Tiles`: the photo as the visual, the filaments with the
+ * time and spools under them and the state beside, the source as its field, and "Open" the full width at the foot.
+ */
+@Composable
+private fun RecordTile(r: HistorySummary, vm: HistoryListViewModel, onClick: () -> Unit) {
+    val ids = RecentValues.spoolIds(r.spools)
+    val spools = if (ids.isEmpty()) {
+        stringResource(R.string.recent_no_spools)
+    } else {
+        pluralStringResource(R.plurals.recent_spool_label, ids.size, RecentValues.idList(ids))
+    }
+    val title = RecentValues.filaments(r.spools) ?: spools
+    val meta = stringResource(R.string.recent_row_meta, RecentValues.time(r.at), spools)
+    val source = sourceText(r.source, r.photos)
+    val state = IntakeState.of(r.state)?.let { stringResource(it.word) } ?: r.state
+    SwTile(
+        title = title,
+        description = listOf(title, meta, state, source).joinToString(", "),
+        actionLabel = stringResource(R.string.a11y_action_open),
+        onAction = onClick,
+        subtitle = meta,
+        status = { IntakeStateLabel(r.state) },
+        visual = { Thumb(vm, r, SpoolwardenTheme.space.s7 * 2) },
+    ) {
+        Text(source, color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 /** The first photo with the photo count in a small badge, or a dashed box standing for "No photo". */
 @Composable
-private fun Thumb(vm: HistoryListViewModel, r: HistorySummary) {
-    val side = SpoolwardenTheme.sizes.thumbS
+private fun Thumb(vm: HistoryListViewModel, r: HistorySummary, side: Dp = SpoolwardenTheme.sizes.thumbS) {
     val colors = SpoolwardenTheme.colors
     val shape = SpoolwardenTheme.shapes.rS
     if (r.photos == 0) {

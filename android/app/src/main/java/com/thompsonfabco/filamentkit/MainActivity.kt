@@ -189,6 +189,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwNav
 import com.thompsonfabco.filamentkit.ui.components.PillMore
 import com.thompsonfabco.filamentkit.ui.components.SwPills
 import com.thompsonfabco.filamentkit.ui.components.contentInsetSides
+import com.thompsonfabco.filamentkit.ui.components.paletteMore
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
@@ -775,17 +776,22 @@ private fun FilamentKitApp(
                     }
                     SwPills(
                         tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
-                        more = settingsGroups(BuildConfig.DEBUG).map { group ->
-                            val route = group.route()
-                            PillMore(
-                                stringResource(group.title), group.icon, destination?.hasRoute(route::class) == true,
-                            ) {
-                                if (destination?.hasRoute(route::class) != true) {
-                                    nav.selectTab(Tab.Settings)
-                                    nav.navigate(route) { launchSingleTop = true }
+                        more = paletteMore(
+                            tab, stringResource(Tab.Settings.label),
+                            settingsGroups(BuildConfig.DEBUG).map { group ->
+                                val route = group.route()
+                                PillMore(
+                                    stringResource(group.title), group.icon, destination?.hasRoute(route::class) == true,
+                                    section = stringResource(Tab.Settings.label),
+                                ) {
+                                    if (destination?.hasRoute(route::class) != true) {
+                                        nav.selectTab(Tab.Settings)
+                                        nav.navigate(route) { launchSingleTop = true }
+                                    }
                                 }
-                            }
-                        },
+                            },
+                            onSettings = { tabTapped(Tab.Settings) },
+                        ),
                     )
                 }
             },

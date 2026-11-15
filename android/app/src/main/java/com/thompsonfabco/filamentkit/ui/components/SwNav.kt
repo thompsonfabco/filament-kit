@@ -49,8 +49,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.LayoutDirection
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.nav.Tab
@@ -209,8 +212,31 @@ internal fun navLayout(visible: Boolean, window: WindowClass, style: NavStyle): 
     else -> NavigationSuiteType.NavigationRail
 }
 
-/** One entry of the More menu of the pills: [current] when the screen shown belongs to it. */
-internal class PillMore(val label: String, @DrawableRes val icon: Int, val current: Boolean, val onClick: () -> Unit)
+/**
+ * One entry of the More menu of the pills: [current] when the screen shown belongs to it. An entry that stands for a whole
+ * [tab] takes that tab's place in the row (a section is a pill or in More, never both). [section] is the section the
+ * entry belongs to when that is not its own [label] (a page of Settings): More names it while the entry is current.
+ */
+internal class PillMore(
+    val label: String,
+    @DrawableRes val icon: Int,
+    val current: Boolean,
+    val tab: Tab? = null,
+    val section: String? = null,
+    val onClick: () -> Unit,
+)
+
+/**
+ * What More holds in Palette: the System group of 02-components 2.3, which on Android is Settings. Settings itself comes
+ * first (it is current at its root: [pages] are the ones of its pages, and while one of them is current it is that one),
+ * then its [pages]; Settings is no pill then.
+ */
+internal fun paletteMore(selected: Tab?, settings: String, pages: List<PillMore>, onSettings: () -> Unit): List<PillMore> =
+    listOf(
+        PillMore(
+            settings, Tab.Settings.icon, selected == Tab.Settings && pages.none { it.current }, tab = Tab.Settings, onClick = onSettings,
+        ),
+    ) + pages
 
 /**
  * The sides of the display the content of the main scaffold keeps clear of (the status bar belongs to the top bar):
@@ -229,8 +255,9 @@ internal fun contentInsetSides(navVisible: Boolean, phone: Boolean, pills: Boole
  * The navigation of `NavStyle.Pills` (Palette) on a tablet or expanded width (02-components 2.3): the five [Tab]s as a
  * row of pills under the top bar, the current one `accentSoft` ground with `accentText`, each `--ctl` high with an icon
  * (`muted`, `accentText` when current) left of its label (`text`, `--fs-m` at the label weight). The trailing More tab
- * opens a menu of the [more] entries, the part of the app the row does not hold; while the screen is one of them it is the
- * current pill and its name is "More, current: ...". The row keeps clear of [insets] (the cutout and the bars at the
+ * opens a menu of the [more] entries, the part of the app the row does not hold (the System group: a tab that an entry
+ * stands for is no pill); while the screen is one of them it is the current pill and its name is "More, current:
+ * <section>". It tells TalkBack that it opens a menu, and whether the menu is open. The row keeps clear of [insets] (the cutout and the bars at the
  * sides). Nothing is drawn on a phone (the bottom bar is there), for another profile, or while [visible] is false.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -248,13 +275,25 @@ internal fun SwPills(
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val updateName = stringResource(R.string.nav_settings_update)
-    val inMore = more.firstOrNull { it.current }
+    // the tabs that More holds are not pills, and the update dot of Settings moves with it
+    val moreTabs = more.mapNotNull { it.tab }.toSet()
+    val pillTabs = Tab.entries.filter { it !in moreTabs }
+    val inMore = more.firstOrNull { it.current } ?: more.firstOrNull { it.tab != null && it.tab == selected }
+    val moreUpdate = settingsUpdate && Tab.Settings in moreTabs
     val moreLabel = stringResource(R.string.nav_more)
-    val moreName = if (inMore != null) stringResource(R.string.nav_more_current, inMore.label) else moreLabel
+    val moreName = when {
+        inMore != null && moreUpdate -> stringResource(R.string.nav_more_current_update, inMore.section ?: inMore.label)
+        inMore != null -> stringResource(R.string.nav_more_current, inMore.section ?: inMore.label)
+        moreUpdate -> stringResource(R.string.nav_more_update)
+        else -> moreLabel
+    }
     var menu by remember { mutableStateOf(false) }
-    val everyTab = Tab.entries.size + if (more.isEmpty()) 0 else 1
+    val menuState = stringResource(if (menu) R.string.nav_more_expanded else R.string.nav_more_collapsed)
     @Composable
-    fun Pill(current: Boolean, onClick: () -> Unit, name: String?, icon: Int, label: String, dot: Boolean, menuContent: (@Composable () -> Unit)? = null) {
+    fun Pill(
+        current: Boolean, onClick: () -> Unit, name: String?, icon: Int, label: String, dot: Boolean,
+        popup: Boolean = false, menuContent: (@Composable () -> Unit)? = null,
+    ) {
         MaterialTab(
             selected = current,
             onClick = onClick,
@@ -263,7 +302,18 @@ internal fun SwPills(
                 .height(SpoolwardenTheme.sizes.control)
                 .clip(SpoolwardenTheme.shapes.rL)
                 .background(if (current) colors.accentSoft else Color.Transparent)
-                .then(if (name != null) Modifier.semantics { contentDescription = name } else Modifier),
+                .then(if (name != null) Modifier.semantics { contentDescription = name } else Modifier)
+                .then(
+                    // a button that opens a menu: its state and the action that toggles it (the has-popup and expanded of 02 2.3)
+                    if (popup) {
+                        Modifier.semantics {
+                            stateDescription = menuState
+                            if (menu) collapse { menu = false; true } else expand { menu = true; true }
+                        }
+                    } else {
+                        Modifier
+                    },
+                ),
             selectedContentColor = colors.accentText,
             unselectedContentColor = colors.text,
         ) {
@@ -291,14 +341,14 @@ internal fun SwPills(
     Column(modifier.fillMaxWidth().background(colors.surface)) {
         Box(Modifier.windowInsetsPadding(insets)) {
             PrimaryScrollableTabRow(
-                selectedTabIndex = if (inMore != null) everyTab - 1 else Tab.entries.indexOf(selected).coerceAtLeast(0),
+                selectedTabIndex = if (inMore != null) pillTabs.size else pillTabs.indexOf(selected).coerceAtLeast(0),
                 containerColor = Color.Transparent,
                 contentColor = colors.muted,
                 edgePadding = space.s4,
                 indicator = {},
                 divider = {},
             ) {
-                Tab.entries.forEach { tab ->
+                pillTabs.forEach { tab ->
                     val withDot = tab == Tab.Settings && settingsUpdate
                     Pill(
                         tab == selected && inMore == null, { onSelect(tab) }, if (withDot) updateName else null,
@@ -306,10 +356,10 @@ internal fun SwPills(
                     )
                 }
                 if (more.isNotEmpty()) {
-                    Pill(inMore != null, { menu = true }, moreName, R.drawable.sw_ic_more, moreLabel, false) {
+                    Pill(inMore != null, { menu = true }, moreName, R.drawable.sw_ic_more, moreLabel, moreUpdate, popup = true) {
                         SwMenu(menu, onDismiss = { menu = false }) {
                             more.forEach { entry ->
-                                SwMenuItem(entry.label, onClick = { menu = false; entry.onClick() }, icon = entry.icon, checked = entry.current)
+                                SwMenuItem(entry.label, onClick = { menu = false; entry.onClick() }, icon = entry.icon, checked = entry === inMore)
                             }
                         }
                     }

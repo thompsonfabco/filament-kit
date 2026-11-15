@@ -45,6 +45,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
+import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
@@ -133,7 +134,26 @@ fun LoadPrintersScreen(
                 SwSkeletonRows(SKELETON_ROWS)
             },
         ) {
-            SwCollection(printers.orEmpty(), inset = space.s4, surface = true) { _, p ->
+            SwCollection(
+                printers.orEmpty(), inset = space.s4, surface = true,
+                tile = { _, p ->
+                    val can = canTakeLoad(p)
+                    val kind = statusOf(p)
+                    // the reason it is off, as the row says it; Offline is said by its label
+                    val why = if (!can && p.state != Printer.STATE_OFFLINE) fixText(p.state)?.let { stringResource(it) } else null
+                    SwTile(
+                        title = p.name,
+                        description = listOfNotNull(p.name, p.shownModel, stringResource(kind.word), why).joinToString(", "),
+                        actionLabel = stringResource(R.string.spool_load_choose),
+                        onAction = { pick(p, false) },
+                        subtitle = p.shownModel,
+                        status = { StatusLabel(kind, small = true) },
+                        enabled = can,
+                    ) {
+                        if (why != null) Text(why, style = MaterialTheme.typography.bodySmall, color = colors.muted)
+                    }
+                },
+            ) { _, p ->
                 val can = canTakeLoad(p)
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(enabled = can) { pick(p, false) },

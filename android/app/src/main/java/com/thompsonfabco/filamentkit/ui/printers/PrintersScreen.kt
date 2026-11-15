@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -76,6 +77,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwTile
+import com.thompsonfabco.filamentkit.ui.components.TileField
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 
@@ -167,7 +169,7 @@ private fun Overflow(online: Boolean, onRefresh: () -> Unit, onFind: () -> Unit,
 }
 
 @Composable
-private fun ColumnScope.PrinterLists(
+internal fun ColumnScope.PrinterLists(
     state: PrintersUiState,
     offline: Boolean,
     onOpen: (String) -> Unit,
@@ -195,14 +197,14 @@ private fun ColumnScope.PrinterLists(
             style = MaterialTheme.typography.labelSmall,
             color = SpoolwardenTheme.colors.muted,
         )
-        SwCollection(found, ground = SpoolwardenTheme.colors.accentSoft) { i, p ->
-            FoundRow(p, enabled = !offline, reason = offline && i == 0) {
-                if (p.family == "klipper") {
-                    onAddKlipper(p.host ?: p.ip.orEmpty(), PrintersViewModel.DEFAULT_KLIPPER_PORT)
-                } else {
-                    onAdd(p)
-                }
-            }
+        val addFound = { p: Printer ->
+            if (p.family == "klipper") onAddKlipper(p.host ?: p.ip.orEmpty(), PrintersViewModel.DEFAULT_KLIPPER_PORT) else onAdd(p)
+        }
+        SwCollection(
+            found, ground = SpoolwardenTheme.colors.accentSoft,
+            tile = { i, p -> FoundTile(p, enabled = !offline, reason = offline && i == 0) { addFound(p) } },
+        ) { i, p ->
+            FoundRow(p, enabled = !offline, reason = offline && i == 0) { addFound(p) }
         }
     }
     Column {
@@ -290,7 +292,15 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, onClick: () -> Unit)
     val space = SpoolwardenTheme.space
     val model = modelLine(p)
     val kind = statusKind(p.state)
-    val said = listOf(p.name, model, stringResource(kind.word)).joinToString(", ")
+    val (shown, more) = shownSlots(slots)
+    val empty = stringResource(R.string.a11y_swatch_empty)
+    // what the tile shows, as one node: the name, model and status, the slots one by one, and the line on how to fix it
+    val said = listOfNotNull(
+        p.name, model, stringResource(kind.word),
+        if (shown.isEmpty()) null else stringResource(R.string.common_field_label, stringResource(R.string.printers_col_slots)),
+    ).plus(shown.map { if (it.empty) empty else stringResource(R.string.a11y_swatch, it.hex.removePrefix("#").uppercase()) })
+        .plus(listOfNotNull(if (more > 0) stringResource(R.string.printers_slots_more, more) else null, fixLine(p.state)?.let { stringResource(it) }))
+        .joinToString(", ")
     SwTile(
         title = p.name,
         description = said,
@@ -300,7 +310,6 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, onClick: () -> Unit)
         status = { StatusLabel(kind, small = true) },
     ) {
         if (slots.isNotEmpty()) {
-            val (shown, more) = shownSlots(slots)
             Text(stringResource(R.string.common_field_label, stringResource(R.string.printers_col_slots)), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(space.s1), verticalArrangement = Arrangement.spacedBy(space.s1),
@@ -350,6 +359,31 @@ private fun Swatches(slots: List<SlotLook>) {
         if (more > 0) {
             Text(stringResource(R.string.printers_slots_more, more), style = MaterialTheme.typography.bodySmall)
         }
+    }
+}
+
+/**
+ * A printer the Hub found as a tile (02-components 6.1): the model, "Not set up" and the address as its field, and "Add"
+ * the full width at the foot; the reason an offline Hub gives sits under it like the row's.
+ */
+@Composable
+private fun FoundTile(p: Printer, enabled: Boolean, reason: Boolean, onAdd: () -> Unit) {
+    val address = (if (p.family == "klipper") p.host else null) ?: p.ip
+    val model = modelLine(p)
+    val kind = StatusKind.NotConfigured
+    Column(Modifier.fillMaxHeight()) {
+        SwTile(
+            title = model,
+            description = listOfNotNull(model, stringResource(kind.word), address?.takeIf { it.isNotBlank() }).joinToString(", "),
+            actionLabel = stringResource(R.string.common_add),
+            onAction = onAdd,
+            modifier = Modifier.weight(1f),
+            status = { StatusLabel(kind, small = true) },
+            enabled = enabled,
+        ) {
+            if (!address.isNullOrBlank()) TileField(stringResource(R.string.printers_field_address), address)
+        }
+        if (reason) NeedsHubReason()
     }
 }
 
