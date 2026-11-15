@@ -1067,7 +1067,8 @@ Hub page, web app · L · Depends on: S6.2 · Beside: S6.5
 - **Change:** the `sidebar`, `cards` and `card` profile groups keyed on Workbench (F6.1, 02 1.3); the Workbench tile
   in both pickers.
 - **Keep:** markup and scripts: a theme brings no markup or script of its own (F6.1).
-- **Check:** AUT-5 in Workbench light and dark; manual: release checklist step 4 (Workbench part).
+- **Check:** AUT-5 in Workbench light and dark; manual: release checklist step 4 (Workbench part). This step sets
+  the size test (`tests/test_design_components.py`) to the numbers of F12 rule 7 and adds its page totals.
 
 ### S6.5 Workbench on Android
 app · M · Depends on: S6.3 · Beside: S6.4
