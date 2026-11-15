@@ -982,11 +982,12 @@ def _spools_src() -> str:
 def test_spools_keeps_every_action_of_today_and_the_requests():
     src = _spools_src()
     for call in ('api("tag")', "find?q=${encodeURIComponent(q)}&sealed=${sealedOnly ? 1 : 0}",
-                 'api("open", { body: { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), dry_run: dry } })',
+                 'body = { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), dry_run: true };',
+                 'body = { ...shot.body, dry_run: false };', 'api("open", { body })',      # Link sends what was previewed
                  "add_summary_error_preview", "add_summary_preview_ok", "spool_sheet_opened_toast", "spool_sheet_link",
                  "[...new Set([...PICKS, ...LOCATIONS])]"):                        # Last tag, search, Preview (Check) and Link tag and open
         assert call in src, call
-    for call in ("api(`spools/${id}`)", "{ body: { gross: num(wf), dry_run: dry } }", "{ body: { location: l, dry_run: false } }",
+    for call in ("api(`spools/${id}`)", "{ body: { gross: value, dry_run: dry } }", "value = wShot.value;", "{ body: { location: l, dry_run: false } }",
                  "{ body: { empty: true, dry_run: false } }"):                      # the S3.9 routes: weight, move, mark empty
         assert call in src, call
     for call in ('api("printers")', 'api("printers/tagged")', "api(`printers/${enc(p.id)}/state`)", "/load`, { body: { spool_id: id, dry_run: dry } }"):

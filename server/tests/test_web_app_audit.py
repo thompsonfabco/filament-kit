@@ -1136,6 +1136,8 @@ const need = (what, ok) => { if (!ok) throw new Error('Spools: ' + what); };
 const typeIn = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
 const reply = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
 const stub = (re, answer) => { const real = window.fetch.bind(window); window.fetch = (u, i) => (re.test(String(u).split('/api/')[1] || '') ? answer(u, i || {}) : real(u, i)); };
+const stubPost = (re, answer) => { const real = window.fetch.bind(window); window.fetch = (u, i) => (re.test(String(u).split('/api/')[1] || '') && (i || {}).method === 'POST' ? answer(u, i) : real(u, i)); };
+const spy = (re, log) => { const real = window.fetch.bind(window); window.fetch = (u, i) => { if (re.test(String(u).split('/api/')[1] || '') && (i || {}).method === 'POST') log.push(JSON.parse(i.body)); return real(u, i); }; };
 const repoll = () => document.dispatchEvent(new Event('visibilitychange'));       // the page polls the tag at once when it is shown again
 const button = (label, root = document) => $$('button', root).find((b) => b.textContent.trim() === label && !b.closest('.hidden'));   // not another screen's, hidden
 const field = (label, root = document) => $$('.field', root).find((f) => f.querySelector('.field__label').firstChild.textContent.trim() === label);
@@ -1362,6 +1364,83 @@ SP_READY = {
   await until('the summary', () => text('.spools__sum-text').includes('Empty'));
   need('Update weight and Mark empty say why', reason(button('Update weight')) === 'This spool is marked empty.' && reason(button('Mark empty')) === 'This spool is marked empty.');
   need('Move stays', !button('Move').getAttribute('aria-disabled'));
+  need('an empty spool is not opened: Preview and Link say why', reason(button('Preview')) === 'This spool is marked empty.' && reason(button('Link tag and open')) === 'This spool is marked empty.');
+""",
+    "sheet_race_weight": r"""
+  const d = await sheetReady(); await tap({});
+  const bodies = [];
+  let release; stub(/^open$/, (u, i) => { bodies.push(JSON.parse(i.body)); return new Promise((ok) => { release = () => ok(new Response(JSON.stringify({ output: 'dry run: nothing changed', exit_code: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }); });
+  const w = field('Weight with spool', d).querySelector('input');
+  typeIn(w, '1212'); button('Preview').click(); await until('the preview is out', () => bodies.length === 1);
+  typeIn(w, '999'); release();
+  await until('the old answer is dropped', () => reason(button('Link tag and open')) === 'You changed the weight. Preview again.' && !button('Preview').getAttribute('aria-busy'));
+  need('no "Preview ready" for a weight that was not previewed', !out('Preview ready.'));
+  button('Link tag and open').click(); await sleep(300);
+  need('Link sends nothing', bodies.length === 1 && bodies[0].gross === '1212' && bodies[0].dry_run === true);
+""",
+    "sheet_race_tag": r"""
+  const d = await sheetReady(); await tap({});
+  const bodies = [];
+  let release; stub(/^open$/, (u, i) => { bodies.push(JSON.parse(i.body)); return new Promise((ok) => { release = () => ok(new Response(JSON.stringify({ output: 'dry run: nothing changed', exit_code: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }); });
+  button('Preview').click(); await until('the preview is out', () => bodies.length === 1);
+  await tap({ nfc_id: '04:AA:BB:CC', read_at: 1700000500 });
+  await until('the sheet names the newer tag', () => text('.spools__sheet-tag').includes('04:AA:BB:CC'));
+  release();
+  await until('the old answer is dropped', () => reason(button('Link tag and open')) === 'You changed the weight. Preview again.' && !button('Preview').getAttribute('aria-busy'));
+  button('Link tag and open').click(); await sleep(300);
+  need('Link sends nothing for a tag that was not previewed', bodies.length === 1);
+""",
+    "sheet_race_link": r"""
+  const d = await sheetReady(); await tap({});
+  const bodies = []; let release = null;
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); if (b.dry_run) return reply({ output: 'dry run: nothing changed', exit_code: 0 });
+    return new Promise((ok) => { release = () => ok(new Response(JSON.stringify({ output: 'opened', exit_code: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }); });
+  typeIn(field('Weight with spool', d).querySelector('input'), '1212'); button('Preview').click();
+  await until('previewed', () => out('Preview ready.') && reason(button('Link tag and open')) === null);
+  button('Link tag and open').click(); await until('the link is out', () => bodies.length === 2 && release);
+  button('Preview').click(); await sleep(300);
+  need('a Preview pressed while Link is out sends nothing', bodies.length === 2);
+  release();
+  await until('opened', () => out('Spool __ID__ is open'));
+  await sleep(300);
+  need('two requests in all, the real one with what was previewed', bodies.length === 2 && JSON.stringify(bodies[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', dry_run: false }));
+  need('Link waits again', reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.');
+""",
+    "sheet_race_save": r"""
+  const d = await sheetReady(); button('Update weight').click();
+  const form = await until('the form', () => $('.spools__form:not([hidden])')), input = field('Weight with spool', form).querySelector('input');
+  const bodies = []; let release = null;
+  const view = (g) => ({ id: __ID__, location: 'Sealed stock', remaining_g: g - 200, net_g: 1000, tare_g: 200, tag: null, state: 'sealed', vendor: 'Polymaker', name: 'PolyTerra PLA Charcoal Black', material: 'PLA', color_hex: '2B2B2E', lot: null });
+  stubPost(/^spools\/\d+$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); const r = () => new Response(JSON.stringify({ spool: {}, view: view(Number(b.gross)), before: view(1200), dry: b.dry_run }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return bodies.length === 1 ? new Promise((ok) => { release = () => ok(r()); }) : Promise.resolve(r()); });
+  typeIn(input, '1012'); button('Preview', form).click(); await until('the preview is out', () => bodies.length === 1);
+  typeIn(input, '5000'); release();
+  await until('the old answer is dropped', () => reason(button('Save weight')) === 'You changed the weight. Preview again.' && !button('Preview', form).getAttribute('aria-busy'));
+  need('no "Remaining changes" for a weight that was not previewed', !text('.result', form).includes('Remaining changes'));
+  button('Save weight').click(); await sleep(300);
+  need('Save sends nothing', bodies.length === 1);
+  button('Preview', form).click(); await until('previewed', () => reason(button('Save weight')) === null && text('.result', form).includes('Remaining changes from 1000 g to 4800 g.'));
+  button('Save weight').click(); await until('saved', () => bodies.length === 3);
+  need('Save sends the previewed weight', bodies[1].gross === '5000' && bodies[1].dry_run === true && bodies[2].gross === '5000' && bodies[2].dry_run === false);
+""",
+    "sheet_move_twice": r"""
+  const d = await sheetReady();
+  const log = []; spy(/^spools\/\d+$/, log);
+  const where = () => text('.spools__sum-text .muted').split(' · ')[0], orig = where();
+  const undo = () => $$('.spools__sheet .result .btn').find((b) => b.textContent.trim() === 'Undo');
+  const move = async (not) => {
+    button('Move').click();
+    const menu = await until('the menu', () => $('dialog[open] .menu'));
+    const pick = $$('.menu__item', menu).find((i) => i.getAttribute('aria-disabled') !== 'true' && i.querySelector('.menu__label').firstChild.textContent !== not);
+    const to = pick.querySelector('.menu__label').firstChild.textContent; pick.click();
+    await until('moved to ' + to, () => out('Moved to ' + to + '.') && where() === to); return to;
+  };
+  const one = await move(orig), two = await move(orig);
+  need('two different places, neither the first', one !== two && two !== orig && one !== orig);
+  need('Undo is offered after the second move', !!undo());
+  undo().click();
+  await until('back where it was before the first move', () => where() === orig && out('Moved to ' + orig + '.') && !undo());
+  need('the requests are the two moves and the undo', log.length === 3 && log[2].location === orig && log.every((b) => b.dry_run === false));
 """,
     "sheet_missing": r"""
   await until('the line', () => $('dialog[open] .result[data-state=bad]') && text('dialog[open]').includes('was not found'));

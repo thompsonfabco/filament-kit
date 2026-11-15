@@ -1815,28 +1815,46 @@ function openTab() {
     const previewBtn = SW.btn(SW.t("common_preview"), { run: (e) => submit(true, e.currentTarget) });
     const linkBtn = SW.btn(SW.t("spool_sheet_link"), { cls: "btn--primary", run: (e) => submit(false, e.currentTarget) });
     // Link waits for a Preview of what is on the form; an edit makes the last Preview stale (04 3.4)
-    let linkKey = "spool_sheet_reason_preview_first";
-    const link = (key) => { linkKey = key; disabled(linkBtn, key ? SW.t(key) : null, () => previewBtn); };
-    const outOfDate = (edit) => { const was = previewed || problem; previewed = false; link(edit && was ? "spool_sheet_reason_weight_changed" : "spool_sheet_reason_preview_first"); };
+    // rev counts what changes the form or the tag; a Preview answer counts only if rev is what it was when the Preview went out, and
+    // Link sends exactly the body that was previewed (R345)
+    let linkKey = "spool_sheet_reason_preview_first", rev = 0, working = false, shot = null;   // shot: { rev, body } of the last good Preview
+    const gone = () => !!view && view.state === "empty";
+    const link = (key) => { linkKey = key; disabled(linkBtn, gone() ? SW.t("spool_sheet_reason_empty") : key ? SW.t(key) : null, () => previewBtn); };
+    const outOfDate = (edit) => { rev++; const was = previewed || problem; previewed = false; link(edit && was ? "spool_sheet_reason_weight_changed" : "spool_sheet_reason_preview_first"); };
     weight._control.addEventListener("input", () => { weightTyped = true; weight._hint.textContent = ""; outOfDate(true); problem = false; });
     for (const f of [loc, hum]) f._control.addEventListener("input", () => { outOfDate(false); problem = false; });
     async function submit(dry, button) {
-      const bad = [weight, hum].filter((f) => { const err = f._check(); SW.fieldError(f, err || null); return !!err; });
-      if (bad.length) return bad[0]._control.focus();
-      await act(ans, SW.t(dry ? "common_checking" : "common_working"), async () => {
-        let res;
-        try { res = await api("open", { body: { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), dry_run: dry } }); }
-        catch (e) { if (dry) { previewed = false; problem = true; link("spool_sheet_reason_problem"); } throw e; }
-        previewed = dry && !res.exit_code; problem = !!res.exit_code;
-        link(previewed ? null : problem ? "spool_sheet_reason_problem" : "spool_sheet_reason_preview_first");
-        if (res.exit_code) return { kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output };
-        if (dry) return { text: SW.t("add_summary_preview_ok"), code: res.output };
-        for (const f of [weight, loc, hum]) f._control.value = "";
-        weightTyped = false; spentKey = lastKey; lastKey = null; changed = true;   // the tag is spent; the next poll draws it again with its new text
-        SW.toast(SW.t("spool_sheet_opened_toast", { id }));
-        refresh();
-        return { text: SW.t("spool_sheet_opened", { id }), code: res.output };
-      }, { button });
+      if (working) return;                                     // one request at a time: Preview and Link
+      let body;
+      if (dry) {
+        const bad = [weight, hum].filter((f) => { const err = f._check(); SW.fieldError(f, err || null); return !!err; });
+        if (bad.length) return bad[0]._control.focus();
+        body = { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), dry_run: true };
+      } else {
+        if (!shot || shot.rev !== rev) { link("spool_sheet_reason_weight_changed"); return; }
+        body = { ...shot.body, dry_run: false };              // what was previewed, not what the fields say now
+      }
+      const mine = rev;
+      working = true;
+      try {
+        await act(ans, SW.t(dry ? "common_checking" : "common_working"), async () => {
+          let res;
+          try { res = await api("open", { body }); }
+          catch (e) { if (dry && mine === rev) { previewed = false; problem = true; link("spool_sheet_reason_problem"); } throw e; }
+          if (dry && mine !== rev) { link("spool_sheet_reason_weight_changed"); return null; }   // an edit or a newer tag came meanwhile: this answer is for what was
+          previewed = dry && !res.exit_code; problem = !!res.exit_code;
+          shot = previewed ? { rev: mine, body } : null;
+          link(previewed ? null : problem ? "spool_sheet_reason_problem" : "spool_sheet_reason_preview_first");
+          if (res.exit_code) return { kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output };
+          if (dry) return { text: SW.t("add_summary_preview_ok"), code: res.output };
+          rev++; shot = null;
+          for (const f of [weight, loc, hum]) f._control.value = "";
+          weightTyped = false; spentKey = lastKey; lastKey = null; changed = true;   // the tag is spent; the next poll draws it again with its new text
+          SW.toast(SW.t("spool_sheet_opened_toast", { id }));
+          refresh();
+          return { text: SW.t("spool_sheet_opened", { id }), code: res.output };
+        }, { button });
+      } finally { working = false; }
       link(linkKey);                                           // the busy button gave back the state it had before the press
     }
     const openPart = part(SW.t("spool_sheet_open_title"), tagText, weight, loc, hum, h("div", { class: "spools__buttons" }, previewBtn, linkBtn), ans.el);
@@ -1849,12 +1867,13 @@ function openTab() {
     const loadBtn = SW.btn(SW.t("spool_load"), { run: () => pickPrinter() });
     const emptyBtn = SW.btn(SW.t("spool_mark_empty"), { cls: "btn--danger", run: (e) => markEmpty(e.currentTarget) });
     function paintActions() {
+      const empty = gone(), why = SW.t("spool_sheet_reason_empty");
+      disabled(previewBtn, empty ? why : null); link(linkKey);   // an empty spool is not opened
       if (!other) return;
-      const gone = view && view.state === "empty", why = SW.t("spool_sheet_reason_empty");
       other.hidden = false;
-      disabled(weightBtn, gone ? why : null); disabled(emptyBtn, gone ? why : null);
+      disabled(weightBtn, empty ? why : null); disabled(emptyBtn, empty ? why : null); disabled(loadBtn, empty ? why : null);
       disabled(moveBtn, LOCATIONS.length ? null : SW.t("spool_move_none"));
-      if (gone) showWeight(false);
+      if (empty) showWeight(false);
     }
     // Update weight: a small form in place; Preview says what the remaining weight becomes, then Save weight
     const wf = SW.field({ type: "number", decimal: true, label: SW.t("common_field_weight_with_spool"), unit: "g", hint: SW.t("spool_weight_hint"),
@@ -1863,41 +1882,63 @@ function openTab() {
     const wPreview = SW.btn(SW.t("common_preview"), { run: (e) => weightGo(true, e.currentTarget) });
     const wSave = SW.btn(SW.t("spool_weight_save"), { cls: "btn--primary", run: (e) => weightGo(false, e.currentTarget) });
     const weightForm = h("div", { class: "spools__form", hidden: true }, wf, h("div", { class: "spools__buttons" }, wPreview, wSave), wAns);
-    let wWas = false, wKey = "spool_weight_need_preview";      // wWas: a Preview has run for this form; wKey: why Save weight waits
+    let wWas = false, wKey = "spool_weight_need_preview", wRev = 0, wWorking = false, wShot = null;   // wWas: a Preview has run; wKey: why Save weight waits; wShot: { rev, value } of the last good Preview
     const wLock = (key) => { wKey = key; disabled(wSave, key ? SW.t(key) : null, () => (wf._control.value.trim() ? wPreview : wf._control)); };
     wLock(wKey);
-    wf._control.addEventListener("input", () => { wLock(wWas ? "spool_sheet_reason_weight_changed" : "spool_weight_need_preview"); clear(wAns); });
+    wf._control.addEventListener("input", () => { wRev++; wLock(wWas ? "spool_sheet_reason_weight_changed" : "spool_weight_need_preview"); clear(wAns); });
     function showWeight(open) {
       weightForm.hidden = !open; weightBtn.setAttribute("aria-expanded", String(open));
       if (open) wf._control.focus();
     }
     async function weightGo(dry, button) {
-      const err = wf._check(); SW.fieldError(wf, err || null);
-      if (err) return wf._control.focus();
-      await act(wAns, SW.t(dry ? "common_checking" : "common_working"), async () => {
-        let r;
-        try { r = await api(`spools/${id}`, { body: { gross: num(wf), dry_run: dry } }); }
-        catch (e) { if (e && e.field === "gross") SW.fieldError(wf, says(e)); throw e; }
-        const left = grams(r.view.remaining_g);
-        if (dry) { wWas = true; wLock(null); return SW.t("spool_sheet_weight_changes", { from: grams(r.before.remaining_g), to: left }); }
-        changed = true; applyView(r.view); wf._control.value = ""; wWas = false; wLock("spool_weight_need_preview"); showWeight(false);
-        SW.toast(SW.t("spool_result_weight", { left })); SW.result(actAns, "ok", SW.t("spool_result_weight", { left }));
-        return null;
-      }, { button });
+      if (wWorking) return;
+      let value;
+      if (dry) {
+        const err = wf._check(); SW.fieldError(wf, err || null);
+        if (err) return wf._control.focus();
+        value = num(wf);
+      } else {
+        if (!wShot || wShot.rev !== wRev) { wLock("spool_sheet_reason_weight_changed"); return; }
+        value = wShot.value;                                   // what was previewed, not what the field says now
+      }
+      const mine = wRev;
+      wWorking = true;
+      try {
+        await act(wAns, SW.t(dry ? "common_checking" : "common_working"), async () => {
+          let r;
+          try { r = await api(`spools/${id}`, { body: { gross: value, dry_run: dry } }); }
+          catch (e) { if (e && e.field === "gross") SW.fieldError(wf, says(e)); throw e; }
+          const left = grams(r.view.remaining_g);
+          if (dry) {
+            if (mine !== wRev) { wLock("spool_sheet_reason_weight_changed"); return null; }   // edited while the Preview was out
+            wWas = true; wShot = { rev: mine, value }; wLock(null);
+            return SW.t("spool_sheet_weight_changes", { from: grams(r.before.remaining_g), to: left });
+          }
+          changed = true; applyView(r.view); wf._control.value = ""; wWas = false; wShot = null; wRev++; wLock("spool_weight_need_preview"); showWeight(false);
+          SW.toast(SW.t("spool_result_weight", { left })); SW.result(actAns, "ok", SW.t("spool_result_weight", { left }));
+          return null;
+        }, { button });
+      } finally { wWorking = false; }
       wLock(wKey);
     }
     // Move: a menu of locations; choosing one moves the spool at once, with Undo for 5 s
     SW.menu(moveBtn, () => LOCATIONS.map((l) => { const here = !!view && l === view.location;
       return { label: l, disabled: here, reason: here ? SW.t("spool_move_here") : null, run: () => moveTo(l, false) }; }), { label: SW.t("spool_move_title") });
+    let moving = false, undoFrom = null;                       // undoFrom: the place before the first move of the Undo window
     async function moveTo(l, back) {
-      await act(actAns, SW.t("spool_move_moving"), async () => {
-        const r = await api(`spools/${id}`, { body: { location: l, dry_run: false } });
-        const was = r.before.location, text = SW.t("spool_result_moved", { location: l }), stamp = ++undoStamp;
-        changed = true; applyView(r.view);
-        if (back || !was) return text;
-        setTimeout(() => { if (stamp === undoStamp && actAns.querySelector(".btn")) SW.result(actAns, "ok", text); }, 5000);   // Undo goes after 5 s
-        return { text, action: { label: SW.t("common_undo"), run: () => moveTo(was, true) } };
-      });
+      if (moving || (!back && view && l === view.location)) return;   // one move at a time; not to where it is
+      moving = true;
+      try {
+        await act(actAns, SW.t("spool_move_moving"), async () => {
+          const r = await api(`spools/${id}`, { body: { location: l, dry_run: false } });
+          const text = SW.t("spool_result_moved", { location: l }), stamp = ++undoStamp;
+          if (!back && undoFrom == null) undoFrom = r.before.location || null;   // a second move in the window keeps the first place
+          changed = true; applyView(r.view);
+          if (back || !undoFrom) { undoFrom = null; return text; }
+          setTimeout(() => { if (stamp === undoStamp) { undoFrom = null; if (actAns.querySelector(".btn")) SW.result(actAns, "ok", text); } }, 5000);   // Undo goes after 5 s
+          return { text, action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
+        });
+      } finally { moving = false; }
     }
     // Mark empty: asks first (04 12.1)
     async function markEmpty(opener) {
@@ -1969,7 +2010,7 @@ function openTab() {
     if (other) other.hidden = true;                            // until the spool is read: its state decides which actions can be pressed
 
     const dlg = SW.sheet({ title: SW.t("spool_title", { id }), body: h("div", { class: "spools__sheet" }, sum, openPart, other), onClose: () => {
-      sheet = null;
+      if (sheet && sheet.dlg === dlg) sheet = null;            // a sheet that was replaced by another one closes after the new one is set
       if (changed) { changed = false; if (shown && asked) find(lastQ); }
       if (shellView) shellView.paint(false);
     } });
