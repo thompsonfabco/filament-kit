@@ -1,4 +1,6 @@
 /* Updates (S2.13) */
+/* the title has no line under it here: it stays at the top, as in the other sections, not at the foot of the Check now button */
+.page[data-section="updates"] .page-head { align-items: flex-start; }
 @media (max-width: 600px) { .page[data-section="updates"] .page-head__actions > .btn--primary { order: -1; } .page[data-section="updates"] .page-head__actions > .btn { flex: 1 1 100%; } }
 .updates__cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--s4); align-items: start; }
 .updates__cards > .card { margin: var(--s3) 0 0; }

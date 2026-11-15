@@ -15,6 +15,9 @@
   .topbar__name { line-height: var(--lh-title); }
   .topbar__hub > [aria-hidden="true"] { display: none; }
 }
+/* the product name stays on one line at 320 px: the lock chip gives up some padding for it */
+.topbar__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) { .topbar .chip { padding: 0 var(--s2); } }
 :where(.page) h2 { font-size: var(--fs-l); line-height: var(--lh-title); margin: 0 0 var(--s2); display: flex; gap: var(--s2); align-items: center; }
 :where(.page) p { margin: var(--s1) 0; }
 .muted { font-size: var(--fs-m); }
@@ -41,6 +44,9 @@
 :where(.page) :is(button.danger:hover, button.danger:active) { border-color: var(--bad); background: var(--bad-soft); }
 :where(.page) button:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
 .row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin: var(--s1) 0; }
+/* the switch keeps its own size: the field rule above would shrink it to a blob (specificity) */
+.page .toggle__input { width: calc(var(--s6) + var(--s2)); height: var(--s5); }
+.page select { text-overflow: ellipsis; }   /* a long choice ends in an ellipsis; the whole list shows when it opens */
 .row > input, .row > select { flex: 1 1 calc(var(--s7) * 3); min-width: 0; width: auto; }
 /* a long label (Flash: "Printer Station (build ...)") wraps inside the row instead of pushing the page past 320 px */
 .row > button { flex: 0 1 auto; max-width: 100%; white-space: normal; }

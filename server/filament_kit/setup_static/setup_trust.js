@@ -94,10 +94,10 @@ function trustCard() {
     fill(list, r.devices.length ? devTable("coll--trusted", SW.t("devices_trusted_title"), [devHead("title", SW.t("common_field_name")), devHead("made", SW.t("devices_trusted_col_made"), 3),
       devHead("seen", SW.t("devices_col_last_seen"), 2), devHead("expires", SW.t("devices_trusted_col_expires"), 2), devActionsHead()], rows(r))
       : h("p", { class: "muted", textContent: SW.t("devices_trusted_empty") }));
-    foot.replaceChildren(r.devices.length ? h("div", {}, SW.btn(SW.t("devices_trusted_revoke_all"), { cls: "btn--danger", action: "revoke-all", run: async () => {
+    foot.replaceChildren(...(r.devices.length ? [h("div", {}, SW.btn(SW.t("devices_trusted_revoke_all"), { cls: "btn--danger", action: "revoke-all", run: async () => {
       if (await asking(all, "trust/revoke_all", destroy("devices_revoke_all_title", "devices_revoke_all_body", "devices_trusted_revoke_all"),
         undefined, () => say(all, SW.t("devices_trusted_all_revoked"), true))) loadTrust();
-    } }), all) : null);
+    } }), all)] : []));
   }
   // the list follows the switch and the lock: read when on and open, the locked line when on and Locked, nothing when off
   function paintList(open) {
