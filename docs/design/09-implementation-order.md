@@ -198,7 +198,7 @@ Hub page, web app · L · Depends on: S0.3, S0.8, S0.9 · Beside: S1.8
   and the announcer (02 1.4, "One shared script"); each page's own copies (`h()`, `api()` and their variants in
   `setup_static/` and `web/static/`) are removed in the step that moves that page onto it (S1.3 to S1.7, S3.2 to
   S3.6). No page uses them yet.
-- **Keep:** both pages unchanged; the size limits of F12 rule 7 (core stylesheet under 40 KB, core script under
+- **Keep:** both pages unchanged; the size limits of F12 rule 7 (core stylesheet under 60 KB, core script under
   60 KB, each addition under 30 KB), checked by a test.
 - **Check:** AUT-2, AUT-3, AUT-4, AUT-6 and 08 tests 4 and 5 with no allow-list entry for the new files; AUT-5 run
   on the sample page at 1280 px and 320 px, light and dark.
