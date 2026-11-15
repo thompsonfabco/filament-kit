@@ -28,6 +28,7 @@ from filament_kit.web.intake_app import IntakeApp
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
 ALLOW = ROOT / "tests" / "allowlists" / "aut5"      # a folder, one file per screen
+VIEWS = "#add,#spools,#printers,#recent,#recent,#presets,#settings"     # the Hub tests drive these: PAGES, with the record page as a second #recent (they know no record id; the allow-list counts are for seven views)
 PAGES = ("#add", "#spools", "#printers", "#recent", "#recent/{id}", "#presets", "#settings")     # {id}: the seeded record
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2, "overflow": "Overflow",
          "sealed_location": "Sealed stock"}
@@ -63,13 +64,12 @@ def _history(sm) -> str:
     return hid
 
 
-@pytest.fixture(params=STATES)
-def served(request, tmp_path, monkeypatch, spoolman_url):
+def _serving(param, tmp_path, monkeypatch, spoolman_url, history):
     for name in ("etc", "state", "opt"):
         (tmp_path / name).mkdir()
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
     mods = {n: False for n in modules.MODES["server"]}
-    mods.update(web=True, ai_intake=True, presets=request.param != "presets-off")
+    mods.update(web=True, ai_intake=True, presets=param != "presets-off")
     config.save({"placement": RULES, "modules": mods, "server_name": "Workshop hub", "web": {"lan": ["127.0.0.0/8"]}})
     api = spoolman_url + "/api/v1"
     made = []
@@ -84,11 +84,11 @@ def served(request, tmp_path, monkeypatch, spoolman_url):
             made.append((vendor, name, material, f["id"]))
             c.post(api + "/spool", json={"filament_id": f["id"], "location": "Rack 1" if i % 2 else "Sealed stock",
                                          "remaining_weight": 1000 - 150 * i})
-    if request.param in ("waiting-with-a-line", "all-covered"):
+    if param in ("waiting-with-a-line", "all-covered"):
         used: set[str] = set()
         ls = {}
         for vendor, name, material, fid in made:
-            if request.param == "waiting-with-a-line" and vendor != "Prusament":
+            if param == "waiting-with-a-line" and vendor != "Prusament":
                 continue
             product = name.rsplit(" ", 1)[0]
             line_id = lines.line_id_for(vendor, product)
@@ -96,12 +96,12 @@ def served(request, tmp_path, monkeypatch, spoolman_url):
             used.add(made_id)
             ls[line_id] = lines.Line(line_id=line_id, vendor=vendor, product=product, material=material, bambu_parent=None,
                                      parent_source="none", filament_id=made_id, created="2026-01-01T00:00:00Z",
-                                     filaments=[fid] if request.param == "all-covered" else [])
+                                     filaments=[fid] if param == "all-covered" else [])
         lines.save(ls)
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
-    hid = _history(sm)
-    if request.param == "public-address":       # the web unit's page: its address has a path, and it keeps no history (04 7.4)
+    hid = _history(sm) if history else None
+    if param == "public-address":       # the web unit's page: its address has a path, and it keeps no history (04 7.4)
         site = IntakeApp(mcp_tools.Tools(sm), public_url="https://hub.example.test/f", lan_cidrs=["127.0.0.0/8"], push=False)
         app, path = Starlette(routes=[Mount("/f", routes=site.routes())]), "/f/intake"
     else:
@@ -110,10 +110,23 @@ def served(request, tmp_path, monkeypatch, spoolman_url):
     try:
         # on the public address a record address shows the same notice as the list, so its page title is the list's: the
         # audit asks for #recent a second time there, to keep every state at the same number of passes
-        views = [v.replace("{id}", hid) if "{id}" in v and path == "/intake" else "#recent" if "{id}" in v else v for v in PAGES]
+        views = [v.replace("{id}", hid or "") if "{id}" in v and path == "/intake" else "#recent" if "{id}" in v else v for v in PAGES]
         yield SimpleNamespace(url=running.url + path, views=",".join(views), hid=hid)
     finally:
         running.stop()
+
+
+@pytest.fixture(params=STATES[:4])
+def served(request, tmp_path, monkeypatch, spoolman_url):
+    """The web app's address as a string, in the four states of the presets screen: what the Hub tests import and drive."""
+    for running in _serving(request.param, tmp_path, monkeypatch, spoolman_url, False):
+        yield running.url
+
+
+@pytest.fixture(params=STATES)
+def served_web(request, tmp_path, monkeypatch, spoolman_url):
+    """The web app with records in Recently added, in every state (and on the web unit's public address): .url, .views, .hid."""
+    yield from _serving(request.param, tmp_path, monkeypatch, spoolman_url, True)
 
 
 def _node() -> str | None:
@@ -143,8 +156,8 @@ def _run(*args: str) -> subprocess.CompletedProcess:
     return run
 
 
-def test_the_page_audit_passes_on_every_view(served):
-    run = _run("--url", served.url, "--views", served.views, "--allow", str(ALLOW))
+def test_the_page_audit_passes_on_every_view(served_web):
+    run = _run("--url", served_web.url, "--views", served_web.views, "--allow", str(ALLOW))
     assert run.returncode == 0, run.stdout + run.stderr
     out = json.loads(run.stdout)
     assert out["views"] == len(PAGES) * 2 * 2 and out["failing"] == 0      # seven views, two widths, light and dark
@@ -152,13 +165,13 @@ def test_the_page_audit_passes_on_every_view(served):
 
 
 @pytest.mark.parametrize("look", ("console", "palette", "workbench", "panes"))
-def test_a_record_opens_with_its_fields_in_every_theme(served, request, look):
+def test_a_record_opens_with_its_fields_in_every_theme(served_web, request, look):
     """R298: Palette (a sheet), Workbench (a card) and Panes show the record in a dialog or a pane; it must open there with
     the 13 fields of its one saved item, as in Console where it opens in place, and without a page error."""
-    if request.node.callspec.params["served"] != "waiting":
+    if request.node.callspec.params["served_web"] != "waiting":
         pytest.skip("one data state is enough: the themes differ in markup, not in data")
-    view = "#recent/" + served.hid
-    run = _run("--url", served.url, "--views", view, "--widths", "375,1280", "--schemes", "light", "--look", look,
+    view = "#recent/" + served_web.hid
+    run = _run("--url", served_web.url, "--views", view, "--widths", "375,1280", "--schemes", "light", "--look", look,
                "--count", f"{view}|.kv__row|13", "--allow", str(ALLOW))
     out = json.loads(run.stdout) if run.stdout.strip() else {}
     bad = [f for r in out.get("report", []) for f in r["findings"] if f["check"] in ("view did not show its content", "page error")]
