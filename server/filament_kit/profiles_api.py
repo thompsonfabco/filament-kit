@@ -608,6 +608,19 @@ def web_routes(authed, sm) -> list[Route]:
         return JSONResponse({"uncovered_filaments": st["uncovered_filaments"]})
 
     @authed
+    async def orca_parents(request: Request):
+        """`GET /api/profiles/orca-parents?material=` (any paired device): the Orca Slicer parents the Hub page and
+        the web app offer for a new line, from the Orca library the PC sync uploaded (`web.presets.find_parents`).
+        `material` is words every parent name must have, any case (blank: all); at most 60. Reply:
+        `{"orca_parents": [base name, ...]}`, sorted; `[]` before an Orca library is uploaded."""
+        material = request.query_params.get("material", "").strip()
+        if len(material) > MAX_TEXT:
+            raise _bad(f"material is longer than {MAX_TEXT} characters")
+        words = material.casefold().split()
+        found = await run_in_threadpool(lambda: presets._orca_parents(words)[:presets.MAX_PARENTS])
+        return JSONResponse({"orca_parents": found})
+
+    @authed
     async def phone_line_new(request: Request):
         """`POST /api/profiles/lines` {name, vendor, ids, bs_template, orca_parent?}: create a line and put the
         filaments in it (as `web/line_new`); the reply is that route's (the line, `notes`, `output`). A refusal is
@@ -650,6 +663,7 @@ def web_routes(authed, sm) -> list[Route]:
             _audit, "build now", request.state.device, presets.generate))
 
     return [Route("/api/profiles/uncovered", uncovered),
+            Route("/api/profiles/orca-parents", orca_parents),
             Route("/api/profiles/lines", phone_line_new, methods=["POST"]),
             Route("/api/profiles/lines/{line_id}/filaments", phone_line_add, methods=["POST"]),
             Route("/api/profiles/build", phone_build, methods=["POST"]),

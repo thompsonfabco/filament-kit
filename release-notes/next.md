@@ -70,6 +70,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 
 - **One status vocabulary, Error and Fix lines.** Every command reports with the same state words and glyphs, and a failure is `Error: ...` with a `Fix: ...` line on standard error, with the command to run kept whole on one line (on its own line when it does not fit).
 - **Progress for waits, documented exit codes, plain output.** A wait longer than 2 seconds shows a progress line, each command ends with a documented exit code, and `--plain`, `--color` and `NO_COLOR` control the look for screen readers and pipes.
+- **Orca Slicer parents for a phone:** a paired phone can list the Orca Slicer parents a new preset line can use, as the setup page and the phone web app do.
 
 ## Still to come
 
