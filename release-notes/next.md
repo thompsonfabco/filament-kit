@@ -51,6 +51,7 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **Settings on the setup page** are regrouped in the new look. Network has a Remote access part; the Label Reader group shows whether a reader is installed on this machine, checks what an install or an upgrade needs, tests the reader and takes a reader token; Backups lists the backups (made, size) with a download for each and sets how many days they are kept (1 to 365); Restore is a set of steps; Voice and the other groups follow.
 - **QR codes:** the Hub now draws its QR codes itself, on the Hub page (the pairing code and the phone web app's address) and in the terminal, so the `qrencode` package is no longer needed (the pairing link is shown when it cannot fit one).
 - **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `filament-kit modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
+- **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
 
 ## Still to come
 
