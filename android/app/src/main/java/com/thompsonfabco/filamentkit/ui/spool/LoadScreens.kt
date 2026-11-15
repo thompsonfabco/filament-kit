@@ -255,11 +255,14 @@ private fun PlanRows(plan: LoadResult) {
             mm != null -> add(stringResource(R.string.spool_load_plan_nozzle, mm))
         }
         plan.movedBack.forEach { m ->
+            val id = m.id?.toString()
             add(
-                stringResource(
-                    R.string.spool_load_plan_goes_back, m.id?.toString() ?: stringResource(R.string.common_unknown), plan.slot.label,
-                    m.location.ifBlank { stringResource(R.string.spool_load_previous_place) },
-                ),
+                when {
+                    id == null && m.location.isBlank() -> stringResource(R.string.spool_load_plan_goes_back_unnumbered_noplace, plan.slot.label)
+                    id == null -> stringResource(R.string.spool_load_plan_goes_back_unnumbered, plan.slot.label, m.location)
+                    m.location.isBlank() -> stringResource(R.string.spool_load_plan_goes_back_noplace, id, plan.slot.label)
+                    else -> stringResource(R.string.spool_load_plan_goes_back, id, plan.slot.label, m.location)
+                },
             )
         }
         addAll(plan.problems)

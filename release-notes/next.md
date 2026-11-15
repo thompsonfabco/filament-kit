@@ -66,6 +66,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Slicer presets from a phone:** a paired phone can now list the filaments that have no preset line, create a line, add filaments to a line and ask for a build; the Android app's Slicer presets screen uses these. The phone web app's own routes are unchanged.
 - **Theme picker:** the setup page (Settings > Appearance) and the phone web app (its own Theme group in Settings) now have a Theme choice, with Console (dense and technical) the one theme so far. Choosing it is kept on this device and the phone's status bar takes its colour, also when you switch the phone between light and dark. A device that has not chosen shows the Hub's theme for new devices.
 - **Workbench theme:** the Theme choice now also offers Workbench (calm cards), in light and dark. The phone web app takes Workbench's colours, text, corners and font and its navigation (its narrow side bar stays on wide screens). The setup page also gets a labelled side list on wide screens, cards for lists, and a card that opens in place for details. Console looks as before.
+- **Android late text changes:** the last printer and design texts are whole sentences, including those for ids added before and unknown spools, and Replace this spool's tag is offered when the spool already has a tag.
 
 ## The command line speaks one way
 

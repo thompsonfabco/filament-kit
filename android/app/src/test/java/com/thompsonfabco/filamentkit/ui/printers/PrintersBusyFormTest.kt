@@ -46,7 +46,10 @@ class PrintersBusyFormTest {
             gate.await()
             return unset
         }
-        override suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer = error("not used")
+        override suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
+            gate.await()
+            return unset
+        }
         override suspend fun scanKlipper(subnet: String?) = emptyList<KlipperFound>()
         override suspend fun setApiKey(id: String, key: String) = Unit
         override suspend fun printer(id: String): PrinterDetail = throw ApiError(404, "not_found", "x")
@@ -67,11 +70,11 @@ class PrintersBusyFormTest {
         vm.submitAdd("12345678", "")
         rule.waitForIdle()
         rule.onNodeWithText("Cancel").assertIsNotEnabled()
-        rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").assertExists()
+        rule.onNodeWithText("Still working. Wait for it to finish.").assertExists()
         rule.onNodeWithText("Add Bambu Lab P1S").performTouchInput { swipeDown() }
         rule.waitForIdle()
         assertNotNull("the form is still open", vm.state.value.dialog)
-        assertTrue("and still shown", rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").isDisplayed())
+        assertTrue("and still shown", rule.onNodeWithText("Still working. Wait for it to finish.").isDisplayed())
         gate.completeExceptionally(ApiError(400, "bad_request", "Refused by the Hub"))
         rule.waitForIdle()
         assertTrue("the later refusal is shown", rule.onNodeWithText("Refused by the Hub").isDisplayed())
@@ -89,9 +92,23 @@ class PrintersBusyFormTest {
         rule.runOnUiThread { (ShadowDialog.getLatestDialog() as ComponentDialog).onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
         assertNotNull("the form is still open", vm.state.value.dialog)
-        assertTrue("and still shown", rule.onNodeWithText("The Hub is adding the printer. Wait for its answer.").isDisplayed())
+        assertTrue("and still shown", rule.onNodeWithText("Still working. Wait for it to finish.").isDisplayed())
         gate.completeExceptionally(ApiError(400, "bad_request", "Refused by the Hub"))
         rule.waitForIdle()
         assertTrue("the later refusal is shown", rule.onNodeWithText("Refused by the Hub").isDisplayed())
+    }
+
+    @Test fun aBusyKlipperAddSaysWhyCancelIsOff() {
+        val vm = PrintersViewModel(Backend())
+        shown(vm)
+        rule.waitForIdle()
+        vm.openAddKlipper()
+        rule.waitForIdle()
+        vm.submitAddKlipper("192.0.2.50", "", "")
+        rule.waitForIdle()
+        rule.onNodeWithText("Cancel").assertIsNotEnabled()
+        rule.onNodeWithText("Still working. Wait for it to finish.").assertExists()
+        gate.completeExceptionally(ApiError(400, "bad_request", "Refused by the Hub"))
+        rule.waitForIdle()
     }
 }
