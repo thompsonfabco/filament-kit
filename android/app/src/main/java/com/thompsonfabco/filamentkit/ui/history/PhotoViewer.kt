@@ -26,6 +26,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -77,31 +80,46 @@ fun HistoryPhotoEntry(
 internal fun PhotoViewer(list: HistoryListViewModel, record: RecordViewModel, id: String, start: Int, onClose: () -> Unit) {
     val s by record.state.collectAsState()
     LaunchedEffect(record) { record.ensureLoaded() }
-    PhotoViewerDialog(s.record?.photos ?: 0, start, onClose) { n -> list.photo(id, n) }
+    // the photo's number within its record is stable, and the shown one is kept across an Activity recreation
+    var current by rememberSaveable { mutableIntStateOf(start.coerceAtLeast(1)) }
+    PhotoViewerDialog((1..(s.record?.photos ?: 0)).toList(), current, { current = it }, onClose) { n -> list.photo(id, n) }
 }
 
 /**
- * The viewer's own part, shared by the Hub photos and the Add spools draft photos: [total] photos, opening on photo
- * [start] (1-based), each fetched by [load] (photo number from 1; null when it could not be had).
+ * The viewer's own part, shared by the Hub photos and the Add spools draft photos: the photos [keys] (each photo's own
+ * stable identity, in order), opening on [current], which the viewer reports through [onCurrent] as the page changes;
+ * each fetched by [load] (null when it could not be had). The pages and the counter follow the photo by its key, so
+ * a photo added or removed elsewhere in the list neither moves the shown page nor changes which photo Try again loads.
  */
 @Composable
-internal fun PhotoViewerDialog(total: Int, start: Int, onClose: () -> Unit, load: suspend (Int) -> ByteArray?) {
+internal fun <K : Any> PhotoViewerDialog(
+    keys: List<K>, current: K, onCurrent: (K) -> Unit, onClose: () -> Unit, load: suspend (K) -> ByteArray?,
+) {
     val colors = SpoolwardenTheme.colors
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         Box(Modifier.fillMaxSize().background(colors.bg)) {
-            var page by remember { mutableIntStateOf(start.coerceAtLeast(1) - 1) }
             var zoomed by remember { mutableStateOf(false) }
+            val total = keys.size
             if (total > 0) {
-                val pager = rememberPagerState(initialPage = page.coerceIn(0, total - 1)) { total }
-                LaunchedEffect(pager.currentPage) {
-                    page = pager.currentPage
-                    zoomed = false
+                val pager = rememberPagerState(initialPage = keys.indexOf(current).coerceAtLeast(0)) { keys.size }
+                val shown = rememberUpdatedState(keys)
+                val now = rememberUpdatedState(current)
+                // the pager follows the photo: when the list changes, return to the current photo's new slot
+                LaunchedEffect(keys) {
+                    val at = keys.indexOf(current)
+                    if (at >= 0 && at != pager.currentPage) pager.scrollToPage(at)
                 }
-                HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !zoomed) { p ->
-                    PhotoPage(p + 1, total, load, onZoom = { zoomed = it })
+                LaunchedEffect(pager) {
+                    snapshotFlow { pager.currentPage }.collect { p ->
+                        shown.value.getOrNull(p)?.let { if (it != now.value) onCurrent(it) }
+                        zoomed = false
+                    }
+                }
+                HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !zoomed, key = { keys[it] }) { p ->
+                    PhotoPage(keys[p], keys.indexOf(keys[p]) + 1, total, load, onZoom = { zoomed = it })
                 }
             }
             Row(
@@ -112,7 +130,7 @@ internal fun PhotoViewerDialog(total: Int, start: Int, onClose: () -> Unit, load
                 SwIconButton(R.drawable.sw_ic_close, stringResource(R.string.recent_photo_close), onClose)
                 if (total > 0) {
                     Text(
-                        stringResource(R.string.photo_position, page + 1, total),
+                        stringResource(R.string.photo_position, keys.indexOf(current).coerceAtLeast(0) + 1, total),
                         style = SpoolwardenTheme.type.data, color = colors.text,
                     )
                 }
@@ -129,12 +147,12 @@ private sealed interface PhotoLoad {
 
 /** One photo, large: "Loading photo…", or "The photo could not be loaded." with "Try again". */
 @Composable
-private fun PhotoPage(n: Int, total: Int, load: suspend (Int) -> ByteArray?, onZoom: (Boolean) -> Unit) {
+private fun <K : Any> PhotoPage(key: K, n: Int, total: Int, load: suspend (K) -> ByteArray?, onZoom: (Boolean) -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
     var state by remember { mutableStateOf<PhotoLoad>(PhotoLoad.Loading) }
-    LaunchedEffect(n, attempt) {
+    LaunchedEffect(key, attempt) {
         state = PhotoLoad.Loading
-        val bytes = load(n)
+        val bytes = load(key)
         val bitmap = bytes?.let { withContext(Dispatchers.Default) { decode(it, FULL_PX) } }
         state = if (bitmap == null) PhotoLoad.Failed else PhotoLoad.Loaded(bitmap)
     }

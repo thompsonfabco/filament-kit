@@ -105,14 +105,16 @@ fun CaptureScreen(
     val wide = SpoolwardenTheme.window != WindowClass.Phone
     val showCamera = state.photos.size < AddViewModel.MAX_PHOTOS && !reading
     // the viewer (10.5) is a full-screen layer over this screen: Back closes it and the draft stays as it was. It is
-    // kept here, above the layout branches and by the photo's file, so a window-class change keeps it open and a
-    // removed photo closes it instead of showing the photo that moved into its slot
+    // kept here, above the layout branches and by the photo's file (the shown photo, followed as it is swiped to), so
+    // a window-class change or an Activity recreation keeps it open on the same photo, and removing that photo closes
+    // it instead of showing the photo that moved into its slot
     var viewing by rememberSaveable { mutableStateOf<String?>(null) }
-    val viewIndex = viewing?.let { path -> state.photos.indexOfFirst { it.path == path } }
-    LaunchedEffect(viewIndex) { if (viewIndex != null && viewIndex < 0) viewing = null }
-    if (viewIndex != null && viewIndex >= 0) {
-        PhotoViewerDialog(state.photos.size, viewIndex + 1, { viewing = null }) { n ->
-            withContext(Dispatchers.IO) { runCatching { state.photos[n - 1].readBytes() }.getOrNull() }
+    val paths = state.photos.map { it.path }
+    val shown = viewing
+    LaunchedEffect(shown, paths) { if (shown != null && shown !in paths) viewing = null }
+    if (shown != null && shown in paths) {
+        PhotoViewerDialog(paths, shown, { viewing = it }, { viewing = null }) { path ->
+            withContext(Dispatchers.IO) { runCatching { File(path).readBytes() }.getOrNull() }
         }
     }
     val onOpen = { i: Int -> viewing = state.photos[i].path }
