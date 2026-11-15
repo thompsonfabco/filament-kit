@@ -96,7 +96,7 @@ def test_config_theme_shows_the_theme_for_new_devices_and_needs_no_rights(capsys
     config.save(cfg)
     assert run(capsys, ["config", "theme"])[:2] == (0, "Theme for new devices: Palette (colourful and roomy).\n")
     got = json.loads(run(capsys, ["config", "theme", "--json"])[1])
-    assert got["theme"] == "palette" and "server_name" in got["values"]
+    assert got == {"theme": "palette"}       # the one setting, not every general setting
 
 
 def test_config_theme_sets_a_theme_in_any_case_and_says_devices_keep_theirs(capsys):

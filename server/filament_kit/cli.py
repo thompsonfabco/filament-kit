@@ -1552,8 +1552,7 @@ def cmd_config_theme(raw: str | None) -> int:
         return f"Theme for new devices: {value.capitalize()} ({_THEME_WORDS[value]})."
     if raw is None:
         value = config.look(config.load())
-        from .setup_console import general_tab
-        output.emit({"values": dict(general_tab._view()["values"]), "theme": value})
+        output.emit({"theme": value})
         output.result(line(value))
         return 0
     value = raw.strip().lower()
