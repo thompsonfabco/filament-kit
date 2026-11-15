@@ -1,7 +1,7 @@
 // Test driver for tests/test_aut5_connect.py: connectToPage (tests/aut5_run.mjs) against a fake DevTools endpoint that
 // refuses, errors and shows no page before it answers. Prints "ok <phase>" lines; exits 1 on a failed expectation.
 import { createServer } from "node:http";
-import { connectToPage } from "./aut5_run.mjs";
+import { connectToPage, endTreeWhileRunning } from "./aut5_run.mjs";
 
 const fake = (script) => new Promise((res) => {
   let n = 0;
@@ -41,5 +41,11 @@ const expect = (name, ok, detail = "") => { console.log(`${ok ? "ok" : "FAIL"} $
   const e = await connectToPage(port, { limitMs: 600, open: async () => { throw new Error("refused"); } }).catch((x) => x);
   expect("names the socket phase", e instanceof Error && /socket did not open twice/.test(e.message), e.message);
   srv.close();
+}
+{   // the cleanup ends the browser's tree only while the browser runs (after its exit the pid may be another process's)
+  const ended = [];
+  const running = endTreeWhileRunning(null, 111, (pid) => ended.push(pid));
+  const exited = [0, 1, "SIGTERM"].map((x) => endTreeWhileRunning(x, 222, (pid) => ended.push(pid)));
+  expect("ends the tree only while the browser runs", running && !exited.some(Boolean) && ended.join() === "111", ended.join());
 }
 process.exit(failed ? 1 : 0);

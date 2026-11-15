@@ -136,6 +136,13 @@ export function endTree(pid) {
   try { process.kill(-pid, "SIGKILL"); } catch { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
 }
 
+// the cleanup's call: only while the browser has not exited (its pid may be another process's by then); returns whether it ended the tree
+export function endTreeWhileRunning(browserExit, pid, end = endTree) {
+  if (browserExit !== null) return false;
+  end(pid);
+  return true;
+}
+
 // profile folders of earlier runs: a folder whose runner is gone has its browser tree ended (only processes whose
 // command line contains that folder) and is removed; any other folder of ours is removed when older than an hour
 export function sweepOldProfiles() {
@@ -211,7 +218,7 @@ async function main() {
   proc.on("exit", (code, signal) => { browserExit = signal || code; });
   proc.on("error", (e) => { browserExit = e.code || e.message; });     // could not be started at all
   const cleanup = () => {
-    endTree(proc.pid);
+    endTreeWhileRunning(browserExit, proc.pid);
     try { proc.kill(); } catch { /* gone */ }
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
   };

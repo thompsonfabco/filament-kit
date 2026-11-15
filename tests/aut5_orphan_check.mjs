@@ -38,7 +38,9 @@ try {
   const first = await run();
   if (first.status === 3 || first.status === 2) { console.log("no browser here: " + first.stderr.trim()); code = 3; }
   else {
-    expect("a normal run leaves no browser process", mine().length === 0, JSON.stringify(mine().map((p) => p.pid)));
+    // the browser may still be closing when the runner exits: look for up to 10 s; what remains after that is a leak
+    for (let i = 0; i < 40 && mine().length; i++) await sleep(250);
+    expect("a normal run leaves no browser process", mine().length === 0, JSON.stringify(mine().map((p) => `${p.pid} ${p.cmd.slice(0, 120)}`)));
     expect("a normal run removes its profile folder", profiles().length === 0, profiles().join(","));
 
     // a run held in the page by --ready, then its node killed hard: no cleanup runs, the browser keeps running

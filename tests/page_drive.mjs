@@ -9,7 +9,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PID_FILE, endTree, sweepOldProfiles } from "./aut5_run.mjs";      // one process-tree cleanup for both drivers
+import { PID_FILE, endTreeWhileRunning, sweepOldProfiles } from "./aut5_run.mjs";      // one process-tree cleanup for both drivers
 
 process.exitCode = 2;      // anything that ends the run early is a failed run, never a pass
 
@@ -46,7 +46,7 @@ async function main() {
   proc.on("exit", (code, signal) => { browserExit = signal || code; });
   proc.on("error", (e) => { browserExit = e.code || e.message; });
   const cleanup = () => {
-    endTree(proc.pid);
+    endTreeWhileRunning(browserExit, proc.pid);
     try { proc.kill(); } catch { /* gone */ }
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
   };

@@ -24,7 +24,7 @@ def _node():
 def test_the_runner_waits_for_the_devtools_endpoint():
     r = subprocess.run([_node(), str(TESTS / "aut5_connect_check.mjs")], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert r.stdout.count("ok ") == 5, r.stdout
+    assert r.stdout.count("ok ") == 6, r.stdout
 
 
 @pytest.mark.skipif(not _node(), reason="needs Node 22 or later")
