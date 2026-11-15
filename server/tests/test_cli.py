@@ -514,9 +514,9 @@ def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_li
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    assert "--   library not downloaded (filament-kit library update), 0 local additions" in out
-    assert "--   profiles: no build yet (waiting for the PC sync)" in out
-    assert "--   PC sync: not set up (see README: Pair your PC)" in out
+    assert "--   Filament Catalog not downloaded (filament-kit library update), 0 local additions" in out
+    assert "--   Slicer presets: no build yet (waiting for Slicer Sync)" in out
+    assert "--   Slicer Sync: not set up (see README: Pair your PC)" in out
 
 
 def test_status_after_waiting_build_no_fail(capsys, spoolman_url):
@@ -526,7 +526,7 @@ def test_status_after_waiting_build_no_fail(capsys, spoolman_url):
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    assert "--   profiles: no build yet (waiting for the PC sync)" in out
+    assert "--   Slicer presets: no build yet (waiting for Slicer Sync)" in out
 
 
 def _fake_profiles(monkeypatch, **st):
@@ -553,9 +553,9 @@ def test_status_good_build_and_pc_sync(capsys, monkeypatch, spoolman_url):
     _fake_library(monkeypatch, source="updated", at=up)
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
-    assert "--   library version 7 (updated 2026-11-02), 2 local additions" in out
-    assert "OK   profiles: build 20261102-080100, 12 presets for 3 lines (2 problems)" in out
-    assert "--   PC sync: last upload 2026-11-02 08:01, installed build 20261102-080100" in out
+    assert "--   Filament Catalog version 7 (updated 2026-11-02), 2 local additions" in out
+    assert "OK   Slicer presets: build 20261102-080100, 12 Slicer presets for 3 lines (2 problems)" in out
+    assert "--   Slicer Sync: last upload 2026-11-02 08:01, installed build 20261102-080100" in out
 
 
 def test_status_failed_build_and_library_update_warning(capsys, monkeypatch, spoolman_url):
@@ -567,10 +567,10 @@ def test_status_failed_build_and_library_update_warning(capsys, monkeypatch, spo
     _fake_library(monkeypatch, last_check={"at": 1.0, "ok": False, "error": "HTTP 404: using bundled version 7"})
     assert cli.main(["status"], client_factory=_ok_client) == 1
     out = _status_lines(capsys)
-    assert "--   library update: HTTP 404: using bundled version 7" in out
-    i = out.index("FAIL profiles: last build failed: ValueError: boom; using build 20261101-070000")
+    assert "--   Filament Catalog update: HTTP 404: using bundled version 7" in out
+    i = out.index("FAIL Slicer presets: last build failed: ValueError: boom; using build 20261101-070000")
     assert out[i + 1] == "     fix: sudo journalctl -u filament-kit-build -n 50"
-    assert "--   PC sync: last upload never, no build installed yet" in out
+    assert "--   Slicer Sync: last upload never, no build installed yet" in out
 
 
 def test_profiles_lines_and_set_parent(capsys, monkeypatch):

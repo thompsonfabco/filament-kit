@@ -618,9 +618,9 @@ def test_overview_shows_the_status_rows_without_addresses(app, owned):
     assert r["redacted"] is True and r["version"] and r["update"]["installed"] == r["version"]
     texts = [x["text"] for x in r["rows"]]
     assert f"Spoolman reachable at {redact.HIDDEN} (v1.2.3)" in texts
-    assert f"station not answering at {redact.HIDDEN}" in texts
+    assert f"Weigh Station not answering at {redact.HIDDEN}" in texts
     assert f"public URL {redact.HIDDEN}" in texts
-    bad = next(x for x in r["rows"] if x["text"].startswith("station not"))
+    bad = next(x for x in r["rows"] if x["text"].startswith("Weigh Station not"))
     assert bad["state"] == "fail" and "192.0.2.30" not in bad["fix"] and "systemctl status" in bad["fix"]
 
 
@@ -761,10 +761,10 @@ def test_a_mode_as_it_is_changes_nothing(app, env):  # noqa: F811
 def test_the_page_will_not_set_a_mode_without_the_server(app, env):  # noqa: F811
     c = client(app)
     r = post(c, "modules/mode", {"mode": "station"})
-    assert r.status_code == 409 and "modules set station" in r.json()["error"]
+    assert r.status_code == 409 and "modules set weigh-station" in r.json()["error"]
     assert "server" in modules.enabled(config.load()) and not env
     p = c.get("/setup/api/modules/preview?mode=station").json()
-    assert p["refused"] and "modules set station" in p["refused"]
+    assert p["refused"] and "modules set weigh-station" in p["refused"]
 
 
 @pytest.mark.parametrize("mode", ["", "nope", None, 3])

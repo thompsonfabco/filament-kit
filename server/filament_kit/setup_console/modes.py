@@ -7,18 +7,20 @@ from __future__ import annotations
 
 from .. import config, modules
 
+_SETUP_NAME = {old: new for new, old in modules.MODE_ALIASES.items()}      # the setup names the page and the command show
+
 
 def preview(mode: str) -> dict:
     from ..setup_page import Refused
     mode = modules.canonical_mode(mode)
     if mode not in modules.MODES:
-        raise Refused(400, "no such mode")
+        raise Refused(400, "no such setup")
     cfg = config.load()
     on = modules.enabled(cfg)
     if "server" not in modules.MODES[mode]:
         return {"mode": mode, "on": True, "notes": [], "after": sorted(on), "needs": [],
-                "refused": "this page is the server module's, and that mode has none: at the server: "
-                           f"sudo filament-kit modules set {mode} --server <the kit server's address>"}
+                "refused": "this page is the Hub's, and that setup has none: at the Hub: "
+                           f"sudo filament-kit modules set {_SETUP_NAME[mode]} --hub ADDRESS"}
     notes: list[str] = []
     try:
         out = modules.set_mode(cfg, mode, say=notes.append)

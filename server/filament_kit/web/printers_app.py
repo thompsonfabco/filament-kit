@@ -57,7 +57,7 @@ POLL_SECONDS = 1.0        # at most one kit poll per second per open stream
 PING_SECONDS = 25.0
 MAX_STREAMS = 12          # open status streams (a phone or two per printer)
 MAX_CAMERAS = 4           # open MJPEG relays
-BUSY = "too many open views of the printers; close one (another phone or tab) and this one will retry"
+BUSY = "Too many open views of the printers. Close one (another phone or tab), then try again."
 ACTIONS = ("pause", "resume", "stop", "light_on", "light_off")
 # A printer id as the kit names it: a Bambu serial, or a Klipper printer's slug ("sv08-max", registry.slug). One
 # check for every printer route: a Bambu-only one refused Klipper printers before the kit was asked.
@@ -89,8 +89,8 @@ REFUSALS = {
                      "address: check the printer's IP before re-adding."),
     "needs_developer_mode": ("The printer refuses remote control. On the printer open Settings > Network/LAN, turn "
                              "on LAN Only mode and then Developer Mode, then try again."),
-    "no_preset": ("No preset for this filament on this printer yet. It is made at the next preset build; see the "
-                  "Presets tab."),
+    "no_preset": ("No Slicer preset for this filament on this printer yet. It is made at the next Slicer presets build; "
+                  "see Slicer presets."),
     "write_refused": "The printer refused the change",
     "already_running": "Slot mapping or a load is in progress on this printer. Try again in a moment.",
 }

@@ -60,16 +60,16 @@ def _station_rows(url: str) -> Iterator[Row]:
     try:
         state = cli.StationClient(url, backoff=0).state()
     except cli.StationUnreachable:
-        yield Row(FAIL, f"station not answering at {url}",
-                  f"check the station machine: sudo systemctl status filament-kit-station  (url {url})")
+        yield Row(FAIL, f"Weigh Station not answering at {url}",
+                  f"check the Weigh Station machine: sudo systemctl status filament-kit-station  (url {url})")
         return
-    yield Row(OK, f"station answering at {url}")
+    yield Row(OK, f"Weigh Station answering at {url}")
     # a fresh station has seen neither the reader nor the scale: informational, not a failure.
     # "tag" is always an object; its nfc_id stays null until the reader has read a tag.
     if not (state.get("tag") or {}).get("nfc_id"):
-        yield Row(INFO, "station reader not seen")
+        yield Row(INFO, "Weigh Station reader not seen")
     if not state.get("scale") and not state.get("last_weight"):
-        yield Row(INFO, "station scale not seen")
+        yield Row(INFO, "Weigh Station scale not seen")
 
 
 def hardware_rows() -> Iterator[Row]:
@@ -125,23 +125,23 @@ def _library_rows() -> Iterator[Row]:
             source = f"updated {time.strftime('%Y-%m-%d', time.localtime(at))}"
     n = st["local"]
     if source == "none":
-        yield Row(INFO, f"library not downloaded (filament-kit library update), {n} local addition"
+        yield Row(INFO, f"Filament Catalog not downloaded (filament-kit library update), {n} local addition"
                         f"{'' if n == 1 else 's'}")
     else:
-        yield Row(INFO, f"library version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
+        yield Row(INFO, f"Filament Catalog version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
     lc = st["last_check"]
     if lc is not None and not lc["ok"]:
         # a warning, not a failure: the last good version (or none) stays in use
-        yield Row(INFO, f"library update: {lc['error']}")
+        yield Row(INFO, f"Filament Catalog update: {lc['error']}")
     if st.get("skipped"):          # .get: the CLI snapshot tests' fake status has no such key
-        yield Row(INFO, f"library: {st['skipped']}")
+        yield Row(INFO, f"Filament Catalog: {st['skipped']}")
 
 
 def _library_safe() -> Iterator[Row]:
     try:
         yield from library_rows()
     except Exception as e:  # noqa: BLE001 - status reports, it does not crash
-        yield Row(INFO, f"library: could not be read ({e.__class__.__name__}: {e})", group="Filament Catalog")
+        yield Row(INFO, f"Filament Catalog: could not be read ({e.__class__.__name__}: {e})", group="Filament Catalog")
 
 
 def profile_rows() -> Iterator[Row]:
@@ -155,32 +155,32 @@ def _profile_rows() -> Iterator[Row]:
     try:
         st = builds.status()
     except Exception as e:  # noqa: BLE001
-        yield Row(FAIL, f"profiles: status could not be read ({e.__class__.__name__}: {e})",
+        yield Row(FAIL, f"Slicer presets: status could not be read ({e.__class__.__name__}: {e})",
                   "sudo journalctl -u filament-kit-build -n 50")
         return
     b = st.get("build")
     error = cli._attempt_failed(st)
     if error is not None:
-        yield Row(FAIL, f"profiles: last build failed: {error}; "
+        yield Row(FAIL, f"Slicer presets: last build failed: {error}; "
                         + (f"using build {b['stamp']}" if b else "no good build yet"),
                   "sudo journalctl -u filament-kit-build -n 50")
     elif b:
-        yield Row(OK, f"profiles: build {b['stamp']}, {st.get('presets', 0)} presets for "
+        yield Row(OK, f"Slicer presets: build {b['stamp']}, {st.get('presets', 0)} Slicer presets for "
                       f"{st.get('lines', 0)} lines ({b.get('problems', 0)} problems)")
     else:
-        yield Row(INFO, "profiles: no build yet (waiting for the PC sync)")
+        yield Row(INFO, "Slicer presets: no build yet (waiting for Slicer Sync)")
     pc = st.get("pc")
     if pc:
         inst = st.get("installed")
-        yield Row(INFO, f"PC sync: last upload {cli._fmt_time(pc.get('last_upload'))}, "
+        yield Row(INFO, f"Slicer Sync: last upload {cli._fmt_time(pc.get('last_upload'))}, "
                         + (f"installed build {inst['stamp']}" if inst else "no build installed yet"))
         wait = builds.pc_waiting_text(pc)
         if wait:
             yield Row(INFO, wait)
         if pc.get("failure"):
-            yield Row(INFO, f"PC sync at {cli._fmt_time(pc['failure']['at'])}: {pc['failure']['text']}")
+            yield Row(INFO, f"Slicer Sync at {cli._fmt_time(pc['failure']['at'])}: {pc['failure']['text']}")
     else:
-        yield Row(INFO, "PC sync: not set up (see README: Pair your PC)")
+        yield Row(INFO, "Slicer Sync: not set up (see README: Pair your PC)")
 
 
 def _station_pairing_rows(state: str | None = None) -> Iterator[Row]:
@@ -324,12 +324,12 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
     cfg = cfg if cfg is not None else config.load()
     web = cfg.get("web") or {}
     on = modules.enabled(cfg)
-    yield Row(OK if "web" in on else FAIL, "web module is on", "sudo filament-kit modules enable web")
+    yield Row(OK if "web" in on else FAIL, "web feature is on", "sudo filament-kit modules enable web")
     public = str(web.get("public_url") or "").rstrip("/")
     yield Row(OK if public.startswith("https://") else FAIL, f"public URL {public or '(not set)'}",
               "set web.public_url in config.json (e.g. https://mcp.example.com/filament)")
     if public:
-        yield Row(DETAIL, f"connector: {public}/mcp   phone app: {public}/intake")
+        yield Row(DETAIL, f"connector: {public}/mcp   web app: {public}/intake")
     if (config.paths().etc / cli.WEB_PASSPHRASE).is_file():
         yield Row(OK, "sign-in passphrase is set")
     else:   # only Claude's connector signs in with it: not a failure for someone using the phone web app alone
@@ -359,9 +359,9 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
         yield Row(DETAIL, "connectors: cannot read (run as root)")
     except (OSError, ValueError, AttributeError) as e:
         yield Row(DETAIL, f"connectors: cannot read the OAuth state ({type(e).__name__})")
-    slots = "the kit's printer bridge" if "printers" in on else "none"
+    slots = "the Hub's printer bridge" if "printers" in on else "none"
     yield Row(DETAIL, f"printer slots: {slots}; tag readers: {len(cfg.get('tag_sources') or [])} "
-                      f"+ {'station' if (cfg.get('station') or {}).get('url') else 'no station'}")
+                      f"+ {'Weigh Station' if (cfg.get('station') or {}).get('url') else 'no Weigh Station'}")
 
 
 def _fields_rows(cfg: dict) -> Iterator[Row]:
@@ -372,7 +372,7 @@ def _fields_rows(cfg: dict) -> Iterator[Row]:
     except cli.SpoolmanError:
         return              # the row above already says Spoolman does not answer
     if missing:
-        yield Row(FAIL, "Spoolman is missing the kit's extra fields: " + ", ".join(missing),
+        yield Row(FAIL, "Spoolman is missing Spoolwarden's extra fields: " + ", ".join(missing),
                   "sudo filament-kit ensure-fields", action="ensure_fields", group="Spoolman")
 
 
@@ -385,5 +385,5 @@ def collect(cfg: dict | None = None, client_factory=None, station_pairing: str |
     if "server" in on or "spoolman" in on:
         out += list(_fields_rows(cfg))
     if "web" in on:
-        out += [r for r in _in("Hub", web_rows(cfg)) if r.text != "web module is on"]    # design gap: no group for Web access
+        out += [r for r in _in("Hub", web_rows(cfg)) if r.text != "web feature is on"]    # design gap: no group for Web access
     return out

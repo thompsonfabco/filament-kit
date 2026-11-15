@@ -29,7 +29,7 @@ def test_every_overview_row_has_a_group_of_the_design(app, owned):
     assert by["Spoolman"] == "Spoolman" and by["certificate"] == "Hub"
     assert next(r for r in rows if r["text"].startswith("paired devices"))["group"] == "Devices"
     assert next(r for r in rows if r["text"].startswith("reads used today"))["group"] == "Label Reader"
-    assert next(r for r in rows if r["text"].startswith("station not answering"))["group"] == "Weigh Station"
+    assert next(r for r in rows if r["text"].startswith("Weigh Station not answering"))["group"] == "Weigh Station"
 
 
 def test_the_whole_overview_carries_the_groups_too(app, owned, helper):

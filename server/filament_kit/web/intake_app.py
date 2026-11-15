@@ -461,7 +461,7 @@ class IntakeApp:
                 text = mcp_tools.error_text(e)
                 if text is None:
                     log.exception("intake %s", request.url.path)
-                    return JSONResponse({"error": "internal error (see the server log)"}, 500)
+                    return JSONResponse({"error": "Something went wrong on the Hub. The details are in its log."}, 500)
                 status = 409 if type(e).__name__ == "TagConflict" else 400
                 field = getattr(e, "field", None)           # the body key a refusal is about, when it is about one
                 problems = getattr(e, "problems", None)     # a refused add: every problem, with its item and field
