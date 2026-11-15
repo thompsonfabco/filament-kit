@@ -122,7 +122,7 @@ await open();
 out.start = state();                                        // as served: nothing chosen
 await clickTile(out.start.look !== "console");
 out.clicked = { ...state(), result: resultText() };
-localStorage.setItem("spoolwarden.look", "workbench"); root.setAttribute("data-look", "workbench");     // a stored look that has no tile
+localStorage.setItem("spoolwarden.look", "palette"); root.setAttribute("data-look", "palette");     // a stored look that has no tile
 await open();
 out.other = state();
 await clickTile(true);
@@ -136,7 +136,7 @@ return out;
 
 def _check_click(page, served_look):
     on, off = [T("theme_console_name")], []
-    assert page["start"]["tiles"] == 1 and page["start"]["line"] == [T("theme_console_line")] and page["start"]["legend"] == T("appearance_theme_title")
+    assert page["start"]["tiles"] == 2 and page["start"]["line"] == [T("theme_console_line"), T("theme_workbench_line")] and page["start"]["legend"] == T("appearance_theme_title")
     assert page["start"]["look"] == served_look and page["start"]["stored"] is None
     assert page["start"]["checked"] == (on if served_look == "console" else off)         # checked only when Console is the look shown
     assert page["clicked"]["look"] == "console" and page["clicked"]["checked"] == on
@@ -145,7 +145,7 @@ def _check_click(page, served_look):
     else:
         assert page["clicked"]["stored"] == "console"
         assert page["clicked"]["result"] == T("appearance_theme_saved", name=T("theme_console_name"))
-    assert page["other"]["look"] == "workbench" and page["other"]["checked"] == off
+    assert page["other"]["look"] == "palette" and page["other"]["checked"] == off
     assert page["otherClicked"]["look"] == "console" and page["otherClicked"]["stored"] == "console" and page["otherClicked"]["checked"] == on
     assert page["again"]["checked"] == on and page["again"]["look"] == "console"
 
