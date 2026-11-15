@@ -53,6 +53,56 @@ def test_every_rule_of_the_workbench_groups_is_inside_a_group_of_a_profile_choic
     assert seen == {"workbench"}                                  # Palette and Panes arrive with S6.6 and S6.8
 
 
+def test_the_card_width_is_18rem_so_cards_grow_with_the_text_size():
+    for css in (CSS, SERVED_CSS):
+        cards = " ".join(_groups(css)[("collection", "cards")])
+        assert "minmax(min(100%,18rem),1fr)" in re.sub(r"\s+", "", css) and "calc(var(--s7) * 6)" not in css
+        assert ".coll__row--result>.coll__cell" not in cards                     # the card's own cell rule already sets that padding
+
+
+# the sidebar is the Hub page's (04 2.3: the web app keeps its tablet layout above 1024 px): the web app's body carries data-ai
+APP_NAV = """
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(look, what) { for (let i = 0; i < 300; i++) { const v = look(); if (v) return v; await sleep(100); } throw new Error("waited for " + what); }
+const r = document.documentElement;
+await until(() => document.querySelector(".shell > .nav .nav__item"), "the navigation");
+const m = (look) => { r.setAttribute("data-look", look); const cs = (el) => getComputedStyle(el), item = document.querySelector(".shell .nav__item");
+  return { cols: cs(document.querySelector(".shell")).gridTemplateColumns, dir: cs(item).flexDirection, rail: cs(r).getPropertyValue("--rail").trim(),
+    heading: Math.round(document.querySelector(".shell .nav__heading").getBoundingClientRect().width) }; };
+return { console: m("console"), workbench: m("workbench"), hubPage: !!document.body.hasAttribute("data-ai") === false };
+"""
+
+
+def test_the_web_app_keeps_its_rail_at_1280_px_in_workbench(served, tmp_path):  # noqa: F811
+    app = _drive(served, tmp_path, APP_NAV, width=1280)
+    assert app["workbench"]["dir"] == "column" and app["workbench"]["cols"].split(" ")[0] == app["workbench"]["rail"]
+    assert app["workbench"]["heading"] <= 1 and app["hubPage"] is False
+
+
+def test_the_hub_page_gets_the_sidebar_at_1280_px_in_workbench(hub, tmp_path):
+    page = _drive(hub, tmp_path, APP_NAV, width=1280)
+    assert page["workbench"]["dir"] == "row" and page["workbench"]["cols"].split(" ")[0] == "256px" and page["workbench"]["heading"] > 50
+    assert page["console"]["dir"] == "column" and page["hubPage"] is True
+
+
+# Recently added: the chevron cell (`go`) is for rows only (02 6.1), so a card does not show it
+GO = """
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(look, what) { for (let i = 0; i < 300; i++) { const v = look(); if (v) return v; await sleep(100); } throw new Error("waited for " + what); }
+const r = document.documentElement;
+location.hash = "#recent";
+const go = await until(() => document.querySelector('.coll__cell[data-col="go"]'), "a go cell");
+await sleep(300);
+const d = (look) => { r.setAttribute("data-look", look); return getComputedStyle(go).display; };
+return { console: d("console"), workbench: d("workbench"), back: d("console") };
+"""
+
+
+def test_the_go_chevron_shows_in_rows_and_not_on_cards(hub, tmp_path):
+    got = _drive(hub, tmp_path, GO)
+    assert got["workbench"] == "none" and got["console"] != "none" and got["back"] == got["console"]
+
+
 # the Hub page's metrics under each look at one width (the driver opens the page at that width, so its media queries answer)
 STYLES = """
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

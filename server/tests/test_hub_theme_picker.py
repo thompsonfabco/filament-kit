@@ -1,7 +1,7 @@
 """The theme picker on the web (design 09 S6.2, 02 3.4, 03 10.2, 04 9.2), in a real headless browser: theme-init.js applies the
 device's stored look (or the Hub's default) and sets the two theme-color metas to that look's surface, on the Hub page and in
-the web app; the Appearance group (Hub Settings) and the web app's Settings sheet hold the picker with one tile, Console,
-selected; a device that has not chosen stays on the Hub's default (Console unless the Hub says otherwise). The AUT-5 audit of
+the web app; the Appearance group (Hub Settings) and the web app's Settings sheet hold the picker with the tiles built so far
+(Console and Workbench), Console selected; a device that has not chosen stays on the Hub's default (Console unless the Hub says otherwise). The AUT-5 audit of
 the picker at 320 px with a long Hub name. The same skip rules as the page audit: no Node 22 or no browser is a skip (a
 failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -93,8 +93,8 @@ def test_theme_init_carries_the_surface_of_every_theme_in_light_and_dark():
         assert f'"{look}": {json.dumps(_surfaces(look))}' in text
 
 
-# the picker, pressed with a real pointer click: one tile, Console, checked only while Console is the look on the page; a click
-# on the tile stores the look and applies it, also when the page showed another look (the Hub's default or a stored one)
+# the picker, pressed with a real pointer click: a tile is checked only while its look is the one on the page; a click
+# on the Console tile stores the look and applies it, also when the page showed another look (the Hub's default or a stored one)
 CLICK = PRELUDE + """
 const out = {};
 const resultText = () => text($(".theme-picker").parentElement.querySelector(":scope > .result .result__text"));
