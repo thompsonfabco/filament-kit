@@ -574,10 +574,12 @@ def feedback_list(cfg: dict) -> dict:
     out = _request(_feedback_base(cfg), body=None, timeout=FEEDBACK_TIMEOUT, auth=True, errors=_FEEDBACK_ERRORS)
     entries = out.get("entries") if isinstance(out.get("entries"), list) else out.get("items")
     mb = out.get("bundle_mb")
+    entries = [e for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []
+    count = _count(out.get("count"))
     return {"opt_in": out.get("opt_in") is True, "endpoint_configured": out.get("endpoint_configured") is True,
-            "count": _count(out.get("count")) or 0,
+            "count": len(entries) if count is None else count,
             "bundle_mb": float(mb) if isinstance(mb, (int, float)) and not isinstance(mb, bool) else 0.0,
-            "entries": [e for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []}
+            "entries": entries}
 
 
 def feedback_add(cfg: dict, images: list[bytes], predicted: dict, corrected: dict, note: str = "", *,

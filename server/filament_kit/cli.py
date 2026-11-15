@@ -5865,6 +5865,129 @@ def cmd_local_intake_token(remove: bool) -> int:
     return 0
 
 
+def _corrections_failed(e) -> int:
+    """A refusal of the corrections core, as the page words it: `Error:` and, under --json, the error document."""
+    output.emit({"ok": False, "error": str(e), "fix": None, "reason": e.code})
+    output.error(str(e))
+    return output.FAILED
+
+
+def cmd_local_intake_corrections_list() -> int:
+    """The corrections waiting to be shared (the setup page's Corrections waiting): count, size and one line each.
+    `--json` (06 6.8) is the global switch: the document is the route's answer."""
+    from . import reader_corrections
+    if not _require_root():
+        return output.NEEDS_SUDO
+    try:
+        got = reader_corrections.waiting(config.load())
+    except reader_corrections.CorrectionsError as e:
+        return _corrections_failed(e)
+    output.emit({"ok": True, **{k: got[k] for k in ("opt_in", "count", "bytes", "entries", "not_queued")}})
+    if not got["count"]:
+        output.out("No corrections waiting.")
+    else:
+        output.out(f"Corrections waiting: {got['count']} - {got['bytes'] / 1048576:.1f} MB. Nothing is sent until you "
+                   "run: sudo filament-kit label-reader corrections send")
+        for e in got["entries"]:
+            what = ", ".join(f"{k}: {v}" for k, v in (e.get("corrected") or {}).items()) if isinstance(
+                e.get("corrected"), dict) else ""
+            output.out(f"  {e.get('id')}  {e.get('created_at') or ''}  {what}".rstrip())
+    for n in got["not_queued"]:
+        output.out(f"Not waiting: {n['name'] or n['record']}: the reader did not take this correction. {n['reason']}")
+    return output.SUCCESS
+
+
+def cmd_local_intake_corrections_remove(ids: list[str]) -> int:
+    """Take corrections out of the list; nothing is sent."""
+    from . import reader_corrections
+    if not _require_root():
+        return output.NEEDS_SUDO
+    cfg = config.load()
+    rc, done, failed = output.SUCCESS, [], []
+    for eid in ids:
+        try:
+            reader_corrections.remove(cfg, eid)
+            done.append(eid)
+            output.out(f"Removed {eid}. Nothing was sent.")
+        except reader_corrections.CorrectionsError as e:
+            failed.append({"id": eid, "error": str(e), "reason": e.code})
+            output.error(f"{eid}: {e}")
+            rc = output.FAILED
+    output.emit({"ok": rc == output.SUCCESS, "removed": done, "failed": failed})
+    return rc
+
+
+def cmd_local_intake_corrections_retry(records: list[str]) -> int:
+    """Queue records' corrections again (the setup page's Try again), for those `list` shows as not waiting."""
+    from . import reader_corrections
+    if not _require_root():
+        return output.NEEDS_SUDO
+    rc, done, failed = output.SUCCESS, [], []
+    for rid in records:
+        try:
+            st = reader_corrections.retry(rid)
+        except reader_corrections.CorrectionsError as e:
+            failed.append({"record": rid, "error": str(e), "reason": e.code})
+            output.error(f"{rid}: {e}")
+            rc = output.FAILED
+            continue
+        done.append({"record": rid, "state": st["state"], "reason": st["reason"]})
+        if st["state"] == "not_queued":
+            output.error(f"{rid}: the reader did not take this correction. {st['reason']}")
+            rc = output.FAILED
+        else:
+            output.out(f"{rid}: " + ("waiting to be shared." if st["state"] == "waiting" else
+                                     "nothing to share for this record."))
+    output.emit({"ok": rc == output.SUCCESS, "retried": done, "failed": failed})
+    return rc
+
+
+def cmd_local_intake_corrections_package(dest: str) -> int:
+    """Save the exact zip that send would send, to `dest` (a file name, or a folder to put the usual name in)."""
+    from . import reader_corrections
+    if not _require_root():
+        return output.NEEDS_SUDO
+    try:
+        data, name = reader_corrections.package(config.load())
+    except reader_corrections.CorrectionsError as e:
+        return _corrections_failed(e)
+    path = Path(dest)
+    if path.is_dir():
+        path = path / name
+    try:
+        path.write_bytes(data)
+    except OSError as e:
+        output.emit({"ok": False, "error": f"cannot write {path}", "fix": None})
+        output.error(f"cannot write {path}: {e.strerror or e}")
+        return output.FAILED
+    output.emit({"ok": True, "file": str(path), "bytes": len(data)})
+    output.out(f"Saved the package to {path} ({len(data) / 1048576:.1f} MB). It is the file send would send.")
+    return output.SUCCESS
+
+
+def cmd_local_intake_corrections_send() -> int:
+    """Ask the local reader to send the corrections waiting (the setup page's job `corrections_send`). The reader does
+    the upload to where it sends them itself; nothing waiting is lost when it fails."""
+    from . import reader_corrections
+    if not _require_root():
+        return output.NEEDS_SUDO
+    cfg = config.load()
+    job = steps.Steps(2)
+    job.next("Checking the corrections waiting.")
+    try:
+        n = reader_corrections.waiting(cfg)["count"]
+        if not n:
+            raise reader_corrections.CorrectionsError(409, "empty", reader_corrections.EMPTY)
+        job.next(f"Sending {n} correction{'s' if n != 1 else ''}.")
+        out = reader_corrections.send(cfg)
+    except reader_corrections.CorrectionsError as e:
+        return _corrections_failed(e)
+    sent = out["sent"] if out["sent"] is not None else n
+    output.emit({"ok": True, "sent": sent})
+    output.out(f"Sent {sent} correction{'s' if sent != 1 else ''}. Thank you.")
+    return output.SUCCESS
+
+
 _READ_LEVEL_WORD = {"high": "high", "medium": "medium", "low": "low: check this", "not_on_label": "not on label"}
 _READ_ROWS = (("Brand", "vendor"), ("Name", "name"), ("Material", "material"), ("Colour", "color_hex"),
               ("Net weight", "net"), ("Price per kg", "price_per_kg"))
@@ -6545,6 +6668,17 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lrt.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
     lrt.add_argument("--engine", choices=("cloud", "local"), default=None,
                      help="read with this engine only (default: the engine order)")
+    lrc = lrsub.add_parser("corrections", help="the corrections waiting to be shared: list, remove, retry, package, "
+                                               "send (nothing is sent by itself)")
+    lrcsub = lrc.add_subparsers(dest="lrc_cmd")
+    lrcsub.add_parser("list", help="the corrections waiting to be shared (the default)")
+    lcr = lrcsub.add_parser("remove", help="take corrections out of the list; nothing is sent")
+    lcr.add_argument("ids", nargs="+", help="the ids `list` shows")
+    lcy = lrcsub.add_parser("retry", help="queue the corrections of records again that `list` shows as not waiting")
+    lcy.add_argument("records", nargs="+", help="the record ids `list` shows")
+    lcp = lrcsub.add_parser("package", help="save the exact zip that send would send, to look at it first")
+    lcp.add_argument("file", help="a file name, or a folder")
+    lrcsub.add_parser("send", help="ask the Label Reader to send the corrections waiting (it does the upload)")
     _add_presets(sub, "presets", alias=False)
     _add_presets(sub, "profiles", alias=True)
     _add_features(sub, "features", alias=False)
@@ -6779,6 +6913,16 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "label-reader":
         if args.lr_cmd == "status":
             return cmd_local_intake_status()
+        if args.lr_cmd == "corrections":
+            if args.lrc_cmd == "remove":
+                return cmd_local_intake_corrections_remove(args.ids)
+            if args.lrc_cmd == "retry":
+                return cmd_local_intake_corrections_retry(args.records)
+            if args.lrc_cmd == "package":
+                return cmd_local_intake_corrections_package(args.file)
+            if args.lrc_cmd == "send":
+                return cmd_local_intake_corrections_send()
+            return cmd_local_intake_corrections_list()
         return cmd_local_intake_test(args.photos, getattr(args, "engine", None))
     if args.cmd == "printer":
         return _dispatch_printer(args, manager_factory or _default_manager)
