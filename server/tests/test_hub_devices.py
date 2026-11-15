@@ -65,13 +65,14 @@ async function until(look, what, ms = 15000) {
 }
 // what the page sends (the path after /setup/api/ and the body), and the replies this test changes
 const sent = [];
-const tweak = { delay: {}, fail: {}, newDevice: null, expires: null };
+const tweak = { delay: {}, fail: {}, refuse: {}, newDevice: null, expires: null };
 const real = window.fetch;
 window.fetch = async (u, o) => {
   const path = String(u).replace(/^.*\\/setup\\/api\\//, "");
   if (o && o.method === "POST") sent.push([path, JSON.parse(o.body || "{}")]);
   if (tweak.delay[path]) await sleep(tweak.delay[path]);
   if (tweak.fail[path] > 0) { tweak.fail[path]--; return new Response(JSON.stringify({ error: "the store is busy" }), { status: 503 }); }
+  if (tweak.refuse[path] > 0) { tweak.refuse[path]--; return new Response(JSON.stringify({ error: "this is not the setup code", field: "code" }), { status: 403 }); }
   const r = await real(u, o);
   if (path === "state" && tweak.newDevice) {
     const d = await r.clone().json();
@@ -527,3 +528,102 @@ def test_devices_unlocked_with_the_dialog_open_do_not_scroll_sideways_at_320_px_
     assert run.returncode in (0, 1), run.stdout + run.stderr
     found = [(r["view"], r["scheme"], f["detail"]) for r in json.loads(run.stdout).get("report", []) for f in r["findings"] if f["check"] == "sideways scroll"]
     assert not found, found
+
+
+def test_a_reader_token_is_made_once_per_press_even_when_pressed_twice_or_enter_is_held(devices_hub, tmp_path):
+    page = _page_drive(devices_hub, tmp_path, DEVICES_PRELUDE + """
+unlock();
+tweak.delay.readers = 700;
+const readers = () => card("Tag Readers");
+const before = $$(".coll--readers .coll__item", readers()).length;
+const name = $('input[name="name"]', readers());
+name.value = "Twice";
+const make = $('[data-action="make-token"]', readers());
+make.focus();
+make.click();
+await sleep(100);
+make.click();                                   // a second press 100 ms later
+for (let i = 0; i < 3; i++) name.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true }));   // Enter held
+await until(() => $(".result[data-state=ok] pre.code__text", readers()), "the new token");
+await sleep(900);
+out.sent = sentTo("readers");
+out.rows = $$(".coll--readers .coll__item", readers()).length - before;
+// the press after the request has come back makes the next token
+tweak.delay.readers = 0;
+$('input[name="name"]', readers()).value = "Again";
+$('[data-action="make-token"]', readers()).focus();
+$('[data-action="make-token"]', readers()).click();
+await until(() => sentTo("readers").length === 2, "the next press");
+out.sentAfter = sentTo("readers");
+return out;
+""")
+    assert page["sent"] == [{"name": "Twice", "code": CODE}] and page["rows"] == 1
+    assert [s["name"] for s in page["sentAfter"]] == ["Twice", "Again"]
+
+
+def test_pair_pressed_twice_on_a_weigh_station_request_sends_one_answer(devices_hub, tmp_path, monkeypatch):
+    asking = [{"id": "q1", "name": "Bench station", "address": "192.0.2.77", "code": "123456"}]
+    answered = []
+
+    def decide(rid, approve):
+        answered.append((rid, approve))
+        asking[:] = [q for q in asking if q["id"] != rid]
+        return {}
+    monkeypatch.setattr(station_requests, "pending", lambda: [dict(q) for q in asking])
+    monkeypatch.setattr(station_requests, "decide", decide)
+    page = _page_drive(devices_hub, tmp_path, DEVICES_PRELUDE + """
+unlock();
+const items = () => $$(".item", card("Weigh"));
+await until(() => items().length === 1, "the request");
+tweak.delay["stations/requests/q1/pair"] = 800;
+const pair = $('[data-action="pair"]', items()[0]);
+pair.focus();
+pair.click();
+await sleep(150);
+pair.click();                                   // pressed again while the answer is out
+await until(() => $$(".toast").map(text).some((t) => t.startsWith("Paired")), "the Paired result");
+await sleep(600);
+out.sent = sent.filter((s) => s[0].startsWith("stations/requests/") && s[0] !== "stations/requests").map((s) => s[0]);
+return out;
+""")
+    assert page["sent"] == ["stations/requests/q1/pair"] and answered == [("q1", True)]
+
+
+def test_a_lock_closes_the_pairing_dialog_and_clears_a_new_reader_token(devices_hub, tmp_path):
+    page = _page_drive(devices_hub, tmp_path, DEVICES_PRELUDE + """
+unlock();
+const readers = () => card("Tag Readers");
+$('input[name="name"]', readers()).value = "Shown once";
+$('[data-action="make-token"]', readers()).focus();
+$('[data-action="make-token"]', readers()).click();
+await until(() => $(".result[data-state=ok] pre.code__text", readers()), "the new token");
+$('[data-action="pair-phone"]').click();
+await until(dlg, "the dialog");
+out.dialogCode = !!$(".pairing__digits", dlg());
+SW.setLock("locked");                           // Lock now
+await until(closed, "the dialog to close");
+await sleep(300);
+out.after = { dialogs: $$("dialog").length, digits: $$(".pairing__digits").length, token: $$("pre.code__text", readers()).length, result: $$(".result[data-state]", readers()).length,
+  focus: document.activeElement.dataset.action, hash: location.hash };
+return out;
+""")
+    assert page["dialogCode"] is True
+    assert page["after"] == {"dialogs": 0, "digits": 0, "token": 0, "result": 0, "focus": "pair-phone", "hash": "#devices"}
+
+
+def test_try_again_on_the_requests_card_locks_the_page_when_the_code_is_refused(devices_hub, tmp_path):
+    page = _page_drive(devices_hub, tmp_path, DEVICES_PRELUDE + """
+unlock();
+await until(() => text(card("Weigh")).includes("No Weigh Station"), "the requests");
+tweak.fail["stations/requests"] = 1;
+render();                                       // drawn again: its first read fails
+await until(() => $('[data-action="try-again"]', card("Weigh")), "the error and Try again");
+tweak.refuse["stations/requests"] = 1;          // the Hub now refuses the code
+$('[data-action="try-again"]', card("Weigh")).click();
+await until(() => SW.lock.state === "locked", "the page to lock");
+await sleep(300);
+out.state = SW.lock.state;
+out.locked = text(card("Weigh")).includes(LOCKED_TEXT);
+return out;
+""".replace("LOCKED_TEXT", json.dumps(_T("devices_requests_locked"))))
+    assert page["state"] == "locked" and page["locked"] is True

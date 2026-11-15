@@ -73,11 +73,11 @@ function trustCard() {
             undefined, () => say(at, SW.t("devices_trusted_revoked", { name: d.name }), true))) loadTrust();
         } }))));
   });
-  const failed = (e) => SW.errorState({ title: SW.t("devices_trusted_error", { reason: "" }).trim(), text: hubText(e.message), level: 3, onTry: () => paintList(true) });
+  const failed = (e) => SW.errorState({ title: SW.t("devices_trusted_error", { reason: "" }).trim(), text: hubText(e.message), level: 3, onTry: devRetry(() => paintList(true)) });
   // a read that is not the newest is dropped, and so is one that comes after the page locked or the switch was turned off
   async function show() {
     const n = me;
-    if (!loaded && !L) L = SW.loading(list, { thing: SW.t("devices_trusted_title"), items: 2, onTry: () => paintList(true), title: SW.t("devices_trusted_error", { reason: "" }).trim() });
+    if (!loaded && !L) L = SW.loading(list, { thing: SW.t("devices_trusted_title"), items: 2, onTry: devRetry(() => paintList(true)), title: SW.t("devices_trusted_error", { reason: "" }).trim() });
     let r;
     try { r = await api("trust/list", { code: theCode() }); } catch (e) {
       if (e.locked) throw e;

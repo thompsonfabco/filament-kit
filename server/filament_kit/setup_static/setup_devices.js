@@ -8,6 +8,13 @@ const ASK_EVERY = 5000;          // Weigh Stations asking to pair: read again th
 const PAIR_EVERY = 3000;         // the pairing dialog asks for the new device this often (03 7.2)
 let devBlocks = 0;
 let devPairing = false;          // a pairing is being asked for: pressed again, it does nothing
+let devMaking = false;           // a reader token is being made: pressed again (or Enter held), it makes no second one
+let devClose = null;             // closes the pairing dialog that is open
+const devAnswering = new Set();  // station requests whose Pair or Refuse is out
+// a read behind Try again: a refusal for the setup code locks the page, as in every other button
+const devRetry = (run) => () => Promise.resolve(run()).catch((e) => { if (!e.locked) throw e; SW.setLock("locked"); });
+// a lock takes the pairing code and a new reader token off the screen
+document.addEventListener("sw:lock", () => { if (SW.lock.state !== "locked") return; if (devClose) devClose(); SW.result(boxFor("readers"), null); });
 let devMetaEl = null;            // the line under the title, kept to change its counts in place
 let devTrusted = null;           // trusted computers listed, once read (null: not read, locked or off)
 let devQrUrls = [];
@@ -223,9 +230,11 @@ function devPairDialog(kind, first, known) {
   // the dialog has its own address while it is open; leaving the section closes it
   const away = () => { if (!location.hash.startsWith("#" + DEVICES)) close(); };
   window.addEventListener("hashchange", away);
+  devClose = close;
   dlg._noReturn = true;          // focus goes back to the pairing's own button, which the redraw has made new
   SW.modal(dlg, { temp: true, onClose: () => {
     st.stopped = true;
+    devClose = null;
     stopTimers();
     if (st.qr) URL.revokeObjectURL(st.qr);
     window.removeEventListener("hashchange", away);
@@ -262,12 +271,19 @@ function pairCard() {
     : SW.empty({ icon: "devices", title: SW.t("devices_empty"), level: 3 }));
 }
 
+// one answer per request at a time: pressed again while it is out, Pair or Refuse sends nothing more
+async function devAnswer(id, run) {
+  if (devAnswering.has(id)) return;
+  devAnswering.add(id);
+  try { await run(); } finally { devAnswering.delete(id); }
+}
+
 // ----- Weigh Stations asking to pair (03 7.3): Pair only when the Weigh Station's screen shows the same six digits -----
 function stationAsksCard() {
   const body = h("div"), note = h("div", { role: "status" });
   let me = 0, timer = 0, loaded = false, seen = null, L = null;
   const stop = () => { clearInterval(timer); timer = 0; };
-  const failed = (e) => SW.errorState({ title: SW.t("devices_requests_error", { reason: "" }).trim(), text: hubText(e.message), level: 3, onTry: () => read() });
+  const failed = (e) => SW.errorState({ title: SW.t("devices_requests_error", { reason: "" }).trim(), text: hubText(e.message), level: 3, onTry: devRetry(() => read()) });
   const rows = (list) => (list.length ? list.map((q) => {
     const box = boxFor("request:" + q.id), line = SW.t("devices_request_line", { name: q.name, address: q.address, code: "\u0001" }).split("\u0001");
     return h("div", { class: "item", "data-key": q.id },
@@ -275,15 +291,15 @@ function stationAsksCard() {
       h("p", { class: "muted", textContent: SW.t("devices_request_hint") }),
       h("div", { class: "row" },
         SW.btn(SW.t("devices_request_pair"), { cls: "btn--primary", name: SW.t("devices_request_pair_named", { name: q.name }), action: "pair",
-          run: () => change(box, `stations/requests/${q.id}/pair`, {}, () => say(box, SW.t("devices_request_paired", { name: q.name }), true)) }),
+          run: () => devAnswer(q.id, () => change(box, `stations/requests/${q.id}/pair`, {}, () => say(box, SW.t("devices_request_paired", { name: q.name }), true))) }),
         SW.btn(SW.t("devices_request_refuse"), { name: SW.t("devices_request_refuse_named", { name: q.name }), action: "refuse",
-          run: () => change(box, `stations/requests/${q.id}/refuse`, {}, () => say(box, SW.t("devices_request_refused", { name: q.name }), true)) })),
+          run: () => devAnswer(q.id, () => change(box, `stations/requests/${q.id}/refuse`, {}, () => say(box, SW.t("devices_request_refused", { name: q.name }), true))) })),
       box);
   }) : [h("p", { class: "muted", textContent: SW.t("devices_requests_none") })]);
   // a read that is not the newest, or comes after the page locked or the card left, is dropped
   async function read() {
     const n = ++me;
-    if (!loaded && !L) L = SW.loading(body, { thing: SW.t("devices_requests_title"), items: 1, onTry: () => read(), title: SW.t("devices_requests_error", { reason: "" }).trim() });
+    if (!loaded && !L) L = SW.loading(body, { thing: SW.t("devices_requests_title"), items: 1, onTry: devRetry(() => read()), title: SW.t("devices_requests_error", { reason: "" }).trim() });
     let r;
     try { r = await api("stations/requests", { code: theCode() }); } catch (e) {
       if (e.locked) throw e;
@@ -329,7 +345,7 @@ function webAppCard() {
   let me = 0, loaded = false, L = null;
   const load = (open) => {
     const n = ++me;
-    if (!loaded && !L) L = SW.loading(body, { thing: SW.t("devices_webapp_title"), items: 2, onTry: () => load(SW.lock.state !== "locked"), title: SW.t("devices_webapp_error", { reason: "" }).trim() });
+    if (!loaded && !L) L = SW.loading(body, { thing: SW.t("devices_webapp_title"), items: 2, onTry: devRetry(() => load(SW.lock.state !== "locked")), title: SW.t("devices_webapp_error", { reason: "" }).trim() });
     return (open ? api("webapp", { code: theCode() }) : api("webapp")).then((r) => {
       if (n !== me) return;
       if (L) { L.done(); L = null; }
@@ -349,7 +365,7 @@ function webAppCard() {
       if (n !== me) return;
       if (L) { L.done(); L = null; }
       loaded = false;
-      fill(body, SW.errorState({ title: SW.t("devices_webapp_error", { reason: "" }).trim(), text: hubText(e.message), level: 3, onTry: () => load(SW.lock.state !== "locked") }));
+      fill(body, SW.errorState({ title: SW.t("devices_webapp_error", { reason: "" }).trim(), text: hubText(e.message), level: 3, onTry: devRetry(() => load(SW.lock.state !== "locked")) }));
     });
   };
   devWhenOpen(body, (open) => { body.removeAttribute("aria-busy"); L = null; loaded = false; return load(open); });
@@ -361,10 +377,10 @@ function readersCard() {
   devMeta();
   const R = S.readers, box = boxFor("readers");
   const name = SW.field({ label: SW.t("common_field_name"), name: "name", placeholder: SW.t("devices_readers_name_placeholder"), attrs: { "aria-required": "false" } });
-  const make = SW.btn(SW.t("devices_readers_make"), { action: "make-token", run: () => change(box, "readers", { name: name._control.value }, (r) => say(box, [
+  const make = SW.btn(SW.t("devices_readers_make"), { action: "make-token", run: async () => { if (devMaking) return; devMaking = true; try { await change(box, "readers", { name: name._control.value }, (r) => say(box, [
     h("p", { textContent: SW.t("devices_readers_new", { id: r.id, name: r.name }) }), devCodeBlock(SW.t("devices_readers_token"), r.token),
-    SW.banner({ kind: "warn", inline: true, text: devParts(SW.t("devices_readers_once")) })], true)) });
-  name._control.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); make.click(); } });
+    SW.banner({ kind: "warn", inline: true, text: devParts(SW.t("devices_readers_once")) })], true)); } finally { devMaking = false; } } });
+  name._control.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (!e.repeat) make.click(); } });
   const rows = R.list.map((t) => {
     const at = boxFor("reader:" + t.id);
     return devRow(t.id, at, 4,
