@@ -655,6 +655,8 @@ def _general(req: dict) -> dict:
         err = _plan_error(cfg)
         if err:
             raise Refused(400, err)
+    if req.get("dry_run") is True:      # everything that can refuse has run: the caller may now do what must come first
+        return {"key": key, "dry_run": True}
     config.save(cfg)
     if then == "apply":
         _start_apply(checked=True)
@@ -705,6 +707,8 @@ def _general_group(req: dict) -> dict:
         err = _plan_error(cfg)
         if err:
             raise Refused(400, f"nothing was changed: {err}")
+    if req.get("dry_run") is True:      # see _general: checked, nothing saved
+        return {"keys": list(checked), "dry_run": True}
     config.save(cfg)
     if applies:
         _start_apply(checked=True)

@@ -49,15 +49,22 @@ def _view() -> dict:
             "spoolman_url": redact.text(str(cfg.get("spoolman_url") or ""), redact.known_values())}
 
 
-async def _delete_waiting(page, body) -> int | None:
-    """Turning Share corrections off with `delete_waiting: true`: the corrections waiting on the reader are deleted
-    first, after the code has been checked and before anything is saved or the reader is switched. None when this
-    request does not do that. A reader that cannot delete them fails the request with nothing changed."""
+def _deleted(n: int | None) -> dict:
+    return {"deleted": n} if n is not None else {}
+
+
+async def _save_with_delete(page, body, op: dict) -> tuple[dict, int | None]:
+    """The helper's answer to the save, and how many waiting corrections were deleted (None: not asked for).
+    Turning Share corrections off with `delete_waiting: true` goes in this order: the helper checks the whole save (the
+    code, every value, a running job: `dry_run`), then the waiting corrections are deleted, then the save is made. A
+    refusal before the deletion leaves them all waiting; a deletion that stops part-way says how many are gone and that
+    the setting was not changed; a save refused after the deletion says that they are gone."""
     from ..setup_page import Refused
     vals = body.get("values") if isinstance(body.get("values"), dict) else (
         {body.get("key"): body.get("value")} if "key" in body else {})
     if body.get("delete_waiting") is not True or vals.get(share_corrections.KEY) is not False:
-        return None
+        return await page._helper(op), None
+    await page._helper({**op, "dry_run": True})
 
     def delete() -> int | None:
         cfg = config.load()
@@ -65,11 +72,20 @@ async def _delete_waiting(page, body) -> int | None:
             return None             # it is off already: nothing is being switched
         try:
             return share_corrections.delete_waiting(cfg)
+        except share_corrections.DeleteFailed as e:
+            raise Refused(502, f"{e}. The setting was NOT changed: save it again to delete the rest.",
+                          field=share_corrections.KEY, deleted=e.done, waiting=e.total - e.done) from None
         except local_reader.LocalReaderError as e:
-            raise Refused(502, f"nothing was changed: the corrections waiting could not be deleted ({e})",
-                          field=share_corrections.KEY) from None
-    await page._helper({"op": "check", "code": body["code"]})
-    return await anyio.to_thread.run_sync(delete)
+            raise Refused(502, f"nothing was deleted and nothing was changed: the reader's waiting corrections could "
+                               f"not be read ({e})", field=share_corrections.KEY, deleted=0) from None
+    deleted = await anyio.to_thread.run_sync(delete)
+    try:
+        return await page._helper(op), deleted
+    except Refused as e:
+        if not deleted:
+            raise
+        raise Refused(e.status, f"{deleted} waiting corrections were deleted, but the setting was NOT changed: "
+                                f"{e.message}", deleted=deleted, **e.extra) from None
 
 
 def routes(page) -> list[tuple]:
@@ -79,18 +95,18 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(_view)
 
     async def write(request, body):
-        deleted = await _delete_waiting(page, body)
-        extra = ({"deleted": deleted} if deleted is not None else {})
         if "values" in body:
-            r = await page._helper({"op": "general_group", "code": body["code"], "values": body["values"]})
+            r, deleted = await _save_with_delete(page, body, {"op": "general_group", "code": body["code"],
+                                                              "values": body["values"]})
             page.audit(request, f"settings {', '.join(r['keys'])} changed")
             return {"ok": True, "keys": r["keys"], "restarts": r["restarts"], "applies": r["applies"],
-                    **({"jobs": r["jobs"]} if r.get("jobs") else {}), **extra}
+                    **({"jobs": r["jobs"]} if r.get("jobs") else {}), **_deleted(deleted)}
         key = body.get("key")
-        r = await page._helper({"op": "general", "code": body["code"], "key": key, "value": body.get("value")})
+        r, deleted = await _save_with_delete(page, body, {"op": "general", "code": body["code"], "key": key,
+                                                          "value": body.get("value")})
         page.audit(request, f"setting {r['key']} changed")
         return {"ok": True, "restarts": r["restarts"], "applies": r["applies"],
-                **({"jobs": r["jobs"]} if r.get("jobs") else {}), **extra}
+                **({"jobs": r["jobs"]} if r.get("jobs") else {}), **_deleted(deleted)}
 
     async def spoolman(request, body):
         url = body.get("url")

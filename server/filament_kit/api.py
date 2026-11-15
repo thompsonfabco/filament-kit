@@ -1050,6 +1050,13 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return JSONResponse({"orders": await run_in_threadpool(build)})
 
     @_authed
+    async def intake_share_corrections(request: Request):
+        """What the phone and web apps show of Share corrections (design 04/05: the state only; it is switched on
+        the Hub page or at the terminal): {saved, actual, differs, count, reason}, share_corrections.state."""
+        from . import share_corrections
+        return JSONResponse(await run_in_threadpool(lambda: share_corrections.state(config.load())))
+
+    @_authed
     async def intake_add(request: Request):
         body = await _json(request)
         dry = _opt(body, "dry_run", bool, True)
@@ -1277,6 +1284,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 Route("/api/intake/orders", intake_orders),
             ], "ai_intake" if "ai_intake" in on or "local_intake" not in on else "local_intake", on),
             Route("/api/intake/add", intake_add, methods=["POST"]),  # adding by hand needs no AI (spec R 2.4)
+            Route("/api/intake/share-corrections", intake_share_corrections),
             Route("/api/intake/history", _hist(history_list)),
             Route("/api/intake/history/{hid}", _hist(history_get)),
             Route("/api/intake/history/{hid}/photos/{n:int}", _hist(history_photo)),

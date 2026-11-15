@@ -32,6 +32,15 @@ class ShareError(Exception):
     """The setting cannot be applied; the message says why and what to do."""
 
 
+class DeleteFailed(ShareError):
+    """Deleting the waiting corrections stopped part-way: `done` of `total` are gone, the rest are still waiting."""
+
+    def __init__(self, done: int, total: int, why: str):
+        super().__init__(f"{done} of {total} waiting corrections were deleted, then the reader failed ({why}); the "
+                         "rest are still waiting")
+        self.done, self.total = done, total
+
+
 def saved(cfg: dict) -> bool:
     """The Hub's setting: off unless it is exactly true."""
     sec = cfg.get("label_reader") if isinstance(cfg.get("label_reader"), dict) else {}
@@ -88,15 +97,17 @@ def state(cfg: dict, h: dict | None = None) -> dict:
 
 
 def delete_waiting(cfg: dict) -> int:
-    """Delete every correction waiting on the reader, one by one; returns how many. Raises LocalReaderError (the
-    caller then changes nothing)."""
-    entries = local_reader.feedback_list(cfg)["entries"]
+    """Delete every correction waiting on the reader, one by one; returns how many. Raises LocalReaderError when the
+    list cannot be read (nothing was deleted) and DeleteFailed when it stops part-way (some were)."""
+    entries = [e for e in local_reader.feedback_list(cfg)["entries"]
+               if isinstance(e.get("id"), (str, int)) and not isinstance(e.get("id"), bool) and str(e["id"]).strip()]
     done = 0
     for e in entries:
-        eid = e.get("id")
-        if isinstance(eid, (str, int)) and not isinstance(eid, bool) and str(eid).strip():
-            local_reader.feedback_delete(cfg, str(eid))
-            done += 1
+        try:
+            local_reader.feedback_delete(cfg, str(e["id"]))
+        except local_reader.LocalReaderError as err:
+            raise DeleteFailed(done, len(entries), str(err)) from None
+        done += 1
     return done
 
 
@@ -129,13 +140,19 @@ def apply(cfg: dict, *, run: Callable[..., int] | None = None, say: Callable[[st
     step = step or (lambda text: None)
     wait = wait or lii.wait_healthy
     want = saved(cfg)
-    why = refusal(cfg)
+    why = refusal(cfg) if want else None        # off is always allowed: the Feature may be off with the reader installed
     if why:
         raise ShareError(why)
+    if not want and lii.installed() is None:
+        say("No reader is installed on this Hub: nothing to switch off.")
+        return {"want": False, "changed": False}
     step("Checking how the reader is set")
     h = local_reader.health(cfg)
     caps = h.get("capabilities") or {}
     if h.get("ok") and not caps.get("feedback"):
+        if not want:
+            say("The reader has no corrections queue: nothing to switch off.")
+            return {"want": False, "changed": False}
         raise ShareError("the reader on this Hub is too old to share corrections: update it in Updates")
     if actual_opt_in(cfg, h) is want:
         say(f"The reader already has sharing of corrections {'on' if want else 'off'}.")

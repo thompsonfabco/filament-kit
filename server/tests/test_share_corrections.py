@@ -9,7 +9,9 @@ import pytest
 from fakes import local_reader_fake as lrf
 from test_setup_page import Helper, client, env, make, post  # noqa: F401
 
-from filament_kit import cli, config, local_intake_install as lii, local_reader, setup_helper, share_corrections as sc
+from starlette.testclient import TestClient
+
+from filament_kit import cli, config, pairing, local_intake_install as lii, local_reader, setup_helper, share_corrections as sc
 
 KEY = "label_reader.share_corrections"
 
@@ -272,8 +274,13 @@ def test_the_command_needs_root(monkeypatch, capsys):
 
 def test_cli_parses_the_command(monkeypatch):
     seen = []
-    monkeypatch.setattr(cli, "cmd_local_intake_share", lambda *a, **k: seen.append((a, k)) or 0)
-    assert cli.main(["local-intake", "share-corrections"]) == 0 and seen == [((), {})]
+    monkeypatch.setattr(cli, "cmd_local_intake_share", lambda *a, **k: seen.append(a) or 0)
+    assert cli.main(["local-intake", "share-corrections"]) == 0
+    assert cli.main(["local-intake", "share-corrections", "off", "--delete-waiting", "--json"]) == 0
+    assert cli.main(["local-intake", "share-corrections", "--status"]) == 0
+    assert seen == [(None, False, False, False), ("off", True, True, False), (None, False, False, True)]
+    with pytest.raises(SystemExit):
+        cli.main(["local-intake", "share-corrections", "maybe"])
 
 
 # ---------------------------------------------------------------- the status
@@ -374,3 +381,192 @@ def test_a_reader_that_cannot_delete_changes_nothing(app, jobs, fake_reader, tmp
     r = post(client(app), "settings/general", {"values": {KEY: False}, "delete_waiting": True})
     assert r.status_code == 502 and "nothing was changed" in r.json()["error"]
     assert config.load()["label_reader"]["share_corrections"] is True and not jobs
+
+
+# ---------------------------------------------------------------- review R367
+
+def test_a_save_that_is_refused_deletes_nothing(app, jobs, fake_reader, tmp_path):
+    """MED 1: the whole save is checked before anything is deleted."""
+    url, data = reader(fake_reader)
+    queue(data, 2)
+    set_up(url, tmp_path=tmp_path, saved=True)
+    before = config.load()
+    r = post(client(app), "settings/general", {"values": {KEY: False, "intake.reader": "no-such-reader"},
+                                               "delete_waiting": True})
+    assert r.status_code == 400 and "nothing was changed" in r.json()["error"]
+    assert len(data["queue"]) == 2 and config.load() == before and not jobs
+
+
+def test_a_save_refused_for_a_running_job_deletes_nothing(app, jobs, fake_reader, tmp_path, monkeypatch):
+    url, data = reader(fake_reader)
+    queue(data, 2)
+    set_up(url, tmp_path=tmp_path, saved=True)
+
+    def busy():
+        raise setup_helper.Refused(409, "the last change is still being applied")
+    monkeypatch.setattr(setup_helper, "_not_applying", busy)
+    r = post(client(app), "settings/general", {"key": KEY, "value": False, "delete_waiting": True})
+    assert r.status_code == 409 and len(data["queue"]) == 2
+    assert config.load()["label_reader"]["share_corrections"] is True
+
+
+def test_a_partial_delete_says_how_many_and_that_the_setting_is_unchanged(app, jobs, fake_reader, tmp_path,
+                                                                          monkeypatch):
+    """MED 2."""
+    url, data = reader(fake_reader)
+    queue(data, 3)
+    set_up(url, tmp_path=tmp_path, saved=True)
+    real, calls = local_reader.feedback_delete, []
+
+    def flaky(cfg, eid):
+        calls.append(eid)
+        if len(calls) == 2:
+            raise local_reader.LocalReaderError("unreachable", "the reader stopped")
+        return real(cfg, eid)
+    monkeypatch.setattr(local_reader, "feedback_delete", flaky)
+    r = post(client(app), "settings/general", {"values": {KEY: False}, "delete_waiting": True})
+    assert r.status_code == 502
+    err = r.json()["error"]
+    assert "1 of 3 waiting corrections were deleted" in err and "NOT changed" in err
+    assert "nothing was changed" not in err
+    assert r.json()["deleted"] == 1 and len(data["queue"]) == 2 and not jobs
+    assert config.load()["label_reader"]["share_corrections"] is True
+
+
+def test_a_save_refused_after_the_delete_says_the_corrections_are_gone(app, jobs, fake_reader, tmp_path, monkeypatch):
+    url, data = reader(fake_reader)
+    queue(data, 2)
+    set_up(url, tmp_path=tmp_path, saved=True)
+    seen = []
+
+    def second_time():
+        seen.append(1)
+        if len(seen) > 1:
+            raise setup_helper.Refused(409, "a job started meanwhile")
+    monkeypatch.setattr(setup_helper, "_not_applying", second_time)
+    r = post(client(app), "settings/general", {"values": {KEY: False}, "delete_waiting": True})
+    assert r.status_code == 409
+    assert "2 waiting corrections were deleted, but the setting was NOT changed" in r.json()["error"]
+    assert data["queue"] == [] and config.load()["label_reader"]["share_corrections"] is True
+
+
+def test_a_dry_run_saves_nothing_and_starts_nothing(env, jobs, tmp_path, fake_reader):  # noqa: F811
+    url, _ = reader(fake_reader)
+    set_up(url, tmp_path=tmp_path, saved=True)
+    before = config.load()
+    assert setup_helper._general_group({"values": {KEY: False, "server_name": "X"}, "dry_run": True}) == {
+        "keys": [KEY, "server_name"], "dry_run": True}
+    assert setup_helper._general({"key": KEY, "value": False, "dry_run": True}) == {"key": KEY, "dry_run": True}
+    assert config.load() == before and not jobs
+
+
+def test_turning_off_reaches_a_reader_that_is_installed_with_the_feature_off(fake_reader, tmp_path):
+    """LOW 1: the Feature is off but the reader is still installed and opted in: off must reach it."""
+    url, data = reader(fake_reader)
+    cfg = set_up(url, tmp_path=tmp_path, on=False, saved=False)
+    run = Run(data)
+    got = sc.apply(cfg, run=run, wait=healthy)
+    assert got == {"want": False, "changed": True} and data["opt_in"] is False
+    assert run.calls[0][-2:] == ["--feedback-opt-in", "false"]
+
+
+def test_turning_off_with_no_reader_installed_does_nothing(tmp_path):
+    cfg = set_up(installed=False, tmp_path=tmp_path, on=False, saved=False)
+    run = Run({})
+    assert sc.apply(cfg, run=run) == {"want": False, "changed": False} and run.calls == []
+
+
+def test_turning_off_a_reader_without_the_queue_does_nothing(fake_reader, tmp_path):
+    url, data = fake_reader                                  # API 1.0
+    cfg = set_up(url, tmp_path=tmp_path, saved=False)
+    run = Run(data)
+    assert sc.apply(cfg, run=run) == {"want": False, "changed": False} and run.calls == []
+
+
+# ---------------------------------------------------------------- the command line (parity)
+
+def cli_json(capsys, *args, **kw):
+    rc = cli.cmd_local_intake_share(*args, as_json=True, **kw)
+    return rc, json.loads(capsys.readouterr().out)
+
+
+def test_cli_on_saves_and_sets_the_reader(fake_reader, tmp_path, capsys):
+    url, data = reader(fake_reader)
+    data["opt_in"] = False
+    lrf.feedback_health(data)
+    set_up(url, tmp_path=tmp_path, saved=False)
+    run = Run(data)
+    rc, out = cli_json(capsys, "on", run=run, wait=healthy)
+    assert rc == 0 and out == {"ok": True, "share": True, "changed": True}
+    assert config.load()["label_reader"]["share_corrections"] is True and data["opt_in"] is True
+    assert run.calls[0][-2:] == ["--feedback-opt-in", "true"] and "endpoint" not in " ".join(run.calls[0])
+
+
+def test_cli_on_is_refused_like_the_page(tmp_path, capsys):
+    set_up(installed=False, tmp_path=tmp_path, on=False)
+    before = config.load()
+    run = Run({})
+    rc, out = cli_json(capsys, "on", run=run)
+    assert rc == 1 and out["ok"] is False and "Switch it on in Features" in out["error"]
+    assert config.load() == before and run.calls == []
+    set_up(installed=False, tmp_path=tmp_path, on=True)
+    assert cli.cmd_local_intake_share("on", run=run) == 1
+    assert "installed on this Hub" in capsys.readouterr().err
+
+
+def test_cli_off_with_delete_waiting(fake_reader, tmp_path, capsys):
+    url, data = reader(fake_reader)
+    queue(data, 2)
+    set_up(url, tmp_path=tmp_path, saved=True)
+    rc, out = cli_json(capsys, "off", True, run=Run(data), wait=healthy)
+    assert rc == 0 and out == {"ok": True, "share": False, "changed": True, "deleted": 2}
+    assert data["queue"] == [] and config.load()["label_reader"]["share_corrections"] is False
+
+
+def test_cli_partial_delete_leaves_the_setting(fake_reader, tmp_path, capsys, monkeypatch):
+    url, data = reader(fake_reader)
+    queue(data, 3)
+    set_up(url, tmp_path=tmp_path, saved=True)
+    real, calls = local_reader.feedback_delete, []
+
+    def flaky(cfg, eid):
+        calls.append(eid)
+        if len(calls) == 3:
+            raise local_reader.LocalReaderError("unreachable", "the reader stopped")
+        return real(cfg, eid)
+    monkeypatch.setattr(local_reader, "feedback_delete", flaky)
+    run = Run(data)
+    rc, out = cli_json(capsys, "off", True, run=run)
+    assert rc == 1 and out["deleted"] == 2 and out["waiting"] == 1 and "NOT changed" in out["error"]
+    assert config.load()["label_reader"]["share_corrections"] is True and run.calls == []
+
+
+def test_cli_status_needs_no_root_and_says_both_states(fake_reader, tmp_path, capsys, monkeypatch):
+    url, data = reader(fake_reader)
+    set_up(url, tmp_path=tmp_path, saved=False)
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
+    rc, out = cli_json(capsys, status=True)
+    assert rc == 0 and out["saved"] is False and out["actual"] is True and out["differs"] is True
+
+
+def test_cli_on_off_need_root(monkeypatch, capsys):
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
+    before = config.load()
+    assert cli.cmd_local_intake_share("on", run=Run({})) == 1 and config.load() == before
+
+
+# ---------------------------------------------------------------- the apps' read
+
+def test_the_apps_can_read_the_state(fake_reader, tmp_path):
+    from filament_kit.api import create_app
+    from filament_kit.spoolman import Spoolman
+    url, data = reader(fake_reader)
+    set_up(url, tmp_path=tmp_path, saved=False)
+    pairing.make_cert("fkhost", [], config.paths().etc)
+    c = TestClient(create_app(sm=Spoolman("http://127.0.0.1:9")))
+    assert c.get("/api/intake/share-corrections").status_code == 401
+    c.headers["Authorization"] = "Bearer " + pairing.redeem_code(pairing.issue("Pixel").code)
+    assert c.get("/api/intake/share-corrections").json() == {"saved": False, "actual": True, "differs": True,
+                                                              "count": 0, "reason": None}
