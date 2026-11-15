@@ -1,7 +1,8 @@
 """Workbench on the web (design 09 S6.4, 02 1.3, 08 9 and test 4 of 08), in a real headless browser where it matters: the three
 profile groups `nav=sidebar`, `collection=cards` and `detail=card` of components.css are keyed on Workbench only (Console's groups
-do not mention it, Workbench's do not hold an unqualified rule); the Hub page and the web app show Workbench (sidebar on a wide
-screen, the rail on a tablet, the bottom bar on a phone, cards in a grid) and Console is the same after a visit to Workbench;
+do not mention it, Workbench's do not hold an unqualified rule); the Hub page shows Workbench (sidebar on a wide
+screen, the rail on a tablet, the bottom bar on a phone, cards in a grid) and the web app its colours and navigation
+(the rail on a wide screen, 04 2.3) and Console is the same after a visit to Workbench;
 the picker offers the Workbench tile in both interfaces; and AUT-5 passes on both in Workbench, light and dark, at 320, 768 and
 1280 px. The same skip rules as the page audit: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
