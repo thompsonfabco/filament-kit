@@ -24,6 +24,7 @@ internal class FakePresets : PresetsBackend {
     val reparented = mutableListOf<Pair<String, String>>()
     var updatesInfo: com.thompsonfabco.filamentkit.net.UpdatesInfo? = null
     var builds = 0
+    var buildOutput = "a build is requested"
     var statusCalls = 0
     var linesCalls = 0
     var uncoveredList = listOf(
@@ -92,6 +93,6 @@ internal class FakePresets : PresetsBackend {
         builds++
         gate?.await()
         failure?.let { throw it }
-        return BuildRequested(requested = true, output = "a build is requested")
+        return BuildRequested(requested = true, output = buildOutput)
     }
 }

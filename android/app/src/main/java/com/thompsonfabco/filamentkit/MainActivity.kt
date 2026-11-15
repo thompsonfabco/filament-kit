@@ -330,6 +330,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
 
     val api by app.session.api.collectAsStateWithLifecycle()
     val config by app.session.config.collectAsStateWithLifecycle()
+    val pairings by app.session.pairings.collectAsStateWithLifecycle()
     val skipFingerprintCheck by app.settings.skipFingerprintCheck.collectAsStateWithLifecycle(initialValue = false)
     val connection by app.session.connection.collectAsStateWithLifecycle()
     val notice by app.router.notice.collectAsStateWithLifecycle()
@@ -954,7 +955,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             vm = presetsVm,
                             onPairAgain = app.router::pairAgain,
                             onAddCatalogLine = { nav.navigate(AddProfileRoute) },
-                            pairing = api,
+                            pairing = pairings,
                             updates = api?.let { a ->
                                 viewModel(key = "preset-updates-${System.identityHashCode(a)}") {
                                     com.thompsonfabco.filamentkit.ui.home.PresetUpdatesViewModel(

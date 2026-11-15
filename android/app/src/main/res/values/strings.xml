@@ -2630,6 +2630,7 @@
     <string name="presets_info">Presets are built on the Hub and installed on your PC by Slicer Sync the next time the slicers are closed.</string>
     <!-- 1=time -->
     <string name="presets_installed">Installed on your PC %1$s</string>
+    <string name="presets_installed_no_time">Installed on your PC</string>
     <string name="presets_missing_text">If a filament\'s line is not in the Filament Catalog, add it so presets can be built for it.</string>
     <string name="presets_missing_title">Missing a product line?</string>
     <string name="presets_never_built">No presets built yet</string>

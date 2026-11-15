@@ -72,6 +72,8 @@ data class FilamentCard(
     val newLineOpen: Boolean = false,
     val name: String = "",
     val template: String? = null,
+    /** What "Find a parent" has typed: narrows [templates] to the names with every word. */
+    val find: String = "",
     val templates: ParentList? = null,
     val busy: CardBusy? = null,
     val fail: Fail? = null,
@@ -91,10 +93,13 @@ data class ParentEdit(
 ) {
     /** The parents whose name has every word typed in "Find a parent". */
     val matches: List<String>
-        get() {
-            val words = query.lowercase().split(' ').filter { it.isNotEmpty() }
-            return parents?.parents.orEmpty().filter { p -> words.all { it in p.lowercase() } }
-        }
+        get() = matchParents(parents?.parents.orEmpty(), query)
+}
+
+/** The [parents] whose name has every word of [query] (any case); all of them when nothing is typed. */
+fun matchParents(parents: List<String>, query: String): List<String> {
+    val words = query.lowercase().split(' ').filter { it.isNotEmpty() }
+    return parents.filter { p -> words.all { it in p.lowercase() } }
 }
 
 /** What happened that the screen tells in a toast, once (the card has left the list). */
@@ -102,7 +107,8 @@ data class Done(val created: Boolean, val name: String)
 
 /** The answer to Build now. */
 sealed interface BuildNote {
-    data object Asked : BuildNote
+    /** The Hub took the request; [summary] is its own `output` (blank: the screen uses its fixed text). */
+    data class Asked(val summary: String = "") : BuildNote
     data class Failed(val fail: Fail) : BuildNote
 }
 
@@ -141,7 +147,7 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
     /** The Bambu Studio parents already read, by material (a card and the sheet ask the same list); only a synced list is kept. */
     private val parentCache = mutableMapOf<String, ParentList>()
 
-    /** The pairing the screen was last shown with (the session's client); null until a paired screen has asked. */
+    /** The pairing the screen was last shown with (the session's pairing count); null until a paired screen has asked. */
     private var pairing: Any? = null
 
     init {
@@ -149,8 +155,9 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
     }
 
     /**
-     * The screen tells which pairing it is shown with ([key], the session's client; null while unpaired). Another one than
-     * before (the phone paired again) drops the old notices and reads everything again; the first one only notes it.
+     * The screen tells which pairing it is shown with ([key], the session's pairing count, which grows on every successful
+     * pairing even with the same Hub; null while unpaired). Another one than before drops the old notices and reads
+     * everything again; the first one only notes it.
      */
     fun pairedWith(key: Any?) {
         if (key == null) return
@@ -159,15 +166,16 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
         if (before == null || before == key) return
         _state.update { s ->
             s.copy(
-                buildNote = null, buildMissing = false, cards = s.cards.mapValues { it.value.copy(fail = null) },
+                buildNote = null, cards = s.cards.mapValues { it.value.copy(fail = null) },
                 edit = s.edit?.copy(fail = null), linesFail = null, uncoveredFail = null,
             )
         }
         reload()
     }
 
-    /** Reads the status, the lines and the filaments without a line again. */
+    /** Reads the status, the lines and the filaments without a line again; a Hub seen without the build route is tried again. */
     fun reload() {
+        _state.update { it.copy(buildMissing = false) }
         loadStatus()
         loadLines()
         loadUncovered()
@@ -233,6 +241,8 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
     fun setName(id: Int, name: String) = updateCard(id) { it.copy(name = name, fail = null) }
 
     fun chooseTemplate(id: Int, template: String) = updateCard(id) { it.copy(template = template, fail = null) }
+
+    fun findTemplate(id: Int, find: String) = updateCard(id) { it.copy(find = find) }
 
     /** Opens or closes the new-line form of [filament]; opening reads the parents for its material. */
     fun toggleNewLine(filament: UncoveredFilament) {
@@ -339,7 +349,7 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
         viewModelScope.launch {
             try {
                 val asked = api.build()
-                val note = if (asked.requested) BuildNote.Asked else BuildNote.Failed(Fail(SaveFailure.Message, asked.output))
+                val note = if (asked.requested) BuildNote.Asked(asked.output.trim()) else BuildNote.Failed(Fail(SaveFailure.Message, asked.output))
                 _state.update { it.copy(building = false, buildNote = note) }
                 loadStatus()
             } catch (e: CancellationException) {

@@ -13,7 +13,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -153,10 +156,45 @@ class PresetsScreenTest {
         rule.onNodeWithText("Build presets now").performClick()
         rule.waitForIdle()
         assertEquals(1, api.builds)
-        rule.onNodeWithText("Build requested. The Hub builds the presets within a minute or two.").assertExists()
-        auditAllFour("Build requested. The Hub builds the presets within a minute or two.")
+        // the Hub's own summary, not a fixed text
+        rule.onNodeWithText("a build is requested").assertExists()
+        rule.onNodeWithText("Build requested. The Hub builds the presets within a minute or two.").assertDoesNotExist()
+        auditAllFour("a build is requested")
         // and still the one filled button afterwards
         assertEquals(1, rule.onAllNodes(hasTestTag(MAIN_BUTTON_TAG)).fetchSemanticsNodes().size)
+    }
+
+    @Test fun aBuildAnswerWithoutAnOutputShowsTheFixedText() {
+        api.buildOutput = ""
+        show()
+        rule.onNodeWithText("Build presets now").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Build requested. The Hub builds the presets within a minute or two.").assertExists()
+    }
+
+    @Test fun theTitleOfTheFilamentsPanelCarriesTheirCountAndTheEmptyStateKeepsItsTextWithACount() {
+        show()
+        // the title stays one heading of its own; the count is the text next to it
+        rule.onNode(hasText("Filaments without a preset line") and SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)).assertExists()
+        rule.onNodeWithText("2").assertExists()
+        val title = rule.onNodeWithText("Filaments without a preset line").fetchSemanticsNode().boundsInRoot
+        val count = rule.onNodeWithText("2").fetchSemanticsNode().boundsInRoot
+        assertTrue("beside the title", count.left >= title.right && count.top < title.bottom)
+    }
+
+    @Test fun findAParentNarrowsTheTemplatesOfTheNewLineForm() {
+        api.parentLists["PLA"] = ParentList(listOf("Bambu PLA Basic", "Generic PLA", "Bambu PETG Basic"), synced = true)
+        val vm = show()
+        rule.onNodeWithText("Or start a new line").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Find a parent").assertExists()
+        rule.onNodeWithText("Find a parent").performTextInput("petg")
+        rule.waitForIdle()
+        assertEquals("petg", vm.state.value.card(7).find)
+        rule.onNodeWithText("Bambu Studio template").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Bambu PETG Basic").assertExists()
+        rule.onNodeWithText("Bambu PLA Basic").assertDoesNotExist()
     }
 
     @Test fun whileItRunsTheButtonSaysBuildingPresets() {

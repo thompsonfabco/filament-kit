@@ -59,6 +59,14 @@ class ServerSession(
     private val _api = MutableStateFlow<Api?>(null)
     val api: StateFlow<Api?> = _api.asStateFlow()
 
+    private val _pairings = MutableStateFlow(0)
+
+    /**
+     * How many times a token has been stored since the app started (a successful pairing, also with the same Hub: the
+     * [api] object then stays). A screen that must read everything again after pairing keys on this, not on [api].
+     */
+    val pairings: StateFlow<Int> = _pairings.asStateFlow()
+
     private val _connection = MutableStateFlow<Connection>(Connection.Unpaired)
     val connection: StateFlow<Connection> = _connection.asStateFlow()
 
@@ -69,6 +77,8 @@ class ServerSession(
     @Volatile private var endpointsPort = 0
     /** A token the server rejected (401); never sent again and never written back by a later save. */
     @Volatile private var revokedToken: String? = null
+    /** The token of the pairing in use, null while none (blank or no config); a different one is a new pairing. */
+    private var pairedToken: String? = null
     private var resolveJob: Job? = null
     @Volatile private var host: String? = null
 
@@ -161,6 +171,9 @@ class ServerSession(
         var changed = false
         synchronized(lock) {
             _config.value = cfg
+            val token = cfg?.token?.takeIf { it.isNotBlank() }
+            if (token != null && token != pairedToken) _pairings.value += 1
+            pairedToken = token
             if (cfg == null) {
                 resolveJob?.cancel()
                 fingerprint = null

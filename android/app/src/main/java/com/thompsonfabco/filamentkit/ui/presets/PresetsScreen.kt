@@ -72,8 +72,8 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
  * Slicer presets (05-android-app 11.2): the build status and Build presets now, the filaments without a preset line (add to
  * a line or start one), the Product lines panel with "Change parent", the Updates panel, and a way to the Filament Catalog.
  * The shell draws the top bar. [onAddCatalogLine] opens the catalog form (05 8). [updates] is the Updates list (null: no
- * Updates panel). [nowMillis] is the time ages count from (null: the clock). [pairing] is the session's client: when the
- * phone pairs again it is another one and the screen reads everything again.
+ * Updates panel). [nowMillis] is the time ages count from (null: the clock). [pairing] is the session's pairing count: when
+ * the phone pairs again (also with the same Hub) it is another one and the screen reads everything again.
  */
 @Composable
 fun PresetsScreen(
@@ -178,8 +178,8 @@ private fun StatusPanel(s: PresetsUiState, vm: PresetsViewModel, now: Long, onPa
         }
         when (val note = s.buildNote) {
             null -> Unit
-            BuildNote.Asked -> Text(
-                stringResource(R.string.presets_result_build_requested),
+            is BuildNote.Asked -> Text(
+                note.summary.ifBlank { stringResource(R.string.presets_result_build_requested) },
                 Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium,
             )
             is BuildNote.Failed -> FailureNotice(note.fail, onPairAgain)
@@ -206,12 +206,22 @@ private fun FailureNotice(fail: Fail, onPairAgain: () -> Unit, onTryAgain: (() -
 private fun UncoveredPanel(s: PresetsUiState, vm: PresetsViewModel, onPairAgain: () -> Unit) {
     val list = s.uncovered
     SettingsPanel {
-        SectionTitle(stringResource(R.string.presets_without_line))
         val fail = s.uncoveredFail
+        Row(horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2), verticalAlignment = Alignment.CenterVertically) {
+            SectionTitle(stringResource(R.string.presets_without_line))
+            if (list != null && fail == null) {
+                Text(list.size.toString(), style = MaterialTheme.typography.titleMedium, color = SpoolwardenTheme.colors.muted)
+            }
+        }
         when {
             list == null -> SwSkeletonRows(3)
             fail != null -> FailureNotice(fail, onPairAgain, vm::loadUncovered)
-            list.isEmpty() -> Text(stringResource(R.string.presets_all_done), style = MaterialTheme.typography.bodyMedium)
+            list.isEmpty() -> Row(
+                horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SwIcon(R.drawable.sw_st_filled, null, size = SwIconSize.Small, tint = SpoolwardenTheme.colors.ok)
+                Text(stringResource(R.string.presets_all_done), style = MaterialTheme.typography.bodyMedium)
+            }
             else -> list.forEachIndexed { i, f ->
                 if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
                 FilamentCardView(f, s.card(f.id), vm, onPairAgain)
@@ -272,10 +282,13 @@ private fun NewLineForm(f: UncoveredFilament, card: FilamentCard, vm: PresetsVie
             stringResource(R.string.presets_templates_none), style = MaterialTheme.typography.bodySmall,
             color = SpoolwardenTheme.colors.muted,
         )
-        else -> PickField(
-            stringResource(R.string.presets_bs_template), card.template.orEmpty(), templates.parents, idle,
-            onPick = { vm.chooseTemplate(f.id, it) }, error = fail?.takeIf { it.field in PARENT_FIELDS }?.message,
-        )
+        else -> {
+            FormField(card.find, { vm.findTemplate(f.id, it) }, stringResource(R.string.presets_parent), enabled = idle)
+            PickField(
+                stringResource(R.string.presets_bs_template), card.template.orEmpty(), matchParents(templates.parents, card.find), idle,
+                onPick = { vm.chooseTemplate(f.id, it) }, error = fail?.takeIf { it.field in PARENT_FIELDS }?.message,
+            )
+        }
     }
     SwButton(
         stringResource(R.string.presets_create), { vm.createLine(f) }, Modifier.fillMaxWidth(),

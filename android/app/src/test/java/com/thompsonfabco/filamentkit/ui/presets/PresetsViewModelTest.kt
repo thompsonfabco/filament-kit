@@ -305,8 +305,17 @@ class PresetsViewModelTest {
         advanceUntilIdle()
         assertEquals(1, api.builds)
         assertFalse(vm.state.value.building)
-        assertEquals(BuildNote.Asked, vm.state.value.buildNote)
+        assertEquals("the Hub's own summary", BuildNote.Asked("a build is requested"), vm.state.value.buildNote)
         assertEquals(before + 1, api.statusCalls)
+    }
+
+    @Test fun aBuildAnswerWithoutAnOutputKeepsNoSummary() = runTest(dispatcher) {
+        api.buildOutput = "  "
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        vm.build()
+        advanceUntilIdle()
+        assertEquals(BuildNote.Asked(""), vm.state.value.buildNote)
     }
 
     @Test fun aRefusedBuildShowsTheHubsWords() = runTest(dispatcher) {
@@ -330,6 +339,25 @@ class PresetsViewModelTest {
         assertNull("no refusal notice besides the Hub-too-old line", vm.state.value.buildNote)
         vm.pairedWith(Any())
         assertFalse(vm.state.value.buildMissing)
+    }
+
+    @Test fun readingTheScreenAgainTriesTheBuildRouteAgain() = runTest(dispatcher) {
+        val vm = PresetsViewModel(api)
+        advanceUntilIdle()
+        api.failure = ApiError(404, "not_found", "Not Found")
+        vm.build()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.buildMissing)
+        vm.reload()
+        assertFalse(vm.state.value.buildMissing)
+    }
+
+    @Test fun findAParentNarrowsTheTemplatesByEveryWordInAnyCase() {
+        val list = listOf("Bambu PLA Basic", "Bambu PETG Basic", "Generic PLA")
+        assertEquals(list, matchParents(list, ""))
+        assertEquals(listOf("Bambu PLA Basic", "Generic PLA"), matchParents(list, "pla"))
+        assertEquals(listOf("Bambu PETG Basic"), matchParents(list, "BAMBU  petg"))
+        assertEquals(emptyList<String>(), matchParents(list, "silk"))
     }
 
     @Test fun anUnpairedPhoneAndAChangedCertificateAreTheHubNoticesNotMessages() {

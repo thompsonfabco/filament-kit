@@ -1918,6 +1918,7 @@ window.SW_TEXT = Object.freeze({
   "presets_field_on_pc": "On your PC",
   "presets_info": "Presets are built on the Hub and installed on your PC by Slicer Sync the next time the slicers are closed.",
   "presets_installed": "Installed on your PC {time}",
+  "presets_installed_no_time": "Installed on your PC",
   "presets_missing_text": "If a filament's line is not in the Filament Catalog, add it so presets can be built for it.",
   "presets_missing_title": "Missing a product line?",
   "presets_never_built": "No presets built yet",

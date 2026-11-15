@@ -92,7 +92,13 @@ class PresetsCardTest {
         assertEquals(null, stampMillis("soon"))
         assertEquals(null, stampMillis(null))
         assertEquals("soon", formatStamp("soon", utc))
-        assertEquals("unknown time", formatStamp(null, utc))
+        assertEquals("", formatStamp(null, utc))
+    }
+
+    @Test fun anInstallWithoutATimeIsAWholeTextNeverAnEmptySlot() {
+        val s = ProfileStatus(installed = InstalledInfo("s1", null), pc = PcInfo("pc-1", null))
+        assertEquals(PresetLine("Installed on your PC", mark = PresetMark.Installed, row = PresetRow.OnPc), presetLines(s, res, fmt).last())
+        assertEquals("Installed on your PC", presetLines(s.copy(installed = InstalledInfo("s1", " ")), res, fmt).last().text)
     }
 
     @Test fun aBuildWithoutATimeIsAWholeTextNeverBuiltUnknownTime() {

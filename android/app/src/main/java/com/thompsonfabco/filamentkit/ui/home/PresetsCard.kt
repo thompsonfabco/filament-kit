@@ -68,7 +68,11 @@ fun presetLines(s: ProfileStatus, r: Resources, time: (String?) -> String): List
     }
     out += when {
         s.installed != null ->
-            PresetLine(r.getString(R.string.presets_installed, time(s.installed.at)), mark = PresetMark.Installed, row = PresetRow.OnPc)
+            PresetLine(
+                // no time from the Hub: a whole text of its own, never "Installed on your PC " with an empty slot
+                if (s.installed.at.isNullOrBlank()) r.getString(R.string.presets_installed_no_time)
+                else r.getString(R.string.presets_installed, time(s.installed.at)),
+                mark = PresetMark.Installed, row = PresetRow.OnPc)
         s.pc == null -> PresetLine(r.getString(R.string.presets_sync_not_set_up), mark = PresetMark.NotSetUp, row = PresetRow.OnPc)
         else -> PresetLine(r.getString(R.string.presets_not_installed), mark = PresetMark.NotYet, row = PresetRow.OnPc)
     }
@@ -122,9 +126,9 @@ internal fun stampMillis(raw: String?): Long? {
     }
 }
 
-/** A server time in the phone's format; unreadable text is shown as sent. */
+/** A server time in the phone's format; unreadable text is shown as sent (no time: empty, callers use a whole text). */
 internal fun formatStamp(raw: String?, zone: TimeZone = TimeZone.getDefault()): String {
-    val ms = stampMillis(raw) ?: return raw?.takeIf { it.isNotBlank() } ?: "unknown time"
+    val ms = stampMillis(raw) ?: return raw?.takeIf { it.isNotBlank() }.orEmpty()
     val f = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
     f.timeZone = zone
     return f.format(Date(ms))
