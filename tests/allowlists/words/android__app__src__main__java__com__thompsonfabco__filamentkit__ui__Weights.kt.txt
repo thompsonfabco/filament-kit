@@ -1,1 +1,0 @@
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/Weights.kt | weight on the scale | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

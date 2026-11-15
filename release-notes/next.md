@@ -99,6 +99,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Panes theme in the Android app:** the simple grey-and-green look where the five destinations are a list of sections: the first page on a phone (choosing one opens it, and Back returns to the list with focus on its row, for a keyboard and for a screen reader; Back on the list leaves the app as it does in the other themes), a pane beside the page on a tablet and wider. Lists of spools, printers and records are plain rows with a chevron. The screens and routes are the same as in Console.
 
 - **The System commands on the command line.** `config show` and `config set <key> <value>` read and change the settings the menu has; `label-reader status` and `test` check and try the Label Reader; `catalog` (the old `library`) has `token`; `backup keep`, `logs`, `spoolman address`, `certificate` and `remote get-certificate` do what the Hub page does; `add` and `spool` say where to do what needs a camera or NFC; `help aliases` lists the old spellings, `help --markdown` prints the command table, and `filament-kit` alone prints the commands in groups. `update`, `uninstall`, `restore` and `setup-code` say the Hub page's words. The old spellings keep working. `migrate-ops` and `migrate-scanner` were removed in 0.5.3 and are not listed.
+- **The last old names are gone from the texts.** The Android app's messages and the Hub's own words now say Hub, Hub page, Label Reader, Slicer presets and Slicer Sync.
 
 ## Still to come
 
