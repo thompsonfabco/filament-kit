@@ -481,6 +481,11 @@
     <string name="nav_logs">Logs</string>
     <!-- 1=section -->
     <string name="nav_more_current">More, current: %1$s</string>
+    <!-- 1=section -->
+    <string name="nav_more_current_update">More, current: %1$s, update available</string>
+    <string name="nav_more_collapsed">Collapsed</string>
+    <string name="nav_more_expanded">Expanded</string>
+    <string name="nav_more_update">More, update available</string>
     <string name="nav_more_sections">More sections</string>
     <string name="nav_off_suffix">, switched off</string>
     <string name="nav_overview">Overview</string>
@@ -550,6 +555,8 @@
     <string name="spool_left_percent">%1$s %% left</string>
     <!-- 1=colour 2=percent 3=grams -->
     <string name="spool_ring_label">%1$s, %2$s %% left, %3$s g</string>
+    <!-- 1=percent -->
+    <string name="spool_ring_percent">%1$s %%</string>
     <string name="status_as_detected">As detected</string>
     <string name="status_connected">Connected</string>
     <string name="status_done">Done</string>
@@ -770,6 +777,8 @@
     <string name="features_applying_again">Applying the features again…</string>
     <string name="features_col_feature">Feature</string>
     <string name="features_col_needs">Needs</string>
+    <!-- 1=name -->
+    <string name="common_field_label">%1$s:</string>
     <string name="common_field_state">State</string>
     <string name="features_col_what">What it does</string>
     <string name="features_drawer_afterwards">On afterwards:</string>
@@ -2341,6 +2350,8 @@
     <string name="printer_used_last_days">Last 7 days</string>
     <!-- 1=grams -->
     <string name="printer_used_put_back">Put %1$s g back on the spool.</string>
+    <!-- 1=action 2=name -->
+    <string name="a11y_action_named">%1$s %2$s</string>
     <string name="a11y_action_open">Open</string>
     <!-- 1=printer -->
     <string name="a11y_camera">Live camera of %1$s</string>
@@ -3012,6 +3023,7 @@
     <!-- 1=material 2=name 3=percent -->
     <string name="spool_load_slot_line">%1$s · %2$s · %3$s %%</string>
     <string name="spool_load_unconfirmed">The printer accepted it but hasn\'t shown the change yet.</string>
+    <string name="spool_load_choose">Choose</string>
     <string name="spool_load_which_printer">Which printer?</string>
     <!-- 1=printer -->
     <string name="spool_load_which_slot">Which slot on %1$s?</string>

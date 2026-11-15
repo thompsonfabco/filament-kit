@@ -1,3 +1,4 @@
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | connected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | klipper | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | slot-ring | test tag of a printer tile's slot ring, never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | wrong_code | Hub identifier (printer state, job state, error code or field name), never shown

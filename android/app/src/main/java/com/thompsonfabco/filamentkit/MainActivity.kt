@@ -187,6 +187,10 @@ import com.thompsonfabco.filamentkit.ui.components.SwConnectionChip
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwNav
+import com.thompsonfabco.filamentkit.ui.components.PillMore
+import com.thompsonfabco.filamentkit.ui.components.SwPills
+import com.thompsonfabco.filamentkit.ui.components.contentInsetSides
+import com.thompsonfabco.filamentkit.ui.components.paletteMore
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
@@ -235,6 +239,9 @@ import com.thompsonfabco.filamentkit.ui.settings.SettingsGroupPage
 import com.thompsonfabco.filamentkit.ui.settings.SettingsHub
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
 import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
+import com.thompsonfabco.filamentkit.ui.settings.icon
+import com.thompsonfabco.filamentkit.ui.settings.settingsGroups
+import com.thompsonfabco.filamentkit.ui.settings.title
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindScreen
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindViewModel
 import com.thompsonfabco.filamentkit.ui.spool.LinkPreviewScreen
@@ -258,7 +265,9 @@ import com.thompsonfabco.filamentkit.ui.spool.toSpoolSummary
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.BUILT_LOOKS
+import com.thompsonfabco.filamentkit.ui.theme.LocalNavStyle
 import com.thompsonfabco.filamentkit.ui.theme.Look
+import com.thompsonfabco.filamentkit.ui.theme.NavStyle
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 import com.thompsonfabco.filamentkit.ui.theme.lookFromWire
@@ -758,24 +767,45 @@ private fun FilamentKitApp(
         Scaffold(
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
             topBar = {
-                if (!scanning) SwTopBar(
-                    title = printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
-                    subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
-                    onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
-                    scrollBehavior = scroll,
-                ) {
-                    if (!inPairing && !settingsOverPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
-                    AppearanceMenu(appearance, app::setAppearance)
-                    topBarActions.content?.invoke(this)
+                // the pills of Palette are a row under the top bar on a tablet and wider; nothing on a phone or in another look
+                Column {
+                    if (!scanning) SwTopBar(
+                        title = printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
+                        subtitle = if (destination?.hasRoute(HomeRoute::class) == true) config?.name?.takeIf { it.isNotBlank() } else null,
+                        onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
+                        scrollBehavior = scroll,
+                    ) {
+                        if (!inPairing && !settingsOverPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
+                        AppearanceMenu(appearance, app::setAppearance)
+                        topBarActions.content?.invoke(this)
+                    }
+                    SwPills(
+                        tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
+                        more = paletteMore(
+                            tab, stringResource(Tab.Settings.label),
+                            settingsGroups(BuildConfig.DEBUG).map { group ->
+                                val route = group.route()
+                                PillMore(
+                                    stringResource(group.title), group.icon, destination?.hasRoute(route::class) == true,
+                                    section = stringResource(Tab.Settings.label),
+                                ) {
+                                    if (destination?.hasRoute(route::class) != true) {
+                                        nav.selectTab(Tab.Settings)
+                                        nav.navigate(route) { launchSingleTop = true }
+                                    }
+                                }
+                            },
+                            onSettings = { tabTapped(Tab.Settings) },
+                        ),
+                    )
                 }
             },
             snackbarHost = { SwToastHost(toast) },
             containerColor = SpoolwardenTheme.colors.bg,
-            contentWindowInsets = when {
-                scanning -> WindowInsets(0)
-                !navVisible -> WindowInsets.safeDrawing
-                phone -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-                else -> WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom)
+            contentWindowInsets = if (scanning) {
+                WindowInsets(0)
+            } else {
+                WindowInsets.safeDrawing.only(contentInsetSides(navVisible, phone, LocalNavStyle.current == NavStyle.Pills))
             },
         ) { padding ->
             NavHost(nav, startDestination = if (paired) HomeGraph else PairGraph, modifier = Modifier.padding(padding)) {
@@ -1219,15 +1249,7 @@ private fun FilamentKitApp(
                         SettingsScreen(
                             facts = settingsFacts,
                             onOpen = { group ->
-                                nav.navigate(
-                                    when (group) {
-                                        SettingsGroup.Appearance -> SettingsAppearanceRoute
-                                        SettingsGroup.Hub -> SettingsHubRoute
-                                        SettingsGroup.Updates -> SettingsUpdatesRoute
-                                        SettingsGroup.Licences -> LicencesRoute
-                                        SettingsGroup.Developer -> SettingsDeveloperRoute
-                                    },
-                                )
+                                nav.navigate(group.route())
                             },
                             detail = { group -> SettingsGroupPage(group, settingsFacts, settingsActions) },
                         )
@@ -1402,6 +1424,15 @@ private fun SimulateTag() {
         )
         Button(onClick = { TagEvents.emit(uid.trim()) }) { Text("Simulate tag") }
     }
+}
+
+/** The destination of a Settings group's own page. */
+private fun SettingsGroup.route(): Any = when (this) {
+    SettingsGroup.Appearance -> SettingsAppearanceRoute
+    SettingsGroup.Hub -> SettingsHubRoute
+    SettingsGroup.Updates -> SettingsUpdatesRoute
+    SettingsGroup.Licences -> LicencesRoute
+    SettingsGroup.Developer -> SettingsDeveloperRoute
 }
 
 /** The saved-state key under which an add's panel hands brand, line and material to the Filament Catalog form. */
