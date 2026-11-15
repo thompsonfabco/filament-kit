@@ -1293,6 +1293,7 @@ function addTab() {
   api("vendors").then((res) => {
     vendorTare = new Map(res.vendors.map((v) => [v.name.toLowerCase(), v.tare]));
     vendorList.replaceChildren(...res.vendors.map((v) => h("option", { value: v.name })));
+    if ([...cards.values()].map((c) => c.refill()).includes(true)) changed();      // a brand typed before the list came gets its empty spool weight now
   }).catch(() => {});                                           // no list: the brand is typed in
 
   const blankItem = () => ({ vendor: "", name: "", material: "", count: 1, net: 1000, tare: null, density: null, color_hex: "",
@@ -1489,7 +1490,15 @@ function addTab() {
       h("div", { class: "add__foot" }, SW.btn(SW.t("common_remove"), { cls: "btn--ghost", icon: "trash", run: () => removeItem(it) })));
     open(it._open === undefined ? needsLook(it) : it._open);
     paint();
-    return { el, open, problems, showErrors, paint, control: (k) => (fields[k] ? fields[k]._control : null) };
+    // the vendor list arrived after the brand was typed: fill a blank empty spool weight, as typing it now would
+    function refill() {
+      if (textOf(it, "tare") !== "") return false;
+      const v = vendorTare.get(it.vendor.trim().toLowerCase());
+      if (v == null) return false;
+      fill("tare", v, "brand"); paint();
+      return true;
+    }
+    return { el, open, problems, showErrors, paint, refill, control: (k) => (fields[k] ? fields[k]._control : null) };
   }
 
   // ============ The action bar: Preview, then Add (04 4.6) ============

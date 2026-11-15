@@ -926,6 +926,20 @@ def test_add_spools_draft_states_pass_the_audit(served_add, name):
     assert _states(served_add, name)["views"] == 4
 
 
+def test_a_brand_typed_before_the_vendor_list_arrives_still_gets_its_empty_spool_weight(served_add, monkeypatch):
+    """The list of brands is asked for when the page loads; a brand typed first is filled in when the list comes (here it takes 2 s)."""
+    import time
+    from filament_kit import inventory
+    real = inventory.vendors
+
+    def slow(sm):
+        time.sleep(2)
+        return real(sm)
+    monkeypatch.setattr(inventory, "vendors", slow)
+    out = _states(served_add, "card_fields", "--widths", "1280", "--schemes", "light")
+    assert out["views"] == 1
+
+
 def test_add_spools_with_the_label_reader_off_says_so_and_leads_with_by_hand(served_off):
     ready = """(async () => {""" + PRELUDE + r"""
   await waitPage();
