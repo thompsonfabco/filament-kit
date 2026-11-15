@@ -113,7 +113,7 @@ function findBrowser() {
 // The browser is several processes (renderers, GPU, utility), and a killed runner never runs its cleanup. So the runner
 // records its own pid and the browser's in the profile folder (PID_FILE), ends the browser's whole process tree by that
 // pid, and a later run ends what a dead runner left, by the profile folder in the command line (never by image name).
-const PID_FILE = "aut5-runner.pids";
+export const PID_FILE = "aut5-runner.pids";
 
 // [{ pid, cmd }] of the processes whose command line mentions "aut5" (the runners and the browsers on our profiles)
 export function aut5Processes() {
@@ -138,7 +138,7 @@ export function endTree(pid) {
 
 // profile folders of earlier runs: a folder whose runner is gone has its browser tree ended (only processes whose
 // command line contains that folder) and is removed; any other folder of ours is removed when older than an hour
-function sweepOldProfiles() {
+export function sweepOldProfiles() {
   const cutoff = Date.now() - 3600_000;
   let procs = null;
   for (const name of readdirSync(tmpdir())) {
@@ -148,7 +148,7 @@ function sweepOldProfiles() {
     try { rec = JSON.parse(readFileSync(join(dir, PID_FILE), "utf8")); } catch { /* no record: an older run, or a page_drive one */ }
     if (rec) {
       procs ||= aut5Processes();
-      if (procs.some((p) => p.pid === rec.runner && p.cmd.includes("aut5_run"))) continue;      // its runner still works
+      if (procs.some((p) => p.pid === rec.runner && /aut5_run|page_drive/.test(p.cmd))) continue;      // its runner still works
       const mine = procs.filter((p) => p.cmd.includes(dir));
       for (const p of mine.filter((q) => q.pid === rec.browser)) endTree(p.pid);
       for (const p of mine) endTree(p.pid);      // what is left of a browser whose first process is gone
