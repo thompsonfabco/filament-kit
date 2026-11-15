@@ -15,14 +15,19 @@ import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.icon
 import com.thompsonfabco.filamentkit.ui.components.label
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import com.thompsonfabco.filamentkit.ui.theme.isDark
 
 /**
  * Appearance (05-android-app 12.2): Light, Dark or System as a segmented control with icons and words, applied at
- * once. The Theme picker joins it with S6.3.
+ * once; under it the Theme picker, whose [look] is the one in use. The Hub page (S6.2) and the web app (S6.4) carry
+ * the same picker.
  */
 @Composable
-internal fun AppearanceSettings(current: Appearance, onChoose: (Appearance) -> Unit, modifier: Modifier = Modifier) {
+internal fun AppearanceSettings(
+    current: Appearance, onChoose: (Appearance) -> Unit, look: Look, onLook: (Look) -> Unit, modifier: Modifier = Modifier,
+) {
     val colors = SpoolwardenTheme.colors
     SettingsPage(modifier) {
         GroupTitle(stringResource(R.string.appearance_title))
@@ -44,6 +49,7 @@ internal fun AppearanceSettings(current: Appearance, onChoose: (Appearance) -> U
                 )
             }
         }
+        ThemePicker(look, isDark(current), onLook)
         Text(
             stringResource(R.string.appearance_note), color = colors.muted, style = MaterialTheme.typography.bodySmall,
         )

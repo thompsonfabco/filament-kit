@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.ui.settings
 
 import com.thompsonfabco.filamentkit.nav.HubState
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
+import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.update.UpdateFailure
 import com.thompsonfabco.filamentkit.update.UpdateUi
 
@@ -21,6 +22,8 @@ internal class SettingsFacts(
     val appVersion: String,
     /** Debug builds only: the Developer group exists. */
     val developer: Boolean,
+    /** The theme in use: the phone's choice, else the Hub's default, else Console. */
+    val look: Look = Look.Console,
 )
 
 /** The groups the list shows: Developer only in a debug build. */
