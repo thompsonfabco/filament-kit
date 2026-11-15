@@ -513,7 +513,8 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 - A command that acts prints the Hub's reply shape: `{"ok": true, ...}`.
 - On an error, standard output gets `{"ok": false, "error": "<text>", "fix": "<text or null>"}`, standard error
   gets the usual text, and the exit code is as in section 6.7.
-- `--json` never asks: a command that would ask needs `--yes`, or it stops with exit code 2.
+- `--json` never asks, at a terminal or not: a command that would ask needs `--yes`, or it stops with exit
+  code 2.
 - Menus (`config`, `features menu`, `printer menu`) do not take `--json`; they say
   `Error: config is a menu. Fix: use spoolwarden config show --json`.
 - Fields are only ever added. Removing or renaming one is announced in the release notes one minor release
@@ -1304,7 +1305,8 @@ Hub page    built in: this Hub's own pairing    d1
 - Empty: `Nothing paired yet.` then `Pair a phone: sudo spoolwarden pair`.
 
 **`pair`** prints, in the Hub page's order: the QR code (phone only), the instruction, the pairing code, the
-certificate fingerprint, the expiry; then waits for the device to pair.
+certificate fingerprint, the expiry; then waits for the device to pair. With `--json` it does not wait
+(section 6.8).
 
 ```
 $ sudo spoolwarden pair
@@ -1612,8 +1614,8 @@ Folder: <backup folder on this Hub>
 | `web passphrase` | prompts (8.7), then `Passphrase saved.` |
 | `remote firewall` | `Spoolwarden never changes your firewall or router. These are the rules to add:` then the rules, each on its own line |
 | `remote get-certificate` | section 7, then `Note: certbot listens on port 80 of this Hub now. Spoolwarden does not open it: your router must forward it here.`, `◐ Getting the certificate…`, then `● done  Certificate issued for hub.example.` or `× failed  The certificate was not issued: <why>.` with `Fix: check that hub.example points at this Hub and port 80 reaches it, then run this again.` (exit 1). Remote access off: `Error: Remote access is off.` with `Fix: sudo spoolwarden features on remote` (exit 1) |
-| `setup-code` | At a terminal: `Open https://192.0.2.10:8710/setup  (setup code: 1234-5678)`. Not at a terminal, only the address and `Note: the setup code is shown at a terminal only.` |
-| `setup-code --new` | section 7, then the new code and `The old setup code no longer works.` |
+| `setup-code` | At a terminal: `Open https://192.0.2.10:8710/setup  (setup code: 1234-5678)`. Not at a terminal, only the address and `Note: the setup code is shown at a terminal only.` `--json` gives `"code": {"set": true}` (section 6.8). |
+| `setup-code --new` | section 7, then the new code and `The old setup code no longer works.` The new code is printed without a terminal too, and in `--json`: the command was asked to make it (section 6.8). |
 | `setup-code --revoke-trusted` | section 7, then `2 trusted computers revoked. Each needs the setup code again.` |
 | `certificate` | `Certificate present.` or `Made a new certificate.`, then `Fingerprint:` and the groups of four, two lines of eight groups |
 | `spoolman fields` | `Spoolman: added Spoolwarden's extra fields: <names>.` or `Spoolman: Spoolwarden's extra fields are in place.` |
