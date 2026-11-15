@@ -4,8 +4,10 @@ from __future__ import annotations
 
 
 class Problem(ValueError):
-    """`field`: the request body's key the refusal is about, when it is about one (the web app's reply carries it)."""
+    """`field`: the request body's key the refusal is about, when it is about one (the web app's reply carries it).
+    `param`: the same for the phone routes of /api/profiles, which name their own fields; the web replies ignore it."""
 
-    def __init__(self, message: str = "", field: str | None = None):
+    def __init__(self, message: str = "", field: str | None = None, param: str | None = None):
         super().__init__(message)
         self.field = field
+        self.param = param

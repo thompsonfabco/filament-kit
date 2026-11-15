@@ -90,7 +90,7 @@ def find_parents(text: str) -> dict:
     store = builds.system_store()
     bs = [] if store is None else [b for b in store.bases() if all(w in b.casefold() for w in words)
                                    and lines_mod.usable(store, b)]
-    out = {"bs_templates": bs[:MAX_PARENTS], "orca_parents": _orca_parents(words)[:MAX_PARENTS],
+    out = {"bs_templates": bs[:MAX_PARENTS], "orca_parents": orca_parents(words),
            "synced": store is not None}
     if store is None:
         out["note"] = "no Bambu Studio system presets uploaded yet: the PC sync uploads them"
@@ -99,13 +99,13 @@ def find_parents(text: str) -> dict:
 
 def _filaments(sm, ids) -> list[dict]:
     if not isinstance(ids, list) or not ids or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
-        raise PresetProblem("filament_ids must be a non-empty list of Spoolman filament ids")
+        raise PresetProblem("filament_ids must be a non-empty list of Spoolman filament ids", param="ids")
     if len(set(ids)) != len(ids):
-        raise PresetProblem("filament_ids lists an id twice")
+        raise PresetProblem("filament_ids lists an id twice", param="ids")
     by_id = {f["id"]: f for f in sm.get("filament")}
     missing = [i for i in ids if i not in by_id]
     if missing:
-        raise PresetProblem(f"no Spoolman filament {missing}")
+        raise PresetProblem(f"no Spoolman filament {missing}", param="ids")
     return [by_id[i] for i in ids]
 
 
@@ -113,7 +113,8 @@ def _join(sm, ls: dict, line, fils: list[dict], notes: list[str]) -> None:
     """Move the filaments into `line` (out of any other line) and pin them there with `extra.line`."""
     for f in fils:
         if _vendor(f).casefold() != line.vendor.casefold():
-            raise PresetProblem(f"filament {f['id']} is {_vendor(f)}, not {line.vendor}: a line is one brand")
+            raise PresetProblem(f"filament {f['id']} is {_vendor(f)}, not {line.vendor}: a line is one brand",
+                                param="ids")
     for f in fils:
         fid = f["id"]
         for other in ls.values():
@@ -140,6 +141,10 @@ def add_ids(sm, line: str, filament_ids: list[int]) -> dict:
     return {**view, "notes": notes, "output": f"added {filament_ids} to {_name(ln)}; a build is requested"}
 
 
+# the `param` (see Problem) of each text `add_line` checks: the phone route's field for each text `add_line` checks (both parents are the one "parent" the app shows)
+_LINE_FIELD = {"vendor": "vendor", "name": "name", "bs_template": "parent", "orca_parent": "parent"}
+
+
 def add_line(sm, name: str, vendor: str, filament_ids: list[int], orca_parent: str, bs_template: str) -> dict:
     vendor = (vendor or "").strip()
     name = (name or "").strip()
@@ -148,9 +153,9 @@ def add_line(sm, name: str, vendor: str, filament_ids: list[int], orca_parent: s
                               ("bs_template", bs_template, False), ("orca_parent", orca_parent, False)):
         problem = lines_mod.text_problem(value, at_ok=at_ok)
         if problem:
-            raise PresetProblem(f"{key} {problem}")
+            raise PresetProblem(f"{key} {problem}", param=_LINE_FIELD[key])
     if not vendor or not product:
-        raise PresetProblem("name ('<Brand> <Line>') and vendor are required")
+        raise PresetProblem("name ('<Brand> <Line>') and vendor are required", param="name")
     fils = _filaments(sm, filament_ids)
     store = builds.system_store()
     lines_mod.check_parent(bs_template, store)
@@ -158,7 +163,7 @@ def add_line(sm, name: str, vendor: str, filament_ids: list[int], orca_parent: s
     with lines_mod.transaction() as ls:
         lid = lines_mod.line_id_for(vendor, product)
         if lid in ls:
-            raise PresetProblem(f"line {_name(ls[lid])} exists already: use add_filaments_to_line")
+            raise PresetProblem(f"line {_name(ls[lid])} exists already: use add_filaments_to_line", param="name")
         ln = lines_mod.ensure(ls, vendor, product, fils[0].get("material") or "", bambu_parent=bs_template or None,
                               library=library_mod.load(), store=store, used_fids=set(),
                               orca_store=builds.orca_store())
@@ -183,14 +188,15 @@ def _orca_view(ln) -> dict:
     return {"orca_parent": ln.orca_parent, "orca_parent_source": ln.orca_parent_source}
 
 
-def _orca_parents(words: list[str]) -> list[str]:
-    """Base names of the uploaded OrcaFilamentLibrary `@System` presets with every word (no store: [])."""
+def orca_parents(words: list[str]) -> list[str]:
+    """Base names of the uploaded OrcaFilamentLibrary `@System` presets with every word, at most MAX_PARENTS (no
+    store: [])."""
     from ..profiles.orca import SYSTEM
     store = builds.orca_store()
     if store is None:
         return []
     names = sorted({n[: -len(SYSTEM)] for n in store.library_names() if n.endswith(SYSTEM)})
-    return [n for n in names if all(w in n.casefold() for w in words)]
+    return [n for n in names if all(w in n.casefold() for w in words)][:MAX_PARENTS]
 
 
 def _set_orca(ls: dict, ln, orca_parent: str, notes: list[str]) -> None:

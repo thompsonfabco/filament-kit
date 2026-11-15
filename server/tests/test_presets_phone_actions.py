@@ -129,6 +129,13 @@ def test_a_refused_new_line_names_its_field(app):
         assert r.json()["field"] == field and r.json()["message"], (body, r.text)
 
 
+def test_both_parent_inputs_refuse_with_the_one_parent_field(app):
+    c, h, sm = app
+    for body in (_new(orca_parent="Bad@Parent"), _new(bs_template="Bad@Parent"), _new(bs_template="")):
+        r = c.post("/api/profiles/lines", headers=h, json=body)
+        assert r.status_code == 400 and r.json()["field"] == "parent", (body, r.text)
+
+
 def test_an_unknown_parent_names_the_parent_field(app):
     c, h, sm = app
     TB.synced(sm)                                                   # a system store: the parent is checked
@@ -163,6 +170,15 @@ def test_orca_parents_for_a_paired_device(app):
     assert c.get("/api/profiles/orca-parents", headers=h, params={"material": "zzz"}).json() == {"orca_parents": []}
     r = c.get("/api/profiles/orca-parents", headers=h, params={"material": "x" * 101})
     assert r.status_code == 400 and r.json()["error"] == "bad_request"
+
+
+def test_the_route_and_find_parents_share_the_public_orca_parents_helper(app, monkeypatch):
+    from filament_kit.web import presets
+    c, h, sm = app
+    monkeypatch.setattr(presets, "orca_parents", lambda words: ["seen " + " ".join(words)])
+    assert c.get("/api/profiles/orca-parents", headers=h, params={"material": "A b"}).json() == {
+        "orca_parents": ["seen a b"]}
+    assert presets.find_parents("C")["orca_parents"] == ["seen c"]
 
 
 def test_orca_parents_tokens(app):
