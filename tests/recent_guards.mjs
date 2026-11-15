@@ -24,7 +24,7 @@ export default async (p) => {
   // a note typed at one record does not move to the next one
   await p.go("#recent/" + ids.local);
   // one wrapper of fetch for the whole run: it records the writes, and (by window.__net) slows the reply of a Save or fails it
-  await p.eval(`window.__reqs = []; window.__net = { applyDelay: 0, failSave: 0 }; const f = window.fetch; window.fetch = async (u, i) => {
+  await p.eval(`window.__reqs = []; window.__net = { applyDelay: 0, failSave: 0 }; window.__proposals = []; const f = window.fetch; window.fetch = async (u, i) => {
     u = String(u);
     if (i && i.body) window.__reqs.push([u, i.body]);
     const wait = (ms) => new Promise((d) => setTimeout(d, ms));
@@ -33,6 +33,7 @@ export default async (p) => {
       return new Response(JSON.stringify({ error: "the Hub is out of order" }), { status: 500, headers: { "Content-Type": "application/json" } });
     }
     const r = await f(u, i);
+    if (u.endsWith("/revise")) r.clone().json().then((j) => window.__proposals.push(j.proposal));
     if (u.endsWith("/apply") && window.__net.applyDelay) await wait(window.__net.applyDelay);
     return r;
   };`);
@@ -250,6 +251,7 @@ export default async (p) => {
   await p.click("button", "Accept");
   await ok(`[...document.querySelectorAll(".result__text")].some((e) => e.textContent.includes("so its answer was not used"))`, "the refusal in words");
   await ok(`!document.querySelector(".changes__title") && !([...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Accept"))`, "the suggestion and its Accept leave after the refusal");
+  await ok(`document.activeElement && document.activeElement.id === "recent-ask-note"`, "the focus goes to the note field after the refusal");
   await noKeys("after the refusal");
 
   // a second answer that arrives while an Accept is out is dropped, says so, and does not clear the Accept's "Saving..."
@@ -266,4 +268,33 @@ export default async (p) => {
   await ok(`[...document.querySelectorAll(".result__text")].some((e) => e.textContent.includes("Saving"))`, "the Accept still says Saving while the second answer has come");
   await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Accepted."))`, "Accepted");
   await ok(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used") && !document.querySelector(".changes__title")`, "the second answer is dropped and says so");
+
+  // an answer held back by a write is released after a newer question was asked: it never replaces the newer suggestion (the Save fails) ...
+  for (const [label, fail] of [["a Save that fails", true], ["a Save that succeeds", false]]) {
+    await net({});
+    await p.go("#recent");
+    await p.go("#recent/" + ids.local);
+    await p.click("button", "Edit by hand");        // a value the Label Reader would change (it answers nozzle 235)
+    await p.waitFor(`document.querySelector("input[name=nozzle]")`, "the fields (before " + label + ")");
+    await p.type("input[name=nozzle]", String(300 + (Date.now() % 9)));
+    await p.click("button[type=submit]", "Save changes");
+    await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Saved"))`, "Saved (before " + label + ")");
+    await net(fail ? { failSave: 4200 } : { applyDelay: 4200 });
+    await p.eval(`window.__proposals = []`);
+    await p.type("textarea[name=note]", "first, to be held");
+    await p.click("button", "Ask the Label Reader");
+    await p.click("button", "Edit by hand");
+    await p.waitFor(`document.querySelector("input[name=nozzle]")`, "the fields (" + label + ")");
+    await p.type("input[name=nozzle]", String(290 + (Date.now() % 9)));
+    await p.click("button[type=submit]", "Save changes");
+    await ok(`window.__proposals.length === 1`, "the first answer has come (" + label + ")");
+    await pause(400);
+    await p.type("textarea[name=note]", "second, newer");
+    await p.click("button", "Ask the Label Reader");
+    await ok(`window.__proposals.length === 2 && document.querySelector("section.changes[data-proposal]") && document.querySelector("section.changes").dataset.proposal === window.__proposals[1]`, "the newer suggestion is shown (" + label + ")");
+    await pause(3800);
+    await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Saved") || e.textContent.includes("out of order"))`, "the Save has ended (" + label + ")");
+    await pause(600);
+    await ok(`document.querySelector("section.changes") && document.querySelector("section.changes").dataset.proposal === window.__proposals[1]`, "the held older answer does not replace or wipe the newer suggestion (" + label + ")");
+  }
 };

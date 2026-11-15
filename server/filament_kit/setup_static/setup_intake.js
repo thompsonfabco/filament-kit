@@ -418,6 +418,7 @@ function recAsk(rec, s, view, box, redraw) {
     SW.fieldError(note, null);
     if (recFlight.has(histPath(view.id, "revise"))) { say(box, SW.t("common_busy_wait"), "neutral"); return; }      // one question at a time: the note shown is not sent
     view.note = note._control.value;
+    view.held = null;                        // an older answer still held is out of date by this newer question: it is never shown after it
     const asked = view.sent || 0;            // asked after every write sent so far
     recPost(box, histPath(view.id, "revise"), { item: s.item, note: note._control.value }, (p) => recAnswer(view, box, p, asked));
   } });
@@ -433,17 +434,17 @@ function recAsk(rec, s, view, box, redraw) {
         redraw(r);
         say(box, [SW.t("changes_accepted", { count: recChanged1(r, p.changes).length, number: r.revisions.length }), ...recFilament(r)].join(" "), true);
         const t = document.getElementById("recent-ask-note"); if (t) t.focus();
-      }, view, (e) => { if (e.data && (e.data.reason === "stale" || e.data.reason === "not_found")) { view.proposal = null; fill(sug); } }).finally(() => { if (accept.isConnected) { SW.idle(accept); discard.disabled = false; } });
+      }, view, (e) => { if (e.data && (e.data.reason === "stale" || e.data.reason === "not_found")) { view.proposal = null; fill(sug); const t = document.getElementById("recent-ask-note"); if (t) t.focus(); } }).finally(() => { if (accept.isConnected) { SW.idle(accept); discard.disabled = false; } });
     } });
     const discard = SW.btn(SW.t("common_discard"), { run: () => { view.proposal = null; fill(sug); say(box, SW.t("recent_result_discarded"), "neutral"); } });
-    fill(sug, h("section", { class: "changes", "aria-labelledby": "recent-suggest" }, title,
+    fill(sug, h("section", { class: "changes", "aria-labelledby": "recent-suggest", "data-proposal": p.proposal }, title,
       p.no_photo ? h("p", { class: "muted" }, SW.t("recent_ask_no_photo")) : null,
       recReread(p), p.note ? h("p", { class: "muted" }, p.note) : null, list, h("p", { class: "changes__note" }, SW.t("changes_note")), h("div", { class: "actions" }, discard, accept)));
     if (view.editing) SW.disable(accept, SW.t("recent_accept_while_editing"));      // Accept writes the Hub's values over the form: what is typed is not lost without a word
     if (focus) accept.focus();           // when it arrives, not when the record is drawn again (02 7.9)
   };
   // an answer that comes later: it takes the focus only when the focus is not in another control (an edit form that is open keeps it)
-  view.dropped = () => fill(sug, h("p", { class: "muted" }, SW.t("recent_answer_dropped")));      // into the card as it is drawn now
+  view.dropped = () => { if (!view.proposal) fill(sug, h("p", { class: "muted" }, SW.t("recent_answer_dropped"))); };      // into the card as it is drawn now; never over a suggestion that is shown
   view.late = (p) => { const a = document.activeElement; showProposal(p, !a || a === document.body || card_el.contains(a)); };
   const card_el = card(note, h("div", { class: "actions" }, ask), sug, box);
   if (view.proposal) showProposal(view.proposal);
