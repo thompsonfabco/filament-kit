@@ -377,7 +377,7 @@ def test_manager_only_connects_the_given_printer(monkeypatch):
 
 def test_cli_map_prints_each_step(stubs, capsys):
     fm = FakeManager()
-    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda serial: fm) == 0
+    assert cli.main(["printer", "map", SERIAL, "--yes"], manager_factory=lambda serial: fm) == 0
     out = capsys.readouterr().out
     assert "Reading the AMS slots" in out and "Testing slot A1 (1/3)" in out and "Slot test finished" in out
     assert "calibrat" in out.lower() and "A1" in out
@@ -388,7 +388,7 @@ def test_cli_map_prints_each_step(stubs, capsys):
 
 def test_cli_map_reports_observe_mode(stubs, capsys):
     stubs["calib"] = CalibResult(consistent=False, problems=["printer refused the calibration job"])
-    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: FakeManager()) == 1
+    assert cli.main(["printer", "map", SERIAL, "--yes"], manager_factory=lambda s: FakeManager()) == 1
     out = capsys.readouterr().out
     assert "printer refused the calibration job" in out and "only logged" in out
 
@@ -397,7 +397,7 @@ def test_cli_map_reports_observe_mode(stubs, capsys):
                                      (FakeManager(state="offline"), "offline"),
                                      (FakeManager(state="cert_changed"), "certificate")])
 def test_cli_map_refusals(stubs, capsys, fm, text):
-    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: fm) == 1
+    assert cli.main(["printer", "map", SERIAL, "--yes"], manager_factory=lambda s: fm) == 1
     assert text in capsys.readouterr().err.lower()
     assert fm.stopped == 1
 
@@ -412,7 +412,7 @@ def test_cli_unpin_with_the_access_code_clears_the_pin(monkeypatch, capsys):
     asked = []
     monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(prompt) or "24681357")
     assert registry.load()[SERIAL].cert_fp
-    assert cli.main(["printer", "unpin", SERIAL]) == 0
+    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 0
     assert asked == ["Access Code: "]
     assert registry.load()[SERIAL].cert_fp == ""
     assert registry.load()[SERIAL].access_code == "24681357"
@@ -423,7 +423,7 @@ def test_cli_unpin_with_the_access_code_clears_the_pin(monkeypatch, capsys):
 @pytest.mark.parametrize("typed", ["", "  ", "bad code!"])
 def test_cli_unpin_without_a_usable_access_code_changes_nothing(monkeypatch, capsys, typed):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: typed)
-    assert cli.main(["printer", "unpin", SERIAL]) == 1
+    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 1
     assert registry.load()[SERIAL].cert_fp == "ab" * 32 and registry.load()[SERIAL].access_code == CODE
     assert capsys.readouterr().err
 
@@ -448,7 +448,7 @@ def test_cli_unpin_without_a_terminal_changes_nothing(monkeypatch, capsys):
     def no_tty(prompt):
         raise EOFError
     monkeypatch.setattr(secret_input, "ask", no_tty)
-    assert cli.main(["printer", "unpin", SERIAL]) == 1
+    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 1
     assert "terminal" in capsys.readouterr().err
     assert registry.load()[SERIAL].cert_fp == "ab" * 32 and registry.load()[SERIAL].access_code == CODE
 

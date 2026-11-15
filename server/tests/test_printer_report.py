@@ -437,7 +437,7 @@ def test_the_cli_map_follows_the_servers_job(monkeypatch, capsys):
     api = ServerApi([{"state": "running", "step": "Reading the AMS slots"}, {"state": "running", "step": "Reading the AMS slots"},
                      {"state": "running", "step": "Running the calibration job"}, done])
     monkeypatch.setattr(cli, "_server_api", lambda: api)
-    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 0
+    assert cli.main(["printer", "map", SERIAL, "--yes"], manager_factory=lambda s: pytest.fail("a second connection")) == 0
     out = capsys.readouterr().out
     assert api.posts == [f"/api/printers/{SERIAL}/map"]
     assert out.count("Reading the AMS slots") == 1 and "Running the calibration job" in out
@@ -452,7 +452,7 @@ def test_the_cli_says_what_the_server_refused(monkeypatch, capsys):
         def post(self, path, body):
             raise SlotError("slot mapping is already running for this printer", code="already_running", http=409)
     monkeypatch.setattr(cli, "_server_api", lambda: Busy())
-    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 1
+    assert cli.main(["printer", "map", SERIAL, "--yes"], manager_factory=lambda s: pytest.fail("a second connection")) == 1
     assert "already running" in capsys.readouterr().err
 
 
@@ -501,7 +501,7 @@ def slow(tmp_path, monkeypatch):
 def test_the_cli_waits_for_a_printer_that_takes_a_moment_to_connect(slow, monkeypatch, capsys, command):
     monkeypatch.setattr(calib3mf, "run", _result())
     m = slow(copy.deepcopy(REPORT))
-    rc = cli.main(["printer", command, SERIAL], manager_factory=lambda s: m)
+    rc = cli.main(["printer", command, SERIAL, *(["--yes"] if command == "map" else [])], manager_factory=lambda s: m)
     out, err = capsys.readouterr()
     assert "offline" not in err and "did not answer" not in err, err
     assert rc == 0 and ("Printer report saved:" in out if command == "report" else "A1:" in out), out + err
@@ -519,7 +519,7 @@ def test_a_refused_first_attempt_does_not_end_the_wait(slow, monkeypatch, capsys
     paho's retry until CONNECT_WAIT instead of saying "did not answer" at once."""
     monkeypatch.setattr(calib3mf, "run", _result())
     m = slow(copy.deepcopy(REPORT), refused_first=True)
-    rc = cli.main(["printer", command, SERIAL], manager_factory=lambda s: m)
+    rc = cli.main(["printer", command, SERIAL, *(["--yes"] if command == "map" else [])], manager_factory=lambda s: m)
     out, err = capsys.readouterr()
     assert "did not answer" not in err, err
     assert rc == 0 and ("Printer report saved:" in out if command == "report" else "A1:" in out), out + err

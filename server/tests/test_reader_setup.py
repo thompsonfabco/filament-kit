@@ -345,23 +345,36 @@ def test_the_buzzer_option_defaults_to_high(monkeypatch):
     assert cli.main(["reader", "setup", "--out", "s.h", "--buzzer", "low"]) == 0 and got["buzzer"] == "low"
 
 
-def _refused(monkeypatch, tmp_path, capsys, **kw):
+def _refused(monkeypatch, tmp_path, capsys, rc=1, **kw):
     calls = _flash_env(monkeypatch, tmp_path, rc=0)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p"), **kw) == 1
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p"), **kw) == rc
     assert calls == [] and reader_tokens.TokenStore().list() == []
     return capsys.readouterr()
 
 
 def test_a_lone_board_is_not_flashed_unless_the_owner_says_yes(tmp_path, monkeypatch, capsys):
     for answer in ("", "n", "no"):
-        out = _refused(monkeypatch, tmp_path, capsys, ask=lambda p, a=answer: a)
-        assert "Nothing was flashed" in out.out
+        out = _refused(monkeypatch, tmp_path, capsys, rc=5, ask=lambda p, a=answer: a)
+        assert "Nothing changed." in out.out
 
 
-def test_a_lone_board_with_no_terminal_is_not_flashed(tmp_path, monkeypatch, capsys):
-    def no_tty(prompt):
+def test_the_end_of_input_at_the_question_is_a_no(tmp_path, monkeypatch, capsys):
+    def no_answer(prompt):
         raise EOFError
-    assert "--port" in _refused(monkeypatch, tmp_path, capsys, ask=no_tty).err
+    assert "Nothing changed." in _refused(monkeypatch, tmp_path, capsys, rc=5, ask=no_answer).out
+
+
+def test_a_lone_board_with_no_terminal_and_no_yes_is_not_flashed_exit_2(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    out = _refused(monkeypatch, tmp_path, capsys, rc=2)
+    assert out.out == "" and out.err.startswith("Error: ") and "--yes" in out.err
+
+
+def test_yes_writes_a_lone_board_without_asking(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), yes=True), ask_secret=_secret("p", "p")) == 0
+    assert calls and "[y/N]" not in capsys.readouterr().out
 
 
 def test_a_lone_board_that_answers_as_the_panel_is_never_asked_about(tmp_path, monkeypatch, capsys):

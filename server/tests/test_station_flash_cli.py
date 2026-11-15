@@ -65,14 +65,33 @@ def test_no_blank_board_flashes_nothing_and_restarts_service(bench):
     assert services(bench) == ["stop", "start"]
 
 
-def test_declined_port_is_not_flashed(bench):
-    asked = []
+def test_declined_port_is_not_flashed(bench, capsys):
     answers = iter(["", "no"])
-    assert cli.cmd_station_flash_panel(ask=lambda p: asked.append(p) or next(answers), run=bench.run) == 1
+
+    def ask(prompt):
+        print(prompt, end="")               # what the real input() writes at a terminal
+        return next(answers)
+    assert cli.cmd_station_flash_panel(ask=ask, run=bench.run) == 5
     assert bench.flashed == []
-    assert asked == ["Flash the intake panel firmware to /dev/ttyACM0? [y/N] ",
-                     "Flash the intake panel firmware to /dev/ttyACM1? [y/N] "]
+    said = " ".join(capsys.readouterr().out.split())
+    assert "Write the intake panel firmware to /dev/ttyACM0? What is on the board now is replaced. [y/N]" in said
+    assert "Write the intake panel firmware to /dev/ttyACM1? What is on the board now is replaced. [y/N]" in said
+    assert said.count("Nothing changed.") == 2
     assert services(bench) == ["stop", "start"]
+
+
+def test_no_terminal_and_no_yes_stops_before_the_service_is_touched(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run) == 2
+    out, err = capsys.readouterr()
+    assert out == "" and err.startswith("Error: ") and "--yes" in err
+    assert bench.calls == [] and bench.flashed == []
+
+
+def test_yes_writes_the_first_blank_board_without_asking(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True) == 0
+    assert bench.flashed and "[y/N]" not in capsys.readouterr().out
 
 
 def test_confirmed_port_is_flashed_with_c3_command(bench):
@@ -181,7 +200,7 @@ def test_ctrl_c_at_the_prompt_flashes_nothing_and_restarts(bench, capsys):
 
 
 def test_service_that_was_active_is_started_again(bench):
-    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=bench.run) == 1
+    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=bench.run) == 5
     assert [c[1] for c in bench.calls] == ["is-active", "stop", "start"]
 
 
@@ -189,5 +208,5 @@ def test_service_that_was_inactive_is_not_started(bench):
     def run(cmd, **kw):
         bench.calls.append(cmd)
         return type("R", (), {"returncode": 3 if cmd[1] == "is-active" else 0})()
-    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=run) == 1
+    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=run) == 5
     assert [c[1] for c in bench.calls] == ["is-active", "stop"]

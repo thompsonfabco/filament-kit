@@ -466,7 +466,7 @@ def test_cli_signal_aborts_restores_then_exits_non_zero(rig, monkeypatch, capsys
     monkeypatch.setattr(slottest, "run", st_run)
     monkeypatch.setattr(m, "stop", lambda: None)
     before = signal.getsignal(signal.SIGINT)
-    rc = cli.main(["printer", "map", SERIAL], manager_factory=lambda s: m)
+    rc = cli.main(["printer", "map", SERIAL, "--yes"], manager_factory=lambda s: m)
     assert rc != 0 and seen["stop"] is True
     assert signal.getsignal(signal.SIGINT) is before       # handlers put back
     out = capsys.readouterr().out
@@ -493,7 +493,7 @@ def test_cli_signal_aborts_even_when_its_message_cannot_be_printed(rig, monkeypa
             raise err
         return real(*a, **k)
     monkeypatch.setattr(cli, "print", flaky, raising=False)
-    rc = cli.main(["printer", "map", SERIAL], manager_factory=lambda s: m)
+    rc = cli.main(["printer", "map", SERIAL, "--yes"], manager_factory=lambda s: m)
     assert seen["stop"] is True and rc != 0
 
 

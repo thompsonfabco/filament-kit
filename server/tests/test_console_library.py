@@ -51,7 +51,7 @@ def test_no_check_yet(app, monkeypatch):
     assert client(app).get("/setup/api/library").json()["last_check"] is None
 
 
-@pytest.mark.parametrize("name,args", [("library_update", ["library", "update"]), ("library_rollback", ["library", "rollback"])])
+@pytest.mark.parametrize("name,args", [("library_update", ["library", "update"]), ("library_rollback", ["library", "rollback", "--yes"])])
 def test_the_jobs_run_the_commands(name, args):
     assert list(setup_helper.JOBS[name]) == args and name in setup_helper.BUSY
 

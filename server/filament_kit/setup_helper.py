@@ -98,10 +98,12 @@ JOB_PREFIX = "filament-kit-setup-job@"              # one instance per job: fila
 UPDATE_UNIT = "filament-kit-update.service"         # the timer's update; `sudo filament-kit update` at a terminal has no unit
 ACTIVE = ("activating", "active", "deactivating", "reloading")      # a oneshot is "activating" while it runs
 # The closed list of jobs: the `filament-kit` arguments each one runs.
-JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "rollback": ("update", "--rollback"),
+# The page asked the owner first, so the jobs that ask at a terminal (06 7) say yes: there is no terminal here.
+JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update", "--yes"),
+        "rollback": ("update", "--rollback", "--yes"),
         "check": ("update", "--check"), "station_pair": ("station", "pair", "--local"),
-        "library_update": ("library", "update"), "library_rollback": ("library", "rollback"),
-        "remote_issue": ("remote", "issue"),
+        "library_update": ("library", "update"), "library_rollback": ("library", "rollback", "--yes"),
+        "remote_issue": ("remote", "issue", "--yes"),
         "backup": ("backup", "create"), "restore": ("restore", "--uploaded", "--yes"),
         # the local label reader: the page showed the release's sizes and the owner confirmed (tier: local_intake.tier)
         "local_intake_plan": ("local-intake", "plan"),         # the server cannot reach GitHub: a job, as `check`

@@ -37,7 +37,7 @@ from typing import Callable, Iterable
 
 from defusedxml import ElementTree as SafeET
 
-from . import API_VERSION, __version__, config, modules, release
+from . import API_VERSION, __version__, config, modules, output, release
 
 FORMAT = "1"
 WRAPPER = "/usr/local/bin/filament-kit"
@@ -667,12 +667,12 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             f"backup in {backups_dir()} first.")
     if not yes:
         try:
-            if ask("Type restore to go on: ").strip() != "restore":
-                out("Not restored. Nothing was changed.")
-                return 1
-        except (EOFError, OSError, RuntimeError):
-            out("error: no answer (no terminal): run it again with --yes. Nothing was changed.")
-            return 1
+            said = ask("Type restore to go on: ")
+        except (EOFError, OSError, RuntimeError):       # the end of input is a no
+            said = ""
+        if said.strip().lower() != "restore":
+            out("Nothing changed.")
+            return output.CANCELLED
     if _has_data():
         step("Keeping what is here now as a backup")
         try:

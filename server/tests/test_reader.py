@@ -190,7 +190,7 @@ def test_cli_reader_token_list_revoke(env, monkeypatch, capsys):
     listed = capsys.readouterr().out
     assert "bench" in listed and tok not in listed
     tid = reader.TokenStore().list()[0]["id"]
-    assert cli.main(["reader", "revoke", tid]) == 0
+    assert cli.main(["reader", "revoke", tid, "--yes"]) == 0
     assert not reader.TokenStore().check(tok)
     assert cli.main(["reader", "revoke", tid]) == 2
 

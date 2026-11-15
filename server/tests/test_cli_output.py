@@ -589,6 +589,7 @@ def test_restore_asks_before_its_wait_starts_and_its_lines_start_clean(quick, te
         return 0
     monkeypatch.setattr(backup, "restore", fake_restore)
     monkeypatch.setattr("builtins.input", answer)
+    monkeypatch.setattr(cli.output, "terminal", lambda: True)
     assert cli.cmd_restore(str(zip_path)) == 0
     assert seen[0].endswith("Type restore to go on: ") and "Restoring" not in seen[0]
     assert "Restoring" in terminal.getvalue()              # the wait did start, after the answer

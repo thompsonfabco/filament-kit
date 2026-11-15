@@ -95,7 +95,7 @@ def test_changed_values_are_listed_as_updates_then_accepted_and_cleared(env, cap
 
     # an unknown line: nothing accepted
     assert cli.main(["profiles", "apply-updates", "--line", "nope"]) == 1
-    assert cli.main(["profiles", "apply-updates", "--line", LID]) == 0
+    assert cli.main(["profiles", "apply-updates", "--line", LID, "--yes"]) == 0
     assert "accepted" in capsys.readouterr().out
     acc = builds.state_view("a")["accepted_updates"]
     assert acc["stamp"] == b2 and acc["base"] == sorted(rows)
@@ -333,6 +333,6 @@ def test_update_items_are_kept_until_a_file_behind_them_changes(env, monkeypatch
     monkeypatch.setattr(updates, "pending", lambda *a, **k: hashed.append(1) or real(*a, **k))
     assert builds.state_view("a")["accepted_updates"] == first["accepted_updates"] and hashed == []
     assert builds.status()["updates"]["count"] and hashed == []        # the status view shares the answer
-    assert cli.main(["profiles", "apply-updates", "--all"]) == 0       # an acceptance moves updates.json
+    assert cli.main(["profiles", "apply-updates", "--all", "--yes"]) == 0       # an acceptance moves updates.json
     assert builds.state_view("a")["accepted_updates"]["base"] and hashed
     assert builds.state_view("a")["accepted_updates"]["stamp"] == b2

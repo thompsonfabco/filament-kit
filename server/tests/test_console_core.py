@@ -77,12 +77,12 @@ def write_log(text: str) -> None:
 
 # ---------- the jobs ----------
 
-@pytest.mark.parametrize("name,args", [("apply", ["modules", "apply", "--no-pair"]), ("update", ["update"]),
-                                       ("rollback", ["update", "--rollback"]), ("check", ["update", "--check"]),
+@pytest.mark.parametrize("name,args", [("apply", ["modules", "apply", "--no-pair"]), ("update", ["update", "--yes"]),
+                                       ("rollback", ["update", "--rollback", "--yes"]), ("check", ["update", "--check"]),
                                        ("station_pair", ["station", "pair", "--local"]),
                                        ("library_update", ["library", "update"]),
-                                       ("library_rollback", ["library", "rollback"]),
-                                       ("remote_issue", ["remote", "issue"])])
+                                       ("library_rollback", ["library", "rollback", "--yes"]),
+                                       ("remote_issue", ["remote", "issue", "--yes"])])
 def test_each_job_runs_the_clis_own_command_with_no_terminal(env, monkeypatch, name, args):  # noqa: F811
     seen = {}
 

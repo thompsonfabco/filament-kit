@@ -602,7 +602,7 @@ def test_existing_presets_stay_until_their_update_is_accepted(tmp_path, server, 
     assert builds.state_view(store.load_config(pc.dirs)["device"])["accepted_updates"]["base"] == []
 
     # the rest, by line
-    assert cli.main(["profiles", "apply-updates", "--line", LID]) == 0
+    assert cli.main(["profiles", "apply-updates", "--line", LID, "--yes"]) == 0
     assert pc.run() == "installed"
     for name in names:
         assert pc.preset(name)["filament_density"] == ["1.31"], name
