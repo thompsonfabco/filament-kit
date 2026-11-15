@@ -9,6 +9,7 @@ import builtins
 import copy
 import json
 import re
+import threading
 import time
 
 import pytest
@@ -30,6 +31,7 @@ def hub(tmp_path, monkeypatch, spoolman_url):
     monkeypatch.setenv("FK_NO_SYSTEMD", "1")
     (tmp_path / "etc" / "anthropic_key").write_text("sk-test\n")
     pairing.make_cert("fkhost", ["192.0.2.5"], tmp_path / "etc")
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "fkhost")        # a runner's own host name is long and wraps the link
     config.save({"placement": {"box_count": 2}})
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     sm = Spoolman(spoolman_url)
@@ -167,7 +169,8 @@ def test_show_prints_the_fields_in_groups_and_marks_only_what_is_not_high(sm, ca
     assert by["Price per kg"].split()[:2] == ["Price", "per"] and "(empty)" in by["Price per kg"] and "not on label" in by["Price per kg"]
     assert "Read confidence is high unless marked." in lines
     assert "Revisions: none." in lines
-    assert lines[-1].startswith("Photos open on the Hub page: https://") and lines[-1].endswith(f"/setup#recent/{hid}")
+    link = " ".join(lines[next(i for i, ln in enumerate(lines) if ln.startswith("Photos open on the Hub page:")):])   # the link is never cut: it may be on its own line
+    assert link.startswith("Photos open on the Hub page: https://") and link.endswith(f"/setup#recent/{hid}")
     assert max(len(ln) for ln in lines if not ln.startswith("Photos open")) <= 79
 
 
@@ -199,6 +202,7 @@ def test_show_lists_the_revisions_newest_last_with_what_undone_and_a_note_and_an
     intake_history._save(rec)
     out = run(capsys, "recent", "show", hid)[1]
     revs = out.split("Revisions:\n")[1].splitlines()
+    revs = revs[:next(i for i, ln in enumerate(revs) if ln.startswith("Photos open on the Hub page:"))] + ["link"]   # the link: whole or on its own line
     assert revs[0].startswith("  1  ") and revs[1].startswith("     ")          # a long one goes on, indented
     first = " ".join(" ".join(revs[:2]).split())
     assert re.fullmatch(r"1 \d{4}-\d\d-\d\d \d\d:\d\d by hand Empty spool weight 213 g -> 150 g - note: it is the matte one", first), first
@@ -646,8 +650,11 @@ def pending_code():
 def waiting(monkeypatch):
     """`pair` waits by sleeping; `steps` are what happens at each look (a callable), the sleeps themselves take no time."""
     state = {"looks": 0, "steps": []}
+    real_sleep, test_thread = time.sleep, threading.get_ident()
 
     def sleep(seconds):
+        if threading.get_ident() != test_thread:    # time.sleep is the process's: another thread's sleep is not a look
+            return real_sleep(seconds)
         state["looks"] += 1
         assert state["looks"] < 200, "pair keeps waiting for a device nobody pairs"
         if state["steps"]:
