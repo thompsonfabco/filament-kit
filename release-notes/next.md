@@ -58,6 +58,7 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `filament-kit modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
 - **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
 - **Hub page, Printers:** pressing Add again while the Hub is still adding a printer says "Still working. Wait for it to finish.", the same words as the app.
+- **Slicer presets from a phone:** a paired phone can now list the filaments that have no preset line, create a line, add filaments to a line and ask for a build; the Android app's Slicer presets screen uses these. The phone web app's own routes are unchanged.
 
 ## Still to come
 

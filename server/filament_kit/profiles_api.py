@@ -576,7 +576,47 @@ def web_routes(authed, sm) -> list[Route]:
         await _json(request)
         return JSONResponse(await run_in_threadpool(restore_deleted, request.state.device, "web restore deleted"))
 
-    return [Route("/api/profiles/web/line_add", line_add, methods=["POST"]),
+    @authed
+    async def uncovered(request: Request):
+        """`GET /api/profiles/uncovered` (any paired device, S4.13): the Spoolman filaments no preset line records
+        yet, as the web app lists them. Reply: `{"uncovered_filaments": [{"id": int, "vendor": text, "name": text,
+        "material": text, "lines_for_vendor": [line names of that brand, sorted]}]}`; empty when every filament has a
+        line. An uncovered filament joins a line by its name at the next build; this is for the wrong-line case."""
+        st = await run_in_threadpool(presets.status, sm)
+        return JSONResponse({"uncovered_filaments": st["uncovered_filaments"]})
+
+    @authed
+    async def phone_line_new(request: Request):
+        """`POST /api/profiles/lines` {name, vendor, ids, bs_template, orca_parent?}: create a line and put the
+        filaments in it (as `web/line_new`); the reply is that route's (the line, `notes`, `output`)."""
+        body = await _json(request)
+        args = (_text_field(body, "name"), _text_field(body, "vendor"), _ids(body),
+                _text_field(body, "orca_parent", False), _text_field(body, "bs_template"))
+        return JSONResponse(await run_in_threadpool(
+            _audit, "line new", request.state.device, lambda: presets.add_line(sm, *args)))
+
+    @authed
+    async def phone_line_add(request: Request):
+        """`POST /api/profiles/lines/{line_id}/filaments` {ids}: add filaments to that line (as `web/line_add`;
+        the line is its line_id); the reply is that route's (the line, `notes`, `output`)."""
+        body = await _json(request)
+        line, ids = request.path_params["line_id"], _ids(body)
+        return JSONResponse(await run_in_threadpool(
+            _audit, "line add", request.state.device, lambda: presets.add_ids(sm, line, ids)))
+
+    @authed
+    async def phone_build(request: Request):
+        """`POST /api/profiles/build` {}: ask for a preset build now (as `web/generate`); the reply is
+        `{requested, last_build, output}`."""
+        await _json(request)
+        return JSONResponse(await run_in_threadpool(
+            _audit, "build now", request.state.device, presets.generate))
+
+    return [Route("/api/profiles/uncovered", uncovered),
+            Route("/api/profiles/lines", phone_line_new, methods=["POST"]),
+            Route("/api/profiles/lines/{line_id}/filaments", phone_line_add, methods=["POST"]),
+            Route("/api/profiles/build", phone_build, methods=["POST"]),
+            Route("/api/profiles/web/line_add", line_add, methods=["POST"]),
             Route("/api/profiles/web/line_new", line_new, methods=["POST"]),
             Route("/api/profiles/web/generate", generate, methods=["POST"]),
             Route("/api/profiles/web/updates_accept", updates_accept, methods=["POST"]),
