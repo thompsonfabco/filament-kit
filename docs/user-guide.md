@@ -419,8 +419,11 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 - **`printer map <printer> --by-loading`** needs the running Hub: it works on the same session as the Hub page and the
   apps (see [When mapping fails](#when-mapping-fails-map-by-loading-filament-v050); the usual way is
   [Map slots](#map-slots)). It names each slot and you load it. At **Answer:** type `y` (or the slot you loaded, for
-  example `A2`), `s` to skip it or `q` to stop; `?` lists the keys. A Klipper printer is mapped only this way.
-- **`printer report <printer>`** makes a short file to attach to an issue when a printer is not known or its mapping
+  example `A2`), `s` to skip it or `q` to stop; `?` lists the keys. When the printer does not report what was loaded, it
+  asks for a number from a list instead; a printer with two nozzles wants `y right` or `y left`. A Klipper printer is
+  mapped only this way.
+- **`printer report <printer>`** (Bambu Lab printers only) makes a short file to attach to an issue when a printer is not
+  known or its mapping
   failed. It holds no serial number, address, name or account id; read it first. When the printer can't be reached,
   the report is built from what the Hub saved and says so. **Collect a report** on the Hub page does the same.
 - **`tag-reader flash`** writes the Tag Reader plugged into the Hub's USB (see [Flash a device](#flash-a-device)).
