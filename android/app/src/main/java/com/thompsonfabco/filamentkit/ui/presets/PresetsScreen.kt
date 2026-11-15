@@ -264,7 +264,8 @@ private fun FilamentCardView(f: UncoveredFilament, card: FilamentCard, vm: Prese
 
 /** The fields a 400 may name that the form has: the line name and the parent (the Hub says `parent` or `orca_parent`). */
 private const val NAME_FIELD = "name"
-private val PARENT_FIELDS = listOf("parent", "orca_parent", "bs_template")
+private const val ORCA_FIELD = "orca_parent"
+private val PARENT_FIELDS = listOf("parent", ORCA_FIELD, "bs_template")
 private val INLINE_FIELDS = listOf(NAME_FIELD) + PARENT_FIELDS
 
 @Composable
@@ -276,19 +277,38 @@ private fun NewLineForm(f: UncoveredFilament, card: FilamentCard, vm: PresetsVie
         card.name, { vm.setName(f.id, it) }, stringResource(R.string.presets_line_name), enabled = idle,
         hint = stringResource(R.string.presets_line_name_help), error = fail?.takeIf { it.field == NAME_FIELD }?.message,
     )
+    val orca = card.orcaParents
+    // the Orca Slicer parent is optional; without its field a refusal that names it goes under the template field
+    val orcaShown = !orca.isNullOrEmpty()
+    if (templates?.synced == true) {
+        FormField(card.find, { vm.findTemplate(f.id, it) }, stringResource(R.string.presets_parent), enabled = idle)
+    }
+    when {
+        orca == null -> Text(stringResource(R.string.presets_parent_loading), style = MaterialTheme.typography.bodySmall)
+        orca.isEmpty() -> Text(
+            stringResource(R.string.presets_orca_none), style = MaterialTheme.typography.bodySmall,
+            color = SpoolwardenTheme.colors.muted,
+        )
+        else -> {
+            val unset = stringResource(R.string.presets_orca_unset)
+            PickField(
+                stringResource(R.string.presets_orca_parent), card.orcaParent ?: unset, listOf(unset) + orca, idle,
+                onPick = { vm.chooseOrcaParent(f.id, it.takeIf { p -> p != unset }) },
+                error = fail?.takeIf { it.field == ORCA_FIELD }?.message,
+            )
+        }
+    }
     when {
         templates == null -> Text(stringResource(R.string.presets_parent_loading), style = MaterialTheme.typography.bodySmall)
         !templates.synced -> Text(
             stringResource(R.string.presets_templates_none), style = MaterialTheme.typography.bodySmall,
             color = SpoolwardenTheme.colors.muted,
         )
-        else -> {
-            FormField(card.find, { vm.findTemplate(f.id, it) }, stringResource(R.string.presets_parent), enabled = idle)
-            PickField(
-                stringResource(R.string.presets_bs_template), card.template.orEmpty(), matchParents(templates.parents, card.find), idle,
-                onPick = { vm.chooseTemplate(f.id, it) }, error = fail?.takeIf { it.field in PARENT_FIELDS }?.message,
-            )
-        }
+        else -> PickField(
+            stringResource(R.string.presets_bs_template), card.template.orEmpty(), matchParents(templates.parents, card.find), idle,
+            onPick = { vm.chooseTemplate(f.id, it) },
+            error = fail?.takeIf { it.field in PARENT_FIELDS && (it.field != ORCA_FIELD || !orcaShown) }?.message,
+        )
     }
     SwButton(
         stringResource(R.string.presets_create), { vm.createLine(f) }, Modifier.fillMaxWidth(),

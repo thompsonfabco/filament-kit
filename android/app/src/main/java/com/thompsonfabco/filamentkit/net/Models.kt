@@ -758,6 +758,10 @@ data class Proposal(
 @Serializable
 data class ParentList(val parents: List<String> = emptyList(), val synced: Boolean = false)
 
+/** `GET /api/profiles/orca-parents`: the Orca Slicer parents of a material; empty until an Orca library is uploaded. */
+@Serializable
+data class OrcaParentList(@SerialName("orca_parents") val parents: List<String> = emptyList())
+
 /** `POST /api/library/local` (201). */
 @Serializable
 data class LocalEntryResult(val entry: JsonObject = JsonObject(emptyMap()), @SerialName("line_id") val lineId: String = "")

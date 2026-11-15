@@ -7,6 +7,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.BuildRequested
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
+import com.thompsonfabco.filamentkit.net.OrcaParentList
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.net.ProfileLine
 import com.thompsonfabco.filamentkit.net.ProfileStatus
@@ -27,9 +28,10 @@ interface PresetsBackend {
     suspend fun lines(): List<ProfileLine>
     suspend fun uncovered(): List<UncoveredFilament>
     suspend fun parents(material: String): ParentList
+    suspend fun orcaParents(material: String): OrcaParentList
     suspend fun setLineParent(lineId: String, parent: String): ProfileLine
     suspend fun addToLine(lineId: String, id: Int): ProfileLine
-    suspend fun newLine(name: String, vendor: String, id: Int, template: String): ProfileLine
+    suspend fun newLine(name: String, vendor: String, id: Int, template: String, orcaParent: String?): ProfileLine
     suspend fun build(): BuildRequested
 
     companion object {
@@ -39,10 +41,11 @@ interface PresetsBackend {
             override suspend fun lines() = current().profileLines()
             override suspend fun uncovered() = current().uncoveredFilaments()
             override suspend fun parents(material: String) = current().parents(material)
+            override suspend fun orcaParents(material: String) = current().orcaParents(material)
             override suspend fun setLineParent(lineId: String, parent: String) = current().setLineParent(lineId, parent)
             override suspend fun addToLine(lineId: String, id: Int) = current().addFilamentsToLine(lineId, listOf(id))
-            override suspend fun newLine(name: String, vendor: String, id: Int, template: String) =
-                current().createLine(name, vendor, listOf(id), template)
+            override suspend fun newLine(name: String, vendor: String, id: Int, template: String, orcaParent: String?) =
+                current().createLine(name, vendor, listOf(id), template, orcaParent)
             override suspend fun build() = current().buildPresets()
         }
     }
@@ -75,6 +78,10 @@ data class FilamentCard(
     /** What "Find a parent" has typed: narrows [templates] to the names with every word. */
     val find: String = "",
     val templates: ParentList? = null,
+    /** The Orca Slicer parents of the filament's material (null while loading; empty: no Orca library uploaded yet). */
+    val orcaParents: List<String>? = null,
+    /** The Orca Slicer parent chosen; null leaves the choice to the Hub. */
+    val orcaParent: String? = null,
     val busy: CardBusy? = null,
     val fail: Fail? = null,
 )
@@ -242,12 +249,15 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
 
     fun chooseTemplate(id: Int, template: String) = updateCard(id) { it.copy(template = template, fail = null) }
 
+    fun chooseOrcaParent(id: Int, parent: String?) = updateCard(id) { it.copy(orcaParent = parent, fail = null) }
+
     fun findTemplate(id: Int, find: String) = updateCard(id) { it.copy(find = find) }
 
     /** Opens or closes the new-line form of [filament]; opening reads the parents for its material. */
     fun toggleNewLine(filament: UncoveredFilament) {
         val open = !_state.value.card(filament.id).newLineOpen
         updateCard(filament.id) { it.copy(newLineOpen = open) }
+        if (open) loadOrcaParents(filament)
         if (open && _state.value.card(filament.id).templates == null) {
             viewModelScope.launch {
                 val list = try {
@@ -260,6 +270,23 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
                 }
                 updateCard(filament.id) {
                     it.copy(templates = list, template = it.template ?: defaultTemplate(list, filament.material))
+                }
+            }
+        }
+    }
+
+    /** Reads the Orca Slicer parents of [filament]'s material once; a Hub without the route (404) has none, as before an upload. */
+    private fun loadOrcaParents(filament: UncoveredFilament) {
+        if (_state.value.card(filament.id).orcaParents != null) return
+        viewModelScope.launch {
+            try {
+                val list = api.orcaParents(filament.material).parents
+                updateCard(filament.id) { it.copy(orcaParents = list) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                updateCard(filament.id) {
+                    it.copy(orcaParents = emptyList(), fail = if (e is ApiError && e.status == 404) it.fail else failOf(e))
                 }
             }
         }
@@ -306,7 +333,7 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
         updateCard(filament.id) { it.copy(busy = CardBusy.Creating, fail = null) }
         viewModelScope.launch {
             try {
-                val made = api.newLine(name, filament.vendor, filament.id, template)
+                val made = api.newLine(name, filament.vendor, filament.id, template, card.orcaParent)
                 left(filament.id, Done(created = true, name = name), made)
             } catch (e: CancellationException) {
                 throw e
@@ -412,8 +439,8 @@ class PresetsViewModel(private val api: PresetsBackend) : ViewModel() {
     }
 
     companion object {
-        /** A line as the Hub names it in the lists of a brand's lines: "<brand> <line>". */
-        fun lineName(line: ProfileLine): String = "${line.vendor} ${line.product}"
+        /** A line as the Hub names it in the lists of a brand's lines: "<brand> <line>", stripped at both ends as the Hub does. */
+        fun lineName(line: ProfileLine): String = "${line.vendor} ${line.product}".trim()
 
         /** "<Brand> <name without its last word>" (the web app's suggestion), the whole name when it has one word. */
         fun suggestedName(f: UncoveredFilament): String {

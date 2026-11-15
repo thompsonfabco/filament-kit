@@ -400,6 +400,12 @@ class Api(
         return decode(call(req.get()))
     }
 
+    /** `GET /api/profiles/orca-parents`: the Orca Slicer parents whose name has every word of [material], at most 60. */
+    suspend fun orcaParents(material: String): OrcaParentList {
+        val req = request("api", "profiles", "orca-parents") { addQueryParameter("material", material) }
+        return decode(call(req.get()))
+    }
+
     /** `GET /api/profiles/updates`: the presets in the slicers a newer build would change. */
     suspend fun presetUpdates(): PresetUpdates = decode(call(request("api", "profiles", "updates").get()))
 
@@ -449,12 +455,13 @@ class Api(
     }
 
     /** `POST /api/profiles/lines`: makes a line named [name] of [vendor] from [ids], on Bambu Studio parent [bsTemplate]. */
-    suspend fun createLine(name: String, vendor: String, ids: List<Int>, bsTemplate: String): ProfileLine {
+    suspend fun createLine(name: String, vendor: String, ids: List<Int>, bsTemplate: String, orcaParent: String? = null): ProfileLine {
         val body = buildJsonObject {
             put("name", name)
             put("vendor", vendor)
             put("ids", JsonArray(ids.map(::JsonPrimitive)))
             put("bs_template", bsTemplate)
+            if (!orcaParent.isNullOrBlank()) put("orca_parent", orcaParent)
         }
         return decode(call(request("api", "profiles", "lines").post(body.toBody())))
     }
