@@ -279,6 +279,62 @@ def test_an_old_proposal_is_stale_after_another_change(sm):
     assert e.value.code == "stale"
 
 
+def _fixed():
+    fixed = copy.deepcopy(READ)
+    fixed["items"][0].update(vendor="Polymaker", nozzle=245)
+    return fixed
+
+
+def _overtaken(change):
+    """A reader that is overtaken: `change` lands while it is still "reading"."""
+    fake = FakeClaude(_fixed())
+    real = fake.beta.messages.create
+
+    def create(**kw):
+        change()
+        return real(**kw)
+    fake.beta.messages.create = create
+    return fake
+
+
+def test_an_ask_made_before_an_undo_is_refused_after_it(sm):
+    _, hid = add(sm, read_id=read(sm)["read_id"])
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 240})
+    fake = _overtaken(lambda: intake_history.undo(sm, hid, 1))
+    p = intake_history.revise(sm, hid, "nozzle is 245", client=fake)
+    with pytest.raises(intake_history.HistoryError) as e:
+        intake_history.apply(sm, hid, proposal=p["proposal"])
+    assert e.value.status == 409 and e.value.code == "stale"
+    assert intake_history.get(hid)["saved"][0]["values"]["nozzle"] == 220
+
+
+def test_an_ask_made_before_a_hand_save_is_refused_after_it(sm):
+    _, hid = add(sm, read_id=read(sm)["read_id"])
+    fake = _overtaken(lambda: intake_history.apply(sm, hid, item=0, values={"bed": 60}))
+    p = intake_history.revise(sm, hid, "nozzle is 245", client=fake)
+    with pytest.raises(intake_history.HistoryError) as e:
+        intake_history.apply(sm, hid, proposal=p["proposal"])
+    assert e.value.status == 409 and e.value.code == "stale"
+    assert intake_history.get(hid)["saved"][0]["values"]["nozzle"] == 220
+
+
+def test_an_ask_then_a_hand_save_then_accept_is_refused(sm):
+    _, hid = add(sm, read_id=read(sm)["read_id"])
+    p = intake_history.revise(sm, hid, "nozzle is 245", client=FakeClaude(_fixed()))
+    intake_history.apply(sm, hid, item=0, values={"bed": 60})
+    with pytest.raises(intake_history.HistoryError) as e:                    # a write drops the held proposals
+        intake_history.apply(sm, hid, proposal=p["proposal"])
+    assert e.value.status in (404, 409)
+    assert intake_history.get(hid)["saved"][0]["values"]["nozzle"] == 220
+
+
+def test_an_ask_then_accept_with_nothing_between_is_applied(sm):
+    _, hid = add(sm, read_id=read(sm)["read_id"])
+    p = intake_history.revise(sm, hid, "nozzle is 245", client=FakeClaude(_fixed()))
+    rec = intake_history.apply(sm, hid, proposal=p["proposal"])
+    assert rec["saved"][0]["values"]["nozzle"] == 245
+
+
 def test_ai_off_refuses_a_revision():
     with pytest.raises(intake_history.HistoryError) as e:
         intake_history.revise(None, "0" * 12, "brand is X", ai_on=False)
