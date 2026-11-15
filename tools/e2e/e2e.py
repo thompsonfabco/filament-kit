@@ -734,6 +734,35 @@ class E2E:
         code = wait_for(lambda: http("GET", f"{SPOOLMAN}/spool/{spool_id}")[0] == 200, 60, 2)
         run.check(sc, f"{when}: the spool is still in Spoolman", bool(code))
 
+    def _owned_state(self, auth: dict) -> dict:
+        """What an owner would not forgive an update for losing, as the kit's own API and config answer it
+        (no Access Code, no key: names, example addresses, ids)."""
+        code, pr = jhttp("GET", f"{KIT}/api/printers", headers=auth)
+        printers = sorted((p.get("id"), p.get("name"), p.get("ip"), p.get("configured"))
+                          for p in pr.get("printers", [])) if isinstance(pr, dict) else [code]
+        code, hist = jhttp("GET", f"{KIT}/api/intake/history", headers=auth)
+        records = sorted((r.get("id"), r.get("source"), r.get("state"), tuple(s.get("spool_id") for s in r.get("spools") or []))
+                         for r in hist.get("records", [])) if isinstance(hist, dict) else [code]
+        return {"printers": printers, "history_keep": (read_cfg().get("intake") or {}).get("history_keep"),
+                "history": records}
+
+    def _console_page(self, sc: str) -> None:
+        """GET /setup serves the Console page: the shared tokens and components and every section script it links load."""
+        run = self.run
+        code, page = http("GET", f"{KIT}/setup")
+        text = page.decode("utf-8", "replace")
+        run.check(sc, "after the update: GET /setup answers 200 with the page shell", code == 200 and "<div id=app>" in text, f"{code}")
+        links = re.findall(r"(?:src|href)='(/setup/[^']+)'", text)
+        for need in ("/setup/shared/tokens.css", "/setup/shared/components.css", "/setup/shared/components.js",
+                     "/setup/setup_overview.js"):
+            run.check(sc, f"the page links {need}", need in links, str(links))
+        bad = {}
+        for path in sorted(set(links)):
+            c, body = http("GET", f"{KIT}{path}")
+            if c != 200 or not body:
+                bad[path] = c
+        run.check(sc, f"all {len(set(links))} linked files load with 200 and a body", bool(links) and not bad, str(bad))
+
     def f_cross_tag(self, sc="f") -> None:
         run, rel = self.run, self.rel
         if not self.previous:
@@ -766,6 +795,21 @@ class E2E:
         code2, spool = jhttp("POST", f"{SPOOLMAN}/spool", body={"filament_id": fil.get("id") if isinstance(fil, dict) else None})
         if code != 200 or code2 != 200 or not isinstance(spool, dict):
             raise Fail(f"cannot add a spool on {old}: {code} {code2}")
+        # what an owner has built up on the old release: a printer, a General setting, one intake-history record
+        r = kit_python("from filament_kit.bridge import registry\n"
+                       f"registry.add_bambu('{CT_PRINTER_SERIAL}', '{CT_PRINTER_NAME}', 'C11', '{CT_PRINTER_IP}', '12345678')")
+        run.check(sc, f"{old}: a printer is added (example name, {CT_PRINTER_IP})", r.returncode == 0, r.stderr[-400:])
+        cfg = read_cfg()
+        cfg.setdefault("intake", {})["history_keep"] = CT_HISTORY_KEEP      # the default is 20
+        write_cfg(cfg)
+        code, added = jhttp("POST", f"{KIT}/api/intake/add", headers=auth,
+                            body={"items": [{**SEED_ITEM, "name": "E2E cross-tag history"}], "dry_run": False})
+        run.check(sc, f"{old}: an intake add leaves a history record",
+                  code == 200 and isinstance(added, dict) and bool(added.get("history_id")), f"{code} {added}")
+        owned_before = self._owned_state(auth)
+        run.check(sc, f"{old}: the printer, the setting and the record are all there before the update",
+                  bool(owned_before["printers"]) and owned_before["history_keep"] == CT_HISTORY_KEEP and
+                  bool(owned_before["history"]), json.dumps(owned_before))
         cfg = read_cfg()
         cfg["updates"] = {"api": rel.api, "repo": repo}
         write_cfg(cfg)
@@ -778,6 +822,10 @@ class E2E:
         self._still_works(sc, f"after the update to {self.v2}", auth, spool["id"], self.v2)
         run.check(sc, "after the update: the same modules are on", read_cfg().get("modules") == modules_before,
                   str(read_cfg().get("modules")))
+        owned_after = self._owned_state(auth)
+        run.check(sc, "after the update: the printer, the General setting and the intake-history record are unchanged",
+                  owned_after == owned_before, f"before {json.dumps(owned_before)} after {json.dumps(owned_after)}")
+        self._console_page(sc)
         r = run.sh([fk, "update", "--rollback"], name="cross-tag-rollback", timeout=3600)
         run.check(sc, f"this checkout's rollback restores {old}", r.returncode == 0 and installed_version() == old,
                   r.stdout[-1500:] + r.stderr[-800:])
@@ -868,6 +916,9 @@ class E2E:
                 jhttp("GET", f"{KIT}/api/printers", headers=auth)), 60, 2) or (0, {})
             run.check(sc, "after the restore: the printer is back in the kit", code_ == 200 and
                       SERIAL in [p.get("id") for p in plist.get("printers", [])], str(plist)[:400])
+
+CT_PRINTER_SERIAL, CT_PRINTER_NAME, CT_PRINTER_IP = "E2E00000000099", "E2E Example Printer", "192.0.2.77"
+CT_HISTORY_KEEP = 7                       # a non-default General setting (the default is 20)
 
 SEED_ITEM = {"vendor": "E2E Test Co", "name": "E2E PLA Red", "material": "PLA", "color_hex": "cc0000",
              "net": 1000, "tare": 200, "density": 1.24, "count": 1, "nozzle": 210, "bed": 60,
