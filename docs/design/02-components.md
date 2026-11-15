@@ -250,7 +250,7 @@ padding `0 var(--s3)`, 1 px `--border-strong`, `--r`, `--fs-m` weight 600.
 
 **Behaviour and keyboard.** The job indicator opens the job strip with its log expanded and moves focus to the log
 toggle. The lock chip opens the unlock dialog or the lock dialog (3.1). On phones the top bar keeps the mark, the
-product name above the Hub name (two lines, `--fs-l` and `--fs-xs`), the lock chip without its hint, and the
+product name above the Hub name (two lines, `--fs-l` and `--fs-xs`), the lock chip as its icon alone (3.1), and the
 appearance icon button; the job indicator and version move out (the job strip is visible on its own above the
 bottom bar). With `nav` = `list` on phones the top bar shows a Back button in front of the mark when the page is
 deeper than the section list (2.3).
@@ -552,7 +552,9 @@ or a hidden-values note with their own **Unlock to show**.
 
 **Anatomy.** A chip button (`chip chip--lock`): state icon (closed lock, open lock, shield), state word, and on wide
 screens a hint separated by a hairline: Locked "Enter setup code", Unlocked "Changes allowed", Trusted computer "No
-code needed". The job indicator in the top bar uses the same `chip` block (`chip--job`), and so does the
+code needed". On phones (below 600 px) the chip is its icon alone, at least `--ctl` wide, so the product name is
+never cut off beside it; the three icons differ in shape, the accessible name is unchanged, and the dialog the
+chip opens has the state word as its title. The job indicator in the top bar uses the same `chip` block (`chip--job`), and so does the
 connection chip of the web app and the Android app (`chip--connection`, below).
 
 **Sizes and tokens.** Height `--ctl`, padding `0 var(--s3)`, gap `--s2`, 1 px border, `--r`,
