@@ -57,7 +57,7 @@ function versionCard(u) {
       u.held && u.held === u.latest ? versionRow("updates_held_label", SW.t("updates_held", { version: u.held })) : null,
       u.failed && u.failed === u.latest ? versionRow("updates_failed_label", SW.t("updates_failed", { version: u.failed })) : null,
       versionRow("updates_schedule_label", ...(u.module_on ? [SW.t("updates_schedule", { schedule: u.schedule || "" })]
-        : [SW.t("updates_schedule_off"), " ", h("a", { class: "btn btn--ghost", href: "#features", textContent: SW.t("nav_features") })]))));
+        : [h("span", {}, SW.t("updates_schedule_off"), " ", h("a", { href: "#features", textContent: SW.t("nav_features") }))]))));
 }
 
 function updatesTab() {
@@ -79,8 +79,8 @@ function updatesTab() {
     if (update) held(update, u.update_refused, refused);
     if (roll) held(roll, u.rollback_refused, rollRefused);
     const notesId = SW.uid("updates-notes");
+    if (page.dataset.section === "updates") pageHead(null, h("div", { class: "page-head__actions" }, check, update));      // the section header (03 12.1); not once another section is open
     fill(out,
-      h("div", { class: "page-head__actions updates__actions" }, check, update),
       refused, box,
       h("div", { class: "updates__cards" },
         versionCard(u),

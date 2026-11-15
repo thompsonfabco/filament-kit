@@ -2,6 +2,11 @@
    shell (top bar, navigation, page header) is the shared one; the rules below are for today's section contents, kept
    inside the page (`:where(.page)` adds no weight) so they never reach the shell, its sheets or dialogs. Every colour,
    size and duration is a token. Light or dark follows the device (tokens.css) unless the owner chose one (theme-init.js). */
+/* the navigation rail's background runs the full page height: the rail itself is sticky and as tall as the window, so on a taller page the
+   shell paints the same surface and edge line behind it (the rail's own border is the last hairline of the column) */
+@media (min-width: 601px) {
+  .shell { background: linear-gradient(to right, var(--surface) calc(var(--rail) - var(--hairline)), var(--border) calc(var(--rail) - var(--hairline)) var(--rail), transparent var(--rail)); }
+}
 /* the top bar on phones (02 2.2, 03 3.1): the product name above the Hub name, without the slash */
 .topbar__hub .skeleton__line { width: calc(var(--s7) * 2); height: var(--s3); }
 @media (max-width: 600px) {
@@ -95,7 +100,7 @@ img.qr { display: block; width: var(--qr); height: var(--qr); max-width: 100%; p
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 /* Updates (S2.13) */
-.updates__actions { margin: 0 0 var(--s3); }
+@media (max-width: 600px) { .page[data-section="updates"] .page-head__actions > .btn--primary { order: -1; } .page[data-section="updates"] .page-head__actions > .btn { flex: 1 1 100%; } }
 .updates__cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--s4); align-items: start; }
 .updates__cards > .card { margin: var(--s3) 0 0; }
 .updates__notes .code__text { max-height: calc(var(--s7) * 8); max-width: var(--column-max); }   /* about 72 characters of --mono */
@@ -104,7 +109,6 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .updates__foot { display: grid; gap: var(--s2); margin-top: var(--s4); }
 .updates__foot > p { margin: 0; }
 @media (max-width: 1024px) { .updates__cards { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 600px) { .updates__actions > .btn--primary { order: -1; } .updates__actions > .btn { flex: 1 1 100%; } }
 
 /* Features (S2.12) */
 /* the setup choice cards (02 5.7, cards variant): the radio is the card's own marker */
@@ -131,6 +135,7 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 /* the collection: the line under the name stands in for "What it does" and "Needs" where those columns are not shown */
 .coll--features{grid-template-columns:minmax(0,1.6fr) max-content minmax(0,2.4fr) minmax(0,1.2fr) max-content}
 .coll--features .coll__sub{display:none}
+.coll--features .coll__head .coll__cell{display:flex;align-items:center}
 .coll--features .coll__cell[data-col="needs"] .muted{font-size:var(--fs-s)}
 @media (max-width:1024px){
   .coll--features{grid-template-columns:minmax(0,1fr) max-content max-content}
