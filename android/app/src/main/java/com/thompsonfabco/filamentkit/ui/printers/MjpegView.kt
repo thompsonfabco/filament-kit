@@ -175,6 +175,9 @@ private const val UNAUTHORIZED_STATUS = 401
 /** A non-2xx camera response; [code] is the server's error code (`camera_unavailable`, `not_configured`, ...). */
 class CameraHttpError(val status: Int, val code: String) : IOException("camera HTTP $status $code")
 
+/** Test seam: receives each stream's call, so a test can cancel it while the coroutine is still active. */
+internal var onStreamCall: (Call) -> Unit = {}
+
 /**
  * Reads the MJPEG stream at [url] until it ends, handing the newest complete JPEG of each read to [onJpeg].
  * Cancelling the caller closes the connection at once, even while a read is blocked.
@@ -188,7 +191,7 @@ internal suspend fun streamMjpeg(
     val req = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
     // an MJPEG stream never ends on its own: no call timeout, closed by cancelling the call
     val call = client.newBuilder().readTimeout(java.time.Duration.ofSeconds(30)).callTimeout(java.time.Duration.ZERO)
-        .build().newCall(req)
+        .build().newCall(req).also { onStreamCall(it) }
     // A blocked socket read ignores coroutine cancellation; this sibling cancels the call the moment the
     // caller is cancelled, which fails the read and closes the response at once.
     // UNDISPATCHED: the closer is waiting before the blocking read starts, so a cancellation at any point closes the call.
@@ -207,6 +210,8 @@ internal suspend fun streamMjpeg(
                 // the closer's call.cancel() surfaces as an IOException; report it as the cancellation it is,
                 // or it would end the caller's job as a failure (and crash a LaunchedEffect)
                 ensureActive()
+                // the closer can cancel the call before this child is cancelled, so ensureActive() still passes
+                if (call.isCanceled()) throw CancellationException(null, e)
                 throw e
             }
         }
