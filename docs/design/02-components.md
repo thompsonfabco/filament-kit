@@ -177,7 +177,7 @@ Desktop, nav = rail                        Phone (Console, Workbench, Palette)
 ```
 
 **Sizes and tokens.** Grid rows `calc(var(--top) + env(safe-area-inset-top))` and `1fr`. Side column `--rail`
-(rail), 228 px (sidebar), none (pills), 304 px (list). Page padding `--s5` on desktop, `--s4` on tablet and phone, plus
+(rail), `var(--side-w)` (sidebar, 256 px), none (pills), 304 px (list). Page padding `--s5` on desktop, `--s4` on tablet and phone, plus
 the safe-area insets; on phones the bottom padding adds `--tab`, the bottom inset and room for the job strip so the
 last control is never hidden. Ground `--bg`. Skip link: `--accent` ground, `--on-accent` text, `--r`.
 
@@ -334,7 +334,9 @@ Ground of the rail, sidebar and section pane: `--surface` with a 1 px `--border`
 - Pressed: `--surface-3`.
 - Disabled: never disabled. A section switched off in Features is **dimmed**: icon and label at `--muted`, a hollow
   circle (7.1) after the label in sidebar and list, and a hidden suffix ", switched off". It still opens its page,
-  which shows the feature-off empty state (10.1).
+  which shows the feature-off empty state (10.1). The circle has no element of its own: the stylesheet draws it
+  on the item's `data-state="off"` (a ring in `--muted`, the size of `icon--s`), and the shell sets that attribute
+  and the hidden suffix from the Hub's list of features.
 - Loading: summaries show a skeleton line until their data arrives; labels and icons are static and never wait.
 - Error: a summary whose data failed reads "Not available" in `--muted`; the item still navigates.
 
@@ -1608,7 +1610,7 @@ spools) so they can be scanned, sorted, opened and acted on. One markup renders 
 | Container | `--surface`, 1 px `--border`, `--r`; CSS grid, every row a `subgrid` of the collection's column template | Grid `repeat(auto-fill, minmax(18rem, 1fr))`, gap `--s4` | Grid `repeat(auto-fill, minmax(14rem, 1fr))`, gap `--s4` | `--surface` block, `--r`, 1 px `--border` hairlines between rows inset by the visual's width |
 | Item | Main row min height `var(--row)` (48 px); 1 px `--border` between items | Card: `--surface`, 1 px `--border`, `--r`, padding `--s4`, gap `--s2` | Tile: `--surface`, 1 px `--border`, `--r`, padding `--s4`; `visual` at the top, `calc(var(--s7) * 2)` | Row min height `var(--row)` (48 px), padding `var(--s3) var(--s4)` |
 | Cells shown | prio 1 always; prio 2 from tablet up; prio 3 on desktop only | prio 1 and 2, each prio-2 field as "key: value" | prio 1 only | `visual`, `title` with prio-1 fields joined into one sub-line, `status`, `go` |
-| Head | `--surface-2`, height 44 px, `--fs-xs` uppercase 0.05em `--muted` (foundations §9) | A wrapping row of sort chips labelled "Sort by" | As cards | As cards |
+| Head | `--surface-2`, height 44 px, `--fs-xs` uppercase 0.05em `--muted` (foundations §9) | A wrapping row of sort chips labelled "Sort by": the head row holds the label once, in every profile, as `<span class="coll__sortlabel">` (catalogue key `coll_sort_by`), hidden under `table` and shown before the chips here | As cards | As cards |
 | Text | Cells `--fs-m`; title `--fs-b` weight 600; sub-line `--fs-s` `--muted`; data in `mono` | Title `--fs-l` weight 650 | Title `--fs-l` weight 650 | Title `--fs-b` weight 600 |
 | Actions | `actions` cell at the row end, right aligned | Bottom of the card | Bottom of the tile, main action full width | Not on the row: in the detail |
 
@@ -1807,8 +1809,9 @@ drawer and form hosts are drawn as bottom sheets (9.1).
 **Behaviour and keyboard.**
 - **Address.** Opening a detail pushes its address (`#printers/p1`, `#recent/214`); loading that address opens it;
   Back closes it. The collection's title links use the same address, so every profile opens in the same way.
-- **How many open.** `inline`: several at once. `card`, `sheet`, `pane`: one; opening another closes the first
-  (asking first if it holds a dirty form).
+- **How many open.** `inline` and `card`: several at once (an open card grows to the full width of the grid, one
+  under another). `sheet` and `pane`: one; opening another closes the first (asking first if it holds a dirty
+  form).
 - **Modal or not.** A region in a host (the table above) is modal: Escape, Close or a tap on the scrim close it,
   as for any dialog or sheet. With `pane` it is not modal: Escape moves focus back to the item's row. In-place
   regions under `inline` and `card` are part of the page flow.
