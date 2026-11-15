@@ -451,6 +451,10 @@ warn triangle, one sentence, one default button.
 | Devices | "<n> paired" | "<m> Tag Readers" | `G state` `devices`, `readers` |
 | Label Reader | "<used> of <limit>" | "Cloud reads used today" | The "reads used today" check row of `G overview` |
 
+When Share corrections is on and corrections are waiting (10.5.2), the Label Reader tile adds the link line
+"<n> corrections waiting to be shared" to `#settings/label-reader`. That line is the only reminder: no toast, no
+mark on the navigation, and nothing is ever sent by itself.
+
 When the feature behind a tile is off, the tile shows "Switched off" in `--muted` and still links to its section.
 
 **Checks** (a collection of the Hub's `rows`, `table` profile in Console).
@@ -811,6 +815,8 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 
 - Header meta: "The newest <keep> additions are kept with their photos (<size> now)." with "Change" as a link to
   `#settings/label-reader`; then "Label Reader" followed by a status badge "On" or "Off".
+  While Share corrections is on (10.5.1): then "Share corrections" with the badge "On" and the link "<n> waiting"
+  to `#settings/label-reader`.
 - Filter (segmented choice, header actions): "All <n>" / "To check <m>", where To check means medium or low
   confidence on any field. Shown only when the Hub sends confidence.
 - More than 50 records: paged, 50 per page, with "Newer" / "Older" at the foot.
@@ -843,6 +849,11 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 | Empty note | error, at the text area | "Say what is wrong first, for example: brand is Polymaker." |
 | No photo, only On this Hub on (409 `no_photo`, unreleased) | error | "No photo was kept for this record, and the On this Hub engine needs one. Switch on Cloud in Features, or correct the fields by hand." |
 | Daily limit reached | error | The Hub's text, for example "Today's Cloud reads are used up. Correct the fields by hand, or raise Reads per day in Settings > Label Reader." |
+| Editing or a suggestion shown, Share corrections on | Note, above the Save changes or Accept button | "Share corrections is on: this correction will wait on this Hub to be shared." |
+| Save changes or Accept, Share corrections on | Note, after the result | "This correction is waiting to be shared." with the link **Corrections waiting** (`#settings/label-reader`) |
+| The same, no photo kept for the record | Note | "Not shared: no photo was kept for this record." |
+| The same, the reader did not take it | warn | "Saved. The correction is not waiting to be shared: <the Hub's reason>." The save itself never fails or waits because of sharing. |
+| Undo, Share corrections on | (none) | The correction waiting follows the record: it holds the record's values as they are now, and is removed when nothing differs from the reading any more. |
 
 | State | Text |
 |---|---|
@@ -1177,6 +1188,7 @@ Side drawer on desktop, full-height dialog on tablet, bottom sheet on phone. Add
 |---|---|
 | Title | "Turn on <feature>?" / "Turn off <feature>?" / "Change the setup to <setup>?" |
 | Notes | The Hub's `notes`, one per line ("Turns on: …", "Turns off: …") |
+| Corrections waiting | Only when turning off Label Reader: On this Hub while corrections are waiting (10.5.2): a warn line "Deletes <n> corrections waiting to be shared. Send them first in Settings > Label Reader, or go on." They are kept by the reader and go with it. |
 | Afterwards | "On afterwards:" and the list of feature names, or "Nothing" |
 | Settings it needs | One labelled field per `needs` item: the label from the item's `prompt` (for example "Public https address of the web app", placeholder `https://hub.example/filament`); required |
 | Refused | Error banner with the Hub's `refused` text, rewritten when it matches: "This page belongs to the Hub service. To switch it off, run on the Hub: `sudo spoolwarden features off hub`." Apply is then absent. |
@@ -1241,7 +1253,8 @@ Phone:  Settings opens on the list of groups (a collection of rows: group name, 
   fields as label-and-control rows (label left 200 px on desktop, above the control on tablet and phone), a foot
   with the inline result at the left and the group's Save at the right.
 - Phone list of groups, one-line states: Appearance "<Light/Dark/System> · <theme>"; General "<display name>";
-  Storage locations "<n> locations"; Label Reader "<engine order in words>"; Backups and restore "Last: <time>" or
+  Storage locations "<n> locations"; Label Reader "<engine order in words>", followed by " · <n> corrections
+  waiting" when there are any; Backups and restore "Last: <time>" or
   "Unlock to show"; Network and addresses "<public address>" or "No public address"; Web passphrase "Set" / "Not
   set"; Filament Catalog "<version>" or "Not downloaded"; Weigh Station voice "<Piper / espeak-ng>" or "Switched off".
 
@@ -1320,9 +1333,99 @@ only Records kept stays editable.
 | Tier | Segmented choice "Automatic" / "Processor (CPU)" / "Graphics card (GPU)" | `local_intake.tier` (unreleased; `auto` / `cpu` / `gpu`) | On this Hub on | Hint "Automatic uses the graphics card when the reader has one." |
 | Records kept | Number | `intake.history_keep` | Always | Hint "How many of the newest additions Recently added keeps with their photos (0 keeps none). Now <count> records, <size> of photos; a record with photos takes about 0.5 to 2 MB." Field error "Enter a whole number from 0 to 500." |
 
-Fields are sent in this order: Engine order, Address, Tier, Records kept, Anthropic API key, Claude model, Reads per
-day, so the two that restart the Hub go last. When either of the last two is among the changes, Save opens a
+Fields are sent in this order: Engine order, Address, Tier, Records kept, Share corrections (10.5.1), Anthropic API
+key, Claude model, Reads per day, so the two that restart the Hub go last. When either of the last two is among the changes, Save opens a
 confirm first (10.11). Save: **Save Label Reader**.
+
+#### 10.5.1 Share corrections
+
+The last block of the Label Reader group, under the sub-heading "SHARE CORRECTIONS". Off by default. It is the
+only control of the feature: there is no address to see or set anywhere (the reader knows where its maintainer
+collects corrections; the Hub never tells it).
+
+```
+| SHARE CORRECTIONS                                                                                          |
+| Share corrections to improve the Label Reader                                                     [ off ] |
+| When this is on, each correction you make to a reading waits on this Hub to be shared: the label photos   |
+| (made smaller, with location and camera data removed), what the Label Reader read, what you changed it    |
+| to, and your note if you wrote one. Readings by On this Hub and by Cloud (Claude) both count. Nothing is  |
+| sent until you press Send now; then the corrections waiting go to the project maintainer for review, to   |
+| improve the Label Reader.                                                                                 |
+```
+
+| Field | Type | Key / endpoint | Shown | Notes |
+|---|---|---|---|---|
+| Share corrections to improve the Label Reader | Switch, off by default; the paragraph above is its description (`aria-describedby`) and is always shown, on or off | `label_reader.share_corrections` → `P settings/general` (code), saved by **Save Label Reader**; the Hub then sets the reader the same way in a short job (the job strip follows it) | Always, in the group | Result after the job: "Saved: Share corrections. The reader restarted." A correction is a change saved in Recently added (Save changes, or Accept of a suggestion) or a read field changed on the Check step while adding spools; from then on each one waits in 10.5.2, with no question per spool. |
+
+| Condition | The switch | Line under it |
+|---|---|---|
+| Label Reader: On this Hub is off or not installed | Disabled, off | Info: "Needs Label Reader: On this Hub, which keeps the corrections until they are sent. Switch it on in Features." with the link **Features**. Cloud (Claude) readings are shared too once it is on. |
+| The reader does not offer it (an older reader) | Disabled, off | Info: "The reader on this Hub is too old to share corrections. Update it in Updates." with the link **Updates** |
+| The reader does not answer | Disabled, showing the saved value | warn: "The reader does not answer, so this cannot be changed now." |
+| The reader's own state differs from the saved setting | Enabled, showing the saved value | warn: "The reader is set differently from this Hub. Save Label Reader to set it again." (Save is then enabled without another change) |
+
+Switching it off stops new corrections from being added. When corrections are still waiting, Save first asks what
+to do with them (10.11, "Stop sharing corrections?").
+
+#### 10.5.2 Corrections waiting
+
+A card of its own directly under the Label Reader group, outside the group's Save: everything in it applies at
+once. Shown while Share corrections is on (as saved), and for as long as anything is still waiting after it was
+switched off. It has no address of its own; links to it go to `#settings/label-reader` and scroll to the card.
+
+**Data** (thin pass-through to the reader; the names are the server builder's, Stage V1.4):
+`G label-reader/corrections` (view) → `{sharing, count, bytes, entries}`, each entry `{id, record, item, at,
+engine, changes: [{field, read, now}], note, photos, queued, reason}`; thumbnails
+`G label-reader/corrections/<id>/photos/<n>` (view); `P label-reader/corrections/<id>/remove` (code);
+`P label-reader/corrections/remove-all` (code); `P label-reader/corrections/<id>/retry` (code);
+`G label-reader/corrections/package` (view); `P label-reader/corrections/send` (code).
+
+```
+Desktop
++-- Corrections waiting -------------------------------------------------- 12 waiting · 3.4 MB --+
+| Nothing is sent until you press Send now. Remove any you do not want to share.                  |
+|  PHOTO   RECORD                               READ BY       CHANGES                              |
+|  [img2]  Polymaker PolyTerra PLA Charcoal..   On this Hub   Brand: Polymakr -> Polymaker [Remove]|
+|          2026-11-12 14:09                                   Colour: #2B2B2E -> #1F1F22           |
+|                                                             Note: brand is Polymaker             |
+|  [img1]  Bambu Lab PETG HF Orange             Cloud         Net weight: 1000 g -> 750 g  [Remove]|
+|          2026-11-12 09:50                     (Claude)                                           |
+| [Remove all]                                          [Download the package]   [Send now]        |
++--------------------------------------------------------------------------------------------------+
+Tablet: Read by moves under the record's name.
+Phone:  rows become cards (photo left; name, time and Read by; the changes; Remove at the foot of the card);
+        the three buttons stack full width, Send now first.
+```
+
+| Column | Content | Priority |
+|---|---|---|
+| Photo | Photo thumbnail of the first photo (48 px square, rounded `--r-s`) with the photo count; pressing it opens the photo viewer of 6.3 on the photos that would be sent | P1 |
+| Record | Link "<vendor> <name>" to `#recent/<id>`, and under it the time of the correction as `YYYY-MM-DD HH:MM`, `--mono`. A record that Recently added no longer keeps: the name as text and "This record is no longer kept." in `--muted`; the correction still waits, with its photos | P1 |
+| Read by | "On this Hub" or "Cloud (Claude)": the engine whose reading was corrected | P2 |
+| Changes | Change list, one line per field: "<Field>: <what was read> → <what it is now>", values in `--mono`; then "Note: <note>" when there is one | P1 |
+| Remove | Default button **Remove** (accessible name "Remove the correction for <vendor> <name>") | P1 |
+
+| Control | Type | Endpoint | Notes |
+|---|---|---|---|
+| Title-row count | Text | from `count`, `bytes` | "<n> waiting · <size>" ("1 waiting"); absent when nothing waits |
+| Intro | Text | | "Nothing is sent until you press Send now. Remove any you do not want to share." With Share corrections off and corrections left: "Share corrections is off, so no new corrections are added. These are still waiting." |
+| **Remove** | Default button per row | `P label-reader/corrections/<id>/remove` (code) | No confirmation: it only takes the correction out of this list. Result (note): "Removed. The record in Recently added is unchanged." |
+| **Remove all** | Danger button, at the left of the foot; absent when nothing waits | `P label-reader/corrections/remove-all` (code) | Asks first (10.11). Result: "Removed <n> corrections. Nothing was sent." |
+| **Download the package** | Default button; disabled when nothing waits ("Nothing is waiting.") | `G label-reader/corrections/package` (view) | Saves `spoolwarden-corrections-<YYYY-MM-DD>.zip`. Hint under the buttons: "The package is the exact file that Send now sends, so you can look at it first." Failure: "Could not make the package. <Hub's text>" |
+| **Send now** | Primary button; disabled when nothing waits ("Nothing is waiting.") | `P label-reader/corrections/send` (code) | Asks first (10.11). Sending: inline spinner "Sending <n> corrections…"; the list is not editable meanwhile |
+
+| Event or state | Shape | Text |
+|---|---|---|
+| Sent | OK | "Sent <n> corrections. Thank you." The list empties. |
+| Not sent | error | "Could not send. <the Hub's or the reader's reason> The corrections are still waiting." |
+| A correction the reader did not take | warn line in its row, in place of the changes' note | "Not waiting: the reader did not take this correction. <reason>" with default **Try again**; such a row is never part of the package or of Send now, and is not counted |
+| Empty, Share corrections on | Empty state with the Label Reader icon | "No corrections waiting" / "Corrections you make in Recently added, or while adding spools, appear here." |
+| Loading | | Three skeleton rows |
+| The reader does not answer | Error state | "The reader does not answer, so the corrections waiting cannot be shown. They are kept." + **Try again** |
+| Error | Error state | "Could not read the corrections waiting. <Hub's text>" + **Try again** |
+| Locked | | The list and Download the package work; Remove, Remove all, Try again and Send now ask for the code in place |
+
+**Main action:** **Send now**, the card's one primary button.
 
 ### 10.6 Backups and restore
 
@@ -1403,6 +1506,9 @@ No Save button.
 |---|---|---|---|
 | Save restarts the Hub | "Restart the Hub to save?" | "A new Claude model or number of reads per day takes effect after a restart. The Hub restarts now and this page comes back by itself." | Cancel · **Save and restart** (primary) |
 | Remove Anthropic API key | "Remove the Anthropic API key?" | "Label Reader: Cloud (Claude) stops reading labels until a new key is set." | Cancel · **Remove key** (danger) |
+| Send the corrections waiting | "Send <n> corrections?" ("Send 1 correction?") | "The photos and values in this list go to the project maintainer for review, to improve the Label Reader. This cannot be taken back." | Cancel · **Send** (primary) |
+| Remove all corrections waiting | "Remove all corrections waiting?" | "<n> corrections are taken out of this list and are not sent. The records in Recently added are unchanged." | Cancel · **Remove all** (danger) |
+| Share corrections switched off while corrections wait (asked by Save Label Reader) | "Stop sharing corrections?" | "<n> corrections are still waiting. Keep them to send later, or delete them now." | Cancel · **Keep them** (default) · **Delete them** (danger). Cancel saves nothing; the other two save the group. |
 | Remove Catalog token | "Remove the Catalog token?" | "The Filament Catalog can then download only from public sources." | Cancel · **Remove token** (danger) |
 | Catalog go back | "Go back to the previous Filament Catalog?" | "The version before the last update comes back. Your own entries are kept." | Cancel · **Go back** (danger) |
 | Get the certificate | "Get the certificate now?" | "Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router." | Cancel · **Get the certificate** (primary) |
@@ -1931,3 +2037,4 @@ column says.
 | Printer states for the whole list in one light read, or a change stream | Printers refresh every 10 s (2.7) | `G state` every 10 s |
 | Feature titles in the plain names of section 9.1 | Features collection | The page maps code names to the names of section 9.1 |
 | Cloud reads used today and the daily limit as numbers in `G state` | Overview Label Reader tile (4.2) | The numbers are taken from the Overview check row that reports them; when that row is missing the tile shows "Reads per day: <limit>" |
+| Share corrections: what the reader can do and its state (it offers sharing, sharing on or off, how many wait), the setting `label_reader.share_corrections` with the job that sets the reader, the corrections waiting (list, thumbnails, remove, remove all, try again, package, send), and each correction handed to the reader when it is saved | Settings > Label Reader (10.5.1, 10.5.2), Recently added (6.2, 6.4), Overview tile (4.2), Features preview (9.4) | The block SHARE CORRECTIONS shows only its paragraph and the line "Not available on this Hub yet."; nothing else of the feature is shown |
