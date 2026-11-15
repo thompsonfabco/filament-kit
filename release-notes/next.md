@@ -103,6 +103,12 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **The documents use the new names.** The README, the user guide and the install guides now say Hub, Hub page, web app, app, Features, Weigh Station, Tag Reader, Label Reader, Filament Catalog, Slicer presets and Slicer Sync, and show the commands in their new spellings (the old spellings still work). The user guide's command table is the one `filament-kit help` prints.
 - **The last old names are gone from the texts.** The Android app's messages and the Hub's own words now say Hub, Hub page, Label Reader, Slicer presets and Slicer Sync.
 
+## Ready for the new name
+
+The updater, the backup reader, the pairing link readers, the Klipper lane check and the Bambu calibration check now also
+accept the second set of names a later release will use (update download, backup, link, lane source and calibration
+job), and the Hub announces itself on the network under both service types. Everything the kit makes is named as before.
+
 ## Still to come
 
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the

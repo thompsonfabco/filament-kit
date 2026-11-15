@@ -7,4 +7,9 @@
     <port>8710</port>
     <txt-record>api=1</txt-record>
   </service>
+  <service>
+    <type>_spoolwarden._tcp</type>
+    <port>8710</port>
+    <txt-record>api=1</txt-record>
+  </service>
 </service-group>

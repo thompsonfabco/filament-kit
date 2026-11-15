@@ -45,7 +45,7 @@ class Link:
 def parse_link(text: str) -> Link:
     """`fkit://pair?h=<host>&p=<port>&t=<token>&fp=<sha256>&ip=<ip>...` (as `filament-kit pair --station` prints)."""
     u = urllib.parse.urlsplit((text or "").strip())
-    if u.scheme.lower() != "fkit" or u.netloc.lower() != "pair":
+    if u.scheme.lower() not in ("fkit", "spoolwarden") or u.netloc.lower() != "pair":
         raise ValueError("not a filament-kit pairing link")
     q = urllib.parse.parse_qs(u.query)
 
