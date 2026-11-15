@@ -194,13 +194,22 @@ def generate(data):
 
 def generate_js(data):
     keys = ", ".join(json.dumps(k) for k in data["themes"])
+    # each theme's (light, dark) surface: the colour of the two theme-color metas (a dark block holds only what differs)
+    sur = {k: [t["light"]["surface"].lower(), t["dark"].get("surface", t["light"]["surface"]).lower()] for k, t in data["themes"].items()}
+    table = ", ".join(f"{json.dumps(k)}: {json.dumps(v)}" for k, v in sur.items())
     return (
         f"// {HEADER}\n"
         "(function (r) {\n"
-        "  var a = null, l = null;\n"
+        "  var a = null, l = null, s = {" + table + "};\n"
         '  try { a = localStorage.getItem("spoolwarden.appearance"); l = localStorage.getItem("spoolwarden.look"); } catch (e) {}\n'
         '  if (a === "light" || a === "dark") r.setAttribute("data-theme", a);\n'
         f'  if ([{keys}].indexOf(l) >= 0) r.setAttribute("data-look", l);\n'
+        '  var c = s[r.getAttribute("data-look")], m = document.querySelectorAll("meta[name=theme-color]"), i, d;\n'
+        "  if (!c) return;\n"
+        "  for (i = 0; i < m.length; i++) {\n"
+        '    d = a === "dark" || (a !== "light" && /dark/.test(m[i].getAttribute("media") || ""));\n'
+        '    m[i].setAttribute("content", c[d ? 1 : 0]);\n'
+        "  }\n"
         "})(document.documentElement);\n"
     )
 

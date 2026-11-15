@@ -181,6 +181,7 @@ textarea.field__control{min-height:calc(var(--s7) + var(--s6) + var(--s1));max-h
 .theme-picker__preview{display:grid;grid-template:var(--s3) 1fr / var(--s5) 1fr;aspect-ratio:4 / 3;border-radius:var(--r-s);background:var(--bg)}
 .theme-picker__bar{grid-column:1 / -1}
 .theme-picker__bar,.theme-picker__nav{background:var(--surface)}
+.theme-picker__rows{background:var(--surface-2)}
 .theme-picker__name{font-size:var(--fs-b)}
 .theme-picker__line{gap:var(--s1)}
 /* form group (5.11), sub-navigation (6.4) */

@@ -86,6 +86,8 @@ async function main() {
         waiting.delete(msg.id);
         clearTimeout(timer);
         msg.error ? rej(new Error(msg.error.message)) : res(msg.result);
+      } else if (msg.method === "Runtime.bindingCalled" && msg.params.name === "__drive") {
+        drive(JSON.parse(msg.params.payload)).catch((e) => errors.push("drive: " + e.message));
       } else if (msg.method === "Runtime.exceptionThrown") {
         const d = msg.params.exceptionDetails;
         errors.push((d.exception && d.exception.description) || d.text);
@@ -99,8 +101,16 @@ async function main() {
       waiting.set(n, [res, rej, timer]);
       ws.send(JSON.stringify({ id: n, method, params }));
     });
+    // the script may ask for what only the browser can do: a real pointer click at viewport x, y, or a change of the colour
+    // scheme (the phone's light/dark switch); it calls __drive(JSON.stringify({click: [x, y]})) or ({scheme: "light"}) and
+    // waits for the effect it expects
+    const drive = async (o) => {
+      if (o.click) for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: o.click[0], y: o.click[1], button: "left", clickCount: 1 });
+      if (o.scheme) await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: o.scheme }] });
+    };
     await send("Page.enable");
     await send("Runtime.enable");
+    await send("Runtime.addBinding", { name: "__drive" });
     const width = Number(args.width || 1280);
     await send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width <= 600 });
     const fonts = args["font-dir"] || process.env.AUT5_FONT_DIR;

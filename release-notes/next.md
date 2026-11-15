@@ -64,8 +64,9 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Hub page, Printers:** pressing Add again while the Hub is still adding a printer says "Still working. Wait for it to finish.", the same words as the app.
 - **Hub page fixes:** the Trusted computers card no longer shows a stray `null` line and its switch is drawn in full, a failed read of the Weigh Stations asking to pair no longer shows an internal error name, the header name stays on one line on a 320 px phone, the setup command box wraps instead of cutting the command, and the Updates title, Logs service list and Devices card pairs line up with the other sections.
 - **Slicer presets from a phone:** a paired phone can now list the filaments that have no preset line, create a line, add filaments to a line and ask for a build; the Android app's Slicer presets screen uses these. The phone web app's own routes are unchanged.
+- **Theme picker:** the setup page (Settings > Appearance) and the phone web app (its own Theme group in Settings) now have a Theme choice, with Console (dense and technical) the one theme so far. Choosing it is kept on this device and the phone's status bar takes its colour, also when you switch the phone between light and dark. A device that has not chosen shows the Hub's theme for new devices.
 
 ## Still to come
 
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the
-command line's wording and the theme picker) are added here when each one merges.
+command line's wording and the other themes) are added here when each one merges.

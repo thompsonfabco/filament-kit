@@ -320,13 +320,16 @@ window.addEventListener("hashchange", () => {
   }
 });
 
-// ----- Appearance (03 10.2): this device, applied at once; Theme arrives with S6.2 and S6.10 -----
+// ----- Appearance (03 10.2): this device, applied at once; Theme for new devices arrives with S6.10 -----
 function groupAppearance() {
   const res = sbox(), hint = h("p", { class: "field__hint", textContent: SW.t("settings_appearance_mode_hint") });
   const choice = SW.segmented({ legend: SW.t("settings_appearance_mode"), cls: "appearance", name: "appearance-device", value: appearanceNow(),
     options: APPEARANCE.map(([value, icon]) => ({ value, icon, label: SW.t("appearance_" + value) })) });
   choice.addEventListener("change", () => setTimeout(paintList, 0));
-  return setGroup("appearance", { desc: SW.t("settings_appearance_desc"), body: [h("div", { class: "settings__choice" }, choice, hint, res)] });
+  const look = SW.themePicker({ legend: true });    // built from the root's data-look each time, so a redraw keeps the choice
+  look.addEventListener("change", () => setTimeout(paintList, 0));
+  return setGroup("appearance", { desc: SW.t("settings_appearance_desc"), body: [h("div", { class: "settings__choice" }, choice, hint, res),
+    h("div", { class: "settings__choice" }, look, sbox())] });
 }
 
 // ----- General (03 10.3) -----
