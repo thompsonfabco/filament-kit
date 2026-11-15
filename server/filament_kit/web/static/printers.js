@@ -561,7 +561,7 @@ function printersTab() {
         const r = await pj(`${slotPath(g, label)}/load`, { spool_id: s.id, dry_run: dry });
         if (spool !== s) return;                         // another spool was picked meanwhile
         const moved = (r.moved_back || []).filter((m) => m.id !== s.id)
-          .map((m) => t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: label, location: m.location || t("spool_load_previous_place") }));
+          .map((m) => (m.location ? t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: label, location: m.location }) : t("spool_load_plan_goes_back_noplace", { id: m.id ?? "?", slot: label })));
         const problems = (r.problems || []).map((x) => sentence("bad", x));
         if (dry) {
           const nozzle = r.nozzle_assumed ? t("spool_load_plan_nozzle_assumed", { mm: r.nozzle_mm ?? 0.4 }) : (r.nozzle_mm ? t("spool_load_plan_nozzle", { mm: r.nozzle_mm }) : "");
@@ -590,15 +590,15 @@ function printersTab() {
       let plan = null;
       await act(line, t("common_checking"), async () => { plan = await pj(`${slotPath(g, label)}/unload`, { dry_run: true }); return null; }, { button, again: () => unloadSlot(sl, sp, button) });
       if (!plan) return;                                // the line says why; its Try again runs the whole unload, the sheet included
-      const where = plan.location || ((plan.moved_back || [])[0] || {}).location || t("spool_load_previous_place");
+      const where = plan.location || ((plan.moved_back || [])[0] || {}).location || "";     // none known: the whole no-place text
       const name = sp.name || t("spool_title", { id: sp.id });
       const r = await sheetAsk({ kind: "confirm", title: t("printer_unload_title", { slot: label }), opener: button,
-        text: t("printer_unload_body", { name, slot: label, location: where }), confirm: t("common_unload"),
+        text: where ? t("printer_unload_body", { name, slot: label, location: where }) : t("printer_unload_body_noplace", { name, slot: label }), confirm: t("common_unload"),
         run: () => pj(`${slotPath(g, label)}/unload`, { dry_run: false }) });
       if (!r) return;
       SW.toast(t("printer_unload_line", { name, slot: label }));
       slotSay(label, [t("printer_unload_line", { name, slot: label }),
-        ...(r.moved_back || []).map((m) => t("printer_unload_moved_back", { id: m.id ?? "?", location: m.location || t("spool_load_previous_place") }))], "ok");
+        ...(r.moved_back || []).map((m) => (m.location ? t("printer_unload_moved_back", { id: m.id ?? "?", location: m.location }) : t("printer_unload_moved_back_noplace", { id: m.id ?? "?" })))], "ok");
     } finally { g.slotBusy = false; }
   }
 

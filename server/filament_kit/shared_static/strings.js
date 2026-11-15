@@ -1714,6 +1714,7 @@ window.SW_TEXT = Object.freeze({
   "add_summary_preview_ok": "Preview ready. Nothing is saved yet.",
   "printer_unload_line": "Unloaded {name} from {slot}.",
   "printer_unload_moved_back": "Moved back: spool {id} to {location}.",
+  "printer_unload_moved_back_noplace": "Moved back: spool {id} to its previous place.",
   "printer_used_empty": "Nothing used in the last 7 days.",
   "printer_used_job_default": "Print job",
   "printer_used_last_days": "Last 7 days",

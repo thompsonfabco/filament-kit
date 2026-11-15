@@ -2342,6 +2342,8 @@
     <string name="printer_unload_line">Unloaded %1$s from %2$s.</string>
     <!-- 1=id 2=location -->
     <string name="printer_unload_moved_back">Moved back: spool %1$s to %2$s.</string>
+    <!-- 1=id -->
+    <string name="printer_unload_moved_back_noplace">Moved back: spool %1$s to its previous place.</string>
     <string name="printer_used_empty">Nothing used in the last 7 days.</string>
     <string name="printer_used_job_default">Print job</string>
     <string name="printer_used_last_days">Last 7 days</string>
