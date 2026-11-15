@@ -173,7 +173,7 @@ async function until(look, what) { for (let i = 0; i < 300; i++) { const v = loo
 const d = document, r = d.documentElement, $ = (s) => d.querySelector(s), vis = (el) => !!el && el.getClientRects().length > 0;
 const at = () => { const a = d.activeElement; return a ? { tag: a.tagName, href: a.getAttribute("href"), expand: a.classList.contains("coll__expand") } : null; };
 const snap = () => ({ look: r.getAttribute("data-look"), drill: $(".shell").getAttribute("data-drill"), nav: vis($(".shell > .nav")), main: vis($(".shell__main")), back: vis($(".topbar__back")),
-  more: vis($(".shell .nav__more")), items: [...d.querySelectorAll(".shell .nav__item")].filter(vis).length, hash: location.hash, active: at(), scrollW: r.scrollWidth, clientW: r.clientWidth });
+  more: vis($(".shell .nav__more")), items: [...d.querySelectorAll(".shell .nav__item")].filter(vis).length, hash: location.hash, len: history.length, active: at(), scrollW: r.scrollWidth, clientW: r.clientWidth });
 const item = (s) => $(`.shell .nav__item[href="#${s}"]`);
 await until(() => $(".shell .nav__item") && $(".shell").getAttribute("data-drill"), "the navigation");
 await sleep(500);
@@ -199,13 +199,6 @@ $(".topbar__back").click();
 await until(() => $(".shell").getAttribute("data-drill") === "list", "the list");
 await sleep(300);
 out.list = snap();
-history.back();
-await until(() => $(".shell").getAttribute("data-drill") === "page", "the section again (the phone's Back)");
-out.backToPage = snap();
-history.back();
-await until(() => $(".shell").getAttribute("data-drill") === "list", "the list again (the phone's Back)");
-await sleep(300);
-out.backToList = snap();
 location.hash = "#printers/00M00A000000001";                         // the address a person types (it is not written while the Hub is locked)
 await until(() => $(".shell").getAttribute("data-drill") === "page" && $(".coll--printers .coll__expand[aria-expanded=true]"), "the printer the address names");
 await sleep(300);
@@ -259,9 +252,7 @@ def test_on_a_phone_the_hub_page_opens_on_the_list_and_a_printer_drills_in_and_b
     assert got["closed"]["expanded"] == "false" and got["closed"]["onRow"] is True and got["closed"]["active"]["expand"] is True      # focus is back on the row
     assert got["closed"]["shown"] > 1 and got["closed"]["hash"] == "#printers"
     _check_list(got["list"], "#printers")                                  # Back again: the list, focus on the Printers row
-    _check_page(got["backToPage"])
-    _check_list(got["backToList"], "#printers")
-    assert got["backToList"]["hash"] in ("", "#")                           # the phone's own Back reaches the first page
+    assert got["list"]["len"] == got["closed"]["len"] and got["list"]["hash"] in ("", "#")     # the in-page Back went back through history: no entry left that reopens the page
     _check_page(got["deep"])
     assert got["deep"]["title"] == "Workshop X1" and got["deep"]["hash"] == "#printers/00M00A000000001"       # the address opens the printer it names
 
