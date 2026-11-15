@@ -1050,3 +1050,607 @@ def test_an_allow_list_line_with_a_view_covers_that_view_only(probe, tmp_path):
     run = _run(*args, str(wrong))
     assert run.returncode == 1 and "#home | view did not open | page: allowed 1, found 0" in run.stdout, run.stdout + run.stderr
     assert ("#gone", "view did not open") in {(r["view"], f["check"]) for r in json.loads(run.stdout)["report"] for f in r["findings"]}
+
+
+# ---- Spools (design 09 S3.10): every state of 04 5, driven in the page and audited ----------------------------------------
+# The Hub is the real one on a fake Spoolman (find, spool read, weight, move, mark empty). What needs a tag on a reader, or a
+# printer, is answered by the state's script (the page's fetch is stood in for `tag`, `open`, `printers/...`). A state script
+# throws when the page is not in the state it names, then the runner audits that state at 1280 px and 320 px, light and dark.
+
+SP_SEALED_STATE = ("Sealed stock", "Rack 1", "Sealed stock", "Rack 1")      # where the four filaments' spools are (index 0 and 2 sealed)
+
+
+class SpoolsHub:
+    def __init__(self, url, ids):
+        self.url, self.ids = url, ids
+
+
+def _spools_hub(tmp_path, monkeypatch, spoolman_url, printers=False, bulk=0):
+    for name in ("etc", "state", "opt"):
+        (tmp_path / name).mkdir()
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+    mods = {n: False for n in modules.MODES["server"]}
+    mods.update(web=True, ai_intake=True, presets=True, printers=printers)
+    config.save({"placement": RULES, "modules": mods, "server_name": "Workshop hub", "web": {"lan": ["127.0.0.0/8"]}})
+    api = spoolman_url + "/api/v1"
+    ids = []
+    with httpx.Client() as c:
+        vendors = {}
+
+        def filament(vendor, name, material, colour):
+            if vendor not in vendors:
+                vendors[vendor] = c.post(api + "/vendor", json={"name": vendor, "empty_spool_weight": 200}).json()["id"]
+            return c.post(api + "/filament", json={"vendor_id": vendors[vendor], "name": name, "material": material, "color_hex": colour,
+                                                   "density": 1.24, "diameter": 1.75, "weight": 1000, "spool_weight": 200}).json()["id"]
+        for i, (vendor, name, material, colour) in enumerate(FILAMENTS):
+            sealed = i % 2 == 0
+            ids.append(c.post(api + "/spool", json={"filament_id": filament(vendor, name, material, colour), "location": SP_SEALED_STATE[i],
+                                                    "remaining_weight": 1000 - 150 * i,
+                                                    "comment": inventory.SEALED_COMMENT if sealed else None}).json()["id"])
+        if bulk:
+            fid = filament("Elegoo", "PLA Silver", "PLA", "C0C0C0")
+            for _ in range(bulk):
+                c.post(api + "/spool", json={"filament_id": fid, "location": "Sealed stock", "remaining_weight": 1000, "comment": inventory.SEALED_COMMENT})
+    sm = Spoolman(spoolman_url)
+    sm.ensure_fields()
+    app = Starlette(routes=IntakeApp(mcp_tools.Tools(sm), public_url=None, lan_cidrs=["127.0.0.0/8"], push=False).routes())
+
+    class HttpsOrigin:
+        """The web app answers a change only from its own https address, and this test's server is plain http: the Origin the browser
+        sends is written as https here (shipped code is untouched), so Preview, Link and the edits can run in the page."""
+        async def __call__(self, scope, receive, send):
+            if scope["type"] == "http":
+                scope["headers"] = [(k, b"https://" + v[len(b"http://"):] if k == b"origin" and v.startswith(b"http://") else v) for k, v in scope["headers"]]
+            await app(scope, receive, send)
+    running = serving.start(HttpsOrigin())
+    try:
+        yield SpoolsHub(running.url + "/intake", ids)
+    finally:
+        running.stop()
+
+
+@pytest.fixture
+def spools_hub(tmp_path, monkeypatch, spoolman_url):
+    yield from _spools_hub(tmp_path, monkeypatch, spoolman_url)
+
+
+@pytest.fixture
+def spools_hub_printers(tmp_path, monkeypatch, spoolman_url):
+    yield from _spools_hub(tmp_path, monkeypatch, spoolman_url, printers=True)
+
+
+SP_BULK = 55
+
+
+@pytest.fixture
+def spools_hub_paged(tmp_path, monkeypatch, spoolman_url):
+    yield from _spools_hub(tmp_path, monkeypatch, spoolman_url, bulk=SP_BULK)
+
+
+SP_PRELUDE = r"""
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (what, fn, ms = 10000) => { const t0 = Date.now(); for (;;) { const v = fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('Spools: ' + what); await sleep(50); } };
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const text = (s, r = document) => ($(s, r) ? $(s, r).textContent.replace(/\s+/g, ' ').trim() : '');
+const need = (what, ok) => { if (!ok) throw new Error('Spools: ' + what); };
+const typeIn = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+const reply = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+const stub = (re, answer) => { const real = window.fetch.bind(window); window.fetch = (u, i) => (re.test(String(u).split('/api/')[1] || '') ? answer(u, i || {}) : real(u, i)); };
+const fetchReal = window.fetch.bind(window);
+const stubPost = (re, answer) => { const real = window.fetch.bind(window); window.fetch = (u, i) => (re.test(String(u).split('/api/')[1] || '') && (i || {}).method === 'POST' ? answer(u, i) : real(u, i)); };
+const spy = (re, log) => { const real = window.fetch.bind(window); window.fetch = (u, i) => { if (re.test(String(u).split('/api/')[1] || '') && (i || {}).method === 'POST') log.push(JSON.parse(i.body)); return real(u, i); }; };
+const repoll = () => document.dispatchEvent(new Event('visibilitychange'));       // the page polls the tag at once when it is shown again
+const button = (label, root = document) => $$('button', root).find((b) => b.textContent.trim() === label && !b.closest('.hidden'));   // not another screen's, hidden
+const field = (label, root = document) => $$('.field', root).find((f) => f.querySelector('.field__label').firstChild.textContent.trim() === label);
+const reason = (b) => { const id = b.getAttribute('aria-describedby'); return b.getAttribute('aria-disabled') === 'true' && id && document.getElementById(id) ? document.getElementById(id).textContent : null; };
+const TAG = (o) => Object.assign({ nfc_id: '04:77:90:E1', read_at: 1700000000, age_seconds: 12, reader: 'station', scale: null,
+  text: 'last tag: 04:77:90:E1  12 s ago on the station reader\n  not linked to any spool yet (a new tag): ready to link' }, o);
+const tap = async (o) => { stub(/^tag$/, () => reply(TAG(o))); repoll(); await until('the tag is shown', () => text('.spools__tagid') === TAG(o).nfc_id && text('.spools__age') !== ''); };
+const waitPage = () => until('the page did not draw', () => $('.spools__results .spools__row, .spools__none') && !document.querySelector('[aria-busy="true"]:not(button)'));
+const search = () => $('.spools__search .field__control');
+const sheetOpen = () => until('the sheet', () => $('dialog[open].sheet'));
+const sheetReady = async () => { const d = await sheetOpen(); await until('the summary', () => $('.spools__sum-text') && !$('.spools__sum .skeleton')); return d; };
+const out = (s) => $$('.spools__sheet .result').find((r) => r.textContent.includes(s));
+const FRESH = () => localStorage.removeItem('spoolwarden.sealedOnly');
+"""
+
+SP_READY = {
+    "list": r"""
+  await waitPage();
+  need('the intro', text('.spools > p').startsWith("Tap the spool's tag on a reader"));
+  need('the Last tag group says no tag yet', $$('.group__title').some((t) => t.textContent === 'Last tag') && text('.spools__tag').includes('No tag read yet: tap one on a reader.'));
+  need('the search label is for screen readers', $('.spools__search .field__label').classList.contains('sr') && text('.spools__search .field__label') === 'Find a spool'
+    && search().getAttribute('placeholder') === 'Brand, colour, material');
+  need('Sealed only is on', $('.spools .check__input').checked && text('.spools .check__label') === 'Sealed only');
+  need('two sealed spools, one filament group each', $$('.spools__row').length === 2 && $$('.spools__fil-name').length === 2);
+  need('a row says spool, place, weight and Sealed', /^Spool \d+/.test(text('.spools__row b')) && /Sealed stock · \d+ g · Sealed/.test(text('.spools__row-text')));
+  need('a swatch and a chevron in a row', $('.spools__row .swatch') && $('.spools__row .spools__chevron'));
+  need('the filament line has material and number', /^[A-Z]+ · F\d+$/.test(text('.spools__fil-meta')));
+  need('one h1', $$('h1').length === 1);
+""",
+    "tag_fresh": r"""
+  await waitPage(); await tap({ scale: { grams: 1212, age_seconds: 8 } });
+  const t = text('.spools__tag');
+  for (const part of ['04:77:90:E1', '12 s ago', 'Weigh Station', 'scale 1212 g', 'last tag: 04:77:90:E1']) need('the tag says "' + part + '"', t.includes(part));
+  need('the id is in the mono face', $('.spools__tagid').classList.contains('mono'));
+  await tap({ reader: 'reader', read_at: 1700000100, age_seconds: 180, scale: null });
+  await until('the later tap', () => text('.spools__tag').includes('3 min ago'));
+  need('a later tap on the Tag Reader, 3 min old', text('.spools__tag').includes('3 min ago') && text('.spools__tag').includes('Tag Reader') && !text('.spools__tag').includes('scale'));
+""",
+    "tag_stale": r"""
+  await waitPage(); await tap({});
+  stub(/^tag$/, () => Promise.reject(new TypeError('offline')));
+  repoll();
+  await until('the line', () => /Last update .*: the Hub did not answer\./.test(text('.spools .group__body > .result[data-state=warn]')));
+  need('the last tag stays', text('.spools__tagid') === '04:77:90:E1');
+""",
+    "search_results": r"""
+  await waitPage(); typeIn(search(), 'pla');
+  await until('the sealed PLA only', () => $$('.spools__row').length === 1 && text('.spools__fil-name').includes('Polymaker'));
+  $('.spools .check__input').click();
+  await until('opened spools too', () => $$('.spools__row').length === 2 && $$('.spools__fil').length === 2);
+  need('Sealed only is remembered', localStorage.getItem('spoolwarden.sealedOnly') === '0');
+  const second = $$('.spools__row')[1].textContent.replace(/\s+/g, ' ');
+  need('an opened row has its place and weight, no Sealed word', /Rack 1 · \d+ g/.test(second) && !second.includes('Sealed'));
+  FRESH();
+""",
+    "search_empty": r"""
+  await waitPage(); typeIn(search(), 'zzzz');
+  await until('no sealed spools', () => text('.spools__none') === 'No sealed spools match. Turn off Sealed only to include opened spools.');
+  $('.spools .check__input').click();
+  await until('no spools', () => text('.spools__none') === 'No spools match.');
+  FRESH();
+""",
+    "search_error": r"""
+  await waitPage(); stub(/^find\?/, () => reply({ error: 'boom' }, 500));
+  typeIn(search(), 'pla');
+  await until('the words of 04 3.6 and Try again', () => text('.spools__find').includes('The Hub hit an error it did not expect.') && button('Try again', $('.spools__find')));
+""",
+    "search_cut": r"""
+  await waitPage();
+  stub(/^find\?/, () => reply({ matches: 1, filaments: [{ filament_id: 1, vendor: 'Polymaker', name: 'PolyTerra PLA Charcoal Black', material: 'PLA', net_g: 1000, tare_g: 200,
+    color_hex: '2B2B2E', spools: [{ spool_id: 1, location: 'Rack 1', remaining_g: 900, sealed: true, lot: 'L-42', tagged: true }] }], truncated: true, total: 61, offset: 0, has_more: true }));
+  typeIn(search(), 'pla');
+  await until('the cut line', () => text('.spools__results').includes('More spools match. Type more of the name to narrow it down.'));
+  need('the row says place, weight, Sealed, tag and lot', text('.spools__row-text').includes('Rack 1 · 900 g · Sealed · Has a tag · Lot L-42'));
+""",
+    "sealed_remembered": r"""
+  await waitPage();
+  if (localStorage.getItem('spoolwarden.sealedOnly') === null) {                // the first pass turns it off; the next passes load the page with it off
+    $('.spools .check__input').click();
+    await until('stored', () => localStorage.getItem('spoolwarden.sealedOnly') === '0');
+    return;
+  }
+  need('the box loads unchecked and the opened spools are listed', !$('.spools .check__input').checked && $$('.spools__row').length === 4);
+""",
+    "sheet_from_row": r"""
+  await waitPage(); const first = $('.spools__row'); first.click();
+  const d = await sheetOpen();
+  need('the address is the spool', /^#spools\/\d+$/.test(location.hash) && text('dialog[open] .sheet__title') === 'Spool ' + location.hash.split('/')[1]);
+  need('the document title names the spool', document.title.startsWith('Spool ' + location.hash.split('/')[1] + ' · '));
+  $('dialog[open] [aria-label="Close"]').click();
+  await until('back to the list', () => location.hash === '#spools' && !$('dialog[open]'));
+""",
+    "sheet_open": r"""
+  const d = await sheetReady();
+  need('titled by the spool', text('dialog[open] .sheet__title') === 'Spool __ID__' && document.title.startsWith('Spool __ID__ · '));
+  need('the summary names the filament and the place', text('.spools__sum-text').includes('Polymaker PolyTerra PLA Charcoal Black') && /Sealed stock · 1000 g left · Sealed/.test(text('.spools__sum-text')));
+  need('the open part with its tag line', text('.spools__part-title') === 'Open it and link the tag' && text('.spools__sheet-tag') === "No tag read yet: tap the spool's tag on a reader.");
+  const w = field('Weight with spool', d), l = field('Location', d), hu = field('Box humidity', d);
+  need('three optional fields with their units and hints', w && l && hu && w.textContent.includes('(optional)') && w.textContent.includes('g') && hu.textContent.includes('%')
+    && l.textContent.includes('Leave empty to choose automatically.') && hu.querySelector('input').placeholder === 'From the box hygrometer');
+  const link = button('Link tag and open');
+  need('Link says why it waits', reason(link) === 'Preview first: nothing changes until you link.' && !!button('Preview'));
+  need('the other actions, Mark empty last and apart', ['Update weight', 'Move', 'Mark empty'].every((x) => button(x)) && !button('Load into a printer') && button('Mark empty').closest('.spools__danger'));
+  need('the three open actions are not disabled', ['Update weight', 'Move', 'Mark empty'].every((x) => !button(x).getAttribute('aria-disabled')));
+""",
+    "sheet_scale": r"""
+  await waitPage(); await tap({ scale: { grams: 1212, age_seconds: 8 } });
+  location.hash = '#spools/__ID__';
+  const d = await sheetReady();
+  need('the weight is filled from the scale, and says so', field('Weight with spool', d).querySelector('input').value === '1212' && field('Weight with spool', d).textContent.includes('Filled in from the Weigh Station scale, 8 s ago'));
+  need('the tag line names the tap', text('.spools__sheet-tag') === 'Tag: 04:77:90:E1, tapped 12 s ago on the Weigh Station');
+  typeIn(field('Weight with spool', d).querySelector('input'), '1100');
+  await tap({ read_at: 1700000200, age_seconds: 2, scale: { grams: 1300, age_seconds: 2 } });
+  await until('the new tap', () => text('.spools__sheet-tag').includes('tapped 2 s ago'));
+  need('a typed weight is not overwritten by a new tap', field('Weight with spool', d).querySelector('input').value === '1100');
+""",
+    "sheet_preview": r"""
+  const d = await sheetReady(); await tap({});
+  window.__open = []; stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); window.__open.push(b); return reply({ output: 'tag 04:77:90:E1 will be linked to spool __ID__\ndry run: nothing changed', exit_code: 0 }); });
+  typeIn(field('Weight with spool', d).querySelector('input'), '1212');
+  button('Preview').click();
+  await until('the preview', () => out('Preview ready. Nothing is saved yet.'));
+  need('the Hub text sits under it in a code block', $('.spools__sheet .code') && $('.spools__sheet .code').textContent.includes('dry run: nothing changed'));
+  need('the request is the one of today', JSON.stringify(window.__open[0]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', nfc_id: '04:77:90:E1', read_at: 1700000000, dry_run: true }));
+  need('Link is available', reason(button('Link tag and open')) === null && button('Link tag and open').getAttribute('aria-disabled') !== 'true');
+  typeIn(field('Weight with spool', d).querySelector('input'), '1300');
+  need('an edit asks for a new preview', reason(button('Link tag and open')) === 'You changed the weight. Preview again.');
+""",
+    "sheet_preview_problem": r"""
+  const d = await sheetReady();
+  stub(/^open$/, () => reply({ output: 'No tag read on any reader yet: tap the tag on a reader first.', exit_code: 1 }));
+  button('Preview').click();
+  await until('the problem', () => out('The Hub found a problem. Nothing was changed.'));
+  need('the Hub text under it', $('.spools__sheet .code').textContent.includes('No tag read on any reader yet'));
+  need('Link says to fix and preview again', reason(button('Link tag and open')) === 'The Hub found a problem. Fix it and preview again.');
+""",
+    "sheet_link": r"""
+  const d = await sheetReady(); await tap({});
+  window.__open = []; stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); window.__open.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'Spool __ID__ opened and tag 04:77:90:E1 linked.', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }); });
+  typeIn(field('Weight with spool', d).querySelector('input'), '1212'); typeIn(field('Location', d).querySelector('input'), 'Rack 1'); typeIn(field('Box humidity', d).querySelector('input'), '41,5');
+  button('Preview').click();
+  await until('the preview', () => out('Preview ready.') && reason(button('Link tag and open')) === null);
+  button('Link tag and open').click();
+  await until('the link', () => out('Spool __ID__ is open'));
+  need('the Hub text follows it', $('.spools__sheet .code').textContent.includes('tag 04:77:90:E1 linked'));
+  need('the real request is the one of today', JSON.stringify(window.__open[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: 'Rack 1', humidity: '41.5', nfc_id: '04:77:90:E1', read_at: 1700000000, dry_run: false }));
+  need('a toast says it', text('.toasts').includes('Spool __ID__ opened.'));
+  need('the fields are clear and Link waits again', ['Weight with spool', 'Location', 'Box humidity'].every((l) => field(l, $('dialog[open]')).querySelector('input').value === '') && reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.');
+""",
+    "sheet_link_refused": r"""
+  const d = await sheetReady();
+  stub(/^open$/, (u, i) => JSON.parse(i.body).dry_run ? reply({ output: 'dry run: nothing changed', exit_code: 0 }) : reply({ error: 'Tag 04:77:90:E1 is already linked to spool 2: say so to move it.' }, 409));
+  button('Preview').click();
+  await until('the preview', () => reason(button('Link tag and open')) === null);
+  button('Link tag and open').click();
+  await until('the refusal', () => out('Tag 04:77:90:E1 is already linked to spool 2'));
+  need('the Hub text as given, no code block, Link still there', !$('.spools__sheet .code') && !!button('Link tag and open'));
+""",
+    "sheet_weight": r"""
+  const d = await sheetReady(); button('Update weight').click();
+  const form = await until('the form', () => $('.spools__form:not([hidden])'));
+  need('the form asks for the weight', field('Weight with spool', form).textContent.includes('Put the spool on the scale and type what it shows.') && button('Update weight').getAttribute('aria-expanded') === 'true');
+  need('Save weight says why it waits', reason(button('Save weight')) === 'Enter the weight to see the result first.');
+  const input = field('Weight with spool', form).querySelector('input'); typeIn(input, '1012');
+  button('Preview', form).click();
+  await until('the remaining', () => /Remaining changes from \d+ g to 812 g\./.test(text('.result', form)));
+  need('Save weight is available', reason(button('Save weight')) === null);
+  typeIn(input, '1100');
+  need('an edit asks for a new preview', reason(button('Save weight')) === 'You changed the weight. Preview again.');
+""",
+    "sheet_weight_saved": r"""
+  const d = await sheetReady(); button('Update weight').click();
+  const form = await until('the form', () => $('.spools__form:not([hidden])'));
+  typeIn(field('Weight with spool', form).querySelector('input'), '1012'); button('Preview', form).click();
+  await until('the remaining', () => reason(button('Save weight')) === null);
+  button('Save weight').click();
+  await until('saved', () => out('Weight updated: 812 g left.'));
+  need('the summary follows and the form is closed', text('.spools__sum-text').includes('812 g left') && $('.spools__form').hidden && text('.toasts').includes('Weight updated: 812 g left.'));
+""",
+    "sheet_weight_refused": r"""
+  const d = await sheetReady(); button('Update weight').click();
+  const form = await until('the form', () => $('.spools__form:not([hidden])'));
+  typeIn(field('Weight with spool', form).querySelector('input'), '50'); button('Preview', form).click();
+  await until('the Hub says it', () => text('.result', form).includes('below the spool tare'));
+  need('the field shows it', !field('Weight with spool', form).querySelector('.field__error').hidden);
+  need('Save weight still waits', reason(button('Save weight')) !== null);
+  typeIn(field('Weight with spool', form).querySelector('input'), '');
+  button('Preview', form).click();
+  need('an empty weight is asked for in words', field('Weight with spool', form).querySelector('.field__error').textContent.includes('Enter grams above 0.'));
+""",
+    "sheet_move": r"""
+  const d = await sheetReady(); button('Move').click();
+  const menu = await until('the menu', () => $('dialog[open] .menu'));
+  const items = $$('.menu__item', menu);
+  need('the four places, the current one marked', items.length === 4 && items.filter((i) => i.getAttribute('aria-disabled') === 'true' && i.textContent.includes('Now here')).length === 1);
+  const pick = items.find((i) => i.getAttribute('aria-disabled') !== 'true'), to = pick.querySelector('.menu__label').firstChild.textContent;
+  pick.click();
+  await until('moved', () => out('Moved to ' + to + '.'));
+  need('Undo is offered, and says where it goes', $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Undo') && text('.spools__sum-text').includes(to) && out('Undo returns it to'));
+""",
+    "sheet_move_undo": r"""
+  const d = await sheetReady(); button('Move').click();
+  const menu = await until('the menu', () => $('dialog[open] .menu'));
+  const pick = $$('.menu__item', menu).find((i) => i.getAttribute('aria-disabled') !== 'true'), to = pick.querySelector('.menu__label').firstChild.textContent;
+  const was = text('.spools__sum-text .muted').split(' · ')[0];
+  pick.click();
+  await until('moved', () => out('Moved to ' + to + '.'));
+  $$('.spools__sheet .result .btn').find((b) => b.textContent.trim() === 'Undo').click();
+  await until('moved back', () => out('Moved to ' + was + '.') && !$$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Undo'));
+""",
+    "sheet_empty_ask": r"""
+  const d = await sheetReady(); button('Mark empty').click();
+  const ask = await until('the question', () => $('dialog.dialog[open]'));
+  need('it asks in words', text('.dialog__title', ask) === 'Mark spool __ID__ empty?' && text('.dialog__text', ask) === 'Prusament PLA Galaxy Silver will be marked as used up.'
+    && button('Cancel', ask) && button('Mark empty', ask).classList.contains('btn--danger'));
+""",
+    "sheet_empty_done": r"""
+  const d = await sheetReady();
+  if (button('Mark empty').getAttribute('aria-disabled') !== 'true') {              // the first pass marks it; the next passes find it empty
+    button('Mark empty').click();
+    const ask = await until('the question', () => $('dialog.dialog[open]')); button('Mark empty', ask).click();
+    await until('marked', () => out('Marked empty.'));
+  }
+  await until('the summary', () => text('.spools__sum-text').includes('Empty'));
+  need('Update weight and Mark empty say why', reason(button('Update weight')) === 'This spool is marked empty.' && reason(button('Mark empty')) === 'This spool is marked empty.');
+  need('Move stays', !button('Move').getAttribute('aria-disabled'));
+  need('an empty spool is not opened: Preview and Link say why', reason(button('Preview')) === 'This spool is marked empty.' && reason(button('Link tag and open')) === 'This spool is marked empty.');
+""",
+    "sheet_race_weight": r"""
+  const d = await sheetReady(); await tap({});
+  const bodies = [];
+  let release; stub(/^open$/, (u, i) => { bodies.push(JSON.parse(i.body)); return new Promise((ok) => { release = () => ok(new Response(JSON.stringify({ output: 'dry run: nothing changed', exit_code: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }); });
+  const w = field('Weight with spool', d).querySelector('input');
+  typeIn(w, '1212'); button('Preview').click(); await until('the preview is out', () => bodies.length === 1);
+  typeIn(w, '999'); release();
+  await until('the old answer is dropped', () => reason(button('Link tag and open')) === 'You changed the weight. Preview again.' && !button('Preview').getAttribute('aria-busy'));
+  need('no "Preview ready" for a weight that was not previewed', !out('Preview ready.'));
+  button('Link tag and open').click(); await sleep(300);
+  need('Link sends nothing', bodies.length === 1 && bodies[0].gross === '1212' && bodies[0].dry_run === true);
+""",
+    "sheet_race_tag": r"""
+  const d = await sheetReady(); await tap({});
+  const bodies = [];
+  let release; stub(/^open$/, (u, i) => { bodies.push(JSON.parse(i.body)); return new Promise((ok) => { release = () => ok(new Response(JSON.stringify({ output: 'dry run: nothing changed', exit_code: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }); });
+  button('Preview').click(); await until('the preview is out', () => bodies.length === 1);
+  await tap({ nfc_id: '04:AA:BB:CC', read_at: 1700000500 });
+  await until('the sheet names the newer tag', () => text('.spools__sheet-tag').includes('04:AA:BB:CC'));
+  release();
+  await until('the old answer is dropped, for the tag', () => reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.' && !button('Preview').getAttribute('aria-busy'));
+  button('Link tag and open').click(); await sleep(300);
+  need('Link sends nothing for a tag that was not previewed', bodies.length === 1);
+""",
+    "sheet_race_link": r"""
+  const d = await sheetReady(); await tap({});
+  const bodies = []; let release = null;
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); if (b.dry_run) return reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 });
+    return new Promise((ok) => { release = () => ok(new Response(JSON.stringify({ output: 'opened', exit_code: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }); });
+  typeIn(field('Weight with spool', d).querySelector('input'), '1212'); button('Preview').click();
+  await until('previewed', () => out('Preview ready.') && reason(button('Link tag and open')) === null);
+  button('Link tag and open').click(); await until('the link is out', () => bodies.length === 2 && release);
+  button('Preview').click(); await sleep(300);
+  need('a Preview pressed while Link is out sends nothing', bodies.length === 2);
+  release();
+  await until('opened', () => out('Spool __ID__ is open'));
+  await sleep(300);
+  need('two requests in all, the real one with what was previewed', bodies.length === 2 && JSON.stringify(bodies[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', nfc_id: '04:77:90:E1', read_at: 1700000000, dry_run: false }));
+  need('Link waits again', reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.');
+""",
+    "sheet_race_save": r"""
+  const d = await sheetReady(); button('Update weight').click();
+  const form = await until('the form', () => $('.spools__form:not([hidden])')), input = field('Weight with spool', form).querySelector('input');
+  const bodies = []; let release = null;
+  const view = (g) => ({ id: __ID__, location: 'Sealed stock', remaining_g: g - 200, net_g: 1000, tare_g: 200, tag: null, state: 'sealed', vendor: 'Polymaker', name: 'PolyTerra PLA Charcoal Black', material: 'PLA', color_hex: '2B2B2E', lot: null });
+  stubPost(/^spools\/\d+$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); const r = () => new Response(JSON.stringify({ spool: {}, view: view(Number(b.gross)), before: view(1200), dry: b.dry_run }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return bodies.length === 1 ? new Promise((ok) => { release = () => ok(r()); }) : Promise.resolve(r()); });
+  typeIn(input, '1012'); button('Preview', form).click(); await until('the preview is out', () => bodies.length === 1);
+  typeIn(input, '5000'); release();
+  await until('the old answer is dropped', () => reason(button('Save weight')) === 'You changed the weight. Preview again.' && !button('Preview', form).getAttribute('aria-busy'));
+  need('no "Remaining changes" for a weight that was not previewed', !text('.result', form).includes('Remaining changes'));
+  button('Save weight').click(); await sleep(300);
+  need('Save sends nothing', bodies.length === 1);
+  button('Preview', form).click(); await until('previewed', () => reason(button('Save weight')) === null && text('.result', form).includes('Remaining changes from 1000 g to 4800 g.'));
+  button('Save weight').click(); await until('saved', () => bodies.length === 3);
+  need('Save sends the previewed weight', bodies[1].gross === '5000' && bodies[1].dry_run === true && bodies[2].gross === '5000' && bodies[2].dry_run === false);
+""",
+    "sheet_move_twice": r"""
+  const d = await sheetReady();
+  const log = []; spy(/^spools\/\d+$/, log);
+  const where = () => text('.spools__sum-text .muted').split(' · ')[0], orig = where();
+  const undo = () => $$('.spools__sheet .result .btn').find((b) => b.textContent.trim() === 'Undo');
+  const move = async (not) => {
+    button('Move').click();
+    const menu = await until('the menu', () => $('dialog[open] .menu'));
+    const pick = $$('.menu__item', menu).find((i) => i.getAttribute('aria-disabled') !== 'true' && i.querySelector('.menu__label').firstChild.textContent !== not);
+    const to = pick.querySelector('.menu__label').firstChild.textContent; pick.click();
+    await until('moved to ' + to, () => out('Moved to ' + to + '.') && where() === to); return to;
+  };
+  const one = await move(orig), two = await move(orig);
+  need('two different places, neither the first', one !== two && two !== orig && one !== orig);
+  need('Undo is offered after the second move', !!undo());
+  undo().click();
+  await until('back where it was before the first move', () => where() === orig && out('Moved to ' + orig + '.') && !undo());
+  need('the requests are the two moves and the undo', log.length === 3 && log[2].location === orig && log.every((b) => b.dry_run === false));
+""",
+    "sheet_tap_refused": r"""
+  const d = await sheetReady(); await tap({});
+  const bodies = [];
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b);
+    return b.dry_run ? reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }) : reply({ error: 'A new tag was tapped. Preview again.', code: 'tap_changed' }, 409); });
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null);
+  need('Preview names the tap it looked at', bodies[0].nfc_id === '04:77:90:E1' && bodies[0].read_at === 1700000000);
+  button('Link tag and open').click();
+  await until('refused', () => text('.spools__sheet-note') === 'A new tag was tapped. Preview again.' && reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.');
+  need('Link named the same tap', bodies[1].nfc_id === '04:77:90:E1' && bodies[1].read_at === 1700000000 && bodies[1].dry_run === false);
+  await tap({ nfc_id: '04:AA:BB:CC', read_at: 1700000600 });                               // the poll catches up: the reason is not lost
+  await until('the sheet names the newer tag', () => text('.spools__sheet-tag').includes('04:AA:BB:CC')); await sleep(200);
+  need('the reason stays after the poll', reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.');
+  button('Link tag and open').click(); await sleep(300);
+  need('Link sends nothing until a new Preview', bodies.length === 2);
+""",
+    "sheet_unread": r"""
+  await waitPage();
+  let release; const log = []; const real = window.fetch.bind(window);
+  window.fetch = (u, i) => { const p = String(u).split('/api/')[1] || '';
+    if ((i || {}).method === 'POST') log.push(p);
+    return /^spools\/\d+$/.test(p) && !(i && i.method === 'POST') ? new Promise((ok) => { release = () => ok(real(u, i)); }) : real(u, i); };
+  location.hash = '#spools/__ID__';
+  await until('the sheet', () => $('dialog[open].sheet') && release);
+  need('Preview and Link say the spool is being read', reason(button('Preview')) === 'Loading Spool __ID__…' && reason(button('Link tag and open')) === 'Loading Spool __ID__…');
+  button('Preview').click(); button('Link tag and open').click(); await sleep(300);
+  need('nothing is sent before the spool is read', log.length === 0);
+  release();
+  await until('read', () => !$('.spools__sum .skeleton') && reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.' && !button('Preview').getAttribute('aria-disabled'));
+""",
+    "sheet_move_wait": r"""
+  const d = await sheetReady(); let release = null;
+  stubPost(/^spools\/\d+$/, (u, i) => { const b = JSON.parse(i.body); return new Promise((ok) => { release = () => ok(fetchReal(u, i)); }); });
+  button('Move').click();
+  let menu = await until('the menu', () => $('dialog[open] .menu'));
+  const first = $$('.menu__item', menu).find((x) => x.getAttribute('aria-disabled') !== 'true'); first.click();
+  await until('the move is out', () => release);
+  button('Move').click();
+  menu = await until('the menu again', () => $('dialog[open] .menu'));
+  need('every place says it waits', $$('.menu__item', menu).every((x) => x.getAttribute('aria-disabled') === 'true' && x.textContent.includes('Moving…')));
+  release();
+""",
+    "sheet_undo_failed": r"""
+  const d = await sheetReady();
+  button('Move').click();
+  const menu = await until('the menu', () => $('dialog[open] .menu'));
+  const pick = $$('.menu__item', menu).find((i) => i.getAttribute('aria-disabled') !== 'true'), to = pick.querySelector('.menu__label').firstChild.textContent, was = text('.spools__sum-text .muted').split(' · ')[0];
+  pick.click();
+  await until('moved, with where Undo goes', () => out('Moved to ' + to + '. Undo returns it to ' + was + '.'));
+  stubPost(/^spools\/\d+$/, () => reply({ error: 'boom' }, 500));
+  $$('.spools__sheet .result .btn').find((b) => b.textContent.trim() === 'Undo').click();
+  await until('the failure', () => out('The Hub hit an error') && $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Try again'));
+  await sleep(5600);
+  need('the error and Try again stay after the Undo window', !!out('The Hub hit an error') && !out('Moved to ' + was + '.') && $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Try again'));
+""",
+    "sheet_link_unseen": r"""
+  const d = await sheetReady();
+  need('the page shows no tag', text('.spools__sheet-tag') === "No tag read yet: tap the spool's tag on a reader.");
+  const bodies = [];
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'opened', exit_code: 0, nfc_id: '04:AA:BB:CC', read_at: 55 }); });
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
+  need('Preview names no tap: the page had none to name', !('nfc_id' in bodies[0]) && !('read_at' in bodies[0]));
+  button('Link tag and open').click(); await until('opened', () => out('Spool __ID__ is open'));
+  need('Link names the tap the Hub used for the preview', bodies[1].nfc_id === '04:AA:BB:CC' && bodies[1].read_at === 55 && bodies[1].dry_run === false);
+""",
+    "sheet_tap_again": r"""
+  const d = await sheetReady(); await tap({});
+  stub(/^open$/, () => reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }));
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
+  await tap({ read_at: 1700000900, age_seconds: 2 });                                      // the same tag, tapped again
+  await until('the tap is shown', () => text('.spools__sheet-tag').includes('tapped 2 s ago'));
+  need('the reason says it was tapped again', reason(button('Link tag and open')) === 'The tag was tapped again. Preview again.');
+""",
+    "sheet_read_failed": r"""
+  await waitPage(); let n = 0; const real = window.fetch.bind(window);
+  window.fetch = (u, i) => { const p = String(u).split('/api/')[1] || ''; return /^spools\/\d+$/.test(p) && !(i && i.method === 'POST') && n++ === 0 ? reply({ error: 'boom' }, 500) : real(u, i); };
+  location.hash = '#spools/__ID__';
+  const d = await sheetOpen();
+  await until('the error with Try again', () => button('Try again', d) && text('.spools__sum', d).includes('The Hub hit an error'));
+  need('Preview and Link say the spool could not be read', reason(button('Preview')) === 'This spool could not be read yet. Use Try again at the top.' && reason(button('Link tag and open')) === 'This spool could not be read yet. Use Try again at the top.');
+  button('Try again', d).click();
+  await until('read', () => !$('.spools__sum .skeleton') && text('.spools__sum-text') && reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.' && !button('Preview').getAttribute('aria-disabled'));
+""",
+    "sheet_missing": r"""
+  await until('the line', () => $('dialog[open] .result[data-state=bad]') && text('dialog[open]').includes('was not found'));
+  const seen = (l) => { const b = button(l); return !!b && b.getClientRects().length > 0; };
+  need('the Hub text, and nothing to act on', text('dialog[open]').includes('spool 99999 was not found') && !seen('Preview') && !seen('Mark empty'));
+""",
+}
+SP_AT = {"sheet_from_row": "#spools", "sheet_unread": "#spools", "sheet_read_failed": "#spools", "sheet_missing": "#spools/99999", "sheet_empty_ask": 3, "sheet_empty_done": 2}   # the view, or which spool's sheet it opens
+SP_PAGED = {
+    "paging": r"""
+  await waitPage();
+  need('50 rows on the first page and the pager', $$('.spools__row').length === 50 && text('.coll__pager').includes('1–50 of __TOTAL__'));
+  button('Next', $('.coll__pager')).click();
+  await until('the rest', () => $$('.spools__row').length === __TOTAL__ - 50);
+  need('the pager says where it is and the focus is on the first row', text('.coll__pager').includes('51–__TOTAL__ of __TOTAL__') && document.activeElement === $('.spools__row') && button('Previous', $('.coll__pager')));
+""",
+}
+SP_PRINTERS = {
+    "tag_linked": r"""
+  await waitPage();
+  stub(/^printers\/tagged$/, () => reply({ nfc_id: '04:77:90:E1', spool: { id: __ID__, vendor: 'Polymaker', name: 'PolyTerra PLA Charcoal Black', location: 'Rack 1', remaining_g: 900 } }));
+  await tap({});
+  await until('the link', () => text('.spools__linked').includes('Linked to spool __ID__, Polymaker PolyTerra PLA Charcoal Black'));
+  button('Show spool __ID__').click();
+  await sheetReady();
+  need('the sheet is the spool', text('dialog[open] .sheet__title') === 'Spool __ID__' && location.hash === '#spools/__ID__');
+""",
+    "load_printers": r"""
+  const d = await sheetReady();
+  stub(/^printers$/, () => reply({ printers: [{ id: '01P0', name: 'Workshop X1', family: 'bambu', state: 'connected' }, { id: 'sv08', name: 'Corner SV08', family: 'klipper', state: 'offline' }] }));
+  need('Load into a printer is offered with the Printers Feature on', !!button('Load into a printer'));
+  button('Load into a printer').click();
+  await until('the printers', () => text('.spools__step') === 'Load into which printer?' && $$('.spools__load .spools__row').length === 2);
+  need('one row per printer, with its state in a word', /Workshop X1.*Connected/.test(text('.spools__load')) && /Corner SV08.*Offline/.test(text('.spools__load')));
+""",
+    "load_none": r"""
+  const d = await sheetReady(); stub(/^printers$/, () => reply({ printers: [] }));
+  button('Load into a printer').click();
+  await until('the line', () => text('.spools__load').includes('No printers are set up yet. Add one under Printers.'));
+""",
+    "load_plan": r"""
+  const d = await sheetReady();
+  stub(/^printers$/, () => reply({ printers: [{ id: '01P0', name: 'Workshop X1', family: 'bambu', state: 'connected' }] }));
+  stub(/^printers\/01P0\/state$/, () => reply({ printer: { id: '01P0' }, status: { ams: [{ label: 'AMS 1', type_name: 'AMS 2 Pro', slots: [
+    { label: 'A1', color_hex: '2B2B2E', type: 'PLA', spool: { name: 'PolyTerra PLA Charcoal Black', remaining_weight: 900 } }, { label: 'A2', color_hex: '', type: '', spool: null, present: false }] }] } }));
+  window.__load = [];
+  stub(/^printers\/01P0\/slots\/A2\/load$/, (u, i) => { const b = JSON.parse(i.body); window.__load.push(b); return reply(b.dry_run ? { preset: { name: 'Polymaker PLA' }, nozzle_mm: 0.4, moved_back: [], problems: [] } : { confirmed: true, moved_back: [], problems: [] }); });
+  button('Load into a printer').click();
+  await until('the printers', () => $$('.spools__load .spools__row').length === 1);
+  $('.spools__load .spools__row').click();
+  await until('the slots', () => text('.spools__step') === 'Which slot on Workshop X1?' && $$('.spools__load .spools__row').length === 2);
+  need('one row per slot, with its spool', text('.spools__load').includes('PolyTerra PLA Charcoal Black · 900 g') && text('.spools__load').includes('Empty'));
+  $$('.spools__load .spools__row')[1].click();
+  await until('the plan', () => text('.spools__load').includes('Preset: Polymaker PLA') && reason(button('Load')) === null);
+  need('the plan is asked as a dry run', JSON.stringify(window.__load[0]) === JSON.stringify({ spool_id: __ID__, dry_run: true }));
+""",
+    "load_done": r"""
+  const d = await sheetReady();
+  stub(/^printers$/, () => reply({ printers: [{ id: '01P0', name: 'Workshop X1', family: 'bambu', state: 'connected' }] }));
+  stub(/^printers\/01P0\/state$/, () => reply({ printer: { id: '01P0' }, status: { ams: [{ label: 'AMS 1', slots: [{ label: 'A2', color_hex: '', type: '', spool: null }] }] } }));
+  window.__load = [];
+  stub(/^printers\/01P0\/slots\/A2\/load$/, (u, i) => { const b = JSON.parse(i.body); window.__load.push(b); return reply(b.dry_run ? { preset: { name: 'Polymaker PLA' }, nozzle_mm: 0.4, moved_back: [], problems: [] } : { confirmed: true, moved_back: [], problems: [] }); });
+  button('Load into a printer').click();
+  await until('the printers', () => $$('.spools__load .spools__row').length === 1); $('.spools__load .spools__row').click();
+  await until('the slots', () => $$('.spools__load .spools__row').length === 1); $('.spools__load .spools__row').click();
+  await until('the plan', () => reason(button('Load')) === null && !button('Load').getAttribute('aria-busy'));
+  button('Load').click();
+  await until('loaded', () => out('Loaded into A2.') && $('.spools__load').hidden);
+  need('the real load is sent after the plan, and a toast says it', JSON.stringify(window.__load[1]) === JSON.stringify({ spool_id: __ID__, dry_run: false }) && text('.toasts').includes('Loaded into A2.'));
+""",
+}
+
+
+def _spools_run(url, name, script, view, *extra, allow=ALLOW):
+    ready = "(async () => {" + SP_PRELUDE + script + "})()"
+    run = _run("--url", url, "--views", view, "--allow", str(allow), "--ready", ready, *extra)
+    assert run.returncode in (0, 1), run.stdout + run.stderr
+    out = json.loads(run.stdout)
+    assert not out.get("report"), name + ": " + json.dumps(out["report"], indent=1)
+    return out
+
+
+def _at(hub, name, listed):
+    """The view of a state and the script with the spool it is about (`__ID__`): the sheet states open the first spool's sheet unless SP_AT says."""
+    at = SP_AT.get(name, 0 if name.startswith("sheet_") or name.startswith("load_") else "#spools")
+    view = at if isinstance(at, str) else f"#spools/{hub.ids[at]}"
+    spool = hub.ids[at] if isinstance(at, int) else hub.ids[0]
+    return view, listed[name].replace("__ID__", str(spool))
+
+
+@pytest.mark.parametrize("name", list(SP_READY))
+def test_spools_state_passes_the_audit(spools_hub, name):
+    view, script = _at(spools_hub, name, SP_READY)
+    assert _spools_run(spools_hub.url, name, script, view)["views"] == 4
+
+
+@pytest.mark.parametrize("name", list(SP_PRINTERS))
+def test_spools_state_with_the_printers_feature_passes_the_audit(spools_hub_printers, name, tmp_path):
+    """The Printers Feature is on here, so the Printers screen's own hidden markup is on the page: its findings are listed beside
+    the allow-list for this run only (S3.11 rebuilds that screen)."""
+    allow = tmp_path / "allow.txt"
+    allow.write_text("".join(f.read_text(encoding="utf-8") for f in sorted(ALLOW.glob("*.txt"))) + "field without a label | main#main > section.page > section.hidden > select | 4 | Printers picker (hidden); rebuilt by S3.11\n",
+                     encoding="utf-8")
+    view, script = _at(spools_hub_printers, name, SP_PRINTERS)
+    assert _spools_run(spools_hub_printers.url, name, script, view, allow=allow)["views"] == 4
+
+
+def test_spools_pages_of_fifty_pass_the_audit(spools_hub_paged):
+    script = SP_PAGED["paging"].replace("__TOTAL__", str(SP_BULK + 2))
+    assert _spools_run(spools_hub_paged.url, "paging", script, "#spools")["views"] == 4
+
+
+def test_the_tag_poll_runs_only_while_the_screen_is_shown_and_the_page_is_visible(spools_hub):
+    """04 5.2: GET tag every 3 s; it stops when the page is hidden or the screen is left, and starts again at once."""
+    script = r"""
+  const calls = []; stub(/^tag$/, () => { calls.push(Date.now()); return reply(TAG({})); });
+  await until('a first poll', () => calls.length >= 1);
+  await sleep(3500); need('it polls again every 3 s while shown', calls.length >= 2);
+  const hide = (v) => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => v }); document.dispatchEvent(new Event('visibilitychange')); };
+  hide(true); const n = calls.length; await sleep(3600);
+  need('no poll while the page is hidden', calls.length === n);
+  hide(false); await until('a poll at once when shown again', () => calls.length > n, 1500);
+  const m = calls.length; location.hash = '#add'; await sleep(300); const k = calls.length; await sleep(3600);
+  need('no poll after the screen is left', calls.length === k);
+  location.hash = '#spools'; await until('and at once on coming back', () => calls.length > k, 1500);
+  need('the first polls are about 3 s apart', calls[1] - calls[0] >= 2500);
+"""
+    out = _spools_run(spools_hub.url, "poll", script, "#spools", "--widths", "1280", "--schemes", "light")
+    assert out["views"] == 1

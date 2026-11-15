@@ -41,6 +41,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Recently added** on the phone: each addition with its badges, where it came from and when; open one for its photos and fields, correct it by hand or ask the Label Reader, and undo a revision.
 - **Printers** on the phone: the printer list and one printer's page with its status, slots, filament used, slot mapping and settings; a printer you add opens at once with "Added."
 - **Add spools** on the phone: find a filament you already have or read the label photos, check each spool card with the Label Reader's confidence marks, Preview, then Add; an unfinished add is kept as a draft in that browser.
+- **Spools** on the phone: the last tag read, a search that remembers Sealed only, and a spool sheet to link a tag and open the spool, update its weight, move it (with Undo), mark it empty or load it into a printer; nothing is written that was not previewed.
 
 ## The Android app is on the new look
 

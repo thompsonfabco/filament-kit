@@ -1,5 +1,0 @@
-field attribute differs from 07 9.1 | div.card > div.grid > label.wide > input | 56 | Spools weight fields, type=number (the Add spool card had none at load); rebuilt by S3.10
-field without a label | section.page > section > div.row > input | 4 | Spools search field; rebuilt by S3.10
-field without a label | section.page > section.hidden > div.row > input | 24 | Spools search field (hidden); rebuilt by S3.10
-hit area under 44 x 44 | section.page > section > div.row > button.fit | 2 | Spools Search button at 1280 px; rebuilt by S3.10
-hit area under 44 x 44 | section.page > section > div.row > input | 2 | Spools search field at 1280 px; rebuilt by S3.10

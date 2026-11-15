@@ -752,7 +752,7 @@ def test_a_link_can_open_a_place_by_its_hash():
     src = _app_js()
     assert 'const PLACES = ["add", "spools", "printers", "recent", "presets"];' in src
     assert 'const ALIAS = { open: "spools", history: "recent" };' in src          # #open and #history redirect
-    assert "if (PLACES.includes(name)) return show(name);" in src
+    assert 'if (PLACES.includes(name)) { show(name); if (name === "spools") tabs.spools.address(raw.slice(head.length + 1), initial); return; }' in src   # #spools/<id> opens the sheet
     assert 'const PLACE_KEY = "spoolwarden.place";' in src and 'localStorage.getItem("tab")' in src
 
 
@@ -969,3 +969,143 @@ def test_every_text_key_built_from_a_prefix_in_the_page_scripts_exists():
                 found.append((f.name, prefix))
                 assert any(k.startswith(prefix) for k in keys), f"{f.name}: no catalogue key starts with {prefix!r}"
     assert ("app.js", "install_step_") in found
+
+
+# ---------- S3.10: Spools in the new design ----------
+
+def _spools_src() -> str:
+    """The Spools part of app.js: from its heading to Slicer presets."""
+    src = _app_js()
+    return src[src.index("// ---------- Open spool"):src.index("// ---------- Presets")]
+
+
+def test_spools_keeps_every_action_of_today_and_the_requests():
+    src = _spools_src()
+    for call in ('api("tag")', "find?q=${encodeURIComponent(q)}&sealed=${sealedOnly ? 1 : 0}",
+                 'body = { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), ...tap, dry_run: true };',
+                 'body = { ...shot.body, dry_run: false };', 'api("open", { body })',      # Link sends what was previewed
+                 "add_summary_error_preview", "add_summary_preview_ok", "spool_sheet_opened_toast", "spool_sheet_link",
+                 "[...new Set([...PICKS, ...LOCATIONS])]"):                        # Last tag, search, Preview (Check) and Link tag and open
+        assert call in src, call
+    for call in ("api(`spools/${id}`)", "{ body: { gross: value, dry_run: dry } }", "value = wShot.value;", "{ body: { location: l, dry_run: false } }",
+                 "{ body: { empty: true, dry_run: false } }"):                      # the S3.9 routes: weight, move, mark empty
+        assert call in src, call
+    for call in ('api("printers")', 'api("printers/tagged")', "api(`printers/${enc(p.id)}/state`)", "/load`, { body: { spool_id: id, dry_run: dry } }"):
+        assert call in src, call                                                    # Load into a printer: the load sheet's own routes
+
+
+def test_spools_poll_the_tag_every_3_s_only_while_shown_and_visible():
+    src = _spools_src()
+    assert "setInterval(poll, 3000)" in src and "clearInterval(timer)" in src
+    assert 'addEventListener("visibilitychange"' in src and "if (document.hidden) stopPoll(); else startPoll();" in src
+    assert "leave() { shown = false; stopPoll(); closeSheet(); }" in src and "if (!document.hidden) startPoll();" in src
+
+
+def test_spools_remember_sealed_only_under_its_key_and_wrap_storage():
+    src = _spools_src()
+    assert 'const SEALED_KEY = "spoolwarden.sealedOnly"' in src
+    for call in ("localStorage.getItem(SEALED_KEY)", "localStorage.setItem(SEALED_KEY,"):
+        i = src.index(call)
+        assert "try {" in src[max(0, i - 120):i], call                              # every read and write is in a try
+
+
+def test_spools_other_actions_follow_what_the_hub_offers():
+    src = _spools_src()
+    assert 'document.body.dataset.spoolEdit === "1"' in src
+    assert "EDIT ? weightBtn : null, EDIT ? moveBtn : null, PRINTERS ? loadBtn : null" in src     # editing, and Load with the Printers Feature
+    assert "const other = EDIT || PRINTERS ?" in src and "EDIT ? h(\"div\", { class: \"spools__danger\" }, emptyBtn)" in src
+    assert "history.pushState({ sheet: true }, \"\", `#spools/${id}`)" in src and "document.title" not in src   # the title comes from the shell
+
+
+def test_spools_texts_come_from_the_catalogue_and_new_keys_use_the_section_prefix():
+    keys = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    src = _spools_src()
+    used = set(re.findall(r'SW\.t\(\s*"([a-z0-9_]+)"', src)) | set(re.findall(r'"((?:spool|spools|common|add)_(?!_)[a-z0-9_]+)"', src))
+    assert used and not sorted(k for k in used if k not in keys)
+    assert not [k for k in used if k.startswith("web_")]
+    for key in ("spool_sheet_humidity", "spool_sheet_reason_empty", "spool_sheet_slot_empty"):
+        assert key in used and key in keys
+    assert "innerHTML" not in src and ".style." not in src                         # no data into markup, no inline style (the CSP)
+
+
+# ---------- R345: open names the tap it was asked about; a spool edit is shown as Spoolman holds it ----------
+
+def test_web_open_with_the_tap_the_page_looked_at(app, env, sm):
+    sid = _web_spool(sm)
+    uid = "4:1:2:3:4:5:6"
+    env["tag"] = {"status": "ok", "nfc_id": uid, "read_at_unix": 7, "age_seconds": 3}
+    post = {"headers": {"Origin": ORIGIN}}
+    body = {"spool": sid, "gross": "", "location": "", "humidity": "", "dry_run": True}
+    with _client(app) as c:
+        r = c.post("/intake/api/open", json={**body, "nfc_id": uid, "read_at": 7}, **post)                 # the same tap: as before
+        assert r.status_code == 200 and uid in r.json()["output"]
+        r = c.post("/intake/api/open", json={**body, "nfc_id": uid}, **post)                               # one of the two is enough
+        assert r.status_code == 200
+        r = c.post("/intake/api/open", json=body, **post)                                                  # absent: the old behaviour
+        assert r.status_code == 200
+        env["tag"] = {"status": "ok", "nfc_id": "4:AA:BB:CC:DD:EE:FF", "read_at_unix": 8, "age_seconds": 1}   # another tap, between two polls
+        for sent, code, words in (({"nfc_id": uid, "read_at": 7}, "tap_changed", "A new tag was tapped. Preview again."),
+                                  ({"nfc_id": uid}, "tap_changed", "A new tag was tapped. Preview again."),
+                                  ({"read_at": 7}, "tap_again", "The tag was tapped again. Preview again."),
+                                  ({"nfc_id": None, "read_at": None}, "tap_changed", "A new tag was tapped. Preview again.")):   # the page saw no tag
+            for dry in (True, False):
+                r = c.post("/intake/api/open", json={**body, **sent, "dry_run": dry}, **post)
+                assert r.status_code == 409 and r.json()["code"] == code and r.json()["error"] == words, (sent, dry)
+        assert tags.stored(sm.get(f"spool/{sid}")) is None                                                 # nothing was linked
+        r = c.post("/intake/api/open", json={**body, "nfc_id": "4:AA:BB:CC:DD:EE:FF", "read_at": 8, "dry_run": False}, **post)
+        assert r.status_code == 200 and tags.stored(sm.get(f"spool/{sid}")) == "4:aa:bb:cc:dd:ee:ff"
+        r = c.post("/intake/api/open", json={**body, "nfc_id": 5}, **post)
+        assert r.status_code == 400 and r.json()["field"] == "nfc_id"
+        r = c.post("/intake/api/open", json={**body, "spool": 99999, "nfc_id": "x"}, **post)               # not a tag at all: still a refusal, not a crash
+        assert r.status_code in (400, 404, 409)
+
+
+def test_open_spool_tool_asks_for_the_tap_only_when_given_one(app, env, sm):
+    from filament_kit.web import mcp_tools
+    from filament_kit.web.errors import TapChanged
+    sid = _web_spool(sm)
+    env["tag"] = {"status": "ok", "nfc_id": "4:1:2:3:4:5:6", "read_at_unix": 7, "age_seconds": 3}
+    tools = mcp_tools.Tools(sm)
+    assert tools.open_spool(spool=sid, dry_run=True)["exit_code"] == 0                                    # the MCP tool and the app: no tap named
+    assert tools.open_spool(spool=sid, dry_run=True, nfc_id="4:1:2:3:4:5:6", read_at=7)["exit_code"] == 0
+    for kw in ({"nfc_id": "4:9:9:9:9:9:9"}, {"read_at": 6}):
+        with pytest.raises(TapChanged):
+            tools.open_spool(spool=sid, dry_run=False, **kw)
+    assert tags.stored(sm.get(f"spool/{sid}")) is None
+
+
+def test_web_weight_preview_is_capped_at_a_full_spool_as_spoolman_holds_it(app, sm):
+    sid = _web_spool(sm)
+    post = {"headers": {"Origin": ORIGIN}}
+    with _client(app) as c:
+        r = c.post(f"/intake/api/spools/{sid}", json={"gross": 5000, "dry_run": True}, **post)
+        assert r.status_code == 200 and r.json()["view"]["remaining_g"] == 1000
+        r = c.post(f"/intake/api/spools/{sid}", json={"remaining": 4000, "dry_run": False}, **post)
+        assert r.json()["view"]["remaining_g"] == 1000 and sm.get(f"spool/{sid}")["remaining_weight"] == 1000
+
+
+def test_web_open_preview_names_the_tap_it_would_link_and_link_can_send_it_back(app, env, sm):
+    sid = _web_spool(sm)
+    uid = "4:1:2:3:4:5:6"
+    env["tag"] = {"status": "ok", "nfc_id": uid, "read_at_unix": 7, "age_seconds": 3}
+    post = {"headers": {"Origin": ORIGIN}}
+    body = {"spool": sid, "gross": "", "location": "", "humidity": ""}
+    with _client(app) as c:
+        seen = c.post("/intake/api/open", json={**body, "dry_run": True}, **post).json()           # the page showed no tag: it sends none
+        assert (seen["nfc_id"], seen["read_at"]) == (uid, 7)
+        env["tag"] = {"status": "ok", "nfc_id": "4:AA:BB:CC:DD:EE:FF", "read_at_unix": 8, "age_seconds": 1}   # a tap the page has not seen
+        r = c.post("/intake/api/open", json={**body, "nfc_id": seen["nfc_id"], "read_at": seen["read_at"], "dry_run": False}, **post)
+        assert r.status_code == 409 and r.json()["code"] == "tap_changed" and tags.stored(sm.get(f"spool/{sid}")) is None
+        env["tag"] = {"status": "ok", "nfc_id": uid, "read_at_unix": 9, "age_seconds": 1}                   # the same tag, tapped again
+        r = c.post("/intake/api/open", json={**body, "nfc_id": uid, "read_at": 7, "dry_run": False}, **post)
+        assert r.status_code == 409 and r.json()["code"] == "tap_again"
+        r = c.post("/intake/api/open", json={**body, "nfc_id": uid, "read_at": 9, "dry_run": False}, **post)
+        assert r.status_code == 200 and r.json()["read_at"] == 9 and tags.stored(sm.get(f"spool/{sid}")) == uid
+
+
+def test_web_open_preview_shows_the_weight_spoolman_will_keep(app, env, sm):
+    sid = _web_spool(sm)
+    env["tag"] = {"status": "ok", "nfc_id": "4:1:2:3:4:5:6", "read_at_unix": 7, "age_seconds": 3}
+    with _client(app) as c:
+        r = c.post("/intake/api/open", json={"spool": sid, "gross": "4800", "dry_run": True}, headers={"Origin": ORIGIN})
+        assert r.status_code == 200 and r.json()["spool"]["remaining_g"] == 1000                           # a full spool at most

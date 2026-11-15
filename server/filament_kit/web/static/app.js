@@ -688,7 +688,7 @@ function route(initial) {
     return;
   }
   closeSettings();
-  if (PLACES.includes(name)) return show(name);
+  if (PLACES.includes(name)) { show(name); if (name === "spools") tabs.spools.address(raw.slice(head.length + 1), initial); return; }
   const keep = storedPlace() || "add";                       // no address, or one the page does not know: the last place
   history.replaceState(history.state, "", "#" + keep);
   show(keep);
@@ -866,7 +866,7 @@ function navigation() {
   app.replaceWith(skip, h("div", { class: "shell" }, topBar(), nav, main),
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   route(true);
-  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => { const k = ALIAS[s] || s; return (tabs[k] && tabs[k].title && tabs[k].title()) || SW.t(TITLES[k] || TITLES[place]); }, onSection: () => route() });
+  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => { const k = ALIAS[s] || s; return (s === "spools" && tabs.spools.sheetTitle()) || (tabs[k] && tabs[k].title && tabs[k].title()) || SW.t(TITLES[k] || TITLES[place]); }, onSection: () => route() });
   nav.append(moreBtn);                                       // after SW.shell: this More has its own sheet
   paintMore();
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page
@@ -1645,94 +1645,441 @@ function addTab() {
   } };
 }
 
-// ---------- Open spool ----------
+// ---------- Open spool, now Spools (04 5): the last tag, search, and the spool sheet ----------
 function openTab() {
-  let timer = null, picked = null, lastKey = null, tagAt = null;   // tagAt: when the tag reader last answered
-  const tagFirst = resultLine();    // the tag card's first line, until the first answer: reading, or why not
-  const tagBox = h("div", { class: "card" }, tagFirst);
-  const tagLine = resultLine();     // under the card: a poll that fails keeps the card and says how old it is (04 3.5)
-  SW.result(tagFirst, "run", SW.t("spools_last_tag_loading"));
-  const q = h("input", { type: "search", placeholder: "Search: brand, colour, material", "aria-label": "Search spools", enterKeyHint: "search",
-                         on: { keydown: (e) => { if (e.key === "Enter") find(); } } });
-  const sealed = h("input", { type: "checkbox", checked: true });
-  const results = h("div", { class: "list" });
-  const findLine = resultLine();    // the search's own line: Searching…, or why it failed
-  const gross = h("input", { type: "number", inputMode: "decimal", step: "any", placeholder: "scale reading, g (optional)" });
-  const loc = h("input", { placeholder: "blank = " + AUTO, list: "locs" });
-  const hum = h("input", { type: "number", inputMode: "decimal", step: "any", placeholder: "box hygrometer % (optional)" });
-  const ans = answer();             // the answer to Check and Link: the line, and the Hub's own text under it
-  const checkBtn = h("button", { class: "secondary", textContent: "Check", on: { click: (e) => submit(true, e.currentTarget) } });
-  const linkBtn = h("button", { textContent: "Link tag and open", on: { click: (e) => submit(false, e.currentTarget) } });
-  const form = h("div", { class: "card hidden" }, h("h3", { textContent: "Selected spool" }), h("p", { class: "picked" }),
-    h("div", { class: "grid" }, h("label", { class: "wide" }, "Gross weight (with spool)", gross),
-      h("label", { class: "wide" }, "Location", loc), h("label", { class: "wide" }, "Humidity", hum)),
-    h("div", { class: "row spaced" }, checkBtn, linkBtn),
-    ans.el);
-  // Link waits for a Check of what is on the form; an edit makes the last Check stale (04 3.4)
-  const blockLink = (on) => disabled(linkBtn, on ? SW.t("add_reason_check_first_link") : null, () => checkBtn);
-  blockLink(true);
-  for (const inp of [gross, loc, hum]) inp.addEventListener("input", () => blockLink(true));
-  const el = h("section", { class: "hidden" },
-    h("p", { class: "muted", textContent: "Tap the spool's tag on a reader, pick the spool, weigh it (the station scale fills it in), link." }),
-    tagBox, tagLine, h("datalist", { id: "locs" }, ...[...new Set([...PICKS, ...LOCATIONS])].map((l) => h("option", { value: l }))),
-    h("h2", { textContent: "Which spool?" }), h("div", { class: "row" }, q, h("button", { class: "fit", textContent: "Search", on: { click: (e) => find(e.currentTarget) } })),
-    findLine,
-    h("label", { class: "check" }, sealed, "sealed spools only"),
-    results, form);
+  const EDIT = document.body.dataset.spoolEdit === "1";      // the Hub offers spool editing to the web app (04 14)
+  const SEALED_KEY = "spoolwarden.sealedOnly", PAGE = 50;
+  let sealedOnly = true;
+  try { sealedOnly = localStorage.getItem(SEALED_KEY) !== "0"; } catch {}   // on by default; a browser without storage keeps the default
+  let shown = false, timer = null, polling = false, lastKey = null, tagAt = null, lastTag = null, tagStamp = 0, tagLoad = null, ageEl = null;
+  let sheet = null;                                          // the open spool sheet: { id, dlg, rec, tag(t, fresh) }
+  let changed = false;                                       // a sheet changed a spool: the list is searched again when it closes
+  let rows = [], page = 1, cut = false, asked = false, lastQ = "", findStamp = 0, firstLoad = null;
+  const hexOf = (v) => (/^[0-9A-Fa-f]{6}$/.test(v || "") ? "#" + v : "");
+  const group = (title, ...kids) => { const id = SW.uid("g"); return h("section", { class: "group", "aria-labelledby": id },
+    h("header", { class: "group__head" }, h("h2", { class: "group__title", id }, title)), h("div", { class: "group__body" }, ...kids)); };
+  const ageText = (s) => SW.t(s < 60 ? "common_age_seconds" : s < 3600 ? "common_age_minutes" : "common_age_hours", { count: s < 60 ? s : s < 3600 ? Math.floor(s / 60) : Math.floor(s / 3600) });
+  const atStation = (t) => t.reader === "station";             // the Weigh Station; any other reader is a Tag Reader
+  const onScale = (t) => atStation(t) && !!t.scale;             // a tap on the Weigh Station that came with a scale reading
+  const readerOf = (t, the) => SW.t(atStation(t) ? (the ? "common_reader_the_weigh_station" : "common_reader_weigh_station")
+    : (the ? "common_reader_the_tag_reader" : "common_reader_tag_reader"));
+  const lines = (list) => list.flatMap((t, i) => (i ? [h("br"), t] : [t]));       // a result of several lines
+  const num = (f) => f._control.value.trim().replace(",", ".");                    // what the Hub reads: a number as text, or blank
+  const grams = (v) => Math.round(Number(v) || 0);
+  const nameOf = (v) => [v.vendor, v.name].filter(Boolean).join(" ");
 
+  // ----- Last tag (04 5.2): GET tag every 3 s while the screen is on show and the page is visible -----
+  const tagBody = h("div", { class: "spools__tag" }), tagLine = resultLine(), tagFirst = resultLine();
+  const linkedBox = h("div", { class: "spools__linked" });
+  const tagKids = (t) => {
+    if (!t.nfc_id) { ageEl = null; return [h("p", { class: "spools__state" }, SW.shape("s-hollow"), h("span", { textContent: SW.t("common_no_tag_yet") }))]; }
+    ageEl = h("span", { class: "spools__age muted" });
+    const meta = [readerOf(t), t.scale ? SW.t("spools_tag_scale", { grams: t.scale.grams }) : null].filter(Boolean).join(" · ");
+    return [h("p", { class: "spools__tagline" }, SW.icon("tag"), h("span", { class: "mono spools__tagid", textContent: t.nfc_id }), ageEl),
+      h("p", { class: "muted spools__meta", textContent: meta }), h("p", { class: "spools__hub", textContent: t.text || "" }), linkedBox];
+  };
+  async function showLinked(t, stamp) {                      // the spool this tag belongs to (the Printers Feature's route has it)
+    linkedBox.replaceChildren();
+    if (!PRINTERS || !t.nfc_id) return;
+    try {
+      const r = await api("printers/tagged");
+      if (stamp !== tagStamp || !r.spool) return;
+      const s = r.spool;
+      linkedBox.replaceChildren(h("p", { textContent: SW.t("spools_tag_linked", { id: s.id, name: nameOf(s) }) }),
+        SW.btn(SW.t("spools_show", { id: s.id }), { run: (e) => openSheet(s.id, e.currentTarget) }));
+    } catch { /* the tag stays without its link line */ }
+  }
   async function poll() {
+    if (polling) return;
+    polling = true;
     try {
       const t = await api("tag");
-      tagAt = Date.now();
-      clear(tagLine);
-      const key = `${t.nfc_id}|${t.read_at}`;
-      if (key !== lastKey) {
-        lastKey = key; blockLink(true);
-        if (t.reader === "station" && t.scale) gross.value = t.scale.grams; // a new station tap: that spool is on the scale
-        tagBox.replaceChildren(h("h3", { textContent: t.nfc_id ? "Last tag: " + t.nfc_id : "No tag read yet: tap one" }),
-          h("pre", { textContent: t.text }));
+      tagAt = Date.now(); clear(tagLine);
+      const key = `${t.nfc_id}|${t.read_at}`, fresh = key !== lastKey;
+      if (fresh) {
+        lastKey = key;
+        const kids = tagKids(t);
+        if (tagLoad) { const l = tagLoad; tagLoad = null; l.done(...kids); } else tagBody.replaceChildren(...kids);
+        showLinked(t, ++tagStamp);
       }
-      tagBox.querySelector(".age")?.remove();
-      if (t.age_seconds != null) tagBox.append(h("p", { class: "muted age", textContent: `tapped ${ago(t.age_seconds)} on the ${t.reader} reader${t.scale ? ` · station scale ${t.scale.grams} g` : ""}` }));
+      lastTag = t;
+      if (ageEl && t.age_seconds != null) ageEl.textContent = ageText(t.age_seconds);   // text in place, nothing redrawn
+      if (sheet) sheet.tag(t, fresh, key);
     } catch (e) {
-      if (tagAt != null) stale(tagLine, tagAt);                  // the card keeps the last tag
-      else if (tagFirst._said !== says(e)) { tagFirst._said = says(e); failed(tagFirst, e, poll); }   // nothing to keep yet; said once, not at every poll
-    }
+      if (tagAt != null) stale(tagLine, tagAt);                // the last tag stays on screen
+      else if (tagFirst._said !== says(e)) {                   // nothing to keep yet; said once, not at every poll
+        tagFirst._said = says(e);
+        if (tagLoad) { const l = tagLoad; tagLoad = null; l.done(tagFirst); }
+        failed(tagFirst, e, poll);
+      }
+    } finally { polling = false; }
   }
-  async function find(button) {
+  const stopPoll = () => { clearInterval(timer); timer = null; };
+  const startPoll = () => { stopPoll(); poll(); timer = setInterval(poll, 3000); };
+  document.addEventListener("visibilitychange", () => { if (shown) { if (document.hidden) stopPoll(); else startPoll(); } });   // not while the page is hidden or the phone locked
+
+  // ----- Search (04 5.3) -----
+  const searchField = SW.field({ type: "search", label: SW.t("spools_find_label"), placeholder: SW.t("common_search_placeholder"), onSearch: (q) => find(q) });
+  searchField.classList.add("spools__search");
+  searchField.querySelector(".field__label").classList.add("sr");
+  searchField.querySelector(".field__box").append(SW.iconBtn("search", SW.t("common_search"), { run: () => find(searchField._control.value.trim()) }));
+  const sealedBox = SW.check({ label: SW.t("spools_sealed_only"), checked: sealedOnly });
+  sealedBox._control.addEventListener("change", () => {
+    sealedOnly = sealedBox._control.checked;
+    try { localStorage.setItem(SEALED_KEY, sealedOnly ? "1" : "0"); } catch { /* not remembered here */ }
+    find(searchField._control.value.trim());
+  });
+  const findLine = resultLine(), resultsBox = h("div", { class: "spools__results" });
+  async function find(q) {
+    lastQ = q;
+    const mine = ++findStamp;
+    if (!asked && !firstLoad) firstLoad = SW.loading(resultsBox, { thing: SW.t("nav_spools"), items: 3 });
+    searchField._busy(true);
     await act(findLine, SW.t("common_searching"), async () => {
-      const res = await api(`find?q=${encodeURIComponent(q.value)}&sealed=${sealed.checked ? 1 : 0}`);
-      const rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ f, s })));
-      if (!rows.length) { results.replaceChildren(h("p", { class: "muted", textContent: "No spools match." })); return null; }
-      results.replaceChildren(...[...rows.slice(0, 60).map(({ f, s }) => h("button", {
-        class: "pick", on: { click: (e) => pick(e.currentTarget, f, s) } },
-        h("strong", { textContent: `S${s.spool_id} ` }), `${f.vendor} ${f.name}`,
-        h("div", { class: "muted", textContent: `${s.location || "?"} · ${s.remaining_g} g${s.sealed ? " · sealed" : ""}${s.tagged ? " · has a tag" : ""}${s.lot ? " · lot " + s.lot : ""}` }))),
-        more(60, rows.length)].filter(Boolean));
+      try {
+        const res = await api(`find?q=${encodeURIComponent(q)}&sealed=${sealedOnly ? 1 : 0}`);
+        if (mine !== findStamp) return null;
+        rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ f, s })));
+        cut = !!res.truncated; page = 1; asked = true;
+        if (firstLoad) { firstLoad.done(); firstLoad = null; }
+        drawResults(false);
+      } catch (e) { if (firstLoad && mine === findStamp) { firstLoad.done(); firstLoad = null; } throw e; }
       return null;
-    }, { button });
+    });
+    if (mine === findStamp) searchField._busy(false);
   }
-  function pick(btn, f, s) {
-    for (const b of results.querySelectorAll(".pick")) b.classList.toggle("on", b === btn);
-    picked = s.spool_id; blockLink(true); SW.result(ans.line, null); ans.code.replaceChildren();
-    form.querySelector(".picked").textContent = `S${s.spool_id} ${f.vendor} ${f.name} (${s.location}, ${s.remaining_g} g)`;
-    form.classList.remove("hidden"); form.scrollIntoView({ behavior: "smooth", block: "start" });
+  function rowButton(f, s) {
+    const net = Number(f.net_g), level = net > 0 && s.remaining_g != null ? s.remaining_g / net : null, colour = hexOf(f.color_hex);
+    const detail = [s.location || "?", SW.t("common_grams", { grams: s.remaining_g == null ? "?" : grams(s.remaining_g) }), s.sealed ? SW.t("common_sealed") : null,
+      s.tagged ? SW.t("spools_row_tag") : null, s.lot ? SW.t("spools_row_lot", { lot: s.lot }) : null].filter(Boolean).join(" · ");
+    return h("button", { class: "spools__row", type: "button", on: { click: (e) => openSheet(s.spool_id, e.currentTarget) } },
+      SW.swatch(colour, { level }),
+      h("span", { class: "spools__row-text" }, h("b", { class: "mono", textContent: SW.t("spool_title", { id: s.spool_id }) }), h("span", { class: "muted", textContent: detail })),
+      SW.icon("chevron", "icon--s spools__chevron"), h("span", { class: "sr", textContent: SW.t("a11y_swatch", { hex: colour || SW.t("common_no_colour") }) }));
   }
-  async function submit(dry, button) {
-    if (picked == null) return;
-    const id = picked;
-    await act(ans, dry ? SW.t("common_checking") : SW.t("common_working"), async () => {
-      const res = await api("open", { body: { spool: id, gross: gross.value, location: loc.value, humidity: hum.value, dry_run: dry } });
-      blockLink(!(dry && !res.exit_code));
-      if (res.exit_code) return { kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output };
-      if (dry) return { text: SW.t("add_summary_preview_ok"), code: res.output };
-      picked = null; gross.value = hum.value = loc.value = ""; lastKey = null;
-      SW.toast(SW.t("spool_sheet_opened_toast", { id }));
-      return { text: SW.t("spool_sheet_opened", { id }), code: res.output };
-    }, { button });
+  function drawResults(focus) {
+    if (!rows.length) { resultsBox.replaceChildren(h("p", { class: "spools__none", textContent: SW.t(sealedOnly ? "spools_empty_sealed" : "spools_empty_filtered") })); return; }
+    const pages = Math.ceil(rows.length / PAGE), kids = [];
+    page = Math.min(page, pages);
+    let cur = null, list = null;
+    for (const { f, s } of rows.slice((page - 1) * PAGE, page * PAGE)) {
+      if (!cur || cur.filament_id !== f.filament_id) {
+        cur = f; list = h("ul", { class: "spools__rows" });
+        kids.push(h("div", { class: "spools__fil" }, h("h3", { class: "spools__fil-name", textContent: nameOf(f) }),
+          h("p", { class: "muted spools__fil-meta", textContent: [f.material, SW.t("common_filament_number", { id: f.filament_id })].filter(Boolean).join(" · ") })), list);
+      }
+      list.append(h("li", {}, rowButton(f, s)));
+    }
+    if (rows.length > PAGE) kids.push(SW.pager({ from: (page - 1) * PAGE + 1, to: Math.min(rows.length, page * PAGE), total: rows.length, page, pages,
+      go: (p) => { page = p; drawResults(true); } }));
+    if (cut) kids.push(h("p", { class: "muted", textContent: SW.t("spools_cut") }));
+    resultsBox.replaceChildren(...kids);
+    if (focus) resultsBox.querySelector(".spools__row")?.focus();
   }
-  return { el, enter() { poll(); timer = setInterval(() => { if (!document.hidden) poll(); }, 3000); },   // not while the page is hidden or the phone locked
-    leave() { clearInterval(timer); timer = null; } };
+
+  // ----- The spool sheet (04 5.4): address #spools/<id>; how: "push" (a row was pressed), "entry" (the address is already in
+  // the history), "direct" (the page was loaded at it) -----
+  function closeSheet() { if (sheet) { sheet.rec.popped = true; sheet.dlg.close(); } }
+  function openSheet(id, opener, how = "push") {
+    if (sheet && sheet.id === id) return;
+    closeSheet();
+    let view = null, previewed = false, problem = false, weightTyped = false, spentKey = null, undoStamp = 0;
+    const part = (title, ...kids) => h("section", { class: "spools__part" }, h("h3", { class: "spools__part-title", textContent: title }), ...kids);
+
+    // -- the summary at the top, read from GET spools/<id> --
+    const sum = h("div", { class: "spools__sum" });
+    const sumKids = (v) => {
+      const state = v.state === "sealed" ? SW.t("common_sealed") : v.state === "empty" ? SW.t("common_empty") : SW.t("spool_state_opened");
+      const detail = [v.location || "?", SW.t("spool_left_grams", { grams: v.remaining_g == null ? "?" : grams(v.remaining_g) }), state, v.tag ? SW.t("spools_row_tag") : null,
+        v.lot ? SW.t("spools_row_lot", { lot: v.lot }) : null].filter(Boolean).join(" · ");
+      return [SW.swatch(hexOf(v.color_hex), { size: "l" }), h("div", { class: "spools__sum-text" }, h("b", { textContent: nameOf(v) }),
+        h("span", { class: "muted", textContent: detail }))];
+    };
+    const applyView = (v) => { view = v; sum.replaceChildren(...sumKids(v)); paintActions(); };
+    let readFailed = false;                                    // the spool could not be read: Preview and Link say so, the error has Try again
+    const repaint = () => { disabled(previewBtn, holdWhy()); link(linkKey); };
+    const refresh = () => fill(sum, SW.t("spool_title", { id }), async () => {
+      if (readFailed) { readFailed = false; repaint(); }
+      try { const r = await api(`spools/${id}`); view = r.view; const kids = sumKids(view); paintActions(); return kids; }
+      catch (e) {
+        if (e instanceof SW.HubError && e.status === 404) { openPart.hidden = true; if (other) other.hidden = true; }
+        else if (!view) { readFailed = true; repaint(); }
+        throw e;
+      }
+    }, { quiet: !!view, items: 1 });
+
+    // -- Open it and link the tag --
+    const tagText = h("p", { class: "spools__sheet-tag" }), tagNote = h("p", { class: "spools__sheet-tag spools__sheet-note" });   // the note: the Hub refused for a newer tap
+    const paintTag = (t) => { tagText.textContent = t && t.nfc_id ? SW.t("spool_sheet_tag_line", { tag: t.nfc_id, age: t.age_seconds != null ? ageText(t.age_seconds) : "", reader: readerOf(t, true) })
+      : SW.t("spool_sheet_no_tag"); };
+    const within = (lo, hi) => (v) => { const n = Number(v.trim().replace(",", ".")); return !v.trim() || (n >= lo && n <= hi) ? null : ""; };
+    const weight = SW.field({ type: "number", decimal: true, label: SW.t("common_field_weight_with_spool"), optional: true, unit: "g", hint: "",
+      check: (v) => (within(Number.MIN_VALUE, Infinity)(v) === null ? null : SW.t("field_error_grams")) });
+    const loc = SW.field({ label: SW.t("common_field_location"), optional: true, hint: SW.t("common_hint_leave_empty_auto"), attrs: { list: "spools-locs" } });
+    const hum = SW.field({ label: SW.t("spool_sheet_humidity"), optional: true, unit: SW.t("common_unit_percent"), hint: "", attrs: { inputmode: "decimal" },   // a text field: the number field is short, the placeholder is long
+      placeholder: SW.t("spool_sheet_humidity_placeholder"), check: (v) => (within(0, 100)(v) === null ? null : SW.t("spool_sheet_humidity_error")) });
+    const ans = answer();             // the answer to Preview and Link: the line, and the Hub's own text under it
+    const previewBtn = SW.btn(SW.t("common_preview"), { run: (e) => submit(true, e.currentTarget) });
+    const linkBtn = SW.btn(SW.t("spool_sheet_link"), { cls: "btn--primary", run: (e) => submit(false, e.currentTarget) });
+    // Link waits for a Preview of what is on the form; an edit makes the last Preview stale (04 3.4)
+    // rev counts what changes the form or the tag; a Preview answer counts only if rev is what it was when the Preview went out, and
+    // Link sends exactly the body that was previewed (R345)
+    let linkKey = "spool_sheet_reason_preview_first", rev = 0, working = false, shot = null;   // shot: { rev, body } of the last good Preview
+    const gone = () => !!view && view.state === "empty";
+    // Preview and Link stay off until the spool is read, and for an empty one
+    const holdWhy = () => (!view ? (readFailed ? SW.t("spool_sheet_reason_not_read") : SW.t("common_loading_thing", { thing: SW.t("spool_title", { id }) })) : gone() ? SW.t("spool_sheet_reason_empty") : null);
+    const link = (key) => { linkKey = key; disabled(linkBtn, holdWhy() || (key ? SW.t(key) : null), () => previewBtn); };
+    // what made the last Preview out of date, and what Link says about it
+    const STALE = { weight: "spool_sheet_reason_weight_changed", tag: "spool_sheet_reason_tag_changed", again: "spool_sheet_reason_tag_again", fields: "spool_sheet_reason_preview_first" };
+    let lastKind = "fields", stale = false;                    // stale: a Preview was lost to a change, and has not been made again: the reason stays
+    const outOfDate = (kind) => { rev++; lastKind = kind; const was = previewed || problem || working || stale; if (was) stale = true; previewed = false; link(was ? STALE[kind] : "spool_sheet_reason_preview_first"); };
+    weight._control.addEventListener("input", () => { weightTyped = true; weight._hint.textContent = ""; outOfDate("weight"); problem = false; });
+    for (const f of [loc, hum]) f._control.addEventListener("input", () => { outOfDate("fields"); problem = false; });
+    async function submit(dry, button) {
+      if (working || holdWhy()) return;                        // one request at a time: Preview and Link; not before the spool is read
+      let body;
+      if (dry) {
+        const bad = [weight, hum].filter((f) => { const err = f._check(); SW.fieldError(f, err || null); return !!err; });
+        if (bad.length) return bad[0]._control.focus();
+        const tap = lastTag && lastTag.nfc_id ? { nfc_id: lastTag.nfc_id, read_at: lastTag.read_at } : {};   // the tap the page shows; none shown: the Hub's own, sent back by Link
+        body = { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), ...tap, dry_run: true };
+      } else {
+        if (!shot || shot.rev !== rev) { link(STALE[lastKind]); return; }
+        body = { ...shot.body, dry_run: false };              // what was previewed, not what the fields say now
+      }
+      const mine = rev;
+      working = true;
+      try {
+        await act(ans, SW.t(dry ? "common_checking" : "common_working"), async () => {
+          let res;
+          try { res = await api("open", { body }); }
+          catch (e) {
+            const code = e instanceof SW.HubError && e.data ? e.data.code : null;
+            if (code === "tap_changed" || code === "tap_again") {   // another tap reached the Hub since the page last asked
+              previewed = false; problem = false; shot = null; rev++; stale = true; lastKind = code === "tap_again" ? "again" : "tag"; link(STALE[lastKind]); tagNote.textContent = says(e); poll();
+            } else if (dry && mine === rev) { previewed = false; problem = true; link("spool_sheet_reason_problem"); }
+            throw e;
+          }
+          if (dry && mine !== rev) { link(STALE[lastKind]); return null; }   // an edit or a newer tag came meanwhile: this answer is for what was
+          previewed = dry && !res.exit_code; problem = !!res.exit_code;
+          if (previewed) stale = false;
+          // Link names the tap the Hub used for this preview, also when the page showed no tag (null: an explicit "no tag")
+          shot = previewed ? { rev: mine, body: dry ? { ...body, nfc_id: res.nfc_id ?? null, read_at: res.read_at ?? null } : body } : null;
+          link(previewed ? null : problem ? "spool_sheet_reason_problem" : "spool_sheet_reason_preview_first");
+          if (res.exit_code) return { kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output };
+          if (dry) return { text: SW.t("add_summary_preview_ok"), code: res.output };
+          rev++; shot = null; stale = false;
+          for (const f of [weight, loc, hum]) f._control.value = "";
+          weightTyped = false; spentKey = lastKey; lastKey = null; changed = true;   // the tag is spent; the next poll draws it again with its new text
+          SW.toast(SW.t("spool_sheet_opened_toast", { id }));
+          refresh();
+          return { text: SW.t("spool_sheet_opened", { id }), code: res.output };
+        }, { button });
+      } finally { working = false; }
+      link(linkKey);                                           // the busy button gave back the state it had before the press
+    }
+    const openPart = part(SW.t("spool_sheet_open_title"), tagText, tagNote, weight, loc, hum, h("div", { class: "spools__buttons" }, previewBtn, linkBtn), ans.el);
+    disabled(previewBtn, holdWhy()); link(linkKey);
+
+    // -- Other actions: Update weight, Move, Load into a printer, and Mark empty kept apart --
+    const actAns = resultLine();      // the answer to Move, Mark empty and Load; Update weight has its own line while it is open
+    const weightBtn = SW.btn(SW.t("spool_update_weight"), { run: () => showWeight(weightForm.hidden) });
+    const moveBtn = SW.btn(SW.t("spool_move"), {});
+    const loadBtn = SW.btn(SW.t("spool_load"), { run: () => pickPrinter() });
+    const emptyBtn = SW.btn(SW.t("spool_mark_empty"), { cls: "btn--danger", run: (e) => markEmpty(e.currentTarget) });
+    function paintActions() {
+      const empty = gone(), why = SW.t("spool_sheet_reason_empty");
+      disabled(previewBtn, holdWhy()); link(linkKey);            // an empty spool is not opened
+      if (!other) return;
+      other.hidden = false;
+      disabled(weightBtn, empty ? why : null); disabled(emptyBtn, empty ? why : null); disabled(loadBtn, empty ? why : null);
+      disabled(moveBtn, LOCATIONS.length ? null : SW.t("spool_move_none"));
+      if (empty) showWeight(false);
+    }
+    // Update weight: a small form in place; Preview says what the remaining weight becomes, then Save weight
+    const wf = SW.field({ type: "number", decimal: true, label: SW.t("common_field_weight_with_spool"), unit: "g", hint: SW.t("spool_weight_hint"),
+      check: (v) => (within(Number.MIN_VALUE, Infinity)(v) === null && v.trim() ? null : SW.t("common_error_grams")) });
+    const wAns = resultLine();
+    const wPreview = SW.btn(SW.t("common_preview"), { run: (e) => weightGo(true, e.currentTarget) });
+    const wSave = SW.btn(SW.t("spool_weight_save"), { cls: "btn--primary", run: (e) => weightGo(false, e.currentTarget) });
+    const weightForm = h("div", { class: "spools__form", hidden: true }, wf, h("div", { class: "spools__buttons" }, wPreview, wSave), wAns);
+    let wWas = false, wKey = "spool_weight_need_preview", wRev = 0, wWorking = false, wShot = null;   // wWas: a Preview has run; wKey: why Save weight waits; wShot: { rev, value } of the last good Preview
+    const wLock = (key) => { wKey = key; disabled(wSave, key ? SW.t(key) : null, () => (wf._control.value.trim() ? wPreview : wf._control)); };
+    wLock(wKey);
+    wf._control.addEventListener("input", () => { wRev++; wLock(wWas ? "spool_sheet_reason_weight_changed" : "spool_weight_need_preview"); clear(wAns); });
+    function showWeight(open) {
+      weightForm.hidden = !open; weightBtn.setAttribute("aria-expanded", String(open));
+      if (open) wf._control.focus();
+    }
+    async function weightGo(dry, button) {
+      if (wWorking) return;
+      let value;
+      if (dry) {
+        const err = wf._check(); SW.fieldError(wf, err || null);
+        if (err) return wf._control.focus();
+        value = num(wf);
+      } else {
+        if (!wShot || wShot.rev !== wRev) { wLock("spool_sheet_reason_weight_changed"); return; }
+        value = wShot.value;                                   // what was previewed, not what the field says now
+      }
+      const mine = wRev;
+      wWorking = true;
+      try {
+        await act(wAns, SW.t(dry ? "common_checking" : "common_working"), async () => {
+          let r;
+          try { r = await api(`spools/${id}`, { body: { gross: value, dry_run: dry } }); }
+          catch (e) { if (e && e.field === "gross") SW.fieldError(wf, says(e)); throw e; }
+          const left = grams(r.view.remaining_g);
+          if (dry) {
+            if (mine !== wRev) { wLock("spool_sheet_reason_weight_changed"); return null; }   // edited while the Preview was out
+            wWas = true; wShot = { rev: mine, value }; wLock(null);
+            return SW.t("spool_sheet_weight_changes", { from: grams(r.before.remaining_g), to: left });
+          }
+          changed = true; applyView(r.view); wf._control.value = ""; wWas = false; wShot = null; wRev++; wLock("spool_weight_need_preview"); showWeight(false);
+          SW.toast(SW.t("spool_result_weight", { left })); SW.result(actAns, "ok", SW.t("spool_result_weight", { left }));
+          return null;
+        }, { button });
+      } finally { wWorking = false; }
+      wLock(wKey);
+    }
+    // Move: a menu of locations; choosing one moves the spool at once, with Undo for 5 s
+    let moving = false;
+    SW.menu(moveBtn, () => LOCATIONS.map((l) => { const here = !!view && l === view.location;
+      return { label: l, disabled: here || moving, reason: moving ? SW.t("spool_move_moving") : here ? SW.t("spool_move_here") : null, run: () => moveTo(l, false) }; }), { label: SW.t("spool_move_title") });
+    let undoFrom = null, undoUntil = 0;                        // undoFrom: the place before the first move of the Undo window
+    async function moveTo(l, back) {
+      if (moving || (!back && view && l === view.location)) return;   // one move at a time (the menu says so); not to where it is
+      moving = true;
+      const stamp = ++undoStamp;                               // any move or Undo ends the timer of an earlier Undo line
+      try {
+        await act(actAns, SW.t("spool_move_moving"), async () => {
+          const r = await api(`spools/${id}`, { body: { location: l, dry_run: false } });
+          if (!back) { if (undoFrom == null || Date.now() > undoUntil) undoFrom = r.before.location || null; undoUntil = Date.now() + 5000; }   // a second move in the window keeps the first place
+          changed = true; applyView(r.view);
+          const text = SW.t("spool_result_moved", { location: l });
+          if (back || !undoFrom) { undoFrom = null; return text; }
+          setTimeout(() => { if (stamp === undoStamp && actAns.querySelector(".btn")) SW.result(actAns, "ok", text); }, 5000);   // Undo goes after 5 s
+          return { text: SW.t("spool_result_moved_undo", { location: l, was: undoFrom }), action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
+        });
+      } finally { moving = false; }
+    }
+    // Mark empty: asks first (04 12.1)
+    async function markEmpty(opener) {
+      const name = view ? nameOf(view) : SW.t("spool_title", { id });
+      const done = await SW.ask({ open: openHere, kind: "destructive", title: SW.t("spool_empty_title", { id }), text: SW.t("spool_sheet_empty_body", { name }),
+        confirm: SW.t("spool_mark_empty"), opener, run: async () => {
+          try { const r = await api(`spools/${id}`, { body: { empty: true, dry_run: false } }); changed = true; applyView(r.view); return true; }
+          catch (e) { throw Object.assign(e, { text: () => says(e) }); }
+        } });
+      if (done) { SW.toast(SW.t("spool_result_empty")); SW.result(actAns, "ok", SW.t("spool_result_empty")); }
+    }
+    // Load into a printer: the printers, then the slots, then the plan and Load (the routes of the load sheet of 04 6.5)
+    const loadBox = h("div", { class: "spools__load", hidden: true });
+    const enc = encodeURIComponent;
+    const closeLoad = () => { loadBox.hidden = true; loadBox.replaceChildren(); loadBtn.focus(); };
+    const stepFoot = (back) => h("div", { class: "spools__buttons" }, SW.btn(SW.t("common_back"), { run: back }), back === closeLoad ? null : SW.btn(SW.t("common_cancel"), { run: closeLoad }));
+    const pickRow = (kids, run) => h("li", {}, h("button", { class: "spools__row", type: "button", on: { click: run } }, ...kids, SW.icon("chevron", "icon--s spools__chevron")));
+    const wordOf = (state) => (state === "connected" ? "connected" : state === "offline" ? "offline" : state === "not_configured" ? "not_configured" : "needs_look");
+    function pickPrinter() {
+      loadBox.hidden = false;
+      return fill(loadBox, SW.t("nav_printers"), async () => {
+        const { printers } = await api("printers");
+        const head = h("h4", { class: "spools__step", textContent: SW.t("spool_sheet_load_which_printer") });
+        if (!printers.length) return [head, h("p", { class: "muted", textContent: SW.t("spool_load_no_printers") }), stepFoot(closeLoad)];
+        return [head, h("ul", { class: "spools__rows" }, printers.map((p) => pickRow([h("span", { class: "spools__row-text" }, h("b", { textContent: p.name || p.id })),
+          SW.status(wordOf(p.state), { small: true })], () => pickSlot(p)))), stepFoot(closeLoad)];
+      }, { items: 2 });
+    }
+    function pickSlot(p) {
+      return fill(loadBox, SW.t("nav_printers"), async () => {
+        const r = await api(`printers/${enc(p.id)}/state`);
+        const slots = ((r.status || {}).ams || []).flatMap((u) => u.slots || []);
+        const head = h("h4", { class: "spools__step", textContent: SW.t("spool_load_which_slot", { printer: p.name || p.id }) });
+        if (!slots.length) return [head, h("p", { class: "muted", textContent: SW.t("spool_load_no_slots") }), stepFoot(pickPrinter)];
+        return [head, h("ul", { class: "spools__rows" }, slots.map((sl) => pickRow([SW.swatch(hexOf(sl.color_hex)),
+          h("span", { class: "spools__row-text" }, h("b", { class: "mono", textContent: sl.label }),
+            h("span", { class: "muted", textContent: sl.spool ? [sl.spool.name, sl.spool.remaining_weight != null ? SW.t("common_grams", { grams: grams(sl.spool.remaining_weight) }) : null].filter(Boolean).join(" · ")
+              : (sl.type || SW.t("spool_sheet_slot_empty")) }))], () => plan(p, sl)))), stepFoot(pickPrinter)];
+      }, { items: 2 });
+    }
+    function plan(p, sl) {
+      const line = resultLine(), go = SW.btn(SW.t("common_load"), { cls: "btn--primary", run: (e) => send(false, e.currentTarget) });
+      loadBox.replaceChildren(h("h4", { class: "spools__step", textContent: SW.t("spool_load_title", { slot: sl.label }) }), line, go, stepFoot(() => pickSlot(p)));
+      disabled(go, SW.t("spool_load_working_out"));
+      async function send(dry, button) {
+        await act(line, SW.t(dry ? "spool_load_working_out" : "common_load_wait"), async () => {
+          let r;
+          try { r = await api(`printers/${enc(p.id)}/slots/${enc(sl.label)}/load`, { body: { spool_id: id, dry_run: dry } }); }
+          catch (e) { if (dry) disabled(go, SW.t("spool_load_see_above")); throw e; }
+          const back = (r.moved_back || []).filter((m) => m.id !== id)
+            .map((m) => SW.t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: sl.label, location: m.location || SW.t("spool_load_previous_place") }));
+          if (dry) {
+            const nozzle = r.nozzle_assumed ? SW.t("spool_load_plan_nozzle_assumed", { mm: r.nozzle_mm ?? 0.4 }) : (r.nozzle_mm ? SW.t("spool_load_plan_nozzle", { mm: r.nozzle_mm }) : "");
+            disabled(go, (r.problems || []).length ? SW.t("spool_load_see_above") : null);
+            return { kind: (r.problems || []).length ? "warn" : "ok", text: h("span", {}, ...lines([SW.t("spool_load_plan", { spool: view ? nameOf(view) : SW.t("spool_title", { id }), slot: sl.label }),
+              SW.t("spool_load_plan_preset", { preset: (r.preset && r.preset.name) || SW.t("common_value_none") }), nozzle, ...back, ...(r.problems || [])].filter(Boolean))) };
+          }
+          closeLoad(); changed = true; refresh();
+          SW.toast(SW.t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_toast", { slot: sl.label }));
+          SW.result(actAns, "ok", h("span", {}, ...lines([SW.t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_line", { slot: sl.label }), ...back, ...(r.problems || [])])));
+          return null;
+        }, { button });
+      }
+      send(true);                                              // the plan first: nothing is sent until Load
+    }
+    const other = EDIT || PRINTERS ? part(SW.t("spool_sheet_other_actions"),
+      h("div", { class: "spools__buttons" }, EDIT ? weightBtn : null, EDIT ? moveBtn : null, PRINTERS ? loadBtn : null), weightForm, loadBox,
+      EDIT ? h("div", { class: "spools__danger" }, emptyBtn) : null, actAns) : null;
+    if (other) other.hidden = true;                            // until the spool is read: its state decides which actions can be pressed
+
+    const dlg = SW.sheet({ title: SW.t("spool_title", { id }), body: h("div", { class: "spools__sheet" }, sum, openPart, other), onClose: () => {
+      if (sheet && sheet.dlg === dlg) sheet = null;            // a sheet that was replaced by another one closes after the new one is set
+      if (changed) { changed = false; if (shown && asked) find(lastQ); }
+      if (shellView) shellView.paint(false);
+    } });
+    if (how === "push") history.pushState({ sheet: true }, "", `#spools/${id}`);
+    const rec = track(dlg, "address", how === "direct");
+    let seenId = lastTag && lastTag.nfc_id;
+    sheet = { id, dlg, rec, tag(t, fresh, key) {
+      paintTag(t);
+      if (!fresh) return;
+      tagNote.textContent = "";
+      if (key !== spentKey && onScale(t) && !weightTyped) {   // a new station tap: that spool is on the scale (04 5.2)
+        weight._control.value = t.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: t.scale.age_seconds });
+      }
+      const again = t.nfc_id === seenId; seenId = t.nfc_id;       // the same tag tapped again, or another one
+      outOfDate(again ? "again" : "tag");
+    } };
+    paintTag(lastTag);
+    if (lastTag && onScale(lastTag)) { weight._control.value = lastTag.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: lastTag.scale.age_seconds }); }
+    SW.openModal(dlg, opener);
+    if (shellView) shellView.paint(false);
+    refresh();
+  }
+
+  const el = h("section", { class: "hidden" }, h("div", { class: "spools" },
+    h("p", { class: "muted", textContent: SW.t("spools_intro") }),
+    group(SW.t("spools_last_tag"), tagBody, tagLine),
+    h("div", { class: "spools__find" }, searchField, sealedBox, findLine), resultsBox,
+    h("datalist", { id: "spools-locs" }, ...[...new Set([...PICKS, ...LOCATIONS])].map((l) => h("option", { value: l })))));
+  return {
+    el,
+    enter() {
+      shown = true;
+      if (!tagLoad && tagAt == null && !tagFirst.dataset.state) {   // the first time: a skeleton and the line, until the first answer
+        tagLoad = SW.loading(tagBody, { thing: SW.t("spools_last_tag"), items: 1 });
+        const run = resultLine(); SW.result(run, "run", SW.t("spools_last_tag_loading")); tagBody.append(run);
+      }
+      if (!document.hidden) startPoll();
+      find(asked ? lastQ : "");
+    },
+    leave() { shown = false; stopPoll(); closeSheet(); },
+    address(more, initial) {                                   // #spools or #spools/<id> (04 2.4)
+      const id = /^\d+$/.test(more) ? Number(more) : null;
+      if (id == null) closeSheet(); else openSheet(id, null, initial ? "direct" : "entry");
+    },
+    sheetTitle: () => (sheet ? SW.t("spool_title", { id: sheet.id }) : null),
+  };
 }
 
 // ---------- Presets (04 8) ----------

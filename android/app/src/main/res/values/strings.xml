@@ -2273,6 +2273,7 @@
     <string name="settings_summary_hub">%1$s · %2$s</string>
     <!-- 1=name -->
     <string name="spool_sheet_empty_body">%1$s will be marked as used up.</string>
+    <string name="spool_sheet_humidity">Box humidity</string>
     <string name="spool_sheet_humidity_error">Enter a percentage from 0 to 100.</string>
     <string name="spool_sheet_humidity_optional">Box humidity (optional)</string>
     <string name="spool_sheet_humidity_placeholder">From the box hygrometer</string>
@@ -2286,9 +2287,14 @@
     <!-- 1=id -->
     <string name="spool_sheet_opened_toast">Spool %1$s opened.</string>
     <string name="spool_sheet_other_actions">Other actions</string>
+    <string name="spool_sheet_reason_empty">This spool is marked empty.</string>
     <string name="spool_sheet_reason_preview_first">Preview first: nothing changes until you link.</string>
     <string name="spool_sheet_reason_problem">The Hub found a problem. Fix it and preview again.</string>
+    <string name="spool_sheet_reason_not_read">This spool could not be read yet. Use Try again at the top.</string>
+    <string name="spool_sheet_reason_tag_changed">A new tag was tapped. Preview again.</string>
+    <string name="spool_sheet_reason_tag_again">The tag was tapped again. Preview again.</string>
     <string name="spool_sheet_reason_weight_changed">You changed the weight. Preview again.</string>
+    <string name="spool_sheet_slot_empty">Empty</string>
     <!-- 1=tag 2=age 3=reader -->
     <string name="spool_sheet_tag_line">Tag: %1$s, tapped %2$s on %3$s</string>
     <!-- 1=from 2=to -->
@@ -3098,6 +3104,8 @@
     <string name="spool_result_loaded">Loaded into %1$s, slot %2$s.</string>
     <!-- 1=location -->
     <string name="spool_result_moved">Moved to %1$s.</string>
+    <!-- 1=location 2=was -->
+    <string name="spool_result_moved_undo">Moved to %1$s. Undo returns it to %2$s.</string>
     <string name="spool_result_tag_linked">Tag linked.</string>
     <string name="spool_result_tag_moved">Tag moved to this spool.</string>
     <!-- 1=left -->

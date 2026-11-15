@@ -1,1 +1,1 @@
-server/filament_kit/web/static/app.js | input | 12 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/app.js | input | 9 | built inline today; moves into the field component when the view is rebuilt
