@@ -169,11 +169,14 @@ the current step all use `--accent-text` (CON-9), whose pairs are in 3.1.
 
 ## 4. Colour independence
 
-Foundations 1.7 and 10: status is never told by colour alone; status shapes are always used with a word.
+Foundations 1.7 and 10: status is never told by colour alone; status shapes are always used with a word. One
+exception: the Hub page's lock chip on phones is its icon alone (`02-components.md` 3.1). Its three states have three
+different icons (closed lock, open lock, shield), not one of the status shapes in different colours; its accessible
+name says the state, and the dialog it opens has the state word as its title.
 
 | ID | Where | Requirement | Check |
 |---|---|---|---|
-| COL-1 | H W A | Every status shows a shape and a word: filled circle + "Connected" / "OK" / "On" / "Set"; hollow circle + "Offline" / "Off" / "Not set" / "Not configured"; triangle + "Needs a look", always followed by a sentence saying what to do (a wrong Access Code, a changed certificate, Developer Mode needed); octagon + "Failed" only; half-filled circle + "Running". The words are those of the status badge vocabulary in `02-components.md`. | Manual: view Printers and Overview with the page in greyscale (devtools "Emulate vision deficiency: achromatopsia"); every state can still be told apart. |
+| COL-1 | H W A | Every status shows a shape and a word: filled circle + "Connected" / "OK" / "On" / "Set"; hollow circle + "Offline" / "Off" / "Not set" / "Not configured"; triangle + "Needs a look", always followed by a sentence saying what to do (a wrong Access Code, a changed certificate, Developer Mode needed); octagon + "Failed" only; half-filled circle + "Running". The words are those of the status badge vocabulary in `02-components.md`. The one exception is the lock chip on phones (the paragraph above this table). | Manual: view Printers and Overview with the page in greyscale (devtools "Emulate vision deficiency: achromatopsia"); every state can still be told apart. |
 | COL-2 | H W | A printer's own state word (`gcode_state`, for example `RUNNING`, `PAUSE`) is never shown raw; it is mapped to a sentence-case word with its shape ("Printing", "Paused", "Preparing", "Finished", "Print failed", "Idle"). An unknown word is shown as it comes, with the hollow circle and the word "Other: " before it. | Review of the mapping table; Manual: a fake printer reporting an unknown state. |
 | COL-3 | H W A | Success and failure of an inline result or toast differ by icon (check / error octagon) and by the first word ("Saved." / "Not saved: …"), not only by colour or border. | Manual: save a field with a valid and an invalid value; read both results in greyscale. |
 | COL-4 | H W A | Links inside running text are underlined. Links that stand alone as navigation (rail, bottom bar, Settings sub-navigation, breadcrumbs) are recognisable by position and shape instead. | Review. |

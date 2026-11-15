@@ -317,7 +317,9 @@ bottom-bar component with their own five destinations.
   copy, download, upload, camera, tag, scale, printer, spool, plug, wifi-off, search, clock, undo.
 - Status shapes (used with a word, never alone): filled circle = connected / OK; hollow circle = offline / off /
   not set; triangle = needs a look; octagon = error / failed; half-filled circle = working; diamond = note. The one
-  phrase for "something wants attention" is **Needs a look**, in every interface.
+  phrase for "something wants attention" is **Needs a look**, in every interface. The one status shown without
+  its word is the Hub page's lock chip on phones, which has an icon of its own per state (`02-components.md` 3.1;
+  `07-accessibility.md` COL-1).
 
 ## 11. Motion
 

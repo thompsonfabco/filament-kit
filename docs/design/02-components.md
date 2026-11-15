@@ -552,10 +552,10 @@ or a hidden-values note with their own **Unlock to show**.
 
 **Anatomy.** A chip button (`chip chip--lock`): state icon (closed lock, open lock, shield), state word, and on wide
 screens a hint separated by a hairline: Locked "Enter setup code", Unlocked "Changes allowed", Trusted computer "No
-code needed". On phones (below 600 px) the chip is its icon alone, at least `--ctl` wide, so the product name is
-never cut off beside it; the three icons differ in shape, the accessible name is unchanged, and the dialog the
-chip opens has the state word as its title. The job indicator in the top bar uses the same `chip` block (`chip--job`), and so does the
-connection chip of the web app and the Android app (`chip--connection`, below).
+code needed". On phones (up to 600 px) the chip is its icon alone, at least `--ctl` wide, so the product name is never
+cut off beside it; the three icons differ in shape, the accessible name is unchanged, and the dialog the chip opens
+has the state word as its title. The job indicator in the top bar uses the same `chip` block (`chip--job`), and so
+does the connection chip of the web app and the Android app (`chip--connection`, below).
 
 **Sizes and tokens.** Height `--ctl`, padding `0 var(--s3)`, gap `--s2`, 1 px border, `--r`,
 `--surface` ground, word `--fs-m` weight 600, hint `--fs-m` weight 400 `--muted` with a 1 px `--border` divider and
