@@ -1005,11 +1005,11 @@ command line · L · Depends on: S5.3, S2.11 · Beside: Stages 3 and 4
 ### S5.8 The System commands
 command line · L · Depends on: S5.3; S2.18 when present · Beside: Stages 3 and 4
 - **Files today:** `cli.py` (`library` 1243-1355, `backup` and `restore` 306-347, `web` 2082-2135, `setup-code`
-  2138-2167, `cert` and `ensure-fields` 779-798, `uninstall` 1895-1925, `migrate-*` 2226-2243, `update` 2498-2509,
+  2138-2167, `cert` and `ensure-fields` 779-798, `uninstall` 1895-1925, `update` 2498-2509,
   parser 2262-2427); `backup.py`; `updates.py`.
-- **Change:** 06 9.8 to 9.15, 10 and 3: `config show` and `config set`; `label-reader status` and `test`; `catalog`;
+- **Change:** 06 9.8 to 9.14, 10 and 3: `config show` and `config set`; `label-reader status` and `test`; `catalog`;
   `backup create`, `list`, `keep`; `restore`; `web`; `remote get-certificate` and `firewall`; `setup-code`;
-  `certificate`; `spoolman fields` and `address`; `update`; `uninstall`; `logs`; `migrate-ops`; `migrate-scanner`;
+  `certificate`; `spoolman fields` and `address`; `update`; `uninstall`; `logs`;
   the pointer commands `add` and `spool`; `help aliases` and `help --markdown`; the grouped top-level help.
   `config theme` arrives in S6.10.
 - **Keep:** old spellings as aliases; `restore`'s typed word.
@@ -1102,7 +1102,7 @@ Hub page · L · Depends on: S6.6, S6.8 · Beside: S6.7, S6.9, S6.10
   `pane` (Panes) draw them in their hosts. With it, what Panes still lacks: one detail open at a time and Escape
   returning focus to the row; the row's actions and every hidden field (Slicer presets: material, "Set parent")
   inside the detail; the empty pane with its text on desktop; Back in the detail head on tablet and phone;
-  Settings one group per pane (02 5.11). The script and styles go into the detail part (F12 rule 7), not the core.
+  Settings one group per pane (02 6.4). The script and styles go into the detail part (F12 rule 7), not the core.
 - **Keep:** addresses (`#printers/<id>`), what a detail holds, the Console look.
 - **Other interfaces:** the web app and the app already open details as their own places; the command line has none.
 - **Check:** AUT-5 in Console and Palette on Printers and Slicer presets; focus returns to the row on close.
@@ -1154,7 +1154,9 @@ Hub · M · Depends on: S2.11 · Beside: Stages 3 to 6 where files differ
 all four · S · Depends on: S7.1 and every interface step of Stages 1 to 5 · Beside: S7.3
 - **Files today:** the allow-list of AUT-7 (S0.7); `tests/strings_allowlist.txt` (S0.8);
   `android/app/build.gradle.kts` and the manifest (app label "filament-kit").
-- **Change:** AUT-7 with no allow-list entry for an old name; any old name left on a screen replaced; any text left
+- **Change:** AUT-7 with no allow-list entry for an old name that a person reads; any old name left on a screen
+  replaced. Entries may stay for identifiers that are never shown (catalogue keys, routes, setting keys, wire
+  fields), each with the reason "identifier, not shown", and for the product name until the rename; any text left
   in the Hub page or web app scripts moved into the catalogue; the app label "Spoolwarden"
   (05 1; open point 12).
 - **Keep:** the app's package and id (the rename's part).
@@ -1438,7 +1440,6 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 9.12 `web`, `remote`, `setup-code`, `certificate`, `spoolman` | S5.8 |
 | 9.13 `update` and `uninstall` | S5.2, S5.8 |
 | 9.14 `logs` | S5.8 |
-| 9.15 `migrate-ops` and `migrate-scanner` | S5.8 |
 | 10 What the command line cannot do (`add`, `spool`, `printer live`) | S5.5, S5.8 |
 | 11 Usability problems and their fixes | S5.1 to S5.8 |
 | 12 Parity | the "Other interfaces" lines of the steps |

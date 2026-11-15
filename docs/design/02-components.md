@@ -363,7 +363,9 @@ page. `collection` and `detail` do not change it.
 
 **Android.** rail: `NavigationRail`. sidebar: `PermanentNavigationDrawer` on expanded width, `NavigationRail` on
 medium. pills: `PrimaryScrollableTabRow` under the top app bar with a trailing "More" tab opening a `DropdownMenu`.
-list: the list pane of `ListDetailPaneScaffold`, items as `ListItem` with `supportingContent` for the summary.
+list: the list pane of `ListDetailPaneScaffold`, items as `ListItem` with `supportingContent` for the summary. The app shows a summary only for a section whose
+data it already holds from Home's requests (Printers, Recently added, Slicer presets); it makes no request of
+its own for a summary, and the other sections show their name alone.
 
 **HTML.** (Identical in every theme.)
 ```html
