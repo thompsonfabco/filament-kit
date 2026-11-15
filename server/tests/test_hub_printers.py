@@ -185,6 +185,7 @@ result.afterReturn = !!(await until(() => stopIn(rowOf("Workshop X1")), "Stop af
 result.rowShown = !rowOf("Workshop X1").querySelector(".coll__row--note").hidden;
 stopIn(rowOf("Workshop X1")).click();
 await until(() => !stopIn(rowOf("Workshop X1")), "the end of the mapping");
+await until(() => text(box()).startsWith("Mapped"), "the end said (a result is written a moment after it is set)");
 result.end = text(box());
 result.progressGone = !$(".coll__row--note .result[data-state=run]", rowOf("Workshop X1"));
 return result;
