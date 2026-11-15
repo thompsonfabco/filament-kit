@@ -557,6 +557,7 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 :root[data-look="palette"] .coll__cell[data-col="actions"] .btn:first-child{flex:1 1 auto}
 :root[data-look="palette"] .coll__key{display:inline;color:var(--muted)}
 :root[data-look="palette"] .coll__key::after{content:": "}
+:root[data-look="palette"] .coll:not(:has(.coll__expand)) .coll__item .coll__cell[data-prio="2"]{display:block}
 :root[data-look="palette"] .coll__title{font-size:var(--fs-l);font-weight:var(--fw-title)}
 /* profile: detail=sheet */
 /* the shared script moves an open detail into the detail host; a wide screen keeps the right-hand sheet of the host, a phone gets it from the top bar's height to the bottom */
