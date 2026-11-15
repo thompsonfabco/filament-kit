@@ -324,7 +324,7 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
     cfg = cfg if cfg is not None else config.load()
     web = cfg.get("web") or {}
     on = modules.enabled(cfg)
-    yield Row(OK if "web" in on else FAIL, "Web access is on", "sudo filament-kit modules enable web")
+    yield Row(OK if "web" in on else FAIL, "Web access is " + ("on" if "web" in on else "off"), "sudo filament-kit modules enable web")
     public = str(web.get("public_url") or "").rstrip("/")
     yield Row(OK if public.startswith("https://") else FAIL, f"public URL {public or '(not set)'}",
               "set web.public_url in config.json (e.g. https://mcp.example.com/filament)")
