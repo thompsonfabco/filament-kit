@@ -16,6 +16,13 @@ two write a field differently, both forms are accepted):
                            -> the corrected item ("item", or "items"[0])
     errors                 -> {"error": {"code", "message"}} (or {"error": code, "message"})
 
+    API 1.1 (opt-in correction queue, the "Share corrections" feature; bearer token like /v1/read):
+    GET  <url>/v1/feedback               -> {"opt_in", "endpoint_configured", "count", "bundle_mb", "entries": [...]}
+    POST <url>/v1/feedback               <- {"images_b64", "predicted", "corrected", "note"} (+ "source", "record")
+    DELETE <url>/v1/feedback/<id>        GET <url>/v1/feedback/bundle.zip     POST <url>/v1/feedback/submit
+    The upload address is the reader's own and never the kit's business: no call here sends one (`endpoint`,
+    `feedback_endpoint` or any URL).
+
 The items have the cloud reader's shape (intake.ITEM_PROPS); intake.py does all post-processing for both readers.
 The kit sends no order history, prices, comments or spool data. `local_intake.url` may name another machine (the
 GPU tier wants a GPU the kit server usually lacks); an optional bearer token (`<etc>/local_intake_token`) protects
@@ -30,7 +37,7 @@ import socket
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from . import config
 
@@ -44,6 +51,11 @@ HEALTH_TIMEOUT = 3
 CONNECT_TIMEOUT = 3              # a reader that is down (or a machine that is off) is known in seconds, not after TIMEOUT
 BUSY_WAIT_MAX = 30               # a `503 busy` is retried once after its Retry-After, if that is at most this
 TOKEN_FILE = "local_intake_token"
+FEEDBACK_TIMEOUT = 30            # list, add, delete: the reader strips and shrinks the photos, nothing more
+BUNDLE_TIMEOUT = 120
+BUNDLE_CAP = 40 * 1048576        # the reader's own bundle limit is 25 MB; more than this is not a bundle of ours
+SUBMIT_TIMEOUT = 600             # the upload plus the reader's proof of work (a few seconds of CPU, more on a slow box)
+FORBIDDEN_FIELDS = ("endpoint", "feedback_endpoint", "url", "address")     # never in a request body (plan section 8)
 
 
 class LocalReaderError(Exception):
@@ -171,19 +183,31 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
-def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False) -> dict:
+def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False, method: str | None = None,
+             errors: dict | None = None, raw_cap: int | None = None) -> dict | bytes:
+    """One call. `method` defaults to GET without a body, POST with one. `errors`: {reader error code or HTTP status:
+    (kind, text)} tried before the generic mapping (the feedback calls' own words). `raw_cap`: the answer is bytes
+    (a download) of at most that many, else `too_large`; without it the answer is a JSON object."""
     _reachable(url)
     data = None if body is None else json.dumps(body).encode("utf-8")
-    headers = {"Accept": "application/json", **({"Content-Type": "application/json"} if body is not None else {})}
+    headers = {"Accept": "application/json" if raw_cap is None else "*/*",
+               **({"Content-Type": "application/json"} if body is not None else {})}
     token = _token() if auth else ""
     if token:
         headers["Authorization"] = f"Bearer {token}"
     deadline = time.monotonic() + timeout
     for attempt in (1, 2):
-        req = urllib.request.Request(url, data=data, method="GET" if body is None else "POST", headers=headers)
+        req = urllib.request.Request(url, data=data, method=method or ("GET" if body is None else "POST"),
+                                     headers=headers)
         try:
             with _OPENER.open(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: S310
-                raw = resp.read()
+                if raw_cap is None:
+                    raw = resp.read()
+                else:
+                    raw = resp.read(raw_cap + 1)
+                    if len(raw) > raw_cap:
+                        raise LocalReaderError("too_large", f"the local reader's download is over {raw_cap // 1048576} "
+                                                            "MB: not fetched")
             break
         except urllib.error.HTTPError as e:
             code, msg = _error_of(e.read() or b"")
@@ -195,6 +219,9 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False)
             if code == "unsupported_api_version":
                 raise LocalReaderError("version", "the local reader does not speak this kit's API version: "
                                                   "update the local reader") from None
+            own = (errors or {}).get(code) or (errors or {}).get(e.code)
+            if own:
+                raise LocalReaderError(own[0], own[1]) from None
             if e.code == 503 and code == "busy" and attempt == 1:
                 try:
                     wait = float(e.headers.get("Retry-After") or 0)
@@ -210,6 +237,8 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False)
             reason = getattr(e, "reason", None) or e
             raise LocalReaderError("unreachable", f"the local reader at {urlparse(url).netloc} does not answer "
                                                   f"({reason})") from None
+    if raw_cap is not None:
+        return raw
     try:
         out = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
@@ -248,13 +277,82 @@ def _tiers(raw) -> dict:
     return out
 
 
+def _version_at_least(v, major: int, minor: int) -> bool:
+    """"1.1" / "1.2" / 2 are at least 1.1; "1.0", 1, None and junk are not."""
+    if isinstance(v, bool) or v is None:
+        return False
+    parts = str(v).strip().split(".")
+    try:
+        got = (int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
+    except ValueError:
+        return False
+    return got >= (major, minor)
+
+
+def _opt_bool(v) -> bool | None:
+    return v if isinstance(v, bool) else None
+
+
+def _count(v) -> int | None:
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+
+
+def _accelerator(v) -> str | None:
+    if isinstance(v, dict):
+        v = v.get("name") or v.get("device") or v.get("provider") or v.get("type")
+    if isinstance(v, (str, int, float)) and not isinstance(v, bool):
+        return str(v).strip()[:80] or None
+    return None
+
+
+def capabilities(h) -> dict:
+    """What the reader can do, from its /v1/health answer `h` (None or anything: the "none" answer). Never raises.
+        {"feedback": bool,            the 1.1 correction queue exists
+         "opt_in": bool|None,         the reader's opt-in is on (None: not known until GET /v1/feedback)
+         "endpoint_configured": bool|None, "count": int|None,
+         "source_record": bool,       POST /v1/feedback may carry `source` and `record`
+         "accelerator": str|None,     what the reader computes on, when it says
+         "known_from": "health"|"api_version"|"none"}
+    The reader's own `capabilities` object wins; without one, API 1.1 or later means the queue exists (the rest
+    unknown) and anything older means none."""
+    none = {"feedback": False, "opt_in": None, "endpoint_configured": None, "count": None, "source_record": False,
+            "accelerator": None, "known_from": "none"}
+    if not isinstance(h, dict):
+        return none
+    try:
+        caps = h.get("capabilities")
+        if not isinstance(caps, dict):
+            if _version_at_least(h.get("api_version"), 1, 1):
+                return {**none, "feedback": True, "known_from": "api_version",
+                        "accelerator": _accelerator(h.get("accelerator"))}
+            return {**none, "accelerator": _accelerator(h.get("accelerator"))}
+        fb = caps.get("feedback")
+        detail = fb if isinstance(fb, dict) else {}
+        if not detail and isinstance(h.get("feedback"), dict):
+            detail = h["feedback"]
+        has = fb is True or (isinstance(fb, dict) and fb.get("enabled", True) is not False) or (
+            fb is None and bool(detail))
+        fields = detail.get("fields")
+        both = (detail.get("source") is True and detail.get("record") is True) or (
+            isinstance(fields, list) and "source" in fields and "record" in fields)
+        return {"feedback": has, "opt_in": _opt_bool(detail.get("opt_in")) if has else None,
+                "endpoint_configured": _opt_bool(detail.get("endpoint_configured")) if has else None,
+                "count": _count(detail.get("count")) if has else None, "source_record": bool(has and both),
+                "accelerator": _accelerator(caps.get("accelerator", h.get("accelerator"))),
+                "known_from": "health"}
+    except Exception:       # an odd answer never fails the reader's status
+        return none
+
+
 def health(cfg: dict, timeout: float = HEALTH_TIMEOUT) -> dict:
-    """{ok, degraded, url, api_version, version, tiers, revise, auth_required, last_read_at, error}: never raises.
+    """{ok, degraded, url, api_version, version, tiers, revise, auth_required, last_read_at, capabilities, error}:
+    never raises (`capabilities`: see capabilities()).
     `ok`: a read can be served now (status ok, or degraded with a usable tier); `error` says why not, or what is
     degraded."""
     s = settings(cfg)
     out = {"ok": False, "degraded": False, "url": s["url"], "api_version": None, "version": None, "tiers": {},
-           "revise": False, "auth_required": False, "last_read_at": None, "error": None}
+           "revise": False, "auth_required": False, "last_read_at": None, "error": None,
+           "capabilities": capabilities(None)}
     try:
         h = _request(f"{s['url']}/v1/health", body=None, timeout=timeout)
     except LocalReaderError as e:
@@ -263,7 +361,7 @@ def health(cfg: dict, timeout: float = HEALTH_TIMEOUT) -> dict:
     tiers = _tiers(h.get("tiers"))
     out.update(api_version=h.get("api_version"), version=h.get("module_version") or h.get("version"), tiers=tiers,
                revise=h.get("revise") is True, auth_required=h.get("auth_required") is True,
-               last_read_at=h.get("last_read_at"))
+               last_read_at=h.get("last_read_at"), capabilities=capabilities(h))
     usable = [k for k, t in tiers.items() if t["usable"]]
     if not _version_ok(h.get("api_version")):
         major = _major(h.get("api_version"))
@@ -427,3 +525,86 @@ def revise(cfg: dict, images: list[bytes], previous: dict, note: str, fils: list
     if isinstance(out.get("item"), dict) and not isinstance(out.get("items"), list):
         out = {**out, "items": [out["item"]]}
     return _answer(cfg, out, vendors, len(images))
+
+
+# ---------- the correction queue (API 1.1; used by the Share corrections steps) ----------
+
+# The reader's words for what can go wrong, by its error code (or HTTP status), in the kit's error kinds
+_TOO_BIG = ("too_large", "the corrections are too big for the local reader (too many or too large photos)")
+_FEEDBACK_ERRORS = {
+    "feedback_disabled": ("feedback_disabled", "sharing of corrections is switched off in the local reader: switch "
+                                               "it on first"),
+    403: ("feedback_disabled", "the local reader refused: sharing of corrections is switched off there"),
+    "empty_feedback_queue": ("empty", "there are no corrections waiting"),
+    "feedback_upload_failed": ("upload_failed", "the local reader could not send the corrections; they are still "
+                                                "waiting, try again later"),
+    409: ("conflict", "the local reader already has this correction"),
+    "too_large": _TOO_BIG,
+    413: _TOO_BIG,
+    404: ("not_found", "the local reader has no such correction (or is too old to keep them: update it)"),
+}
+
+
+def _feedback_base(cfg: dict) -> str:
+    return f"{settings(cfg)['url']}/v1/feedback"
+
+
+def _check_body(body: dict) -> dict:
+    """The kit never names an upload address to the reader: a bug that did would fail here, not leak."""
+    bad = [k for k in body if str(k).lower() in FORBIDDEN_FIELDS]
+    if bad:
+        raise ValueError(f"the kit never sends {bad[0]} to the local reader")
+    return body
+
+
+def feedback_list(cfg: dict) -> dict:
+    """{opt_in, endpoint_configured, count, bundle_mb, entries} from GET /v1/feedback: missing fields get safe
+    defaults, the entries are the reader's own summaries (id, time, predicted, corrected, thumbnail ...)."""
+    out = _request(_feedback_base(cfg), body=None, timeout=FEEDBACK_TIMEOUT, auth=True, errors=_FEEDBACK_ERRORS)
+    entries = out.get("entries") if isinstance(out.get("entries"), list) else out.get("items")
+    mb = out.get("bundle_mb")
+    return {"opt_in": out.get("opt_in") is True, "endpoint_configured": out.get("endpoint_configured") is True,
+            "count": _count(out.get("count")) or 0,
+            "bundle_mb": float(mb) if isinstance(mb, (int, float)) and not isinstance(mb, bool) else 0.0,
+            "entries": [e for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []}
+
+
+def feedback_add(cfg: dict, images: list[bytes], predicted: dict, corrected: dict, note: str = "", *,
+                 source: str | None = None, record: str | None = None, caps: dict | None = None) -> dict:
+    """Queue one correction: the reader strips the photos' metadata and shrinks them. `source` ("local" | "cloud")
+    and `record` (the Hub's record id) go along only when the reader advertises them (`caps`, else read from its
+    health); a reader that does not know them is sent neither. Returns the reader's answer (the entry's id ...)."""
+    body = {"api_version": API_SENT, "images_b64": [base64.standard_b64encode(b).decode("ascii") for b in images],
+            "predicted": predicted or {}, "corrected": corrected or {}, "note": note or ""}
+    if source is not None or record is not None:
+        if caps is None:
+            caps = health(cfg)["capabilities"]
+        if caps.get("source_record"):
+            if source is not None:
+                body["source"] = str(source)
+            if record is not None:
+                body["record"] = str(record)
+    return _request(_feedback_base(cfg), body=_check_body(body), timeout=FEEDBACK_TIMEOUT, auth=True,
+                    errors=_FEEDBACK_ERRORS)
+
+
+def feedback_delete(cfg: dict, entry_id: str) -> dict:
+    """Remove one waiting correction (and its photos) from the reader."""
+    eid = str(entry_id or "").strip()
+    if not eid:
+        raise LocalReaderError("not_found", "no such correction")
+    return _request(f"{_feedback_base(cfg)}/{quote(eid, safe='')}", body=None, method="DELETE",
+                    timeout=FEEDBACK_TIMEOUT, auth=True, errors=_FEEDBACK_ERRORS)
+
+
+def feedback_bundle(cfg: dict, cap: int = BUNDLE_CAP) -> bytes:
+    """The zip the reader would send, exactly (for the user to look at); at most `cap` bytes, else `too_large`."""
+    return _request(f"{_feedback_base(cfg)}/bundle.zip", body=None, timeout=BUNDLE_TIMEOUT, auth=True,
+                    errors=_FEEDBACK_ERRORS, raw_cap=cap)
+
+
+def feedback_submit(cfg: dict) -> dict:
+    """Ask the reader to send what is waiting to where the reader itself sends it; the answer is the reader's (ok,
+    sent count ...). No address of ours goes along, ever. May take long (the reader's proof of work, the upload)."""
+    return _request(f"{_feedback_base(cfg)}/submit", body=_check_body({"api_version": API_SENT}),
+                    timeout=SUBMIT_TIMEOUT, auth=True, errors=_FEEDBACK_ERRORS)
