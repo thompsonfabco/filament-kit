@@ -196,7 +196,19 @@ private fun DrawScope.drawLookPreview(tokens: ThemeTokens, c: SpoolwardenColors,
             }
             top = bar + h * 0.15f
         }
-        NavStyle.List -> Unit
+        NavStyle.List -> {
+            // the section list: a pane of one grouped block, its current row on a darker ground with a marked tile
+            val pane = w * 0.34f
+            drawRect(c.border, Offset(pane - line, bar), Size(line, h - bar))
+            block(pane * 0.1f, bar + h * 0.05f, pane * 0.8f, h * 0.42f, c.surface, c.border)
+            repeat(3) { i ->
+                val ry = bar + h * (0.08f + 0.12f * i)
+                if (i == 0) drawRect(c.surface3, Offset(pane * 0.1f + line, ry - h * 0.015f), Size(pane * 0.8f - 2 * line, h * 0.1f))
+                block(pane * 0.16f, ry, pane * 0.14f, h * 0.07f, if (i == 0) c.accentText else c.muted)
+                block(pane * 0.36f, ry + h * 0.02f, pane * 0.4f, h * 0.03f, c.muted)
+            }
+            left = pane
+        }
     }
 
     // the collection form, in the room that is left

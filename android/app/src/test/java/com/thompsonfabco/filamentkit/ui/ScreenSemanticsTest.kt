@@ -203,8 +203,11 @@ import com.thompsonfabco.filamentkit.ui.history.RecordViewModel
 @RunWith(RobolectricTestRunner::class)
 // a tall window, so nothing is scrolled out of view and every control has a touch area to measure
 @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h8000dp")
-class ScreenSemanticsTest {
+open class ScreenSemanticsTest {
     @get:Rule val rule = createComposeRule()
+
+    /** The look every screen is drawn in; the Workbench run of AUT-8 overrides it. */
+    protected open val look: Look = Look.Console
 
     private var dark by mutableStateOf(false)
     private var fontScale by mutableStateOf(1f)
@@ -218,7 +221,7 @@ class ScreenSemanticsTest {
             val base = LocalDensity.current
             density = base.density
             CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
-                SpoolwardenTheme(Look.Console, if (dark) Appearance.Dark else Appearance.Light) {
+                SpoolwardenTheme(look, if (dark) Appearance.Dark else Appearance.Light) {
                     CompositionLocalProvider(LocalTopBarActions provides actions) {
                         Column(Modifier.fillMaxSize()) {
                             SwTopBar(title = title) { actions.content?.invoke(this) }
@@ -237,7 +240,7 @@ class ScreenSemanticsTest {
             val base = LocalDensity.current
             density = base.density
             CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
-                SpoolwardenTheme(Look.Console, if (dark) Appearance.Dark else Appearance.Light) { screen() }
+                SpoolwardenTheme(look, if (dark) Appearance.Dark else Appearance.Light) { screen() }
             }
         }
     }

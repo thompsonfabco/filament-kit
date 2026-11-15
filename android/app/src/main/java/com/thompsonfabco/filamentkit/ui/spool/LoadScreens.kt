@@ -41,9 +41,11 @@ import com.thompsonfabco.filamentkit.ui.components.StatusLabel
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
+import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
@@ -132,25 +134,41 @@ fun LoadPrintersScreen(
                 SwSkeletonRows(SKELETON_ROWS)
             },
         ) {
-            SpoolPanel {
-                printers.orEmpty().forEachIndexed { i, p ->
-                    if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+            SwCollection(
+                printers.orEmpty(), inset = space.s4, surface = true,
+                tile = { _, p ->
                     val can = canTakeLoad(p)
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(enabled = can) { pick(p, false) },
-                        horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically,
+                    val kind = statusOf(p)
+                    // the reason it is off, as the row says it; Offline is said by its label
+                    val why = if (!can && p.state != Printer.STATE_OFFLINE) fixText(p.state)?.let { stringResource(it) } else null
+                    SwTile(
+                        title = p.name,
+                        description = listOfNotNull(p.name, p.shownModel, stringResource(kind.word), why).joinToString(", "),
+                        actionLabel = stringResource(R.string.spool_load_choose),
+                        onAction = { pick(p, false) },
+                        subtitle = p.shownModel,
+                        status = { StatusLabel(kind, small = true) },
+                        enabled = can,
                     ) {
-                        Column(Modifier.weight(1f).padding(vertical = space.s2)) {
-                            Text(p.name, style = MaterialTheme.typography.bodyLarge, color = if (can) colors.text else colors.muted)
-                            StatusLabel(statusOf(p), small = true)
-                            p.shownModel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.muted) }
-                            // the reason it is off; Offline is said by its label
-                            if (!can && p.state != Printer.STATE_OFFLINE) {
-                                fixText(p.state)?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = colors.muted) }
-                            }
-                        }
-                        if (can) SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
+                        if (why != null) Text(why, style = MaterialTheme.typography.bodySmall, color = colors.muted)
                     }
+                },
+            ) { _, p ->
+                val can = canTakeLoad(p)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(enabled = can) { pick(p, false) },
+                    horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f).padding(vertical = space.s2)) {
+                        Text(p.name, style = MaterialTheme.typography.bodyLarge, color = if (can) colors.text else colors.muted)
+                        StatusLabel(statusOf(p), small = true)
+                        p.shownModel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.muted) }
+                        // the reason it is off; Offline is said by its label
+                        if (!can && p.state != Printer.STATE_OFFLINE) {
+                            fixText(p.state)?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = colors.muted) }
+                        }
+                    }
+                    if (can) SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
                 }
             }
         }

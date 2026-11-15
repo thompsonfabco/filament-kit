@@ -67,7 +67,7 @@ private fun SettingsList(facts: SettingsFacts, onOpen: (SettingsGroup) -> Unit, 
 }
 
 @get:DrawableRes
-private val SettingsGroup.icon: Int
+internal val SettingsGroup.icon: Int
     get() = when (this) {
         SettingsGroup.Appearance -> R.drawable.sw_ic_half_circle
         SettingsGroup.Hub -> R.drawable.sw_ic_plug

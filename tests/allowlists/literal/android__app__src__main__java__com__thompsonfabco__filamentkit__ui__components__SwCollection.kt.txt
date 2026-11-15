@@ -1,0 +1,4 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwCollection.kt | 16.dp | 1 | the rem of the tile and card widths, 16 dp to the rem of 02-components 6.1; no size token holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwCollection.kt | 16.sp | 1 | the rem as a text size, so the grid columns grow with the font scale; no type token is 16 sp in every look
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwCollection.kt | 224.dp | 1 | the tile grid column of 02 6.1, minmax(14rem, 1fr) at 16 dp to the rem; no size token holds it
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwCollection.kt | 288.dp | 1 | the card grid column of 02 6.1, minmax(18rem, 1fr) at 16 dp to the rem; no size token holds it

@@ -7,10 +7,9 @@ val Look.wire: String get() = name.lowercase()
 fun lookFromWire(text: String?): Look? = Look.entries.firstOrNull { it.wire == text }
 
 /**
- * The looks whose layouts the app has built (08-platform-mapping 9: a look is drawn only when the screens can). Console
- * today; the Workbench, Palette and Panes steps (S6.5, S6.7, S6.9) each add theirs.
+ * The looks whose layouts the app has built (08-platform-mapping 9: a look is drawn only when the screens can): all four.
  */
-internal val BUILT_LOOKS: List<Look> = listOf(Look.Console)
+internal val BUILT_LOOKS: List<Look> = Look.entries
 
 /**
  * The look to draw: the phone's own choice wins; a phone that has not chosen follows the Hub's default (the answer of

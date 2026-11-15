@@ -38,6 +38,7 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
@@ -57,6 +58,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import java.math.BigDecimal
+import com.thompsonfabco.filamentkit.ui.spool.SpoolTile
 
 /** The calls "Pick a spool for a slot" makes; [ApiPickBackend] adapts the Api, tests pass a fake. */
 interface PickBackend {
@@ -396,11 +398,8 @@ fun PickSpoolScreen(
             )
         }
         if (s.results.isNotEmpty()) {
-            PrinterPanel(title = null, padded = false) {
-                s.results.forEachIndexed { i, spool ->
-                    if (i > 0) PanelDivider()
-                    SpoolRow(spool) { viewModel.pick(spool) }
-                }
+            SwCollection(s.results, visual = SpoolwardenTheme.sizes.swatchRowW + SpoolwardenTheme.space.s3, tile = { _, spool -> SpoolTile(spool) { viewModel.pick(spool) } }) { _, spool ->
+                SpoolRow(spool) { viewModel.pick(spool) }
             }
         }
     }

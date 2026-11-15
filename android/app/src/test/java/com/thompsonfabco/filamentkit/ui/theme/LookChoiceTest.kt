@@ -25,10 +25,30 @@ class LookChoiceTest {
     }
 
     @Test fun aLookWithNoBuiltLayoutIsNotDrawn() {
-        assertEquals(listOf(Look.Console), BUILT_LOOKS)
-        assertEquals(Look.Console, resolveLook(chosen = null, hub = Look.Palette))
-        assertEquals(Look.Console, resolveLook(chosen = Look.Panes, hub = null))
-        assertEquals("the Hub's look is the fallback of an unbuilt choice", Look.Workbench, resolveLook(Look.Panes, Look.Workbench, listOf(Look.Console, Look.Workbench)))
+        val three = listOf(Look.Console, Look.Workbench, Look.Palette)
+        assertEquals(Look.Console, resolveLook(chosen = null, hub = Look.Panes, built = three))
+        assertEquals(Look.Console, resolveLook(chosen = Look.Panes, hub = null, built = three))
+        assertEquals("the Hub's look is the fallback of an unbuilt choice", Look.Workbench, resolveLook(Look.Panes, Look.Workbench, three))
+    }
+
+    @Test fun everyLookIsBuiltSoThePanesAreDrawnWhenChosenOrWhenTheHubNamesThemAndNothingIsStored() {
+        assertEquals(Look.entries, BUILT_LOOKS)
+        assertEquals(Look.Panes, resolveLook(chosen = Look.Panes, hub = null))
+        assertEquals("the phone's own Console wins over the Hub's Panes", Look.Console, resolveLook(Look.Console, Look.Panes))
+        assertEquals("nothing stored: the Hub's look", Look.Panes, resolveLook(chosen = null, hub = lookFromWire("panes")))
+        assertEquals("neither: Console", Look.Console, resolveLook(null, null))
+    }
+
+    @Test fun theWorkbenchIsDrawnWhenChosenOrWhenTheHubNamesItAndNothingIsStored() {
+        assertEquals(Look.Workbench, resolveLook(chosen = Look.Workbench, hub = null))
+        assertEquals("the phone's own Console wins over the Hub's Workbench", Look.Console, resolveLook(Look.Console, Look.Workbench))
+        assertEquals("nothing stored: the Hub's look", Look.Workbench, resolveLook(chosen = null, hub = lookFromWire("workbench")))
+    }
+
+    @Test fun thePaletteIsDrawnWhenChosenOrWhenTheHubNamesItAndNothingIsStored() {
+        assertEquals(Look.Palette, resolveLook(chosen = Look.Palette, hub = null))
+        assertEquals("the phone's own Console wins over the Hub's Palette", Look.Console, resolveLook(Look.Console, Look.Palette))
+        assertEquals("nothing stored: the Hub's look", Look.Palette, resolveLook(chosen = null, hub = lookFromWire("palette")))
     }
 
     @Test fun lookNamesAreTheHubsWords() {
