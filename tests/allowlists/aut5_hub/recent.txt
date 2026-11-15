@@ -1,2 +1,0 @@
-#recent | hit area under 44 x 44 | div > div.item > div.row > button.secondary | 2 | Recently added (today's markup); removed by S2.7
-#recent | img alt is "photo N" | div > div.item > div.row > img | 4 | Recently added (today's markup); removed by S2.7

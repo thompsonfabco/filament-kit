@@ -2929,6 +2929,18 @@
     <string name="recent_weighed">Weighed %1$s</string>
     <!-- 1=details -->
     <string name="recent_when_read">When read: %1$s</string>
+    <string name="recent_accept_while_editing">Save or cancel your edit first: Accept would replace what you typed.</string>
+    <string name="recent_answer_dropped">The record changed while the Label Reader was asked, so its answer was not used. Ask again.</string>
+    <string name="recent_confidence_not_rated">Not rated</string>
+    <string name="recent_confidence_note_unrated">This reader does not say how sure it is. Check the values against the label.</string>
+    <!-- 1=engine 2=model -->
+    <string name="recent_engine">%1$s · %2$s</string>
+    <string name="recent_items_legend">Item of this record</string>
+    <string name="recent_mark_filled">Medium: filled in by the Hub</string>
+    <!-- 1=value -->
+    <string name="recent_size_kb">%1$s KB</string>
+    <!-- 1=value -->
+    <string name="recent_size_mb">%1$s MB</string>
     <!-- 1=value 2=unit -->
     <string name="recent_value_unit">%1$s %2$s</string>
     <!-- 1=name 2=id -->
