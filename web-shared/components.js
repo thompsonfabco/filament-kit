@@ -373,7 +373,7 @@ function setLook(look) {
   return store.set("spoolwarden.look", look);
 }
 // the picker (3.4): one entry per theme that is built; a theme built later is one more entry here
-const THEMES = ["console"];   // the arrow keys select a tile only once there are two tiles
+const THEMES = ["console", "workbench"];
 function themePicker(o = {}) {
   const now = root.getAttribute("data-look") || "console", chosen = THEMES.includes(now) ? now : null;   // a theme with no tile: none is checked
   const fs = h("fieldset", { class: "theme-picker" }, h("legend", { class: o.legend ? "theme-picker__legend" : "sr" }, t("appearance_theme_title")));
