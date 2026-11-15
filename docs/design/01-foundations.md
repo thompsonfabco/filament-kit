@@ -337,9 +337,11 @@ except progress indicators. Everything respects `prefers-reduced-motion`.
 5. Every colour, size and duration comes from a token. A check fails the build on a literal colour in a component
    rule.
 6. Every page works by keyboard alone and with a screen reader (`07-accessibility.md`).
-7. Fast on a phone: the shared core stylesheet stays under 40 KB and the shared core script under 60 KB
-   uncompressed. Parts only some pages need (the job strip, photos and the photo viewer) are separate files of
-   at most 30 KB each, loaded only by those pages; no page loads more than 80 KB of styles or 120 KB of script in
+7. Fast on a phone: the shared core stylesheet stays under 60 KB and the shared core script under 60 KB
+   uncompressed. The stylesheet's limit covers all four looks: every look's profile groups are in the one core
+   file, so changing the look loads nothing and moves nothing (a look is chosen in the browser, so the Hub
+   cannot send only one look's rules). Parts only some pages need (the job strip, photos and the photo viewer) are separate files of
+   at most 30 KB each, loaded only by those pages; no page loads more than 100 KB of styles or 120 KB of script in
    all, its own included. No layout shift after the first paint; lists of more than 50 items are paged or
    virtualised.
 8. No owner data in examples, placeholders, screenshots or tests: example addresses use `192.0.2.x`,
