@@ -208,7 +208,7 @@ def test_send_with_the_reader_absent_or_old_starts_no_job(hub):
 
 
 def test_the_job_is_on_the_closed_list_with_its_command_and_busy_text():
-    assert setup_helper.JOBS["corrections_send"] == ("local-intake", "corrections", "send")
+    assert setup_helper.JOBS["corrections_send"] == ("label-reader", "corrections", "send")
     assert "corrections_send" in setup_helper.BUSY
 
 
@@ -246,7 +246,7 @@ def test_the_job_command_with_nothing_waiting_or_no_reader(hub, capsys):
 def test_the_command_is_wired_in_the_parser(hub, monkeypatch):
     seen = []
     monkeypatch.setattr(cli, "cmd_local_intake_corrections_send", lambda: seen.append(1) or 0)
-    assert cli.main(["local-intake", "corrections", "send"]) == 0 and seen == [1]
+    assert cli.main(["label-reader", "corrections", "send"]) == 0 and seen == [1]
 
 
 def test_reader_corrections_send_asks_the_reader_with_only_the_api_version(hub):
@@ -402,17 +402,17 @@ def test_a_conflict_is_the_hubs_own_refusal(hub):
 
 def test_cli_list_remove_package(hub, capsys, tmp_path):
     _, data, _ = hub
-    assert cli.main(["local-intake", "corrections", "list"]) == 0
+    assert cli.main(["label-reader", "corrections", "list"]) == 0
     assert "No corrections waiting." in capsys.readouterr().out
     a, b = add(data, "r1"), add(data, "r2")
-    assert cli.main(["local-intake", "corrections"]) == 0
+    assert cli.main(["label-reader", "corrections"]) == 0
     out = capsys.readouterr().out
     assert "Corrections waiting: 2" in out and a in out and b in out and "Polymaker" in out
-    assert cli.main(["local-intake", "corrections", "package", str(tmp_path)]) == 0
+    assert cli.main(["label-reader", "corrections", "package", str(tmp_path)]) == 0
     saved = next(tmp_path.glob("spoolwarden-corrections-*.zip"))
     assert saved.read_bytes() == local_reader.feedback_bundle(config.load())
     capsys.readouterr()
-    assert cli.main(["local-intake", "corrections", "remove", a, "fb-99"]) == output.FAILED
+    assert cli.main(["label-reader", "corrections", "remove", a, "fb-99"]) == output.FAILED
     cap = capsys.readouterr()
     assert f"Removed {a}. Nothing was sent." in cap.out and "fb-99: That correction is not waiting" in cap.err
     assert [e["id"] for e in data["queue"]] == [b] and data["submits"] == []
@@ -420,14 +420,14 @@ def test_cli_list_remove_package(hub, capsys, tmp_path):
 
 def test_cli_refusals_are_the_routes_texts(hub, capsys, tmp_path):
     _, data, _ = hub
-    assert cli.main(["local-intake", "corrections", "package", str(tmp_path / "x.zip")]) == output.FAILED
+    assert cli.main(["label-reader", "corrections", "package", str(tmp_path / "x.zip")]) == output.FAILED
     err = capsys.readouterr().err
     assert err.startswith("Error: ") and reader_corrections.EMPTY in " ".join(err.split())
     cfg = config.load()
     cfg["modules"]["local_intake"] = False
     config.save(cfg)
     for args in (["list"], ["remove", "fb-1"], ["package", str(tmp_path)], ["send"]):
-        assert cli.main(["local-intake", "corrections", *args]) == output.FAILED
+        assert cli.main(["label-reader", "corrections", *args]) == output.FAILED
         assert reader_corrections.NO_READER in " ".join(capsys.readouterr().err.split())
 
 
@@ -437,29 +437,29 @@ def test_cli_corrections_need_root_exit_3_with_the_sudo_fix(hub, capsys, monkeyp
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
     for args in (["list"], ["remove", "fb-1"], ["package", "x.zip"], ["send"]):
-        assert cli.main(["local-intake", "corrections", *args]) == output.NEEDS_SUDO == 3
+        assert cli.main(["label-reader", "corrections", *args]) == output.NEEDS_SUDO == 3
         err = capsys.readouterr().err
-        assert "Error: this needs administrator rights." in err and "sudo filament-kit local-intake corrections" in err
+        assert "Error: this needs administrator rights." in err and "sudo filament-kit label-reader corrections" in err
     assert len(data["queue"]) == 1 and data["submits"] == []
 
 
 def test_the_global_json_switch_gives_each_commands_document(hub, capsys, tmp_path):
     _, data, _ = hub
     a = add(data, "r1")
-    assert cli.main(["--json", "local-intake", "corrections", "list"]) == 0
+    assert cli.main(["--json", "label-reader", "corrections", "list"]) == 0
     doc = json.loads(capsys.readouterr().out)
     assert doc["ok"] is True and doc["count"] == 1 and doc["entries"][0]["id"] == a and doc["not_queued"] == []
-    assert cli.main(["--json", "local-intake", "corrections", "package", str(tmp_path)]) == 0
+    assert cli.main(["--json", "label-reader", "corrections", "package", str(tmp_path)]) == 0
     doc = json.loads(capsys.readouterr().out)
     assert doc["ok"] is True and doc["bytes"] > 0 and doc["file"].endswith(".zip")
-    assert cli.main(["--json", "local-intake", "corrections", "remove", a, "fb-99"]) == output.FAILED
+    assert cli.main(["--json", "label-reader", "corrections", "remove", a, "fb-99"]) == output.FAILED
     doc = json.loads(capsys.readouterr().out)
     assert doc["ok"] is False and doc["removed"] == [a] and doc["failed"][0]["reason"] == "not_found"
-    assert cli.main(["--json", "local-intake", "corrections", "send"]) == output.FAILED
+    assert cli.main(["--json", "label-reader", "corrections", "send"]) == output.FAILED
     doc = json.loads(capsys.readouterr().out)
     assert doc["ok"] is False and doc["reason"] == "empty" and "error" in doc
     add(data, "r2")
-    assert cli.main(["--json", "local-intake", "corrections", "send"]) == 0
+    assert cli.main(["--json", "label-reader", "corrections", "send"]) == 0
     assert json.loads(capsys.readouterr().out) == {"ok": True, "sent": 1}
 
 
@@ -511,14 +511,14 @@ def test_the_apps_api_has_no_try_again(phone):
 def test_cli_retry_queues_again_with_the_conventions(hub, capsys, monkeypatch):
     _, data, _ = hub
     rid = a_record("the Label Reader did not answer: down")
-    assert cli.main(["--json", "local-intake", "corrections", "retry", rid, "0123456789ab"]) == output.FAILED
+    assert cli.main(["--json", "label-reader", "corrections", "retry", rid, "0123456789ab"]) == output.FAILED
     cap = capsys.readouterr()
     doc = json.loads(cap.out)
     assert doc["ok"] is False and doc["retried"] == [{"record": rid, "state": "none", "reason": None}]
     assert doc["failed"][0]["record"] == "0123456789ab" and doc["failed"][0]["reason"] == "not_found"
     assert "0123456789ab: That record is no longer kept." in cap.err
     rid2 = a_record("again down")
-    assert cli.main(["local-intake", "corrections", "retry", rid2]) == 0
+    assert cli.main(["label-reader", "corrections", "retry", rid2]) == 0
     assert f"{rid2}: nothing to share for this record." in capsys.readouterr().out
     assert data["submits"] == []
 
@@ -527,7 +527,7 @@ def test_cli_retry_that_fails_again_exits_1(hub, capsys, monkeypatch):
     _, _, _ = hub
     rid = a_record("down")
     monkeypatch.setattr(share_queue, "retry", lambda r: {"state": "not_queued", "reason": "still down", "entries": 0})
-    assert cli.main(["--json", "local-intake", "corrections", "retry", rid]) == output.FAILED
+    assert cli.main(["--json", "label-reader", "corrections", "retry", rid]) == output.FAILED
     cap = capsys.readouterr()
     assert json.loads(cap.out)["retried"][0] == {"record": rid, "state": "not_queued", "reason": "still down"}
     assert "the reader did not take this correction. still down" in cap.err
@@ -536,5 +536,5 @@ def test_cli_retry_that_fails_again_exits_1(hub, capsys, monkeypatch):
 def test_cli_retry_needs_root(hub, capsys, monkeypatch):
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
-    assert cli.main(["local-intake", "corrections", "retry", "abc"]) == output.NEEDS_SUDO
-    assert "sudo filament-kit local-intake corrections retry abc" in capsys.readouterr().err
+    assert cli.main(["label-reader", "corrections", "retry", "abc"]) == output.NEEDS_SUDO
+    assert "sudo filament-kit label-reader corrections retry abc" in capsys.readouterr().err

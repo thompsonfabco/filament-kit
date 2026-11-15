@@ -112,7 +112,7 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update", "--yes"
         # Share corrections (label_reader.share_corrections): the module's own config command, then its restart
         "local_intake_share": ("local-intake", "share-corrections"),
         # Send now on the corrections waiting: the reader does the upload, the job only asks it (and may wait long)
-        "corrections_send": ("local-intake", "corrections", "send"),
+        "corrections_send": ("label-reader", "corrections", "send"),
         # the "Flash a device" tab, Printer Station plugged into the server: the answers wait in reader_flash.PENDING
         "reader_setup": ("reader", "setup", "--pending")}
 WRAPPER = "/usr/local/bin/filament-kit"

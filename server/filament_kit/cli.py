@@ -5887,7 +5887,7 @@ def cmd_local_intake_corrections_list() -> int:
         output.out("No corrections waiting.")
     else:
         output.out(f"Corrections waiting: {got['count']} - {got['bytes'] / 1048576:.1f} MB. Nothing is sent until you "
-                   "run: sudo filament-kit local-intake corrections send")
+                   "run: sudo filament-kit label-reader corrections send")
         for e in got["entries"]:
             what = ", ".join(f"{k}: {v}" for k, v in (e.get("corrected") or {}).items()) if isinstance(
                 e.get("corrected"), dict) else ""
@@ -6668,6 +6668,17 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lrt.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
     lrt.add_argument("--engine", choices=("cloud", "local"), default=None,
                      help="read with this engine only (default: the engine order)")
+    lrc = lrsub.add_parser("corrections", help="the corrections waiting to be shared: list, remove, retry, package, "
+                                               "send (nothing is sent by itself)")
+    lrcsub = lrc.add_subparsers(dest="lrc_cmd")
+    lrcsub.add_parser("list", help="the corrections waiting to be shared (the default)")
+    lcr = lrcsub.add_parser("remove", help="take corrections out of the list; nothing is sent")
+    lcr.add_argument("ids", nargs="+", help="the ids `list` shows")
+    lcy = lrcsub.add_parser("retry", help="queue the corrections of records again that `list` shows as not waiting")
+    lcy.add_argument("records", nargs="+", help="the record ids `list` shows")
+    lcp = lrcsub.add_parser("package", help="save the exact zip that send would send, to look at it first")
+    lcp.add_argument("file", help="a file name, or a folder")
+    lrcsub.add_parser("send", help="ask the Label Reader to send the corrections waiting (it does the upload)")
     _add_presets(sub, "presets", alias=False)
     _add_presets(sub, "profiles", alias=True)
     _add_features(sub, "features", alias=False)
@@ -6700,17 +6711,6 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lir = lisub.add_parser("remove", help="uninstall the local reader from this machine and switch local_intake off "
                                           "(root; its settings are kept)")
     _add_yes(lir, "do not ask")
-    lic = lisub.add_parser("corrections", help="the corrections waiting to be shared (the setup page's Send now)")
-    licsub = lic.add_subparsers(dest="lic_cmd")
-    licsub.add_parser("list", help="the corrections waiting to be shared (the default)")
-    lcr = licsub.add_parser("remove", help="take corrections out of the list; nothing is sent")
-    lcr.add_argument("ids", nargs="+", help="the ids `list` shows")
-    lcy = licsub.add_parser("retry", help="queue the corrections of records again that `list` shows as not waiting")
-    lcy.add_argument("records", nargs="+", help="the record ids `list` shows")
-    lcp = licsub.add_parser("package", help="save the exact zip that send would send, to look at it first")
-    lcp.add_argument("file", help="a file name, or a folder")
-    licsub.add_parser("send", help="ask the local reader to send the corrections waiting (nothing is sent by "
-                                   "itself; the reader does the upload)")
     lit = lisub.add_parser("test", help="read photos with the local reader only and print the result (no Claude, "
                                         "no daily read used, nothing saved)")
     lit.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
@@ -6913,6 +6913,16 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "label-reader":
         if args.lr_cmd == "status":
             return cmd_local_intake_status()
+        if args.lr_cmd == "corrections":
+            if args.lrc_cmd == "remove":
+                return cmd_local_intake_corrections_remove(args.ids)
+            if args.lrc_cmd == "retry":
+                return cmd_local_intake_corrections_retry(args.records)
+            if args.lrc_cmd == "package":
+                return cmd_local_intake_corrections_package(args.file)
+            if args.lrc_cmd == "send":
+                return cmd_local_intake_corrections_send()
+            return cmd_local_intake_corrections_list()
         return cmd_local_intake_test(args.photos, getattr(args, "engine", None))
     if args.cmd == "printer":
         return _dispatch_printer(args, manager_factory or _default_manager)
@@ -6954,16 +6964,6 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return cmd_local_intake_share(args.value, args.delete_waiting, args.status)
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
-        if args.li_cmd == "corrections":
-            if args.lic_cmd == "remove":
-                return cmd_local_intake_corrections_remove(args.ids)
-            if args.lic_cmd == "retry":
-                return cmd_local_intake_corrections_retry(args.records)
-            if args.lic_cmd == "package":
-                return cmd_local_intake_corrections_package(args.file)
-            if args.lic_cmd == "send":
-                return cmd_local_intake_corrections_send()
-            return cmd_local_intake_corrections_list()
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)
     if args.cmd == "tag-reader" and args.tag_reader_cmd == "flash":
         return cmd_reader_setup(args)

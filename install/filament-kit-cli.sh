@@ -81,7 +81,12 @@ fi
 # file and `plan` saves what an install needs in the root-owned store for the setup page; `status` and `test` only
 # read and run as the user below.
 if [ "${1:-}" = local-intake ] && { [ "${2:-}" = install ] || [ "${2:-}" = remove ] || [ "${2:-}" = token ] \
-        || [ "${2:-}" = plan ]; }; then
+        || [ "${2:-}" = plan ] || [ "${2:-}" = share-corrections ]; }; then
+    run_as_root "$@"
+fi
+# `label-reader corrections` (list, remove, retry, package, send) uses the reader's root-owned token; `status` and
+# `test` read as the user below.
+if [ "${1:-}" = label-reader ] && [ "${2:-}" = corrections ]; then
     run_as_root "$@"
 fi
 
