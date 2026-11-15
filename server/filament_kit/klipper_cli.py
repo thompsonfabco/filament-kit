@@ -1,11 +1,11 @@
-"""`filament-kit klipper ...`: Klipper/Moonraker printers (spec 2026-11-03-klipper-printers §6, §7).
+"""`filament-kit klipper add-on` and the Klipper halves of the `printer` commands (spec 2026-11-03-klipper-printers
+§6, §7; 06 9.2).
 
-    klipper add NAME HOST [--port 7125]     add a printer by host name and show what it is
-    klipper scan [--subnet CIDR]            look for Moonraker on this machine's /24 (or CIDR); found ones are listed
-    klipper detect ID                       ask the printer again what it is (read only)
-    klipper set ID --lane-data auto|on|off  publishing slots to Moonraker lane_data
-    klipper api-key ID                      store a Moonraker API key (asked, never echoed; empty clears it)
-    klipper pack                            print the verified command that installs this version's printer pack
+    klipper add-on                          print the verified command that installs this version's Klipper add-on
+    printer detect                          `detect_printer` below; cli.py asks and names the printer (`printer add
+                                            --klipper` and `scan` run the Hub's own routes, cli.py).
+                                            The old `klipper add|scan|detect|set|api-key|pack` are aliases: `run` hands
+                                            them to the printer commands (06 4)
 
 All read-only towards the printer except what the running server does later. Kept in its own module so cli.py only
 hooks it in (`add_parser`, `run`).
@@ -24,10 +24,9 @@ import re
 import shlex
 import socket
 
-from . import config, hostaddr, output, pairing, release, secret_input, updates
+from . import config, output, pairing, release, updates
 from .bridge import registry
 from .bridge.klipper import detect as kdetect
-from .bridge.klipper import discovery
 from .bridge.klipper import hardware as kh
 from .bridge.klipper import usage as kusage
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, Unauthorized
@@ -141,9 +140,14 @@ def pack_info(version: str, cfg: dict | None = None, *, fetcher: release.Fetcher
         f'echo "{want}  {PACK}" | sha256sum -c - && tar xzf {PACK} && sh fk-printer-pack/fk-printer-pack.sh install{options}']}
 
 
+ADD_ON_INTRO = ("Installs the spool macros and filament-kit's Moonraker settings on a Klipper printer. Run these on the "
+                "printer:")        # the Hub page's sentence (strings.js cli_klipper_add_on_intro)
+
+
 def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> int:
-    """Print the printer-pack install command, pinned to this kit's version and to the pack's SHA-256 from the
-    release's signed SHA256SUMS. Prints no command at all when that hash cannot be had."""
+    """`klipper add-on` (06 9.2): the Hub page's sentence and the add-on's install command, pinned to this kit's version
+    and to the add-on's SHA-256 from the release's signed SHA256SUMS, each command on its own unbroken line. Prints no
+    command at all when that hash cannot be had."""
     version = updates.current_version()
     try:
         info = pack_info(version, cfg, fetcher=fetcher)
@@ -153,31 +157,43 @@ def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> 
                      "development build has none), so there is nothing to run.")
         return output.FAILED
     output.emit({"ok": True, **info})
-    output.out("Run this on the printer (as its normal user, not root):")
-    output.out_lines([f"  {line}" for line in info["lines"]])      # a command is never wrapped
-    output.out(f"The hash is the one in the signed {release.SUMS} of release v{version} (checked here against the "
-               "filament-kit release key); nothing is unpacked or run unless the download matches it.")
+    output.out(ADD_ON_INTRO)
+    output.out()
+    output.out_lines(info["lines"])      # a command is never wrapped
     return 0
 
 
+def dash(value: str) -> str:
+    """The value of an option that takes a secret (06 8.7): only `-`, and the secret comes on standard input. One
+    typed on the command line would show to the other users of the machine."""
+    if value != "-":
+        raise argparse.ArgumentTypeError("a secret is never given on the command line: give - and type it on "
+                                         "standard input")
+    return value
+
+
 def add_parser(sub) -> None:
-    kp = sub.add_parser("klipper", help="Klipper/Moonraker printers: add, scan, detect, lane_data, API key, pack")
+    kp = sub.add_parser("klipper", help="the Klipper add-on (the old spellings of the printer commands still work)")
     ks = kp.add_subparsers(dest="klipper_cmd", required=True)
-    a = ks.add_parser("add", help="add a Klipper printer by its Moonraker host name")
+    ks.add_parser("add-on", help="print the command that installs the Klipper add-on on a printer")
+    ks.add_parser("pack", help=argparse.SUPPRESS)       # the old spellings of 06 4 (`printer add --klipper`, ...)
+    a = ks.add_parser("add", help=argparse.SUPPRESS)
     a.add_argument("name")
     a.add_argument("host", help="host name (a *.home.arpa or .local name is best) or address")
     a.add_argument("--port", type=int, default=7125)
-    s = ks.add_parser("scan", help="look for Moonraker on the LAN (only when you run it)")
+    s = ks.add_parser("scan", help=argparse.SUPPRESS)
     s.add_argument("--subnet", help="CIDR to scan, at most a /24 (default: this machine's /24)")
-    d = ks.add_parser("detect", help="ask a printer what it is (read only)")
+    d = ks.add_parser("detect", help=argparse.SUPPRESS)
     d.add_argument("id")
-    st = ks.add_parser("set", help="change a Klipper printer's settings")
+    st = ks.add_parser("set", help=argparse.SUPPRESS)
     st.add_argument("id")
     st.add_argument("--lane-data", choices=registry.LANE_DATA, required=True,
                     help="publish slots to Moonraker lane_data (auto = multi-tool printers only)")
-    k = ks.add_parser("api-key", help="store the printer's Moonraker API key (asked, not echoed)")
+    k = ks.add_parser("api-key", help=argparse.SUPPRESS)
     k.add_argument("id")
-    ks.add_parser("pack", help="print the command that installs the printer pack on a printer")
+    k.add_argument("--api-key", type=dash, metavar="-", help="give - and type the key on standard input")
+    k.add_argument("--clear", action="store_true")
+    k.add_argument("-y", "--yes", action="store_true")
 
 
 def _spoolman(client: Moonraker, kit_url: str | None, printer_host: str) -> dict | None:
@@ -229,94 +245,61 @@ def detect(p: registry.Printer, *, kit_spoolman: str | None = None, spoolman: bo
     return out
 
 
+def _model_text(d: dict) -> str:
+    return f"{d['model']}{'' if d['verified'] else ' (not verified)'}"
+
+
+def _slots_text(d: dict) -> str:
+    return ", ".join(d["slots"]) or "from the printer"
+
+
 def _describe(p: registry.Printer, added: dict | None = None) -> int:
-    """What the printer says it is. `--json`: that answer, inside `added` (what `add` did) when given."""
+    """What `printer add --klipper` shows after the result line (06 9.2): what the printer says it is, indented, each
+    reason a line further in. `--json`: that answer, inside `added` (what `add` did). A printer that does not answer is
+    a note: it is saved, and the Hub keeps trying."""
     with output.wait(f"Asking {registry.display_name(p)}…"):
         d = detect(p, spoolman=False)     # it prints no Spoolman, so a bad config.json must not stop it
     output.emit({**added, "detect": d} if added is not None else d)
     if not d["ok"]:
-        output.out(f"  {d['message']}")
+        output.note(d["message"])
         return 0
-    output.out(f"  model: {d['model']} ({d['model_key']}){'' if d['verified'] else ' - unverified entry'}")
-    output.out(f"  filament system: {d['system']}; slots: {', '.join(d['slots']) or 'from the printer'}")
-    for r in d["reasons"]:
-        output.out(f"    {r}")
+    output.out_lines([f"  Model: {_model_text(d)}", f"  Slots: {_slots_text(d)}"])
+    output.out_lines([f"    {r}" for r in d["reasons"]])
+    return 0
+
+
+def detect_printer(p: registry.Printer) -> int:
+    """`printer detect` (06 9.2): ask the printer again what it is (read only): one result line, the reasons under it,
+    the Spoolman warning of the Hub as a note."""
+    with output.wait(f"Asking {registry.display_name(p)}…"):
+        d = detect(p)
+    output.emit(d)
+    if not d["ok"]:
+        output.error(d["message"])
+        return 1
+    output.out(f"{registry.display_name(p)}: {_model_text(d)}. Slots: {_slots_text(d)}.")
+    output.out_lines([f"    {r}" for r in d["reasons"]])
+    warning = (d.get("spoolman") or {}).get("warning")
+    if warning:
+        output.note(warning)
     return 0
 
 
 def run(args) -> int:
+    """The old spellings (06 4): each does what its new spelling does."""
+    from . import cli
     c = args.klipper_cmd
-    if c == "add":
-        if not 1 <= args.port <= 65535:
-            output.error("the port must be a number from 1 to 65535")
-            return output.USAGE
-        host = hostaddr.clean(args.host)
-        bad = hostaddr.form_error(host)
-        if bad:
-            output.error(str(bad))
-            return output.USAGE
-        seen = hostaddr.inspect(host)       # a name that won't resolve is still saved: the printer may just be off
-        try:
-            p = discovery.add(args.name, host, args.port)
-        except registry.DuplicatePrinter as e:
-            output.error(str(e))
-            return 1
-        output.result(f"added {registry.display_name(p)} as {p.serial} ({p.host}:{p.port})")
-        if seen.problem or seen.note:
-            output.note(str(seen.problem or seen.note))
-        return _describe(p, {"ok": True, "id": p.serial, "name": registry.display_name(p), "host": p.host,
-                             "port": p.port})
-    if c == "scan":
-        try:
-            net = ipaddress.ip_network(args.subnet, strict=False) if args.subnet else discovery.own_subnet()
-        except ValueError as e:
-            output.error(str(e))
-            return output.USAGE
-        if net is None:
-            output.error("cannot tell this machine's network; give --subnet")
-            return 1
-        try:
-            with output.wait(f"Looking for Moonraker on {net}…"):
-                found = discovery.scan(net, port=discovery.DEFAULT_PORT)
-        except ValueError as e:
-            output.error(str(e))
-            return output.USAGE
-        if not found:
-            output.emit([])
-            output.out(f"no Moonraker found on {net}")
-            return 0
-        added = discovery.added_at()
-        listed = []
-        for host, port in found:
-            p = added.get((host, port)) or registry.detected_klipper(host, port, lookups=False)
-            listed.append({"host": host, "port": port, "added": bool(p.configured),
-                           "id": p.serial if p.configured else None,
-                           "name": registry.display_name(p) if p.configured else None})
-            state = (f"added already as {registry.display_name(p)}" if p.configured
-                     else f"add it: filament-kit klipper add NAME {host}")
-            output.out(f"{host}:{port}  ({state})")
-        output.emit(listed)
-        return 0
-    p = registry.load().get(getattr(args, "id", "") or "")
-    if c == "pack":
+    if c in ("pack", "add-on"):
         return pack()
-    if p is None or p.family != "klipper":
-        output.error(f"no Klipper printer {getattr(args, 'id', '')!r}")
-        return output.USAGE
+    if c == "add":
+        return cli.cmd_printer_add(klipper=True, address=args.host, port=args.port, name=args.name)
+    if c == "scan":
+        return cli.cmd_printer_scan(args.subnet)
     if c == "detect":
-        output.out(f"{registry.display_name(p)} ({p.host}:{p.port})")
-        return _describe(p)
+        return cli.cmd_printer_detect(args.id)
     if c == "set":
-        registry.set_lane_data(p.serial, args.lane_data)
-        output.emit({"ok": True, "id": p.serial, "lane_data": args.lane_data})
-        output.result(f"{registry.display_name(p)}: lane_data {args.lane_data}")
-        return 0
-    if c == "api-key":
-        key = secret_input.ask("Moonraker API key (empty clears it): ")
-        registry.set_api_key(p.serial, key)
-        output.result(f"{registry.display_name(p)}: API key {'stored' if key.strip() else 'cleared'}")
-        return 0
-    return 1
+        return cli.cmd_printer_lane_data(args.id, args.lane_data)
+    return cli.cmd_printer_api_key(args.id, args.api_key, args.clear, yes=args.yes)
 
 
 def main(argv: list[str] | None = None) -> int:

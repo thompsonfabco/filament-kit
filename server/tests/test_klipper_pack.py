@@ -1,4 +1,4 @@
-"""`filament-kit klipper pack`: the printer-pack install command, pinned to the running version and checked
+"""`filament-kit klipper add-on` (once `klipper pack`): the printer-pack install command, pinned to the running version and checked
 against the signed SHA256SUMS (review 2026-11-08 B2)."""
 from __future__ import annotations
 
@@ -51,10 +51,10 @@ def _no_command(out):
 
 def _check_command(out, sha, repo=release.REPO):
     url = f"https://github.com/{repo}/releases/download/v1.0.0/{PACK}"
-    assert "Run this on the printer (as its normal user, not root):" in out
-    assert "signed" in out
-    assert f"curl -fsSLo {PACK} {url}" in out
-    line = next(ln for ln in out.splitlines() if "sha256sum" in ln).strip()
+    assert " ".join(out.split()).startswith("Installs the spool macros and filament-kit's Moonraker settings on a Klipper "
+                                            "printer. Run these on the printer:")
+    assert f"\ncurl -fsSLo {PACK} {url}\n" in out
+    line = next(ln for ln in out.splitlines() if "sha256sum" in ln)       # each command on its own line, not indented
     assert line == (f'echo "{sha}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
                     f"&& sh fk-printer-pack/fk-printer-pack.sh install")
     assert "latest" not in out
@@ -140,7 +140,9 @@ def test_cli_entry_uses_the_updaters_fetcher(env, srv, key, capsys, monkeypatch)
     srv.add("1.0.0", extra={PACK: PACK_BYTES})
     _cfg(env)
     monkeypatch.setattr(updates, "default_fetcher", lambda cfg: srv.fetcher())
-    assert klipper_cli.main(["pack"]) == 0
+    assert klipper_cli.main(["add-on"]) == 0
+    _check_command(capsys.readouterr().out, PACK_SHA)
+    assert klipper_cli.main(["pack"]) == 0                  # the old spelling
     _check_command(capsys.readouterr().out, PACK_SHA)
 
 
@@ -170,21 +172,19 @@ def test_a_repo_override_names_the_same_repo_in_the_url(env, srv, key, capsys):
 
 # ---------- pack_info (the web console's data; console-printers stage) and the CLI's output, pinned ----------
 
-def test_cli_output_is_unchanged(env, srv, key, capsys):
-    """The exact text `klipper pack` printed before pack_info existed (snapshot, 2026-11-08)."""
+def test_cli_output_is_06_9_2(env, srv, key, capsys):
+    """`klipper add-on` (06 9.2): the Hub page's sentence, a blank line, the commands, each on one unbroken line."""
     fr = srv.add("1.0.0", extra={PACK: PACK_BYTES})
     _keep(env, fr)
     rc, out, err = _run(env, NoNet(), capsys)
     url = f"https://github.com/{release.REPO}/releases/download/v1.0.0/{PACK}"
     assert (rc, err) == (0, "")
-    head, _, tail = out.partition("The hash is")
-    assert " ".join(("The hash is" + tail).split()) == (
-        "The hash is the one in the signed SHA256SUMS of release v1.0.0 (checked here against the filament-kit "
-        "release key); nothing is unpacked or run unless the download matches it.")
-    assert head == (
-        "Run this on the printer (as its normal user, not root):\n"
-        f"  curl -fsSLo {PACK} {url}\n"
-        f'  echo "{PACK_SHA}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
+    assert out == (
+        "Installs the spool macros and filament-kit's Moonraker settings on a Klipper\n"
+        "printer. Run these on the printer:\n"
+        "\n"
+        f"curl -fsSLo {PACK} {url}\n"
+        f'echo "{PACK_SHA}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
         "&& sh fk-printer-pack/fk-printer-pack.sh install\n")
 
 

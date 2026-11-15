@@ -6,7 +6,7 @@ import queue
 
 import pytest
 
-from filament_kit import cli
+from filament_kit import cli, config
 from filament_kit.bridge import ams, manual, mapping, registry
 from filament_kit.web.slots import SlotError
 
@@ -212,6 +212,9 @@ def test_manual_goes_to_the_server_session(env, monkeypatch):
 
 
 def test_a_klipper_printer_is_refused_by_the_plain_map(env, monkeypatch, capsys):
+    c = config.load()                                                     # Klipper printers are listed only with their module on
+    c.setdefault("modules", {})["klipper"] = True
+    config.save(c)
     p = registry.add_klipper("Shop Box", "box.example")
     monkeypatch.setattr(cli, "_server_api", lambda: pytest.fail("the server must not be asked"))
     assert cli.main(["printer", "map", p.serial]) == 1

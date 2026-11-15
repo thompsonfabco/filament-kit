@@ -1,5 +1,5 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules,
-web, remote, setup-code."""
+"""Command line: status, pair, unpair, config, cert, ensure-fields, printer (list, show, test, add, map, ...), library,
+profiles, modules, web, remote, setup-code."""
 from __future__ import annotations
 
 import argparse
@@ -10,6 +10,7 @@ import http.client
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -2509,14 +2510,15 @@ def _report_said(r: dict) -> int:
     return 0
 
 
-def cmd_printer_unpin(serial: str, yes: bool = False) -> int:
-    """`printer unpin <serial>`: asks for the Access Code, as the API does (R103), and saves it with the cleared pin."""
+def cmd_printer_unpin(serial: str, yes: bool = False, access_code: str | None = None) -> int:
+    """`printer forget-certificate <printer>` (once `printer unpin`): asks for the Access Code, as the API does (R103), and
+    saves it with the cleared pin. `--access-code -` gives it on standard input."""
     p = registry.load().get(serial)
     if p is None:
         _err_line(f"no printer {serial}")
         return output.USAGE
     if p.family != "bambu":
-        _err_line("unpin is for a Bambu printer")
+        _err_line(f"{registry.display_name(p)} is a Klipper printer; it has no certificate to forget.")
         return 1
     if not p.configured:
         _err_line(f"{serial} is not set up here; add it with its Access Code first")
@@ -2527,21 +2529,719 @@ def cmd_printer_unpin(serial: str, yes: bool = False) -> int:
                     f"forgetting the certificate of {name}", yes=yes)
     if stop is not None:
         return stop
-    try:
-        code = secret_input.ask("Access Code: ").strip()
-    except (EOFError, RuntimeError, OSError):      # no terminal to ask on
-        _err_line("printer unpin needs a terminal to ask for the Access Code; nothing changed")
-        return 1
+    code = _secret_answer(access_code, f"Access Code of {name} (on the printer: Settings > Network/LAN): ",
+                          "--access-code", "printer forget-certificate")
+    if code is None:
+        return output.USAGE
     if not code:
-        _err_line("trusting a new certificate needs the printer's Access Code; nothing changed")
-        return 1
+        output.result("No Access Code entered; nothing changed.")
+        return output.CANCELLED
     problem = registry.check_fields(serial, code)
     if problem:
         _err_line(f"nothing changed: {problem}")
         return 1
     registry.set_code(serial, code, replace=True)     # clears the pin, as adding the printer again
     # the service's Manager notices the cleared pin at its next registry sync (within 15 s) and reconnects
-    print(f"Forgot the certificate of {p.name or serial} and saved its Access Code; the next connection trusts the one it presents.")
+    output.emit({"ok": True, "serial": serial, "name": name})
+    output.result(f"Forgot the certificate of {name}; the next connection pins the one it presents.")
+    return 0
+
+
+# ---------- printer commands (06 5, 9.2) ----------
+# The Hub page's own printer code does the work: setup_page.SetupPage's printer routes and setup_console/printers_tab,
+# run in this process with no setup code and no HTTP (these commands run as the Hub's own user). What that code asks
+# the Hub's connection manager for (a printer's state, its slots) the running Hub answers through its API; with no
+# Hub running every state is "unknown" (06 9.2).
+
+def _families() -> frozenset:
+    """The printer families whose module is on, as the running Hub serves them (api.py): nothing here acts on the others."""
+    on = modules.enabled(config.load())
+    return frozenset(f for m, f in (("printers", "bambu"), ("klipper", "klipper")) if m in on)
+
+
+class _Hub:
+    """Stands in for the connection manager the Hub page's printer code asks, and runs its routes. `api`: the running
+    Hub's API (`_server_api()`), or None. Read once, `GET /api/printers`; `up` is False when nothing answered."""
+
+    def __init__(self, api=None):
+        self.api = api
+        self._views: dict | None = None
+        self._page = None
+
+    def _read(self) -> dict:
+        if self._views is None:
+            self._views = {}
+            if self.api is not None:
+                from .web.slots import SlotError
+                try:
+                    self._views = {v["id"]: v for v in self.api.get("/api/printers")["printers"]}
+                except (SlotError, KeyError, TypeError):
+                    self.api = None
+        return self._views
+
+    @property
+    def up(self) -> bool:
+        self._read()
+        return self.api is not None
+
+    def view(self, serial: str) -> dict | None:
+        """The Hub's own view of one printer (`GET /api/printers`), None when it does not know it."""
+        return self._read().get(serial)
+
+    def state(self, serial: str) -> str:
+        views = self._read()
+        return "unknown" if self.api is None else (views[serial]["state"] if serial in views else "offline")
+
+    def sync(self) -> None:
+        """The Hub's manager sees a change in the registry at its next round (within 15 s)."""
+
+    def slots(self, serial: str) -> list | None:
+        """The units and slots of a printer's status (`GET /api/printers/<id>`), None when there is none."""
+        if self.api is None:
+            return None
+        from .web.slots import SlotError
+        try:
+            return self.api.get(f"/api/printers/{serial}")["status"]["ams"]
+        except (SlotError, KeyError, TypeError):
+            return None
+
+    def rows(self) -> list[dict]:
+        """The printer objects of `GET /setup/api/state` (`printers.list`), in the Hub page's order."""
+        from types import SimpleNamespace
+        from .setup_page import SetupPage
+        return SetupPage._printer_rows(SimpleNamespace(families=_families(), printers=self, mapper=None))
+
+    @property
+    def page(self):
+        if self._page is None:
+            from .setup_page import SetupPage
+            page = SetupPage(self, families=_families())
+            page.guard = lambda fn, write=False, raw=False: fn       # no setup code: the user running this is the Hub's own
+            page.audit = lambda request, what: None
+            page._gap = lambda: None                                 # one command, no page to keep from asking too often
+            self._page = page
+        return self._page
+
+    def route(self, path: str, method: str = "POST"):
+        """One of the Hub page's printer routes (setup_console/printers_tab), without its guard."""
+        from .setup_console import printers_tab
+        return next(fn for p, fn, m in printers_tab.routes(self.page) if (p, m) == (path, method))
+
+    def call(self, handler, serial: str | None = None, body: dict | None = None) -> tuple:
+        """(the Hub's reply, None), or (None, exit code) after the Hub's refusal was printed as an error."""
+        import asyncio
+        from types import SimpleNamespace
+        from .setup_page import Refused
+        request = SimpleNamespace(path_params={"serial": serial} if serial else {}, headers={}, client=None)
+        try:
+            return asyncio.run(handler(request, body or {})), None
+        except Refused as e:
+            return None, self.refused(e)
+
+    @staticmethod
+    def refused(e) -> int:
+        """Print the Hub's refusal as an error (a module that is off gets the command that turns it on); its exit code."""
+        module = re.fullmatch(r"the (\w+) module is off on this server", e.message)
+        output.error(e.message, cmd=f"sudo filament-kit modules enable {module.group(1)}" if module else None)
+        return output.USAGE if e.status in (400, 404) else output.FAILED
+
+
+def _hub() -> _Hub:
+    return _Hub(_server_api())
+
+
+_STATE_WORD = {"connected": "connected", "unknown_model": "connected", "offline": "offline", "connecting": "offline",
+               "wrong_code": "wrong Access Code", "cert_changed": "certificate changed", "unknown": "unknown",
+               "not_configured": "not set up"}
+
+
+def _state_word(row: dict) -> str:
+    """The status word of a printer (06 6.1): what the Hub says, or that it is only found."""
+    return "found, not added" if not row["configured"] else _STATE_WORD.get(row["state"], "needs a look")
+
+
+def _bare(text: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def _quoted(name: str) -> str:
+    return name if re.fullmatch(r"[\w.-]+", name) else '"' + name.replace('"', '\\"') + '"'
+
+
+def _address_of(row: dict) -> str:
+    return f"{row['host']}:{row['port']}" if row["family"] == "klipper" else row["ip"]
+
+
+def _printer_match(arg: str, rows: list[dict]) -> dict | None:
+    """06 5: an exact serial or id, else an exact name, else the start of exactly one name; ignoring case."""
+    a = arg.strip().lower()
+    if not a:
+        return None
+    hit = [r for r in rows if r["serial"].lower() == a]
+    if len(hit) != 1:
+        hit = [r for r in rows if r["name"].lower() == a]
+        if not hit:
+            hit = [r for r in rows if r["name"].lower().startswith(a)]
+    return hit[0] if len(hit) == 1 else None
+
+
+def _printer_named(arg: str, *, found: bool = False, found_verb: str = "use") -> dict | None:
+    """The printer `arg` names (06 5), or None after the error (the caller then exits with 2). `found`: a printer a scan
+    found but nobody added may be named (`show`, `test`, `use`, `dismiss`); any other command says to run
+    `printer <found_verb>` first. Names come from the registry alone: no Hub is asked."""
+    rows = _Hub().rows()
+    row = _printer_match(arg, rows)
+    if row is None:
+        a = arg.strip().lower()
+        close = [r for r in rows if a and (a in r["name"].lower() or a in r["serial"].lower())][:5]
+        fix = "use a name, serial or id from filament-kit printer list." + (
+            " Close matches:\n" + "\n".join(f"{r['name']}  {r['serial']}" for r in close) if close else "")
+        output.error(f'"{arg}" does not name one printer.', fix)
+        return None
+    if not row["configured"] and not found:
+        fix = (f"sudo filament-kit printer add --address {row['ip']}" if row["family"] == "bambu" and found_verb == "use"
+               else f"sudo filament-kit printer {found_verb} {_quoted(row['name'])}")      # `use` refuses a Bambu printer
+        output.error(f"{row['name']} is found on the network but not added yet.", cmd=fix)
+        return None
+    return row
+
+
+def _family_refusal(row: dict, family: str, what: str, fix_cmd: str | None = None) -> bool:
+    """True after saying that the printer is of the other family and has no `what`; `fix_cmd` is the command of its own
+    family that does the same, where there is one."""
+    if row["family"] == family:
+        return False
+    kind = "a Klipper printer" if row["family"] == "klipper" else "a Bambu Lab printer"
+    output.error(f"{row['name']} is {kind}; it has no {what}.", cmd=fix_cmd)
+    return True
+
+
+def _entry(row: dict) -> "registry.Printer":
+    return registry.load()[row["serial"]]
+
+
+def _prompted(given, prompt: str):
+    """What a flag gave, else what is typed at a terminal; None when there is no terminal to ask on (nothing is asked)."""
+    if given is not None:
+        return given
+    return (_ask(prompt) or "").strip() if output.terminal() else None
+
+
+def _secret_answer(given: str | None, prompt: str, flag: str, doing: str) -> str | None:
+    """A secret (06 8.7): `-` reads one line of standard input, else it is asked, hidden. The text (maybe empty), or None
+    after the error (nothing to ask on, or --json, which does not ask)."""
+    if given == "-":
+        try:
+            return sys.stdin.readline().strip()
+        except (OSError, ValueError):
+            return ""
+    if not output.json_mode():
+        try:
+            return secret_input.ask(prompt).strip()
+        except (EOFError, RuntimeError, OSError):
+            pass
+    output.error(f"{doing} needs it, and " + ("--json does not ask." if output.json_mode() else
+                                              "there is no terminal to ask."), f"give it on standard input with {flag} -.")
+    return None
+
+
+def _api_key_ok(key: str) -> bool:
+    from .setup_console import printers_tab
+    if key and not printers_tab.API_KEY.fullmatch(key):
+        output.error(printers_tab.BAD_API_KEY)
+        return False
+    return True
+
+
+def cmd_printer_list() -> int:
+    hub = _hub()
+    rows = hub.rows()
+    output.emit(rows)
+    if not hub.up:
+        output.note("the Hub is not running, so connection states are unknown.")
+    if not rows:
+        output.out("No printer yet. Printers on the network appear here once they announce themselves.")
+        output.out("Add one: sudo filament-kit printer add")
+        return 0
+    lines = output.table(["Name", "Type", "Id", "Address", "State"],
+                         [[r["name"], "Klipper" if r["family"] == "klipper" else "Bambu", r["serial"], _address_of(r),
+                           _bare(output.state(_state_word(r)))] for r in rows], long=0, whole=True)
+    if len(lines) == len(rows) + 1:         # a table, not blocks: the colour goes on after the layout is made
+        for i, r in enumerate(rows, 1):
+            word = output.state(_state_word(r))
+            if lines[i].endswith(_bare(word)):
+                lines[i] = lines[i][:len(lines[i]) - len(_bare(word))] + word
+    output.out_lines(lines)
+    output.out()
+    mine = [r for r in rows if r["configured"]]
+    found = [r for r in rows if not r["configured"]]
+    words = [_state_word(r) for r in mine]
+    summary = f"{len(mine)} set up"
+    if hub.up and mine:
+        looking = [r for r in mine if _state_word(r) not in ("connected", "offline")]
+        summary += f": {words.count('connected')} connected, {words.count('offline')} offline" + (
+            f", {len(looking)} need a look" if looking else "")
+    output.out(summary + "." + (f" {len(found)} found on the network, not added." if found else ""))
+    mark = "" if output.plain() else output.paint("▲" if output.unicode_glyphs() else "!", "warn", sys.stdout) + " "
+    for r in mine if hub.up else []:
+        if _state_word(r) != "connected":
+            output.out(f"{mark}{r['name']} needs a look: filament-kit printer show {_quoted(r['name'])}")
+    for r in found:
+        how = f"use {_quoted(r['name'])}" if r["family"] == "klipper" else f"add --address {r['ip']}"
+        output.out(f"Add the found one: sudo filament-kit printer {how}" if len(found) == 1 else
+                   f"Add {r['name']}: sudo filament-kit printer {how}")
+    return 0
+
+
+def _slot_rows(units: list) -> list[list]:
+    rows = []
+    for u in units or []:
+        for s in u.get("slots") or []:
+            spool = s.get("spool") or {}
+            filament = spool.get("name") or s.get("type") or ""
+            if not s.get("present", True) and not filament:
+                rows.append([s.get("label", ""), "empty", "", ""])
+                continue
+            weight = spool.get("remaining_weight")
+            rows.append([s.get("label", ""), filament or "unknown",
+                         "#" + s["color_hex"].upper() if s.get("color_hex") else "",
+                         f"{round(weight)} g" if isinstance(weight, (int, float)) else ""])
+    return rows
+
+
+def cmd_printer_show(arg: str) -> int:
+    row = _printer_named(arg, found=True)
+    if row is None:
+        return output.USAGE
+    hub = _hub()
+    row = next((r for r in hub.rows() if r["serial"] == row["serial"]), row)
+    output.emit(row)
+    from .bridge import ams, models
+    klipper = row["family"] == "klipper"
+    fields = [("Model", (hub.view(row["serial"]) or {}).get("model_name") or models.model_name(row["model"])
+               or "not known yet"),
+              ("Address", _address_of(row)), ("ID" if klipper else "Serial", row["serial"]),
+              ("State", output.state(_state_word(row)))]
+    if row["configured"] and klipper:
+        fields += [("API key", output.state("set" if row["api_key"] else "not set")), ("Lane data", row["lane_data"])]
+    elif row["configured"]:
+        fields += [("Certificate", "pinned" if row["pinned"] else "not pinned yet"),
+                   ("Slots", "mapped" if ams.load_map(row["serial"]).slots else "not mapped")]
+    output.out_lines([row["name"]] + [f"  {label:<11}  {value}" for label, value in fields])
+    if row.get("report_why"):
+        output.out_lines(output.status_row("needs a look", row["report_why"]))
+    if not row["configured"]:
+        return 0
+    slots = hub.slots(row["serial"]) if _state_word(row) == "connected" else None
+    output.out()
+    if slots is None:
+        output.out("No slot data while offline." if hub.up else "No slot data while the Hub is not running.")
+    else:
+        output.out_lines(output.table(["Slot", "Filament", "Colour", "Left"], _slot_rows(slots), long=1, right=(3,)))
+    return 0
+
+
+def cmd_printer_test(arg: str) -> int:
+    row = _printer_named(arg, found=True)
+    if row is None:
+        return output.USAGE
+    hub = _hub()
+    with output.wait(f"Testing {row['name']}…"):
+        r, rc = hub.call(hub.page.printer_test, row["serial"])
+    if rc is not None:
+        return rc
+    output.emit(r)
+    text = r["text"][:1].upper() + r["text"][1:]
+    output.out_lines(output.status_row("OK" if r["reachable"] else "failed", text.rstrip(".") + "."))
+    return 0 if r["reachable"] else 1
+
+
+def cmd_printer_add(*, klipper: bool = False, address: str | None = None, port: int | None = None,
+                    name: str | None = None, serial: str | None = None, access_code: str | None = None,
+                    api_key: str | None = None) -> int:
+    """`printer add` (06 9.2): asks for what the flags do not give (06 8.7). A Bambu Lab printer is added by the Hub
+    page's own route, a Klipper printer as the Klipper commands always did."""
+    address = _prompted(address, "Address: " if klipper else "IP address or name (e.g. 192.0.2.40 or printer.local): ")
+    if address is None:
+        output.error("printer add needs an address, and there is no terminal to ask.", "give it with --address.")
+        return output.USAGE
+    if not address.strip():
+        output.error("give the printer's address.", "give it with --address.")
+        return output.USAGE
+    if klipper:
+        if port is None:
+            raw = _prompted(None, "Port [7125]: ")
+            try:
+                port = int(raw) if raw else 7125
+            except ValueError:
+                output.error("the port must be a number from 1 to 65535")
+                return output.USAGE
+        name = _prompted(name, "Name (optional): ") or ""
+        key = ""
+        if api_key == "-" or (api_key is None and output.terminal()):
+            key = _secret_answer(api_key, "Moonraker API key (optional): ", "--api-key", "printer add")
+        if key is None or not _api_key_ok(key):
+            return output.USAGE
+        return _klipper_add(name, address, port, key)
+    code = _secret_answer(access_code, "Access Code (on the printer: Settings > Network/LAN): ", "--access-code",
+                          "printer add")
+    if code is None:
+        return output.USAGE
+    if not code:
+        output.result("No Access Code entered; nothing added.")
+        return output.CANCELLED
+    body = {"address": address, "access_code": code, "name": _prompted(name, "Name (optional): ") or "",
+            "serial": _prompted(serial, "Serial (optional: read from the printer): ") or ""}
+    hub = _hub()
+    with output.wait(f"Asking the printer at {address}…"):
+        r, rc = hub.call(hub.page.printer_add, None, body)
+    if rc is not None:
+        return rc
+    p = registry.load().get(r["serial"])
+    shown = registry.display_name(p) if p else r["serial"]
+    output.emit({"ok": True, "serial": r["serial"], "name": shown, **({"note": r["note"]} if r.get("note") else {})})
+    output.result(f"Added {shown} (serial {r['serial']}).")
+    if r.get("note"):
+        output.note(r["note"])
+    return 0
+
+
+def cmd_printer_use(arg: str, api_key: str | None = None) -> int:
+    row = _printer_named(arg, found=True)
+    if row is None:
+        return output.USAGE
+    if row["configured"]:
+        output.error(f"{row['name']} is already added.")
+        return 1
+    if row["family"] == "bambu":
+        output.error(f"{row['name']} is a Bambu Lab printer; it needs its Access Code.",
+                     cmd=f"sudo filament-kit printer add --address {row['ip']}")
+        return output.USAGE
+    key = _secret_answer(api_key, "", "--api-key", "printer use") if api_key == "-" else ""
+    if key is None or not _api_key_ok(key):
+        return output.USAGE
+    hub = _hub()
+    _, rc = hub.call(hub.route("/printers/{serial}/connect"), row["serial"], {"api_key": key})
+    if rc is not None:
+        return rc
+    output.emit({"ok": True, "serial": row["serial"], "name": row["name"], "host": row["host"], "port": row["port"]})
+    output.result(f"Added {row['name']} ({_address_of(row)}).")
+    return 0
+
+
+def cmd_printer_dismiss(arg: str, yes: bool = False) -> int:
+    row = _printer_named(arg, found=True)
+    if row is None:
+        return output.USAGE
+    if row["configured"]:
+        output.error(f"{row['name']} is added, so it cannot be dismissed.",
+                     cmd=f"sudo filament-kit printer forget {_quoted(row['name'])}")
+        return output.USAGE
+    stop = _confirm(f"Dismiss {row['name']}? It leaves this list. A new scan may find it again.",
+                    f"dismissing {row['name']}", yes=yes)
+    if stop is not None:
+        return stop
+    hub = _hub()
+    _, rc = hub.call(hub.page.printer_forget, row["serial"])
+    if rc is not None:
+        return rc
+    output.emit({"ok": True, "serial": row["serial"], "name": row["name"]})
+    output.result(f"Dismissed {row['name']}.")
+    return 0
+
+
+def cmd_printer_forget(arg: str, yes: bool = False) -> int:
+    row = _printer_named(arg, found_verb="dismiss")
+    if row is None:
+        return output.USAGE
+    if row["family"] == "klipper":
+        question = (f"Forget {row['name']}? filament-kit stops connecting to it and deletes its Moonraker API key, if one "
+                    "is saved.")
+    else:
+        question = (f"Forget {row['name']}? filament-kit stops connecting to it and deletes its Access Code. To use it "
+                    "again, add it again.")
+    stop = _confirm(question, f"forgetting {row['name']}", yes=yes)
+    if stop is not None:
+        return stop
+    hub = _hub()
+    _, rc = hub.call(hub.page.printer_forget, row["serial"])
+    if rc is not None:
+        return rc
+    output.emit({"ok": True, "serial": row["serial"], "name": row["name"]})
+    output.result(f"Forgot {row['name']}.")
+    return 0
+
+
+def cmd_printer_rename(arg: str, name: str) -> int:
+    row = _printer_named(arg)
+    if row is None:
+        return output.USAGE
+    hub = _hub()
+    _, rc = hub.call(hub.route("/printers/{serial}/rename"), row["serial"], {"name": name})
+    if rc is not None:
+        return rc
+    new = registry.display_name(_entry(row))
+    output.emit({"ok": True, "serial": row["serial"], "name": new})
+    output.result(f"Renamed {row['name']} to {new}.")
+    return 0
+
+
+def cmd_printer_address(arg: str, address: str, port: int | None = None, access_code: str | None = None) -> int:
+    row = _printer_named(arg)
+    if row is None:
+        return output.USAGE
+    body: dict = {"address": address}
+    if port is not None:
+        body["port"] = port
+    if row["family"] == "bambu":       # as the Hub page's Change address dialog: the Access Code comes with it
+        code = _secret_answer(access_code, f"Access Code of {row['name']} (on the printer: Settings > Network/LAN): ",
+                              "--access-code", "printer address")
+        if code is None:
+            return output.USAGE
+        if not code:
+            output.result("No Access Code entered; nothing changed.")
+            return output.CANCELLED
+        body["access_code"] = code
+    elif access_code is not None:
+        output.error(f"{row['name']} is a Klipper printer; it has no Access Code.")
+        return output.USAGE
+    hub = _hub()
+    r, rc = hub.call(hub.route("/printers/{serial}/address"), row["serial"], body)
+    if rc is not None:
+        return rc
+    p = _entry(row)
+    where = f"{p.host}:{p.port}" if p.family == "klipper" else p.ip
+    output.emit({"ok": True, "serial": row["serial"], "name": row["name"], "address": where,
+                 **({"note": r["note"]} if r.get("note") else {})})
+    output.result(f"Saved. {row['name']} is at {where}.")
+    if r.get("note"):
+        output.note(r["note"])
+    return 0
+
+
+def cmd_printer_access_code(arg: str, access_code: str | None = None) -> int:
+    row = _printer_named(arg)
+    if row is None or _family_refusal(row, "bambu", "Access Code", f"sudo filament-kit printer api-key {_quoted(row['name'])}"):
+        return output.USAGE
+    code = _secret_answer(access_code, f"New Access Code for {row['name']} (on the printer: Settings > Network/LAN): ",
+                          "--access-code", "printer access-code")
+    if code is None:
+        return output.USAGE
+    if not code:
+        output.emit({"ok": True, "serial": row["serial"], "name": row["name"], "changed": False})
+        output.result("Unchanged.")
+        return 0
+    hub = _hub()
+    _, rc = hub.call(hub.page.printer_code, row["serial"], {"access_code": code})
+    if rc is not None:
+        return rc
+    output.emit({"ok": True, "serial": row["serial"], "name": row["name"], "changed": True})
+    output.result(f"Saved the Access Code of {row['name']}.")
+    return 0
+
+
+def cmd_printer_api_key(arg: str, api_key: str | None = None, clear: bool = False, yes: bool = False) -> int:
+    row = _printer_named(arg)
+    if row is None or _family_refusal(row, "klipper", "Moonraker API key",
+                                      f"sudo filament-kit printer access-code {_quoted(row['name'])}"):
+        return output.USAGE
+    if clear and api_key is not None:
+        output.error("--clear and --api-key do not go together.", "use one of them.")
+        return output.USAGE
+    if clear:
+        stop = _confirm(f"Clear the Moonraker API key of {row['name']}? filament-kit then connects without a key. If "
+                        "Moonraker asks for one, the printer's test says so until a key is set.",
+                        f"clearing the API key of {row['name']}", yes=yes)
+        if stop is not None:
+            return stop
+        key = ""
+    else:
+        key = _secret_answer(api_key, f"Moonraker API key for {row['name']}: ", "--api-key", "printer api-key")
+        if key is None:
+            return output.USAGE
+        if not key:
+            output.emit({"ok": True, "serial": row["serial"], "name": row["name"], "set": row["api_key"]})
+            output.result("Unchanged.")
+            return 0
+    hub = _hub()
+    _, rc = hub.call(hub.route("/printers/{serial}/api_key"), row["serial"], {"key": key})
+    if rc is not None:
+        return rc
+    output.emit({"ok": True, "serial": row["serial"], "name": row["name"], "set": bool(key)})
+    output.result(f"Saved the API key of {row['name']}." if key else f"Cleared the API key of {row['name']}.")
+    return 0
+
+
+def cmd_printer_lane_data(arg: str, mode: str) -> int:
+    row = _printer_named(arg)
+    if row is None or _family_refusal(row, "klipper", "lane data"):
+        return output.USAGE
+    hub = _hub()
+    _, rc = hub.call(hub.route("/printers/{serial}/lane_data"), row["serial"], {"mode": mode})
+    if rc is not None:
+        return rc
+    output.emit({"ok": True, "serial": row["serial"], "name": row["name"], "lane_data": mode})
+    output.result(f"Saved. Lane data: {mode}.")
+    return 0
+
+
+def cmd_printer_detect(arg: str) -> int:
+    row = _printer_named(arg)
+    if row is None or _family_refusal(row, "klipper", "model to detect"):
+        return output.USAGE
+    return klipper_cli.detect_printer(_entry(row))
+
+
+def cmd_printer_scan(subnet: str | None = None) -> int:
+    return _scan(subnet)
+
+
+def _klipper_add(name: str | None, host: str, port: int, key: str) -> int:
+    """`printer add --klipper`: the Hub's own route (`POST /printers/klipper`), so a printer a scan found is put into use
+    as the Hub page does; then what the printer says it is (06 9.2)."""
+    hub = _hub()
+    r, rc = hub.call(hub.route("/printers/klipper"), None, {"host": host, "port": port, "name": name or "", "api_key": key})
+    if rc is not None:
+        return rc
+    p = registry.load()[r["serial"]]
+    output.result(f"Added {registry.display_name(p)} as {p.serial} ({p.host}:{p.port}).")
+    if r.get("note"):
+        output.note(r["note"])
+    return klipper_cli._describe(p, {"ok": True, "id": p.serial, "name": registry.display_name(p), "host": p.host,
+                                     "port": p.port})
+
+
+def _scan(subnet: str | None) -> int:
+    """`printer scan` (06 9.2): the Hub's own route (`POST /printers/scan`: a private IPv4 network, at most a /24); one
+    line per printer found, and each is recorded (not added) so `printer use` can name it."""
+    hub = _hub()
+    from .setup_console import printers_tab
+    from .setup_page import Refused
+    try:                                    # the Hub's own checks first: a network it refuses is never named as looked at
+        hub.page._manager("klipper")
+        net = printers_tab.scan_net(subnet)
+    except Refused as e:
+        return _Hub.refused(e)
+    with output.wait(f"Looking for Moonraker on {net}…"):
+        r, rc = hub.call(hub.route("/printers/scan"), None, {"subnet": subnet})
+    if rc is not None:
+        return rc
+    net, listed, lines = r["subnet"], [], []
+    for f in r["found"]:
+        p = registry.load()[f["serial"]]
+        listed.append({**f, "id": p.serial, "name": registry.display_name(p)})
+        where = f"{f['host']}:{f['port']}"
+        lines.append(f"Found on {net}: {where} (added as {registry.display_name(p)})" if f["configured"] else
+                     f"Found on {net}: {where} (add it: sudo filament-kit printer use {p.serial})")
+    output.emit({"ok": True, "subnet": net, "found": listed})
+    if not lines:
+        output.out(f"No Moonraker found on {net}.")
+    for line in lines:
+        output.out(line)
+    return 0
+
+
+def cmd_printer_reports(arg: str) -> int:
+    row = _printer_named(arg)
+    if row is None or _family_refusal(row, "bambu", "printer reports"):
+        return output.USAGE
+    hub = _hub()
+    r, rc = hub.call(hub.route("/printers/{serial}/reports"), row["serial"])
+    if rc is not None:
+        return rc
+    output.emit({**r, "reports": [{**x, "at": _iso(x["at"])} for x in r["reports"]]})
+    if not r["reports"]:
+        output.out("No report kept for this printer yet.")
+        return 0
+    output.out_lines(output.table(["Made", "Size", "Name"],
+                                  [[_fmt_time(x["at"]), f"{max(1, round(x['size'] / 1024)):,} KiB", x["name"]]
+                                   for x in r["reports"]], long=2, right=(1,)))
+    output.out(f"Kept in {config.paths().state / 'printers' / row['serial']}.")
+    return 0
+
+
+def cmd_printer_live(arg: str) -> int:
+    """06 10: the camera and the controls need a screen; say where they are."""
+    if _printer_named(arg) is None:
+        return output.USAGE
+    ips = pairing.local_ips()
+    host = ips[0] if ips else f"{pairing.short_hostname()}.local"
+    url = f"https://{host}:{int(config.load().get('port', 8710))}/intake#printers"
+    output.emit({"available": False, "where": "web app", "url": url})
+    output.out(f"Camera and controls are in the web app: {url}")
+    return 0
+
+
+def _config_unreadable() -> int | None:
+    """None when config.json reads; else the Error (06 6.5) and its exit code: the Hub page cannot list printers without it."""
+    try:
+        config.load()
+    except ValueError as e:
+        output.error(f"config.json cannot be read: {e}.",
+                     f"correct {config.paths().etc / 'config.json'}, then run the command again.")
+        return output.FAILED
+    return None
+
+
+def _dispatch_printer(a, manager_factory) -> int:
+    bad = _config_unreadable()
+    if bad is not None:
+        return bad
+    c = {"unpin": "forget-certificate"}.get(a.printer_cmd, a.printer_cmd)
+    if c == "list":
+        return cmd_printer_list()
+    if c == "menu":
+        return cmd_printer_menu()
+    if c == "scan":
+        return cmd_printer_scan(a.subnet)
+    if c == "add":
+        return cmd_printer_add(klipper=a.klipper, address=a.address, port=a.port, name=a.name, serial=a.serial,
+                               access_code=a.access_code, api_key=a.api_key)
+    simple = {"show": cmd_printer_show, "test": cmd_printer_test, "detect": cmd_printer_detect,
+              "reports": cmd_printer_reports, "live": cmd_printer_live}
+    if c in simple:
+        return simple[c](a.printer)
+    if c == "use":
+        return cmd_printer_use(a.printer, a.api_key)
+    if c == "dismiss":
+        return cmd_printer_dismiss(a.printer, yes=a.yes)
+    if c == "forget":
+        return cmd_printer_forget(a.printer, yes=a.yes)
+    if c == "rename":
+        return cmd_printer_rename(a.printer, a.name)
+    if c == "address":
+        return cmd_printer_address(a.printer, a.address, a.port, a.access_code)
+    if c == "access-code":
+        return cmd_printer_access_code(a.printer, a.access_code)
+    if c == "api-key":
+        return cmd_printer_api_key(a.printer, a.api_key, a.clear, yes=a.yes)
+    if c == "lane-data":
+        return cmd_printer_lane_data(a.printer, a.mode)
+    # map, report, forget-certificate: what they did before, on the printer the name stands for
+    row = _printer_named(a.printer)
+    if row is None:
+        return output.USAGE
+    if c == "map":
+        return cmd_printer_map(row["serial"], manager_factory, manual=a.manual, yes=a.yes)
+    if c == "report":
+        return cmd_printer_report(row["serial"], manager_factory)
+    return cmd_printer_unpin(row["serial"], yes=a.yes, access_code=a.access_code)
+
+
+def cmd_printer_menu() -> int:
+    """`printer menu`: the Printers screen of `config` (06 8.4), on its own."""
+    if not output.numbered() and not menu_ui._stdin_tty():
+        output.error("printer menu is a menu, and there is no terminal to ask on.",
+                     "run it again with --numbered, giving the answers on standard input.")
+        return output.USAGE
+    try:
+        with menu_ui.open_ui(_ask, secret_input.ask) as ui:
+            try:
+                _printers_screen(ui)
+            except _Ended:
+                pass
+    except KeyboardInterrupt:
+        return output.INTERRUPTED
     return 0
 
 
@@ -4187,19 +4887,68 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     iun = isub.add_parser("undo", help="undo the record's newest revision")
     iun.add_argument("id")
     sub.add_parser("ensure-fields", help="create the Spoolman extra fields")
-    pr = sub.add_parser("printer", help="printer tasks: map slots, forget a certificate")
+    pr = sub.add_parser("printer", help="printers: list, show, test, add, change, map slots, reports, forget")
     psub = pr.add_subparsers(dest="printer_cmd", required=True)
+    PRINTER = dict(metavar="printer", help="its name, serial or id (or the start of its name)")
+    SECRET = dict(type=klipper_cli.dash, metavar="-", help="give - and type the secret on standard input")
+    psub.add_parser("list", help="every printer, set up or found, with its state")
+    for name, text in (("show", "one printer: its fields and its slots"), ("test", "check that a printer answers"),
+                       ("detect", "ask a Klipper printer what it is (read only)"),
+                       ("reports", "the printer reports kept for a Bambu Lab printer"),
+                       ("live", "where the camera and the controls are")):
+        psub.add_parser(name, help=text).add_argument("printer", **PRINTER)
+    pa = psub.add_parser("add", help="add a Bambu Lab printer, or with --klipper a Klipper printer (asks for what is left out)")
+    pa.add_argument("--klipper", action="store_true", help="a Klipper printer (Moonraker), not a Bambu Lab printer")
+    pa.add_argument("--address", help="its IP address or name")
+    pa.add_argument("--port", type=int, help="Klipper: Moonraker's port (7125)")
+    pa.add_argument("--name", help="what to call it (default: its serial, or its address for a Klipper printer)")
+    pa.add_argument("--serial", help="Bambu Lab: its serial number (read from the printer when left out)")
+    pa.add_argument("--access-code", **SECRET)
+    pa.add_argument("--api-key", **SECRET)
+    pu_ = psub.add_parser("use", help="put a Klipper printer a scan found into use")
+    pu_.add_argument("printer", **PRINTER)
+    pu_.add_argument("--api-key", **SECRET)
+    pd = psub.add_parser("dismiss", help="take a printer a scan found off the list")
+    pd.add_argument("printer", **PRINTER)
+    _add_yes(pd)
+    prn = psub.add_parser("rename", help="give a printer another name")
+    prn.add_argument("printer", **PRINTER)
+    prn.add_argument("name", help="the new name")
+    pad = psub.add_parser("address", help="change the address of a printer (a Bambu Lab printer asks for its Access Code)")
+    pad.add_argument("printer", **PRINTER)
+    pad.add_argument("address")
+    pad.add_argument("--port", type=int, help="Klipper: Moonraker's port")
+    pad.add_argument("--access-code", **SECRET)
+    pac = psub.add_parser("access-code", help="replace the Access Code of a Bambu Lab printer (asked, not echoed)")
+    pac.add_argument("printer", **PRINTER)
+    pac.add_argument("--access-code", **SECRET)
+    pak = psub.add_parser("api-key", help="set the Moonraker API key of a Klipper printer (asked, not echoed), or --clear it")
+    pak.add_argument("printer", **PRINTER)
+    pak.add_argument("--api-key", **SECRET)
+    pak.add_argument("--clear", action="store_true", help="remove the key (asks first)")
+    _add_yes(pak)
+    pld = psub.add_parser("lane-data", help="what a Klipper printer publishes to Moonraker's lane_data: auto, on or off")
+    pld.add_argument("printer", **PRINTER)
+    pld.add_argument("mode", choices=registry.LANE_DATA)
+    psc = psub.add_parser("scan", help="look for Moonraker on the network (only when you run it)")
+    psc.add_argument("--subnet", help="CIDR to scan, at most a /24 (default: this machine's /24)")
     pm = psub.add_parser("map", help="map the AMS slots (changes slot colours briefly, runs a no-motion job)")
-    pm.add_argument("serial")
-    pm.add_argument("--manual", action="store_true",
+    pm.add_argument("printer", **PRINTER)
+    pm.add_argument("--by-loading", "--manual", dest="manual", action="store_true",
                     help="map by loading filament: you load each slot, the printer says which one it sees (needs the "
                          "running server; the same session as the setup page and the phone apps)")
-    _add_yes(pm, "answer yes to the question before mapping (not asked with --manual)")
+    _add_yes(pm, "answer yes to the question before mapping (not asked with --by-loading)")
     prp = psub.add_parser("report", help="make a report that helps add a printer or AMS the kit doesn't know yet")
-    prp.add_argument("serial")
-    pu = psub.add_parser("unpin", help="forget a Bambu printer's pinned TLS certificate (asks for its Access Code)")
-    pu.add_argument("serial")
+    prp.add_argument("printer", **PRINTER)
+    pu = psub.add_parser("forget-certificate", aliases=["unpin"],
+                         help="forget a Bambu printer's pinned TLS certificate (asks for its Access Code)")
+    pu.add_argument("printer", **PRINTER)
+    pu.add_argument("--access-code", **SECRET)
     _add_yes(pu)
+    pf = psub.add_parser("forget", help="stop using a printer and delete what is kept for it")
+    pf.add_argument("printer", **PRINTER)
+    _add_yes(pf)
+    psub.add_parser("menu", help="the Printers screen")
     lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
     lsub = lb.add_subparsers(dest="library_cmd", required=True)
     lsub.add_parser("status", help="show the library version, local additions and the last update check")
@@ -4364,13 +5113,16 @@ def _json_refusal(a) -> int | None:
     if c == "modules" and sub == "menu":
         output.error("modules menu is a menu.", "use filament-kit modules list --json")
         return output.USAGE
+    if c == "printer" and sub == "menu":
+        output.error("printer menu is a menu.", "use filament-kit printer list --json")
+        return output.USAGE
     asks = ((c == "station" and sub == "pair" and not a.local, "station pair"),
             (c == "reader" and sub == "setup" and not a.pending, "reader setup"),
             (c == "web" and sub == "passphrase", "web passphrase"),
             (c == "local-intake" and sub == "token" and not a.remove, "local-intake token"),
-            (c == "printer" and sub == "unpin", "printer unpin"),
+            (c == "printer" and sub in ("unpin", "forget-certificate") and not a.access_code, f"printer {sub}"),
             (c == "printer" and sub == "map" and a.manual, "printer map --manual"),
-            (c == "klipper" and sub == "api-key", "klipper api-key"))
+            (c == "klipper" and sub == "api-key" and not a.api_key and not a.clear, "klipper api-key"))
     for yes, name in asks:
         if yes:
             output.error(f"{name} asks for typed answers, and --json does not ask.", "run it without --json.")
@@ -4387,7 +5139,10 @@ _RESULTS_ONLY = {("station", "flash-panel"), ("backup", "create"), ("restore", N
                  ("profiles", "apply-updates"), ("modules", "apply"), ("modules", "set"), ("modules", "enable"),
                  ("modules", "disable"), ("web", "passphrase"), ("local-intake", "install"),
                  ("local-intake", "remove"), ("local-intake", "token"), ("reader", "revoke"), ("remote", "issue"),
-                 ("uninstall", None), ("update", None), ("klipper", "add"), ("klipper", "set")}
+                 ("uninstall", None), ("update", None), ("klipper", "add"), ("klipper", "set"), ("klipper", "api-key"),
+                 ("printer", "forget-certificate"), ("printer", "add"), ("printer", "use"), ("printer", "dismiss"),
+                 ("printer", "forget"), ("printer", "rename"), ("printer", "address"), ("printer", "access-code"),
+                 ("printer", "api-key"), ("printer", "lane-data")}
 
 
 def _reports_results(a) -> bool:
@@ -4428,11 +5183,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "cert":
         return cmd_cert()
     if args.cmd == "printer":
-        if args.printer_cmd == "map":
-            return cmd_printer_map(args.serial, manager_factory or _default_manager, manual=args.manual, yes=args.yes)
-        if args.printer_cmd == "report":
-            return cmd_printer_report(args.serial, manager_factory or _default_manager)
-        return cmd_printer_unpin(args.serial, yes=args.yes)
+        return _dispatch_printer(args, manager_factory or _default_manager)
     if args.cmd == "library":
         if args.library_cmd == "status":
             return cmd_library_status()
