@@ -2073,6 +2073,10 @@
     <string name="spool_load_plan_goes_back">Spool %1$s now in %2$s goes back to %3$s</string>
     <!-- 1=id 2=slot -->
     <string name="spool_load_plan_goes_back_noplace">Spool %1$s now in %2$s goes back to its previous place</string>
+    <!-- 1=slot 2=location -->
+    <string name="spool_load_plan_goes_back_unnumbered">The spool now in %1$s goes back to %2$s</string>
+    <!-- 1=slot -->
+    <string name="spool_load_plan_goes_back_unnumbered_noplace">The spool now in %1$s goes back to its previous place</string>
     <!-- 1=mm -->
     <string name="spool_load_plan_nozzle">Nozzle: %1$s mm</string>
     <!-- 1=mm -->
@@ -2464,6 +2468,11 @@
     <string name="add_read_without_tag">Add without the tag</string>
     <!-- 1=note -->
     <string name="add_review_added_before">These spools may have been added already: %1$s. Check Spoolman before adding them again.</string>
+    <!-- 1=spools -->
+    <plurals name="add_review_added_before_ids">
+        <item quantity="one">This spool may have been added already: %1$s. Check Spoolman before adding it again.</item>
+        <item quantity="other">These spools may have been added already: %1$s. Check Spoolman before adding them again.</item>
+    </plurals>
     <string name="add_review_added_before_lost">These spools may have been added already: the connection was lost before the Hub answered. Check Spoolman before adding them again.</string>
     <string name="add_review_blocked_count">Enter a spool count for every spool.</string>
     <!-- 1=id 2=fields -->

@@ -561,6 +561,18 @@ class SpoolScreenSemanticsTest {
         auditAllFour(listOf("Spool 212 now in A2 goes back to its previous place"))
     }
 
+    @Test fun loadPreviewWithAnUnknownSpoolNumberNeverFillsInUnknown() {
+        previewScreen(FakeLoad(listOf(x1), PrinterDetail(x1, status), plan.copy(movedBack = listOf(MovedBack(null, "Shelf B")))))
+        auditAllFour(listOf("The spool now in A2 goes back to Shelf B"))
+        rule.onNodeWithText("Unknown", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun loadPreviewWithAnUnknownSpoolNumberAndNoPlace() {
+        previewScreen(FakeLoad(listOf(x1), PrinterDetail(x1, status), plan.copy(movedBack = listOf(MovedBack(null, "")))))
+        auditAllFour(listOf("The spool now in A2 goes back to its previous place"))
+        rule.onNodeWithText("Unknown", substring = true).assertDoesNotExist()
+    }
+
     @Test fun loadPreviewDroppedConnection() {
         val load = FakeLoad(listOf(x1), PrinterDetail(x1, status), plan)
         load.failure = ApiError(0, "offline", "lost")

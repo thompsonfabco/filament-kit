@@ -188,7 +188,9 @@ internal fun AddedBefore.text(context: Context): String {
     return when {
         ids.isNotEmpty() && hubMessage != null ->
             context.resources.getQuantityString(R.plurals.add_done_partial, ids.size, hubMessage, spoolNumbersOf(ids))
-        ids.isNotEmpty() -> context.getString(R.string.add_review_added_before, spoolListOf(context, ids))
+        ids.isNotEmpty() ->
+            context.resources.getQuantityString(R.plurals.add_review_added_before_ids, ids.size, ids.joinToString(", ") { context.getString(R.string.add_done_spool, it) })
+        hubMessage != null -> context.getString(R.string.add_review_added_before, hubMessage)
         else -> context.getString(R.string.add_review_added_before_lost)
     }
 }
