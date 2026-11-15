@@ -1033,6 +1033,8 @@ undo a correction. Served on the home address only (7.4). Code today: `historyTa
 - Data: GET `history`. Photos: GET `history/<id>/photos/<n>`.
 - Intro: "The newest <keep> additions are kept with their photos (<size> now). Change the number on the Hub page
   under Settings."
+- While Share corrections is on, on the Hub (7.5): a second line, the link "Share corrections is on · <n> waiting"
+  to `#recent/corrections`.
 - Filter (segmented control, shown only when the Hub reports read confidence, section 14): "All <n>" · "To check
   <n>".
 - Card (the whole card opens `#recent/<id>`): first photo 48 px (`--s7`) with the photo count chip, or a dashed box
@@ -1141,6 +1143,70 @@ Recently added".
 
 Recent is dimmed in the bottom bar and the page shows: clock icon, "Recently added is on the home address only." and
 "Open Spoolwarden at its home address on the home network to check and correct recent additions."
+
+### 7.5 Share corrections (`#recent/corrections`)
+
+Share corrections is switched on and off on the Hub page (Settings > Label Reader; `03-hub-page.md` 10.5.1), and
+sending is done there or on the command line. The web app says when a correction will be shared, and shows what
+is waiting, where each one can be removed.
+
+**Where a correction is saved.** Only while Share corrections is on:
+
+| Place | Line | Shape |
+|---|---|---|
+| A record being edited (7.2), above "Save changes"; a proposal (7.2), above "Accept" | "Share corrections is on: this correction will wait on the Hub to be shared." | info circle, `--muted` |
+| After "Save changes" or "Accept" succeeded, under the result | "This correction is waiting to be shared." with the link "Corrections waiting" | info circle |
+| The same, when no photo was kept for the record | "Not shared: no photo was kept for this record." | info circle |
+| The same, when the reader did not take it | "Saved. The correction is not waiting to be shared: <the Hub's reason>." | triangle |
+| Add spools, the read summary (4.4), under its last line, when the spools were read from photos | "Share corrections is on: fields you change here will wait on the Hub to be shared once the spools are added." | info circle, `--muted` |
+
+Saving never waits for sharing and never fails because of it.
+
+**Corrections waiting** (`#recent/corrections`, a page under Recently added with the back link "Recently added").
+
+```
++------------------------------------------+
+| < Recently added                         |
+| Corrections waiting                      |
+| 12 waiting . 3.4 MB                      |
+| Nothing is sent until Send now is        |
+| pressed on the Hub page. Remove any you  |
+| do not want to share.                    |
+| +---------------------------------------+|
+| | [img] Polymaker PolyTerra PLA         ||
+| |  2    Charcoal Black                  ||
+| |       2026-11-12 14:09 . On this Hub  ||
+| | Brand: Polymakr -> Polymaker          ||
+| | Colour: #2B2B2E -> #1F1F22            ||
+| | Note: brand is Polymaker              ||
+| |                          [ Remove ]   ||
+| +---------------------------------------+|
+| Sending is done on the Hub page, under   |
+| Settings > Label Reader.                 |
+| [ Open the Hub page ]                    |
++------------------------------------------+
+```
+
+- Data: GET `label-reader/corrections`; thumbnails GET `label-reader/corrections/<id>/photos/<n>`.
+- Head: "<n> waiting · <size>"; intro "Nothing is sent until Send now is pressed on the Hub page. Remove any you do
+  not want to share." With Share corrections off and corrections left: "Share corrections is off, so no new
+  corrections are added. These are still waiting."
+- Card: first photo 48 px with the photo count chip (tapping opens the photo viewer of 7.2); "<Brand> <Name>" as a
+  link to `#recent/<id>`, or as text with "This record is no longer kept."; the time of the correction and the
+  engine whose reading was corrected ("On this Hub" or "Cloud (Claude)"); one line per changed field, "<Field>:
+  <what was read> → <what it is now>" (the arrow is read as "becomes"); "Note: <note>"; a correction the reader
+  did not take shows the triangle line "Not waiting: the reader did not take this correction. <reason>" instead.
+- "Remove" (default button, 44 px, named "Remove the correction for <Brand> <Name>"): POST
+  `label-reader/corrections/<id>/remove`, no confirmation; line "Removed. The record in Recently added is
+  unchanged."
+- Foot: "Sending is done on the Hub page, under Settings > Label Reader." and, on the home address, "Open the Hub
+  page". There is no Send, Download or Remove all here.
+- Empty: "No corrections waiting" with the text "Corrections you make in Recently added, or while adding spools,
+  appear here."
+- The reader does not answer: "The reader does not answer, so the corrections waiting cannot be shown. They are
+  kept." with "Try again". Any other failure: "Could not read the corrections waiting." with the Hub's text and
+  "Try again".
+- On the public address: as 7.4 (Recently added is on the home address only).
 
 ---
 
@@ -1518,6 +1584,7 @@ right column is left out or falls back as described there.
 | Label Reader result: which engine (Cloud (Claude) or On this Hub), model and tier | 4.4, 7.2 | The model name from `usage.model` only |
 | Add preview with per-item results: existing or new filament, spools to create, location, and problems tied to a field | 4.6 | The Hub's text in a code block |
 | Recently added: read confidence and engine per record | 7.1, 7.2 | No "To check" filter, no confidence lines |
+| Share corrections for the web app: whether it is on and how many wait (in `history`), the corrections waiting with thumbnails, and remove | 7.1, 7.2, 4.4, 7.5 | No Share corrections lines and no `#recent/corrections` page |
 | Spool editing for the web app: preview and save a new weight, move to a location, mark empty (the app has this through its own API) | 5.4 | "Update weight", "Move" and "Mark empty" left out; "Load into a printer" stays |
 | Filament colour in spool search results (`find`) | 5.3, 6.5 | Rows without a swatch |
 | The spool an entry of Filament used was taken from | 12.1 | The "Put it back" sheet names job, slot and time only |
