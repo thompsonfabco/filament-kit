@@ -201,15 +201,58 @@ def test_a_lines_error_gives_the_same_exit_code_and_an_error_document_under_json
     assert rc == 1 and json.loads(out)["ok"] is False and "lines.json" in json.loads(out)["error"]
 
 
-def test_an_audit_line_lands_where_the_hubs_go_without_any_test_handler(capsys, real_journal_logging):
-    """No caplog: the Hub's own logger setup (__main__._log_to_journal) is what puts the line on standard error."""
-    log = logging.getLogger("filament_kit")
-    log.handlers[:], log.propagate = [], True              # a real run: no handler yet (conftest restores it)
+class _FakeJournal(logging.Handler):
+    """Stands in for the syslog handler on /dev/log: keeps what it is asked to write."""
+    made: list = []
+
+    def __init__(self, address=None, **kw):
+        super().__init__()
+        self.address, self.lines = address, []
+        _FakeJournal.made.append(self)
+
+    def emit(self, record):
+        self.lines.append(self.format(record))
+
+
+@pytest.fixture
+def fake_journal(monkeypatch):
+    import logging.handlers
+    _FakeJournal.made = []
+    monkeypatch.setattr(cli, "_journal_address", lambda: "/dev/log")
+    monkeypatch.setattr(logging.handlers, "SysLogHandler", _FakeJournal)
+    logging.getLogger("filament_kit").handlers[:] = []         # a real run: no handler yet (conftest restores it)
+    return _FakeJournal
+
+
+def test_an_audit_line_reaches_the_journal_handler_and_prints_nothing(capsys, fake_journal):
+    """No caplog: the line is read from the handler the command attached, under the identifier filament-kit."""
     cli._hub_audit("probe change")
     cli._history_audit("rid1", "revised")
-    err = capsys.readouterr().err
-    assert "INFO filament_kit.setup_page: setup: probe change from " in err
-    assert "setup: recently added record rid1 revised from " in err
+    assert capsys.readouterr() == ("", "")
+    (handler,) = fake_journal.made                             # one handler for both lines
+    assert handler.address == "/dev/log" and handler.ident == "filament-kit: "
+    assert len(handler.lines) == 2
+    assert handler.lines[0].startswith("INFO filament_kit.setup_page: setup: probe change from ")
+    assert "setup: recently added record rid1 revised from " in handler.lines[1]
+
+
+def test_an_audit_line_without_a_journal_is_dropped_silently(capsys, monkeypatch):
+    monkeypatch.setattr(cli, "_journal_address", lambda: None)
+    logging.getLogger("filament_kit").handlers[:] = []
+    cli._hub_audit("probe change")
+    assert capsys.readouterr() == ("", "") and logging.getLogger("filament_kit").handlers == []
+
+
+def test_an_audit_line_with_an_unreachable_journal_socket_is_dropped_silently(capsys, monkeypatch):
+    import logging.handlers
+
+    def refuse(address=None, **kw):
+        raise ConnectionRefusedError(address)
+    monkeypatch.setattr(cli, "_journal_address", lambda: "/dev/log")
+    monkeypatch.setattr(logging.handlers, "SysLogHandler", refuse)
+    logging.getLogger("filament_kit").handlers[:] = []
+    cli._hub_audit("probe change")
+    assert capsys.readouterr() == ("", "")
 
 
 def test_restore_deleted_asks_for_a_build_and_is_audited_as_the_hub_page_does(env, capsys, caplog, monkeypatch):

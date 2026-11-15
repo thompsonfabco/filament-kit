@@ -3808,11 +3808,36 @@ def _default_spoolman() -> Spoolman:
     return Spoolman(config.load()["spoolman_url"])
 
 
+def _journal_address() -> str | None:
+    """The syslog socket the systemd journal reads, or None where there is none (Windows, dev machines)."""
+    return "/dev/log" if hasattr(socket, "AF_UNIX") and os.path.exists("/dev/log") else None
+
+
+def _log_to_journal() -> None:
+    """Audit lines go to the journal directly (ident filament-kit), never to the terminal: stderr carries only Error,
+    Fix and Note lines (06). Without a journal the lines are dropped silently."""
+    import logging
+    import logging.handlers
+    app_log = logging.getLogger("filament_kit")
+    if any(getattr(h, "_filament_kit_journal", False) for h in app_log.handlers):
+        return
+    address = _journal_address()
+    if address is None:
+        return
+    try:
+        handler = logging.handlers.SysLogHandler(address=address)
+    except OSError:
+        return
+    handler.ident = "filament-kit: "
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    handler._filament_kit_journal = True
+    app_log.addHandler(handler)
+    app_log.setLevel(logging.INFO)
+
+
 def _hub_audit(what: str) -> None:
-    """The Hub page's audit line for a change, written as its routes write it (setup_page.audit), to the place the
-    Hub's lines go: its own logger setup (__main__._log_to_journal), so the line is not dropped without a handler."""
+    """The Hub page's audit line for a change, written as its routes write it (setup_page.audit), to the journal."""
     from types import SimpleNamespace
-    from .__main__ import _log_to_journal
     from .setup_page import SetupPage
     _log_to_journal()
     SetupPage.audit(SetupPage, SimpleNamespace(client=None), what)
