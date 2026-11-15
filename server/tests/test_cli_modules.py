@@ -1,5 +1,6 @@
 """filament-kit modules list/set/enable/disable and the Features checklist (spec sections 3-4; 06 8.5)."""
 import io
+import re
 import sys
 
 import pytest
@@ -35,12 +36,31 @@ def _stdin(monkeypatch, text, tty=False):
     monkeypatch.setattr(sys, "stdin", s)
 
 
-def test_modules_list_shows_mode(capsys):
-    assert cli.main(["modules", "list"]) == 0
+def test_features_lists_the_setup_and_every_feature_with_its_key_state_and_needs(capsys, monkeypatch):
+    monkeypatch.setenv("SPOOLWARDEN_GLYPHS", "unicode")
+    assert cli.main(["features"]) == 0
     out = capsys.readouterr().out
-    rows = {line.split()[0]: line.split()[1] for line in out.strip().splitlines()[:-1]}
-    assert rows["spoolman"] == "on" and rows["station"] == "off"
-    assert out.strip().splitlines()[-1] == "mode: server"
+    lines = out.splitlines()
+    assert lines[0] == "Setup: Hub" and lines[1] == ""
+    assert lines[2].split() == ["FEATURE", "KEY", "STATE", "NEEDS"]
+    cells = [re.split(r"\s{2,}", ln.strip()) for ln in lines[3:17]]
+    rows = {c[0]: c for c in cells}
+    assert rows["Spoolman"][:3] == ["Spoolman", "spoolman", "● on"]
+    assert rows["Hub service"] == ["Hub service", "hub", "● on", "Spoolman"]
+    assert rows["Label Reader: Cloud (Claude)"][1:3] == ["label-reader", "● on"]          # an older install keeps it
+    assert rows["Label Reader: On this Hub"][1:3] == ["label-reader-local", "○ off"]
+    assert rows["Weigh Station"][1:3] == ["weigh-station", "○ off"]
+    assert [c[1] for c in cells] == list(cli._FEATURE_KEYS)                                     # the order of 06 9.6
+    assert out.rstrip().endswith("Uses AI: Label Reader: Cloud (Claude), Label Reader: On this Hub.")
+
+
+def test_modules_list_is_features_under_its_old_name_and_shows_the_same(capsys):
+    assert cli.main(["modules", "list"]) == 0
+    old = capsys.readouterr().out
+    assert cli.main(["features", "list"]) == 0
+    assert capsys.readouterr().out == old
+    assert cli.main(["features"]) == 0
+    assert capsys.readouterr().out == old
 
 
 def test_modules_set_all_in_one_saves_and_applies(applied):
@@ -61,9 +81,9 @@ def test_modules_apply_keeps_pairing(applied):
 
 def test_disable_with_dependents_noninteractive_fails(applied, capsys, monkeypatch):
     _stdin(monkeypatch, "")
-    assert cli.main(["modules", "disable", "server"]) == 1
+    assert cli.main(["modules", "disable", "server"]) == 2
     err = capsys.readouterr().err
-    assert "Fix: disable presets, printers, ai_intake first" in err
+    assert "Fix: add --yes to accept the cascade, or switch the others first." in err
     assert applied == []
     assert "modules" not in config.load()
 
@@ -84,7 +104,7 @@ def test_disable_with_dependents_tty_asks(applied, monkeypatch):
     cfg = config.load()
     cfg["spoolman_url"] = "http://spoolman.example:7912"
     config.save(cfg)
-    _stdin(monkeypatch, "y\n", tty=True)
+    _stdin(monkeypatch, "y\n" * 5, tty=True)          # one question for each Feature that goes with it
     assert cli.main(["modules", "disable", "server"]) == 0
     mods = config.load()["modules"]
     assert mods["server"] is False and mods["printers"] is False and mods["ai_intake"] is False
@@ -105,22 +125,24 @@ def _deep():
 def test_disable_names_the_whole_set_before_asking(applied, capsys, monkeypatch):
     _deep()
     _stdin(monkeypatch, "")
-    assert cli.main(["modules", "disable", "server"]) == 1
-    err = capsys.readouterr().err
+    assert cli.main(["modules", "disable", "server"]) == 2
+    err = " ".join(capsys.readouterr().err.split("Fix:")[0].split())
     for n in ("ai_intake", "orders", "printers", "presets", "web", "remote"):
-        assert n in err.split("Fix:")[1], n
+        assert modules.MODULES[n].title in err, n
 
 
 def test_disable_after_a_yes_does_what_it_said(applied, capsys, monkeypatch):
     _deep()
     asked = []
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
     monkeypatch.setattr(cli, "_tty_confirm", lambda q: asked.append(q) or True)
     assert cli.main(["modules", "disable", "server"]) == 0
     mods = config.load()["modules"]
     for n in ("server", "ai_intake", "orders", "printers", "presets", "web", "remote"):
         assert mods[n] is False, n
+    assert len(asked) == 6 and asked[0].startswith("Also turn off ")
     for n in ("orders", "remote"):
-        assert n in asked[0], n
+        assert any(modules.MODULES[n].title in q for q in asked), n
 
 
 def test_enable_at_a_terminal_offers_what_it_needs_all_the_way_down(applied, monkeypatch):
@@ -129,9 +151,11 @@ def test_enable_at_a_terminal_offers_what_it_needs_all_the_way_down(applied, mon
     cfg["spoolman_url"] = "http://spoolman.example:7912"
     config.save(cfg)
     asked = []
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
     monkeypatch.setattr(cli, "_tty_confirm", lambda q: asked.append(q) or True)
     assert cli.main(["modules", "enable", "printers"]) == 0
-    assert "server" in asked[0] and config.load()["modules"]["server"] is True
+    assert asked == ["Also turn on Hub service? Bambu Lab printers needs it. [y/N] "]
+    assert config.load()["modules"]["server"] is True
 
 
 def _terminal(monkeypatch, *answers):
@@ -151,8 +175,8 @@ def test_the_offer_goes_on_to_ask_for_what_the_new_set_needs(applied, capsys, mo
     assert cli.main(["modules", "enable", "remote"]) == 0, capsys.readouterr().err
     after = config.load()
     assert after["modules"]["remote"] is True and after["modules"]["web"] is True
-    assert after["web"]["public_url"] == "https://printer.example.com/filament" and "public" in asked[0]
-    assert "now on too" in capsys.readouterr().out
+    assert after["web"]["public_url"] == "https://printer.example.com/filament" and "Public" in asked[0]
+    assert "Turns on: Web access (Remote access needs it), Remote access." in " ".join(capsys.readouterr().out.split())
 
 
 def test_the_offer_asks_for_the_order_file_too(applied, capsys, monkeypatch):
@@ -187,6 +211,7 @@ def test_a_blank_answer_changes_nothing_and_says_nothing_was_turned_on(applied, 
 def test_a_change_the_plan_refuses_never_says_it_happened(applied, capsys, monkeypatch):
     _deep()
     before = config.load()
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
     monkeypatch.setattr(cli, "_tty_confirm", lambda q: True)
     monkeypatch.setattr(cli, "_plan_error", lambda cfg: "name does not resolve")
     assert cli.main(["modules", "disable", "server"]) == 1
@@ -195,35 +220,41 @@ def test_a_change_the_plan_refuses_never_says_it_happened(applied, capsys, monke
     assert config.load() == before and applied == []
 
 
-def test_the_fix_line_can_be_followed_in_the_order_it_gives(applied, capsys, monkeypatch):
+def test_the_fix_line_can_be_followed_switching_the_others_off_first(applied, capsys, monkeypatch):
     _deep()
     _stdin(monkeypatch, "")
-    assert cli.main(["modules", "disable", "server"]) == 1
-    listed = capsys.readouterr().err.split("Fix: disable ")[1].split(" first")[0].split(", ")
-    assert listed.index("orders") < listed.index("ai_intake") and listed.index("remote") < listed.index("web")
+    assert cli.main(["features", "off", "server"]) == 2
+    assert "Fix: add --yes to accept the cascade, or switch the others first." in capsys.readouterr().err
+    for key in ("orders", "remote", "web", "presets", "printers", "label-reader", "hub"):      # the others, then it
+        assert cli.main(["features", "off", key]) == 0, key
+    assert config.load()["modules"]["server"] is False
 
 
 def test_enable_at_a_terminal_refused_changes_nothing(applied, capsys, monkeypatch):
     config.save(modules.set_mode(config.load(), "station"))
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
     monkeypatch.setattr(cli, "_tty_confirm", lambda q: False)
-    assert cli.main(["modules", "enable", "printers"]) == 1
-    assert "Fix: enable server first" in capsys.readouterr().err and applied == []
+    assert cli.main(["modules", "enable", "printers"]) == 5          # a no: Nothing changed (06 7)
+    assert capsys.readouterr().out.strip().endswith("Nothing changed.") and applied == []
+    assert "server" not in modules.enabled(config.load())
 
 
 def test_every_way_of_switching_says_it_in_the_same_words(applied, capsys, monkeypatch):
     _deep()
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
     monkeypatch.setattr(cli, "_tty_confirm", lambda q: True)
     before = modules.enabled(config.load())
-    _new, notes = modules.toggle(before, "server")
+    new, _notes = modules.toggle(before, "server")
     assert cli.main(["modules", "disable", "server"]) == 0
-    assert notes[0] in capsys.readouterr().out
+    out = " ".join(capsys.readouterr().out.split())
+    assert cli._feature_plan(before, new, {"server"})[0] in out and "Features applied: " in out
 
 
 def test_enable_with_dependency_off_fails(applied, capsys, monkeypatch):
     _stdin(monkeypatch, "")
     config.save(modules.set_mode(config.load(), "station"))
-    assert cli.main(["modules", "enable", "printers"]) == 1
-    assert "Fix: enable server first" in capsys.readouterr().err
+    assert cli.main(["modules", "enable", "printers"]) == 2
+    assert "Fix: add --yes to accept the cascade, or switch the others first." in capsys.readouterr().err
 
 
 def test_enable_station_with_server_on_links_locally(applied):
@@ -235,8 +266,11 @@ def test_enable_station_with_server_on_links_locally(applied):
 
 
 def test_unknown_module_fails(applied, capsys):
-    assert cli.main(["modules", "enable", "nope"]) == 1
-    assert "unknown module" in capsys.readouterr().err
+    assert cli.main(["modules", "enable", "nope"]) == 2
+    err = capsys.readouterr().err
+    assert 'Error: "nope" is not a Feature.' in err and "filament-kit features" in err
+    assert cli.main(["features", "on", "label-reader-local", "--yes"]) == 0           # a key, an old name or a title
+    assert cli.main(["features", "off", "local_intake"]) == 0
 
 
 def _features(monkeypatch, script, *args):
@@ -322,9 +356,9 @@ def test_non_root_changes_nothing(applied, monkeypatch, capsys):
 
 
 def test_set_station_without_address_fails(applied, capsys):
-    assert cli.main(["modules", "set", "station"]) == 1
+    assert cli.main(["modules", "set", "station"]) == 2             # no terminal, no address: stops first (06 6.7)
     err = capsys.readouterr().err
-    assert "fix:" in err and "--server" in err
+    assert "Fix:" in err and "--hub" in err
     assert "modules" not in config.load() and applied == []
 
 
@@ -491,5 +525,5 @@ def test_enable_station_at_a_terminal_asks_for_the_server_address(applied, monke
     config.save(cfg)
     asked = _terminal(monkeypatch, "10.0.0.5")
     assert cli.main(["modules", "enable", "station"]) == 0
-    assert any("Server address" in q for q in asked)
+    assert any("The Hub's address (IP address or name): " == q for q in asked)
     assert config.load()["station"]["allow"] == ["10.0.0.5"]

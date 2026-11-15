@@ -233,9 +233,10 @@ def _visible(s: str) -> int:
 
 # What `wrap` takes for a command (06 6.3, 6.5): it starts at one of these programs and runs to the end of its clause,
 # so it is never split over two lines. The texts themselves are plain strings; nothing marks a command in them.
-_KIT = frozenset(("apply", "backup", "cert", "config", "devices", "ensure-fields", "intake", "klipper", "library",
-                  "local-intake", "modules", "pair", "printer", "profiles", "reader", "recent", "remote", "restore", "setup",
-                  "setup-code", "station", "status", "uninstall", "unpair", "update", "web"))
+_KIT = frozenset(("apply", "backup", "cert", "config", "devices", "ensure-fields", "features", "intake", "klipper",
+                  "library", "local-intake", "modules", "pair", "presets", "printer", "profiles", "reader", "recent",
+                  "remote", "restore", "setup", "setup-code", "station", "status", "tag-reader", "uninstall", "unpair",
+                  "update", "web", "weigh-station"))
 _AFTER = {"systemctl": frozenset(("start", "stop", "restart", "status", "enable", "disable", "mask", "daemon-reload",
                                   "reload")),
           "apt": frozenset(("install", "remove", "update", "upgrade")), "pip": frozenset(("install",)),

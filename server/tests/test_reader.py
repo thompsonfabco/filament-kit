@@ -182,17 +182,27 @@ def test_cli_reader_token_list_revoke(env, monkeypatch, capsys):
     assert cli.main(["reader", "token"]) == 3
     assert "administrator rights" in capsys.readouterr().err
     monkeypatch.setattr(cli, "_is_root", lambda: True)
-    assert cli.main(["reader", "token", "--name", "bench"]) == 0
+    assert cli.main(["tag-reader", "new-token", "--name", "bench"]) == 0
     out = capsys.readouterr().out
-    tok = next(w for w in out.split() if len(w) >= 32)
-    assert reader.TokenStore().check(tok) and "secrets.h" in out
-    assert cli.main(["reader", "tokens"]) == 0
+    lines = out.splitlines()
+    tok = lines[1]
+    assert lines[0] == "New Tag Reader token r1 (bench):" and len(tok) >= 32 and " " not in tok
+    assert lines[2] == "Shown only this once. tag-reader flash puts it on the reader for you." and len(lines) == 3
+    assert reader.TokenStore().check(tok)
+    assert cli.main(["reader", "tokens"]) == 0                       # the old spelling is the same command
     listed = capsys.readouterr().out
     assert "bench" in listed and tok not in listed
+    assert cli.main(["tag-reader", "list"]) == 0 and capsys.readouterr().out == listed
+    assert listed.split()[:3] == ["ID", "NAME", "MADE"]
     tid = reader.TokenStore().list()[0]["id"]
-    assert cli.main(["reader", "revoke", tid, "--yes"]) == 0
+    assert cli.main(["tag-reader", "revoke", tid, "--yes"]) == 0
+    assert capsys.readouterr().out == f"Revoked the token {tid}.\n"
     assert not reader.TokenStore().check(tok)
     assert cli.main(["reader", "revoke", tid]) == 2
+    assert "does not name one Tag Reader token" in capsys.readouterr().err
+    assert cli.main(["tag-reader", "list"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["No Tag Reader tokens.",
+                                                    "Make one: sudo filament-kit tag-reader new-token --name bench"]
 
 
 # ---------- routes: auth, healthz, fw ----------

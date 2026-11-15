@@ -217,16 +217,30 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool 
                             "Slicer Sync" if slicer_sync else "the Weigh Station" if weigh_station else "the phone", cmd)
 
 
+def _paired_with_hub(link, result) -> None:
+    """`Paired with the Hub at 192.0.2.10.`, then what happened to the service (the rest of the pairing's own message)."""
+    output.emit({"ok": True, "address": link.host})
+    output.result(f"Paired with the Hub at {link.host}.")
+    rest = result.message.partition("Paired.")[2].strip().replace("modules enable station", "features on weigh-station")
+    if rest and result.status != "paired_not_restarted":
+        output.result(rest)
+
+
 def cmd_station_pair(ask=input) -> int:
-    """On the station PC: take the link from `filament-kit pair --station`, check the server's fingerprint with the
-    owner, save the pairing for the button flow (station/server_api.py)."""
+    """On the Weigh Station's computer: take the link from `filament-kit pair --weigh-station`, check the Hub's
+    fingerprint with the owner, save the pairing for the button flow (station/server_api.py). Nothing answers the
+    comparison but a person: no `--yes`."""
     from .station import server_api
     if hasattr(os, "geteuid") and os.geteuid() != 0:
-        return output.need_sudo(_sudo_command("sudo filament-kit station pair"))
-    no_terminal = ("sudo filament-kit station pair needs a terminal: it asks for the link and for you to "
+        return output.need_sudo(_sudo_command("sudo filament-kit weigh-station pair"))
+    if ask is input and not output.terminal():
+        output.error("pairing asks for the link and for you to compare the fingerprint, and there is no terminal to ask.",
+                     "run it at a terminal:", cmd=_sudo_command("sudo filament-kit weigh-station pair"))
+        return output.USAGE
+    no_terminal = ("sudo filament-kit weigh-station pair needs a terminal: it asks for the link and for you to "
                    "compare the fingerprint. Nothing was saved.")
     try:
-        text = ask("Paste the link from sudo filament-kit pair --station on the server: ")
+        text = ask("Paste the link from the Hub (sudo filament-kit pair --weigh-station): ")
     except (EOFError, RuntimeError, OSError):  # `< /dev/null`; `<&-` is no stdin (RuntimeError) or a dead one (OSError)
         _err_line(no_terminal)
         return 1
@@ -237,24 +251,26 @@ def cmd_station_pair(ask=input) -> int:
         return 1
 
     def owner_compares(seen: str) -> bool:
-        print("The server's certificate fingerprint:")
-        print("  " + " ".join(seen[i:i + 4] for i in range(0, len(seen), 4)))
+        with output.shown():
+            output.out_lines(_fingerprint_lines(seen))
         try:
-            answer = ask("Does it match the one sudo filament-kit pair --station showed? [y/N] ")
+            answer = ask("Does it match the fingerprint the Hub shows? [y/N] ")
         except (EOFError, RuntimeError, OSError):  # no answer is a no
             _err_line(no_terminal)
             return False
         return answer.strip().lower() in ("y", "yes")
 
     result = server_api.pair_with_link(link, confirm=owner_compares)
+    if result.status == "declined":
+        output.result("Not paired. Nothing changed.")
+        return output.CANCELLED
     if result.status == "failed":
         _err_line(result.message)
-    else:
-        if result.status == "paired_not_restarted":
-            print(result.message, file=sys.stderr)
-        else:
-            output.result(result.message)
-    return 1 if result.status in ("failed", "declined") else 0
+        return 1
+    if result.status == "paired_not_restarted":
+        output.note(result.message)
+    _paired_with_hub(link, result)
+    return 0
 
 
 def _port_check(port: str, boards: list[tuple[str, ...]], what: str) -> str | None:
@@ -280,13 +296,15 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
     the same as a blank panel, so each candidate port is flashed only after the owner says yes to that port."""
     from .station import panel
     if not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit station flash-panel"))
+        return output.need_sudo(_sudo_command("sudo filament-kit weigh-station flash-display"))
     if not yes and ask is input and not output.terminal():     # nobody to ask which board: nothing is stopped or written
-        return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit station flash-panel") + " --yes")
+        return output.no_terminal("writing the firmware",
+                                  _sudo_command("sudo filament-kit weigh-station flash-display") + " --yes")
     service = "filament-kit-station.service"
     was_active = run(["systemctl", "is-active", service], check=False).returncode == 0  # only restart what was running
     try:
-        stopped = run(["systemctl", "stop", service], check=False)
+        with output.wait("Stopping the Weigh Station service…", programs=True):
+            stopped = run(["systemctl", "stop", service], check=False)
         if stopped.returncode not in (0, 5):  # 5: the unit isn't loaded (no service to stop)
             _err_line(f"could not stop {service} (systemctl exit {stopped.returncode}); its panel port may look "
                       "blank. Nothing was flashed.")
@@ -297,13 +315,13 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
             return 1
         ports = panel.blank_c3_ports()
         if only_port is not None:       # only a board this scan would offer: not the PN532, a running panel or a path that is no board
-            only_port = _port_check(only_port, [(p,) for p in ports], "station flash-panel would write")
+            only_port = _port_check(only_port, [(p,) for p in ports], "weigh-station flash-display would write")
             if only_port is None:
                 return output.USAGE
             ports = [only_port]
         if not ports:
-            _err_line("no blank ESP32-C3 board found. Nothing was flashed.\nfix: plug the board's USB port into this PC (a "
-                      "board that already runs the panel firmware doesn't need flashing).")
+            output.error("no blank display board found on USB.", "plug the display in with a data cable, then run this "
+                         "again (a board that already runs the display firmware does not need flashing).")
             return 1
         if yes and len(ports) > 1:      # --yes answers for one named board, never for a pick among several (06 7)
             output.error("more than one board could be the intake panel: " + ", ".join(ports) + "; nothing was written.",
@@ -323,12 +341,19 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
         return output.CANCELLED     # every board was declined: "Nothing changed." was said
     finally:
         if was_active:
-            run(["systemctl", "start", service], check=False)
+            started = run(["systemctl", "start", service], check=False)
+            if started.returncode == 0:
+                output.result("Started the Weigh Station service again.")
+            else:
+                output.error(f"could not start {service} again (systemctl exit {started.returncode}).",
+                             "see why:", cmd=f"sudo journalctl -u {service} -n 50")
 
 
 def _flash_and_verify(panel, port: str, version: str) -> int:
     """Flash port, then ask the board for its HELLO: success only when it reports the bundled version."""
-    if not panel.flash_panel(port, version):
+    with output.wait(f"Writing the firmware to {port}…", programs=True):
+        written = panel.flash_panel(port, version)
+    if not written:
         _err_line(f"writing the firmware to {port} failed (esptool); the board may still be blank. Unplug and "
                   "replug it, then run this again.")
         return 1
@@ -341,7 +366,8 @@ def _flash_and_verify(panel, port: str, version: str) -> int:
         _err_line(f"{port} was written but does not answer with firmware {version}"
                   + (f" (it says {seen})" if seen else "") + ". Unplug and replug it, then run this again.")
         return 1
-    print(f"Wrote panel firmware {version} to {port}; the board answers.")
+    output.emit({"ok": True, "port": port, "version": version})
+    output.out_lines(output.status_row("done", "The display answered."))
     return 0
 
 
@@ -351,11 +377,11 @@ def cmd_station_pair_local() -> int:
     on loopback against it. Prints no token: the output goes to the page's job log."""
     from .station import server_api
     if hasattr(os, "geteuid") and os.geteuid() != 0:
-        return output.need_sudo(_sudo_command("sudo filament-kit station pair --local"))
+        return output.need_sudo(_sudo_command("sudo filament-kit weigh-station pair --local"))
     if "server" not in modules.enabled(config.load()):
-        _err_line("--local pairs a station with the kit server on the same machine, and the server module is off "
-                  "here.\nfix: run sudo filament-kit pair --station on the kit server, then sudo filament-kit station "
-                  "pair here")
+        _err_line("--local pairs a Weigh Station with the Hub on the same machine, and the Hub service is off "
+                  "here.\nfix: run sudo filament-kit pair --weigh-station on the Hub, then sudo filament-kit "
+                  "weigh-station pair here")
         return 1
     try:
         result = server_api.pair_with_link(server_api.parse_link(pairing.issue(device_hint="station", scope="station").qr),
@@ -363,7 +389,11 @@ def cmd_station_pair_local() -> int:
     except (pairing.PairingError, ValueError) as e:
         _err_line(str(e))
         return 1
-    print(result.message, file=sys.stderr if result.status in ("failed", "paired_not_restarted") else sys.stdout)
+    if result.status in ("failed", "paired_not_restarted"):
+        print(result.message, file=sys.stderr)
+    else:
+        output.emit({"ok": True})
+        output.result("The Weigh Station on this machine is paired with this Hub.")
     return 1 if result.status == "failed" else 0
 
 
@@ -444,13 +474,18 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             path.unlink(missing_ok=True)
 
 
-def cmd_station_pairing_state() -> int:
-    """One line for the wrapper, run as root: see server_api.pairing_state."""
+def cmd_station_pairing_state(old_spelling: bool = False) -> int:
+    """`weigh-station pairing-state` (06 9.7): `paired with 192.0.2.10:8710`, `not paired` or `not checked yet`; its `--json`
+    `state` keeps `paired`, `unpaired`, `unchecked`. The old spelling `station pairing-state` still prints the one line
+    the root wrapper passes on to `status` (install/filament-kit-cli.sh reads that text until it reads the `--json`)."""
     from .station import server_api
     state = server_api.pairing_state()
     word, _, address = state.partition(" ")
     output.emit({"state": word, "address": address or None})
-    print(state)
+    if old_spelling:
+        print(state)
+    else:
+        print({"paired": f"paired with {address}", "unpaired": "not paired", "unchecked": "not checked yet"}.get(word, state))
     return 0
 
 
@@ -660,6 +695,8 @@ _ENGINES = (("auto", "Automatic: On this Hub first, Cloud (Claude) when it is un
 _TIERS = (("auto", "Automatic"), ("cpu", "Processor (CPU)"), ("gpu", "Graphics card (GPU)"))
 _VOICES = (("auto", "Piper (natural; a 60-80 MB download)"), ("espeak", "espeak-ng (robotic; no download)"))
 _SETUP_WORDS = {"server": "Hub", "station": "Weigh Station", "all-in-one": "Hub with Weigh Station", "custom": "Custom"}
+# The setup sentence of `features setup` (06 9.6) and the new words for the three setups (N27).
+_SETUP_SENTENCE = {"server": "Hub", "station": "Weigh Station only", "all-in-one": "Hub with Weigh Station"}
 FEATURES_ROW = 11          # the number the main list gives Features: the texts that point at it say so
 _APPLY_KEYS = ("station.tts", "web.public_url", "station.url", "spoolman_url")     # saving these applies (modules apply)
 
@@ -1731,6 +1768,34 @@ def _features_checklist(on, chosen, explicit) -> menu_ui.Screen:
                           save="apply", plan=plan, after=(plan, _FEATURES_HINT), hint=_FEATURES_HINT)
 
 
+_SETTING_OWNERS = {"web.public_url": "web", "orders.file": "orders", "spoolman_url": "server", "station.allow": "station"}
+
+
+def _ask_setting(key: str, owner: str) -> str | None:
+    """One setting of the table in 8.5: the line saying which feature needs it, then the prompt, asked again after a
+    wrong value. The value, or None for an empty answer or the end of input."""
+    line, prompt, wrong = _FEATURE_ASKS[key]
+    output.out(line.format(who=modules.MODULES[owner].title))
+    while True:
+        raw = _ask(prompt)
+        if raw is None or not raw.strip():
+            return None
+        value = raw.strip()
+        if key == "station.allow":
+            if modules._bad_allow(value):
+                err = wrong
+            elif value in modules._LOCAL_HOSTS:
+                err = "give the address of the machine the Hub runs on."
+            else:
+                err = None
+        else:
+            err = wrong if modules.check_setting(key, value) else None
+        if err:
+            output.error(err)
+            continue
+        return value
+
+
 def _ask_feature_settings(on, new: dict) -> tuple[dict | None, str]:
     """The settings the chosen features need and the Hub does not have yet, one prompt each in the table's order, each
     after one line saying which feature needs it (8.5). (answers, "") or (None, the feature that was not answered)."""
@@ -1739,30 +1804,12 @@ def _ask_feature_settings(on, new: dict) -> tuple[dict | None, str]:
     keys += ["spoolman_url"] if modules.needs_spoolman_url(on, new) else []
     keys += ["station.allow"] if "station.allow" in need else []
     got: dict[str, str] = {}
-    owners = {"web.public_url": "web" if "web" in on else "remote", "orders.file": "orders", "spoolman_url": "server",
-              "station.allow": "station"}
+    owners = {**_SETTING_OWNERS, "web.public_url": "web" if "web" in on else "remote"}
     for key in keys:
-        line, prompt, wrong = _FEATURE_ASKS[key]
-        output.out(line.format(who=modules.MODULES[owners[key]].title))
-        while True:
-            raw = _ask(prompt)
-            if raw is None or not raw.strip():
-                return None, modules.MODULES[owners[key]].title
-            value = raw.strip()
-            if key == "station.allow":
-                if modules._bad_allow(value):
-                    err = wrong
-                elif value in modules._LOCAL_HOSTS:
-                    err = "give the address of the machine the Hub runs on."
-                else:
-                    err = None
-            else:
-                err = wrong if modules.check_setting(key, value) else None
-            if err:
-                output.error(err)
-                continue
-            got[key] = value
-            break
+        value = _ask_setting(key, owners[key])
+        if value is None:
+            return None, modules.MODULES[owners[key]].title
+        got[key] = value
     return got, ""
 
 
@@ -2209,9 +2256,7 @@ def _rec_item_arg(item: int | None) -> int | None | bool:
 
 def _history_audit(rid: str, what: str) -> None:
     """The Hub page's audit line for a change to a record, written as its routes write it (intake_tab.py)."""
-    from types import SimpleNamespace
-    from .setup_page import SetupPage
-    SetupPage.audit(SetupPage, SimpleNamespace(client=None), f"recently added record {rid} {what}")
+    _hub_audit(f"recently added record {rid} {what}")
 
 
 def _history_charge():
@@ -3757,109 +3802,199 @@ def cmd_library_add(source: str) -> int:
     return 0
 
 
-# ---------- profiles ----------
+# ---------- presets (06 9.5; `profiles` is the old spelling) ----------
 
 def _default_spoolman() -> Spoolman:
     return Spoolman(config.load()["spoolman_url"])
 
 
+def _journal_address() -> str | None:
+    """The syslog socket the systemd journal reads, or None where there is none (Windows, dev machines)."""
+    return "/dev/log" if hasattr(socket, "AF_UNIX") and os.path.exists("/dev/log") else None
+
+
+def _log_to_journal() -> None:
+    """Audit lines go to the journal directly (ident filament-kit), never to the terminal: stderr carries only Error,
+    Fix and Note lines (06). Without a journal the lines are dropped silently."""
+    import logging
+    import logging.handlers
+    app_log = logging.getLogger("filament_kit")
+    if any(getattr(h, "_filament_kit_journal", False) for h in app_log.handlers):
+        return
+    address = _journal_address()
+    if address is None:
+        return
+    try:
+        handler = logging.handlers.SysLogHandler(address=address)
+    except OSError:
+        return
+    handler.ident = "filament-kit: "
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    handler._filament_kit_journal = True
+    app_log.addHandler(handler)
+    app_log.setLevel(logging.INFO)
+
+
+def _hub_audit(what: str) -> None:
+    """The Hub page's audit line for a change, written as its routes write it (setup_page.audit), to the journal."""
+    from types import SimpleNamespace
+    from .setup_page import SetupPage
+    _log_to_journal()
+    SetupPage.audit(SetupPage, SimpleNamespace(client=None), what)
+
+
+def _presets_on() -> bool:
+    """False, after its Error and Fix, while the Slicer presets Feature is off: the Hub page refuses the same way."""
+    if "presets" in modules.enabled(config.load()):
+        return True
+    output.error('the "Slicer presets" Feature is off.', "turn it on first:",
+                 cmd="sudo filament-kit features on presets")
+    return False
+
+
+def _when(t) -> str:
+    """A time of the Hub's own view (ISO text, or none) as local `2026-11-12 07:30`."""
+    try:
+        return datetime.datetime.fromisoformat(str(t)).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return str(t)
+
+
+def _stamp_when(stamp: str) -> str:
+    """A build's stamp (UTC `20261112-030500`) as local `2026-11-12 03:05`."""
+    try:
+        return datetime.datetime.strptime(stamp, "%Y%m%d-%H%M%S").replace(
+            tzinfo=datetime.timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return stamp
+
+
+def _plural(n: int, one: str, many: str | None = None) -> str:
+    return f"{n} {one if n == 1 else many or one + 's'}"
+
+
 def cmd_profiles_build(sm_factory) -> int:
+    """`presets build`: runs the build here and waits for it (the Hub page asks the build unit for one instead)."""
     with output.wait("Building the Slicer presets…"):
         r = builds.run_build(sm_factory())
     if r.get("waiting"):
-        # waiting for the first PC sync is a normal state: the build unit must not show as failed
-        err = r.get("error") or builds.NO_SYSTEM
-        print(err + (" (see README: Pair your PC)" if err == builds.NO_SYSTEM else ""))
+        # waiting for the first Slicer Sync run is a normal state: the build unit must not show as failed
+        text = r.get("error") or builds.NO_SYSTEM
+        output.emit({"ok": True, "waiting": True, "text": text})
+        output.out_lines(output.status_row("note", text.rstrip(".") + ".",
+                                           "sudo filament-kit pair --slicer-sync"
+                                           if text == builds.NO_SYSTEM else ""))
         return 0
     if not r.get("ok"):
-        _err_line(f"build failed: {r.get('error')}; the last good build stays in use "
-                  f"(see: sudo journalctl -u filament-kit-build -n 50)")
+        output.error(f"The build failed: {str(r.get('error')).rstrip('.')}. The last good build stays in use.",
+                     "see what it logged:", cmd="sudo journalctl -u filament-kit-build -n 50")
         return 1
-    c = builds.current() or {}
-    problems = r.get("problems") or []
-    print(f"build {r['stamp']}: {c.get('presets', 0)} presets, {len(problems)} "
-          f"problem{'' if len(problems) == 1 else 's'}")
-    for prob in problems:
-        print(f"  problem: {prob}")
+    n = int((builds.current() or {}).get("presets") or 0)
+    problems = [str(p) for p in r.get("problems") or []]
+    output.emit({"ok": True, "presets": n, "problems": problems})
+    output.out_lines(output.status_row(
+        "done", f"Presets built: {n}. Problems: " + (f"{len(problems)}:" if problems else "none.")))
+    for p in problems:
+        output.out_lines(output.status_row("needs a look", p))
     return 0
 
 
 def cmd_profiles_status() -> int:
-    if output.json_mode():
-        from .setup_console import presets_tab
-        output.emit(presets_tab._view())        # the Hub page's own reply
-    st = builds.status()
-    b, la, inst, pc = st["build"], st["last_attempt"], st["installed"], st["pc"]
-    print(f"lines: {st['lines']}")
+    """`presets status`: the Hub page's reply (`--json`) as lines in the page's order."""
+    from .setup_console import presets_tab
+    v = presets_tab._view()
+    if not v["on"] and not _presets_on():               # an error says so, with exit 1, as text and as --json (06 6.8)
+        return 1
+    if v["on"] and v["lines_error"]:
+        output.error(v["lines_error"])
+        return 1
+    output.emit(v)
+    if not v["on"]:
+        return 0
+    output.out(f"Lines: {len(v['lines'])}.")
+    b = v["build"]
     if b:
-        orca = (f"{st['orca_presets']} Orca presets, {len(st['orca_stale'])} Orca stale, "
-                if st.get("orca_presets") is not None else "")
-        print(f"build: {b['stamp']} ({_fmt_time(b.get('created'))}), {st['presets']} presets, {orca}"
-              f"{b.get('problems', 0)} problems")
+        orca = f" ({v['orca_presets']} for Orca Slicer)" if v.get("orca_presets") is not None else ""
+        found = b.get("problems") or 0
+        output.out(f"Last build {_when(b.get('created'))}. Presets: {v['presets']}{orca}. "
+                   f"Problems: {found or 'none'}.")
     else:
-        print("build: no build yet")
-    if la:
-        state = "ok" if la.get("ok") else ("waiting" if la.get("error") in (builds.NO_SYSTEM, builds.WAIT_LIVE)
-                                           else "failed")
-        print(f"last attempt: {_fmt_time(la.get('at'))} {state}"
-              + (f": {la['error']}" if la.get("error") and not la.get("ok") else ""))
-        if not la.get("ok") and la.get("error") == builds.WAIT_LIVE:
-            print("  the PC sync has to run once (it runs every 10 minutes while Bambu Studio is closed); "
-                  "the build follows its upload")
-    print(f"installed on the PC: {inst['stamp']} ({_fmt_time(inst.get('at'))})" if inst
-          else "installed on the PC: nothing yet")
-    up = st.get("updates") or {}
-    if up.get("count"):
-        acc = f", {up['accepted']} accepted (the PC sync writes them next)" if up.get("accepted") else ""
-        print(f"{up['count']} update{'' if up['count'] == 1 else 's'} available ({up['lines']} "
-              f"line{'' if up['lines'] == 1 else 's'}){acc}: presets already in your slicers differ from the "
-              "generated ones and are never replaced on their own")
-        if up["count"] > up.get("accepted", 0):
-            output.out("  see them: sudo filament-kit profiles apply-updates --all --dry-run"
-                       + "; apply: sudo filament-kit profiles apply-updates --line <id> | --all")
-    elif b:
-        print("updates: none (presets already in your slicers are never replaced)")
-    if up.get("yours"):
-        print(f"  {up['yours']} generated preset{'' if up['yours'] == 1 else 's'} differ from your own preset of the "
-              "same name in Bambu Studio's filament folder; yours stay (rename or delete yours to get ours)")
-    print(f"PC sync: device {pc['device_id']}, last upload {_fmt_time(pc.get('last_upload'))}" if pc
-          else "PC sync: not set up (see README: Pair your PC)")
-    wait = builds.pc_waiting_text(pc)
-    if wait:
-        print(f"  {wait}")
-    for name in st["stale"]:
-        print(f"  delete in Bambu Studio: {name}")
-    for name in st.get("orca_stale", []):
-        print(f"  delete in Orca Slicer: {name}")
-    for prob in st["problems"]:
-        print(f"  problem: {prob}")
+        output.out("No build yet.")
+    la = v["last_attempt"]
+    if la and not la.get("ok") and la.get("error") and la["error"] not in (builds.NO_SYSTEM, builds.WAIT_LIVE):
+        output.out(f"The last build attempt failed ({_when(la.get('at'))}): {str(la['error']).rstrip('.')}.")
+    if la and la.get("error") == builds.WAIT_LIVE:
+        output.out("Waiting for the PC's next sync: the Slicer Sync runs every 10 minutes while Bambu Studio is closed, "
+                   "and the build follows its upload.")
+    if v["waiting_text"]:
+        output.out(v["waiting_text"].rstrip(".") + ".")
+    inst = v["installed"]
+    output.out(f"Installed on the PC: the build of {_stamp_when(inst['stamp'])}, written {_when(inst.get('at'))}."
+               if inst else "Installed on the PC: nothing yet.")
+    pc = v["pc"]
+    if pc:
+        output.out(f"Slicer Sync: last reported {_when(pc['last_upload'])}." if pc.get("last_upload")
+                   else "Slicer Sync: set up, nothing reported yet.")
+    else:
+        output.out_lines(output.status_row("needs a look", "Slicer Sync: not set up.",
+                                           "sudo filament-kit pair --slicer-sync"))
+    up = v["updates"]
+    accepted = f" {_plural(up['accepted'], 'update')} accepted; the Slicer Sync writes them next." if up["accepted"] else ""
+    output.out((f"Updates: {up['count']} on {_plural(up['lines'], 'line')}." if up["count"] else "Updates: none.")
+               + " Presets already in your slicers are never replaced unless you accept them." + accepted)
+    if up["count"] > up["accepted"]:
+        output.out("See them: " + "sudo filament-kit presets updates")
+    if up["yours"]:
+        output.out(f"{_plural(up['yours'], 'generated preset')} differ from your own preset of the same name in Bambu "
+                   "Studio's filament folder; yours stay (rename or delete yours to get ours).")
+    for name in v["stale"]:
+        output.out(f"Delete in Bambu Studio: {name}")
+    for name in v["orca_stale"]:
+        output.out(f"Delete in Orca Slicer: {name}")
+    for prob in v["problems"]:
+        output.out_lines(output.status_row("needs a look", prob))
     return 0
 
 
+def _parents_text(line: dict) -> str:
+    sep = output.sym("sep")
+    one = lambda app, name, src: f"{app} {name} ({src})" if name else f"{app} none"      # noqa: E731
+    return "parents: " + sep.join((one("Bambu Studio", line["bambu_parent"], line["parent_source"]),
+                                   one("Orca Slicer", line["orca_parent"], line["orca_parent_source"])))
+
+
 def cmd_profiles_lines() -> int:
+    """`presets lines`: the Hub page's lines, each with its parents and filaments under it."""
+    if not _presets_on():
+        return 1
+    from . import profiles_api
     try:
         ls = lines_mod.load()
     except lines_mod.LineStoreError as e:
-        _err_line(e.message)
+        output.error(e.message)
         return 1
-    if output.json_mode():
-        from . import profiles_api
-        counts = profiles_api._preset_counts()
-        output.emit({"lines": [profiles_api._line_view(line, counts) for _k, line in sorted(ls.items())]})
-    c = builds.current()
-    per_line: dict[str, int] = {}
-    for row in builds.bambu_rows(builds.manifest(c["stamp"]) if c else None):
-        if isinstance(row, dict) and isinstance(row.get("line_id"), str):
-            per_line[row["line_id"]] = per_line.get(row["line_id"], 0) + 1
-    if not ls:
-        print("no lines yet (they are made from the Spoolman filaments at the next build or intake)")
-    for lid in sorted(ls):
-        line = ls[lid]
-        parent = f"{line.bambu_parent} ({line.parent_source})" if line.bambu_parent else "none"
-        oparent = f"{line.orca_parent} ({line.orca_parent_source})" if line.orca_parent else "none"
-        ids = ", ".join(str(i) for i in line.filaments) or "-"
-        print(f"{lid}  {line.vendor} {line.product}  {line.material}  parent {parent}  orca {oparent}  "
-              f"filaments {ids}  presets {per_line.get(lid, 0)}")
+    counts = profiles_api._preset_counts()
+    views = [profiles_api._line_view(line, counts) for _k, line in sorted(ls.items())]
+    output.emit({"lines": views})
+    if not views:
+        output.out("No lines yet. They are made from the Spoolman filaments at the next build or addition.")
+        return 0
+    details = [[_parents_text(w), "filaments: " + (", ".join(str(i) for i in w["spoolman_ids"]) or "none")]
+               for w in views]
+    lines = output.table(["ID", "Line", "Material", "Presets"],
+                         [[w["line_id"], f"{w['vendor']} {w['product']}".strip(), w["material"], w["presets"]]
+                          for w in views], long=1, right=(3,))
+    dim = lambda d: [output.paint(ln, "muted", sys.stdout) for ln in output.wrap(d, indent=4, first=2)]    # noqa: E731
+    if len(lines) == len(views) + 1:                    # a table: the details go under their rows
+        shown = [lines[0]]
+        for row, det in zip(lines[1:], details):
+            shown += [row] + [ln for d in det for ln in dim(d)]
+    else:                                               # blocks (plain, narrow): after each block's fields
+        shown, per, i = [], 4, 0
+        for n, det in enumerate(details):
+            shown += ([""] if n else []) + lines[i:i + per] + [ln for d in det for ln in output.wrap(d, indent=4, first=2)]
+            i += per + 1
+    output.out_lines(shown)
     return 0
 
 
@@ -3881,81 +4016,118 @@ def set_parent_checked(line_id: str, parent: str, orca: bool = False):
 
 
 def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> int:
+    if not _presets_on():
+        return 1
+    from .setup_console import presets_tab
+    try:
+        ls = lines_mod.load()
+        material = ls[line_id].material if line_id in ls else ""
+        synced = presets_tab._parents(material, "orca" if orca else "bambu")["synced"]     # what the Hub's dialog reads
+    except lines_mod.LineStoreError as e:
+        output.error(e.message)
+        return 1
+    if line_id in ls and not synced:
+        output.error("the Slicer Sync has not reported any parents yet. It reports them when it runs.")
+        return 1
     try:
         line = set_parent_checked(line_id, parent, orca)
     except (ValueError, ProfileError) as e:
-        _err_line(str(e))
+        output.error(str(e))
         return 1
     except KeyError:
-        _err_line(f"no line {line_id} (see: sudo filament-kit profiles lines)")
+        output.error(f"there is no line {line_id}.", "use an ID from:", cmd="sudo filament-kit presets lines")
         return output.USAGE
     except lines_mod.LineStoreError as e:
-        _err_line(e.message)
+        output.error(e.message)
         return 1
-    output.emit({"ok": True, "line": line.line_id, "target": "orca" if orca else "bambu",
+    target = "orca" if orca else "bambu"
+    _hub_audit(f"Slicer preset line {line.line_id}: {target} parent set")
+    output.emit({"ok": True, "line": line.line_id, "target": target,
                  "parent": line.orca_parent if orca else line.bambu_parent})
-    if orca:
-        print(f"line {line.line_id}: Orca parent {line.orca_parent} (set by you)")
-    else:
-        print(f"line {line.line_id}: parent {line.bambu_parent} (set by you)")
+    output.result("Saved. A build was asked for.")
     return 0
 
 
-def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool, yes: bool = False) -> int:
-    """Accept the listed updates of one line or all: the next PC sync writes them over the presets in the slicers
-    (after its backup); nothing else ever writes over an existing preset."""
+def _line_names() -> dict[str, str]:
     try:
-        r = builds.apply_updates(line_id=line_id, all_=all_, dry_run=True)      # what would be accepted, before asking
+        return {k: f"{ln.vendor} {ln.product}".strip() for k, ln in lines_mod.load().items()}
+    except lines_mod.LineStoreError:
+        return {}
+
+
+def _update_lines(chosen: list[dict]) -> list[str]:
+    names = _line_names()
+    out = []
+    for u in chosen:
+        app = "Orca Slicer" if u["target"] == "orca" else "Bambu Studio"
+        keys = ", ".join(u["keys"][:6]) + (", ..." if len(u["keys"]) > 6 else "")
+        where = f" (in your file {u['file']})" if u.get("file") else ""
+        out.append(f"{names.get(u['line_id'], u['line_id'])}  {app}: {u['name']}{where}: {keys}")
+    return out
+
+
+def cmd_profiles_updates(line_id: str | None, accept: bool = False, yes: bool = False) -> int:
+    """`presets updates` lists what would be accepted and changes nothing; `presets accept-updates` lists the same,
+    asks, and accepts exactly what it listed: the next Slicer Sync writes them over the presets in the slicers (after
+    its backup); nothing else ever writes over an existing preset."""
+    if line_id is not None and not line_id.strip():
+        output.error("--line needs a line ID.", "see the IDs:", cmd="sudo filament-kit presets lines")
+        return 2
+    if not _presets_on():
+        return 1
+    try:
+        r = builds.apply_updates(line_id=line_id, all_=line_id is None, dry_run=True)    # what would be accepted
     except ValueError as e:
-        _err_line(str(e))
+        output.error(str(e))
         return 1
     chosen = r["chosen"]
-    if r["stamp"] is None:
-        print("no build yet: nothing to update")
+    if r["stamp"] is None or not chosen:
+        if line_id and r["stamp"] is not None:
+            output.error(f"there are no updates for line {line_id}.", "see them with:",
+                         cmd="sudo filament-kit presets updates")
+            return 1
+        output.emit({"ok": True, "dry_run": not accept, "stamp": r["stamp"], "chosen": [], "count": 0, "updates": []})
+        output.out("No updates to accept." if r["stamp"] is not None else "No build yet, so there are no updates to accept.")
         return 0
-    if not chosen:
-        output.out(f"no updates for line {line_id} (see: sudo filament-kit profiles status)" if line_id
-                   else "no updates available")
-        return 1 if line_id else 0
-    if not dry_run and not yes and not output.terminal():       # nothing is listed or accepted when nobody can answer
-        return output.no_terminal("accepting the updates", _sudo_command("sudo filament-kit <command>") + " --yes")
-    with output.shown() if dry_run or not yes else contextlib.nullcontext():    # asked-for data, or what the question is about
-        for u in chosen:
-            app = "Orca Slicer" if u["target"] == "orca" else "Bambu Studio"
-            keys = ", ".join(u["keys"][:6]) + (", ..." if len(u["keys"]) > 6 else "")
-            where = f" (in your file {u['file']})" if u.get("file") else ""
-            print(f"  {u['line_id']}  {app}: {u['name']}{where}: {keys}")
-    lines = len({u["line_id"] for u in chosen})
-    what = f"{len(chosen)} update{'' if len(chosen) == 1 else 's'} ({lines} line{'' if lines == 1 else 's'})"
-    if not dry_run:
-        stop = _confirm(f"Accept {'this' if len(chosen) == 1 else f'these {len(chosen)}'} update"
-                        f"{'' if len(chosen) == 1 else 's'}? The PC sync writes {'it' if len(chosen) == 1 else 'them'} at "
-                        "its next run, after its backup.", "accepting the updates", yes=yes)
-        if stop is not None:
-            return stop
-        try:        # exactly what was shown: a build that landed while the question was open is accepted unseen by no one
-            builds.apply_updates(line_id=line_id, all_=all_, dry_run=False, only={u["name"] for u in chosen},
-                                 expect_stamp=r["stamp"])
-        except builds.UpdatesChanged:
-            output.error("the updates changed while you were asked; nothing was accepted.",
-                         "run it again to see them as they are now.")
-            return 1
-        except ValueError as e:
-            _err_line(str(e))
-            return 1
-    output.emit({"ok": True, "dry_run": dry_run, "count": len(chosen), "updates": chosen})
-    if dry_run:
-        with output.shown():
-            print(f"dry run: {what} would be accepted; nothing was changed")
-    else:
-        print(f"accepted {what}; the PC sync writes them at its next run (after its backup)")
+    if accept and not yes and not output.terminal():     # nothing is listed or accepted when nobody can answer
+        return output.no_terminal("accepting the updates", _sudo_command("sudo filament-kit presets accept-updates") + " --yes")
+    with output.shown() if not accept or not yes else contextlib.nullcontext():    # asked-for data, or what the question is about
+        for text in _update_lines(chosen):
+            output.out(text)
+    n = len(chosen)
+    shown = [{"line_id": u["line_id"], "target": u["target"], "name": u["name"], "file": u.get("file"),
+              "keys": u["keys"]} for u in chosen]
+    if not accept:
+        output.emit({"ok": True, "dry_run": True, "stamp": r["stamp"], "chosen": shown, "count": n, "updates": chosen})
+        output.out(f"{_plural(n, 'update')} would be accepted; nothing was changed.")
+        return 0
+    stop = _confirm(f"Accept {'this update' if n == 1 else f'these {n} updates'}? The Slicer Sync writes "
+                    f"{'it' if n == 1 else 'them'} at its next run, after its backup.", "accepting the updates", yes=yes)
+    if stop is not None:
+        return stop
+    try:        # exactly what was shown: a build that landed while the question was open is accepted unseen by no one
+        builds.apply_updates(line_id=line_id, all_=line_id is None, dry_run=False, only={u["name"] for u in chosen},
+                             expect_stamp=r["stamp"])
+    except builds.UpdatesChanged:
+        output.error("the updates changed since this list.", "run it again to see them.")
+        return 1
+    except ValueError as e:
+        output.error(str(e))
+        return 1
+    _hub_audit(f"{n} Slicer preset updates accepted")
+    output.emit({"ok": True, "dry_run": False, "stamp": r["stamp"], "chosen": shown, "count": n, "updates": chosen})
+    output.result(f"{_plural(n, 'update')} accepted; the Slicer Sync writes them at its next run, after its backup.")
     return 0
 
 
 def cmd_profiles_restore_deleted() -> int:
+    if not _presets_on():
+        return 1
     builds.restore_deleted_next()
-    _request_rebuild("restore presets deleted in Bambu Studio")
-    print("the next build brings back the presets deleted in Bambu Studio; a build was requested")
+    _request_rebuild("restore Slicer presets deleted in Bambu Studio")
+    _hub_audit("Slicer presets deleted in Bambu Studio: restore requested")
+    output.emit({"ok": True})
+    output.result("The next build brings back the presets deleted in Bambu Studio. A build was asked for.")
     return 0
 
 
@@ -3990,11 +4162,11 @@ def _run_apply(*, pairing: bool = True) -> int:
         _err_line(str(e))
         return 1
     on = modules.enabled(cfg)
-    print(f"Mode: {modules.mode_of(on)} ({', '.join(n for n in modules.MODULES if n in on)})")
+    print(f"Setup: {_SETUP_WORDS[modules.mode_of(on)]} ({_titles(n for n in modules.MODULES if n in on)}).")
     for a in actions:
         if a.kind == "install_file" and a.arg[0] == apply.DROPIN:
             allow = next(ln for ln in a.arg[1].splitlines() if ln.startswith("IPAddressAllow="))
-            print(f"Station answers: {allow.split('=', 1)[1]}")
+            print(f"Weigh Station answers at: {allow.split('=', 1)[1]}")
     job = steps.Steps(len(apply.step_names(actions)) + 1)
     try:
         with output.wait("Applying the changes…", programs=True):
@@ -4036,10 +4208,11 @@ def _link_station(cfg: dict) -> None:
 
 
 def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_address=None, ask_settings=None,
-                   server: str | None = None, notes: list[str] | None = None) -> str | None:
+                   server: str | None = None, notes: list[str] | None = None, show_plan=None) -> str | None:
     """Turn `name` on/off in `cfg` (in place). Returns an error text, or None when changed.
 
-    `confirm(text) -> bool` is asked before dependents go off, or needs go on, too (None: refuse).
+    `confirm(text) -> bool` is asked, one question for each of them, before dependents go off, or needs go on, too
+    (None: refuse). `show_plan(before, after)` is called once they are answered, before any setting is asked.
     `ask_address() -> str | None` supplies the server address for a station without a server.
     `ask_settings(new_cfg, on) -> error | None` fills in what the new module set needs, once that set is known.
     `notes` gets the sentence saying what else changed: the caller prints it when the change has really passed its checks."""
@@ -4052,8 +4225,11 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
         if missing:
             listed = ", ".join(missing)
             # without a terminal it stays a refusal: a script gets the failure the docs describe
-            if confirm is None or not confirm(f"{name} needs {listed}. Also turn on {listed}? [y/N] "):
-                return f"{name} needs {listed}\nfix: enable {listed} first"
+            for m in missing:
+                who = next((n for n in (name, *missing) if m in modules.MODULES[n].depends), name)
+                if confirm is None or not confirm(f"Also turn on {modules.MODULES[m].title}? "
+                                                  f"{modules.MODULES[who].title} needs it."):
+                    return f"{name} needs {listed}\nfix: enable {listed} first"
             on |= set(missing)
             said = modules.change_note(name, True, missing)
         on.add(name)
@@ -4061,15 +4237,20 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
         deps = modules.dependents_closure(name, on)     # not only the direct ones: the rest would refuse after the yes
         if deps:
             listed = ", ".join(deps)
-            if confirm is None or not confirm(f"Also turn off {listed}? [y/N] "):
-                # the list is parents first; the fix has to go children first, or each step refuses
-                return f"{listed} depend on {name}\nfix: disable {', '.join(reversed(deps))} first"
+            for d in deps:
+                parent = next((n for n in (name, *deps) if n in modules.MODULES[d].depends), name)
+                if confirm is None or not confirm(f"Also turn off {modules.MODULES[d].title}? "
+                                                  f"It needs {modules.MODULES[parent].title}."):
+                    # the list is parents first; the fix has to go children first, or each step refuses
+                    return f"{listed} depend on {name}\nfix: disable {', '.join(reversed(deps))} first"
             on -= set(deps)
             said = modules.change_note(name, False, deps)
         on.discard(name)
     new = _with_modules(cfg, on)
     if not {"server", "station"} <= on:
         modules.drop_local_station_link(new)
+    if show_plan is not None:
+        show_plan(modules.enabled(cfg), frozenset(on))
     if want_on and name == "station":
         if "server" in on:
             _link_station(new)
@@ -4108,15 +4289,56 @@ def _tty_confirm(text: str) -> bool:
     return bool(ans) and ans.strip().lower() in ("y", "yes")
 
 
+# The Features' keys (06 9.6, in the order of that table) and the old module names they stand for. The old names stay
+# accepted everywhere a key is, and are what the code and the stored settings use.
+_FEATURE_KEYS = {"spoolman": "spoolman", "hub": "server", "label-reader": "ai_intake",
+                 "label-reader-local": "local_intake", "printers": "printers", "klipper": "klipper",
+                 "presets": "presets", "catalog": "library", "backups": "backup", "weigh-station": "station",
+                 "web": "web", "remote": "remote", "orders": "orders", "updates": "updates"}
+_KEY_OF = {old: new for new, old in _FEATURE_KEYS.items()}
+# What a feature needs besides other features, as the table shows it (the registry's longer sentence is for the checklist).
+_NEEDS_SHOWN = {"server": ["Spoolman"], "ai_intake": ["API key"]}
+
+
+def _feature_named(arg: str) -> str | None:
+    """The module a Feature key (or its old name, or its title) names, ignoring case; None after the Error (exit 2)."""
+    a = arg.strip().lower()
+    for name, mod in modules.MODULES.items():
+        if a in (name, _KEY_OF[name], mod.title.lower()):
+            return name
+    output.error(f'"{arg}" is not a Feature.', "use a key from the KEY column of:", cmd="sudo filament-kit features")
+    return None
+
+
+def _feature_needs(name: str) -> str:
+    return ", ".join([modules.MODULES[d].title for d in modules.MODULES[name].depends] + _NEEDS_SHOWN.get(name, []))
+
+
 def cmd_modules_list() -> int:
+    """`features` (06 9.6): the setup and every Feature, as the Hub page's Features collection lists them."""
     on = modules.enabled(config.load())
-    output.emit({"modules": [{"name": n, "title": m.title, "description": m.description, "needs": modules.needs_of(n),
-                              "optional_ai": m.optional_ai, "on": n in on} for n, m in modules.MODULES.items()],
+    output.emit({"modules": [{"name": n, "key": _KEY_OF[n], "title": m.title, "description": m.description,
+                              "needs": modules.needs_of(n), "optional_ai": m.optional_ai, "on": n in on}
+                             for n, m in modules.MODULES.items()],
                  "setup": modules.mode_of(on)})
-    width = max(len(n) for n in modules.MODULES)
-    for n, m in modules.MODULES.items():
-        print(f"{n:<{width}}  {'on ' if n in on else 'off'}  {m.title}")
-    print(f"mode: {modules.mode_of(on)}")
+    mode = modules.mode_of(on)
+    output.out(f"Setup: {_SETUP_SENTENCE.get(mode, 'custom')}")
+    output.out()
+    names = [_FEATURE_KEYS[k] for k in _FEATURE_KEYS]
+    word = lambda n: "on" if n in on else "off"                                                       # noqa: E731
+    lines = output.table(["Feature", "Key", "State", "Needs"],
+                         [[modules.MODULES[n].title, _KEY_OF[n], _bare(output.state(word(n))), _feature_needs(n)]
+                          for n in names], long=3)
+    if len(lines) == len(names) + 1:        # a table, not blocks: the colour goes on after the layout is made
+        for i, n in enumerate(names, 1):
+            had = _bare(output.state(word(n)))
+            cut = lines[i].find(had)
+            if cut >= 0:
+                lines[i] = lines[i][:cut] + output.state(word(n)) + lines[i][cut + len(had):]
+    output.out_lines(lines)
+    ai = [modules.MODULES[n].title for n in names if modules.MODULES[n].optional_ai]
+    output.out()
+    output.out(f"Uses AI: {', '.join(ai)}.")
     return 0
 
 
@@ -4149,41 +4371,91 @@ def _server_addr_error(addr: str) -> str | None:
     return None
 
 
+def _features_report(cfg: dict, before, explicit, notes=(), *, plan_shown: bool = False) -> int:
+    """`features on|off|setup` after its questions (06 9.6): the plan, the apply, then `Features applied: …` or
+    `Unchanged.`"""
+    after = modules.enabled(cfg)
+    plan, short = _feature_plan(before, after, explicit)
+    if short and not plan_shown:
+        output.out(plan)
+    rc = _save_and_apply(cfg, notes)
+    if rc == 0:
+        output.emit({"ok": True, "changed": bool(short),
+                     "on": [_KEY_OF[n] for n in modules.MODULES if n in after and n not in before],
+                     "off": [_KEY_OF[n] for n in modules.MODULES if n in before and n not in after]})
+        output.result(f"Features applied: {short}." if short else "Unchanged.")
+    return rc
+
+
 def cmd_modules_set(mode: str, server: str | None = None) -> int:
+    """`features setup <setup>`: `Setup: Weigh Station only.`, the plan and the apply. The Weigh Station only setup
+    needs the Hub's address: `--hub`, or asked at a terminal."""
     mode = modules.canonical_mode(mode)
     if not _require_root():
         return output.NEEDS_SUDO
     try:
-        cfg = modules.set_mode(config.load(), mode)
+        before_cfg = config.load()
+        before = modules.enabled(before_cfg)
+        if mode == "station" and not server and _server_addr_missing(before_cfg) and (
+                output.json_mode() or not apply._tty()):     # before any output or change: nobody can be asked
+            output.error("the Weigh Station only setup needs the Hub's address, and there is no terminal to ask.",
+                         "give it with --hub:", cmd=_sudo_command("sudo filament-kit features setup weigh-station")
+                         + " --hub <address>")
+            return output.USAGE
+        output.out(f"Setup: {_SETUP_SENTENCE[mode]}.")
+        cfg = modules.set_mode(before_cfg, mode)
         if server:
             err = _server_addr_error(server)
             if err:
                 raise modules.ModuleError(err)
             if mode == "station":
                 cfg["station"]["allow"] = [server]
+        elif mode == "station" and _server_addr_missing(cfg):
+            addr = _ask_station_server()
+            if addr is None:
+                output.error("the Weigh Station only setup needs the Hub's address; nothing was changed.")
+                return 1
+            cfg["station"]["allow"] = [addr]
         modules.validate(cfg)
     except modules.ModuleError as e:
         _err_line(str(e))
         return 1
-    return _save_and_apply(cfg)
+    return _features_report(cfg, before, set(modules.enabled(cfg)) ^ set(before))
 
 
 def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None, yes: bool = False) -> int:
+    """`features on|off <feature>` (06 9.6): the `Also turn on|off …?` questions, one for each other Feature, then the
+    plan, the setting prompts, the apply and `Features applied: …`."""
     if not _require_root():
         return output.NEEDS_SUDO
+    named = _feature_named(name)
+    if named is None:
+        return output.USAGE
+    name = named
     cfg = config.load()
     if server:
         err = _server_addr_error(server)
         if err:
             _err_line(err)
             return 1
+    before = modules.enabled(cfg)
     notes: list[str] = []
     tty = apply._tty() and not output.json_mode()         # --json never asks
     asked: list[str] = []
+    declined: list[str] = []
     unset: list[str] = []                                   # --json: the settings a question would have asked for
+    planned = [False]
 
-    def _json_confirm(text: str) -> bool:       # --json: a question stops the command with exit 2 (06 6.8)
-        asked.append(text)
+    def _cascade(text: str) -> bool:
+        """--yes answers it; --json and a missing terminal stop the command; at a terminal the person answers."""
+        if yes:
+            return True
+        if not tty:
+            asked.append(text)          # every question is collected, so the Error names all of them; nothing is saved
+            return True
+        if _tty_confirm(text + " [y/N] "):
+            return True
+        declined.append(text)
         return False
 
     def _json_settings(new_cfg: dict, on) -> None:
@@ -4193,59 +4465,61 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None, yes:
     def _json_address() -> None:
         unset.append("station.allow")
 
+    def _show_plan(old, new) -> None:
+        if asked:                       # nothing will be applied: no plan to show
+            return
+        planned[0] = True
+        plan, short = _feature_plan(old, new, {name})
+        if short:
+            output.out(plan)
+
     json_ = output.json_mode()
-    err = _change_module(cfg, name, want_on, confirm=(lambda text: True) if yes else _json_confirm if json_ else _tty_confirm,
-                         server=server, notes=notes,
+    err = _change_module(cfg, name, want_on, confirm=_cascade, server=server, notes=notes, show_plan=_show_plan,
                          ask_address=_json_address if json_ else _ask_station_server if tty else None,
                          ask_settings=_json_settings if json_ else _ask_module_settings if tty else None)
     if asked:
-        return output.no_terminal(f"turning {name} {'on' if want_on else 'off'} with the modules it "
-                                  f"{'needs' if want_on else 'carries'}",
-                                  _sudo_command(f"sudo filament-kit modules {'enable' if want_on else 'disable'} {name}")
-                                  + " --yes")
+        also = modules.needs_closure([name], before) if want_on else modules.dependents_closure(name, before)
+        output.error(f"turning {modules.MODULES[name].title} {'on' if want_on else 'off'} also turns "
+                     f"{'on' if want_on else 'off'} {_and_list([modules.MODULES[n].title for n in also])}, which needs "
+                     "a yes, and there is no terminal to ask.",
+                     "add --yes to accept the cascade, or switch the others first.")
+        return output.USAGE
+    if declined:
+        output.result("Nothing changed.")
+        return output.CANCELLED
     if unset:
         key = unset[0]
         if key == "station.allow":
-            output.error("station needs the server's address, and there is no terminal to ask.",
-                         "give it with --server:", cmd=_sudo_command(f"sudo filament-kit modules enable {name}") + " --server <address>")
+            output.error("Weigh Station needs the Hub's address, and there is no terminal to ask.",
+                         "give it with --hub:", cmd=_sudo_command(f"sudo filament-kit features on {_KEY_OF[name]}")
+                         + " --hub <address>")
         else:
-            output.error(f"{name} needs {key}, and there is no terminal to ask.",
+            output.error(f"{modules.MODULES[name].title} needs {key}, and there is no terminal to ask.",
                          "run it again at a terminal without --json to answer it:",
-                         cmd=_sudo_command(f"sudo filament-kit modules {'enable' if want_on else 'disable'} {name}")
+                         cmd=_sudo_command(f"sudo filament-kit features {'on' if want_on else 'off'} {_KEY_OF[name]}")
                          .replace(" --json", ""))
         return output.USAGE
     if err:
         _err_line(err)
         return 1
-    return _save_and_apply(cfg, notes)
+    return _features_report(cfg, before, {name}, plan_shown=planned[0])
 
 
 def _ask_module_settings(cfg: dict, on) -> str | None:
-    """`modules enable NAME` at a terminal: ask for the settings the new set `on` needs (web.public_url, orders.file, a
-    remote Spoolman's address), with the menu's prompts, into cfg (in place). Not for the station's server address
-    (--server and _change_module see to it). Returns an error text or None."""
-    also = ("spoolman_url",) if modules.needs_spoolman_url(on, cfg) else ()
-    got = modules.collect_settings(on, cfg, _ask, skip=("station.allow",), also=also)
+    """`features on NAME` at a terminal: ask for the settings the new set `on` needs (web.public_url, orders.file, a
+    remote Spoolman's address), with the checklist's prompts (8.5), into cfg (in place). The Hub's address for a
+    Weigh Station alone is asked before (--hub and _change_module see to it). Returns an error text or None."""
+    got, owner = _ask_feature_settings(on, cfg)
     if got is None:
-        return "a setting was left blank; nothing was changed"
+        return f"{owner} needs that setting; nothing was changed."
     for key, value in got.items():
         modules.set_setting(cfg, key, value)
     return None
 
 
 def _ask_station_server() -> str | None:
-    """Server address for a station-only machine; a blank answer cancels."""
-    while True:
-        raw = _ask("Server address (single IP or host name, blank to cancel): ")
-        if raw is None or not raw.strip():
-            return None
-        addr = raw.strip()
-        try:
-            modules.validate({"modules": {"station": True}, "station": {"allow": [addr]}})
-        except modules.ModuleError:
-            print("Enter a single address or host name, not a range or wildcard.")
-            continue
-        return addr
+    """The Hub's address for a Weigh Station that has no Hub on this machine (8.5); an empty answer cancels."""
+    return _ask_setting("station.allow", "station")
 
 
 def _station_link(new: dict, on) -> None:
@@ -4476,6 +4750,21 @@ def _refuse_panel_board(port: str, explicit: bool, found, run=None) -> int | Non
     return 1
 
 
+def _wifi_password(a, ask_secret) -> str | None:
+    """The reader's Wi-Fi password (06 8.7): `--password -` reads one line of standard input, else it is asked twice,
+    hidden. None after the error (nothing was changed)."""
+    if getattr(a, "password", None) == "-":
+        try:
+            return sys.stdin.readline().rstrip("\r\n")      # only the line ending: spaces can be part of a password
+        except (OSError, ValueError):
+            return ""
+    password = ask_secret("Its Wi-Fi password: ")
+    if ask_secret("The password again: ") != password:
+        _err_line("the two passwords differ; nothing was changed")
+        return None
+    return password
+
+
 def _ask_choice(ask, prompt: str, choices: dict[str, str], default: str) -> str | None:
     """One of `choices` (answer -> value) from the owner; the default on an empty answer; None when it can't ask."""
     for _ in range(3):
@@ -4566,9 +4855,8 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     except (EOFError, RuntimeError, OSError):
         _err_line("reader setup needs a terminal to ask you; nothing was changed")
         return 1
-    password = ask_secret("Its Wi-Fi password: ")
-    if ask_secret("The password again: ") != password:
-        _err_line("the two passwords differ; nothing was changed")
+    password = _wifi_password(a, ask_secret)
+    if password is None:
         return 1
     buzzer = a.buzzer or _ask_choice(
         ask, "Its buzzer: [h]igh-triggered (behind a MOSFET, as in the parts list) or [l]ow-triggered (the older "
@@ -4722,9 +5010,8 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
                      cmd="sudo filament-kit reader token")
         return output.NEEDS_SUDO
     ssid = a.ssid or ask("Wi-Fi name the reader joins: ").strip()
-    password = ask_secret("Its Wi-Fi password: ")
-    if ask_secret("The password again: ") != password:
-        _err_line("the two passwords differ; nothing was changed")
+    password = _wifi_password(a, ask_secret)
+    if password is None:
         return 1
     try:
         rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem, low)  # every check before a token is made
@@ -4912,46 +5199,54 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -
 
 
 def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes: bool = False) -> int:
-    """`reader token [--name X]` (root): a new reader token, printed once for the reader's secrets.h (only its
-    sha256 is kept); `reader tokens`: the tokens (id, name, made); `reader revoke <id|name>` (root)."""
+    """`tag-reader new-token [--name X]` (root): a new Tag Reader token, printed once (only its sha256 is kept);
+    `tag-reader list`: the tokens (id, name, made); `tag-reader revoke <id|name>` (root). The actions keep their old
+    names (token, tokens, revoke) in here."""
     try:
         from .web import reader  # needs the [web] extra
     except ImportError as e:
-        _err_line(f"the reader commands need the kit's [web] packages ({e.name or e} is missing); install them "
+        _err_line(f"the Tag Reader commands need the kit's [web] packages ({e.name or e} is missing); install them "
                   "into the kit's Python: <venv>/bin/python -m pip install 'filament-kit[web]' (or re-run the "
                   "installer, which adds them)")
         return 1
     store = reader.TokenStore()
     if action in ("token", "revoke") and not _is_root():
-        return output.need_sudo(_sudo_command(f"sudo filament-kit reader {action}"))
+        return output.need_sudo(_sudo_command(f"sudo filament-kit tag-reader {'new-token' if action == 'token' else action}"))
     try:
         if action == "token":
             tid, tok = store.issue(name)
+            _hub_audit(f"reader token {tid} made")
             output.emit({"ok": True, "id": tid, "name": reader._clean_name(name), "token": tok})
-            output.out(f"New reader token {tid} ({reader._clean_name(name)}). It is shown only this once:\n\n  {tok}\n\n"
-                       "Put it in the reader's src/secrets.h as READER_TOKEN, then build and flash (reader/README.md).\n"
-                       "Remove it later with: " + f"sudo filament-kit reader revoke {tid}")
+            output.out(f"New Tag Reader token {tid} ({reader._clean_name(name)}):")
+            output.out_lines([tok])         # alone on its line, never wrapped
+            output.out("Shown only this once. tag-reader flash puts it on the reader for you.")
             return 0
         if action == "tokens":
             rows = store.list()
             output.emit(rows)
             if not rows:
-                output.out("No reader tokens yet. Make one with:")
-                output.out("  sudo filament-kit reader token --name printer-station")
+                output.out("No Tag Reader tokens.")
+                output.out("Make one: sudo filament-kit tag-reader new-token --name bench")
                 return 0
-            output.out_lines(output.table(["Id", "Name", "Made"], [[t["id"], t["name"], t["created"]] for t in rows],
-                                          long=1, whole=True))   # `reader revoke` takes the id or the name
+            output.out_lines(output.table(["ID", "Name", "Made"], [[t["id"], t["name"], t["created"]] for t in rows],
+                                          long=1, whole=True))   # `tag-reader revoke` takes the id or the name
             return 0
         rows = store.list()
-        if len([t for t in rows if t["id"] == ref] or [t for t in rows if t["name"] == ref]) == 1:   # one that is there
-            stop = _confirm(f"Revoke the token {ref}? A reader using it is refused from now on. Set it up again with "
-                            "sudo filament-kit reader setup to give it a new token.", f"revoking the token {ref}", yes=yes)
+        hit = [t for t in rows if t["id"] == ref] or [t for t in rows if t["name"] == ref]
+        if len(hit) == 1:                       # one that is there
+            tid = hit[0]["id"]
+            stop = _confirm(f"Revoke the token {tid}? A Tag Reader using it is refused from now on. Set it up again "
+                            "with sudo filament-kit tag-reader flash to give it a new token.", f"revoking the token {tid}",
+                            yes=yes)
             if stop is not None:
                 return stop
-        if store.revoke(ref or ""):
-            print(f"revoked {ref}; a reader using it is refused from now on")
-            return 0
-        _err_line(f"no single reader token {ref!r} (see: filament-kit reader tokens)")
+            if store.revoke(tid):
+                _hub_audit(f"reader token {tid} revoked")
+                output.emit({"ok": True, "id": tid})
+                output.result(f"Revoked the token {tid}.")
+                return 0
+        output.error(f'"{ref}" does not name one Tag Reader token.', "use an ID or a name from:",
+                     cmd="sudo filament-kit tag-reader list")
         return output.USAGE
     except reader.TokenFileError as e:
         _err_line(f"{e}; nothing was changed")
@@ -5228,6 +5523,123 @@ def _add_recent(sub, name: str, help: str, *, alias: bool) -> None:
     ru.add_argument("record", help="its ID")
 
 
+def _add_weigh_station(sub, name: str, *, alias: bool) -> None:
+    """`weigh-station` and its old spelling `station` (06 9.7, 4): the same subcommands, `flash-panel` for `flash-display`."""
+    stp = sub.add_parser(name, help="the Weigh Station on this computer: pair it, write its display, ask its pairing" if not alias
+                         else "the old spelling of weigh-station")
+    stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
+    stpp = stp_sub.add_parser("pair", help="pair this Weigh Station with the Hub (the link comes from 'pair --weigh-station')")
+    stpp.add_argument("--local", action="store_true", help="the Hub is this machine: no link, nothing to compare")
+    fpp = stp_sub.add_parser("flash-panel" if alias else "flash-display",
+                             help="write the display firmware to a blank ESP32-C3 board, after you confirm the port")
+    fpp.add_argument("--port", help="the board's serial port (/dev/ttyACM0): only that one is offered")
+    _add_yes(fpp)
+    stp_sub.add_parser("pairing-state", help="whether this Weigh Station is paired, as one line (paired, unpaired, "
+                                             "unchecked in --json)")
+
+
+def _add_presets(sub, name: str, *, alias: bool) -> None:
+    """`presets` and its old spelling `profiles` (06 9.5, 4). `profiles apply-updates` is `presets updates` with
+    --dry-run and `presets accept-updates` without."""
+    text = "the generated Bambu Studio and Orca Slicer presets: build, status, lines, parents, updates"
+    pf = sub.add_parser(name, help=text if not alias else "the old spelling of presets", description=text)
+    pfsub = pf.add_subparsers(dest="presets_cmd", required=True)
+    pfsub.add_parser("build", help="build the presets now and wait for it (needs the Slicer Sync to have run once)")
+    pfsub.add_parser("status", help="the last build, the Slicer Sync and the problems")
+    pfsub.add_parser("lines", help="the product lines and their Bambu Studio and Orca Slicer parents")
+    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset (or with --orca the Orca Slicer "
+                                             "library preset) a line is built from")
+    sp.add_argument("line_id")
+    sp.add_argument("parent")
+    sp.add_argument("--orca", action="store_true",
+                    help="set the line's Orca Slicer library parent instead (the name without ' @System')")
+    pfsub.add_parser("restore-deleted", help="bring back the presets deleted in Bambu Studio at the next build")
+    if alias:
+        au = pfsub.add_parser("apply-updates", help="the old spelling of updates (--dry-run) and accept-updates")
+        aug = au.add_mutually_exclusive_group(required=True)
+        aug.add_argument("--line", dest="line_id", help="the updates of one product line (see: profiles lines)")
+        aug.add_argument("--all", dest="all_", action="store_true", help="every listed update")
+        au.add_argument("--dry-run", action="store_true", help="only show what would be accepted")
+        _add_yes(au, "accept without asking (a script has no terminal to ask on)")
+        return
+    up = pfsub.add_parser("updates", help="list the updates that accept-updates would accept; changes nothing")
+    upg = up.add_mutually_exclusive_group()
+    upg.add_argument("--line", dest="line_id", help="only the updates of one product line (see: presets lines)")
+    upg.add_argument("--all", dest="all_", action="store_true", help="every listed update (also what no switch means)")
+    au = pfsub.add_parser("accept-updates", help="write the listed updates over presets already in your slicers "
+                                                 "(at the next Slicer Sync run); they are never replaced otherwise")
+    aug = au.add_mutually_exclusive_group()
+    aug.add_argument("--line", dest="line_id", help="only the updates of one product line (see: presets lines)")
+    aug.add_argument("--all", dest="all_", action="store_true", help="every listed update (also what no switch means)")
+    _add_yes(au, "accept without asking (a script has no terminal to ask on)")
+
+
+def _add_features(sub, name: str, *, alias: bool) -> None:
+    """`features` and its old spelling `modules` (06 9.6, 4): `enable` is `on`, `disable` is `off`, `set` is `setup`."""
+    HUB = dict(dest="server", metavar="ADDRESS", help="the Hub's address (IP address or name), for a Weigh Station "
+                                                    "with no Hub on this machine")
+    ft = sub.add_parser(name, help="the switchable parts of the kit: list, switch on or off, set up, apply" if not alias
+                        else "the old spelling of features")
+    fsub = ft.add_subparsers(dest="features_cmd", required=alias)
+    fsub.add_parser("list", help="every Feature, its key, whether it is on and what it needs (what features alone shows)")
+    fm = fsub.add_parser("menu", help="the Features checklist (cursor keys move, Space switches, h/w/b choose a setup, "
+                                      "s applies)")
+    fm.add_argument("--raw", action="store_true", help="print the chosen features as a comma list; change nothing")
+    on = fsub.add_parser("enable" if alias else "on", help="turn a Feature on and apply (root)")
+    on.add_argument("name", metavar="feature", help="its key (see: features)")
+    on.add_argument("--server", "--hub", **HUB)
+    _add_yes(on, "also turn on the Features it needs, without asking (a script has no terminal to ask on)")
+    off = fsub.add_parser("disable" if alias else "off", help="turn a Feature off and apply; its data is kept (root)")
+    off.add_argument("name", metavar="feature", help="its key (see: features)")
+    if not alias:
+        off.add_argument("--hub", **{k: v for k, v in HUB.items() if k != "dest"}, dest="server")
+    _add_yes(off, "also turn off the Features that depend on it, without asking (a script has no terminal to ask on)")
+    st = fsub.add_parser("set" if alias else "setup", help="switch to a setup and apply (root)")
+    st.add_argument("mode", metavar="setup", choices=[*modules.MODES, *modules.MODE_ALIASES])
+    st.add_argument("--server", "--hub", **HUB)
+    ap_ = fsub.add_parser("apply", help="install, start and stop what the settings say (root)")
+    ap_.add_argument("--no-pair", action="store_true", help="show no pairing code at the end (the setup page)")
+    fsub.add_parser("units", help="print every systemd unit of every Feature, one per line")
+
+
+def _add_tag_reader(sub, name: str, *, alias: bool) -> None:
+    """`tag-reader` and its old spelling `reader` (06 9.7, 4): `tokens` is `list`, `token` is `new-token`, `setup` is
+    `flash`."""
+    rd = sub.add_parser(name, help="the Tag Reader tokens and the reader's firmware: make, list, revoke, flash" if not alias
+                        else "the old spelling of tag-reader")
+    rdsub = rd.add_subparsers(dest="tag_reader_cmd", required=True)
+    rdt = rdsub.add_parser("token" if alias else "new-token", help="make a Tag Reader token and print it once (root)")
+    rdt.add_argument("--name", help="what the token is for, e.g. bench")
+    rdsub.add_parser("tokens" if alias else "list", help="list the Tag Reader tokens (never the tokens themselves)")
+    rdr = rdsub.add_parser("revoke", help="remove a Tag Reader token (root)")
+    rdr.add_argument("ref", help="its id (r1 ...) or name")
+    _add_yes(rdr)
+    rds = rdsub.add_parser("setup" if alias else "flash", help="write the kit's firmware to the Tag Reader plugged into "
+                                                               "this computer's USB, then its Wi-Fi and token (root to "
+                                                               "make the token). --source or --out build it with "
+                                                               "PlatformIO instead")
+    rds.add_argument("--name", help="what its token is for, e.g. bench")
+    _add_yes(rds, "answer yes to the question before writing the firmware to the board (the one found, or --port)")
+    rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
+    rds.add_argument("--password", type=klipper_cli.dash, metavar="-",
+                     help="give - and type the Wi-Fi password on standard input")
+    rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
+    rds.add_argument("--port", help="its USB serial port (found when one ESP32 board is plugged in, which you are asked to confirm)")
+    rds.add_argument("--out", help="write its secrets.h here (0600) to build elsewhere")
+    rds.add_argument("--ota-pubkey", help="the PEM public key OTA images are signed with (ota_publish.py --init-key)")
+    rds.add_argument("--token-file", help="a token made on the server (new-token) instead of a new one")
+    rds.add_argument("--base", help="READER_BASE when this machine is not the server: <web.public_url>/reader")
+    rds.add_argument("--secrets", help="flash a secrets.h written earlier with --out (needs --source)")
+    rds.add_argument("--reflash", action="store_true",
+                     help="write the kit's firmware even when the board already runs that build")
+    rds.add_argument("--pending", action="store_true",
+                     help="take the answers the setup page left (its job runs this; nothing is asked)")
+    rds.add_argument("--buzzer", choices=("high", "low"), default=None,
+                     help="the buzzer's trigger: high (a buzzer behind a MOSFET, the default; asked when left out) "
+                          "or low (the older 3-pin "
+                          "module)")
+
+
 def _dispatch_recent(args) -> int:
     which = args.recent_cmd or "history"
     if which == "history":
@@ -5268,15 +5680,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     pkind.add_argument("--weigh-station", "--station", dest="weigh_station", action="store_true",
                        help="pair a Weigh Station on another computer: print the link")
     pp.add_argument("--no-wait", action="store_true", help="show the code and end without waiting for the device")
-    stp = sub.add_parser("station", help="intake station commands (run on the station PC)")
-    stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
-    stpp = stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
-    stpp.add_argument("--local", action="store_true", help="the kit server is this machine: no link, nothing to compare")
-    fpp = stp_sub.add_parser("flash-panel", help="write the panel firmware to a blank ESP32-C3 board, after you "
-                                                 "confirm the port")
-    fpp.add_argument("--port", help="the board's serial port (/dev/ttyACM0): only that one is offered")
-    _add_yes(fpp)
-    stp_sub.add_parser("pairing-state", help="print whether the button flow is paired, as one line")
+    _add_weigh_station(sub, "weigh-station", alias=False)
+    _add_weigh_station(sub, "station", alias=True)
     pp.add_argument("--text", action="store_true", help="print the pairing link and code without the QR code")
     dv = sub.add_parser("devices", help="the paired devices; devices forget unpairs one")
     dsub = dv.add_subparsers(dest="devices_cmd")
@@ -5364,44 +5769,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     la.add_argument("folder", help="the old library_data folder (index.json and library/)")
     la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
     la.add_argument("file")
-    _pf_help = "the generated Bambu Studio and Orca Slicer presets: build, status, lines, parents"
-    pf = sub.add_parser("profiles", help=_pf_help, description=_pf_help)
-    pfsub = pf.add_subparsers(dest="profiles_cmd", required=True)
-    pfsub.add_parser("build", help="build the presets now (needs the PC sync to have run once)")
-    pfsub.add_parser("status", help="show the last build, the PC sync and the problems")
-    pfsub.add_parser("lines", help="list the product lines and their Bambu Studio and Orca Slicer parents")
-    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset (or with --orca the Orca Slicer "
-                                             "library preset) a line is built from")
-    sp.add_argument("line_id")
-    sp.add_argument("parent")
-    sp.add_argument("--orca", action="store_true",
-                    help="set the line's Orca Slicer library parent instead (the name without ' @System')")
-    pfsub.add_parser("restore-deleted", help="bring back the presets deleted in Bambu Studio at the next build")
-    au = pfsub.add_parser("apply-updates", help="write the listed updates over presets already in your slicers "
-                                                "(at the next PC sync); they are never replaced otherwise")
-    aug = au.add_mutually_exclusive_group(required=True)
-    aug.add_argument("--line", dest="line_id", help="the updates of one product line (see: profiles lines)")
-    aug.add_argument("--all", dest="all_", action="store_true", help="every listed update")
-    au.add_argument("--dry-run", action="store_true", help="only show what would be accepted")
-    _add_yes(au, "accept without asking (a script has no terminal to ask on)")
-    md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
-    mdsub = md.add_subparsers(dest="modules_cmd", required=True)
-    mda = mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
-    mda.add_argument("--no-pair", action="store_true", help="show no pairing code at the end (the setup page)")
-    mdsub.add_parser("list", help="show each module on/off and the mode")
-    mm = mdsub.add_parser("menu", help="the module checklist (cursor keys move, Space switches, a/s/t presets, Enter applies)")
-    mm.add_argument("--raw", action="store_true", help="print the chosen modules as a comma list; change nothing")
-    ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
-    ms.add_argument("mode", choices=[*modules.MODES, *modules.MODE_ALIASES])
-    ms.add_argument("--server", "--hub", dest="server", help="the kit server's name or IP (station mode)")
-    me = mdsub.add_parser("enable", help="turn a module on and apply (root)")
-    me.add_argument("name")
-    me.add_argument("--server", "--hub", dest="server", help="the kit server's name or IP (when enabling station without a server)")
-    _add_yes(me, "also turn on the modules it needs, without asking (a script has no terminal to ask on)")
-    mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
-    mx.add_argument("name")
-    _add_yes(mx, "also turn off the modules that depend on it, without asking (a script has no terminal to ask on)")
-    mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
+    _add_presets(sub, "presets", alias=False)
+    _add_presets(sub, "profiles", alias=True)
+    _add_features(sub, "features", alias=False)
+    _add_features(sub, "modules", alias=True)
     wb = sub.add_parser("web", help="the MCP endpoint and phone web app: passphrase, status")
     wbsub = wb.add_subparsers(dest="web_cmd", required=True)
     wbsub.add_parser("passphrase", help="set the sign-in passphrase (root; typed twice, hidden)")
@@ -5426,35 +5797,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lit = lisub.add_parser("test", help="read photos with the local reader only and print the result (no Claude, "
                                         "no daily read used, nothing saved)")
     lit.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
-    rd = sub.add_parser("reader", help="the Printer Station reader tokens: make, list, revoke")
-    rdsub = rd.add_subparsers(dest="reader_cmd", required=True)
-    rdt = rdsub.add_parser("token", help="make a reader token and print it once, for secrets.h (root)")
-    rdt.add_argument("--name", help="what the token is for, e.g. printer-station")
-    rdsub.add_parser("tokens", help="list the reader tokens (never the tokens themselves)")
-    rdr = rdsub.add_parser("revoke", help="remove a reader token (root)")
-    rdr.add_argument("ref", help="its id (r1 ...) or name")
-    _add_yes(rdr)
-    rds = rdsub.add_parser("setup", help="set up the Printer Station plugged into this server's USB: the kit's "
-                                         "firmware, then its Wi-Fi and token (root to make the token). --source or "
-                                         "--out build it with PlatformIO instead")
-    rds.add_argument("--name", help="what its token is for, e.g. printer-station")
-    _add_yes(rds, "answer yes to the question before writing the firmware to the board (the one found, or --port)")
-    rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
-    rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
-    rds.add_argument("--port", help="its USB serial port (found when one ESP32 board is plugged in, which you are asked to confirm)")
-    rds.add_argument("--out", help="write its secrets.h here (0600) to build elsewhere")
-    rds.add_argument("--ota-pubkey", help="the PEM public key OTA images are signed with (ota_publish.py --init-key)")
-    rds.add_argument("--token-file", help="a token made on the server (reader token) instead of a new one")
-    rds.add_argument("--base", help="READER_BASE when this machine is not the server: <web.public_url>/reader")
-    rds.add_argument("--secrets", help="flash a secrets.h written earlier with --out (needs --source)")
-    rds.add_argument("--reflash", action="store_true",
-                     help="write the kit's firmware even when the board already runs that build")
-    rds.add_argument("--pending", action="store_true",
-                     help="take the answers the setup page left (its job runs this; nothing is asked)")
-    rds.add_argument("--buzzer", choices=("high", "low"), default=None,
-                     help="the buzzer's trigger: high (a buzzer behind a MOSFET, the default; asked when left out) "
-                          "or low (the older 3-pin "
-                          "module)")
+    _add_tag_reader(sub, "tag-reader", alias=False)
+    _add_tag_reader(sub, "reader", alias=True)
     bk = sub.add_parser("backup", help="a whole-kit backup as one zip: make one, list them (root)")
     bksub = bk.add_subparsers(dest="backup_cmd", required=True)
     bkc = bksub.add_parser("create", help="write a backup zip (default: into /var/backups/filament-kit)")
@@ -5495,6 +5839,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         args.cmd = "recent"
     elif args.cmd == "unpair":
         args.cmd, args.devices_cmd = "devices", "forget" if args.device else "list"
+    else:
+        _old_spelling(args)
     if output.json_mode():
         refused = _json_refusal(args)
         if refused is not None:
@@ -5503,10 +5849,30 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return _dispatch(args, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
 
 
+def _old_spelling(args) -> None:
+    """06 4: the old groups and subcommands are the same commands as the new ones (silently, 06 2)."""
+    if args.cmd == "station":
+        args.cmd, args.old_spelling = "weigh-station", True
+        if args.station_cmd == "flash-panel":
+            args.station_cmd = "flash-display"
+    elif args.cmd == "profiles":
+        args.cmd = "presets"
+        if args.presets_cmd == "apply-updates":
+            args.presets_cmd = "updates" if args.dry_run else "accept-updates"
+            args.line_id = None if args.all_ else args.line_id
+    elif args.cmd == "modules":
+        args.cmd = "features"
+        args.features_cmd = {"enable": "on", "disable": "off", "set": "setup"}.get(args.features_cmd, args.features_cmd)
+    elif args.cmd == "reader":
+        args.cmd = "tag-reader"
+        args.tag_reader_cmd = {"tokens": "list", "token": "new-token", "setup": "flash"}.get(args.tag_reader_cmd,
+                                                                                              args.tag_reader_cmd)
+
+
 def _sub_of(a) -> str | None:
     """The word after the command: `backup create` is `create`."""
-    for name in ("station_cmd", "recent_cmd", "devices_cmd", "printer_cmd", "library_cmd", "profiles_cmd", "modules_cmd", "web_cmd",
-                 "li_cmd", "reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd"):
+    for name in ("station_cmd", "recent_cmd", "devices_cmd", "printer_cmd", "library_cmd", "presets_cmd", "features_cmd",
+                 "web_cmd", "li_cmd", "tag_reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd"):
         if hasattr(a, name):
             return getattr(a, name)
     return None
@@ -5519,14 +5885,14 @@ def _json_refusal(a) -> int | None:
     if c == "config":
         output.error("config is a menu.", "use filament-kit config show --json")
         return output.USAGE
-    if c == "modules" and sub == "menu":
-        output.error("modules menu is a menu.", "use filament-kit modules list --json")
+    if c == "features" and sub == "menu":
+        output.error("features menu is a menu.", "use filament-kit features --json")
         return output.USAGE
     if c == "printer" and sub == "menu":
         output.error("printer menu is a menu.", "use filament-kit printer list --json")
         return output.USAGE
-    asks = ((c == "station" and sub == "pair" and not a.local, "station pair"),
-            (c == "reader" and sub == "setup" and not a.pending, "reader setup"),
+    asks = ((c == "weigh-station" and sub == "pair" and not a.local, "weigh-station pair"),
+            (c == "tag-reader" and sub == "flash" and not a.pending, "tag-reader flash"),
             (c == "web" and sub == "passphrase", "web passphrase"),
             (c == "local-intake" and sub == "token" and not a.remove, "local-intake token"),
             (c == "printer" and sub in ("unpin", "forget-certificate") and not a.access_code, f"printer {sub}"),
@@ -5541,13 +5907,13 @@ def _json_refusal(a) -> int | None:
 
 # `--quiet`: the commands whose standard output is only results (06 6.8 drops them). Every other command prints what it
 # exists to print there (a list, a detail, an answer, a link or token) or is a screen, and stays as it is.
-_RESULTS_ONLY = {("station", "flash-panel"), ("backup", "create"), ("restore", None), ("recent", "edit"),
+_RESULTS_ONLY = {("weigh-station", "flash-display"), ("backup", "create"), ("restore", None), ("recent", "edit"),
                  ("recent", "undo"), ("devices", "forget"), ("ensure-fields", None), ("printer", "report"), ("printer", "unpin"),
                  ("library", "update"), ("library", "rollback"), ("library", "adopt"), ("library", "add"),
-                 ("profiles", "build"), ("profiles", "set-parent"), ("profiles", "restore-deleted"),
-                 ("profiles", "apply-updates"), ("modules", "apply"), ("modules", "set"), ("modules", "enable"),
-                 ("modules", "disable"), ("web", "passphrase"), ("local-intake", "install"),
-                 ("local-intake", "remove"), ("local-intake", "token"), ("reader", "revoke"), ("remote", "issue"),
+                 ("presets", "build"), ("presets", "set-parent"), ("presets", "restore-deleted"),
+                 ("presets", "accept-updates"), ("features", "apply"), ("features", "setup"), ("features", "on"),
+                 ("features", "off"), ("web", "passphrase"), ("local-intake", "install"),
+                 ("local-intake", "remove"), ("local-intake", "token"), ("tag-reader", "revoke"), ("remote", "issue"),
                  ("uninstall", None), ("update", None), ("klipper", "add"), ("klipper", "set"), ("klipper", "api-key"),
                  ("printer", "forget-certificate"), ("printer", "add"), ("printer", "use"), ("printer", "dismiss"),
                  ("printer", "forget"), ("printer", "rename"), ("printer", "address"), ("printer", "access-code"),
@@ -5559,7 +5925,7 @@ def _reports_results(a) -> bool:
     if not output.quiet():
         return False
     c, sub = a.cmd, _sub_of(a)
-    if c == "station" and sub == "pair":
+    if c == "weigh-station" and sub == "pair":
         return a.local
     if c == "printer" and sub == "map":
         return not a.manual
@@ -5576,12 +5942,13 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "pair":
         return cmd_pair(slicer_sync=args.slicer_sync, weigh_station=args.weigh_station, text=args.text,
                         wait=not args.no_wait)
-    if args.cmd == "station" and args.station_cmd == "pair" and args.local:
+    if args.cmd == "weigh-station" and args.station_cmd == "pair" and args.local:
         return cmd_station_pair_local()
-    if args.cmd == "station" and args.station_cmd == "flash-panel":
+    if args.cmd == "weigh-station" and args.station_cmd == "flash-display":
         return cmd_station_flash_panel(yes=args.yes, only_port=args.port)
-    if args.cmd == "station":
-        return cmd_station_pairing_state() if args.station_cmd == "pairing-state" else cmd_station_pair()
+    if args.cmd == "weigh-station":
+        return (cmd_station_pairing_state(old_spelling=getattr(args, "old_spelling", False))
+                if args.station_cmd == "pairing-state" else cmd_station_pair())
     if args.cmd == "devices":
         return cmd_devices(yes=getattr(args, "yes", False), forget=args.device if args.devices_cmd == "forget" else None)
     if args.cmd == "config":
@@ -5602,17 +5969,18 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         if args.library_cmd == "adopt":
             return cmd_library_adopt(args.folder)
         return cmd_library_add(args.file)
-    if args.cmd == "profiles":
-        if args.profiles_cmd == "build":
+    if args.cmd == "presets":
+        which = args.presets_cmd
+        if which == "build":
             return cmd_profiles_build(sm_factory or _default_spoolman)
-        if args.profiles_cmd == "status":
+        if which == "status":
             return cmd_profiles_status()
-        if args.profiles_cmd == "lines":
+        if which == "lines":
             return cmd_profiles_lines()
-        if args.profiles_cmd == "set-parent":
+        if which == "set-parent":
             return cmd_profiles_set_parent(args.line_id, args.parent, orca=args.orca)
-        if args.profiles_cmd == "apply-updates":
-            return cmd_profiles_apply_updates(args.line_id, args.all_, args.dry_run, yes=args.yes)
+        if which in ("updates", "accept-updates"):
+            return cmd_profiles_updates(args.line_id, accept=which == "accept-updates", yes=getattr(args, "yes", False))
         return cmd_profiles_restore_deleted()
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
@@ -5626,11 +5994,11 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)
-    if args.cmd == "reader" and args.reader_cmd == "setup":
+    if args.cmd == "tag-reader" and args.tag_reader_cmd == "flash":
         return cmd_reader_setup(args)
-    if args.cmd == "reader":
-        return cmd_reader(args.reader_cmd, getattr(args, "name", None), getattr(args, "ref", None),
-                          yes=getattr(args, "yes", False))
+    if args.cmd == "tag-reader":
+        return cmd_reader({"list": "tokens", "new-token": "token"}.get(args.tag_reader_cmd, args.tag_reader_cmd),
+                          getattr(args, "name", None), getattr(args, "ref", None), yes=getattr(args, "yes", False))
     if args.cmd == "backup":
         return cmd_backup(args.backup_cmd, args.out if args.backup_cmd == "create" else None)
     if args.cmd == "restore":
@@ -5672,18 +6040,18 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         if args.rollback:
             return updates.rollback(cfg)
         return updates.update(cfg, scheduled=args.scheduled)
-    if args.cmd == "modules":
-        if args.modules_cmd == "units":
+    if args.cmd == "features":
+        which = args.features_cmd or "list"
+        if which == "units":
             return cmd_modules_units()
-        if args.modules_cmd == "list":
+        if which == "list":
             return cmd_modules_list()
-        if args.modules_cmd == "menu":
+        if which == "menu":
             return cmd_modules_menu(args.raw)
-        if args.modules_cmd == "set":
+        if which == "setup":
             return cmd_modules_set(args.mode, args.server)
-        if args.modules_cmd in ("enable", "disable"):
-            return cmd_modules_toggle(args.name, args.modules_cmd == "enable",
-                                      getattr(args, "server", None), yes=args.yes)
+        if which in ("on", "off"):
+            return cmd_modules_toggle(args.name, which == "on", getattr(args, "server", None), yes=args.yes)
         return cmd_modules_apply(pair=not args.no_pair)
     if args.cmd == "setup-code":
         return cmd_setup_code(args.new, args.revoke_trusted, yes=args.yes)

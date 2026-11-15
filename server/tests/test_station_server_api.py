@@ -130,7 +130,7 @@ def test_station_pair_command(server, monkeypatch):
     assert api.paired and api.ips[0] == "127.0.0.1"
     assert api.tag_lookup(UID)[0] == 200
     answers = iter([link, "n"])
-    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 5          # a no: Nothing changed (06 7)
 
 
 def _local_pair(server, monkeypatch, on=("server", "station")):
@@ -150,7 +150,7 @@ def test_station_pair_local_needs_no_link_and_no_answer(server, monkeypatch, cap
     _local_pair(server, monkeypatch)
     assert cli.main(["station", "pair", "--local"]) == 0
     out = capsys.readouterr()
-    assert "Paired." in out.out
+    assert out.out.splitlines()[-1] == "The Weigh Station on this machine is paired with this Hub."
     api = server_api.ServerApi(timeout=10)
     assert api.paired and api.ips[0] == "127.0.0.1" and api.tag_lookup(UID)[0] == 200
     assert api.token not in out.out + out.err           # the output goes to the page's job log
@@ -172,7 +172,7 @@ def test_station_pair_local_with_the_station_off_stops_after_saving(server, monk
 def test_station_pair_local_refuses_with_no_server_here(server, monkeypatch, capsys):
     _local_pair(server, monkeypatch, on=("station",))
     assert cli.main(["station", "pair", "--local"]) == 1
-    assert "pair --station" in capsys.readouterr().err
+    assert "pair --weigh-station" in capsys.readouterr().err
     assert not server_api.ServerApi(timeout=10).paired
 
 
@@ -580,7 +580,7 @@ def test_station_pair_from_the_command_line_with_no_input(monkeypatch, capsys, s
     one whose descriptor is gone (seen under sudo)."""
     _as_root(monkeypatch)
     monkeypatch.setattr(sys, "stdin", stdin)
-    assert cli.main(["station", "pair"]) == 1
+    assert cli.main(["station", "pair"]) == 2          # no terminal to ask on (06 7)
     assert "terminal" in capsys.readouterr().err
     assert _nothing_saved()
 
@@ -604,9 +604,9 @@ def test_a_closed_fingerprint_prompt_counts_as_no(monkeypatch, capsys):
         for a in answers:
             return a
         raise EOFError
-    assert cli.cmd_station_pair(ask=ask) == 1
+    assert cli.cmd_station_pair(ask=ask) == 5
     out = capsys.readouterr()
-    assert "terminal" in out.err and "Paired" not in out.out
+    assert "terminal" in out.err and "Paired" not in out.out and "Not paired. Nothing changed." in out.out
     assert calls == []  # the token was not claimed
     assert (server_api.server_file().read_bytes(), server_api.token_file().read_bytes()) == before
 

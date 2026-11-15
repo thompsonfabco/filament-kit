@@ -101,7 +101,12 @@ def _apply_updates(m, rec, tmp_path):
             rec("accept")()
         return {"stamp": "s1", "chosen": [row], "dry_run": dry_run}
     m.setattr(builds, "apply_updates", apply)
-    return ["profiles", "apply-updates", "--all"], "Accept this update? The PC sync writes it at its next run, after its backup."
+    return ["presets", "accept-updates"], "Accept this update? The Slicer Sync writes it at its next run, after its backup."
+
+
+def _apply_updates_old(m, rec, tmp_path):
+    argv, question = _apply_updates(m, rec, tmp_path)
+    return ["profiles", "apply-updates", "--all"], question
 
 
 def _setup_code_new(m, rec, tmp_path):
@@ -134,7 +139,13 @@ def _reader_revoke(m, rec, tmp_path):
             rec("revoke")()
             return True
     m.setattr(web_reader, "TokenStore", Store)
-    return ["reader", "revoke", "tr3"], "Revoke the token tr3? A reader using it is refused from now on."
+    return (["tag-reader", "revoke", "tr3"], "Revoke the token tr3? A Tag Reader using it is refused from now on. Set it "
+            "up again with sudo filament-kit tag-reader flash to give it a new token.")
+
+
+def _reader_revoke_old(m, rec, tmp_path):
+    argv, question = _reader_revoke(m, rec, tmp_path)
+    return ["reader", "revoke", "tr3"], question
 
 
 def _uninstall(m, rec, tmp_path):
@@ -194,10 +205,12 @@ CASES = {
     "printer unpin": _unpin,
     "printer map": _map,
     "library rollback": _library_rollback,
-    "profiles apply-updates": _apply_updates,
+    "presets accept-updates": _apply_updates,
+    "profiles apply-updates": _apply_updates_old,
     "setup-code --new": _setup_code_new,
     "setup-code --revoke-trusted": _setup_code_revoke,
-    "reader revoke": _reader_revoke,
+    "tag-reader revoke": _reader_revoke,
+    "reader revoke": _reader_revoke_old,
     "uninstall": _uninstall,
     "update": _update,
     "update --rollback": _rollback,
@@ -273,8 +286,9 @@ def test_the_question_is_the_hub_pages_dialog(command, terminal, capsys):
 def test_apply_updates_dry_run_asks_nothing(rec, monkeypatch, terminal, capsys, tmp_path):
     argv, _ = _apply_updates(monkeypatch, rec, tmp_path)
     terminal(False)
-    rc, out, err = run(capsys, [*argv, "--dry-run"])
-    assert rc == 0 and rec.acted == [] and "dry run" in out
+    rc, out, err = run(capsys, ["profiles", "apply-updates", "--all", "--dry-run"])
+    assert rc == 0 and rec.acted == [] and "1 update would be accepted; nothing was changed." in out
+    assert run(capsys, ["presets", "updates"]) == (0, out, "") and rec.acted == []
 
 
 def test_apply_updates_lists_nothing_when_nobody_can_answer(rec, monkeypatch, terminal, capsys, tmp_path):
@@ -315,8 +329,9 @@ def _updates_landing(monkeypatch, rec, current):
 def test_updates_that_changed_while_asked_are_not_accepted(rec, monkeypatch, terminal, capsys):
     got = _updates_landing(monkeypatch, rec, {"stamp": "s1"})
     terminal(True, "y")
-    rc, out, err = run(capsys, ["profiles", "apply-updates", "--all"])
-    assert rc == 1 and rec.acted == [] and "nothing was accepted" in err and "accepted 1 update" not in out
+    rc, out, err = run(capsys, ["presets", "accept-updates"])
+    assert rc == 1 and rec.acted == [] and "the updates changed since this list." in err
+    assert "Fix: run it again to see them." in err and "1 update accepted" not in out
     assert got == {"only": {"Example PLA"}, "expect_stamp": "s1"}     # exactly what was shown, as the Hub does
 
 

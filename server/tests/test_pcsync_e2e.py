@@ -586,7 +586,7 @@ def test_existing_presets_stay_until_their_update_is_accepted(tmp_path, server, 
     assert view["count"] == len(names) and view["lines"] == 1
 
     assert cli.main(["profiles", "status"]) == 0
-    assert f"{len(names)} updates available (1 line)" in capsys.readouterr().out
+    assert f"Updates: {len(names)} on 1 line." in capsys.readouterr().out
     assert cli.main(["profiles", "apply-updates", "--line", LID, "--dry-run"]) == 0
     assert pc.run() in ("up_to_date", "uploaded")           # a dry run accepted nothing
     assert {p.name: p.read_bytes() for p in pc.base.iterdir() if p.name in before} == before

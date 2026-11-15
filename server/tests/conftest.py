@@ -17,6 +17,14 @@ def _restore_app_logger():
 
 
 @pytest.fixture(autouse=True)
+def _no_real_journal(monkeypatch):
+    """No test writes audit lines into the machine's real journal (/dev/log on Linux and CI): a test that checks the
+    journal route patches `cli._journal_address` itself."""
+    from filament_kit import cli
+    monkeypatch.setattr(cli, "_journal_address", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def _command_line_output(monkeypatch):
     """What the command line writes (glyphs, colour, width) is the same on every machine: ASCII glyphs, no colour,
     80 columns, a colour-capable terminal type (colour then follows the stream, as on a real machine, whatever TERM the

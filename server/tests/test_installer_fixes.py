@@ -76,8 +76,9 @@ def test_enable_web_asks_for_the_public_url_at_a_terminal(applied, monkeypatch, 
     _save(modules.MODES["server"])
     _stdin(monkeypatch, "http://nope\nhttps://kit.example.com/filament\n", tty=True)
     assert cli.main(["modules", "enable", "web"]) == 0
-    out = capsys.readouterr().out
-    assert "web needs its public https address" in out and "Give the https address" in out
+    cap = capsys.readouterr()
+    assert "Web access needs the address people use." in cap.out and "Public https address of the web app" in cap.out
+    assert "Error: give the https address people use" in cap.err
     cfg = config.load()
     assert cfg["modules"]["web"] is True and cfg["web"]["public_url"] == "https://kit.example.com/filament"
 
@@ -86,7 +87,7 @@ def test_enable_web_blank_answer_changes_nothing(applied, monkeypatch, capsys):
     _save(modules.MODES["server"])
     _stdin(monkeypatch, "\n", tty=True)
     assert cli.main(["modules", "enable", "web"]) == 1
-    assert "left blank" in capsys.readouterr().err
+    assert "Web access needs that setting; nothing was changed" in capsys.readouterr().err
     assert config.load()["modules"]["web"] is False and applied == []
 
 
@@ -108,9 +109,10 @@ def test_enable_orders_asks_for_its_file(applied, monkeypatch):
 def test_enable_with_a_missing_dependency_refused_at_the_prompt_asks_no_address(applied, monkeypatch, capsys):
     _save({"spoolman"})
     _stdin(monkeypatch, "", tty=True)
-    assert cli.main(["modules", "enable", "remote"]) == 1
+    assert cli.main(["modules", "enable", "remote"]) == 5              # no answer is a no: Nothing changed
     cap = capsys.readouterr()
-    assert "remote needs server, web" in cap.err and "public https address" not in cap.out
+    assert "Also turn on Hub service? Web access needs it." in cap.out and "public https address" not in cap.out
+    assert cap.out.rstrip().endswith("Nothing changed.")
 
 
 # ---------- B4: web status and the passphrase ----------

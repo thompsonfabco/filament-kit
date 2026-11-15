@@ -1,3 +1,4 @@
+import copy
 import io
 import json
 import os
@@ -439,9 +440,9 @@ def test_profiles_build_waiting_exits_0_with_message(capsys, spoolman_url):
     _spoolman_cfg(spoolman_url)
     assert cli.main(["profiles", "build"]) == 0
     out = capsys.readouterr()
-    assert "install and pair the PC sync" in out.out
-    assert "see README: Pair your PC" in out.out
-    assert "FAIL" not in out.out and out.err == ""
+    assert "install and pair the PC sync" in " ".join(out.out.split())
+    assert "Fix: sudo filament-kit pair --slicer-sync" in out.out
+    assert "FAIL" not in out.out and "failed" not in out.out and out.err == ""
 
 
 def test_profiles_build_ok_prints_stamp(capsys, monkeypatch, spoolman_url):
@@ -456,8 +457,8 @@ def test_profiles_build_ok_prints_stamp(capsys, monkeypatch, spoolman_url):
     monkeypatch.setattr(builds, "current", lambda: {"stamp": "20261102-080100", "presets": 12, "problems": 1})
     assert cli.main(["profiles", "build"]) == 0
     out = capsys.readouterr().out
-    assert "build 20261102-080100" in out and "12 presets" in out
-    assert "problem: a: no parent" in out
+    assert "done          Presets built: 12. Problems: 1:" in out
+    assert "needs a look  a: no parent" in out
     assert seen["sm"] is not None
 
 
@@ -540,10 +541,10 @@ def test_status_after_waiting_build_no_fail(capsys, spoolman_url):
 
 
 def _fake_profiles(monkeypatch, **st):
-    base = {"lines": 3, "presets": 0, "build": None, "last_attempt": None, "installed": None, "pc": None,
-            "stale": [], "problems": []}
+    base = {"lines": 3, "presets": 0, "orca_presets": None, "build": None, "last_attempt": None, "installed": None,
+            "pc": None, "stale": [], "orca_stale": [], "problems": [], "updates": {}}
     base.update(st)
-    monkeypatch.setattr(builds, "status", lambda: base)
+    monkeypatch.setattr(builds, "status", lambda: copy.deepcopy(base))      # a fresh one each time, as the real one is
 
 
 def _fake_library(monkeypatch, source="bundled", local=2, last_check=None, at=None):
@@ -583,7 +584,14 @@ def test_status_failed_build_and_library_update_warning(capsys, monkeypatch, spo
     assert "--   Slicer Sync: last upload never, no build installed yet" in out
 
 
+def _parents_reported(monkeypatch):
+    """The Slicer Sync has reported its parents (what the Hub's parents route says before a dialog opens)."""
+    from filament_kit.setup_console import presets_tab
+    monkeypatch.setattr(presets_tab, "_parents", lambda material, target: {"parents": [], "synced": True})
+
+
 def test_profiles_lines_and_set_parent(capsys, monkeypatch):
+    _parents_reported(monkeypatch)
     lib = library_mod.load()
     _ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
     assert cli.main(["profiles", "lines"]) == 0
@@ -596,7 +604,7 @@ def test_profiles_lines_and_set_parent(capsys, monkeypatch):
     assert (line.bambu_parent, line.parent_source) == ("Generic PETG", "user")
     assert asked
     assert cli.main(["profiles", "set-parent", "nope--x", "Generic PETG"]) == 2
-    assert "no line nope--x" in capsys.readouterr().err
+    assert "there is no line nope--x." in capsys.readouterr().err
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG @BBL H2D"]) == 1
     assert "@" in capsys.readouterr().err
     assert lines_mod.load()["elegoo--petg-hf"].bambu_parent == "Generic PETG"
@@ -618,7 +626,7 @@ def test_profiles_set_parent_unknown_with_store(capsys, monkeypatch):
 
 def test_profiles_status_and_restore_deleted(capsys, monkeypatch):
     assert cli.main(["profiles", "status"]) == 0
-    assert "no build yet" in capsys.readouterr().out
+    assert "No build yet." in capsys.readouterr().out
     asked = []
     monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
     assert cli.main(["profiles", "restore-deleted"]) == 0
@@ -630,23 +638,40 @@ def test_import_guard_removed():
     assert "ImportError" not in inspect.getsource(cli._request_rebuild)
 
 
+def test_presets_set_parent_waits_for_the_slicer_sync_to_report_parents(capsys, monkeypatch):
+    lib = library_mod.load()
+    _ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
+    asked = []
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
+    for argv in (["presets", "set-parent", "elegoo--petg-hf", "Generic PETG"],
+                 ["presets", "set-parent", "elegoo--petg-hf", "Overture PLA Pro", "--orca"]):
+        assert cli.main(argv) == 1
+        assert " ".join(capsys.readouterr().err.split()).startswith(
+            "Error: the Slicer Sync has not reported any parents yet. It reports them when it runs.")
+    assert asked == [] and lines_mod.load()["elegoo--petg-hf"].parent_source == "library"
+    _parents_reported(monkeypatch)
+    assert cli.main(["presets", "set-parent", "elegoo--petg-hf", "Generic PETG"]) == 0
+    assert capsys.readouterr().out == "Saved. A build was asked for.\n" and len(asked) == 1
+
+
 def test_profiles_lines_shows_orca_parent_and_set_parent_orca(capsys, monkeypatch):
     import io as _io
+    _parents_reported(monkeypatch)
 
     import test_builds as TB
     lib = library_mod.load()
     _ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
     assert cli.main(["profiles", "lines"]) == 0
-    assert "orca Generic PETG (material)" in capsys.readouterr().out
+    assert "Orca Slicer Generic PETG (material)" in " ".join(capsys.readouterr().out.split())
     asked = []
     monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Overture PLA Pro", "--orca"]) == 0
-    assert "Orca parent Overture PLA Pro (set by you)" in capsys.readouterr().out
+    assert capsys.readouterr().out == "Saved. A build was asked for.\n"
     line = lines_mod.load()["elegoo--petg-hf"]
     assert (line.orca_parent, line.orca_parent_source) == ("Overture PLA Pro", "user")
     assert line.parent_source == "library" and asked
     assert cli.main(["profiles", "lines"]) == 0
-    assert "orca Overture PLA Pro (user)" in capsys.readouterr().out
+    assert "Orca Slicer Overture PLA Pro (user)" in " ".join(capsys.readouterr().out.split())
     # with an Orca store uploaded the name is checked against its library index
     TB.pair("a")
     builds.store_upload("orca_system", _io.BytesIO(TB.orca_system_zip()), device_id="a")
@@ -667,7 +692,7 @@ def test_profiles_set_parent_orca_canonical_spelling(capsys, monkeypatch):
     TB.pair("a")
     builds.store_upload("orca_system", _io.BytesIO(TB.orca_system_zip()), device_id="a")
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "generic petg", "--orca"]) == 0
-    assert "Orca parent Generic PETG (set by you)" in capsys.readouterr().out
+    assert capsys.readouterr().out == "Saved. A build was asked for.\n"
     assert lines_mod.load()["elegoo--petg-hf"].orca_parent == "Generic PETG"
 
 
@@ -745,7 +770,7 @@ def test_status_shows_the_pc_sync_waiting_for_studio(capsys, monkeypatch, spoolm
     out = _status_lines(capsys)
     assert "--   PC sync waiting for Bambu Studio to close since 2026-11-03 10:00" in out
     assert cli.main(["profiles", "status"]) == 0
-    assert "PC sync waiting for Bambu Studio to close since 2026-11-03 10:00" in capsys.readouterr().out
+    assert "PC sync waiting for Bambu Studio to close since 2026-11-03 10:00." in capsys.readouterr().out
 
 
 def test_status_without_a_wait_has_no_waiting_line(capsys, monkeypatch, spoolman_url):

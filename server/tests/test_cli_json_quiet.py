@@ -285,7 +285,7 @@ def test_a_modules_json_fix_names_a_switch_the_command_has(capsys, monkeypatch):
     monkeypatch.setattr(cli.apply, "_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", _Terminal())
     rc, out, err = run(capsys, ["modules", "disable", "server", "--json"])
-    assert rc == 2 and "modules disable server --yes" in doc(out)["fix"]
+    assert rc == 2 and "add --yes to accept the cascade" in doc(out)["fix"]
     monkeypatch.setattr(cli, "_save_and_apply", lambda cfg, notes: 0)
     rc, out, err = run(capsys, ["modules", "disable", "server", "--json", "--yes"])
     assert "unrecognized" not in out + err and rc == 0
@@ -361,7 +361,7 @@ def test_a_restore_has_no_word_to_type_under_json(capsys, tmp_path):
 
 
 @pytest.mark.parametrize("argv,fix", [(["config"], "filament-kit config show --json"),
-                                      (["modules", "menu"], "filament-kit modules list --json")])
+                                      (["features", "menu"], "filament-kit features --json")])
 def test_menus_refuse_json(capsys, argv, fix):
     rc, out, err = run(capsys, [*argv, "--json"])
     assert rc == 2 and doc(out)["error"].endswith("is a menu.") and doc(out)["fix"] == "use " + fix
@@ -466,11 +466,11 @@ def test_a_new_setup_code_is_printed_without_a_terminal_too(capsys, monkeypatch)
 def test_quiet_drops_the_station_pair_result(capsys, monkeypatch):
     from filament_kit.station import server_api
     monkeypatch.setattr(cli.os, "geteuid", lambda: 0, raising=False)
-    monkeypatch.setattr(server_api, "parse_link", lambda text: text)
+    monkeypatch.setattr(server_api, "parse_link", lambda text: server_api.Link("kit.example", 8710, "t", "fp", []))
     monkeypatch.setattr(server_api, "pair_with_link",
-                        lambda link, confirm: types.SimpleNamespace(status="paired", message="Paired with the kit."))
+                        lambda link, confirm: types.SimpleNamespace(status="paired", message="Paired."))
     assert cli.cmd_station_pair(ask=lambda p: "link") == 0
-    assert "Paired with the kit." in capsys.readouterr().out
+    assert "Paired with the Hub at kit.example." in capsys.readouterr().out
     output.configure(quiet=True)
     assert cli.cmd_station_pair(ask=lambda p: "link") == 0
     assert capsys.readouterr() == ("", "")
