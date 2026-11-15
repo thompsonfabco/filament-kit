@@ -1,11 +1,13 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -27,6 +29,7 @@ class MjpegStreamTest {
     @Volatile private var socket: Socket? = null
 
     @After fun tearDown() {
+        onStreamCall = {}
         socket?.close()
         server.close()
     }
@@ -76,6 +79,22 @@ class MjpegStreamTest {
         assertTrue("connection still open after cancel", closed)
         assertTrue("cancelling must not end the job with an error: $uncaught", uncaught.isEmpty())
         assertTrue(System.nanoTime() - t0 < TimeUnit.SECONDS.toNanos(3))
+    }
+
+    @Test fun aCallClosedBeforeTheJobIsCancelledEndsAsCancelledNotFailed() = runBlocking {
+        // the closer's call.cancel() can land before the read's coroutine is cancelled: cancel the call alone
+        val call = CompletableDeferred<Call>()
+        onStreamCall = { call.complete(it) }
+        serve()
+        val job = CoroutineScope(Dispatchers.Default + handler).launch {
+            streamMjpeg(OkHttpClient(), url(), emptyMap()) { }
+        }
+        assertTrue(accepted.await(5, TimeUnit.SECONDS))
+        Thread.sleep(200) // the client is now blocked reading a body that never comes
+        call.await().cancel()
+        withTimeout(2000) { job.join() }
+        assertTrue("a closed stream must not fail the job: $uncaught", uncaught.isEmpty())
+        assertTrue(job.isCancelled)
     }
 
     @Test fun deliversFrames() = runBlocking {
