@@ -208,7 +208,7 @@ def cmd_station_pair(ask=input) -> int:
     return 1 if result.status in ("failed", "declined") else 0
 
 
-def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False) -> int:
+def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, only_port: str | None = None) -> int:
     """On the station PC: write the panel firmware to a blank ESP32-C3 board. A Printer Station plugged in for power looks
     the same as a blank panel, so each candidate port is flashed only after the owner says yes to that port."""
     from .station import panel
@@ -228,15 +228,20 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False) ->
         if not version:
             _err_line("this station has no panel firmware bundled; nothing was flashed.")
             return 1
-        ports = panel.blank_c3_ports()
+        ports = [only_port] if only_port else panel.blank_c3_ports()
         if not ports:
             _err_line("no blank ESP32-C3 board found. Nothing was flashed.\nfix: plug the board's USB port into this PC (a "
                       "board that already runs the panel firmware doesn't need flashing).")
             return 1
+        if yes and len(ports) > 1:      # --yes answers for one named board, never for a pick among several (06 7)
+            output.error("more than one board could be the intake panel: " + ", ".join(ports) + "; nothing was written.",
+                         "name the board with --port, for example --port " + ports[0] + ".")
+            return output.USAGE
         for port in ports:
-            print(f"Found a USB serial board on {port} that does not answer as the intake panel.")
+            if not only_port:
+                print(f"Found a USB serial board on {port} that does not answer as the intake panel.")
             try:
-                stop = _confirm(f"Write the intake panel firmware to {port}? What is on the board now is replaced.",
+                stop = _confirm(f"Write the intake panel firmware to {port}?",
                                 "writing the firmware", yes=yes, ask=None if ask is input else ask)
             except KeyboardInterrupt:
                 print("\nNothing was flashed.")
@@ -384,6 +389,8 @@ def cmd_unpair(device_id: str | None, yes: bool = False) -> int:
             [[d["id"], d["name"], _fmt_time(d["paired"]), _fmt_time(d["last_seen"])] for d in devs], long=1, whole=True))   # `unpair` takes the id; the name is what tells phones apart
         return 0
     dev = next((d for d in pairing.devices() if d["id"] == device_id), None)
+    if dev is None:     # a pairing token nobody has claimed yet is removed too (`unpair <id>` always did)
+        dev = next((d for d in pairing._read("devices.json") if d.get("id") == device_id), None)
     if dev is None:
         _err_line(f"no paired device {device_id}")
         return output.USAGE
@@ -1667,8 +1674,13 @@ def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool, y
                         "its next run, after its backup.", "accepting the updates", yes=yes)
         if stop is not None:
             return stop
-        try:
-            builds.apply_updates(line_id=line_id, all_=all_, dry_run=False)
+        try:        # exactly what was shown: a build that landed while the question was open is accepted unseen by no one
+            builds.apply_updates(line_id=line_id, all_=all_, dry_run=False, only={u["name"] for u in chosen},
+                                 expect_stamp=r["stamp"])
+        except builds.UpdatesChanged:
+            output.error("the updates changed while you were asked; nothing was accepted.",
+                         "run it again to see them as they are now.")
+            return 1
         except ValueError as e:
             _err_line(str(e))
             return 1
@@ -2059,14 +2071,11 @@ def _kept_release() -> tuple[str, Path] | None:
 
 def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
     """06 7 for `update` and `update --rollback`: asked once there is something to install, with its version. Nobody
-    to ask (no terminal, no --yes) stops before anything is looked up. Root, an up-to-date kit, no kept version and a
-    release that cannot be read are left to the command, which says so itself."""
+    to ask (no terminal, no --yes) stops only then: without root, with an up-to-date kit, no kept version or a release
+    that cannot be read the command says so itself, as it does at a terminal."""
     from . import release, updates
     if yes:
         return None
-    if not output.terminal():
-        return output.no_terminal("rolling back" if rollback else "updating",
-                                  _sudo_command("sudo filament-kit update") + " --yes")
     if not _no_systemd() and not _is_root():
         return None
     if rollback:
@@ -2286,6 +2295,18 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     except rs.SetupError as e:
         _err_line(f"{e}; nothing was changed")
         return 1
+    if not getattr(a, "pending", False):     # the setup page's job was asked there: it has no terminal
+        yes = bool(getattr(a, "yes", False))
+        if not yes and ask is input and not output.terminal():      # nobody to ask: nothing is written
+            return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit reader setup") + " --yes")
+        try:
+            stop = _confirm(f"Write the reader firmware to {port}? What is on the board now is replaced.",
+                            "writing the firmware", yes=yes, ask=None if ask is input else ask)
+        except KeyboardInterrupt:
+            print("\nNothing was flashed.")
+            return 1
+        if stop is not None:
+            return stop
     tid = None
     if token is None:
         try:
@@ -2897,8 +2918,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
     stpp = stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
     stpp.add_argument("--local", action="store_true", help="the kit server is this machine: no link, nothing to compare")
-    _add_yes(stp_sub.add_parser("flash-panel", help="write the panel firmware to a blank ESP32-C3 board, after you "
-                                                   "confirm the port"))
+    fpp = stp_sub.add_parser("flash-panel", help="write the panel firmware to a blank ESP32-C3 board, after you "
+                                                 "confirm the port")
+    fpp.add_argument("--port", help="the board's serial port (/dev/ttyACM0): only that one is offered")
+    _add_yes(fpp)
     stp_sub.add_parser("pairing-state", help="print whether the button flow is paired, as one line")
     pkind.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
@@ -3019,7 +3042,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                                          "firmware, then its Wi-Fi and token (root to make the token). --source or "
                                          "--out build it with PlatformIO instead")
     rds.add_argument("--name", help="what its token is for, e.g. printer-station")
-    _add_yes(rds, "answer yes to the question before writing the firmware to the one board found (with --source)")
+    _add_yes(rds, "answer yes to the question before writing the firmware to the board (the one found, or --port)")
     rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
     rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
     rds.add_argument("--port", help="its USB serial port (found when one ESP32 board is plugged in, which you are asked to confirm)")
@@ -3082,7 +3105,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "station" and args.station_cmd == "pair" and args.local:
         return cmd_station_pair_local()
     if args.cmd == "station" and args.station_cmd == "flash-panel":
-        return cmd_station_flash_panel(yes=args.yes)
+        return cmd_station_flash_panel(yes=args.yes, only_port=args.port)
     if args.cmd == "station":
         return cmd_station_pairing_state() if args.station_cmd == "pairing-state" else cmd_station_pair()
     if args.cmd == "unpair":

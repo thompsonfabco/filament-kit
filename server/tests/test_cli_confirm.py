@@ -290,6 +290,33 @@ def test_setup_code_new_with_revoke_asks_both_and_a_no_to_the_second_stops_befor
     assert rc == 5 and rec.acted == [] and len(asked) == 2
 
 
+def _updates_landing(monkeypatch, rec, current):
+    """builds.apply_updates over a list that a build changes once it was shown: `current["stamp"]` is the build now."""
+    row = {"line_id": "pla", "target": "base", "name": "Example PLA", "keys": ["nozzle_temperature"], "file": None}
+    got = {}
+
+    def apply(*, line_id=None, all_=False, dry_run=False, only=None, expect_stamp=None):
+        if dry_run:
+            shown = current["stamp"]
+            current["stamp"] = "s2"             # the build lands while the question is open
+            return {"stamp": shown, "chosen": [row], "dry_run": True}
+        got.update(only=only, expect_stamp=expect_stamp)
+        if expect_stamp is not None and expect_stamp != current["stamp"]:
+            raise builds.UpdatesChanged()
+        rec("accept")()
+        return {"stamp": current["stamp"], "chosen": [row], "dry_run": False}
+    monkeypatch.setattr(builds, "apply_updates", apply)
+    return got
+
+
+def test_updates_that_changed_while_asked_are_not_accepted(rec, monkeypatch, terminal, capsys):
+    got = _updates_landing(monkeypatch, rec, {"stamp": "s1"})
+    terminal(True, "y")
+    rc, out, err = run(capsys, ["profiles", "apply-updates", "--all"])
+    assert rc == 1 and rec.acted == [] and "nothing was accepted" in err and "accepted 1 update" not in out
+    assert got == {"only": {"Example PLA"}, "expect_stamp": "s1"}     # exactly what was shown, as the Hub does
+
+
 def test_update_that_is_up_to_date_does_not_ask(rec, monkeypatch, terminal, capsys, tmp_path):
     argv, _ = _update(monkeypatch, rec, tmp_path)
     monkeypatch.setattr(updates, "check_info", lambda cfg, **k: {"newer": False, "latest": "0.5.1"})
@@ -364,3 +391,35 @@ def test_nothing_in_the_setup_helper_jobs_waits_for_an_answer():
     from filament_kit import setup_helper
     for name in ("update", "rollback", "library_rollback", "remote_issue", "restore"):
         assert "--yes" in setup_helper.JOBS[name], name
+
+
+def test_a_pairing_nobody_claimed_is_removed_the_same_way(rec, monkeypatch, terminal, capsys):
+    from filament_kit import pairing
+    monkeypatch.setattr(pairing, "devices", lambda: [])                  # the list shows claimed pairings only
+    monkeypatch.setattr(pairing, "_read", lambda name: [{"id": "u1", "name": "Shop phone", "claimed": None}])
+    monkeypatch.setattr(pairing, "revoke", lambda i: rec("revoke")() == 0)
+    terminal(True, "n")
+    rc, out, _ = run(capsys, ["unpair", "u1"])
+    assert rc == 5 and rec.acted == [] and "Unpair Shop phone?" in out
+    terminal(True, "y")
+    assert run(capsys, ["unpair", "u1"])[0] == 0 and rec.acted == ["revoke"]
+    assert run(capsys, ["unpair", "zzz"])[0] == 2                        # still no such id: nothing asked
+
+
+def test_update_without_root_is_left_to_the_command_even_when_piped(rec, monkeypatch, terminal, capsys, tmp_path):
+    """Not root and piped: nothing is asked, so `updates.update` says it needs sudo (exit 3), not exit 2."""
+    _update(monkeypatch, rec, tmp_path)
+    monkeypatch.delenv("FK_NO_SYSTEMD")
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    terminal(False)
+    assert cli._confirm_update({}, rollback=False, yes=False) is None
+    assert cli._confirm_update({}, rollback=True, yes=False) is None
+    assert capsys.readouterr().err == ""
+
+
+def test_update_that_is_up_to_date_does_not_ask_when_piped(rec, monkeypatch, terminal, capsys, tmp_path):
+    argv, _ = _update(monkeypatch, rec, tmp_path)
+    monkeypatch.setattr(updates, "check_info", lambda cfg, **k: {"newer": False, "latest": "0.5.1"})
+    terminal(False)
+    rc, out, err = run(capsys, argv)
+    assert rc == 0 and rec.acted == ["update"] and "needs a yes" not in err

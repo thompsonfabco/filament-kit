@@ -177,7 +177,7 @@ def test_no_bundled_image_writes_nothing(tmp_path, monkeypatch):
 # ---------------------------------------------------------------- the command
 def _args(**kw):
     base = dict(name=None, ssid=None, source=None, port=None, out=None, ota_pubkey=None, token_file=None, base=BASE,
-                secrets=None, buzzer=None, reflash=False)
+                secrets=None, buzzer=None, reflash=False, yes=True)       # --yes: the question before writing is tested apart
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -376,8 +376,42 @@ def test_the_reader_command_writes_five_numbered_steps(env, monkeypatch, capsys)
     def run(cmd, **kw):         # the station service is not running; esptool is the fake flasher
         return subprocess.CompletedProcess(cmd, 3, "", "") if cmd[0] == "systemctl" else flasher(cmd, **kw)
     a = argparse.Namespace(source=None, out=None, secrets=None, pending=False, ssid="Home", port=None, buzzer="high",
-                           name=None, base=BASE, ota_pubkey=None, token_file=None, reflash=False)
+                           name=None, base=BASE, ota_pubkey=None, token_file=None, reflash=False, yes=True)
     assert cli._reader_setup_usb(a, lambda q: "", lambda q: "pw", run=run) == 0
     assert sentences(capsys.readouterr().out, 5) == [
         "Finding the board", "Writing the program", "Checking what was written", "Joining the Wi-Fi",
         "Reaching the Hub"]
+
+
+# ---------------------------------------------------------------- the question before writing (06 7)
+def test_plain_setup_asks_before_it_overwrites_the_board(usb, monkeypatch, capsys):
+    run, _ = _run()
+    asked = []
+    monkeypatch.setattr(cli.output, "terminal", lambda: True)
+    for answer in ("n", ""):
+        ask = _answers(answer)
+        rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), lambda p, a=ask: asked.append(p) or a(p),
+                                   _answers("p", "p"), run=run)
+        assert rc == 5 and "settings" not in usb and reader_tokens.TokenStore().list() == []
+    assert len(asked) == 2 and all(" ".join(p.split()).endswith("replaced. [y/N]") for p in asked)
+    said = " ".join(capsys.readouterr().out.split())
+    assert said.count("Write the reader firmware to /dev/ttyACM0? What is on the board now is") == 2
+    assert said.count("Nothing changed.") == 2
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), _answers("y"), _answers("p", "p"),
+                                 run=run) == 0 and usb["port"] == "/dev/ttyACM0"
+
+
+def test_plain_setup_piped_without_yes_writes_nothing_and_exits_2(usb, monkeypatch, capsys):
+    run, _ = _run()
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), input, _answers("p", "p"), run=run)
+    out, err = capsys.readouterr()
+    assert rc == 2 and "settings" not in usb and out.count("[y/N]") == 0 and "--yes" in err
+
+
+def test_the_setup_pages_job_is_not_asked(usb, monkeypatch):
+    """`reader setup --pending` runs without a terminal: the page asked."""
+    run, _ = _run()
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    monkeypatch.setattr(rf, "take_pending", lambda: {"ssid": "Home", "pass": "p", "buzzer": "high"})
+    assert cli._reader_setup_usb(_args(pending=True, yes=False), input, None, run=run) == 0 and "settings" in usb

@@ -74,8 +74,8 @@ def test_declined_port_is_not_flashed(bench, capsys):
     assert cli.cmd_station_flash_panel(ask=ask, run=bench.run) == 5
     assert bench.flashed == []
     said = " ".join(capsys.readouterr().out.split())
-    assert "Write the intake panel firmware to /dev/ttyACM0? What is on the board now is replaced. [y/N]" in said
-    assert "Write the intake panel firmware to /dev/ttyACM1? What is on the board now is replaced. [y/N]" in said
+    assert "Write the intake panel firmware to /dev/ttyACM0? [y/N]" in said
+    assert "Write the intake panel firmware to /dev/ttyACM1? [y/N]" in said
     assert said.count("Nothing changed.") == 2
     assert services(bench) == ["stop", "start"]
 
@@ -88,10 +88,25 @@ def test_no_terminal_and_no_yes_stops_before_the_service_is_touched(bench, monke
     assert bench.calls == [] and bench.flashed == []
 
 
-def test_yes_writes_the_first_blank_board_without_asking(bench, monkeypatch, capsys):
+def test_yes_writes_the_one_blank_board_without_asking(bench, monkeypatch, capsys):
     monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    bench.probe.hello = {"/dev/ttyACM1"}                # one blank board left
     assert cli.cmd_station_flash_panel(run=bench.run, yes=True) == 0
-    assert bench.flashed and "[y/N]" not in capsys.readouterr().out
+    assert bench.flashed == [("/dev/ttyACM0", "10")] and "[y/N]" not in capsys.readouterr().out
+
+
+def test_yes_with_several_blank_boards_stops_and_names_port(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True) == 2      # two blank boards: --yes does not pick
+    out, err = capsys.readouterr()
+    assert bench.flashed == [] and out == "" and "--port" in err and "/dev/ttyACM0" in err
+    assert services(bench) == ["stop", "start"]
+
+
+def test_yes_with_port_writes_that_board_only(bench, monkeypatch, capsys):
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="/dev/ttyACM1") == 0
+    assert bench.flashed == [("/dev/ttyACM1", "10")] and "[y/N]" not in capsys.readouterr().out
 
 
 def test_confirmed_port_is_flashed_with_c3_command(bench):
