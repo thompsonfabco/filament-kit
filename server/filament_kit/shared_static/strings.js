@@ -859,6 +859,7 @@ window.SW_TEXT = Object.freeze({
   "printers_add_serial_hint": "Read from the printer when left empty.",
   "printers_add_serial_optional": "Serial (optional)",
   "printers_add_type": "Printer type",
+  "printers_add_wait": "The Hub is adding the printer. Wait for its answer.",
   "printers_added": "Added {name}.",
   "printers_added_next": "Added. Test the connection next.",
   "printers_addon_caption": "Run these on the printer. Klipper add-on {version}.",
