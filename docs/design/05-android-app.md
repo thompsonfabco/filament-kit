@@ -1555,11 +1555,14 @@ Panel "Slicer presets" on Home; the whole header is a link to 11.2 (chevron). Re
 |---|---|
 | Status not available | "Slicer preset status is not available right now." (`--muted`) |
 | Built | "24 presets for 9 lines, built 3 hours ago" |
+| Built, the Hub gives no time | "24 presets for 9 lines" (a whole text of its own; never "built unknown time") |
 | Last build failed | "The last preset build failed: <the Hub's error>" (`bad` line) |
 | Never built | "No presets built yet" |
 | Installed on the PC | "Installed on your PC 2 hours ago" (filled circle) |
 | Slicer Sync not set up | "Slicer Sync is not set up" (hollow circle) |
 | Not installed yet | "Not installed on your PC yet" (triangle) |
+| Updates are waiting | "1 update is waiting." / "3 updates are waiting." with the text button "Review 1 update" / "Review 3 updates" (opens the Updates part of 11.2) |
+| The Hub is too old to build from the phone | "Building from the phone needs a newer Hub. Update the Hub, or build on the Hub page." (`info`) |
 
 The panel is absent until the app is paired.
 
@@ -1569,6 +1572,19 @@ Top bar title "Slicer presets", back arrow. The status lines of 11.1 as field ro
 An `info` line: "Presets are built on the Hub and installed on your PC by Slicer Sync the next time the slicers are
 closed." A panel "Missing a product line?" with the text "If a filament's line is not in the Filament Catalog, add
 it so presets can be built for it." and the outlined button "Add a line to the Filament Catalog" (opens 8).
+
+The first panel is the build: the one filled button of the screen, "Build presets now" (`POST api/profiles/build`);
+while it runs "Building presets… (a minute or two)", then the status rows reload and the inline result shows the
+Hub's summary, or its refusal as given. A Hub without that route shows no button and the `info` line "Building from
+the phone needs a newer Hub. Update the Hub, or build on the Hub page."
+
+A panel "Filaments without a preset line" with the count (`GET api/profiles/uncovered`), the same cards, fields
+and texts as the web app (`04-web-app.md` 8): each filament as "<Brand> <Name>" with "<Material> · F<id>";
+"Add to the line" (the brand's lines) with the button "Add to line"
+(`POST api/profiles/lines/<line>/filaments`), result "Added to <line>."; and the disclosure "Or start a new line"
+("Start a new line (new brand or product line)" when the brand has none) with "Line name", "Find a parent",
+"Orca Slicer parent", "Bambu Studio template" and "Create line" (`POST api/profiles/lines`), result "Line <name>
+created." Empty: filled circle "Every filament has a preset line." Errors show per card under its buttons.
 
 A panel "Product lines" lists the lines the Hub knows, as on the Hub page and in the web app (the
 app's existing product-lines route). One row per line: headline "<brand> <product line>", supporting
@@ -1581,8 +1597,8 @@ given. No parents reported yet: the sheet says "Slicer Sync has not reported any
 when it runs." and has only "Close". Empty list: "No lines yet. They are made from the filaments in Spoolman at the
 next build or when a spool is added." Loading: three skeleton rows. The list is paged at 50.
 
-A last line: "Attach filaments to lines and build presets now on the Hub page or in the web app." with the text
-button "Open the Hub page".
+A last panel "Updates", as the app has it today, with the Hub page's texts (`03-hub-page.md` 8.2): the summary
+line, "Show what would change", and "Accept these" under a shown list.
 
 ---
 
