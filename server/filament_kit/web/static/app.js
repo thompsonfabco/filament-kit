@@ -1796,9 +1796,16 @@ function openTab() {
         h("span", { class: "muted", textContent: detail }))];
     };
     const applyView = (v) => { view = v; sum.replaceChildren(...sumKids(v)); paintActions(); };
+    let readFailed = false;                                    // the spool could not be read: Preview and Link say so, the error has Try again
+    const repaint = () => { disabled(previewBtn, holdWhy()); link(linkKey); };
     const refresh = () => fill(sum, SW.t("spool_title", { id }), async () => {
+      if (readFailed) { readFailed = false; repaint(); }
       try { const r = await api(`spools/${id}`); view = r.view; const kids = sumKids(view); paintActions(); return kids; }
-      catch (e) { if (e instanceof SW.HubError && e.status === 404) { openPart.hidden = true; if (other) other.hidden = true; } throw e; }
+      catch (e) {
+        if (e instanceof SW.HubError && e.status === 404) { openPart.hidden = true; if (other) other.hidden = true; }
+        else if (!view) { readFailed = true; repaint(); }
+        throw e;
+      }
     }, { quiet: !!view, items: 1 });
 
     // -- Open it and link the tag --
@@ -1820,12 +1827,12 @@ function openTab() {
     let linkKey = "spool_sheet_reason_preview_first", rev = 0, working = false, shot = null;   // shot: { rev, body } of the last good Preview
     const gone = () => !!view && view.state === "empty";
     // Preview and Link stay off until the spool is read, and for an empty one
-    const holdWhy = () => (!view ? SW.t("common_loading_thing", { thing: SW.t("spool_title", { id }) }) : gone() ? SW.t("spool_sheet_reason_empty") : null);
+    const holdWhy = () => (!view ? (readFailed ? SW.t("spool_sheet_reason_not_read") : SW.t("common_loading_thing", { thing: SW.t("spool_title", { id }) })) : gone() ? SW.t("spool_sheet_reason_empty") : null);
     const link = (key) => { linkKey = key; disabled(linkBtn, holdWhy() || (key ? SW.t(key) : null), () => previewBtn); };
     // what made the last Preview out of date, and what Link says about it
-    const STALE = { weight: "spool_sheet_reason_weight_changed", tag: "spool_sheet_reason_tag_changed", fields: "spool_sheet_reason_preview_first" };
-    let lastKind = "fields";
-    const outOfDate = (kind) => { rev++; lastKind = kind; const was = previewed || problem || working; previewed = false; link(was ? STALE[kind] : "spool_sheet_reason_preview_first"); };
+    const STALE = { weight: "spool_sheet_reason_weight_changed", tag: "spool_sheet_reason_tag_changed", again: "spool_sheet_reason_tag_again", fields: "spool_sheet_reason_preview_first" };
+    let lastKind = "fields", stale = false;                    // stale: a Preview was lost to a change, and has not been made again: the reason stays
+    const outOfDate = (kind) => { rev++; lastKind = kind; const was = previewed || problem || working || stale; if (was) stale = true; previewed = false; link(was ? STALE[kind] : "spool_sheet_reason_preview_first"); };
     weight._control.addEventListener("input", () => { weightTyped = true; weight._hint.textContent = ""; outOfDate("weight"); problem = false; });
     for (const f of [loc, hum]) f._control.addEventListener("input", () => { outOfDate("fields"); problem = false; });
     async function submit(dry, button) {
@@ -1834,7 +1841,7 @@ function openTab() {
       if (dry) {
         const bad = [weight, hum].filter((f) => { const err = f._check(); SW.fieldError(f, err || null); return !!err; });
         if (bad.length) return bad[0]._control.focus();
-        const tap = lastTag && lastTag.nfc_id ? { nfc_id: lastTag.nfc_id, read_at: lastTag.read_at } : {};   // the tap the Hub is asked to link
+        const tap = lastTag && lastTag.nfc_id ? { nfc_id: lastTag.nfc_id, read_at: lastTag.read_at } : {};   // the tap the page shows; none shown: the Hub's own, sent back by Link
         body = { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), ...tap, dry_run: true };
       } else {
         if (!shot || shot.rev !== rev) { link(STALE[lastKind]); return; }
@@ -1847,18 +1854,21 @@ function openTab() {
           let res;
           try { res = await api("open", { body }); }
           catch (e) {
-            if (e instanceof SW.HubError && e.data && e.data.code === "tap_changed") {   // another tap reached the Hub since the page last asked
-              previewed = false; problem = false; shot = null; rev++; lastKind = "tag"; link(STALE.tag); tagNote.textContent = says(e); poll();
+            const code = e instanceof SW.HubError && e.data ? e.data.code : null;
+            if (code === "tap_changed" || code === "tap_again") {   // another tap reached the Hub since the page last asked
+              previewed = false; problem = false; shot = null; rev++; stale = true; lastKind = code === "tap_again" ? "again" : "tag"; link(STALE[lastKind]); tagNote.textContent = says(e); poll();
             } else if (dry && mine === rev) { previewed = false; problem = true; link("spool_sheet_reason_problem"); }
             throw e;
           }
           if (dry && mine !== rev) { link(STALE[lastKind]); return null; }   // an edit or a newer tag came meanwhile: this answer is for what was
           previewed = dry && !res.exit_code; problem = !!res.exit_code;
-          shot = previewed ? { rev: mine, body } : null;
+          if (previewed) stale = false;
+          // Link names the tap the Hub used for this preview, also when the page showed no tag (null: an explicit "no tag")
+          shot = previewed ? { rev: mine, body: dry ? { ...body, nfc_id: res.nfc_id ?? null, read_at: res.read_at ?? null } : body } : null;
           link(previewed ? null : problem ? "spool_sheet_reason_problem" : "spool_sheet_reason_preview_first");
           if (res.exit_code) return { kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output };
           if (dry) return { text: SW.t("add_summary_preview_ok"), code: res.output };
-          rev++; shot = null;
+          rev++; shot = null; stale = false;
           for (const f of [weight, loc, hum]) f._control.value = "";
           weightTyped = false; spentKey = lastKey; lastKey = null; changed = true;   // the tag is spent; the next poll draws it again with its new text
           SW.toast(SW.t("spool_sheet_opened_toast", { id }));
@@ -2029,6 +2039,7 @@ function openTab() {
     } });
     if (how === "push") history.pushState({ sheet: true }, "", `#spools/${id}`);
     const rec = track(dlg, "address", how === "direct");
+    let seenId = lastTag && lastTag.nfc_id;
     sheet = { id, dlg, rec, tag(t, fresh, key) {
       paintTag(t);
       if (!fresh) return;
@@ -2036,7 +2047,8 @@ function openTab() {
       if (key !== spentKey && onScale(t) && !weightTyped) {   // a new station tap: that spool is on the scale (04 5.2)
         weight._control.value = t.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: t.scale.age_seconds });
       }
-      outOfDate("tag");
+      const again = t.nfc_id === seenId; seenId = t.nfc_id;       // the same tag tapped again, or another one
+      outOfDate(again ? "again" : "tag");
     } };
     paintTag(lastTag);
     if (lastTag && onScale(lastTag)) { weight._control.value = lastTag.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: lastTag.scale.age_seconds }); }

@@ -634,7 +634,8 @@ class IntakeApp:
             raise Problem("nfc_id must be text", "nfc_id")
         kw = dict(spool=b["spool"], location=loc if isinstance(loc, str) and loc.strip() else None,
                   gross=_num(b, "gross"), humidity=_num(b, "humidity"), dry_run=bool(b.get("dry_run", True)),
-                  nfc_id=nfc or None, read_at=_num(b, "read_at"))      # the tap the page looked at; both optional
+                  nfc_id=nfc or None, read_at=_num(b, "read_at"),      # the tap the page looked at; both optional
+                  check_tap=any(k in b and b[k] is None for k in ("nfc_id", "read_at")))   # a key sent as null: the page saw no tag
         return await anyio.to_thread.run_sync(lambda: self.tools.open_spool(**kw))
 
     @staticmethod

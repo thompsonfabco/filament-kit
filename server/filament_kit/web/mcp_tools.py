@@ -189,10 +189,11 @@ class Tools:
     def open_spool(self, spool: int | None = None, filament: int | None = None, location: str | None = None,
                    gross: float | None = None, remaining: float | None = None, humidity: float | None = None,
                    force: bool = False, dry_run: bool = True, ai_note: bool = False,
-                   nfc_id: str | None = None, read_at: float | None = None) -> dict:
+                   nfc_id: str | None = None, read_at: float | None = None, check_tap: bool = False) -> dict:
         """Link the readers' last tap to a spool (or a filament's lowest-id sealed spool) and mark it opened.
         `ai_note`: the MCP path adds the call-again instruction to a dry run (see add_spools). `nfc_id` / `read_at` (the web
-        app, optional): the tap the caller looked at; the call is refused when the last tap is another one."""
+        app, optional): the tap the caller looked at; the call is refused when the last tap is another one. With `check_tap` the
+        two are compared even when they are None (the caller saw no tag: a tap that has appeared since is refused)."""
         if (spool is None) == (filament is None):
             raise Problem("give exactly one of spool or filament")
         t = tagsources.latest(self.cfg())
@@ -201,8 +202,11 @@ class Tools:
         uid = _uid(t["nfc_id"])
         if uid is None:
             raise Problem(f"the last tap {t['nfc_id']!r} is not a tag UID: tap again")
-        if (nfc_id is not None and _uid(nfc_id) != uid) or (read_at is not None and t.get("read_at_unix") != read_at):
-            raise TapChanged("A new tag was tapped. Preview again.")
+        if check_tap or nfc_id is not None or read_at is not None:
+            if (check_tap or nfc_id is not None) and _uid(nfc_id) != uid:
+                raise TapChanged("A new tag was tapped. Preview again.")
+            if (check_tap or read_at is not None) and t.get("read_at_unix") != read_at:
+                raise TapChanged("The tag was tapped again. Preview again.", "tap_again")
         if spool is None:
             spool = inventory.pick_sealed(self.sm, filament)
             if spool is None:
@@ -221,7 +225,8 @@ class Tools:
                 f"reader) to {inventory.describe(out)}")
         if dry_run and ai_note:
             notes.append("dry run: nothing changed. Show the user, then call again with dry_run=false.")
-        return {"output": "\n".join([head, *notes]), "exit_code": 0, "spool": _spool_view(out), "dry": bool(dry_run)}
+        return {"output": "\n".join([head, *notes]), "exit_code": 0, "spool": _spool_view(out), "dry": bool(dry_run),
+                "nfc_id": uid, "read_at": t.get("read_at_unix")}     # the tap this answer is about: a page sends it back to link exactly that
 
     # ---------- presets ----------
 

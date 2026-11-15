@@ -1044,10 +1044,13 @@ def test_web_open_with_the_tap_the_page_looked_at(app, env, sm):
         r = c.post("/intake/api/open", json=body, **post)                                                  # absent: the old behaviour
         assert r.status_code == 200
         env["tag"] = {"status": "ok", "nfc_id": "4:AA:BB:CC:DD:EE:FF", "read_at_unix": 8, "age_seconds": 1}   # another tap, between two polls
-        for sent in ({"nfc_id": uid, "read_at": 7}, {"nfc_id": uid}, {"read_at": 7}):
+        for sent, code, words in (({"nfc_id": uid, "read_at": 7}, "tap_changed", "A new tag was tapped. Preview again."),
+                                  ({"nfc_id": uid}, "tap_changed", "A new tag was tapped. Preview again."),
+                                  ({"read_at": 7}, "tap_again", "The tag was tapped again. Preview again."),
+                                  ({"nfc_id": None, "read_at": None}, "tap_changed", "A new tag was tapped. Preview again.")):   # the page saw no tag
             for dry in (True, False):
                 r = c.post("/intake/api/open", json={**body, **sent, "dry_run": dry}, **post)
-                assert r.status_code == 409 and r.json()["code"] == "tap_changed" and r.json()["error"] == "A new tag was tapped. Preview again.", (sent, dry)
+                assert r.status_code == 409 and r.json()["code"] == code and r.json()["error"] == words, (sent, dry)
         assert tags.stored(sm.get(f"spool/{sid}")) is None                                                 # nothing was linked
         r = c.post("/intake/api/open", json={**body, "nfc_id": "4:AA:BB:CC:DD:EE:FF", "read_at": 8, "dry_run": False}, **post)
         assert r.status_code == 200 and tags.stored(sm.get(f"spool/{sid}")) == "4:aa:bb:cc:dd:ee:ff"
@@ -1079,3 +1082,30 @@ def test_web_weight_preview_is_capped_at_a_full_spool_as_spoolman_holds_it(app, 
         assert r.status_code == 200 and r.json()["view"]["remaining_g"] == 1000
         r = c.post(f"/intake/api/spools/{sid}", json={"remaining": 4000, "dry_run": False}, **post)
         assert r.json()["view"]["remaining_g"] == 1000 and sm.get(f"spool/{sid}")["remaining_weight"] == 1000
+
+
+def test_web_open_preview_names_the_tap_it_would_link_and_link_can_send_it_back(app, env, sm):
+    sid = _web_spool(sm)
+    uid = "4:1:2:3:4:5:6"
+    env["tag"] = {"status": "ok", "nfc_id": uid, "read_at_unix": 7, "age_seconds": 3}
+    post = {"headers": {"Origin": ORIGIN}}
+    body = {"spool": sid, "gross": "", "location": "", "humidity": ""}
+    with _client(app) as c:
+        seen = c.post("/intake/api/open", json={**body, "dry_run": True}, **post).json()           # the page showed no tag: it sends none
+        assert (seen["nfc_id"], seen["read_at"]) == (uid, 7)
+        env["tag"] = {"status": "ok", "nfc_id": "4:AA:BB:CC:DD:EE:FF", "read_at_unix": 8, "age_seconds": 1}   # a tap the page has not seen
+        r = c.post("/intake/api/open", json={**body, "nfc_id": seen["nfc_id"], "read_at": seen["read_at"], "dry_run": False}, **post)
+        assert r.status_code == 409 and r.json()["code"] == "tap_changed" and tags.stored(sm.get(f"spool/{sid}")) is None
+        env["tag"] = {"status": "ok", "nfc_id": uid, "read_at_unix": 9, "age_seconds": 1}                   # the same tag, tapped again
+        r = c.post("/intake/api/open", json={**body, "nfc_id": uid, "read_at": 7, "dry_run": False}, **post)
+        assert r.status_code == 409 and r.json()["code"] == "tap_again"
+        r = c.post("/intake/api/open", json={**body, "nfc_id": uid, "read_at": 9, "dry_run": False}, **post)
+        assert r.status_code == 200 and r.json()["read_at"] == 9 and tags.stored(sm.get(f"spool/{sid}")) == uid
+
+
+def test_web_open_preview_shows_the_weight_spoolman_will_keep(app, env, sm):
+    sid = _web_spool(sm)
+    env["tag"] = {"status": "ok", "nfc_id": "4:1:2:3:4:5:6", "read_at_unix": 7, "age_seconds": 3}
+    with _client(app) as c:
+        r = c.post("/intake/api/open", json={"spool": sid, "gross": "4800", "dry_run": True}, headers={"Origin": ORIGIN})
+        assert r.status_code == 200 and r.json()["spool"]["remaining_g"] == 1000                           # a full spool at most

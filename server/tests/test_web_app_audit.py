@@ -1277,7 +1277,7 @@ SP_READY = {
 """,
     "sheet_link": r"""
   const d = await sheetReady(); await tap({});
-  window.__open = []; stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); window.__open.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'Spool __ID__ opened and tag 04:77:90:E1 linked.', exit_code: 0 }); });
+  window.__open = []; stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); window.__open.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'Spool __ID__ opened and tag 04:77:90:E1 linked.', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }); });
   typeIn(field('Weight with spool', d).querySelector('input'), '1212'); typeIn(field('Location', d).querySelector('input'), 'Rack 1'); typeIn(field('Box humidity', d).querySelector('input'), '41,5');
   button('Preview').click();
   await until('the preview', () => out('Preview ready.') && reason(button('Link tag and open')) === null);
@@ -1394,7 +1394,7 @@ SP_READY = {
     "sheet_race_link": r"""
   const d = await sheetReady(); await tap({});
   const bodies = []; let release = null;
-  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); if (b.dry_run) return reply({ output: 'dry run: nothing changed', exit_code: 0 });
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); if (b.dry_run) return reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 });
     return new Promise((ok) => { release = () => ok(new Response(JSON.stringify({ output: 'opened', exit_code: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }); });
   typeIn(field('Weight with spool', d).querySelector('input'), '1212'); button('Preview').click();
   await until('previewed', () => out('Preview ready.') && reason(button('Link tag and open')) === null);
@@ -1447,12 +1447,15 @@ SP_READY = {
   const d = await sheetReady(); await tap({});
   const bodies = [];
   stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b);
-    return b.dry_run ? reply({ output: 'dry run: nothing changed', exit_code: 0 }) : reply({ error: 'A new tag was tapped. Preview again.', code: 'tap_changed' }, 409); });
+    return b.dry_run ? reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }) : reply({ error: 'A new tag was tapped. Preview again.', code: 'tap_changed' }, 409); });
   button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null);
   need('Preview names the tap it looked at', bodies[0].nfc_id === '04:77:90:E1' && bodies[0].read_at === 1700000000);
   button('Link tag and open').click();
   await until('refused', () => text('.spools__sheet-note') === 'A new tag was tapped. Preview again.' && reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.');
   need('Link named the same tap', bodies[1].nfc_id === '04:77:90:E1' && bodies[1].read_at === 1700000000 && bodies[1].dry_run === false);
+  await tap({ nfc_id: '04:AA:BB:CC', read_at: 1700000600 });                               // the poll catches up: the reason is not lost
+  await until('the sheet names the newer tag', () => text('.spools__sheet-tag').includes('04:AA:BB:CC')); await sleep(200);
+  need('the reason stays after the poll', reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.');
   button('Link tag and open').click(); await sleep(300);
   need('Link sends nothing until a new Preview', bodies.length === 2);
 """,
@@ -1495,13 +1498,41 @@ SP_READY = {
   await sleep(5600);
   need('the error and Try again stay after the Undo window', !!out('The Hub hit an error') && !out('Moved to ' + was + '.') && $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Try again'));
 """,
+    "sheet_link_unseen": r"""
+  const d = await sheetReady();
+  need('the page shows no tag', text('.spools__sheet-tag') === "No tag read yet: tap the spool's tag on a reader.");
+  const bodies = [];
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'opened', exit_code: 0, nfc_id: '04:AA:BB:CC', read_at: 55 }); });
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
+  need('Preview names no tap: the page had none to name', !('nfc_id' in bodies[0]) && !('read_at' in bodies[0]));
+  button('Link tag and open').click(); await until('opened', () => out('Spool __ID__ is open'));
+  need('Link names the tap the Hub used for the preview', bodies[1].nfc_id === '04:AA:BB:CC' && bodies[1].read_at === 55 && bodies[1].dry_run === false);
+""",
+    "sheet_tap_again": r"""
+  const d = await sheetReady(); await tap({});
+  stub(/^open$/, () => reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }));
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
+  await tap({ read_at: 1700000900, age_seconds: 2 });                                      // the same tag, tapped again
+  await until('the tap is shown', () => text('.spools__sheet-tag').includes('tapped 2 s ago'));
+  need('the reason says it was tapped again', reason(button('Link tag and open')) === 'The tag was tapped again. Preview again.');
+""",
+    "sheet_read_failed": r"""
+  await waitPage(); let n = 0; const real = window.fetch.bind(window);
+  window.fetch = (u, i) => { const p = String(u).split('/api/')[1] || ''; return /^spools\/\d+$/.test(p) && !(i && i.method === 'POST') && n++ === 0 ? reply({ error: 'boom' }, 500) : real(u, i); };
+  location.hash = '#spools/__ID__';
+  const d = await sheetOpen();
+  await until('the error with Try again', () => button('Try again', d) && text('.spools__sum', d).includes('The Hub hit an error'));
+  need('Preview and Link say the spool could not be read', reason(button('Preview')) === 'This spool could not be read yet. Use Try again at the top.' && reason(button('Link tag and open')) === 'This spool could not be read yet. Use Try again at the top.');
+  button('Try again', d).click();
+  await until('read', () => !$('.spools__sum .skeleton') && text('.spools__sum-text') && reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.' && !button('Preview').getAttribute('aria-disabled'));
+""",
     "sheet_missing": r"""
   await until('the line', () => $('dialog[open] .result[data-state=bad]') && text('dialog[open]').includes('was not found'));
   const seen = (l) => { const b = button(l); return !!b && b.getClientRects().length > 0; };
   need('the Hub text, and nothing to act on', text('dialog[open]').includes('spool 99999 was not found') && !seen('Preview') && !seen('Mark empty'));
 """,
 }
-SP_AT = {"sheet_from_row": "#spools", "sheet_unread": "#spools", "sheet_missing": "#spools/99999", "sheet_empty_ask": 3, "sheet_empty_done": 2}   # the view, or which spool's sheet it opens
+SP_AT = {"sheet_from_row": "#spools", "sheet_unread": "#spools", "sheet_read_failed": "#spools", "sheet_missing": "#spools/99999", "sheet_empty_ask": 3, "sheet_empty_done": 2}   # the view, or which spool's sheet it opens
 SP_PAGED = {
     "paging": r"""
   await waitPage();
@@ -1595,7 +1626,7 @@ def test_spools_state_with_the_printers_feature_passes_the_audit(spools_hub_prin
     """The Printers Feature is on here, so the Printers screen's own hidden markup is on the page: its findings are listed beside
     the allow-list for this run only (S3.11 rebuilds that screen)."""
     allow = tmp_path / "allow.txt"
-    allow.write_text(ALLOW.read_text(encoding="utf-8") + "field without a label | main#main > section.page > section.hidden > select | 4 | Printers picker (hidden); rebuilt by S3.11\n",
+    allow.write_text("".join(f.read_text(encoding="utf-8") for f in sorted(ALLOW.glob("*.txt"))) + "field without a label | main#main > section.page > section.hidden > select | 4 | Printers picker (hidden); rebuilt by S3.11\n",
                      encoding="utf-8")
     view, script = _at(spools_hub_printers, name, SP_PRINTERS)
     assert _spools_run(spools_hub_printers.url, name, script, view, allow=allow)["views"] == 4

@@ -501,6 +501,13 @@ def _record_lines(items: list[dict]) -> None:
         log.warning("spools added, but recording their product lines failed: %s: %s", e.__class__.__name__, e)
 
 
+def _cap_remaining(spool: dict, patch: dict) -> None:
+    """Spoolman holds no more than a full spool: a preview shows the weight it will keep."""
+    full = spool.get("initial_weight") or (spool.get("filament") or {}).get("weight")
+    if "remaining_weight" in patch and isinstance(full, (int, float)) and full > 0:
+        patch["remaining_weight"] = min(patch["remaining_weight"], full)
+
+
 def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: float | None = None,
                location: str | None = None, force: bool = False, dry: bool,
                humidity: float | None = None, remaining: float | None = None) -> dict:
@@ -528,6 +535,7 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
             patch["remaining_weight"] = round(gross - tare, 1)
         elif remaining is not None:
             patch["remaining_weight"] = remaining
+        _cap_remaining(spool, patch)
         link = link_tag(sm, spool_id, uid, force=force, dry=dry)  # raises TagConflict before any other write
         if location is None and spool.get("location") in (None, "", rules["sealed_location"]):
             used = {s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id}
@@ -633,9 +641,7 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
         if remaining < 0:
             raise SpoolEditError("remaining cannot be negative", "remaining")
         patch["remaining_weight"] = remaining
-    full = spool.get("initial_weight") or (spool.get("filament") or {}).get("weight")
-    if "remaining_weight" in patch and isinstance(full, (int, float)) and full > 0:
-        patch["remaining_weight"] = min(patch["remaining_weight"], full)    # Spoolman holds no more than a full spool: so does the preview
+    _cap_remaining(spool, patch)
     if empty:
         patch.update(remaining_weight=0, archived=True)
     if location is not None:

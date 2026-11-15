@@ -815,3 +815,10 @@ def test_open_spool_refuses_an_archived_spool(sm):
     with pytest.raises(ValueError, match="marked empty"):
         inventory.open_spool(sm, s["id"], UID, RULES, dry=False)
     assert tags.stored(sm.get(f"spool/{s['id']}")) is None
+
+
+def test_open_spool_weight_is_capped_at_a_full_spool_like_the_edit(sm):
+    s = _spool(sm, material="PETG", name="Y")
+    dry = inventory.open_spool(sm, s["id"], UID, RULES, gross=4800, dry=True)
+    assert dry["remaining_weight"] == 1000
+    assert inventory.open_spool(sm, s["id"], UID, RULES, remaining=4000, dry=False)["remaining_weight"] == 1000
