@@ -172,6 +172,15 @@ def test_orca_parents_for_a_paired_device(app):
     assert r.status_code == 400 and r.json()["error"] == "bad_request"
 
 
+def test_the_route_and_find_parents_share_the_public_orca_parents_helper(app, monkeypatch):
+    from filament_kit.web import presets
+    c, h, sm = app
+    monkeypatch.setattr(presets, "orca_parents", lambda words: ["seen " + " ".join(words)])
+    assert c.get("/api/profiles/orca-parents", headers=h, params={"material": "A b"}).json() == {
+        "orca_parents": ["seen a b"]}
+    assert presets.find_parents("C")["orca_parents"] == ["seen c"]
+
+
 def test_orca_parents_tokens(app):
     c, h, sm = app
     assert c.get("/api/profiles/orca-parents").status_code == 401

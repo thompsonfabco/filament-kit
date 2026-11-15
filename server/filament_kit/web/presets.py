@@ -90,7 +90,7 @@ def find_parents(text: str) -> dict:
     store = builds.system_store()
     bs = [] if store is None else [b for b in store.bases() if all(w in b.casefold() for w in words)
                                    and lines_mod.usable(store, b)]
-    out = {"bs_templates": bs[:MAX_PARENTS], "orca_parents": _orca_parents(words)[:MAX_PARENTS],
+    out = {"bs_templates": bs[:MAX_PARENTS], "orca_parents": orca_parents(words),
            "synced": store is not None}
     if store is None:
         out["note"] = "no Bambu Studio system presets uploaded yet: the PC sync uploads them"
@@ -188,14 +188,15 @@ def _orca_view(ln) -> dict:
     return {"orca_parent": ln.orca_parent, "orca_parent_source": ln.orca_parent_source}
 
 
-def _orca_parents(words: list[str]) -> list[str]:
-    """Base names of the uploaded OrcaFilamentLibrary `@System` presets with every word (no store: [])."""
+def orca_parents(words: list[str]) -> list[str]:
+    """Base names of the uploaded OrcaFilamentLibrary `@System` presets with every word, at most MAX_PARENTS (no
+    store: [])."""
     from ..profiles.orca import SYSTEM
     store = builds.orca_store()
     if store is None:
         return []
     names = sorted({n[: -len(SYSTEM)] for n in store.library_names() if n.endswith(SYSTEM)})
-    return [n for n in names if all(w in n.casefold() for w in words)]
+    return [n for n in names if all(w in n.casefold() for w in words)][:MAX_PARENTS]
 
 
 def _set_orca(ls: dict, ln, orca_parent: str, notes: list[str]) -> None:

@@ -604,7 +604,7 @@ def web_routes(authed, sm) -> list[Route]:
         if len(material) > MAX_TEXT:
             raise _bad(f"material is longer than {MAX_TEXT} characters")
         words = material.casefold().split()
-        found = await run_in_threadpool(lambda: presets._orca_parents(words)[:presets.MAX_PARENTS])
+        found = await run_in_threadpool(lambda: presets.orca_parents(words))
         return JSONResponse({"orca_parents": found})
 
     @authed
