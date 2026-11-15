@@ -692,7 +692,7 @@ window.addEventListener("hashchange", () => { if (tabNow() !== PRINTERS) titleOv
 // the live printer view is the web app's Printers tab, served by the same Hub
 const liveUrl = () => location.pathname.replace(/\/setup\/?$/, "") + "/intake#printers";
 // the header: what is there, and the three ways to the rest (03 5.1)
-function metaLine(list, found) {
+function printersMeta(list, found) {
   const on = list.filter((p) => p.configured), up = on.filter((p) => stateOf(p) === "connected").length;
   const parts = [E("span", null, SW.t("printers_meta_total", { count: on.length })),
     on.length ? SW.status("connected", { text: SW.t("printers_meta_connected", { count: up }) }) : null,
@@ -712,7 +712,7 @@ function header(found) {
   const P = S.printers;
   const url = liveUrl();
   const find = P.klipper ? SW.btn(SW.t("printers_find"), { run: () => goTo(scanCard) }) : null;
-  return E("div", "printers-head", metaLine(P.list, found),
+  return E("div", "printers-head", printersMeta(P.list, found),
     E("div", "page-head__actions",
       P.bambu ? X("a", { class: "btn btn--ghost", href: url, target: "_blank", rel: "noopener" }, SW.icon("camera", "icon--s"), SW.t("printers_live_view")) : null,
       find, SW.btn([SW.icon("plus", "icon--s"), SW.t("printers_add")], { cls: "btn--primary", run: () => goTo(addCard) })));
@@ -751,7 +751,7 @@ function paintLive(body, r) {
     setCell(v.connectionCell, E("span", "coll__key", { "aria-hidden": "true" }, SW.t("printers_col_connection")), connectionCell(p));
   }
   const meta = body.querySelector(".printers-meta");
-  if (meta) meta.replaceWith(metaLine(S.printers.list, S.printers.list.filter((p) => klipperOf(p) && !p.configured)));
+  if (meta) meta.replaceWith(printersMeta(S.printers.list, S.printers.list.filter((p) => klipperOf(p) && !p.configured)));
 }
 function printersList() {
   const body = E("div", "printers-list");
