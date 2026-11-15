@@ -298,7 +298,9 @@ def test_modules_enable_json_stops_on_a_missing_setting_with_exit_2(capsys, monk
     before = config.load()
     rc, out, err = run(capsys, ["modules", "enable", "web", "--json", "--yes"])
     got = doc(out)
-    assert rc == 2 and got["ok"] is False and "config set web.public_url" in got["fix"]
+    assert rc == 2 and got["ok"] is False and "config set" not in got["fix"]
+    assert got["fix"] == ("run it again at a terminal without --json to answer it: "
+                                                  "sudo filament-kit modules enable web --yes")
     assert config.load() == before
 
 
@@ -321,6 +323,22 @@ def test_quiet_shows_the_app_download_text_before_its_question(capsys, monkeypat
         output.configure(quiet=False)
     out = capsys.readouterr().out
     assert "scan this code" in out and "app.apk" in out and "Press Enter when the app is installed" in out
+
+
+def test_quiet_modules_apply_shows_the_app_download_text_before_its_question(capsys, monkeypatch):
+    (config.paths().opt / "app").mkdir(parents=True)
+    (config.paths().opt / "app" / "filament-kit.apk").write_bytes(b"x")
+    monkeypatch.setattr(apply, "plan", lambda cfg, **kw: [])         # the install steps are not what is tested
+    monkeypatch.setattr(apply, "execute", lambda actions, **kw: None)
+    monkeypatch.setattr(apply, "_wait_for_server", lambda port: None)
+    _muted_terminal(monkeypatch, ["\n"])
+    try:
+        rc, out, err = run(capsys, ["modules", "apply", "--quiet"])
+    finally:
+        output.configure(quiet=False)
+    assert rc == 0
+    assert out.index("scan this code") < out.index("Press Enter when the app is installed")
+    assert "app.apk" in out
 
 
 def test_quiet_shows_the_storage_menu_with_its_question(capsys, monkeypatch):

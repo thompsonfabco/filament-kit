@@ -2040,8 +2040,10 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None, yes:
             output.error("station needs the server's address, and there is no terminal to ask.",
                          "give it with --server:", cmd=_sudo_command(f"sudo filament-kit modules enable {name}") + " --server <address>")
         else:
-            output.error(f"{name} needs {key}, and there is no terminal to ask.", "set it first, then run this again:",
-                         cmd=f"sudo filament-kit config set {key} <value>")
+            output.error(f"{name} needs {key}, and there is no terminal to ask.",
+                         "run it again at a terminal without --json to answer it:",
+                         cmd=_sudo_command(f"sudo filament-kit modules {'enable' if want_on else 'disable'} {name}")
+                         .replace(" --json", ""))
         return output.USAGE
     if err:
         _err_line(err)
