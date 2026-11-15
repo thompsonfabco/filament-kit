@@ -1149,7 +1149,10 @@ const tap = async (o) => { stub(/^tag$/, () => reply(TAG(o))); repoll(); await u
 const waitPage = () => until('the page did not draw', () => $('.spools__results .spools__row, .spools__none') && !document.querySelector('[aria-busy="true"]:not(button)'));
 const search = () => $('.spools__search .field__control');
 const sheetOpen = () => until('the sheet', () => $('dialog[open].sheet'));
-const sheetReady = async () => { const d = await sheetOpen(); await until('the summary', () => $('.spools__sum-text') && !$('.spools__sum .skeleton')); return d; };
+// the summary is drawn from the list row at once; the spool's own read comes after it, and until then Preview and Link
+// are held with "Loading Spool N…", so a press before it lands does nothing (seen in CI under load)
+const sheetReady = async () => { const d = await sheetOpen(); await until('the summary', () => $('.spools__sum-text') && !$('.spools__sum .skeleton'));
+  await until('the spool read', () => !/^Loading /.test(reason(button('Preview')) || '')); return d; };
 const out = (s) => $$('.spools__sheet .result').find((r) => r.textContent.includes(s));
 const FRESH = () => localStorage.removeItem('spoolwarden.sealedOnly');
 """
