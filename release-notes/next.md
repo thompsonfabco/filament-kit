@@ -38,6 +38,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **A new shell.** A top bar and a bottom bar (a side rail on tablets), with Add, Spools, Printers, Recent, Slicer presets and Settings; a **More** sheet holds the places that do not fit. A place whose feature is switched off says so instead of showing an empty page.
 - **The page shown outside the home network, and the sign-in page,** use the same styles and the shared texts.
 - **Slicer presets** on the phone: build the presets and see the result in place; add a new filament to a line, or start a new line with a search for its parent; Updates and Restore work as on the setup page.
+- **Recently added** on the phone: each addition with its badges, where it came from and when; open one for its photos and fields, correct it by hand or ask the Label Reader, and undo a revision.
 
 ## The Android app is on the new look
 

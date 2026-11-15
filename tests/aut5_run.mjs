@@ -4,6 +4,11 @@
 //
 //   node tests/aut5_run.mjs --url http://127.0.0.1:8799/intake --views "#add,#spools" [--widths 1280,320]
 //        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/allowlists/aut5] [--wide-font] [--font-dir <dir>] [--ready "<js>"]
+//        [--look palette] [--count "<view>|<css selector>|<n>"]
+//
+// --look: the theme the page starts in (what Settings keeps as spoolwarden.look); the themes that show details in a dialog
+// differ from the in-place one. --count: after that view opens, the selector must match n elements (a "view did not
+// show its content" finding otherwise); may be given once, separate several with ";".
 //
 // Besides the audit's own checks, each pass fails on: sideways scroll (content wider than the layout viewport), a view
 // that did not open (the address or title is not the one asked for), and an uncaught error in the page.
@@ -85,6 +90,7 @@ const WIDEST = `(() => {
   return path.join(" > ") + " reaches " + Math.round(best.right) + " px: " + (best.e.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
 })()`;
 const BUSY_LIMIT = 10000;
+const COUNTS = (args.count || "").split(";").filter(Boolean).map((c) => { const [view, sel, n] = c.split("|"); return { view, sel, n: Number(n) }; });
 const CALL_TIMEOUT = 30000;
 const PROFILE_PREFIX = "aut5-";
 const AUDIT = readFileSync(join(HERE, "page_audit.js"), "utf8");
@@ -244,6 +250,7 @@ async function main() {
     };
     await send("Page.enable");
     await send("Runtime.enable");
+    if (args.look) await send("Page.addScriptToEvaluateOnNewDocument", { source: `try { localStorage.setItem("spoolwarden.look", ${JSON.stringify(args.look)}); } catch (e) {}` });
     if (args["font-dir"]) await send("Page.addScriptToEvaluateOnNewDocument", { source: dejavuScript(args["font-dir"]) });
     else if (args["wide-font"]) await send("Page.addScriptToEvaluateOnNewDocument", { source: WIDE_FONT });
     const report = [], passes = [];
@@ -283,6 +290,10 @@ async function main() {
             extra.push({ check: "sideways scroll", where: "page", detail: `${page.width} px${widest ? "; " + widest : ""}` });
           }
           for (const e of errors.splice(0)) extra.push({ check: "page error", where: "page", detail: String(e).split("\n")[0] });
+          for (const c of COUNTS.filter((x) => x.view === view)) {
+            const got = await evaluate(`document.querySelectorAll(${JSON.stringify(c.sel)}).length`);
+            if (got !== c.n) extra.push({ check: "view did not show its content", where: c.sel, detail: `expected ${c.n}, found ${got}` });
+          }
           const findings = [...found, ...extra].filter((f) => {
             const a = ALLOW.get(`${view} | ${f.check} | ${f.where}`) || ALLOW.get(` | ${f.check} | ${f.where}`);
             if (!a) return true;

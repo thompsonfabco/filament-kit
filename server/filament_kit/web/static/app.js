@@ -160,110 +160,468 @@ window.addEventListener("click", (e) => {                    // in the capture p
 const note = (kind, text) => h("p", { class: "result", role: "status", "data-state": kind }, SW.shape({ ok: "s-filled", bad: "s-octagon", warn: "s-triangle", info: "s-diamond", neutral: "s-hollow" }[kind]),
   h("span", { class: "result__text" }, text));
 
-// ---------- History: the intake history (the newest spool additions, their photos, revise, edit, undo) ----------
-const HIST_FIELDS = [["vendor", "Brand"], ["name", "Name"], ["material", "Material"], ["color_hex", "Colour (hex)"],
-  ["net", "Net g"], ["tare", "Spool g"], ["density", "Density"], ["nozzle", "Nozzle °C"], ["bed", "Bed °C"],
-  ["nozzle_range", "Nozzle range"], ["bed_range", "Bed range"], ["price_per_kg", "Price per kg"], ["line", "Line"]];
-const HIST_NUM = new Set(["net", "tare", "density", "nozzle", "bed", "price_per_kg"]);
+// ---------- Recently added (04 7): the newest additions with their photos; check, correct by hand or by the Label Reader, undo ----------
+// The fields of a record in the four groups of 04 7.2. kind: text (required: the Hub wants it), colour, range, whole, number.
+const REC_FIELDS = [
+  { key: "vendor", label: "common_field_brand", group: "identity", kind: "text", required: true },
+  { key: "name", label: "common_field_name", group: "identity", kind: "text", required: true },
+  { key: "material", label: "common_field_material", group: "identity", kind: "text", required: true },
+  { key: "color_hex", label: "common_field_colour", group: "identity", kind: "colour" },
+  { key: "line", label: "common_field_line", group: "identity", kind: "text" },
+  { key: "net", label: "common_field_net_weight", group: "weights", kind: "number", unit: "unit_g", bad: "field_error_grams" },
+  { key: "tare", label: "common_field_empty_spool_weight", group: "weights", kind: "number", unit: "unit_g", bad: "field_error_grams" },
+  { key: "density", label: "common_field_density", group: "weights", kind: "number", unit: "unit_g_cm3", bad: "add_review_error_density" },
+  { key: "nozzle", label: "common_field_nozzle", group: "temperatures", kind: "whole", unit: "unit_c", example: "220" },
+  { key: "bed", label: "common_field_bed", group: "temperatures", kind: "whole", unit: "unit_c", example: "60" },
+  { key: "nozzle_range", label: "common_field_nozzle_range", group: "temperatures", kind: "range", unit: "unit_c", example: "190-230" },
+  { key: "bed_range", label: "common_field_bed_range", group: "temperatures", kind: "range", unit: "unit_c", example: "50-60" },
+  { key: "price_per_kg", label: "common_field_price_per_kg", group: "other", kind: "number", bad: "recent_error_number" },
+];
+const REC_GROUPS = [["identity", "common_group_identity"], ["weights", "recent_group_weights"],
+  ["temperatures", "common_group_temperatures"], ["other", "common_group_other"]];
+const REC_BY = Object.fromEntries(REC_FIELDS.map((f) => [f.key, f]));
+const recLabel = (k) => (REC_BY[k] ? SW.t(REC_BY[k].label) : k);
+// a value as the person reads it: "(empty)", the colour with its #, a number with its unit
+function recShow(k, v) {
+  if (v == null || v === "") return SW.t("common_field_empty_value");
+  if (k === "color_hex") return "#" + String(v).replace("#", "").toUpperCase();
+  return REC_BY[k] && REC_BY[k].unit ? `${v} ${SW.t(REC_BY[k].unit)}` : String(v);
+}
+const recInput = (f, v) => (v == null ? "" : f.kind === "colour" ? "#" + String(v).replace("#", "").toUpperCase() : String(v));
+// what was typed as [true, the value to send (null: empty)] or [false, the sentence for the field]
+function recParse(f, text) {
+  const t = String(text).trim();
+  if (f.kind === "text") return t || !f.required ? [true, t || null] : [false, SW.t("recent_error_required")];
+  if (!t) return [true, null];
+  if (f.kind === "colour") { const m = /^#?([0-9a-fA-F]{6})$/.exec(t); return m ? [true, m[1].toUpperCase()] : [false, SW.t("add_card_colour_error")]; }
+  if (f.kind === "range") return /^\d{1,3}\s*-\s*\d{1,3}$/.test(t) ? [true, t] : [false, SW.t("common_error_range")];
+  if (f.kind === "whole") { const n = /^\d{1,3}$/.test(t) ? Number(t) : 0; return n > 0 && n < 500 ? [true, n] : [false, SW.t("field_error_whole_number", { example: f.example })]; }
+  const n = /^\d+([.,]\d+)?$/.test(t) ? Number(t.replace(",", ".")) : 0;
+  return n > 0 ? [true, n] : [false, SW.t(f.bad)];
+}
+function recSame(f, was, now) {
+  if (f.kind === "colour") return String(was ?? "").replace("#", "").toUpperCase() === String(now ?? "");
+  if (f.kind === "number" || f.kind === "whole") return was == null ? now == null : Number(was) === now;
+  return (was || null) === (now || null);
+}
+const recWhen = (at) => String(at || "").slice(0, 16).replace("T", " ");
+// the relative time of the list (04 7.1); a day or more shows the date
+function recAge(at) {
+  const s = Math.round((Date.now() - Date.parse(at)) / 1000);
+  if (!(s >= 0)) return recWhen(at);
+  if (s < 60) return SW.t("common_age_seconds", { count: s });
+  if (s < 3600) return SW.t("common_age_minutes", { count: Math.floor(s / 60) });
+  if (s < 86400) return SW.t("common_age_hours", { count: Math.floor(s / 3600) });
+  return recWhen(at);
+}
+// where it came from in words; a source the page has no word for is shown as the Hub gave it
+function recSource(r) {
+  const src = r.source === "web" ? (r.photos ? "phone" : "hand") : r.source;
+  const key = { phone: "recent_source_phone", hand: "recent_source_hand", station: "recent_source_station" }[src];
+  return key ? SW.t(key) : String(r.source || "");
+}
+// "<Brand> <Name>" of each filament, and "x<n>" for several spools
+function recNames(spools) {
+  const base = [...new Set(spools.map((s) => [s.vendor, s.name].filter(Boolean).join(" ")))].join(", ") || SW.t("recent_no_spools");
+  return spools.length > 1 ? SW.t("recent_name_many", { name: base, count: spools.length }) : base;
+}
+const recSpools = (ids) => (ids.length ? SW.t("recent_spool_label", { count: ids.length, ids: ids.join(", ") }) : SW.t("recent_no_spools"));
 // the state of a record is a status badge: a shape and a word (04 3.3); a state the badges do not know is shown as the Hub gave it
 const HIST_WORD = { detected: "as_detected", revised_ai: "revised_ai", edited: "edited" };
 const histMark = (state) => (HIST_WORD[state] ? SW.status(HIST_WORD[state], { small: true }) : h("span", { textContent: state }));
+// what a change did to the filaments, as the sentences of 04 7.2 (an undo puts the spools back on the filament they had)
+function recFilaments(what, rev) {
+  const fl = rev.filaments || {};
+  const use = (id, isNew) => SW.t(isNew ? "recent_result_filament_new" : "recent_now_use", isNew ? { filament: id } : { id });
+  const left = (ids) => (ids && ids.length ? SW.t("recent_result_filament_empty", { ids: ids.join(", ") }) : "");
+  if (what === "undo") return [fl.undo_to || fl.to !== fl.from ? use(fl.undo_to || fl.from, !!fl.undo_to) : "", left(fl.orphaned_by_undo)];
+  return [fl.to !== fl.from ? use(fl.to, fl.created) : "", left(fl.orphaned)];
+}
+// the changes of a revision, one per field
+const recChanges = (rev) => [...new Map((rev.changes || []).map((c) => [c.field, c])).values()];
+
 function historyTab() {
-  const box = h("div");
-  const el = h("section", { class: "hidden" }, box);
+  const intro = h("p", { class: "muted" });
+  const missing = h("div");                                   // "no longer kept" for an address that names a record the Hub dropped
+  const list = h("div");
+  const el = h("section", { class: "hidden" }, intro, missing, list);
   const hp = (id, what) => `history/${encodeURIComponent(id)}${what ? "/" + what : ""}`;
-  function photoImg(id, n) {
-    const img = h("img", { src: `${BASE}/api/${hp(id, "photos/" + n)}`, alt: `Photo ${n}`, loading: "lazy", class: "thumb" });
-    img.addEventListener("click", () => img.classList.toggle("big"));     // tap to enlarge
-    return img;
-  }
+  const photo = (id, n) => `${BASE}/api/${hp(id, "photos/" + n)}`;
+  let records = [], reader = false, keep = 0;                 // the list as the Hub last gave it; whether the Label Reader is on
+  let addr = "", ready = Promise.resolve();                   // the record the address names; the list being read
+  const item = (id) => list.querySelector(`.coll__item[data-id="${CSS.escape(id)}"]`);
+
+  // ----- the list (7.1) -----
   async function load() {
-    await fill(box, SW.t("nav_recently_added"), async () => {
+    missing.replaceChildren();
+    await fill(list, SW.t("nav_recently_added"), async () => {
       const d = await api("history");
-      return [h("p", { class: "muted", textContent: `The newest ${d.keep} additions, with their photos. The number is in the setup page's Settings.` }),
-        ...(d.records.length ? d.records.map((r) => row(r, d.ai)) : [h("p", { textContent: "Nothing added since the history started." })])];
+      records = d.records; reader = !!d.ai; keep = d.keep;
+      intro.textContent = SW.t("recent_intro", { count: d.keep, size: SW.t("recent_size_mb", { value: (d.photo_bytes / 1048576).toFixed(1) }) });
+      return records.length ? table() : SW.empty({ icon: "recent", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") });
     });
   }
-  function row(r, ai) {
-    const det = h("div");
-    det.mark = histMark(r.state);   // the state mark, redrawn after a change
-    const names = [...new Set(r.spools.map((s) => `${s.vendor} ${s.name}`))].join(", ");
-    return h("div", { class: "card" },
-      h("div", { class: "row" }, ...(r.photos ? [photoImg(r.id, 1)] : []),
-        h("p", {}, h("b", { textContent: names }), ` · ${(r.at || "").slice(0, 16).replace("T", " ")} · `, det.mark)),
-      h("button", { class: "secondary", textContent: "Open", on: { click: () => detail(r.id, ai, det) } }), det);
-  }
-  // `done`: the sentence for the line under the record's buttons, written when the record is drawn again after a change
-  async function detail(id, ai, det, done) {
-    await fill(det, SW.t("nav_recently_added"), async () => {
-      const rec = await api(hp(id));
-      const msg = resultLine(), prop = h("div");               // msg: the answer to a press; prop: the Label Reader's proposal
-      const ctx = { id, ai, det, msg, prop };
-      const parts = [];
-      if (rec.photos > 1) parts.push(h("div", { class: "row" }, ...Array.from({ length: rec.photos - 1 }, (_, i) => photoImg(id, i + 2))));
-      for (const s of rec.saved) {
-        const ins = {};
-        const fields = HIST_FIELDS.map(([k, label]) => {
-          ins[k] = h("input", { value: s.values[k] ?? "", "aria-label": label });
-          return h("label", {}, label, ins[k]);
-        });
-        const note = h("textarea", { rows: 2, placeholder: "e.g. brand is Polymaker", disabled: !ai });
-        parts.push(h("div", { class: "card" },
-          h("p", { class: "muted", textContent: `Spool ${s.spool_ids.join(", ")}${s.spool_ids.length > 1 ? ": a change applies to all of them" : ""}` }),
-          ...fields,
-          h("button", { textContent: "Save changes", on: { click: (e) => save(ctx, s, ins, e.currentTarget) } }),
-          note, h("button", { class: "secondary", textContent: "Ask the AI to correct it", disabled: !ai,
-                              on: { click: (e) => revise(ctx, s, note, e.currentTarget) } }),
-          ai ? null : h("p", { class: "muted", textContent: "Label reading is off on this server: edit by hand." })));
+  function table() {
+    const col = (name, label, hidden) => h("div", { class: "coll__cell", role: "columnheader", "data-col": name }, h("span", { class: hidden ? "sr" : "", textContent: label }));
+    const box = h("div", { class: "coll coll--recent", role: "table", "aria-label": SW.t("nav_recently_added") },
+      h("div", { class: "coll__head", role: "rowgroup" }, h("div", { class: "coll__row", role: "row" },
+        col("expand", SW.t("common_details"), true), col("visual", SW.t("recent_col_photo")), col("title", SW.t("recent_col_added")),
+        col("status", SW.t("common_field_state")), col("spool", SW.t("recent_col_spool")))),
+      ...records.map(row));
+    SW.collection(box, { name: "recent" });
+    // the expand button and the address say the same thing (04 2.4): opening a record names it, closing it leaves it
+    new MutationObserver((ms) => {
+      for (const m of ms) {
+        const x = m.target, it = x.closest(".coll__item");
+        if (!it || !x.matches(".coll__expand")) continue;
+        const id = it.dataset.id, shown = x.getAttribute("aria-expanded") === "true";
+        if (shown) { ensure(it); if (location.hash !== "#recent/" + id) location.hash = "#recent/" + id; }
+        else if (location.hash === "#recent/" + id) location.hash = "#recent";
       }
-      const live = rec.revisions.filter((v) => !v.undone);
-      const last = live[live.length - 1];
-      for (const v of rec.revisions) parts.push(h("p", { class: "muted", textContent: `Revision ${v.n} by ${v.by === "ai" ? "the AI" : "hand"}${v.undone ? " (undone)" : ""}: ${[...new Set(v.changes.map((c) => `${c.field} ${c.old} → ${c.new}`))].join("; ")}${v.note ? " · " + v.note : ""}` }));
-      if (last) parts.push(h("button", { class: "secondary", textContent: `Undo revision ${last.n}`, on: { click: (e) => act(msg, SW.t("common_working"), () => apply(ctx, "undo", { revision: last.n }), { button: e.currentTarget }) } }));
-      parts.push(msg, prop);
-      if (done) SW.result(msg, "ok", done);
-      return parts;
-    }, { quiet: !!done });
+    }).observe(box, { subtree: true, attributes: true, attributeFilter: ["aria-expanded"] });
+    return box;
   }
-  // what changed, in words, for the sentence after a save or an undo (the Hub's reply carries the revision)
-  function changeText(what, r) {
-    const v = r.revisions[r.revisions.length - 1] || {}, fl = v.filaments || {};
-    const fields = [...new Set((v.changes || []).map((c) => c.field))];
-    return [what === "undo" ? SW.t("recent_result_undone", { number: v.n }) : SW.t("recent_saved", { count: fields.length, fields: fields.join(", ") }),
-      fl.to !== fl.from ? SW.t("recent_now_use", { id: fl.to }) + (fl.created ? " " + SW.t("recent_new") : "") : "",
-      fl.orphaned && fl.orphaned.length ? SW.t("recent_result_filament_empty", { ids: fl.orphaned.join(", ") }) : ""].filter(Boolean).join(" ");
+  // the first photo small, with its count; a dashed box when no photo was kept
+  const listThumb = (r) => (r.photos
+    ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", loading: "lazy", src: photo(r.id, 1) }),
+      r.photos > 1 ? h("span", { class: "thumb__count mono", "aria-hidden": "true", textContent: String(r.photos) }) : null)
+    : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr", textContent: SW.t("photo_none") })));
+  function row(r) {
+    const id = r.id, name = recNames(r.spools);
+    const cell = (c, prio, ...kids) => h("div", { class: "coll__cell", role: "cell", "data-col": c, "data-prio": prio }, ...kids);
+    const x = h("button", { class: "btn btn--ghost btn--icon coll__expand", type: "button", "aria-expanded": "false", "aria-controls": "detail-" + id,
+      "aria-label": SW.t("detail_for", { name }) }, SW.icon("chevron"));
+    const main = h("div", { class: "coll__row", role: "row" },
+      cell("expand", "1", x), cell("visual", "1", listThumb(r)),
+      cell("title", "1", h("a", { class: "coll__title", href: "#recent/" + id, textContent: name }),
+        h("span", { class: "coll__sub" }, recSource(r), " · ", h("time", { datetime: r.at, title: recWhen(r.at), textContent: recAge(r.at) }))),
+      cell("status", "1", histMark(r.state)),
+      cell("spool", "2", h("span", { class: "mono", textContent: recSpools(r.spools.map((s) => s.spool_id)) })));
+    const reg = detail(r, name);
+    const it = h("div", { class: "coll__item", role: "rowgroup", "data-id": id }, main,
+      h("div", { class: "coll__row coll__row--detail", role: "row", hidden: true }, h("div", { class: "coll__cell", role: "cell", "aria-colspan": "5" }, reg)));
+    it._reg = reg;                                            // a dialog profile moves the region out of the row: keep the way back to it
+    main.addEventListener("click", (e) => { if (!e.target.closest("a, button")) location.hash = "#recent/" + id; });   // the whole card opens it
+    return it;
   }
-  // sends a change, then draws the record again with the sentence under its buttons
-  async function apply({ id, ai, det }, what, body) {
-    const r = await api(hp(id, what), { body });
-    if (det.mark) { const m = histMark(r.state); det.mark.replaceWith(m); det.mark = m; }
-    await detail(id, ai, det, changeText(what, r));
+  // the state badge of a record changed: in its row and in its head
+  function setState(id, state) {
+    const it = item(id), r = records.find((x) => x.id === id);
+    if (r) r.state = state;
+    if (it) for (const c of [...it.querySelectorAll('[data-col="status"]'), ...it._reg.querySelectorAll(".recent__state")]) c.replaceChildren(histMark(state));
   }
-  function save(ctx, s, ins, button) {
-    const values = {};
-    for (const [k] of HIST_FIELDS) {
-      const was = s.values[k] == null ? "" : String(s.values[k]), now = ins[k].value.trim();
-      if (now !== was) values[k] = now === "" ? null : (HIST_NUM.has(k) ? Number(now) : now);
+  function retitle(id, spools) {
+    const it = item(id), r = records.find((x) => x.id === id), name = recNames(spools);
+    if (r) r.spools = spools;
+    if (!it) return;
+    it.querySelector(".coll__title").textContent = it._reg.querySelector(".detail__title").textContent = name;
+    it.querySelector(".coll__expand").setAttribute("aria-label", SW.t("detail_for", { name }));
+    it.querySelector('[data-col="spool"] .mono').textContent = recSpools(spools.map((s) => s.spool_id));
+  }
+
+  // ----- one record (7.2): the detail region of its row -----
+  function detail(r, name) {
+    const id = r.id, at = records.findIndex((x) => x.id === id);
+    const step = (to) => () => { if (to) location.hash = "#recent/" + to.id; };
+    const newer = SW.iconBtn("chevron", SW.t("recent_newer_addition"), { cls: "recent__newer", run: step(records[at - 1]) });
+    const older = SW.iconBtn("chevron", SW.t("recent_older_addition"), { cls: "recent__older", run: step(records[at + 1]) });
+    if (!records[at - 1]) newer.setAttribute("aria-disabled", "true");
+    if (!records[at + 1]) older.setAttribute("aria-disabled", "true");
+    const reg = h("section", { class: "detail", id: "detail-" + id, "aria-labelledby": `detail-${id}-title`, hidden: true },
+      h("header", { class: "detail__head" },
+        SW.iconBtn("chevron", SW.t("detail_back", { name: SW.t("nav_recently_added") }), { cls: "detail__back" }),
+        h("h2", { class: "detail__title", id: `detail-${id}-title`, tabindex: "-1", textContent: name }),
+        h("span", { class: "recent__state" }, histMark(r.state)), newer, older,
+        SW.iconBtn("close", SW.t("detail_close", { name }), { cls: "detail__close" })),
+      h("p", { class: "page-head__meta" }, h("time", { class: "mono", datetime: r.at, textContent: recWhen(r.at) }),
+        h("span", { textContent: recSource(r) }), h("span", { class: "mono", textContent: recSpools(r.spools.map((s) => s.spool_id)) })));
+    reg._body = h("div");
+    reg.append(reg._body);
+    return reg;
+  }
+  // the edit forms of the list with unsaved values; reloading the list drops them, so it asks first (the shell's guard, 6.1)
+  const dirtySlots = () => [...list.querySelectorAll(".coll__item")].flatMap((it) => (it._reg && it._reg._ctx ? it._reg._ctx.slots.filter((s) => s.dirty()) : []));
+  async function leaveOk() {
+    const ds = dirtySlots();
+    return !ds.length || SW.leaveAsk(ds.map((s, i) => SW.t(i ? "form_leave_next" : "form_leave_first",
+      { count: s.g.changed().length, group: recSpools(s.s.spool_ids) })).join(", "));
+  }
+  const ensure = (it) => {                                    // read the record the first time it opens
+    const reg = it._reg;
+    if (!reg._loaded) { reg._loaded = true; loadRecord(it.dataset.id, reg); }
+  };
+  const goneNote = () => h("div", {}, note("warn", SW.t("recent_not_found", { keep })),
+    h("p", {}, SW.btn(SW.t("recent_back_to_list"), { action: "back", run: async () => { if (!(await leaveOk())) return; location.hash = "#recent"; ready = load(); } })));
+  async function loadRecord(id, reg) {
+    await fill(reg._body, SW.t("nav_recently_added"), async () => {
+      let rec;
+      try { rec = await api(hp(id)); }
+      catch (e) { if (e instanceof SW.HubError && e.status === 404) return goneNote(); throw e; }
+      return recordBody({ id, rec, reg, slots: [], res: resultLine(), list: h("div"), count: h("span", { class: "mono" }) });
+    }, { items: 2 });
+  }
+  // c: the record on show: its id, the Hub's reply, its slots (one per saved item) and the revisions' result line
+  function recordBody(c) {
+    const { id, rec } = c;
+    const photos = h("div", { class: "group" }, h("div", { class: "group__head" },
+      h("h3", { class: "group__title" }, SW.t("recent_record_photos"), " ", h("span", { class: "mono", textContent: String(rec.photos) }))),
+      h("div", { class: "group__body" }, rec.photos
+        ? h("div", { class: "photos" }, ...Array.from({ length: rec.photos }, (_, i) => {
+          const b = h("button", { class: "thumb thumb--m", type: "button", "aria-label": SW.t("photo_enlarge", { number: i + 1, total: rec.photos }) },
+            h("img", { class: "thumb__img", alt: "", loading: "lazy", src: photo(id, i + 1) }));
+          b.addEventListener("click", () => viewer(c, i + 1, b));
+          return b;
+        }))
+        : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr", textContent: SW.t("photo_none") }))));
+    c.slots = rec.saved.map((s) => slotFor(c, s));
+    c.reg._ctx = c;
+    revisions(c);
+    return [h("div", { class: "detail__body" },
+      h("div", { class: "detail__section" }, photos, ...c.slots.map((s) => s.group)),
+      h("div", { class: "detail__section" }, ...(reader ? c.slots.map((s) => askGroup(c, s)) : [note("info", SW.t("recent_ask_off"))]),
+        h("div", { class: "group" }, h("div", { class: "group__head" }, h("h3", { class: "group__title", id: `rev-${id}`, tabindex: "-1" }, SW.t("revision_heading"), " ", c.count)),
+          h("div", { class: "group__body" }, c.list, c.res))))];
+  }
+  // a change came back from the Hub (it sends the whole record): the groups it touched, the revisions and the badges follow;
+  // a group being edited with unsaved values is left alone
+  function applied(c, r, force) {
+    c.rec = r;
+    if (r.saved.length !== c.slots.length) { c.reg._body.replaceChildren(...recordBody(c)); }
+    else for (const slot of c.slots) {
+      const now = r.saved.find((x) => x.item === slot.s.item);
+      if (now && (slot === force || (JSON.stringify(now) !== JSON.stringify(slot.s) && !slot.dirty()))) { slot.s = now; slot.show(); }
     }
-    if (!Object.keys(values).length) { SW.result(ctx.msg, "neutral", SW.t("common_nothing_changed")); return; }
-    act(ctx.msg, SW.t("common_saving"), () => apply(ctx, "apply", { item: s.item, values }), { button });
+    revisions(c);
+    setState(c.id, r.state);
+    retitle(c.id, r.spools);
   }
-  async function revise(ctx, s, note, button) {
-    await act(ctx.msg, SW.t("changes_asking"), async () => {
-      const p = await api(hp(ctx.id, "revise"), { body: { item: s.item, note: note.value } });
-      ctx.prop.replaceChildren();
-      if (!p.changes.length) return { kind: "neutral", text: SW.t("changes_none") };
-      ctx.prop.replaceChildren(h("p", { textContent: "The AI suggests:" }),
-        ...p.changes.map((k) => h("p", { textContent: `${k}: ${p.before[k]} → ${p.after[k]}` })),
-        p.no_photo ? h("p", { class: "muted", textContent: "No photo was kept: it worked from the saved values and your note." }) : null,
-        p.reader ? h("p", { class: "muted", textContent: `Read again by ${p.reader === "local" ? "the local reader" : "Claude"}${p.confidence != null ? ", " + Math.round(p.confidence * 100) + " % sure" : ""}${p.note ? " (" + p.note + ")" : ""}.` }) : null,
-        h("div", { class: "row" },
-          h("button", { textContent: "Accept", on: { click: (e) => act(ctx.msg, SW.t("common_saving"), () => apply(ctx, "apply", { proposal: p.proposal }), { button: e.currentTarget }) } }),
-          h("button", { class: "secondary", textContent: "Discard", on: { click: () => { ctx.prop.replaceChildren(); SW.result(ctx.msg, "neutral", SW.t("changes_discarded")); } } })));
-      return null;
-    }, { button });
+
+  // ----- the fields of one saved item: shown, then edited in place (7.2) -----
+  function slotFor(c, s) {
+    const slot = { s, g: null, group: null, say: () => {} };
+    slot.dirty = () => !!(slot.g && slot.group.isConnected && slot.g.dirty());
+    slot.show = () => { slot.g = null; slot.set(viewGroup(c, slot)); };
+    slot.set = (g) => { if (slot.group) slot.group.replaceWith(g); slot.group = g; };
+    slot.group = viewGroup(c, slot);
+    return slot;
   }
-  return { el, enter: load };
+  const spoolsHead = (s) => [h("h3", { class: "group__title", textContent: recSpools(s.spool_ids) }),
+    s.spool_ids.length > 1 ? h("p", { class: "group__desc", textContent: SW.t("recent_all_apply") }) : null];
+  function viewGroup(c, slot) {
+    const s = slot.s, res = resultLine();
+    const foot = h("div", { class: "group__foot", hidden: true }, res);
+    slot.say = (kind, text) => { foot.hidden = false; SW.result(res, kind, text); };
+    const edit = SW.btn(SW.t("recent_edit"), { icon: "pencil", action: "edit", run: () => {
+      slot.set(editGroup(c, slot));
+      slot.group.querySelector(".field__control").focus();
+    } });
+    const row = (f) => {
+      const v = s.values[f.key], empty = v == null || v === "";
+      return h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: SW.t(f.label) }),
+        h("dd", { class: "kv__value" }, empty ? h("span", { class: "muted", textContent: SW.t("common_field_empty_value") })
+          : f.kind === "colour" ? [SW.swatch("#" + String(v).replace("#", "")), h("span", { class: "mono", textContent: recShow(f.key, v) })]
+            : h("span", { class: f.kind === "text" ? "" : "mono", textContent: recShow(f.key, v) })));
+    };
+    return h("div", { class: "group" }, h("div", { class: "group__head" }, h("div", {}, ...spoolsHead(s)), edit),
+      h("div", { class: "group__body" }, ...REC_GROUPS.map(([gk, label]) => h("div", { class: "detail__section" },
+        h("h4", { class: "detail__heading", textContent: SW.t(label) }), h("dl", { class: "kv" }, ...REC_FIELDS.filter((f) => f.group === gk).map(row))))), foot);
+  }
+  function editGroup(c, slot) {
+    const s = slot.s, res = resultLine(), fields = {}, title = recSpools(s.spool_ids);
+    const field = (f) => fields[f.key] = SW.field({ label: SW.t(f.label), name: f.key, value: recInput(f, s.values[f.key]), mono: f.kind !== "text",
+      unit: f.unit ? SW.t(f.unit) : undefined, type: f.kind === "number" || f.kind === "whole" ? "number" : "text", decimal: f.kind === "number",
+      placeholder: f.kind === "range" ? f.example : undefined, check: (text) => { if (text === recInput(f, s.values[f.key])) return ""; const p = recParse(f, text); return p[0] ? "" : p[1]; } });
+    const cancel = SW.btn(SW.t("common_cancel"), { action: "cancel", run: async () => {
+      if (slot.g.dirty() && !(await SW.leaveAsk(SW.t("form_leave_first", { count: slot.g.changed().length, group: title })))) return;
+      slot.show();
+      slot.group.querySelector('[data-action="edit"]').focus();
+    } });
+    const save = SW.btn(SW.t("common_save_changes"), { type: "submit", cls: "btn--primary", action: "save" });
+    const form = h("form", { class: "group", novalidate: true },
+      h("div", { class: "group__head" }, h("div", {}, ...spoolsHead(s))),
+      h("div", { class: "group__body" }, ...REC_GROUPS.map(([gk, label]) => h("div", { class: "detail__section" },
+        h("h4", { class: "detail__heading", textContent: SW.t(label) }), ...REC_FIELDS.filter((f) => f.group === gk).map(field)))),
+      h("div", { class: "group__foot" }, res, cancel, save));
+    // only the changed fields are sent, in one request, so one save is one revision: this handler runs before the shared group's own
+    form.addEventListener("submit", (e) => { e.preventDefault(); e.stopImmediatePropagation(); store(); });
+    slot.g = SW.formGroup(form, { title });
+    async function store() {
+      const values = {}, bad = [];
+      for (const f of REC_FIELDS) {
+        const text = fields[f.key]._control.value;
+        if (text === recInput(f, s.values[f.key])) { SW.fieldError(fields[f.key], null); continue; }   // untouched: a value the Hub kept stays as it is
+        const [ok, v] = recParse(f, text);
+        SW.fieldError(fields[f.key], ok ? null : v);
+        if (!ok) bad.push(fields[f.key]);
+        else if (!recSame(f, s.values[f.key], v)) values[f.key] = v;
+      }
+      if (bad.length) { bad[0]._control.focus(); return; }
+      if (!Object.keys(values).length) { SW.result(res, "neutral", SW.t("common_nothing_changed")); return; }
+      const controls = REC_FIELDS.map((f) => fields[f.key]._control);
+      for (const e of controls) e.readOnly = true;            // what is typed while the save runs would be lost
+      await act(res, SW.t("common_saving"), async () => {
+        try { return await send(); } finally { for (const e of controls) e.readOnly = false; }
+      }, { button: save });
+      async function send() {
+        const r = await api(hp(c.id, "apply"), { body: { item: s.item, values } });
+        const rev = r.revisions[r.revisions.length - 1] || {}, names = recChanges(rev).map((x) => recLabel(x.field));
+        slot.g = null;
+        applied(c, r, slot);
+        slot.say("ok", [SW.t("recent_saved", { count: names.length, fields: names.join(", ") }), ...recFilaments("apply", rev)].filter(Boolean).join(" "));
+        return null;
+      }
+    }
+    return form;
+  }
+
+  // ----- ask the Label Reader to correct it (7.2) -----
+  function askGroup(c, slot) {
+    const res = resultLine(), prop = h("div");
+    const text = SW.field({ type: "textarea", label: SW.t("recent_ask_label"), hint: SW.t("recent_ask_hint"), placeholder: SW.t("recent_ask_placeholder") });
+    const send = SW.btn(SW.t("recent_ask_button"), { action: "ask", run: () => ask() });
+    const sync = () => disabled(send, text._control.value.trim() ? null : SW.t("recent_ask_reason"), () => text._control);
+    const group = h("div", { class: "group" }, h("div", { class: "group__head" }, h("div", {},
+      h("h3", { class: "group__title", textContent: SW.t("recent_ask_title") }),
+      c.rec.saved.length > 1 ? h("p", { class: "group__desc", textContent: recSpools(slot.s.spool_ids) }) : null)),
+      h("div", { class: "group__body" }, text, h("div", {}, send), res, prop));
+    text._control.addEventListener("input", sync);
+    sync();
+    async function ask() {
+      await act(res, SW.t("changes_asking"), async () => {
+        prop.replaceChildren();
+        let p;
+        try { p = await api(hp(c.id, "revise"), { body: { item: slot.s.item, note: text._control.value.trim() } }); }
+        catch (e) {
+          if (e instanceof SW.HubError && e.data && e.data.code === "ai_off") { group.replaceWith(note("info", SW.t("recent_ask_off"))); return null; }
+          throw e;
+        }
+        if (!p.changes.length) return { kind: "neutral", text: SW.t("changes_none") };
+        prop.replaceChildren(proposal(c, p, res, prop, text));
+        prop.querySelector('[data-action="accept"]').focus();
+        return null;
+      }, { button: send, busy: SW.t("common_working"), kept: true });
+    }
+    return group;
+  }
+  // the before-and-after change list (02 7.9): nothing changes until Accept
+  function proposal(c, p, res, prop, text) {
+    const tid = SW.uid("prop");
+    const sr = (key) => h("span", { class: "sr", textContent: SW.t(key) });
+    const accept = SW.btn(SW.t("common_accept"), { cls: "btn--primary", action: "accept", run: (e) =>
+      act(res, SW.t("common_accepting"), async () => {
+        const r = await api(hp(c.id, "apply"), { body: { proposal: p.proposal } });
+        const rev = r.revisions[r.revisions.length - 1] || {};
+        prop.replaceChildren();
+        applied(c, r);
+        return [SW.t("changes_accepted", { count: p.changes.length, number: rev.n }), ...recFilaments("apply", rev)].filter(Boolean).join(" ");
+      }, { button: e.currentTarget }) });
+    const discard = SW.btn(SW.t("common_discard"), { action: "discard", run: () => {
+      prop.replaceChildren();
+      SW.result(res, "neutral", SW.t("changes_discarded"));
+      text._control.focus();
+    } });
+    return h("section", { class: "changes", "aria-labelledby": tid },
+      h("h4", { class: "changes__title", id: tid, textContent: SW.t("changes_title", { count: p.changes.length }) }),
+      h("ul", { class: "changes__list" }, ...p.changes.map((k) => h("li", { class: "changes__item" },
+        h("span", { class: "changes__key", textContent: recLabel(k) }),
+        h("span", { class: "changes__old mono" }, sr("changes_was"), recShow(k, p.before[k])),
+        h("span", { "aria-hidden": "true", textContent: "→" }),
+        h("span", { class: "changes__new mono" }, sr("changes_becomes"), recShow(k, p.after[k]))))),
+      p.no_photo ? h("p", { class: "muted", textContent: SW.t("recent_ask_no_photo") }) : null,
+      h("p", { class: "changes__note", textContent: SW.t("changes_note") }),
+      h("div", { class: "actions" }, discard, accept));
+  }
+
+  // ----- revisions with undo (7.2, 02 7.10) -----
+  function revisions(c) {
+    const live = c.rec.revisions.filter((v) => !v.undone), last = live[live.length - 1];
+    const one = (v) => {
+      const changes = recChanges(v);
+      const undo = last && last.n === v.n ? SW.btn(SW.t("revision_undo", { number: v.n }), { icon: "undo", action: "undo", run: (e) =>
+        act(c.res, SW.t("common_working"), async () => {
+          const r = await api(hp(c.id, "undo"), { body: { revision: v.n } });
+          const done = r.revisions.find((x) => x.n === v.n) || v;
+          applied(c, r);
+          return [SW.t("recent_result_undone", { number: v.n }), ...recChanges(done).map((x) => SW.t("recent_revision_value_again", { field: recLabel(x.field), value: recShow(x.field, x.old) })),
+            ...recFilaments("undo", done)].filter(Boolean).join(" ");
+        }, { button: e.currentTarget, alert: true }) }) : null;
+      return h("li", { class: "revisions__item", "data-state": v.undone ? "undone" : null },
+        h("p", {}, SW.t(v.by === "ai" ? "recent_revision_ai" : "recent_revision_hand", { number: v.n, time: recWhen(v.at), changes: changes.map((x) => recLabel(x.field)).join(", ") }),
+          v.undone ? " " + SW.t("recent_revision_undone") : ""),
+        h("div", { class: "changes changes--compact" }, h("ul", { class: "changes__list" }, ...changes.map((x) => h("li", { class: "changes__item" },
+          h("span", { class: "changes__key", textContent: recLabel(x.field) }),
+          h("span", { class: "changes__old mono" }, h("span", { class: "sr", textContent: SW.t("changes_was") }), recShow(x.field, x.old)),
+          h("span", { "aria-hidden": "true", textContent: "→" }),
+          h("span", { class: "changes__new mono" }, h("span", { class: "sr", textContent: SW.t("changes_becomes") }), recShow(x.field, x.new)))))),
+        v.note ? h("p", { class: "muted", textContent: SW.t("recent_revision_note", { note: v.note }) }) : null, undo);
+    };
+    c.count.textContent = String(c.rec.revisions.length);
+    c.list.replaceChildren(c.rec.revisions.length ? h("ol", { class: "revisions__list" }, ...c.rec.revisions.map(one))
+      : h("p", { class: "muted", textContent: SW.t("revision_empty") }));
+  }
+
+  // ----- the photo viewer (02 7.6): one photo, Previous and Next, Escape closes -----
+  function viewer(c, from, opener) {
+    const total = c.rec.photos, name = recNames(c.rec.spools);
+    let n = from;
+    const img = h("img", { class: "viewer__img", alt: "" }), problem = h("div");
+    const prev = SW.btn(SW.t("common_previous"), { action: "previous", run: () => move(-1) });
+    const next = SW.btn(SW.t("common_next"), { action: "next", run: () => move(1) });
+    const dlg = SW.sheet({ title: SW.t("photo_position", { number: n, total }), cls: "viewer", body: [img, problem],
+      foot: [prev, next, SW.btn(SW.t("common_close"), { action: "close", run: () => dlg.close() })] });
+    function paint() {
+      const position = SW.t("photo_position", { number: n, total });
+      problem.replaceChildren();
+      img.alt = SW.t("photo_viewer_alt", { number: n, total, name });
+      img.src = photo(c.id, n);
+      dlg.querySelector(".sheet__title").textContent = position;
+      prev.setAttribute("aria-disabled", String(n === 1)); next.setAttribute("aria-disabled", String(n === total));
+      SW.announce(position);
+    }
+    function move(by) { if (n + by >= 1 && n + by <= total) { n += by; paint(); } }
+    img.addEventListener("error", () => problem.replaceChildren(note("warn", SW.t("photo_load_failed")), h("p", {}, SW.btn(SW.t("common_try_again"), { action: "try-again", run: paint }))));
+    dlg.addEventListener("keydown", (e) => {
+      const to = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+      if (to) move(to);
+      else if (e.key === "Home" && n !== 1) { n = 1; paint(); } else if (e.key === "End" && n !== total) { n = total; paint(); }
+    });
+    paint();
+    SW.openModal(dlg, opener);
+  }
+
+  // ----- the address (04 2.4): #recent/<id> opens the record in place under its row -----
+  async function open(id) {
+    const it = item(id);
+    if (!it) { missing.replaceChildren(goneNote()); return; }
+    const reg = it._reg;
+    if (reg.hidden) SW.openDetail(reg, { opener: it.querySelector(".coll__expand"), focusTitle: false });
+    ensure(it);
+    it.scrollIntoView({ block: "start" });
+    reg.querySelector(".detail__title").focus({ preventScroll: true });
+    shellView.paint(false);                                   // the page title names the record (04 2.4)
+  }
+  async function go(rest) {
+    missing.replaceChildren();
+    if (!rest) {                                              // back to the list: the record the address named closes
+      const was = addr && item(addr);
+      addr = "";
+      if (was && !was._reg.hidden) await SW.closeDetail(was._reg);
+      return;
+    }
+    const was = addr && addr !== rest && item(addr);          // Newer and Older: the record before closes
+    addr = rest;
+    if (was && !was._reg.hidden) await SW.closeDetail(was._reg);
+    await ready;
+    await open(rest);
+  }
+  // the page title of the record the address names ("Spool 214 · Workshop"), once the list is known
+  const title = () => {
+    let id = "";
+    try { id = decodeURIComponent(location.hash.split("/")[1] || ""); } catch {}   // a malformed address names no record
+    const r = records.find((x) => x.id === id);
+    return r && r.spools.length ? recSpools(r.spools.map((x) => x.spool_id)) : "";
+  };
+  return { el, go, title, enter(rest) { if (!dirtySlots().length) ready = load(); return go(rest); }, leave() { addr = ""; } };
 }
 
 // ---------- the shell (04 2 and 9): top bar, bottom bar (a rail on tablets), More, Settings; the places and their addresses ----------
@@ -284,7 +642,7 @@ const tabs = {
   add: addTab(),
   spools: openTab(),
   printers: PRINTERS ? printersTab() : notice("printer", SW.t("common_feature_off_title", { feature: SW.t("nav_printers") }), SW.t("common_feature_off_hint"), true),
-  recent: HISTORY ? historyTab() : notice("recent", SW.t("recent_public_title"), SW.t("recent_public_text", { product: PRODUCT })),
+  recent: HISTORY ? historyTab() : notice("clock", SW.t("recent_public_title"), SW.t("recent_public_text", { product: PRODUCT })),
   presets: PRESETS ? presetsTab() : notice("presets", SW.t("presets_off_title"), SW.t("presets_off_text"), true),
   settings: { el: settingsPage, enter: () => settingsPage.replaceChildren(...settingsBody(true)), leave: () => settingsPage.replaceChildren() },
 };
@@ -305,10 +663,12 @@ function storedPlace() {
   return PLACES.includes(v) ? v : null;
 }
 function show(key) {
+  const raw = location.hash.slice(1), head = raw.split(/[/?]/)[0];
+  const rest = (ALIAS[head] || head) === key && raw.charAt(head.length) === "/" ? raw.slice(head.length + 1) : "";   // #recent/<id>: what follows the place
   if (key !== place) {
-    for (const [k, t] of Object.entries(tabs)) { t.el.classList.toggle("hidden", k !== key); (k === key ? t.enter : t.leave)?.(); }
+    for (const [k, t] of Object.entries(tabs)) { t.el.classList.toggle("hidden", k !== key); (k === key ? t.enter : t.leave)?.(rest); }
     window.scrollTo(0, 0);
-  }
+  } else tabs[key].go?.(rest);
   place = key;
   page.dataset.section = key;
   pageTitle.textContent = SW.t(TITLES[key]);
@@ -498,7 +858,7 @@ function navigation() {
   app.replaceWith(skip, h("div", { class: "shell" }, topBar(), nav, main),
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   route(true);
-  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => SW.t(TITLES[ALIAS[s] || s] || TITLES[place]), onSection: () => route() });
+  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => ((ALIAS[s] || s) === "recent" && tabs.recent.title && tabs.recent.title()) || SW.t(TITLES[ALIAS[s] || s] || TITLES[place]), onSection: () => route() });
   nav.append(moreBtn);                                       // after SW.shell: this More has its own sheet
   paintMore();
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page

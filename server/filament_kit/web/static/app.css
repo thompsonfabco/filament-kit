@@ -135,10 +135,22 @@ progress { width: 100%; height: var(--s3); accent-color: var(--accent-text); }
       border-radius: 50%; }
 .slot button { flex: none; min-height: calc(var(--s7) - var(--s1)); padding: 0 var(--s3); }
 
-/* history photos: a small photo that opens full width */
-img.thumb { width: auto; height: auto; max-width: calc(var(--thumb) + var(--s6)); border: 1px solid var(--border);
-            border-radius: var(--r-s); background: var(--surface-2); }
-img.thumb.big { max-width: 100%; cursor: zoom-out; }
+/* Recently added (04 7): the list is the shared collection; a record opens in place under its row */
+.coll--recent { grid-template-columns: auto auto minmax(0, 3fr) max-content minmax(0, 1fr); }
+.coll--recent .coll__cell[data-col="visual"] { padding-inline: 0; }
+.coll__sub { display: block; }
+.group__head > .btn { margin-left: auto; }
+.coll--recent .coll__head .coll__cell { display: flex; align-items: center; }
+.detail__head { flex-wrap: wrap; }
+.detail__head > .btn { flex: none; }
+.detail__title { flex: 1 1 calc(var(--s7) * 4); min-width: 0; margin: 0; }
+@media (max-width: 600px) { .coll--recent .coll__item .coll__cell[data-col="visual"] { width: auto; } }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--s7) * 2), 1fr)); gap: var(--s2); }
+.photos > .thumb { width: 100%; height: auto; aspect-ratio: 1; }         /* square tiles: the shared 40 px thumb is under the 44 px hit area */
+.recent__newer .icon { transform: rotate(-90deg); }
+.recent__older .icon { transform: rotate(90deg); }
+.recent__state { display: inline-flex; margin-right: auto; }
+.viewer__img { display: block; max-width: 100%; max-height: calc(var(--s7) * 10); margin: 0 auto; object-fit: contain; }
 
 /* were inline styles, which the Content-Security-Policy blocks */
 label.filebtn.wide { display: flex; }
