@@ -749,7 +749,10 @@ count for every spool."; or the empty-spool problem.
 "These spools may have been added already: <the Hub's note>. Check Spoolman before adding them again." When the
 reason is the app's own (the reply was lost), it is one whole text, never a phrase filled into that sentence:
 "These spools may have been added already: the connection was lost before the Hub answered. Check Spoolman before
-adding them again." On Preview, a reply lost while adding: "The connection to the Hub was lost while adding, so the
+adding them again." When the app knows which spools (a draft restored after a lost reply), a third whole text
+names them as a list of data, joined by commas, never "and": "These spools may have been added already: spool 212,
+spool 213. Check Spoolman before adding them again." (for one: "This spool may have been added already: spool 212.
+Check Spoolman before adding it again."). On Preview, a reply lost while adding: "The connection to the Hub was lost while adding, so the
 spools may have been added. Check Spoolman before trying again; Try again first runs a new preview."
 
 Other lines of this step: a weighed value that cannot be used, "The weight (<n> g) was not filled in: it is only
@@ -1328,7 +1331,7 @@ The same texts on the Hub page and in the web app, where they show the same thin
 | Progress line (9.4), facts joined by " · " | "<n> %" · "Layer <n> of <m>" · "<time> left" · "done about <clock time>" (the line under the bar starts with "Layer …", as in the web app) |
 | Results of the controls (9.4) | "Resumed." · "Paused." · "Stopped." · "Light on." · "Light off." |
 | Stop dialog (9.4) when the printer gives no job name | Title as always "Stop the print?"; body "Stop the print on <printer>? It cannot be resumed." (a whole second text; no phrase is filled into the usual body) |
-| Load preview rows (7.6) | "Preset: <name>" or "Preset: none" · "Nozzle: <n> mm" or "Nozzle size not reported by the printer; assuming <n> mm" · "Spool <id> now in <slot> goes back to <location>" (when the place is not known, the whole text "Spool <id> now in <slot> goes back to its previous place") |
+| Load preview rows (7.6) | "Preset: <name>" or "Preset: none" · "Nozzle: <n> mm" or "Nozzle size not reported by the printer; assuming <n> mm" · "Spool <id> now in <slot> goes back to <location>" (when the place is not known, the whole text "Spool <id> now in <slot> goes back to its previous place"; when the spool's number is not known, "The spool now in <slot> goes back to <location>" or "The spool now in <slot> goes back to its previous place"; the word "Unknown" is never filled in as a number) |
 | Unload dialog (9.5) when the place is not known | Body "Unload <spool name> from <slot>? It goes back to its previous place. Only the inventory changes; the printer's slot setting stays as it is." (a whole second text beside the usual body with "<location>"; title and buttons as always) |
 | Map by loading rows (9.8) | "<slot>: <status>"; the nozzle as "Right nozzle" or "Left nozzle" |
 | Printer settings (9.9) | Field "Name", error "Enter a name."; results "Saved."; after a new Access Code is saved, "Access Code replaced." (`02-components.md` 5.3; the printer's name is not repeated) |
