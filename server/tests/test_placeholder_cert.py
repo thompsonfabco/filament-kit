@@ -262,15 +262,16 @@ def test_web_status_warns_and_a_warning_is_not_a_failure(web_on, monkeypatch, ca
     soon = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=10)
     monkeypatch.setattr(remote, "served_certificate", lambda: {"self_signed": True, "not_after": soon})
     assert cli.main(["web", "status"]) == 0
-    out = capsys.readouterr().out
-    assert "self-signed certificate ends on" in out and "modules apply" in out
+    raw = capsys.readouterr().out
+    assert "self-signed certificate ends on" in " ".join(raw.split())
+    assert any("modules apply" in x for x in raw.splitlines()), raw
 
 
 def test_web_status_fails_on_an_expired_one(web_on, monkeypatch, capsys):
     gone = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
     monkeypatch.setattr(remote, "served_certificate", lambda: {"self_signed": True, "not_after": gone})
     assert cli.main(["web", "status"]) == 1
-    assert "FAIL the web address's self-signed certificate ended on" in capsys.readouterr().out
+    assert "needs a look the web address's self-signed certificate ended on" in " ".join(capsys.readouterr().out.split())
 
 
 def test_web_status_says_nothing_with_the_remote_module_off(web_on, monkeypatch, capsys):

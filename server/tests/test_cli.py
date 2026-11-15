@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from filament_kit import cli, config, modules, pairing
+from conftest import old_rows
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +33,7 @@ def test_status_reports_spoolman_down(capsys, monkeypatch):
     config.save(cfg)
     assert cli.main(["status"]) == 1
     out = capsys.readouterr().out
-    assert "FAIL" in out
+    assert "needs a look" in out
     assert "sudo systemctl start spoolman" in out
 
 
@@ -59,8 +60,8 @@ def test_status_all_ok(capsys, spoolman_url):
 
     assert cli.main(["status"], client_factory=factory) == 0
     out = capsys.readouterr().out
-    assert "FAIL" not in out
-    assert fp in out
+    assert "needs a look" not in out
+    assert " ".join(fp[i:i + 4] for i in range(0, len(fp), 4)) in " ".join(out.split())
     assert "sk-ant-secret" not in out
     assert seen["key"] == "sk-ant-secret"
     assert "reads used today: 0" in out
@@ -78,7 +79,7 @@ def test_status_rejected_key(capsys, spoolman_url):
 
     assert cli.main(["status"], client_factory=factory) == 1
     out = capsys.readouterr().out
-    assert "FAIL" in out and "sk-bad" not in out
+    assert "needs a look" in out and "sk-bad" not in out
 
 
 def test_status_counts_reads_today(capsys, spoolman_url):
@@ -115,7 +116,7 @@ def test_unpair_lists_and_revokes(capsys):
     assert dev["id"] in capsys.readouterr().out
     assert cli.main(["unpair", dev["id"]]) == 0
     assert pairing.devices() == []
-    assert cli.main(["unpair", "nope"]) == 1
+    assert cli.main(["unpair", "nope"]) == 2
 
 
 def test_config_menu_sets_box_count(monkeypatch):
@@ -224,9 +225,9 @@ def test_status_api_not_answering_fails(capsys, monkeypatch):
     cfg["port"] = free_port()
     config.save(cfg)
     assert cli.main(["status"]) == 1
-    out = capsys.readouterr().out
+    out = old_rows(capsys.readouterr().out)
     assert f"FAIL filament-kit API not answering at https://127.0.0.1:{cfg['port']}/api/info" in out
-    assert "sudo journalctl -u filament-kit -n 50" in out
+    assert "     fix: sudo journalctl -u filament-kit -n 50" in out
 
 
 def test_status_api_answering_ok(capsys, monkeypatch):
@@ -252,7 +253,7 @@ def test_status_api_answering_ok(capsys, monkeypatch):
 
     monkeypatch.setattr(cli.urllib.request, "urlopen", urlopen)
     cli.main(["status"])
-    out = capsys.readouterr().out
+    out = old_rows(capsys.readouterr().out)
     assert "OK   filament-kit API answering at https://127.0.0.1:8710/api/info" in out
     import ssl
     assert seen == {"url": "https://127.0.0.1:8710/api/info", "timeout": 5, "verify": ssl.CERT_NONE}
@@ -281,8 +282,10 @@ def test_status_api_bad_http_answer_fails(capsys, monkeypatch):
 
     monkeypatch.setattr(cli.urllib.request, "urlopen", urlopen)
     assert cli.main(["status"]) == 1
-    out = capsys.readouterr().out
-    assert "FAIL filament-kit API not answering" in out and "sudo journalctl -u filament-kit -n 50" in out
+    raw = capsys.readouterr().out
+    out = " ".join(raw.split())
+    assert "needs a look filament-kit API not answering" in out
+    assert any("sudo journalctl -u filament-kit -n 50" in x for x in raw.splitlines()), raw     # the command: one line
 
 
 def test_status_api_check_skipped_without_systemd(capsys):
@@ -365,7 +368,7 @@ def test_printers_corrupt_file_reports_error_and_keeps_it(capsys, monkeypatch, e
     f = env / "state" / "printers.json"
     f.write_text("garbage")
     assert _printers_session(monkeypatch, "5\n2\nA\n1.2.3.4\nS1\n0\n0\n") == 0
-    assert "unreadable" in capsys.readouterr().out
+    assert "unreadable" in capsys.readouterr().err
     assert f.read_text() == "garbage"
 
 
@@ -506,7 +509,7 @@ def _status_setup(spoolman_url):
 
 
 def _status_lines(capsys) -> list:
-    return capsys.readouterr().out.splitlines()
+    return old_rows(capsys.readouterr().out)
 
 
 def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_library):
@@ -585,7 +588,7 @@ def test_profiles_lines_and_set_parent(capsys, monkeypatch):
     line = lines_mod.load()["elegoo--petg-hf"]
     assert (line.bambu_parent, line.parent_source) == ("Generic PETG", "user")
     assert asked
-    assert cli.main(["profiles", "set-parent", "nope--x", "Generic PETG"]) == 1
+    assert cli.main(["profiles", "set-parent", "nope--x", "Generic PETG"]) == 2
     assert "no line nope--x" in capsys.readouterr().err
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG @BBL H2D"]) == 1
     assert "@" in capsys.readouterr().err
@@ -677,7 +680,7 @@ def test_unreadable_config_says_run_with_sudo(argv, monkeypatch, capsys):
         raise PermissionError(13, "Permission denied", "/etc/filament-kit/config.json")
 
     monkeypatch.setattr(config, "load", denied)
-    assert cli.main(argv) == 1
+    assert cli.main(argv) == 3
     err = capsys.readouterr().err
     assert "/etc/filament-kit/config.json" in err and f"sudo filament-kit {argv[0]}" in err
     assert "Traceback" not in err

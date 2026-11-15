@@ -192,7 +192,7 @@ def test_a_refused_start_is_said(env, clock, capsys):
 
 def test_manual_needs_the_running_server(env, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_server_api", lambda: None)
-    assert cli.main(["printer", "map", "--manual", SERIAL]) == 1
+    assert cli.main(["printer", "map", "--manual", SERIAL]) == 4
     assert "needs the running kit server" in capsys.readouterr().err
 
 

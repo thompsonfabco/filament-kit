@@ -1,11 +1,13 @@
-"""The CLI's words stay exactly as they were when `status`, `web status` and `update --check` moved onto functions that
-return data (status.py, updates.check_info): the console reads the data, the terminal prints these lines."""
+"""The CLI's words stay as they were when `status`, `web status` and `update --check` moved onto functions that
+return data (status.py, updates.check_info): the console reads the data, the terminal prints these rows. Since S5.1 the
+rows come under their group's heading with a glyph and a state word; `old_rows` gives them back as the old lines."""
 from __future__ import annotations
 
 import json
 
 import pytest
 
+from conftest import old_rows
 from filament_kit import cli, config, modules, updates
 
 DEAD = "http://192.0.2.77:9"
@@ -26,7 +28,7 @@ def cfg(monkeypatch):
 
 
 def lines(capsys):
-    return capsys.readouterr().out.splitlines()
+    return old_rows(capsys.readouterr().out)
 
 
 def test_status_lines_on_a_server(cfg, capsys, monkeypatch):
@@ -35,11 +37,11 @@ def test_status_lines_on_a_server(cfg, capsys, monkeypatch):
     assert cli.main(["status"]) == 0
     assert lines(capsys) == [
         "--   service checks skipped (FK_NO_SYSTEMD=1)",
-        f"OK   Spoolman reachable at {DEAD} (v1.2.3)",
-        f"OK   certificate present, fingerprint {'AB' * 32}",
+        f"OK   certificate present, fingerprint {' '.join(('AB' * 32)[i:i + 4] for i in range(0, 64, 4))}",
         "--   display name: Workshop",
-        "--   paired devices: 0",
+        f"OK   Spoolman reachable at {DEAD} (v1.2.3)",
         f"--   reads used today: 0 of {cfg['reads_per_day']}",
+        "--   paired devices: 0",
         "--   Filament Catalog version 7 (bundled), 1 local addition",
     ]
 
@@ -62,17 +64,17 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
     assert cli.main(["status"], client_factory=lambda k: None) == 1
     assert lines(capsys) == [
         "--   service checks skipped (FK_NO_SYSTEMD=1)",
+        f"FAIL certificate missing ({config.paths().etc / 'cert.pem'})",
+        "     fix: run: sudo filament-kit cert",
+        "--   display name: Workshop",
         f"FAIL Spoolman not reachable at {DEAD}: no answer",
         "     fix: check that the remote Spoolman is running and spoolman_url is right",
         f"FAIL Anthropic key missing ({config.paths().etc / 'anthropic_key'})",
         "     fix: run: sudo filament-kit config  (option 4)",
-        f"FAIL certificate missing ({config.paths().etc / 'cert.pem'})",
-        "     fix: run: sudo filament-kit cert",
+        f"--   reads used today: 0 of {cfg['reads_per_day']}",
         "FAIL Weigh Station not answering at http://192.0.2.30:5003",
         "     fix: check the Weigh Station machine: sudo systemctl status filament-kit-station  (url http://192.0.2.30:5003)",
-        "--   display name: Workshop",
         "--   paired devices: 0",
-        f"--   reads used today: 0 of {cfg['reads_per_day']}",
         "--   Filament Catalog version 7 (bundled), 1 local addition",
     ]
 
@@ -84,14 +86,17 @@ def test_web_status_lines(cfg, capsys, monkeypatch):
     monkeypatch.setattr(cli, "_web_health", lambda port: (True, "ok"))
     assert cli.main(["web", "status"]) == 0
     port = cfg["web"]["port"]
-    assert lines(capsys) == [
-        "OK   Web access is on",
-        "OK   public URL https://printer.example.com/filament",
-        "     connector: https://printer.example.com/filament/mcp   web app: https://printer.example.com/filament/intake",
-        "--   sign-in passphrase not set: the Claude connector cannot sign in until `sudo filament-kit web passphrase`",
-        f"OK   web unit answers on 127.0.0.1:{port}",
-        "     connectors: none signed in yet",
-        "     printer slots: none; tag readers: 0 + no Weigh Station",
+    out = capsys.readouterr().out
+    assert out.splitlines() == [                      # no group, so no heading and no summary
+        "  + OK            Web access is on",
+        "  + OK            public URL https://printer.example.com/filament",
+        "                  connector: https://printer.example.com/filament/mcp   web",
+        "                  app: https://printer.example.com/filament/intake",
+        "  * note          sign-in passphrase not set: the Claude connector cannot sign",
+        "                  in until sudo filament-kit web passphrase",
+        f"  + OK            web unit answers on 127.0.0.1:{port}",
+        "                  connectors: none signed in yet",
+        "                  printer slots: none; tag readers: 0 + no Weigh Station",
     ]
 
 
@@ -103,16 +108,20 @@ class Fetcher:
         return {"version": self.version, "assets": {}, "notes": "What changed."}
 
 
+def raw_lines(capsys):
+    return capsys.readouterr().out.splitlines()
+
+
 def test_update_check_lines(cfg, capsys, monkeypatch):
     monkeypatch.setattr(updates, "current_version", lambda: "0.5.0")
     assert updates.check(cfg, fetcher=Fetcher("0.5.0")) == 0
-    assert lines(capsys) == ["installed 0.5.0; latest release 0.5.0: up to date"]
+    assert raw_lines(capsys) == ["installed 0.5.0; latest release 0.5.0: up to date"]
     assert updates.check(cfg, fetcher=Fetcher("0.6.0")) == 0
-    assert lines(capsys) == ["installed 0.5.0; 0.6.0 is available: sudo filament-kit update"]
+    assert raw_lines(capsys) == ["installed 0.5.0; 0.6.0 is available: sudo filament-kit update"]
     updates._write_state(held="0.6.0")
     assert updates.check(cfg, fetcher=Fetcher("0.6.0")) == 0
-    assert lines(capsys) == ["installed 0.5.0; 0.6.0 is available (rolled back earlier: the timer skips it; "
-                             "`sudo filament-kit update` installs it): sudo filament-kit update"]
+    assert raw_lines(capsys) == ["installed 0.5.0; 0.6.0 is available (rolled back earlier: the timer skips it;",
+                             "     sudo filament-kit update installs it): sudo filament-kit update"]
 
 
 def test_update_check_failure_line(cfg, capsys):

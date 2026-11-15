@@ -53,8 +53,8 @@ def services(b):
 
 def test_flash_panel_needs_root(bench, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
-    assert "root" in capsys.readouterr().err
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 3
+    assert "administrator rights" in capsys.readouterr().err
     assert bench.calls == [] and bench.flashed == []
 
 

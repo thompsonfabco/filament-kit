@@ -66,6 +66,11 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Slicer presets from a phone:** a paired phone can now list the filaments that have no preset line, create a line, add filaments to a line and ask for a build; the Android app's Slicer presets screen uses these. The phone web app's own routes are unchanged.
 - **Theme picker:** the setup page (Settings > Appearance) and the phone web app (its own Theme group in Settings) now have a Theme choice, with Console (dense and technical) the one theme so far. Choosing it is kept on this device and the phone's status bar takes its colour, also when you switch the phone between light and dark. A device that has not chosen shows the Hub's theme for new devices.
 
+## The command line speaks one way
+
+- **One status vocabulary, Error and Fix lines.** Every command reports with the same state words and glyphs, and a failure is `Error: ...` with a `Fix: ...` line on standard error, with the command to run kept whole on one line (on its own line when it does not fit).
+- **Progress for waits, documented exit codes, plain output.** A wait longer than 2 seconds shows a progress line, each command ends with a documented exit code, and `--plain`, `--color` and `NO_COLOR` control the look for screen readers and pipes.
+
 ## Still to come
 
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the

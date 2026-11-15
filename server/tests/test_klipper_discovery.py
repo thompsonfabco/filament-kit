@@ -1,6 +1,7 @@
 """Klipper discovery (mDNS + on-demand scan) and the `filament-kit klipper` commands."""
 import ipaddress
 import json
+import re
 import socket
 from pathlib import Path
 
@@ -101,14 +102,14 @@ def test_cli_add_offline_still_adds(capsys):
 def test_cli_add_says_when_the_service_cannot_reach_it(capsys, monkeypatch):
     monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
     assert klipper_cli.main(["add", "Far", "203.0.113.7"]) == 0
-    assert "IPAddressAllow=203.0.113.0/24" in capsys.readouterr().out
+    assert any("IPAddressAllow=203.0.113.0/24" in x for x in capsys.readouterr().err.splitlines())
     assert registry.load()["far"].host == "203.0.113.7"
 
 
 def test_cli_add_says_nothing_for_a_home_address(capsys, monkeypatch):
     monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
     assert klipper_cli.main(["add", "Near", "192.168.50.7"]) == 0
-    assert "note:" not in capsys.readouterr().out
+    assert "Note:" not in capsys.readouterr().err
 
 
 def test_cli_add_saves_a_name_that_does_not_resolve_and_says_so(capsys, monkeypatch):
@@ -118,12 +119,12 @@ def test_cli_add_saves_a_name_that_does_not_resolve_and_says_so(capsys, monkeypa
     monkeypatch.setattr(socket, "getaddrinfo", nope)
     monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
     assert klipper_cli.main(["add", "Off", "off.local"]) == 0
-    assert "off.local did not answer" in capsys.readouterr().out
+    assert "off.local did not answer" in " ".join(capsys.readouterr().err.split())
     assert registry.load()["off"].host == "off.local"
 
 
 def test_cli_add_refuses_what_cannot_be_an_address(capsys):
-    assert klipper_cli.main(["add", "Bad", "192.0.2.999"]) == 1
+    assert klipper_cli.main(["add", "Bad", "192.0.2.999"]) == 2
     assert "give an IP address or a host name" in capsys.readouterr().err
     assert registry.load() == {}
 
@@ -146,7 +147,7 @@ def test_cli_set_lane_data(capsys):
     registry.add_klipper("P", "h")
     assert klipper_cli.main(["set", "p", "--lane-data", "on"]) == 0
     assert registry.load()["p"].lane_data == "on"
-    assert klipper_cli.main(["set", "nope", "--lane-data", "on"]) == 1
+    assert klipper_cli.main(["set", "nope", "--lane-data", "on"]) == 2
 
 
 def test_cli_scan(moonraker, capsys, monkeypatch):
@@ -170,6 +171,8 @@ def test_cli_scan_shows_a_printer_added_by_name_as_that_printer(capsys, monkeypa
     out = capsys.readouterr().out
     assert "192.0.2.20:7125  (added already as Voron)" in out
     assert "add NAME 192.0.2.20" not in out and "add NAME 192.0.2.21" in out
+    assert "192.0.2.21:7125  (add it: filament-kit klipper add NAME 192.0.2.21)\n" in out     # printed plain, no backticks
+    assert "`" not in out
     assert {p.host for p in registry.load().values()} == {mine.host, "192.0.2.21"}
 
 
@@ -239,18 +242,21 @@ def test_cli_detect_output_is_unchanged(moonraker, capsys):
         0, "SV08 MAX (127.0.0.1:PORT)\n  model: Klipper printer (generic)\n  filament system: afc; slots: from the "
            "printer\n    no model entry matched: generic Klipper printer\n    filament system afc (object AFC)\n", "")
     moonraker.api_key = "k"
-    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (
-        0, "SV08 MAX (127.0.0.1:PORT)\n  127.0.0.1:PORT wants a Moonraker API key: run "
-           "`filament-kit klipper api-key sv08-max`\n", "")
+    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (       # the long line wraps at the width
+        0, "SV08 MAX (127.0.0.1:PORT)\n  127.0.0.1:PORT wants a Moonraker API key: run\n"
+           "       `filament-kit klipper api-key sv08-max`\n", "")
 
 
-def test_cli_detect_offline_output_is_unchanged(capsys):
+def test_cli_detect_offline_output_is_unchanged(capsys, monkeypatch):
+    # the OS's connection-error text in the brackets differs per platform (CI's is longer), so give the line room
+    # and check its words exactly; wrapping itself is tested in test_cli_output.py
+    monkeypatch.setenv("COLUMNS", "400")
     registry.add_klipper("Gone", "127.0.0.1", 9)
     rc = klipper_cli.main(["detect", "gone"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert out.startswith("Gone (127.0.0.1:9)\n  Moonraker at 127.0.0.1:9 is not answering (")
-    assert out.endswith("); the server keeps trying once it runs\n") and out.count("\n") == 2
+    assert re.fullmatch(r"Gone \(127\.0\.0\.1:9\)\n  Moonraker at 127\.0\.0\.1:9 is not answering \([^\n]*\); the"
+                        r" server keeps trying once it runs\n", out), out
 
 
 def test_detect_returns_what_the_cli_prints(moonraker):
@@ -409,7 +415,7 @@ def test_klipper_add_cli_says_it_is_already_added(capsys):
 
 def test_cli_add_refuses_a_port_outside_1_65535(capsys):
     for port in ("0", "99999"):
-        assert klipper_cli.main(["add", "Bad", "box.example", "--port", port]) == 1
+        assert klipper_cli.main(["add", "Bad", "box.example", "--port", port]) == 2
         assert "1 to 65535" in capsys.readouterr().err
     assert registry.load() == {}
 

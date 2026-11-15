@@ -130,7 +130,8 @@ def test_backup_excludes():
 
 def test_cli_wrapper_library_add_uses_stdin():
     text = _text(INSTALL / "filament-kit-cli.sh")
-    assert 'exec runuser -u filament-kit -- "$BIN" library add - < "$3"' in text
+    assert 'run_as_user library add - < "$3"' in text  # root opens the file; the service user reads it on stdin
+    assert 'run_as_user() { exec runuser -u filament-kit -- "$BIN" ' in text
     assert '[ ! -f "$3" ] || [ ! -r "$3" ]' in text  # a missing file is refused with a message
 
 

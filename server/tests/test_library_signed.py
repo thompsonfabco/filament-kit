@@ -137,7 +137,7 @@ def test_cli_prints_the_note(fresh, served, capsys, monkeypatch):
     cfg.setdefault("library", {})["url"] = url
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
     assert cli.main(["library", "update"]) == 0
-    assert "not signature-checked" in capsys.readouterr().out
+    assert "not signature-checked" in " ".join(capsys.readouterr().err.split())
 
 
 # ---------- one GitHub-token host policy (final review M7) ----------

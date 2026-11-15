@@ -280,8 +280,8 @@ def test_different_passwords_change_nothing(usb):
 
 def test_not_root_without_a_token_file_changes_nothing(usb, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli._reader_setup_usb(_args(), _answers(), _answers(), run=_run()[0]) == 1
-    assert "run as root" in capsys.readouterr().err and "settings" not in usb
+    assert cli._reader_setup_usb(_args(), _answers(), _answers(), run=_run()[0]) == 3
+    assert "administrator rights" in capsys.readouterr().err and "settings" not in usb
 
 
 # ---------------------------------------------------------------- the port (review RK14)

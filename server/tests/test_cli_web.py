@@ -49,8 +49,8 @@ def _prompts(monkeypatch, *answers):
 
 def test_web_passphrase_needs_root(monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.main(["web", "passphrase"]) == 1
-    assert "root" in capsys.readouterr().err
+    assert cli.main(["web", "passphrase"]) == 3
+    assert "administrator rights" in capsys.readouterr().err
     assert not (config.paths().etc / "web_passphrase").exists()
 
 
@@ -91,7 +91,7 @@ def test_web_status(monkeypatch, capsys):
     config.save({"modules": mods, "web": {"port": port, "public_url": "https://mcp.example.test/filament"}})
     assert cli.main(["web", "status"]) == 1          # no passphrase, nothing answering
     out = capsys.readouterr().out
-    assert "FAIL" in out and "filament-kit web passphrase" in out
+    assert "needs a look" in out and "filament-kit web passphrase" in out
     (config.paths().etc / "web_passphrase").write_text(auth.hash_passphrase(PASS), encoding="utf-8")
     with served:
         assert cli.main(["web", "status"]) == 0
@@ -130,6 +130,6 @@ def test_web_passphrase_without_the_group(monkeypatch, capsys):
     _prompts(monkeypatch, PASS, PASS)
     assert cli.main(["web", "passphrase"]) == 1
     err = capsys.readouterr().err
-    assert "filament-kit" in err and "fix:" in err and "Traceback" not in err
+    assert "filament-kit" in err and "Fix:" in err and "Traceback" not in err
     etc = config.paths().etc
     assert not (etc / "web_passphrase").exists() and not list(etc.glob("web_passphrase*"))

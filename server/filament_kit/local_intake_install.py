@@ -35,7 +35,7 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Callable
 
-from . import local_reader, release
+from . import local_reader, output, release
 
 # The module's release key: ed25519, the raw 32 bytes in base64, as release.PUBKEY: the module's own key pair (never
 # the kit's), published by its builder in KIT-INTEGRATION-STATUS.md on 2026-11-12 with the repository name. Empty
@@ -247,7 +247,8 @@ def plan_text(p: dict) -> list[str]:
         lines.append(f"This release has no {p['asked_tier']} tier: its {p['tier']} tier is used.")
     if p.get("downgrade"):
         lines.append(f"That is older than the installed {p['installed']}: it is installed only when that version is "
-                     "asked for by name (filament-kit local-intake install --version " + p["version"] + ").")
+                     "asked for by name (filament-kit local-intake install --version " + p["version"]
+                     + ").")
     if t["fetched_at_install"]:
         lines.append(f"The installer also fetches: {t['fetched_at_install']}.")
     others = [f"{k}: {v['download_mb'] or '?'} MB download, {v['disk_mb'] or '?'} MB disk"

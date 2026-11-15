@@ -347,7 +347,7 @@ def test_cli_modules_apply_invalid_config(monkeypatch, capsys):
     (config.paths().etc / "config.json").write_text(
         json.dumps({"modules": {"server": True, "spoolman": False}}), encoding="utf-8")
     assert cli.main(["modules", "apply"]) == 1
-    assert "error:" in capsys.readouterr().err
+    assert "Error:" in capsys.readouterr().err
 
 
 def test_prints_reach_the_output_before_each_command(tmp_path, monkeypatch):

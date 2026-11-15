@@ -404,7 +404,7 @@ def test_cli_map_refusals(stubs, capsys, fm, text):
 
 def test_cli_map_unknown_printer(stubs, capsys):
     made = []
-    assert cli.main(["printer", "map", "NOPE"], manager_factory=lambda s: made.append(s)) == 1
+    assert cli.main(["printer", "map", "NOPE"], manager_factory=lambda s: made.append(s)) == 2
     assert "no printer" in capsys.readouterr().err.lower() and made == []
 
 
@@ -455,7 +455,7 @@ def test_cli_unpin_without_a_terminal_changes_nothing(monkeypatch, capsys):
 
 def test_cli_unpin_unknown_printer(monkeypatch, capsys):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code for no printer"))
-    assert cli.main(["printer", "unpin", "NOPE"]) == 1
+    assert cli.main(["printer", "unpin", "NOPE"]) == 2
     assert "no printer" in capsys.readouterr().err.lower()
 
 

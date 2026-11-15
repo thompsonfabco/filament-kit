@@ -936,8 +936,8 @@ def test_m_body_size_is_capped_before_reading(app):
 
 def test_m_setup_code_refuses_non_root_even_without_systemd(env, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.main(["setup-code"]) == 1
-    assert "run as root" in capsys.readouterr().err
+    assert cli.main(["setup-code"]) == 3
+    assert "administrator rights" in capsys.readouterr().err
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="unix sockets")

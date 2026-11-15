@@ -7,12 +7,14 @@ the setup code, so it shows them through `redact.text` unless the code was given
 from __future__ import annotations
 
 import json
+import re
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, replace
 from typing import Iterable, Iterator
 
-from . import config, modules, pairing, remote
+from . import config, modules, output, pairing, remote
 
 OK, FAIL, INFO, DETAIL = "ok", "fail", "info", "detail"
 _MARKS = {"OK": OK, "--": INFO}
@@ -33,22 +35,67 @@ def _in(group: str, source: Iterable[Row]) -> Iterator[Row]:
         yield r if r.group else replace(r, group=group)
 
 
-def print_rows(rows: Iterable[Row]) -> bool:
-    """The rows as the CLI has always shown them. True when none failed."""
-    good = True
+# The headings of the Hub page's Overview, in its order (06 section 9.1); a row's group is one of these
+GROUPS = ("Hub", "Spoolman", "Label Reader", "Weigh Station", "Devices", "Printers", "Slicer presets", "Filament Catalog")
+_WORDS = {OK: "OK", FAIL: "needs a look", INFO: "note"}      # 06 6.1: the code's values as the words people read
+
+
+def _grouped(rows: list[Row]) -> list[tuple[str, list[Row]]]:
+    """The rows under their headings, the groups in the Overview's order and the rows of each in the order they came.
+    Rows with no group (`web status`) come last, with no heading."""
+    known = {g: [r for r in rows if r.group == g] for g in GROUPS}
+    other = [r for r in rows if r.group not in known]
+    return [(g, rs) for g, rs in known.items() if rs] + ([("", other)] if other else [])
+
+
+def _fours(text: str) -> str:
+    """A long run of hex digits (a certificate fingerprint) in groups of four, which can be read aloud and wrapped
+    (CLI-9, 06 9.4); nothing else is touched."""
+    return re.sub(r"[0-9A-Fa-f]{32,}", lambda m: " ".join(m[0][i:i + 4] for i in range(0, len(m[0]), 4)), text)
+
+
+def header_line(cfg: dict | None = None) -> str:
+    """`filament-kit 0.5.2 · Workshop hub · server`: the version, the Hub's display name and the setup."""
+    from . import updates
+    cfg = cfg if cfg is not None else config.load()
+    sep = output.sym("sep")
+    return sep.join([f"filament-kit {updates.current_version()}", str(cfg.get("server_name") or "Hub"),
+                     modules.mode_of(modules.enabled(cfg))])
+
+
+def summary_line(rows: Iterable[Row]) -> str:
+    """`2 need a look · 9 OK · 3 notes`: the rows counted by their word, none left out that has a count."""
+    n = {w: 0 for w in _WORDS.values()}
     for r in rows:
-        if r.state == OK:
-            print(f"OK   {r.text}")
-        elif r.state == FAIL:
-            good = False
-            print(f"FAIL {r.text}")
-            if r.fix:
-                print(f"     fix: {r.fix}")
-        elif r.state == INFO:
-            print(f"--   {r.text}")
-        else:
-            print(f"     {r.text}")
-    return good
+        if r.state in _WORDS:
+            n[_WORDS[r.state]] += 1
+    parts = [f"{n['needs a look']} need{'s' if n['needs a look'] == 1 else ''} a look" if n["needs a look"] else "",
+             f"{n['OK']} OK" if n["OK"] else "",
+             f"{n['note']} note{'' if n['note'] == 1 else 's'}" if n["note"] else ""]
+    return output.sym("sep").join(p for p in parts if p) or "No rows"
+
+
+def print_rows(rows: Iterable[Row], *, summary: bool = False) -> bool:
+    """The rows as the command line shows them (06 9.1): a heading per group, then a glyph, the state word and the text
+    of each row, a needs-a-look row followed by its `Fix:` line. Detail rows are aligned with the text. True when none
+    needs a look."""
+    rows = list(rows)
+    lines: list[str] = []
+    for group, members in _grouped(rows):
+        if group:
+            lines.append(output.paint(group, "bold", sys.stdout))
+        for r in members:
+            if r.state == DETAIL:
+                text = r.text.strip()
+                if text[:5].lower() == "fix: ":      # a fix that is its own line: the same word as the others
+                    text = "Fix: " + text[5:]
+                lines += output.status_row("", text)
+            else:
+                lines += output.status_row(_WORDS[r.state], _fours(r.text), r.fix if r.state == FAIL else "")
+    if summary:
+        lines += ["", summary_line(rows)]
+    output.out_lines(lines)
+    return not any(r.state == FAIL for r in rows)
 
 
 def station_rows(url: str) -> Iterator[Row]:
@@ -61,7 +108,8 @@ def _station_rows(url: str) -> Iterator[Row]:
         state = cli.StationClient(url, backoff=0).state()
     except cli.StationUnreachable:
         yield Row(FAIL, f"Weigh Station not answering at {url}",
-                  f"check the Weigh Station machine: sudo systemctl status filament-kit-station  (url {url})")
+                  "check the Weigh Station machine: sudo systemctl status filament-kit-station"
+                  + f"  (url {url})")
         return
     yield Row(OK, f"Weigh Station answering at {url}")
     # a fresh station has seen neither the reader nor the scale: informational, not a failure.
@@ -125,8 +173,8 @@ def _library_rows() -> Iterator[Row]:
             source = f"updated {time.strftime('%Y-%m-%d', time.localtime(at))}"
     n = st["local"]
     if source == "none":
-        yield Row(INFO, f"Filament Catalog not downloaded (filament-kit library update), {n} local addition"
-                        f"{'' if n == 1 else 's'}")
+        yield Row(INFO, "Filament Catalog not downloaded (filament-kit library update"
+                  + f"), {n} local addition{'' if n == 1 else 's'}")
     else:
         yield Row(INFO, f"Filament Catalog version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
     lc = st["last_check"]
@@ -223,7 +271,8 @@ def _key_lines(client_factory, live_key: bool) -> Iterator[Row]:
     elif text.startswith("Anthropic key missing"):
         yield Row(FAIL, text, "run: sudo filament-kit config  (option 4)")
     else:
-        yield Row(FAIL, text, "run: sudo filament-kit config  (option 4) or check internet access")
+        yield Row(FAIL, text, "run: sudo filament-kit config"
+                  + "  (option 4) or check internet access")
 
 
 def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
@@ -245,7 +294,8 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
                 active = r.stdout.strip() == "active"
             except (OSError, subprocess.SubprocessError):
                 active = False
-            yield Row(OK if active else FAIL, f"service {svc} active", f"sudo systemctl start {svc}", group="Hub")
+            yield Row(OK if active else FAIL, f"service {svc} active", f"sudo systemctl start {svc}",
+                      group="Hub")
         if "server" in on:
             ok, url = cli._api_answers(cfg["port"])
             yield Row(OK if ok else FAIL, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
@@ -272,7 +322,8 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
             yield Row(OK, f"certificate present, fingerprint {cli.pairing.fingerprint(cert.read_bytes())}",
                       group="Hub")
         else:
-            yield Row(FAIL, f"certificate missing ({cert})", "run: sudo filament-kit cert", group="Hub")
+            yield Row(FAIL, f"certificate missing ({cert})", "run: sudo filament-kit cert",
+                      group="Hub")
 
     station_url = (cfg.get("station") or {}).get("url")
     if station_url:
@@ -311,8 +362,8 @@ def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
             yield Row(INFO, f"local label reader: last read {h['last_read_at']}")
     else:
         yield Row(FAIL, f"local label reader at {h['url']}: {h['error']}",
-                  "check that it runs (on its machine: systemctl status filament-kit-vision), or set its address: "
-                  "filament-kit config, 9) Label reader")
+                  "check that it runs (on its machine: systemctl status filament-kit-vision"
+                  + "), or set its address: filament-kit config, 9) Label reader")
     order = intake.reader_order(cfg)
     names = {"local": "the local reader", "cloud": "Claude"}
     yield Row(INFO, "label reading: " + (", then ".join(names[r] for r in order) if order else "off"))
@@ -334,11 +385,12 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
         yield Row(OK, "sign-in passphrase is set")
     else:   # only Claude's connector signs in with it: not a failure for someone using the phone web app alone
         yield Row(INFO, "sign-in passphrase not set: the Claude connector cannot sign in until "
-                        "`sudo filament-kit web passphrase`")
+                        + "sudo filament-kit web passphrase")
     port = int(web.get("port") or config.DEFAULTS["web"]["port"])
     up, why = cli._web_health(port)
     yield Row(OK if up else FAIL, f"web unit answers on 127.0.0.1:{port}" + ("" if up else f" ({why})"),
-              "sudo systemctl restart filament-kit-web; journalctl -u filament-kit-web")
+              "sudo systemctl restart filament-kit-web; "
+              + "journalctl -u filament-kit-web")
     if "remote" in on:
         warn = remote.certificate_warning(remote.served_certificate())
         if warn:

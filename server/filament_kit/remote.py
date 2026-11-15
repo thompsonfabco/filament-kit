@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
-from . import config
+from . import config, output
 from .modules import ModuleError
 
 HOOK = "/usr/local/sbin/filament-kit-acme-hook"
@@ -258,28 +258,28 @@ def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
     if run is None:
         from .apply import run_checked as run
     if "remote" not in enabled(cfg):
-        print("The remote module is off. Turn it on first: sudo filament-kit modules enable remote")
-        return 1
+        output.error("the remote module is off.", "turn it on first:", cmd="sudo filament-kit modules enable remote")
+        return output.FAILED
     if not _is_root():
-        print("error: run this as root: sudo filament-kit remote issue")
-        return 1
+        from .cli import _sudo_command
+        return output.need_sudo(_sudo_command("sudo filament-kit remote issue"))
     try:
         s = settings(cfg)
     except ModuleError as e:
-        print(f"error: {e}")
-        return 1
+        output.error(str(e))
+        return output.FAILED
     cmd = ["certbot", "certonly", "--standalone", "--non-interactive", "--agree-tos", "--keep-until-expiring",
            "--cert-name", s["hostname"], "-d", s["hostname"]]
     cmd += ["--email", s["email"]] if s["email"] else ["--register-unsafely-without-email"]
     cmd += ["--pre-hook", f"{HOOK} pre", "--post-hook", f"{HOOK} post", "--deploy-hook", f"{HOOK} deploy"]
-    print(f"certbot will bind port 80 on this machine now. The kit does not open it: make sure port 80 "
-          f"reaches this machine (run `filament-kit remote firewall` for the rules).\n"
-          f"nginx stops for the run and starts again after.")
+    output.out(f"certbot will bind port 80 on this machine now. The kit does not open it: make sure port 80 "
+               f"reaches this machine (run filament-kit remote firewall for the rules).\n"
+               f"nginx stops for the run and starts again after.")
     try:
         run(cmd)
     except (subprocess.CalledProcessError, OSError) as e:
-        print(f"certbot failed: {e}\nfix: check that {s['hostname']} resolves here and port 80 is open, then retry")
-        return 1
+        output.error(f"certbot failed: {e}", f"check that {s['hostname']} resolves here and port 80 is open, then retry")
+        return output.FAILED
     print(f"Certificate issued for {s['hostname']}.")
     return 0
 
@@ -288,10 +288,11 @@ def firewall(cfg: dict) -> int:
     try:
         print(firewall_text(settings(cfg), config.paths().opt / "resources"))
     except ModuleError as e:
-        print(f"error: {e}")
-        return 1
+        output.error(str(e))
+        return output.FAILED
     except OSError as e:
-        print(f"error: cannot read the remote files ({e})\n"
-              f"fix: run the install command again: {config.GET_COMMAND} (they live in /opt/filament-kit/resources/remote)")
-        return 1
+        output.error(f"cannot read the remote files ({e})",
+                     f"run the install command again: {config.GET_COMMAND} (they live in "
+                     "/opt/filament-kit/resources/remote)")
+        return output.FAILED
     return 0
