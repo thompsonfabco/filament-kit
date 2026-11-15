@@ -254,7 +254,9 @@ def test_a_board_that_answers_as_the_panel_is_never_written(usb, monkeypatch, ca
 def test_two_boards_ask_which_and_none_says_plug_it_in(usb, monkeypatch, capsys):
     run, _ = _run()
     monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader("/dev/ttyACM0", None, "a"), rs.Reader("/dev/ttyACM1", None, "b")])
-    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers("2"), _answers("p", "p"), run=run) == 0
+    monkeypatch.setattr(cli.output, "terminal", lambda: True)
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), _answers("2", "y"), _answers("p", "p"),
+                                 run=run) == 0
     assert usb["port"] == "/dev/ttyACM1"
     monkeypatch.setattr(rs, "find_readers", lambda: [])
     assert cli._reader_setup_usb(_args(), _answers(), _answers(), run=run) == 1
@@ -395,7 +397,7 @@ def test_plain_setup_asks_before_it_overwrites_the_board(usb, monkeypatch, capsy
         assert rc == 5 and "settings" not in usb and reader_tokens.TokenStore().list() == []
     assert len(asked) == 2 and all(" ".join(p.split()).endswith("replaced. [y/N]") for p in asked)
     said = " ".join(capsys.readouterr().out.split())
-    assert said.count("Write the reader firmware to /dev/ttyACM0? What is on the board now is") == 2
+    assert said.count("Write the Printer Station firmware to /dev/ttyACM0? What is on the board now is") == 2
     assert said.count("Nothing changed.") == 2
     assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), _answers("y"), _answers("p", "p"),
                                  run=run) == 0 and usb["port"] == "/dev/ttyACM0"
@@ -415,3 +417,44 @@ def test_the_setup_pages_job_is_not_asked(usb, monkeypatch):
     monkeypatch.setattr(cli.output, "terminal", lambda: False)
     monkeypatch.setattr(rf, "take_pending", lambda: {"ssid": "Home", "pass": "p", "buzzer": "high"})
     assert cli._reader_setup_usb(_args(pending=True, yes=False), input, None, run=run) == 0 and "settings" in usb
+
+
+# ---------------------------------------------------------------- --port names a board the command would offer
+def _two_boards(monkeypatch):
+    monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader("/dev/ttyACM0", None, "a"), rs.Reader("/dev/ttyACM1", None, "b")])
+
+
+@pytest.mark.parametrize("port", ["/dev/ttyUSB0", "/etc/passwd", "/dev/ttyACM7"])
+def test_port_that_is_no_found_board_writes_nothing_and_exits_2(usb, port, capsys):
+    run, _ = _run()
+    rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port=port), _answers(), _answers("p", "p"), run=run)
+    out, err = capsys.readouterr()
+    assert rc == 2 and "settings" not in usb and reader_tokens.TokenStore().list() == []
+    assert err.startswith("Error: ") and port in err and "Fix: use one of: /dev/ttyACM0." in " ".join(err.split())
+
+
+def test_port_with_no_board_found_says_none_were_found(usb, monkeypatch, capsys):
+    monkeypatch.setattr(rs, "find_readers", lambda: [])
+    run, _ = _run()
+    assert cli._reader_setup_usb(_args(port="/dev/ttyACM0"), _answers(), _answers(), run=run) == 2
+    assert "no such board was found" in " ".join(capsys.readouterr().err.split()) and "settings" not in usb
+
+
+def test_port_that_is_a_found_board_is_written(usb, monkeypatch):
+    _two_boards(monkeypatch)
+    run, _ = _run()
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port="/dev/ttyACM1"), _answers(), _answers("p", "p"),
+                                 run=run) == 0 and usb["port"] == "/dev/ttyACM1"
+
+
+@pytest.mark.parametrize("at_terminal", [False, True])
+def test_yes_with_several_boards_stops_and_names_port(usb, monkeypatch, capsys, at_terminal):
+    _two_boards(monkeypatch)
+    monkeypatch.setattr(cli.output, "terminal", lambda: at_terminal)
+    run, _ = _run()
+    asked = []
+    rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=True), lambda p: asked.append(p) or "1",
+                               _answers("p", "p"), run=run)
+    out, err = capsys.readouterr()
+    assert rc == 2 and asked == [] and "settings" not in usb and "[y/N]" not in out and "pick" not in out
+    assert "Fix: name the Printer Station's board with --port" in " ".join(err.split()) and "/dev/ttyACM1" in err

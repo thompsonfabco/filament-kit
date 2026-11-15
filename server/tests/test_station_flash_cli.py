@@ -225,3 +225,20 @@ def test_service_that_was_inactive_is_not_started(bench):
         return type("R", (), {"returncode": 3 if cmd[1] == "is-active" else 0})()
     assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=run) == 5
     assert [c[1] for c in bench.calls] == ["is-active", "stop"]
+
+
+@pytest.mark.parametrize("port", ["/dev/ttyUSB0", "/dev/ttyACM0", "/etc/passwd"])
+def test_port_the_scan_would_not_offer_writes_nothing_and_exits_2(bench, monkeypatch, capsys, port):
+    """ttyUSB (the PN532), a board that answers HELLO (a running panel), a path that is no board."""
+    monkeypatch.setattr(cli.output, "terminal", lambda: False)
+    bench.probe.hello = {"/dev/ttyACM0"}
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port=port) == 2
+    err = " ".join(capsys.readouterr().err.split())
+    assert bench.flashed == [] and err.startswith("Error: " + port) and "Fix: use one of: /dev/ttyACM1." in err
+    assert services(bench) == ["stop", "start"]
+
+
+def test_port_with_no_blank_board_says_none_were_found(bench, monkeypatch, capsys):
+    bench.probe.hello = {"/dev/ttyACM0", "/dev/ttyACM1"}
+    assert cli.cmd_station_flash_panel(run=bench.run, yes=True, only_port="/dev/ttyACM0") == 2
+    assert "no such board was found" in " ".join(capsys.readouterr().err.split()) and bench.flashed == []
