@@ -405,7 +405,7 @@ def test_cli_map_refusals(stubs, capsys, fm, text):
 def test_cli_map_unknown_printer(stubs, capsys):
     made = []
     assert cli.main(["printer", "map", "NOPE"], manager_factory=lambda s: made.append(s)) == 2
-    assert "no printer" in capsys.readouterr().err.lower() and made == []
+    assert "does not name one printer" in capsys.readouterr().err and made == []        # 06 5, 6.7
 
 
 def test_cli_unpin_with_the_access_code_clears_the_pin(monkeypatch, capsys):
@@ -413,34 +413,38 @@ def test_cli_unpin_with_the_access_code_clears_the_pin(monkeypatch, capsys):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(prompt) or "24681357")
     assert registry.load()[SERIAL].cert_fp
     assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 0
-    assert asked == ["Access Code: "]
+    assert asked == ["Access Code of Office H2D (on the printer: Settings > Network/LAN): "]       # 06 8.7
     assert registry.load()[SERIAL].cert_fp == ""
     assert registry.load()[SERIAL].access_code == "24681357"
     out = capsys.readouterr().out
     assert "Office H2D" in out and "24681357" not in out
 
 
-@pytest.mark.parametrize("typed", ["", "  ", "bad code!"])
-def test_cli_unpin_without_a_usable_access_code_changes_nothing(monkeypatch, capsys, typed):
+@pytest.mark.parametrize("typed,code", [("", 5), ("  ", 5), ("bad code!", 1)])        # 06 8.7: nothing typed is a cancel
+def test_cli_unpin_without_a_usable_access_code_changes_nothing(monkeypatch, capsys, typed, code):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: typed)
-    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 1
+    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == code
     assert registry.load()[SERIAL].cert_fp == "ab" * 32 and registry.load()[SERIAL].access_code == CODE
-    assert capsys.readouterr().err
+    out = capsys.readouterr()
+    assert "nothing changed" in (out.out + out.err).lower()
 
 
 def test_cli_unpin_refuses_a_klipper_printer(monkeypatch, capsys):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code"))
+    c = config.load()                                                     # Klipper printers are listed only with their module on
+    c.setdefault("modules", {})["klipper"] = True
+    config.save(c)
     k = registry.add_klipper("Workshop", "printer.example.com", 7125)
     assert cli.main(["printer", "unpin", k.serial]) == 1
-    assert "Bambu" in capsys.readouterr().err
+    assert "Klipper printer" in capsys.readouterr().err
     assert registry.load()[k.serial].access_code == ""
 
 
 def test_cli_unpin_refuses_a_printer_never_set_up(monkeypatch, capsys):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code"))
     registry.upsert(registry.Printer("01P00A222222222", "Found", "", "10.0.0.6", "", False))
-    assert cli.main(["printer", "unpin", "01P00A222222222"]) == 1
-    assert "not set up" in capsys.readouterr().err
+    assert cli.main(["printer", "unpin", "01P00A222222222"]) == 2                       # 06 5, 6.7: found, not added
+    assert "not added yet" in capsys.readouterr().err
     assert not registry.load()["01P00A222222222"].configured
 
 
@@ -448,7 +452,7 @@ def test_cli_unpin_without_a_terminal_changes_nothing(monkeypatch, capsys):
     def no_tty(prompt):
         raise EOFError
     monkeypatch.setattr(secret_input, "ask", no_tty)
-    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 1
+    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 2                         # 06 6.7: no terminal to ask
     assert "terminal" in capsys.readouterr().err
     assert registry.load()[SERIAL].cert_fp == "ab" * 32 and registry.load()[SERIAL].access_code == CODE
 
@@ -456,7 +460,7 @@ def test_cli_unpin_without_a_terminal_changes_nothing(monkeypatch, capsys):
 def test_cli_unpin_unknown_printer(monkeypatch, capsys):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code for no printer"))
     assert cli.main(["printer", "unpin", "NOPE"]) == 2
-    assert "no printer" in capsys.readouterr().err.lower()
+    assert "does not name one printer" in capsys.readouterr().err
 
 
 def test_cert_changed_hint_points_to_adding_the_printer_again_not_unpin():

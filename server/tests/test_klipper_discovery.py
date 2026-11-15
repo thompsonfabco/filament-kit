@@ -1,4 +1,5 @@
-"""Klipper discovery (mDNS + on-demand scan) and the `filament-kit klipper` commands."""
+"""Klipper discovery (mDNS + on-demand scan) and the Klipper halves of the `filament-kit printer` commands (the old
+`klipper add|scan|detect|set|api-key` spellings are aliases of them, 06 4)."""
 import ipaddress
 import json
 import re
@@ -7,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import config, hostaddr, klipper_cli
+from filament_kit import cli, config, hostaddr, klipper_cli
 from filament_kit.bridge import registry
 from filament_kit.bridge.klipper import discovery
 from filament_kit.bridge.klipper import hardware as kh
@@ -21,6 +22,7 @@ def env(tmp_path, monkeypatch):
         (tmp_path / name).mkdir()
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
     kh._reset_cache()
+    config.save({**config.load(), "modules": {"printers": True, "klipper": True}})       # Klipper is opt-in
     yield
     kh._reset_cache()
 
@@ -90,12 +92,12 @@ def test_cli_add_and_detect(moonraker, capsys):
     assert registry.load()["sv08-max"].family == "klipper"
     moonraker.objects = ["print_stats", "gcode_macro FK_UNVERIFIED_M1D"]
     assert klipper_cli.main(["detect", "sv08-max"]) == 0
-    assert "unverified" in capsys.readouterr().out
+    assert "not verified" in capsys.readouterr().out
 
 
 def test_cli_add_offline_still_adds(capsys):
     assert klipper_cli.main(["add", "Gone", "127.0.0.1", "--port", "9"]) == 0
-    assert "not answering" in capsys.readouterr().out
+    assert "not answering" in capsys.readouterr().err
     assert "gone" in registry.load()
 
 
@@ -113,14 +115,13 @@ def test_cli_add_says_nothing_for_a_home_address(capsys, monkeypatch):
 
 
 def test_cli_add_saves_a_name_that_does_not_resolve_and_says_so(capsys, monkeypatch):
-    """The printer may just be off: it's kept as typed and the server keeps trying."""
+    """The Hub's own route refuses a name this server cannot resolve, and saves nothing."""
     def nope(*a, **kw):
         raise socket.gaierror("no such host")
     monkeypatch.setattr(socket, "getaddrinfo", nope)
-    monkeypatch.setattr(klipper_cli, "_describe", lambda p, added=None: 0)
-    assert klipper_cli.main(["add", "Off", "off.local"]) == 0
+    assert klipper_cli.main(["add", "Off", "off.local"]) == 2
     assert "off.local did not answer" in " ".join(capsys.readouterr().err.split())
-    assert registry.load()["off"].host == "off.local"
+    assert registry.load() == {}
 
 
 def test_cli_add_refuses_what_cannot_be_an_address(capsys):
@@ -137,7 +138,7 @@ def test_cli_add_keeps_an_ipv6_address_without_its_brackets(monkeypatch):
 
 def test_cli_api_key_not_echoed(capsys, monkeypatch):
     registry.add_klipper("P", "h")
-    monkeypatch.setattr(klipper_cli.secret_input, "ask", lambda prompt="": "s3cretkey")
+    monkeypatch.setattr(cli.secret_input, "ask", lambda prompt="": "s3cretkey")
     assert klipper_cli.main(["api-key", "p"]) == 0
     assert "s3cretkey" not in capsys.readouterr().out
     assert registry.load()["p"].api_key == "s3cretkey"
@@ -152,8 +153,8 @@ def test_cli_set_lane_data(capsys):
 
 def test_cli_scan(moonraker, capsys, monkeypatch):
     monkeypatch.setattr(discovery, "DEFAULT_PORT", moonraker.port)
-    monkeypatch.setattr(discovery.scan, "__defaults__", (None, 64, 5.0))   # what the command does, not how fast a crowd lets it
-    assert klipper_cli.main(["scan", "--subnet", "127.0.0.1/32"]) == 0
+    monkeypatch.setattr(discovery, "scan", lambda net, **kw: [("127.0.0.1", moonraker.port)])      # the Hub scans private networks only
+    assert klipper_cli.main(["scan", "--subnet", "192.0.2.0/24"]) == 0
     assert "127.0.0.1" in capsys.readouterr().out
     assert any(p.host == "127.0.0.1" and not p.configured for p in registry.load().values())
 
@@ -169,9 +170,9 @@ def test_cli_scan_shows_a_printer_added_by_name_as_that_printer(capsys, monkeypa
     mine = _voron_by_name(monkeypatch)
     assert klipper_cli.main(["scan", "--subnet", "10.1.2.0/24"]) == 0
     out = capsys.readouterr().out
-    assert "192.0.2.20:7125  (added already as Voron)" in out
-    assert "add NAME 192.0.2.20" not in out and "add NAME 192.0.2.21" in out
-    assert "192.0.2.21:7125  (add it: filament-kit klipper add NAME 192.0.2.21)\n" in out     # printed plain, no backticks
+    found = next(p.serial for p in registry.load().values() if p.host == "192.0.2.21")
+    assert "Found on 10.1.2.0/24: 192.0.2.20:7125 (added as Voron)\n" in out
+    assert f"Found on 10.1.2.0/24: 192.0.2.21:7125 (add it: sudo filament-kit printer use {found})" in " ".join(out.split())
     assert "`" not in out
     assert {p.host for p in registry.load().values()} == {mine.host, "192.0.2.21"}
 
@@ -179,7 +180,7 @@ def test_cli_scan_shows_a_printer_added_by_name_as_that_printer(capsys, monkeypa
 def test_cli_add_refuses_the_address_of_a_printer_added_by_name(capsys, monkeypatch):
     _voron_by_name(monkeypatch)
     assert klipper_cli.main(["add", "Again", "192.0.2.20"]) == 1
-    assert "already added as Voron" in capsys.readouterr().err
+    assert "Voron is already at 192.0.2.20:7125" in capsys.readouterr().err        # the Hub's words
     assert len(registry.load()) == 1
 
 
@@ -187,7 +188,7 @@ def test_cli_add_refuses_an_address_a_found_entry_holds_for_a_printer_added_by_n
     _voron_by_name(monkeypatch)
     registry.detected_klipper("192.0.2.20", 7125, lookups=False)
     assert klipper_cli.main(["add", "Again", "192.0.2.20"]) == 1
-    assert "already added as Voron" in capsys.readouterr().err
+    assert "Voron is already at 192.0.2.20:7125" in capsys.readouterr().err
     assert sum(p.configured for p in registry.load().values()) == 1
 
 
@@ -220,43 +221,45 @@ def test_add_takes_a_name_it_cannot_resolve_as_typed(monkeypatch):
 # ---------- detect(p) (the web console's data; console-printers stage) and the CLI's output, pinned ----------
 
 def _detect_cli(moonraker, capsys, *argv):
-    rc = klipper_cli.main(list(argv))
+    rc = cli.main(list(argv))
     out, err = capsys.readouterr()
-    return rc, out.replace(str(moonraker.port), "PORT"), err
+    return rc, out.replace(str(moonraker.port), "PORT"), err.replace(str(moonraker.port), "PORT")
 
 
-def test_cli_detect_output_is_unchanged(moonraker, capsys):
-    """The exact text `klipper add` / `detect` printed before detect(p) existed (snapshot, 2026-11-08)."""
+def test_cli_detect_output_is_06_9_2(moonraker, capsys):
+    """`printer add --klipper` and `printer detect` (the old `klipper add` / `detect` do the same): 06 9.2's lines."""
     moonraker.objects = json.loads((DATA / "SV08-MAX" / "objects.json").read_text())["objects"]
     moonraker.hostname = "SV08MAX"
-    assert _detect_cli(moonraker, capsys, "add", "SV08 MAX", moonraker.host, "--port", str(moonraker.port)) == (
-        0, "added SV08 MAX as sv08-max (127.0.0.1:PORT)\n  model: Sovol SV08 MAX (SOVOL-SV08-MAX)\n"
-           "  filament system: single; slots: T0\n    object gcode_macro DEMON_START\n    hostname SV08MAX*\n", "")
+    assert _detect_cli(moonraker, capsys, "printer", "add", "--klipper", "--name", "SV08 MAX", "--address", moonraker.host,
+                       "--port", str(moonraker.port)) == (
+        0, "Added SV08 MAX as sv08-max (127.0.0.1:PORT).\n  Model: Sovol SV08 MAX\n  Slots: T0\n"
+           "    object gcode_macro DEMON_START\n    hostname SV08MAX*\n", "")
     moonraker.objects = ["print_stats", "gcode_macro FK_UNVERIFIED_M1D"]
-    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (
-        0, "SV08 MAX (127.0.0.1:PORT)\n  model: Sovol M1D (sovol-m1d) - unverified entry\n"
-           "  filament system: tool-macros; slots: L, C1, C2, C3, C4, C5, C6\n"
-           "    object gcode_macro FK_UNVERIFIED_M1D\n", "")
+    rc, out, err = _detect_cli(moonraker, capsys, "printer", "detect", "sv08")      # Moonraker's Spoolman is a Note
+    assert (rc, out) == (0, "SV08 MAX: Sovol M1D (not verified). Slots: L, C1, C2, C3, C4, C5, C6.\n"
+                            "    object gcode_macro FK_UNVERIFIED_M1D\n")
+    assert err.startswith("Note: cannot tell whether Moonraker's Spoolman")
     moonraker.objects = ["print_stats", "AFC", "AFC_stepper lane1"]
-    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (
-        0, "SV08 MAX (127.0.0.1:PORT)\n  model: Klipper printer (generic)\n  filament system: afc; slots: from the "
-           "printer\n    no model entry matched: generic Klipper printer\n    filament system afc (object AFC)\n", "")
+    rc, out, err = _detect_cli(moonraker, capsys, "printer", "detect", "sv08-max")
+    assert (rc, out) == (0, "SV08 MAX: Klipper printer. Slots: from the printer.\n"
+                            "    no model entry matched: generic Klipper printer\n    filament system afc (object AFC)\n")
+    assert _detect_cli(moonraker, capsys, "klipper", "detect", "sv08-max")[1].startswith("SV08 MAX: Klipper printer.")
     moonraker.api_key = "k"
-    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (       # the long line wraps at the width
-        0, "SV08 MAX (127.0.0.1:PORT)\n  127.0.0.1:PORT wants a Moonraker API key: run\n"
-           "       `filament-kit klipper api-key sv08-max`\n", "")
+    rc, out, err = _detect_cli(moonraker, capsys, "printer", "detect", "sv08-max")
+    assert (rc, out) == (1, "")
+    assert " ".join(err.split()) == ("Error: 127.0.0.1:PORT wants a Moonraker API key: run `filament-kit klipper "
+                                     "api-key sv08-max`")
 
 
-def test_cli_detect_offline_output_is_unchanged(capsys, monkeypatch):
-    # the OS's connection-error text in the brackets differs per platform (CI's is longer), so give the line room
-    # and check its words exactly; wrapping itself is tested in test_cli_output.py
+def test_cli_detect_offline_is_an_error(capsys, monkeypatch):
+    # the OS's connection-error text differs per platform (CI's is longer), so give the line room
     monkeypatch.setenv("COLUMNS", "400")
     registry.add_klipper("Gone", "127.0.0.1", 9)
-    rc = klipper_cli.main(["detect", "gone"])
-    out = capsys.readouterr().out
-    assert rc == 0
-    assert re.fullmatch(r"Gone \(127\.0\.0\.1:9\)\n  Moonraker at 127\.0\.0\.1:9 is not answering \([^\n]*\); the"
-                        r" server keeps trying once it runs\n", out), out
+    rc = cli.main(["printer", "detect", "gone"])
+    out, err = capsys.readouterr()
+    assert (rc, out) == (1, "")
+    assert "Error: Moonraker at 127.0.0.1:9 is not answering (" in err
+    assert "the server keeps trying once it runs" in " ".join(err.split())
 
 
 def test_detect_returns_what_the_cli_prints(moonraker):
@@ -381,15 +384,15 @@ def test_detect_without_spoolman_asks_nothing_about_it(moonraker, monkeypatch):
 
 @pytest.mark.parametrize("answer", ODD_CONFIGS)
 def test_cli_add_and_detect_do_not_care_about_the_spoolman(moonraker, capsys, answer):
-    """`klipper add` / `detect` print the model only; a broken config.json or /server/config must not stop them."""
+    """`klipper add` / `detect` print the model only; a bad Spoolman setting in config.json or an odd /server/config must not stop them."""
     moonraker.server_config = answer
-    (config.paths().etc / "config.json").write_text("{not json", encoding="utf-8")
+    config.save({**config.load(), "spoolman_url": ["not", "a", "url"]})
     moonraker.objects = ["print_stats", "AFC", "AFC_stepper lane1"]
-    want = "  model: Klipper printer (generic)\n  filament system: afc; slots: from the printer\n" \
-           "    no model entry matched: generic Klipper printer\n    filament system afc (object AFC)\n"
-    assert _detect_cli(moonraker, capsys, "add", "Box", moonraker.host, "--port", str(moonraker.port)) == (
-        0, f"added Box as box (127.0.0.1:PORT)\n{want}", "")
-    assert _detect_cli(moonraker, capsys, "detect", "box") == (0, f"Box (127.0.0.1:PORT)\n{want}", "")
+    want = "    no model entry matched: generic Klipper printer\n    filament system afc (object AFC)\n"
+    assert _detect_cli(moonraker, capsys, "klipper", "add", "Box", moonraker.host, "--port", str(moonraker.port)) == (
+        0, f"Added Box as box (127.0.0.1:PORT).\n  Model: Klipper printer\n  Slots: from the printer\n{want}", "")
+    assert _detect_cli(moonraker, capsys, "printer", "detect", "box") == (
+        0, f"Box: Klipper printer. Slots: from the printer.\n{want}", "")
 
 
 def test_detect_problems(moonraker):
@@ -406,9 +409,11 @@ def test_detect_problems(moonraker):
     assert d["model_key"] is None and d["spoolman"] is None
 
 
-def test_klipper_add_cli_says_it_is_already_added(capsys):
+def test_klipper_add_cli_says_it_is_already_added(capsys, monkeypatch):
     registry.add_klipper("Voron", "voron.home.arpa")
     args = type("A", (), {"klipper_cmd": "add", "name": "Again", "host": "voron.home.arpa", "port": 7125})
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: {"192.0.2.20"})
+    monkeypatch.setattr(hostaddr, "_lookup", lambda *a, **kw: [("x",)])
     assert klipper_cli.run(args) == 1
     assert "Voron" in capsys.readouterr().err
 

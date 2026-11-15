@@ -49,6 +49,25 @@ BAD_API_KEY = "a Moonraker API key has no spaces and at most 64 characters"
 OFFLINE = "the printer is offline; check that it is on and on the network"
 
 
+def scan_net(subnet):
+    """The network `printers/scan` looks at (an own or a private IPv4 one, at most a /24), or Refused."""
+    from ..setup_page import Refused
+    if not subnet:
+        net = discovery.own_subnet()
+        if net is None:
+            raise Refused(400, "can't tell this Hub's network; give a subnet such as 192.168.1.0/24", field="subnet")
+        return net
+    try:
+        net = ipaddress.ip_network(str(subnet).strip(), strict=False)
+    except ValueError:
+        raise Refused(400, "give a subnet such as 192.168.1.0/24", field="subnet") from None
+    if net.version != 4 or not net.is_private or net.is_loopback or net.is_link_local or net.is_multicast:
+        raise Refused(400, "scan your own network: a private IPv4 subnet such as 192.168.1.0/24", field="subnet") from None
+    if net.prefixlen < 24:
+        raise Refused(400, "scan at most a /24 (256 addresses)", field="subnet")
+    return net
+
+
 def printer_states(page) -> list[dict]:
     """One entry per listed printer: `serial`, `family`, `state` (as `G state` gives it), `job` (None while the Hub has
     no status: the printer's `gcode_state`, `name`, `percent`, `remaining_min`, `eta`, `layer`, `total_layers`) and
@@ -160,24 +179,8 @@ def routes(page) -> list[tuple]:
         page._manager("klipper")
         subnet = body.get("subnet")
 
-        def net_of():
-            if not subnet:
-                net = discovery.own_subnet()
-                if net is None:
-                    raise Refused(400, "can't tell this Hub's network; give a subnet such as 192.168.1.0/24", field="subnet")
-                return net
-            try:
-                net = ipaddress.ip_network(str(subnet).strip(), strict=False)
-            except ValueError:
-                raise Refused(400, "give a subnet such as 192.168.1.0/24", field="subnet") from None
-            if net.version != 4 or not net.is_private or net.is_loopback or net.is_link_local or net.is_multicast:
-                raise Refused(400, "scan your own network: a private IPv4 subnet such as 192.168.1.0/24", field="subnet") from None
-            if net.prefixlen < 24:
-                raise Refused(400, "scan at most a /24 (256 addresses)", field="subnet")
-            return net
-
         def run() -> dict:
-            net = net_of()
+            net = scan_net(subnet)
             if not scan_lock.acquire(blocking=False):
                 raise Refused(429, "a scan is running")
             try:

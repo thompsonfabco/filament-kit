@@ -206,9 +206,12 @@ def test_exit_codes_of_06_6_7(cfg, capsys, monkeypatch):
                    "Fix: run it with sudo:\n"
                    "     sudo filament-kit backup create\n")
     monkeypatch.setattr(cli, "_server_api", lambda: None)
-    p = type("P", (), dict(configured=True, family="bambu"))()
+    c = config.load()                                                     # printers are listed only with their module on
+    c["modules"]["printers"] = True
+    config.save(c)
+    p = cli.registry.Printer("S1", "Shop", "X1C", "192.0.2.40", "12345678", True)
     monkeypatch.setattr(cli.registry, "load", lambda: {"S1": p})
-    rc, out, err = run(capsys, "printer", "map", "S1", "--manual")
+    rc, out, err = run(capsys, "printer", "map", "S1", "--by-loading")
     assert (rc, out) == (4, "")                                           # the Hub is not running
     assert "Fix: sudo systemctl start filament-kit" in err
 
