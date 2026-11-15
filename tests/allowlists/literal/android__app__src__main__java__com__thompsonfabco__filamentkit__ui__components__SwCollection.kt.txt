@@ -1,0 +1,1 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SwCollection.kt | 288.dp | 1 | the card grid column of 02 6.1, minmax(18rem, 1fr) at 16 dp to the rem; no size token holds it

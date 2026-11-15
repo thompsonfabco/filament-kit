@@ -38,6 +38,7 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
@@ -396,12 +397,7 @@ fun PickSpoolScreen(
             )
         }
         if (s.results.isNotEmpty()) {
-            PrinterPanel(title = null, padded = false) {
-                s.results.forEachIndexed { i, spool ->
-                    if (i > 0) PanelDivider()
-                    SpoolRow(spool) { viewModel.pick(spool) }
-                }
-            }
+            SwCollection(s.results) { _, spool -> SpoolRow(spool) { viewModel.pick(spool) } }
         }
     }
     // leaving the preview by leaving the screen hands the held tag on to where the screen went back to

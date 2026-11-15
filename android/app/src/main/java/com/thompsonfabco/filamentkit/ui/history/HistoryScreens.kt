@@ -1,8 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.history
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,10 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -46,6 +41,7 @@ import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwLazyCollection
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
@@ -134,19 +130,8 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (
                             text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
                         )
                     } else {
-                        Box(
-                            Modifier.weight(1f, fill = false).fillMaxWidth()
-                                .border(BorderStroke(SpoolwardenTheme.sizes.hairline, SpoolwardenTheme.colors.border), SpoolwardenTheme.shapes.r)
-                                .clip(SpoolwardenTheme.shapes.r).background(SpoolwardenTheme.colors.surface),
-                        ) {
-                            LazyColumn {
-                                items(h.records, key = { it.id }) { r ->
-                                    RecordRow(r, vm) { onOpen(r.id) }
-                                    if (r !== h.records.last()) {
-                                        HorizontalDivider(thickness = SpoolwardenTheme.sizes.hairline, color = SpoolwardenTheme.colors.border)
-                                    }
-                                }
-                            }
+                        SwLazyCollection(h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false)) { r ->
+                            RecordRow(r, vm) { onOpen(r.id) }
                         }
                     }
                 }

@@ -2,16 +2,23 @@ package com.thompsonfabco.filamentkit.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
+import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
@@ -27,12 +34,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.nav.Tab
+import com.thompsonfabco.filamentkit.ui.theme.LocalNavStyle
+import com.thompsonfabco.filamentkit.ui.theme.NavStyle
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 
 /**
  * The shell around the main graph (05-android-app 2.1, 2.3): the bottom bar on a phone, the rail on a wider window,
- * the same five [Tab]s in both. [selected] is the current destination, null while a screen outside the five is on top
+ * the same five [Tab]s in both. The `nav` profile of the look (02-components 2.3) changes only the wide form: `Sidebar`
+ * (Workbench) is the rail on a tablet and a permanent drawer `sideW` wide on expanded width. [selected] is the current destination, null while a screen outside the five is on top
  * (the bar is then [visible] = false). A dot on Settings tells that an app update is ready ([settingsUpdate]).
  *
  * The bar and the rail keep Material's own geometry (80 dp high, 80 dp wide at least); [content] gets a 1 dp
@@ -49,12 +59,8 @@ internal fun SwNav(
 ) {
     val colors = SpoolwardenTheme.colors
     val sizes = SpoolwardenTheme.sizes
-    val rail = SpoolwardenTheme.window != WindowClass.Phone
-    val layout = when {
-        !visible -> NavigationSuiteType.None
-        rail -> NavigationSuiteType.NavigationRail
-        else -> NavigationSuiteType.NavigationBar
-    }
+    val window = SpoolwardenTheme.window
+    val layout = navLayout(visible, window, LocalNavStyle.current)
     val labels = Tab.entries.map { stringResource(it.label) }
     val updateName = stringResource(R.string.nav_settings_update)
     val barColors = NavigationBarItemDefaults.colors(
@@ -65,7 +71,13 @@ internal fun SwNav(
         selectedIconColor = colors.accentText, selectedTextColor = colors.accentText, indicatorColor = colors.accentSoft,
         unselectedIconColor = colors.muted, unselectedTextColor = colors.muted,
     )
-    val dotSize = SpoolwardenTheme.space.s2
+    val drawerColors = NavigationDrawerItemDefaults.colors(
+        selectedContainerColor = colors.accentSoft, unselectedContainerColor = Color.Transparent,
+        selectedIconColor = colors.accentText, selectedTextColor = colors.accentText,
+        unselectedIconColor = colors.muted, unselectedTextColor = colors.text,
+    )
+    val space = SpoolwardenTheme.space
+    val dotSize = space.s2
     val labelWeight = MaterialTheme.typography.titleMedium.fontWeight
     val labelStyle = MaterialTheme.typography.labelSmall
     // The icon, with the update dot on Settings; the item carries the name "Settings, update available".
@@ -112,6 +124,38 @@ internal fun SwNav(
                         )
                     }
                 }
+                NavigationSuiteType.NavigationDrawer -> PermanentDrawerSheet(
+                    Modifier.width(sizes.sideW),
+                    drawerContainerColor = colors.surface,
+                    drawerContentColor = colors.muted,
+                ) {
+                    SwIcon(
+                        R.drawable.sw_ic_spoolwarden, null, size = SwIconSize.Large, tint = colors.accentText,
+                        modifier = Modifier.padding(space.s4),
+                    )
+                    Tab.entries.forEachIndexed { i, tab ->
+                        val current = tab == selected
+                        NavigationDrawerItem(
+                            label = { Text(labels[i], style = MaterialTheme.typography.labelLarge, fontWeight = if (current) labelWeight else null) },
+                            selected = current,
+                            onClick = { onSelect(tab) },
+                            // `--ctl` high (02-components 2.3), in a slot of the 48 dp a touch needs
+                            modifier = Modifier.named(tab).padding(NavigationDrawerItemDefaults.ItemPadding).minimumInteractiveComponentSize()
+                                .height(sizes.control).drawWithContent {
+                                drawContent()
+                                // the current item: the same mark as the rail's, at the outer edge
+                                if (current) {
+                                    val width = sizes.navMark.toPx()
+                                    val x = if (layoutDirection == LayoutDirection.Ltr) 0f else size.width - width
+                                    drawRect(colors.accentText, Offset(x, 0f), Size(width, size.height))
+                                }
+                            },
+                            icon = { Icon(tab) },
+                            shape = SpoolwardenTheme.shapes.r,
+                            colors = drawerColors,
+                        )
+                    }
+                }
                 NavigationSuiteType.NavigationBar -> NavigationBar(containerColor = colors.surface, contentColor = colors.muted) {
                     Tab.entries.forEachIndexed { i, tab ->
                         val current = tab == selected
@@ -135,7 +179,15 @@ internal fun SwNav(
     }
 }
 
-/** The hairline between the content and the bar below it, or the rail before it. */
+/** The bar on a phone; wider, the rail, or the drawer of `Sidebar` on expanded width; none while [visible] is false. */
+internal fun navLayout(visible: Boolean, window: WindowClass, style: NavStyle): NavigationSuiteType = when {
+    !visible -> NavigationSuiteType.None
+    window == WindowClass.Phone -> NavigationSuiteType.NavigationBar
+    style == NavStyle.Sidebar && window == WindowClass.Desktop -> NavigationSuiteType.NavigationDrawer
+    else -> NavigationSuiteType.NavigationRail
+}
+
+/** The hairline between the content and the bar below it, or the rail or drawer before it. */
 private fun Modifier.hairlineToward(layout: NavigationSuiteType, colour: Color, thickness: Float): Modifier =
     if (layout == NavigationSuiteType.None) {
         this
@@ -143,7 +195,7 @@ private fun Modifier.hairlineToward(layout: NavigationSuiteType, colour: Color, 
         drawWithContent {
             drawContent()
             val line = thickness * density
-            if (layout == NavigationSuiteType.NavigationRail) {
+            if (layout == NavigationSuiteType.NavigationRail || layout == NavigationSuiteType.NavigationDrawer) {
                 val x = if (layoutDirection == LayoutDirection.Ltr) 0f else size.width - line
                 drawRect(colour, Offset(x, 0f), Size(line, size.height))
             } else {
