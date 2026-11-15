@@ -16,6 +16,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,7 +43,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +70,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
+import com.thompsonfabco.filamentkit.ui.history.PhotoViewerDialog
 import com.thompsonfabco.filamentkit.ui.openAppSettings
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -100,6 +104,20 @@ fun CaptureScreen(
     val space = SpoolwardenTheme.space
     val wide = SpoolwardenTheme.window != WindowClass.Phone
     val showCamera = state.photos.size < AddViewModel.MAX_PHOTOS && !reading
+    // the viewer (10.5) is a full-screen layer over this screen: Back closes it and the draft stays as it was. It is
+    // kept here, above the layout branches and by the photo's file (the shown photo, followed as it is swiped to), so
+    // a window-class change or an Activity recreation keeps it open on the same photo, and removing that photo closes
+    // it instead of showing the photo that moved into its slot
+    var viewing by rememberSaveable { mutableStateOf<String?>(null) }
+    val paths = state.photos.map { it.path }
+    val shown = viewing
+    LaunchedEffect(shown, paths) { if (shown != null && shown !in paths) viewing = null }
+    if (shown != null && shown in paths) {
+        PhotoViewerDialog(paths, shown, { viewing = it }, { viewing = null }) { path ->
+            withContext(Dispatchers.IO) { runCatching { File(path).readBytes() }.getOrNull() }
+        }
+    }
+    val onOpen = { i: Int -> viewing = state.photos[i].path }
     AddPage(
         AddStep.Photos, state, modifier,
         bar = {
@@ -142,19 +160,19 @@ fun CaptureScreen(
                 Column(Modifier.weight(1f).widthIn(max = SpoolwardenTheme.sizes.previewMax)) {
                     camera(state.photos.size, vm::addPhoto)
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(space.s3)) { Controls(state, vm) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(space.s3)) { Controls(state, vm, onOpen) }
             }
         } else {
             if (showCamera) camera(state.photos.size, vm::addPhoto)
-            Controls(state, vm)
+            Controls(state, vm, onOpen)
         }
     }
 }
 
 /** The photo strip, the tag row, "Still sealed", the weight and the note. */
 @Composable
-private fun Controls(state: AddUiState, vm: AddViewModel) {
-    PhotoStrip(state.photos, onRemove = vm::removePhoto)
+private fun Controls(state: AddUiState, vm: AddViewModel, onOpen: (Int) -> Unit) {
+    PhotoStrip(state.photos, onOpen = onOpen, onRemove = vm::removePhoto)
     TagRow(state.tag, onClear = vm::clearTag)
     SealedRow(state.sealed, vm::setSealed)
     WeightField(state, vm)
@@ -246,13 +264,20 @@ private fun WeightField(state: AddUiState, vm: AddViewModel) {
 
 /** Square thumbnails with a close button in the corner (48 dp to touch); the photos are numbered for TalkBack. */
 @Composable
-private fun PhotoStrip(photos: List<File>, onRemove: (Int) -> Unit) {
+private fun PhotoStrip(photos: List<File>, onOpen: (Int) -> Unit, onRemove: (Int) -> Unit) {
     if (photos.isEmpty()) return
     val side = SpoolwardenTheme.sizes.thumb
     LazyRow(horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2)) {
         itemsIndexed(photos, key = { _, f -> f.path }) { i, file ->
+            val description = stringResource(R.string.a11y_photo_draft, i + 1)
             Box(Modifier.size(side)) {
-                Thumbnail(file, Modifier.size(side), stringResource(R.string.a11y_photo_draft, i + 1))
+                // the button is this box, which stays the same while the picture loads: a tap that lands as the
+                // decoded picture replaces the placeholder is not lost
+                Box(
+                    Modifier.size(side).clip(SpoolwardenTheme.shapes.r)
+                        .clickable(role = Role.Button) { onOpen(i) }
+                        .semantics { contentDescription = description },
+                ) { Thumbnail(file, Modifier.size(side)) }
                 SwIconButton(
                     R.drawable.sw_ic_close, stringResource(R.string.add_photo_remove, (i + 1).toString(), photos.size), { onRemove(i) },
                     Modifier.align(Alignment.TopEnd),
@@ -262,18 +287,23 @@ private fun PhotoStrip(photos: List<File>, onRemove: (Int) -> Unit) {
     }
 }
 
+/** How a thumbnail is decoded; a test replaces it to control when the picture arrives. */
+internal val LocalThumbnailLoader = staticCompositionLocalOf<suspend (File) -> ImageBitmap?> {
+    { file -> withContext(Dispatchers.IO) { decodeThumbnail(file, 256) } }
+}
+
+/** The picture only: the button around it (see [PhotoStrip]) carries the description. */
 @Composable
-private fun Thumbnail(file: File, modifier: Modifier, description: String) {
-    val bitmap by produceState<ImageBitmap?>(null, file) {
-        value = withContext(Dispatchers.IO) { decodeThumbnail(file, 256) }
-    }
+private fun Thumbnail(file: File, modifier: Modifier) {
+    val loader = LocalThumbnailLoader.current
+    val bitmap by produceState<ImageBitmap?>(null, file) { value = loader(file) }
     val colors = SpoolwardenTheme.colors
     val frame = modifier.clip(SpoolwardenTheme.shapes.r).border(SpoolwardenTheme.sizes.hairline, colors.border, SpoolwardenTheme.shapes.r)
     val b = bitmap
     if (b == null) {
-        Box(frame.background(colors.surface2).semantics { contentDescription = description })
+        Box(frame.background(colors.surface2))
     } else {
-        Image(b, contentDescription = description, modifier = frame, contentScale = ContentScale.Crop)
+        Image(b, contentDescription = null, modifier = frame, contentScale = ContentScale.Crop)
     }
 }
 
