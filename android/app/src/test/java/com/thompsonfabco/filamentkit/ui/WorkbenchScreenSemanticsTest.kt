@@ -17,3 +17,19 @@ import org.robolectric.annotation.Config
 class WorkbenchScreenSemanticsTest : ScreenSemanticsTest() {
     override val look: Look = Look.Workbench
 }
+
+/** The same audit on a tablet window (600 to 839 dp wide), where the Workbench lays cards two to a line. */
+@OptIn(ExperimentalMaterial3Api::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w700dp-h8000dp")
+class WorkbenchTabletScreenSemanticsTest : ScreenSemanticsTest() {
+    override val look: Look = Look.Workbench
+}
+
+/** The same audit on expanded width (840 dp and wider), the sidebar's window. */
+@OptIn(ExperimentalMaterial3Api::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w1000dp-h8000dp")
+class WorkbenchExpandedScreenSemanticsTest : ScreenSemanticsTest() {
+    override val look: Look = Look.Workbench
+}

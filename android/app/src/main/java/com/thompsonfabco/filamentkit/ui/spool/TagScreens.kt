@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,6 +32,7 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.parseWeight
@@ -151,11 +151,8 @@ fun LinkFindScreen(
         ) {
             // the rows are off while the weight is wrong; the reason is above them
             if (ui.weightInvalid) Text(stringResource(R.string.field_error_grams), style = MaterialTheme.typography.bodySmall, color = colors.muted)
-            SpoolPanel {
-                ui.results.forEachIndexed { i, spool ->
-                    if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                    SpoolRow(spool, enabled = !ui.weightInvalid, onClick = { onPick(spool, ui.weight.trim().ifEmpty { null }) })
-                }
+            SwCollection(ui.results, inset = SpoolwardenTheme.space.s4, surface = true) { _, spool ->
+                SpoolRow(spool, enabled = !ui.weightInvalid, onClick = { onPick(spool, ui.weight.trim().ifEmpty { null }) })
             }
         }
     }

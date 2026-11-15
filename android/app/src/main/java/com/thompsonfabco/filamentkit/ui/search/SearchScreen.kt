@@ -248,7 +248,7 @@ fun SearchScreen(
                     offline = !online,
                     loadedSecondsAgo = secondsSince(ui.loadedAt),
                 ) {
-                    SwCollection(ui.results, inset = SpoolwardenTheme.space.s4) { _, spool ->
+                    SwCollection(ui.results, inset = SpoolwardenTheme.space.s4, surface = true) { _, spool ->
                         SpoolRow(spool, onClick = { onOpenSpool(spool) })
                     }
                 }

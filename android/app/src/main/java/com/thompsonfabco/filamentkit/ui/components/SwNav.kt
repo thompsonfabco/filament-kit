@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +18,7 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
@@ -72,7 +74,7 @@ internal fun SwNav(
     val drawerColors = NavigationDrawerItemDefaults.colors(
         selectedContainerColor = colors.accentSoft, unselectedContainerColor = Color.Transparent,
         selectedIconColor = colors.accentText, selectedTextColor = colors.accentText,
-        unselectedIconColor = colors.muted, unselectedTextColor = colors.muted,
+        unselectedIconColor = colors.muted, unselectedTextColor = colors.text,
     )
     val space = SpoolwardenTheme.space
     val dotSize = space.s2
@@ -134,10 +136,12 @@ internal fun SwNav(
                     Tab.entries.forEachIndexed { i, tab ->
                         val current = tab == selected
                         NavigationDrawerItem(
-                            label = { Text(labels[i], fontWeight = if (current) labelWeight else null) },
+                            label = { Text(labels[i], style = MaterialTheme.typography.labelLarge, fontWeight = if (current) labelWeight else null) },
                             selected = current,
                             onClick = { onSelect(tab) },
-                            modifier = Modifier.named(tab).padding(NavigationDrawerItemDefaults.ItemPadding).drawWithContent {
+                            // `--ctl` high (02-components 2.3), in a slot of the 48 dp a touch needs
+                            modifier = Modifier.named(tab).padding(NavigationDrawerItemDefaults.ItemPadding).minimumInteractiveComponentSize()
+                                .height(sizes.control).drawWithContent {
                                 drawContent()
                                 // the current item: the same mark as the rail's, at the outer edge
                                 if (current) {

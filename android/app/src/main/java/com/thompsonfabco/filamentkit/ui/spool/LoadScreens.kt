@@ -41,6 +41,7 @@ import com.thompsonfabco.filamentkit.ui.components.StatusLabel
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
@@ -132,25 +133,22 @@ fun LoadPrintersScreen(
                 SwSkeletonRows(SKELETON_ROWS)
             },
         ) {
-            SpoolPanel {
-                printers.orEmpty().forEachIndexed { i, p ->
-                    if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                    val can = canTakeLoad(p)
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(enabled = can) { pick(p, false) },
-                        horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f).padding(vertical = space.s2)) {
-                            Text(p.name, style = MaterialTheme.typography.bodyLarge, color = if (can) colors.text else colors.muted)
-                            StatusLabel(statusOf(p), small = true)
-                            p.shownModel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.muted) }
-                            // the reason it is off; Offline is said by its label
-                            if (!can && p.state != Printer.STATE_OFFLINE) {
-                                fixText(p.state)?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = colors.muted) }
-                            }
+            SwCollection(printers.orEmpty(), inset = space.s4, surface = true) { _, p ->
+                val can = canTakeLoad(p)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(enabled = can) { pick(p, false) },
+                    horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f).padding(vertical = space.s2)) {
+                        Text(p.name, style = MaterialTheme.typography.bodyLarge, color = if (can) colors.text else colors.muted)
+                        StatusLabel(statusOf(p), small = true)
+                        p.shownModel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.muted) }
+                        // the reason it is off; Offline is said by its label
+                        if (!can && p.state != Printer.STATE_OFFLINE) {
+                            fixText(p.state)?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = colors.muted) }
                         }
-                        if (can) SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
                     }
+                    if (can) SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
                 }
             }
         }
