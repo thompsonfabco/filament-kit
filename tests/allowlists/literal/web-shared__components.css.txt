@@ -1,0 +1,1 @@
+web-shared/components.css | 18rem | 1 | the card minimum width of the Workbench cards, in rem so cards grow with the text size (02 6.1)
