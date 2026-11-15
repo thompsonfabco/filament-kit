@@ -124,9 +124,13 @@ def test_the_terminal_flow_confirms_skips_and_answers_the_share_question(env, cl
                         "offer": "n"})
     assert cli._manual_map_via_server(api, SERIAL, lines) == 0
     out = capsys.readouterr().out
-    assert "Load A1 to the nozzle, then wait. (s skips, q stops)" in out
-    assert "Is that the A1 you loaded?" in out and "Type y for yes" in out
-    assert "  A1: confirmed (A1)" in out and "  A2: confirmed (A2)" in out and "  A3: skipped" in out
+    assert out.startswith("Map by loading filament: Shop X1C\nLoad each slot to the nozzle when asked.")
+    # the Hub's own sentences as they come, and the one line the command line adds: the answers it takes
+    assert "Load A1 to the nozzle, then wait.\n  s skip A1 - q stop" in out
+    assert "The printer now reports A1 loaded. Is that the A1 you loaded?" in out
+    assert "  y yes - a slot (e.g. A1) I loaded that one - s skip A1 - q stop\nAnswer: " in out
+    assert "Stopped: 2 confirmed, 2 skipped, 1 not asked." in out
+    assert "  A1  + confirmed (A1)" in out and "  A2  + confirmed (A2)" in out and "  A3  o skipped" in out
     assert "Noted: this map is not shared." in out
     m = ams.load_map(SERIAL)
     assert (m.slots["A1"]["tray_id"], m.slots["A2"]["tray_id"]) == (0, 1) and m.by_user["A1"]["by"] == "user"
@@ -140,17 +144,18 @@ def test_a_printer_that_reports_no_load_gets_the_numbered_form(env, clock, capsy
     lines = Owner(api, {"A1": "3", "A2": "q", "offer": "n"})
     assert cli._manual_map_via_server(api, SERIAL, lines) == 0
     out = capsys.readouterr().out
-    assert "which slot is A1 in? (not checked by the printer)" in out and "    3) A3" in out
-    assert "  A1: entered by hand (A3)" in out
+    assert "Load A1, then pick the slot it is in from the list." in out and "\n  3  A3\n" in out
+    assert "  A1  * entered by hand (A3)" in out and "Stopped: 1 entered by hand" in out
     assert ams.load_map(SERIAL).by_user["A1"]["by"] == "user-unverified"
 
 
-def test_an_answer_that_means_nothing_is_said_and_nothing_is_sent():
+def test_an_answer_that_means_nothing_is_said_and_nothing_is_sent(capsys):
     v = {"open": True, "reports_loads": True, "dual_nozzle": True,
          "positions": [{"id": "A1", "label": "A1"}, {"id": "A2", "label": "A2"}],
          "step": {"position": {"id": "A1", "label": "A1"}, "say": "Load A1",
                   "ask": "The printer now reports A2 loaded. Is that the A1 you loaded?",
                   "seen": {"reported": {"ams_id": 0, "tray_id": 1}, "settled": True, "nozzle_reported": False}}}
+    assert cli._manual_prompt(v)[1] is True and "y right or y left yes" in cli._manual_prompt(v)[0][1]
     assert cli._manual_answer(v, "y") == "say which nozzle too: right or left"
     assert cli._manual_answer(v, "y left") == ("confirm", {"position": "A1", "reported": {"ams_id": 0, "tray_id": 1},
                                                           "nozzle": "left"})
@@ -158,9 +163,11 @@ def test_an_answer_that_means_nothing_is_said_and_nothing_is_sent():
     assert cli._manual_answer(v, "a2 right")[1]["position"] == "A2"
     assert cli._manual_answer(v, "s") == ("skip", {"position": "A1"})
     assert cli._manual_answer(v, "Q") == ("stop", {})
+    assert cli._manual_answer(v, "?").startswith("y yes, or the slot you loaded") and "q stops" in cli._manual_answer(v, "?")
     v["step"]["ask"] = None
     v["step"]["seen"] = None
     assert cli._manual_answer(v, "y").startswith("the printer has not reported a new load yet")
+    assert cli._manual_prompt(v) == (["Load A1", "  s skip A1 - q stop"], False)
 
 
 def test_no_terminal_input_stops_the_session_rather_than_waiting(env, clock):

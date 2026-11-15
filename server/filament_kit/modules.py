@@ -326,41 +326,6 @@ def menu_lines(cfg: dict, on=None) -> list[str]:
     return lines
 
 
-PRESET_KEYS = {"a": "all-in-one", "s": "server", "t": "station"}
-MENU_HELP = ("Type a number to switch a module on or off (several: 2 5 7). "
-             "a = all-in-one, s = server, t = station preset. Enter applies; q cancels.")
-
-
-def run_checklist(on, ask: Callable[[str], str | None], say: Callable[[str], None] = print) -> frozenset[str] | None:
-    """Interactive checklist. `ask(prompt)` returns a line (None = EOF = cancel). Returns the chosen set, or
-    None when cancelled."""
-    on = frozenset(on)
-    names = list(MODULES)
-    say(MENU_HELP)
-    while True:
-        for line in menu_lines({}, on):
-            say(line)
-        raw = ask("> ")
-        if raw is None or raw.strip().lower() in ("q", "quit", "0"):
-            return None
-        raw = raw.strip().lower()
-        if not raw:
-            return on
-        for tok in raw.replace(",", " ").split():
-            if tok in PRESET_KEYS:
-                on, notes = preset(on, PRESET_KEYS[tok])
-                say(f"Preset {PRESET_KEYS[tok]}.")
-            elif tok.isdigit() and 1 <= int(tok) <= len(names):
-                on, notes = toggle(on, names[int(tok) - 1])
-            elif tok in MODULES:
-                on, notes = toggle(on, tok)
-            else:
-                say(f"Unknown choice {tok!r}.")
-                continue
-            for note in notes:
-                say(note)
-
-
 def close_selection(names) -> tuple[frozenset[str], list[str]]:
     """A name list (e.g. --modules a,b) plus everything it needs; unknown names raise ModuleError."""
     names = [n.strip() for n in names if n.strip()]

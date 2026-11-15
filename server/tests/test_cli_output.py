@@ -395,9 +395,10 @@ def test_plain_mode_asks_for_the_numbered_menu_not_the_full_screen_one(monkeypat
     from filament_kit import menu_ui, output
     monkeypatch.setenv("TERM", "xterm")
     monkeypatch.setattr(menu_ui, "_stdin_tty", lambda: True)
-    assert menu_ui._usable() is True
+    monkeypatch.setattr(menu_ui, "_stdout_tty", lambda: True)
+    assert menu_ui.fullscreen_wanted() is True
     output.configure(plain=True)
-    assert menu_ui._usable() is False
+    assert menu_ui.fullscreen_wanted() is False
 
 
 # ---------- waits (06 6.6) ----------
@@ -742,7 +743,7 @@ def test_a_status_fix_that_is_a_command_is_not_split(monkeypatch):
     assert any("sudo systemctl start filament-kit" in x for x in lines), lines
 
 
-def test_the_groupmissing_fix_is_split_into_a_fix_line(capsys, monkeypatch):
+def test_the_groupmissing_fix_is_split_into_a_fix_line(capsys, monkeypatch, secret_terminal):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(cli, "write_passphrase", lambda p: (_ for _ in ()).throw(cli.GroupMissing("no group")))
     answers = iter(["a long enough passphrase", "a long enough passphrase"])

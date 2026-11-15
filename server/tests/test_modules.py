@@ -276,24 +276,6 @@ def test_preset_keeps_opt_ins():
     assert on == {"station"}
 
 
-def test_run_checklist_toggle_preset_apply():
-    from filament_kit import modules
-    answers = iter(["t", "1 2", "", ])
-    out = []
-    got = modules.run_checklist(frozenset(), lambda p: next(answers), out.append)
-    assert got == {"station", "spoolman", "server"}
-    assert any("Preset station" in o for o in out)
-
-
-def test_run_checklist_cancel_and_unknown():
-    from filament_kit import modules
-    answers = iter(["99", "q"])
-    out = []
-    assert modules.run_checklist(frozenset({"server"}), lambda p: next(answers), out.append) is None
-    assert any("Unknown choice" in o for o in out)
-    assert modules.run_checklist(frozenset(), lambda p: None, lambda s: None) is None
-
-
 def test_close_selection():
     from filament_kit import modules
     on, notes = modules.close_selection(["spoolman", "printers"])

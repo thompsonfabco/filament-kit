@@ -532,7 +532,8 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         cfg = config.load()
         cfg["server_name"] = name or default_name
         if _ask("Use the default storage locations? [Y/n]: ").strip()[:1] in ("n", "N"):
-            print("Make your changes, then 0 to go back.")
+            with output.shown():        # the context of the screen below
+                print("Make your changes, then q to go back.")
             cli._storage_menu(cfg)
         config.save(cfg)
 
@@ -544,7 +545,7 @@ def _server_setup(ex: _Exec, arg: str) -> None:
             cli.write_key(key)
             print("Key saved.")
         else:
-            print("No key entered. Add it later with: sudo filament-kit config  (option 4)")
+            print("No key entered. Add it later with: sudo filament-kit config  (Label Reader)")
         del key
     for f in (etc / "config.json", key_file):
         if f.exists():

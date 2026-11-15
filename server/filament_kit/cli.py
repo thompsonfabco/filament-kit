@@ -7,6 +7,7 @@ import contextlib
 import copy
 import datetime
 import http.client
+import io
 import json
 import os
 import shlex
@@ -479,6 +480,14 @@ def _ask(prompt: str) -> str | None:
     return line.rstrip("\r\n")
 
 
+def _secret(prompt: str) -> str:
+    """`secret_input.ask` inside the menus: the end of input ends the session (exit 5, 06 8.2)."""
+    try:
+        return secret_input.ask(prompt)
+    except EOFError:
+        raise _Ended from None
+
+
 def _ask_int(prompt: str, minimum: int) -> int | None:
     raw = _ask(prompt)
     if raw is None:
@@ -551,260 +560,1304 @@ def write_key(key: str) -> Path:
 
 
 def _storage_menu(cfg: dict) -> None:
-    pl = cfg["placement"]
-    while True:
-        with output.shown():        # the menu is the context of the question below
-            print("\nStorage\n"
-                  f"  1) locations          {', '.join(cfg['locations'])}\n"
-                  f"  2) PLA rack           {pl['pla_location']}\n"
-                  f"  3) box prefix         {pl['box_prefix']!r}\n"
-                  f"  4) box count          {pl['box_count']}\n"
-                  f"  5) overflow           {pl['overflow']}\n"
-                  "  0) back")
-        choice = _ask("> ")
-        if choice is None or choice.strip() == "0":
-            return
-        choice = choice.strip()
-        if choice == "1":
-            v = _ask("Locations, comma separated: ")
-            items = [s.strip() for s in (v or "").split(",") if s.strip()]
-            if items:
-                cfg["locations"] = items
-        elif choice == "2":
-            v = _ask("PLA rack location: ")
-            if v and v.strip():
-                pl["pla_location"] = v.strip()
-        elif choice == "3":
-            v = _ask("Box location prefix (e.g. 'Storage box '): ")
-            if v:
-                pl["box_prefix"] = v
-        elif choice == "4":
-            n = _ask_int("Number of storage boxes: ", 0)
-            if n is not None:
-                pl["box_count"] = n
-        elif choice == "5":
-            v = _ask("Overflow location: ")
-            if v and v.strip():
-                pl["overflow"] = v.strip()
-        else:
-            print("Unknown choice.")
-
-
-def _pick_printer(printers: list) -> "registry.Printer | None":
-    raw = _ask("Printer number: ")
+    """The Storage locations group on its own, for the installer's first-run question: the changes go into `cfg` (in
+    place) when `s` or `q` leaves the screen."""
+    session = _ConfigMenu(copy.deepcopy(cfg), menu_ui.NumberedUi(_ask, secret_input.ask))
+    session.embedded = True
     try:
-        n = int((raw or "").strip())
-        if n >= 1:
-            return printers[n - 1]
-    except (ValueError, IndexError):
+        session.group("storage")
+    except _Ended:
         pass
-    print("No such printer.")
-    return None
+    session.stage_into(cfg)
 
 
-def _printers_action(choice: str, printers: list) -> None:
-    if choice == "1":
-        return
-    if choice == "2":
-        name = (_ask("Name: ") or "").strip()
-        ip = hostaddr.clean(_ask("Address (IP or name): ") or "")
-        serial = (_ask("Serial number: ") or "").strip()
-        if not (name and ip and serial):
-            print("Name, address and serial number are all needed.")
-            return
-        _, problem, note = hostaddr.inspect(ip)
-        if problem:
-            print(f"Not added: {problem}.")
-            return
-        if note:
-            output.note(f"{note}.")
-        if not registry.SERIAL.fullmatch(serial):
-            print(f"Not added: {registry.BAD_SERIAL}.")
-            return
-        # a printer added by hand may never announce its model, and the model decides which camera it has
-        model = (_ask("Model (e.g. H2D, X1C, P1S; Enter to skip): ") or "").strip()
-        code = secret_input.ask("Access Code: ").strip()
-        if not code:
-            print("No Access Code entered; nothing added.")
-            return
-        problem = registry.check_fields(serial, code)
-        if problem:
-            print(f"Not added: {problem}.")
-            return
-        old = registry.load().get(serial)
-        # a fresh entry: adding the printer again also clears its TLS pin (cert_fp), as POST /api/printers does
-        added = registry.add_bambu(serial, name, model or (old.model if old else ""), ip, code)
-        print(f"Added {added.name}.")
-    elif choice in ("3", "4"):
-        p = _pick_printer(printers)
-        if p is None:
-            return
-        if choice == "3":
-            name = (_ask("New name: ") or "").strip()
-            if name:
-                registry.rename(p.serial, name)
-                print(f"Renamed {p.name} to {name}.")
-        else:
-            what = ("its Moonraker API key, if one is saved." if p.family == "klipper" else
-                    "its Access Code. To use it again, add it again.")
-            if _confirm(f"Forget {p.name}? filament-kit stops connecting to it and deletes {what}",
-                        f"forgetting {p.name}", yes=False, ask=lambda prompt: _ask(prompt)) is not None:
-                return
-            registry.remove(p.serial)
-            print(f"Removed {p.name}.")
-    else:
-        print("Unknown choice.")
+# ---------- config: the settings menu (06 8.3) ----------
+
+class _Ended(Exception):
+    """The input ended (Ctrl-D, the end of piped input) while a screen waited for an answer."""
 
 
-def _printers_menu() -> None:
-    while True:
-        printers = list(registry.load().values())
-        print("\nPrinters")
-        for i, p in enumerate(printers, 1):
-            state = "set up" if p.configured else "detected, not set up"
-            print(f"  {i}. {p.name}  {p.model}  {p.ip}  serial {p.serial}  ({state})")
-        if not printers:
-            print("  (none yet; printers on your network appear here once they announce themselves)")
-        print("  1) refresh list\n  2) add printer\n  3) rename\n  4) remove\n  0) back")
-        choice = _ask("> ")
-        if choice is None or choice.strip() == "0":
-            return
-        choice = choice.strip()
+class _Sentence(ValueError):
+    """An error that is a whole sentence already (the Error: line says it as it is)."""
+
+
+class _Remove:
+    """A staged removal of a secret (the Anthropic key, the Catalog token)."""
+
+
+_THEMES = (("console", "Console (dense and technical)"), ("workbench", "Workbench (calm cards)"),
+           ("palette", "Palette (colourful and roomy)"), ("panes", "Panes (simple lists)"))
+_ENGINES = (("auto", "Automatic: On this Hub first, Cloud (Claude) when it is unsure or fails"),
+            ("local-then-cloud", "On this Hub, then Cloud (Claude)"),
+            ("cloud-then-local", "Cloud (Claude), then On this Hub"),
+            ("cloud", "Cloud (Claude) only"), ("local", "On this Hub only"))
+_TIERS = (("auto", "Automatic"), ("cpu", "Processor (CPU)"), ("gpu", "Graphics card (GPU)"))
+_VOICES = (("auto", "Piper (natural; a 60-80 MB download)"), ("espeak", "espeak-ng (robotic; no download)"))
+_SETUP_WORDS = {"server": "Hub", "station": "Weigh Station", "all-in-one": "Hub with Weigh Station", "custom": "Custom"}
+FEATURES_ROW = 11          # the number the main list gives Features: the texts that point at it say so
+_APPLY_KEYS = ("station.tts", "web.public_url", "station.url", "spoolman_url")     # saving these applies (modules apply)
+
+
+class _Item:
+    """One setting of the menu: its label, the kind of answer and the key `config set` knows it by (06 8.3)."""
+
+    def __init__(self, id, label, kind, key, *, choices=(), sep="", low=0, high=0, words="", restarts=False,
+                 keep_spaces=False):
+        self.id, self.label, self.kind, self.key = id, label, kind, key
+        self.choices, self.sep, self.low, self.high, self.words = choices, sep, low, high, words
+        self.restarts, self.keep_spaces = restarts, keep_spaces
+
+
+_ITEMS = {i.id: i for i in (
+    _Item("theme", "Theme for new devices", "choice", "appearance.theme", choices=_THEMES),
+    _Item("name", "Display name", "text", "server_name"),
+    _Item("spoolman", "Spoolman address", "text", "spoolman_url"),
+    _Item("locations", "Locations", "list", "locations", sep=","),
+    _Item("pla", "PLA rack", "text", "placement.pla_location"),
+    _Item("prefix", "Box location prefix", "text", "placement.box_prefix", keep_spaces=True),
+    _Item("boxes", "Number of storage boxes", "int", "placement.box_count", low=0, high=999, words="0 or more"),
+    _Item("overflow", "Overflow location", "text", "placement.overflow"),
+    _Item("engine", "Engine order", "choice", "intake.reader", choices=_ENGINES),
+    _Item("apikey", "Anthropic API key", "secret", "anthropic_key"),
+    _Item("model", "Claude model", "text", "model", restarts=True),
+    _Item("reads", "Reads per day", "int", "reads_per_day", low=1, high=100000, words="from 1", restarts=True),
+    _Item("address", "Address", "text", "local_intake.url"),
+    _Item("tier", "Tier", "choice", "local_intake.tier", choices=_TIERS),
+    _Item("keep", "Records kept", "int", "intake.history_keep", low=0, high=500, words="0 to 500"),
+    _Item("days", "Keep nightly backups for", "int", "backup.keep_days", low=1, high=365, words="1 to 365"),
+    _Item("public", "Public address", "text", "web.public_url"),
+    _Item("station", "Weigh Station address", "text", "station.url"),
+    _Item("hosts", "Names for this page", "list", "setup.hosts", sep=" "),
+    _Item("changes", "Allow printer changes from the public address", "bool", "web.printer_changes"),
+    _Item("passphrase", "New passphrase", "secret", "web_passphrase"),
+    _Item("token", "Catalog token", "secret", "library_token"),
+    _Item("voice", "Voice", "choice", "station.tts", choices=_VOICES),
+)}
+
+# the groups, in the Hub page's order (03 10.1): id, title
+_GROUPS = (("appearance", "Appearance"), ("general", "General"), ("storage", "Storage locations"),
+           ("reader", "Label Reader"), ("backups", "Backups and restore"), ("network", "Network and addresses"),
+           ("passphrase", "Web passphrase"), ("catalog", "Filament Catalog"), ("voice", "Weigh Station voice"))
+_GROUP_ITEMS = {"appearance": ("theme",), "general": ("name", "spoolman"),
+                "storage": ("locations", "pla", "prefix", "boxes", "overflow"),
+                "reader": ("engine", "apikey", "model", "reads", "address", "tier", "keep"),
+                "backups": ("days",), "network": ("public", "station", "hosts", "changes"),
+                "passphrase": ("passphrase",), "catalog": ("token",), "voice": ("voice",)}
+
+
+def _lower_first(label: str) -> str:
+    """`Display name` -> `display name` for the line after saving; names and acronyms (`PLA rack`) stay."""
+    first = label.split(" ")[0]
+    return label if first.isupper() or first in ("Spoolman", "Anthropic", "Claude", "Weigh") else label[:1].lower() + label[1:]
+
+
+def _changes_word(n: int) -> str:
+    return f"{n} change{'' if n == 1 else 's'}"
+
+
+def _general_value(cfg: dict, key: str):
+    from . import setup_helper
+    if key == "backup.keep_days":
+        from . import backup
+        return backup.keep_days(cfg)
+    return setup_helper.general_value(cfg, key)
+
+
+def _set_path(cfg: dict, key: str, value) -> None:
+    parts = key.split(".")
+    cur = cfg
+    for part in parts[:-1]:
+        if not isinstance(cur.get(part), dict):
+            cur[part] = {}
+        cur = cur[part]
+    cur[parts[-1]] = value
+
+
+class _ConfigMenu:
+    """`config`: the Hub's settings, changed in a list of groups, collected, then saved together with `s` (06 8.3)."""
+
+    def __init__(self, cfg: dict, ui):
+        self.cfg = cfg                        # the settings as stored when the menu opened (or were last saved)
+        self.ui = ui
+        self.staged: dict[str, object] = {}   # item id -> the checked value, in the order it was changed
+        self.rc = 0
+        self.embedded = False                 # the Storage group alone, for the installer: no `s`, nothing is written
+        self.final: list[str] = []            # said after the screen is gone
+
+    # ----- values
+    def stored(self, it: _Item, cfg: dict | None = None):
+        return _general_value(self.cfg if cfg is None else cfg, it.key)
+
+    def value(self, it: _Item):
+        return self.staged[it.id] if it.id in self.staged else self.stored(it)
+
+    def show(self, it: _Item, value) -> str:
+        if it.kind == "secret":
+            return "will be removed" if value is _Remove else "new value, not saved yet" if value else ""
+        if it.kind == "choice":
+            return dict(it.choices).get(value, str(value))
+        if it.kind == "bool":
+            return "on" if value else "off"
+        if it.kind == "list":
+            return (", " if it.sep == "," else " ").join(value or [])
+        if value is None or value == "":
+            return "not set" if it.id in ("public", "station", "spoolman", "hosts") else ""
+        if it.keep_spaces and (str(value) != str(value).strip()):
+            return f'"{value}"'
+        return str(value)
+
+    def row_value(self, it: _Item) -> str:
+        if it.kind == "secret":
+            gone = self.staged.get(it.id) is _Remove
+            text = "set" if self.is_set(it) else "not set"
+            return text + ("  (will be removed)" if gone else "  (not saved)" if it.id in self.staged else "")
+        v = self.value(it)
+        text = self.show(it, v)
+        if it.id in self.staged and it.kind != "secret":
+            text += "  (not saved" + ("; restarts the Hub" if it.restarts else "") + ")"
+        return text
+
+    # ----- checking an answer
+    def check(self, it: _Item, raw: str):
+        """The checked value of the typed `raw`; ValueError with the sentence to print (no `Error:`)."""
+        from . import local_reader, setup_helper
+        label = _lower_first(it.label)
+        text = raw if it.keep_spaces else raw.strip()
         try:
-            _printers_action(choice, printers)
-        except registry.RegistryError as e:
-            _err_line(str(e))
+            if it.id == "spoolman":
+                if modules.check_setting("spoolman_url", text):
+                    raise _Sentence("give the address of the Spoolman to use, on another machine, e.g. "
+                                    "http://spoolman.example:7912.")
+                return text.rstrip("/")
+            if it.id == "public":
+                if modules.check_setting("web.public_url", text):
+                    raise _Sentence("the public address must start with https://, e.g. https://hub.example/filament.")
+                return text.rstrip("/")
+            if it.id == "station":
+                if text == "-":
+                    return None
+                if setup_helper.station_url_error(text):
+                    raise _Sentence("give the Weigh Station's address, e.g. http://station.local:5003.")
+                return text.rstrip("/")
+            if it.id == "address":
+                err = local_reader.check_url(text)
+                if err:
+                    raise _Sentence(f"the {label} is not usable: {err.rstrip('.')}.")
+            if it.kind == "int":
+                return _check_general(it, int(text))
+            if it.kind == "list":
+                split = text.replace(",", " ").split() if it.sep == " " else text.split(",")
+                return _check_general(it, [x.strip() for x in split if x.strip()])
+            return _check_general(it, text)
+        except _Sentence:
+            raise
+        except ValueError as e:
+            if it.kind == "int":
+                raise _Sentence(f"the {label} is a whole number, {it.words}.") from None
+            raise _Sentence(f"the {label} {str(e).rstrip('.')}.") from None
 
+    # ----- one item
+    def edit(self, it: _Item) -> None:
+        ui = self.ui
+        if it.kind == "secret":
+            return self.edit_secret(it)
+        if it.kind == "bool":
+            new = not bool(self.value(it))
+            self.stage(it, new)
+            return
+        if it.kind == "choice":
+            return self.edit_choice(it)
+        current = self.value(it)
+        shown = self.show(it, current)
+        while True:
+            raw = ui.ask(f"{it.label} [{shown}]: ")
+            if raw is None:
+                raise _Ended
+            if raw == "" or (not it.keep_spaces and not raw.strip()):
+                ui.say("Unchanged.")
+                return
+            try:
+                value = self.check(it, raw)
+            except ValueError as e:
+                ui.error(str(e))
+                continue
+            self.stage(it, value)
+            return
 
-def _tts_name(cfg: dict) -> str:
-    st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
-    if not st.get("speech"):
-        return "off (station.speech)"
-    return "espeak-ng" if st.get("tts") == "espeak" else "Piper"
+    def stage(self, it: _Item, value) -> None:
+        """Keep `value` for the next save, or drop the change when it is what is stored."""
+        if value == self.stored(it):
+            self.staged.pop(it.id, None)
+            self.ui.say("Unchanged.")
+        elif it.id in self.staged and self.staged[it.id] == value:
+            self.ui.say("Unchanged.")
+        else:
+            self.staged[it.id] = value
+            self.ui.say("Changed, not saved yet.")
 
+    def edit_choice(self, it: _Item) -> None:
+        now = self.value(it)
+        rows = [menu_ui.Row(words + ("  (now)" if value == now else "")) for value, words in it.choices]
+        sc = menu_ui.Screen(f"choice-{it.id}", it.label, rows, leave="back", empty_leaves=True,
+                            prompt="Number (Enter keeps it): ")
+        ev = self.ui.choose(sc, True)
+        if ev[0] == "eof":
+            raise _Ended
+        if ev[0] == "open":
+            self.stage(it, it.choices[ev[1]][0])
+        else:
+            self.ui.say("Unchanged.")
 
-def _station_voice_menu(cfg: dict) -> None:
-    """How the button panel speaks: Piper (natural, a 60-80 MB voice download) or espeak-ng (no download)."""
-    v = _ask("The station's voice: 1) Piper (natural; downloads a 60-80 MB voice)  "
-             "2) espeak-ng (robotic; no download)  [Enter keeps it]: ")
-    v = (v or "").strip()
-    if v in ("1", "2"):
-        cfg.setdefault("station", {})["tts"] = "auto" if v == "1" else "espeak"
+    def edit_secret(self, it: _Item) -> None:
+        ui = self.ui
+        if it.id == "passphrase":
+            return self.edit_passphrase(it)
+        while True:
+            raw = ui.ask(f"{it.label} (Enter keeps it): ", secret=True)
+            if raw is None:
+                raise _Ended
+            raw = raw.strip()
+            if not raw:
+                ui.say("Unchanged.")
+                return
+            if it.id == "token" and (" " in raw or not raw.isprintable() or len(raw) > 400):
+                ui.error("a GitHub token is one word of printable characters.")
+                continue
+            self.staged[it.id] = raw
+            ui.say("Changed, not saved yet.")
+            return
 
+    def edit_passphrase(self, it: _Item) -> None:
+        ui = self.ui
+        while True:
+            first = ui.ask("New passphrase (Enter keeps it): ", secret=True)
+            if first is None:
+                raise _Ended
+            if not first:
+                ui.say("Unchanged.")
+                return
+            try:
+                from .web import auth
+                if len(first) < auth.MIN_PASSPHRASE:
+                    ui.error(f"use at least {auth.MIN_PASSPHRASE} characters. This one has {len(first)}.")
+                    continue
+            except ImportError:
+                pass            # without the web extra the save says so
+            second = ui.ask("New passphrase again: ", secret=True)
+            if second is None:
+                raise _Ended
+            if first != second:
+                ui.error("the two passphrases do not match. Type them again.")
+                continue
+            self.staged[it.id] = first
+            ui.say("Changed, not saved yet.")
+            return
 
-def _reader_name(cfg: dict) -> str:
-    from . import intake
-    order = intake.reader_order(cfg)
-    names = {"local": "local", "cloud": "Claude"}
-    return " then ".join(names[r] for r in order) if order else "off (ai_intake / local_intake in 6) Modules)"
+    # ----- screens
+    def labels(self) -> str:
+        return ", ".join(_ITEMS[i].label for i in self.staged)
 
+    def title(self) -> str:
+        return f"Settings{output.sym('sep')}{self.cfg.get('server_name', '')}"
 
-READER_MENU = (("1", "auto", "local first, Claude when unsure (default)"),
-               ("2", "cloud-then-local", "Claude first, local when Claude fails"),
-               ("3", "local", "local reader only"), ("4", "cloud", "Claude only"))
+    def features_on(self) -> frozenset[str]:
+        return modules.enabled(self.cfg)
 
+    def summary(self, gid: str) -> tuple[str, bool]:
+        """The main list's value for a group, and whether it is dim (off)."""
+        on, sep, cfg = self.features_on(), output.sym("sep"), self.cfg
+        it = _ITEMS
+        if gid == "appearance":
+            return f"Theme for new devices: {self.show(it['theme'], self.value(it['theme'])).split(' (')[0]}", False
+        if gid == "general":
+            return str(self.value(it["name"])), False
+        if gid == "storage":
+            pl, boxes = self.value(it["pla"]), self.value(it["boxes"])
+            n = len(self.value(it["locations"]) or [])
+            return f"{n} location{'' if n == 1 else 's'}{sep}PLA rack {pl}{sep}{boxes} box{'' if boxes == 1 else 'es'}", False
+        if gid == "reader":
+            from . import intake
+            order = intake.reader_order(cfg)
+            if not order:
+                return "off: only Records kept", True
+            names = {"local": "On this Hub", "cloud": "Cloud (Claude)"}
+            text = " then ".join(names[r] for r in order)
+            if "cloud" in order:
+                text += f"{sep}{self.value(it['reads'])} reads a day{sep}key {'set' if self.key_set() else 'not set'}"
+            return text, False
+        if gid == "backups":
+            return f"Nightly backups kept {self.value(it['days'])} days", False
+        if gid == "network":
+            url = self.value(it["public"])
+            return (f"Public address {url}" if url else "Public address not set"), False
+        if gid == "passphrase":
+            return ("set" if self.passphrase_set() else "not set"), False
+        if gid == "catalog":
+            if "library" not in on:
+                return "off: only Catalog token", True
+            return f"Catalog token {'set' if self.token_set() else 'not set'}", False
+        if "station" not in on:
+            return f"off: switch it on in Features ({FEATURES_ROW})", True
+        return {"auto": "Piper (natural)", "espeak": "espeak-ng (robotic)"}.get(self.value(it["voice"]), ""), False
 
-def _label_reader_menu(cfg: dict) -> None:
-    """Which reader reads first, and the local reader's address and tier (intake.reader, local_intake.*)."""
-    from . import local_reader
-    li = cfg.setdefault("local_intake", {})
-    print("Which label reader reads first (a reader whose module is off is skipped):")
-    for k, _, text in READER_MENU:
-        print(f"  {k}) {text}")
-    v = (_ask("Choice (Enter keeps it): ") or "").strip()
-    pick = next((name for k, name, _ in READER_MENU if k == v), None)
-    if pick:
-        cfg.setdefault("intake", {})["reader"] = pick
-    url = (_ask(f"Local reader address [{local_reader.settings(cfg)['url']}] (Enter keeps it): ") or "").strip()
-    if url:
-        err = local_reader.check_url(url)
+    def is_set(self, it: _Item) -> bool:
+        return {"apikey": self.key_set, "token": self.token_set, "passphrase": self.passphrase_set}[it.id]()
+
+    def key_set(self) -> bool:
+        if "apikey" in self.staged:
+            return self.staged["apikey"] is not _Remove
+        try:
+            return bool((config.paths().etc / KEY_FILE).read_text(encoding="utf-8").strip())
+        except OSError:
+            return False
+
+    def token_set(self) -> bool:
+        if "token" in self.staged:
+            return self.staged["token"] is not _Remove
+        return library._token() is not None
+
+    def passphrase_set(self) -> bool:
+        return "passphrase" in self.staged or (config.paths().etc / WEB_PASSPHRASE).exists()
+
+    def main_screen(self) -> menu_ui.Screen:
+        rows = []
+        for gid, title in _GROUPS:
+            text, dim = self.summary(gid)
+            rows.append(menu_ui.Row(title, text, dim=dim, note=_group_note(gid)))
+        printers = list(registry.load().values())
+        found = sum(1 for p in printers if not p.configured)
+        rows.append(menu_ui.Row("Printers", f"{len(printers) - found} set up{output.sym('sep')}{found} found",
+                                before=("These open their own screens; changes there apply at once:",),
+                                note="Opens the Printers screen."))
+        rows.append(menu_ui.Row("Features", _SETUP_WORDS[modules.mode_of(self.features_on())],
+                                note="Opens the Features checklist."))
+        return menu_ui.Screen("config", self.title(), rows, save="save", changes=len(self.staged))
+
+    def group_screen(self, gid: str) -> tuple[menu_ui.Screen, list[str | None]]:
+        """The screen of one group and, row by row, the item it opens (None: a row that cannot be opened)."""
+        title = dict(_GROUPS)[gid]
+        on, rows, targets, after, actions = self.features_on(), [], [], [], []
+        cloud, local = "ai_intake" in on, "local_intake" in on
+
+        def add(iid: str, before: tuple[str, ...] = (), extra: str = "") -> None:
+            it = _ITEMS[iid]
+            rows.append(menu_ui.Row(it.label, self.row_value(it) + extra, before=before, note=_item_note(it)))
+            targets.append(iid)
+
+        if gid == "reader":
+            if cloud and local:
+                add("engine")
+            elif cloud or local:
+                one = "Cloud (Claude)" if cloud else "On this Hub"
+                rows.append(menu_ui.Row("Engine order", f"Engine: {one}. Switch on the other one in Features "
+                                        f"({FEATURES_ROW}) to use both.", dim=True))
+                targets.append(None)
+            if cloud:
+                add("apikey", ("Cloud (Claude)",))
+                add("model")
+                add("reads")
+                actions += [("c", "check the key"), ("x", "remove the key")]
+            if local:
+                add("address", ("On this Hub",))
+                add("tier")
+            use = _history_use()
+            add("keep", ("Recently added",), f"  Now {use['count']} record{'' if use['count'] == 1 else 's'}, "
+                f"{use['photo_bytes'] / 1e6:.1f} MB of photos")
+        else:
+            for iid in _GROUP_ITEMS[gid]:
+                if iid == "spoolman" and not ("server" in on and "spoolman" not in on):
+                    continue
+                if iid == "changes" and "web" not in on:
+                    continue
+                add(iid)
+                if iid == "token":
+                    actions.append(("x", "remove the token"))
+        if gid == "backups":
+            after = ["Back up now: sudo filament-kit backup create", "Restore: sudo filament-kit restore <zip>"]
+        elif gid == "catalog":
+            after = ["Update now: sudo filament-kit library update"]
+        elif gid == "network":
+            after = ["Firewall rules: filament-kit remote firewall"]
+        sc = menu_ui.Screen(f"group-{gid}", f"Settings > {title}", rows, actions=tuple(actions),
+                            save="" if self.embedded else "save", leave="back", changes=len(self.staged),
+                            after=tuple(after))
+        return sc, targets
+
+    # ----- running
+    def run(self) -> int:
+        ui, show = self.ui, True
+        while True:
+            ev = ui.choose(self.main_screen(), show)
+            show = False
+            if ev[0] == "eof":
+                raise _Ended
+            if ev[0] == "save":
+                self.save()
+            elif ev[0] == "leave":
+                if self.leave():
+                    return self.rc or (5 if self.staged else 0)
+            elif ev[0] == "open":
+                i = ev[1]
+                if i < len(_GROUPS):
+                    self.group(_GROUPS[i][0])
+                elif i == len(_GROUPS):
+                    _printers_screen(ui)
+                else:
+                    self.features()
+                show = True
+
+    def leave(self) -> bool:
+        """`q` at the top: True to end (nothing staged, or the person said yes to losing it)."""
+        if not self.staged:
+            return True
+        n = len(self.staged)
+        yes = self.ui.yesno(f"Leave without saving {_changes_word(n)} ({self.labels()})?")
+        if yes is None:
+            raise _Ended
+        if yes:
+            self.final.append("Nothing saved.")
+        return bool(yes)
+
+    def group(self, gid: str) -> None:
+        ui, on = self.ui, self.features_on()
+        if gid == "voice" and "station" not in on:
+            ui.say(f"Weigh Station is off on this Hub. Switch it on in Features ({FEATURES_ROW}) first.")
+            return
+        if gid == "reader" and not ({"ai_intake", "local_intake"} & on):
+            ui.say(f"The Label Reader is switched off. Spools are then added by hand. Switch it on in Features "
+                   f"({FEATURES_ROW}).")
+        if gid == "catalog" and "library" not in on:
+            ui.say(f"The Filament Catalog is switched off. Switch it on in Features ({FEATURES_ROW}).")
+        show = True
+        while True:
+            on = self.features_on()
+            sc, targets = self.group_screen(gid)
+            if gid == "reader" and not ({"ai_intake", "local_intake"} & on):
+                sc.rows, targets = sc.rows[-1:], targets[-1:]
+            if gid == "catalog" and "library" not in on:
+                sc.rows, targets = sc.rows[:1], targets[:1]
+                sc.after = ()
+            ev = ui.choose(sc, show)
+            show = False
+            if ev[0] == "eof":
+                raise _Ended
+            if ev[0] == "leave":
+                return
+            if ev[0] == "save":
+                self.save()
+            elif ev[0] == "action":
+                self.action(gid, ev[1])
+            elif ev[0] == "open":
+                iid = targets[ev[1]]
+                if iid is None:
+                    ui.say(sc.rows[ev[1]].value)
+                    continue
+                self.edit(_ITEMS[iid])
+
+    def action(self, gid: str, letter: str) -> None:
+        ui = self.ui
+        if letter == "c":
+            ui.say("Checking the key…")
+            ok, text = check_key()
+            ui.say(text if ok else f"{text}.")
+        elif letter == "x" and gid == "reader":
+            if not self.key_set():
+                ui.say("No key is set.")
+                return
+            yes = ui.yesno("Remove the Anthropic API key? Label Reader: Cloud (Claude) stops reading labels until a "
+                           "new key is set.")
+            if yes is None:
+                raise _Ended
+            if yes:
+                self.staged["apikey"] = _Remove
+                ui.say("Changed, not saved yet.")
+        elif letter == "x" and gid == "catalog":
+            if not self.token_set():
+                ui.say("No token is set.")
+                return
+            yes = ui.yesno("Remove the Catalog token? The Filament Catalog can then download only from public sources.")
+            if yes is None:
+                raise _Ended
+            if yes:
+                self.staged["token"] = _Remove
+                ui.say("Changed, not saved yet.")
+
+    def features(self) -> None:
+        state, rc = _features_screen(self.ui, self.cfg, fresh=True)
+        self.cfg = config.load()
+        self.rc = self.rc or rc
+        if state == "discarded":
+            self.ui.say("Nothing applied.")
+
+    def stage_into(self, cfg: dict) -> None:
+        """The staged settings written into `cfg` (in place), checked: the installer's storage question."""
+        for iid, value in self.staged.items():
+            if _ITEMS[iid].kind != "secret":
+                _set_path(cfg, _ITEMS[iid].key, value)
+
+    # ----- saving
+    def save(self) -> None:
+        """Every staged change at once, all or nothing (06 8.3). The Hub's rules: each value checked first, the
+        settings written together, one restart and one apply for the group."""
+        ui = self.ui
+        if not self.staged:
+            ui.say("Nothing to save.")
+            return
+        now = config.load()
+        for iid in list(self.staged):
+            it = _ITEMS[iid]
+            if it.kind == "secret":
+                continue
+            mine, theirs = self.stored(it), self.stored(it, now)
+            if theirs != mine and theirs != self.staged[iid]:
+                yes = ui.yesno(f'{it.label} was changed elsewhere to "{self.show(it, theirs)}" while this menu was '
+                               "open. Keep yours?")
+                if yes is None:
+                    raise _Ended
+                if not yes:
+                    del self.staged[iid]
+        self.cfg = now
+        if not self.staged:
+            ui.say("Nothing to save.")
+            return
+        new = copy.deepcopy(now)
+        err = self.build(new)
         if err:
-            print(f"Not changed: {err}")
-        else:
-            li["url"] = url.rstrip("/")
-    tier = (_ask(f"Local reader tier auto, cpu or gpu [{local_reader.settings(cfg)['tier']}]: ") or "").strip().lower()
-    if tier:
-        if tier in local_reader.TIERS:
-            li["tier"] = tier
-        else:
-            print("Not changed: give auto, cpu or gpu")
+            ui.error(f"nothing was saved: {err.rstrip('.')}. Your changes are still here.")
+            return
+        saved = [_lower_first(_ITEMS[i].label) for i in self.staged]
+        restarts = any(_ITEMS[i].restarts for i in self.staged)
+        applies = any(_ITEMS[i].key in _APPLY_KEYS for i in self.staged)
+        try:
+            config.save(new)
+        except (GroupMissing, ValueError, library.LibraryError, OSError) as e:
+            ui.error(f"nothing was saved: {str(e).rstrip('.')}. Your changes are still here.")
+            return
+        done: list[str] = []
+        try:
+            self.write_secrets(done)
+        except (GroupMissing, ValueError, library.LibraryError, OSError) as e:
+            config.save(now)                  # the settings go back: one save or none
+            kept = f" ({', '.join(_ITEMS[i].label for i in done)} had already been written)" if done else ""
+            ui.error(f"not everything was saved: {str(e).rstrip('.')}. The settings are as before{kept}. Your changes "
+                     "are still here.")
+            return
+        self.cfg, self.staged = new, {}
+        ui.say(f"Saved {_changes_word(len(saved))}: {', '.join(saved)}.")
+        if applies or restarts:
+            with ui.suspended():
+                if applies:
+                    self.rc = self.rc or _run_apply(pairing=False)
+                if restarts and not _no_systemd():
+                    output.out(f"{output.glyph('working')} The Hub is restarting{output.sym('ellipsis')}".strip())
+                    _restart_service()
+                    output.out("The Hub is back.")
+
+    def build(self, new: dict) -> str | None:
+        """Put the staged settings into `new`; the sentence saying what is wrong, or None."""
+        for iid, value in self.staged.items():
+            it = _ITEMS[iid]
+            if it.kind == "secret":
+                continue
+            if it.key == "backup.keep_days":
+                new.setdefault("backup", {})["keep_days"] = value
+            elif it.key == "station.url":
+                _set_path(new, it.key, value)
+            else:
+                _set_path(new, it.key, value)
+        if "spoolman" in self.staged:
+            try:
+                Spoolman(self.staged["spoolman"], timeout=5).ping()
+            except (SpoolmanError, OSError, ValueError) as e:
+                return f"no Spoolman answered at that address ({e})"
+        if any(i in self.staged for i in ("public", "station", "spoolman")):
+            try:
+                modules.validate(new)
+            except modules.ModuleError as e:
+                return str(e)
+        if any(_ITEMS[i].key in _APPLY_KEYS for i in self.staged):
+            err = _plan_error(new)
+            if err:
+                return err
+        return None
+
+    def write_secrets(self, done: list[str]) -> None:
+        """Written after the settings are saved; `done` collects the ids written so far (what a failure leaves)."""
+        s = self.staged
+        if "passphrase" in s:
+            write_passphrase(s["passphrase"])
+            done.append("passphrase")
+        if "apikey" in s:
+            if s["apikey"] is _Remove:
+                remove_key()
+            else:
+                write_key(s["apikey"])
+            done.append("apikey")
+        if "token" in s:
+            if s["token"] is _Remove:
+                library.remove_token()
+            else:
+                library.write_token(s["token"])
+            done.append("token")
+
+
+def _check_general(it: _Item, raw):
+    """The Hub's check of `raw` for this item's key (setup_helper.GENERAL), or the item's own rule."""
+    from . import setup_helper
+    if it.key in setup_helper.GENERAL:
+        return setup_helper.GENERAL[it.key][0](raw)
+    if it.key == "backup.keep_days":
+        return setup_helper._whole(raw, 1, 365)
+    return raw
+
+
+def _item_note(it: _Item) -> str:
+    return {"text": "Enter to type a new value; an empty answer keeps it.",
+            "int": f"A whole number, {it.words}. Enter to change it.",
+            "list": "Separate the entries with " + ("commas." if it.sep == "," else "spaces."),
+            "choice": "Enter to choose.", "bool": "Enter switches it on or off.",
+            "secret": "Typed hidden. It is never shown back."}[it.kind]
+
+
+def _group_note(gid: str) -> str:
+    return {"appearance": "How new devices look.", "general": "The Hub's name and its Spoolman.",
+            "storage": "Where spools are put away.", "reader": "Reads a spool's label from a photo.",
+            "backups": "One zip with everything the kit keeps.", "network": "How the Hub is reached.",
+            "passphrase": "Approves Claude's connector on the web access page.",
+            "catalog": "Known filaments and their settings.", "voice": "The voice the Weigh Station speaks with."}[gid]
+
+
+def _history_use() -> dict:
+    from . import intake_history
+    try:
+        d = intake_history.list_records(False)
+        return {"count": d["count"], "photo_bytes": d["photo_bytes"]}
+    except Exception:  # noqa: BLE001 - a line beside a setting
+        return {"count": 0, "photo_bytes": 0}
 
 
 def cmd_config() -> int:
-    cfg = config.load()
-    before = _module_state(cfg)
+    """`config`: the settings menu (06 8.3). A menu needs a terminal, or `--numbered` with its answers on standard input."""
+    if not output.numbered() and not menu_ui._stdin_tty():
+        output.error("config is a menu, and there is no terminal to ask on.",
+                     "run it again with --numbered, giving the answers on standard input.")
+        return output.USAGE
+    if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
+        return output.need_sudo(_sudo_command("sudo filament-kit config"))
+    session = None
+    try:
+        with menu_ui.open_ui(_ask, secret_input.ask) as ui:
+            session = _ConfigMenu(config.load(), ui)
+            try:
+                rc = session.run()
+            except _Ended:
+                n = len(session.staged)
+                if n:
+                    session.final.append(f"Input ended: {_changes_word(n)} not saved.")
+                rc = 5 if n else 0
+    except KeyboardInterrupt:
+        n = len(session.staged) if session else 0
+        if n:
+            output.out(f"Left without saving {_changes_word(n)}.")
+        return output.INTERRUPTED
+    for line in session.final:
+        output.out(line)
+    return rc
+
+# ---------- the Printers screen (06 8.4) ----------
+
+_BAMBU_KEYS = (("c", "collect a report"), ("t", "test connection"), ("m", "map slots"),
+               ("b", "map by loading filament"), ("v", "saved reports"), ("r", "rename"), ("e", "change address"),
+               ("k", "replace Access Code"), ("u", "forget certificate"), ("f", "forget printer"))
+_KLIPPER_KEYS = (("t", "test connection"), ("d", "detect model and slots"), ("b", "map by loading filament"),
+                 ("r", "rename"), ("e", "change address"), ("k", "set or replace Moonraker API key"),
+                 ("n", "lane data"), ("x", "clear API key"), ("f", "forget printer"))
+_FOUND_KEYS = (("u", "use this printer"), ("t", "test connection"), ("f", "dismiss"))
+ACCESS_WHERE = "(on the printer: Settings > Network/LAN)"
+
+
+def _printer_states() -> dict:
+    """serial -> the running Hub's word for each printer's connection (empty when the Hub does not answer)."""
+    api = _server_api()
+    if api is None:
+        return {}
+    try:
+        return {p["id"]: p.get("state") for p in api.get("/api/printers").get("printers", [])}
+    except Exception:  # noqa: BLE001 - a word beside a row: the list is useful without it
+        return {}
+
+
+def _printer_state_word(p, states: dict) -> str:
+    if not p.configured:
+        return "found, not added"
+    st = states.get(p.serial)
+    return "" if st is None else "connected" if st == "connected" else "offline"
+
+
+def _printer_address(p) -> str:
+    return f"{p.host}:{p.port}" if p.family == "klipper" else p.ip
+
+
+def _printers_screen(ui) -> None:
+    """The list of printers: a number opens one, `a` adds, `l` reads the list again."""
+    sep, show = output.sym("sep"), True
     while True:
-        print("\nfilament-kit settings\n"
-              f"  1) display name       {cfg['server_name']}\n"
-              "  2) storage\n"
-              f"  3) Claude model       {cfg['model']}, {cfg['reads_per_day']} reads/day\n"
-              "  4) Anthropic key      only for AI label reading (ai_intake)\n"
-              "  5) Printers\n"
-              f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
-              f"  7) Station voice      {_tts_name(cfg)}\n"
-              f"  8) Intake records kept {(cfg.get('intake') or {}).get('history_keep', 20)} (with their photos; 0 = none)\n"
-              f"  9) Label reader       {_reader_name(cfg)}\n"
-              "  0) save and exit")
-        choice = _ask("> ")
-        if choice is None or choice.strip() == "0":
-            break
-        choice = choice.strip()
-        if choice == "1":
-            v = _ask("Display name (shown in the app): ")
-            if v and v.strip():
-                cfg["server_name"] = v.strip()
-        elif choice == "2":
-            _storage_menu(cfg)
-        elif choice == "3":
-            v = _ask("Model: ")
-            if v and v.strip():
-                cfg["model"] = v.strip()
-            n = _ask_int("Reads per day: ", 1)
-            if n is not None:
-                cfg["reads_per_day"] = n
-        elif choice == "4":
-            key = secret_input.ask("Anthropic API key: ").strip()
+        try:
+            printers = list(registry.load().values())
+        except registry.RegistryError as e:
+            ui.error(str(e))
+            return
+        states = _printer_states()
+        rows = []
+        for p in printers:
+            word = _printer_state_word(p, states)
+            state = output.state(word, io.StringIO()) if word else ""
+            kind = "Klipper" if p.family == "klipper" else "Bambu"
+            rows.append(menu_ui.Row(registry.display_name(p), f"{kind:<8} {_printer_address(p)}  {state}".rstrip(),
+                                    note="Enter opens this printer."))
+        found = sum(1 for p in printers if not p.configured)
+        sc = menu_ui.Screen("printers", f"Printers{sep}{len(printers) - found} set up{sep}{found} found", rows,
+                            actions=(("a", "add a printer"), ("l", "look again")), leave="back",
+                            empty="No printers yet. Printers on your network appear here once they announce themselves.")
+        ev = ui.choose(sc, show)
+        show = False
+        if ev[0] == "eof":
+            raise _Ended
+        if ev[0] == "leave":
+            return
+        if ev[0] == "action":
+            if ev[1] == "a":
+                with ui.suspended():
+                    _printer_add(ui)
+            show = True
+        elif ev[0] == "open":
+            _printer_screen(ui, printers[ev[1]].serial)
+            show = True
+
+
+def _printer_add(ui) -> None:
+    """`a` on the list: the questions of `printer add` (8.7): the kind first, then its fields in the Hub form's order."""
+    kind = _ask("Add a Bambu Lab printer (b) or a Klipper printer (k)? [b]: ")
+    if kind is None:
+        raise _Ended
+    try:
+        if kind.strip().lower() in ("k", "klipper"):
+            host = hostaddr.clean(_ask("Address: ") or "")
+            port = _ask("Port [7125]: ")
+            name = (_ask("Name (optional): ") or "").strip()
+            key = _secret("Moonraker API key (optional): ").strip()
+            bad = hostaddr.form_error(host) if host else "give the printer's address"
+            if bad:
+                output.error(str(bad))
+                return
+            try:
+                number = int((port or "").strip() or 7125)
+            except ValueError:
+                output.error("the port is a number.", "give the port as digits, for example 7125.")
+                return
+            from .bridge.klipper import discovery
+            p = discovery.add(name, host, number)
             if key:
-                write_key(key)
-                print("Key saved.")
-                if "ai_intake" not in modules.enabled(cfg):  # AI is optional: the key alone turns nothing on
-                    print("AI label reading is off: turn on ai_intake in 6) Modules to use the key.")
-            else:
-                print("No key entered; unchanged.")
-        elif choice == "5":
-            _printers_menu()
-        elif choice == "6":
-            _modules_menu(cfg)
-        elif choice == "7":
-            _station_voice_menu(cfg)
-        elif choice == "8":
-            n = _ask_int("Intake records kept (0-500): ", 0)
-            if n is not None:
-                cfg.setdefault("intake", {})["history_keep"] = min(n, 500)
-        elif choice == "9":
-            _label_reader_menu(cfg)
+                registry.set_api_key(p.serial, key)
+            output.out(f"Added {registry.display_name(p)}.")
+            return
+        ip = hostaddr.clean(_ask("IP address or name (e.g. 192.0.2.40 or printer.local): ") or "")
+        code = _secret(f"Access Code {ACCESS_WHERE}: ").strip()
+        name = (_ask("Name (optional): ") or "").strip()
+        serial = (_ask("Serial (optional: read from the printer): ") or "").strip()
+        model = (_ask("Model (optional, e.g. H2D, X1C, P1S; it picks the camera): ") or "").strip()
+        if not code:
+            output.out("No Access Code entered; nothing added.")
+            return
+        if not ip:
+            output.error("an address is needed.")
+            return
+        _, problem, note = hostaddr.inspect(ip)
+        if problem:
+            output.error(f"not added: {problem}.")
+            return
+        if note:
+            output.note(f"{note}.")
+        from . import setup_page          # the Hub's own reader: the serial a printer names in its certificate
+        try:
+            seen, why = setup_page.setup_serial(ip), ""
+        except OSError as e:
+            seen, why = None, f"the printer at {ip} did not answer ({type(e).__name__})"
+        if seen and serial and seen.upper() != serial.upper():
+            output.error(f"not added: the printer at {ip} names itself {seen}, not {serial.upper()}.",
+                         "check the address, or leave the serial empty to take the printer's own.")
+            return
+        serial = seen or serial
+        if not serial:
+            output.error(f"{why or f'the printer at {ip} did not name its serial'}, so it cannot be read.",
+                         "give the serial number; it is on the printer's label and in Bambu Studio.")
+            return
+        if not registry.SERIAL.fullmatch(serial):
+            output.error(f"not added: {registry.BAD_SERIAL}.")
+            return
+        problem = registry.check_fields(serial, code)
+        if problem:
+            output.error(f"not added: {problem}.")
+            return
+        old = registry.load().get(serial)
+        added = registry.add_bambu(serial, name or serial, model or (old.model if old else ""), ip, code)
+        output.out(f"Added {added.name}.")
+    except (registry.RegistryError, ValueError) as e:
+        output.error(str(e))
+
+
+def _printer_keys(p, state: str) -> tuple[tuple[str, str], ...]:
+    if not p.configured:
+        return _FOUND_KEYS
+    if p.family == "klipper":
+        return _KLIPPER_KEYS
+    keys = list(_BAMBU_KEYS)
+    if state != "connected":          # a problem is shown: the report comes first, then the test
+        return tuple(keys)
+    keys[0], keys[1] = keys[1], keys[0]
+    return tuple(keys)
+
+
+def _printer_screen(ui, serial: str) -> None:
+    """One printer: its facts, then the actions as letters (8.4)."""
+    sep, show = output.sym("sep"), True
+    while True:
+        p = registry.load().get(serial)
+        if p is None:
+            return
+        word = _printer_state_word(p, _printer_states())
+        facts = [f"{'Klipper' if p.family == 'klipper' else 'Bambu'}{sep}{_printer_address(p)}" +
+                 (f"{sep}{p.model}" if p.model else "") + (f"{sep}serial {p.serial}" if p.family != "klipper" else "")]
+        facts.append((output.state(word, io.StringIO()) if word else "set up") +
+                     (f"{sep}certificate pinned" if p.cert_fp else ""))
+        sc = menu_ui.Screen(f"printer-{serial}", f"Printers > {registry.display_name(p)}", [], intro=tuple(facts),
+                            actions=_printer_keys(p, word), leave="back", prompt="Number or letter: ")
+        ev = ui.choose(sc, show)
+        show = False
+        if ev[0] == "eof":
+            raise _Ended
+        if ev[0] == "leave":
+            return
+        if ev[0] == "action":
+            with ui.suspended():
+                try:
+                    gone = _printer_do(p, ev[1])
+                except registry.RegistryError as e:
+                    output.error(str(e))
+                    gone = False
+            if gone:
+                return
+            show = True
+
+
+def _printer_do(p, letter: str) -> bool:
+    """What one letter of the printer screen does; True when the printer is gone from the list."""
+    name = registry.display_name(p)
+    serial = p.serial
+    if letter == "c":
+        cmd_printer_report(serial, _default_manager)
+    elif letter == "m":
+        cmd_printer_map(serial, _default_manager)
+    elif letter == "b":
+        cmd_printer_map(serial, _default_manager, manual=True)
+    elif letter == "u" and p.configured:
+        cmd_printer_unpin(serial)
+    elif letter == "u":
+        if p.family == "klipper":
+            registry.configure_klipper(serial)
+            output.out(f"Using {name}.")
+            return False
+        code = secret_input.ask(f"Access Code of {name} {ACCESS_WHERE}: ").strip()
+        problem = registry.check_fields(serial, code) if code else None
+        if not code:
+            output.out("No Access Code entered; nothing added.")
+        elif problem:
+            output.error(f"not added: {problem}.")
         else:
-            print("Unknown choice.")
-    changed = _module_state(cfg) != before
-    if changed:
-        if not _require_root():
-            return output.NEEDS_SUDO
-        err = _plan_error(cfg)
+            registry.set_code(serial, code)
+            output.out(f"Added {name}.")
+    elif letter == "t":
+        _printer_test(p)
+    elif letter == "d":
+        output.out(f"{name} ({p.host}:{p.port})")
+        klipper_cli._describe(p)
+    elif letter == "v":
+        found = sorted((config.paths().state / "printers" / serial).glob("printer-report-*.xml"))
+        output.out_lines([f"  {f}" for f in found] if found else [f"No saved reports for {name}."])
+    elif letter == "r":
+        new = (_ask("New name: ") or "").strip()
+        if new:
+            registry.rename(serial, new)
+            output.out(f"Renamed {name} to {new}.")
+        else:
+            output.out("Unchanged.")
+    elif letter == "e":
+        _printer_address_change(p)
+    elif letter == "k" and p.family == "klipper":
+        key = secret_input.ask(f"Moonraker API key for {name}: ").strip()
+        if key:
+            registry.set_api_key(serial, key)
+            output.out(f"Stored the API key of {name}.")
+        else:
+            output.out("Unchanged.")
+    elif letter == "k":
+        code = secret_input.ask(f"New Access Code for {name} {ACCESS_WHERE}: ").strip()
+        problem = registry.check_fields(serial, code) if code else None
+        if not code:
+            output.out("Unchanged.")
+        elif problem:
+            output.error(f"nothing changed: {problem}.")
+        else:
+            registry.set_code(serial, code, replace=True)
+            output.out(f"Replaced the Access Code of {name}.")
+    elif letter == "n":
+        mode = (_ask(f"Lane data of {name} (auto, on or off) [{p.lane_data}]: ") or "").strip().lower()
+        if mode in registry.LANE_DATA:
+            registry.set_lane_data(serial, mode)
+            output.out(f"{name}: lane_data {mode}.")
+        else:
+            output.out("Unchanged.")
+    elif letter == "x":
+        stop = _confirm(f"Clear the Moonraker API key of {name}? filament-kit then connects without a key. If Moonraker "
+                        "asks for one, the printer's test says so until a key is set.",
+                        f"clearing the API key of {name}", yes=False, ask=_ask)
+        if stop is None:
+            registry.set_api_key(serial, "")
+            output.out(f"Cleared the API key of {name}.")
+    elif letter == "f":
+        if not p.configured:
+            stop = _confirm(f"Dismiss {name}? It leaves this list. A new scan may find it again.",
+                            f"dismissing {name}", yes=False, ask=_ask)
+            word = "Dismissed"
+        else:
+            what = ("its Moonraker API key, if one is saved." if p.family == "klipper" else
+                    "its Access Code. To use it again, add it again.")
+            stop = _confirm(f"Forget {name}? filament-kit stops connecting to it and deletes {what}",
+                            f"forgetting {name}", yes=False, ask=_ask)
+            word = "Forgot"
+        if stop is None:
+            registry.remove(serial)
+            output.out(f"{word} {name}.")
+            return True
+    return False
+
+
+def _printer_address_change(p) -> None:
+    name = registry.display_name(p)
+    host = hostaddr.clean(_ask(f"Address of {name} [{_printer_address(p)}]: ") or "")
+    if not host:
+        output.out("Unchanged.")
+        return
+    bad = hostaddr.form_error(host)
+    if bad:
+        output.error(str(bad))
+        return
+    if p.family == "klipper":
+        port = _ask(f"Port [{p.port}]: ")
+        registry.set_address(p.serial, host, int(port.strip()) if (port or "").strip().isdigit() else None)
+        output.out(f"Changed the address of {name}.")
+        return
+    code = secret_input.ask(f"Access Code of {name} {ACCESS_WHERE}: ").strip()
+    if not code:
+        output.out("No Access Code entered; nothing changed.")
+        return
+    problem = registry.check_fields(p.serial, code)
+    if problem:
+        output.error(f"nothing changed: {problem}.")
+        return
+    pinned = p.cert_fp
+    registry.set_address(p.serial, host)
+    registry.set_code(p.serial, code, replace=True)
+    if pinned:
+        registry.pin(p.serial, pinned)          # the pin is of the printer, not of its address
+    output.out(f"Changed the address of {name}.")
+
+
+def _printer_test(p) -> None:
+    name = registry.display_name(p)
+    if p.family == "klipper":
+        with output.wait(f"Asking {name}…"):
+            d = klipper_cli.detect(p, spoolman=False)
+        output.out(f"{output.state('connected')} {name} answers at {p.host}:{p.port}." if d["ok"] else d["message"])
+        return
+    state = _printer_states().get(p.serial)
+    if state is not None:
+        output.out(f"{name}: {output.state('connected') if state == 'connected' else output.state('offline')}")
+        return
+    m = _default_manager(p.serial)
+    try:
+        why = _connect(m, p.serial)
+    finally:
+        m.stop()
+    if why:
+        output.error(why)
+    else:
+        output.out(f"{output.state('connected')} {name} answers at {p.ip}.")
+
+
+# ---------- the Features checklist (06 8.5) ----------
+
+_FEATURE_ASKS = {
+    "web.public_url": ("{who} needs the address people use.",
+                       "Public https address of the web app (e.g. https://hub.example/filament): ",
+                       "give the https address people use, e.g. https://hub.example/filament."),
+    "orders.file": ("Order history needs its file.", "Path of the order history file: ",
+                    "give the path of the order history file."),
+    "spoolman_url": ("The Hub service needs a Spoolman: none runs on this machine.",
+                     "Address of your Spoolman (e.g. http://spoolman.example:7912): ",
+                     "give the address of a Spoolman on another machine, e.g. http://spoolman.example:7912."),
+    "station.allow": ("Weigh Station only needs the Hub's address.", "The Hub's address (IP address or name): ",
+                      "enter one address or name, not a range or wildcard."),
+}
+_FEATURES_HINT = ("Type numbers to switch (several: 2 5 7); h, w, b choose a setup; s applies; q leaves; ? help.")
+
+
+def _titles(names) -> str:
+    return ", ".join(modules.MODULES[n].title for n in names)
+
+
+def _and_list(words: list[str]) -> str:
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
+
+
+def _feature_note(name: str, chosen) -> str:
+    """The checklist's first footer line: what the row needs and what switching it off also switches off (8.5)."""
+    needs = [modules.MODULES[n].title if n in modules.MODULES else n for n in modules.needs_of(name)]
+    gone = modules.dependents_closure(name, chosen)
+    return (f"Needs {_and_list(needs)}." if needs else "Needs nothing else.") + \
+        f" Off also turns off: {_titles(gone) if gone else 'nothing else'}."
+
+
+def _feature_plan(on, chosen, explicit) -> tuple[str, str]:
+    """(the plan line, the short list for the leave question): `Turns on: ... Turns off: ...` as the Hub's preview."""
+    turned_on = [n for n in modules.MODULES if n in chosen and n not in on]
+    turned_off = [n for n in modules.MODULES if n in on and n not in chosen]
+    if not turned_on and not turned_off:
+        return "Changes: none", ""
+    parts, short = [], []
+    if turned_on:
+        words = []
+        for n in turned_on:
+            title = modules.MODULES[n].title
+            who = [modules.MODULES[e].title for e in turned_on if e in explicit and e != n
+                   and n in modules.needs_closure([e], frozenset())]
+            words.append(f"{title} ({_and_list(who)} {'needs' if len(who) == 1 else 'need'} it)" if who and n not in explicit
+                         else title)
+        parts.append(f"Turns on: {', '.join(words)}.")
+        short += [f"{modules.MODULES[n].title} on" for n in turned_on]
+    if turned_off:
+        parts.append(f"Turns off: {_titles(turned_off)}.")
+        short += [f"{modules.MODULES[n].title} off" for n in turned_off]
+    return " ".join(parts), ", ".join(short)
+
+
+def _features_checklist(on, chosen, explicit) -> menu_ui.Screen:
+    names = list(modules.MODULES)
+    rows = [menu_ui.Row(modules.MODULES[n].title, modules.MODULES[n].description, mark="x" if n in chosen else " ",
+                        note=_feature_note(n, chosen),
+                        detail=("needs: " + ", ".join(modules.MODULES[d].title if d in modules.MODULES else d
+                                                      for d in modules.needs_of(n))) if modules.needs_of(n) else "")
+            for n in names]
+    plan, _ = _feature_plan(on, chosen, explicit)
+    return menu_ui.Screen("features", f"Features{output.sym('sep')}{_SETUP_WORDS[modules.mode_of(chosen)]}", rows,
+                          kind="checklist", actions=(("h", "Hub setup"), ("w", "Weigh Station only"),
+                                                     ("b", "Hub with Weigh Station")),
+                          save="apply", plan=plan, after=(plan, _FEATURES_HINT), hint=_FEATURES_HINT)
+
+
+def _ask_feature_settings(on, new: dict) -> tuple[dict | None, str]:
+    """The settings the chosen features need and the Hub does not have yet, one prompt each in the table's order, each
+    after one line saying which feature needs it (8.5). (answers, "") or (None, the feature that was not answered)."""
+    need = modules.missing_settings(on, new)
+    keys = [k for k in ("web.public_url", "orders.file") if k in need]
+    keys += ["spoolman_url"] if modules.needs_spoolman_url(on, new) else []
+    keys += ["station.allow"] if "station.allow" in need else []
+    got: dict[str, str] = {}
+    owners = {"web.public_url": "web" if "web" in on else "remote", "orders.file": "orders", "spoolman_url": "server",
+              "station.allow": "station"}
+    for key in keys:
+        line, prompt, wrong = _FEATURE_ASKS[key]
+        output.out(line.format(who=modules.MODULES[owners[key]].title))
+        while True:
+            raw = _ask(prompt)
+            if raw is None or not raw.strip():
+                return None, modules.MODULES[owners[key]].title
+            value = raw.strip()
+            if key == "station.allow":
+                if modules._bad_allow(value):
+                    err = wrong
+                elif value in modules._LOCAL_HOSTS:
+                    err = "give the address of the machine the Hub runs on."
+                else:
+                    err = None
+            else:
+                err = wrong if modules.check_setting(key, value) else None
+            if err:
+                output.error(err)
+                continue
+            got[key] = value
+            break
+    return got, ""
+
+
+def _apply_features(ui, cfg: dict, chosen, explicit, on, raw_apply) -> tuple[bool, int]:
+    """`s` in the checklist: (applied, exit code). Not applied: the rows stay as they are and the person is told why."""
+    if chosen == on and raw_apply is None:
+        ui.say("Unchanged.")
+        return False, 0
+    plan, short = _feature_plan(on, chosen, explicit)
+    with ui.suspended():
+        output.out(plan)
+        if raw_apply is None and not _require_root():
+            return False, output.NEEDS_SUDO
+        new = _with_modules(cfg, chosen)
+        _station_link(new, chosen)
+        if "station" in chosen and "station" not in on and "server" in chosen:
+            _link_station(new)
+        got, owner = _ask_feature_settings(chosen, new)
+        if got is None:
+            output.out(f"Not applied: {owner} needs that setting.")
+            return False, 0
+        for key, value in got.items():
+            modules.set_setting(new, key, value)
+        try:
+            modules.validate(new)
+        except modules.ModuleError as e:
+            output.error(f"{e}", "change the rows and apply again.")
+            return False, 0
+        if raw_apply is not None:
+            return raw_apply(chosen, got), 0
+        err = _plan_error(new)
         if err:
-            _err_line(f"{err}\nNothing was saved.")
+            output.error(f"{err}\nNothing was applied.")
+            return False, 1
+        config.save(new)
+        rc = _run_apply(pairing=False)
+        if rc == 0:
+            output.out(f"Features applied: {short}.")
+        return True, rc
+
+
+def _features_screen(ui, cfg: dict, on=None, raw_apply=None, fresh=False) -> tuple[str, int]:
+    """The Features checklist. ("applied", code), ("left", 0) or ("discarded", 0) after a yes to losing the switched
+    rows. `raw_apply(chosen, answers) -> bool` stands in for saving and applying (`modules menu --raw`). `fresh`: the
+    settings are read again when `s` applies (inside `config`, where they may have changed since the menu opened)."""
+    on = frozenset(modules.enabled(cfg) if on is None else on)
+    chosen, explicit, show = on, set(), True
+    names = list(modules.MODULES)
+    while True:
+        ev = ui.choose(_features_checklist(on, chosen, explicit), show)
+        show = True
+        if ev[0] == "eof":
+            raise _Ended
+        if ev[0] == "toggle":
+            for i in ev[1]:
+                chosen, notes = modules.toggle(chosen, names[i])
+                explicit.add(names[i])
+                for note in notes:
+                    ui.say(note)
+        elif ev[0] == "action":
+            mode = {"h": "server", "w": "station", "b": "all-in-one"}[ev[1]]
+            before = chosen
+            chosen, notes = modules.preset(chosen, mode)
+            explicit |= set(before) ^ set(chosen)
+            for note in notes:
+                ui.say(note)
+        elif ev[0] == "save":
+            done, rc = _apply_features(ui, config.load() if fresh else cfg, chosen, explicit, on, raw_apply)
+            if done:
+                return "applied", rc
+            if rc:
+                return "left", rc
+        elif ev[0] == "leave":
+            if chosen == on:
+                return "left", 0
+            _, short = _feature_plan(on, chosen, explicit)
+            n = len([1 for x in names if (x in chosen) != (x in on)])
+            yes = ui.yesno(f"Leave without applying {_changes_word(n)} ({short})?")
+            if yes is None:
+                raise _Ended
+            if yes:
+                return "discarded", 0
+
+
+def _need_terminal(what: str) -> int | None:
+    """06 6.7: a menu with no terminal to ask on (and no `--numbered`): exit 2 after its Error and Fix."""
+    if output.numbered() or menu_ui._stdin_tty():
+        return None
+    output.error(f"{what} is a menu, and there is no terminal to ask on.",
+                 "run it again with --numbered, giving the answers on standard input.")
+    return output.USAGE
+
+
+def _modules_menu(cfg: dict) -> int:
+    """`modules menu` (the Features checklist on its own): the exit code."""
+    with menu_ui.open_ui(_ask, secret_input.ask) as ui:
+        try:
+            state, rc = _features_screen(ui, cfg)
+        except _Ended:
+            output.out("Input ended: nothing applied.")
+            return output.CANCELLED
+    if state == "discarded":
+        output.out("Nothing applied.")
+        return output.CANCELLED
+    return rc
+
+
+def cmd_modules_menu(raw: bool) -> int:
+    """The checklist on its own. --raw: prompts on stderr; stdout gets the chosen modules as a comma list, then
+    one `set <key>=<value>` line per setting asked for (install.sh custom mode). Changes nothing."""
+    stop = _need_terminal("modules menu")
+    if stop is not None:
+        return stop
+    cfg = config.load()
+    on = modules.enabled(cfg)
+    if not raw:
+        return _modules_menu(cfg)
+    if not _config_has_content():
+        on = modules.MODES["server"]            # a first install: AI intake and the library start off
+    result: dict = {}
+
+    def keep(chosen, got) -> bool:
+        """The installer's apply: check the whole choice, remember it; a refusal puts the person back in the list."""
+        trial = _with_modules(cfg, chosen)
+        _station_link(trial, chosen)
+        if {"server", "station"} <= set(chosen):
+            _link_station(trial)
+        for key, value in got.items():
+            modules.set_setting(trial, key, value)
+        try:
+            modules.validate(trial)
+        except modules.ModuleError as e:
+            output.error(str(e), "change the selection and apply again (q leaves).")
+            return False
+        result.update(chosen=chosen, got=got)
+        return True
+
+    out = sys.stdout
+    sys.stdout = sys.stderr                     # prompts and the checklist go to the terminal, not the capture
+    try:
+        with menu_ui.open_ui(_ask, secret_input.ask, raw=True) as ui:
+            try:
+                state, _ = _features_screen(ui, cfg, on, keep)
+            except _Ended:
+                output.out("Input ended: nothing applied.")
+                return output.CANCELLED
+        if state == "discarded":
+            output.out("Nothing applied.")
+            return output.CANCELLED
+        if state != "applied":
             return 1
-    config.save(cfg)
-    print("Saved.")
-    if changed:
-        # the apply restarts what changed, so it replaces the plain restart
-        return _run_apply(pairing=False)
-    _restart_service()
+    except KeyboardInterrupt:                   # the capture stays empty; the word goes to the terminal (06 6.7)
+        output.out("Stopped.")
+        return output.INTERRUPTED
+    finally:
+        sys.stdout = out
+    print(",".join(n for n in modules.MODULES if n in result["chosen"]))
+    for key, value in result["got"].items():
+        print(f"set {key}={value}")
     return 0
 
-
-# ---------- cert / ensure-fields ----------
-
-# ---------- intake history ----------
 
 def _intake_line(s: dict) -> str:
     sp = s.get("spools") or []
@@ -974,6 +2027,12 @@ def _err_line(text: str) -> None:
     output.error(text)
 
 
+def _input_ended() -> int:
+    """The end of input at a secret prompt of a command: nothing was changed (06 8.2)."""
+    output.out("Input ended.")
+    return 5
+
+
 STOP_SIGNALS = ("SIGINT", "SIGTERM", "SIGHUP")
 
 
@@ -1139,30 +2198,36 @@ def _stdin_lines():
 
 
 def _manual_status(q: dict) -> str:
-    if q.get("status") == "confirmed":
-        return f"confirmed ({q.get('reported_label')}{', ' + q['nozzle'] + ' nozzle' if q.get('nozzle') else ''})"
-    if q.get("status") == "by_hand":
-        return f"entered by hand ({q.get('reported_label')})"
-    return str(q.get("status"))
+    """One position's row at the end of Map by loading filament (06 8.6): its state word, then the detail."""
+    st = q.get("status")
+    if st == "confirmed":
+        nozzle = f", {q['nozzle']} nozzle" if q.get("nozzle") else ""
+        return f"{output.state('confirmed')} ({q.get('reported_label')}{nozzle})"
+    if st == "by_hand":
+        return f"{output.state('entered by hand')} ({q.get('reported_label')})"
+    if st == "skipped":
+        return output.state("skipped")
+    return str(st)
 
 
-def _manual_prompt(v: dict) -> str | None:
-    """What to say to the owner for the session's current step (None while nothing changed for them to answer)."""
+def _manual_prompt(v: dict) -> tuple[list[str], bool] | None:
+    """The Hub's own sentences for the session's current step, then the line the command line adds: the answers it takes.
+    (lines, asking), `asking` when an answer is wanted now; None while nothing is asked."""
     st = v.get("step")
     if not st:
         return None
+    label = st["position"]["label"]
     if st.get("seen") and st.get("ask"):
         nozzle = v.get("dual_nozzle") and not st["seen"].get("nozzle_reported")
-        return (f"  {st['ask']}\n  Type y{' right or y left' if nozzle else ''} for yes, or the position you loaded "
-                f"(e.g. {st['position']['label']}{' left' if nozzle else ''}); s skips {st['position']['label']}, "
-                "q stops.")
+        return ([st["ask"], f"  y{' right or y left' if nozzle else ''} yes{output.sym('sep')}a slot (e.g. "
+                 f"{label}{' left' if nozzle else ''}) I loaded that one{output.sym('sep')}s skip {label}"
+                 f"{output.sym('sep')}q stop"], True)
     if not v.get("reports_loads"):
-        lines = [f"  The printer reports no loads: which slot is {st['position']['label']} in? (not checked by the "
-                 "printer)"]
-        lines += [f"    {i}) {c['label']}" for i, c in enumerate(v.get("choices") or [], 1)]
-        lines.append("  Type its number; s skips, q stops.")
-        return "\n".join(lines)
-    return f"  {st['say']} (s skips, q stops)"
+        lines = [st["say"]]
+        lines += [f"  {i}  {c['label']}" for i, c in enumerate(v.get("choices") or [], 1)]
+        lines.append(f"  a number{output.sym('sep')}s skip {label}{output.sym('sep')}q stop")
+        return lines, True
+    return [st["say"], f"  s skip {label}{output.sym('sep')}q stop"], False
 
 
 def _manual_answer(v: dict, line: str) -> tuple[str, dict] | str:
@@ -1173,6 +2238,8 @@ def _manual_answer(v: dict, line: str) -> tuple[str, dict] | str:
         return ""
     if words[0].lower() in ("q", "quit", "stop"):
         return "stop", {}
+    if words[0] == "?":
+        return "y yes, or the slot you loaded (e.g. A2); s skips it, q stops, Ctrl-C leaves at once"
     if not st:
         return "nothing is being asked now"
     pos = st["position"]
@@ -1201,10 +2268,23 @@ def _manual_answer(v: dict, line: str) -> tuple[str, dict] | str:
     return "the printer has not reported a new load yet; load it, or s skips, q stops"
 
 
+def _manual_done(v: dict) -> str:
+    """`Done: 3 confirmed, 1 skipped.`; `Stopped: ...` while positions were not asked."""
+    got = [q.get("status") for q in v.get("positions") or []]
+    parts = [f"{n} {word}" for word, n in (("confirmed", got.count("confirmed")),
+                                           ("entered by hand", got.count("by_hand")),
+                                           ("skipped", got.count("skipped"))) if n]
+    pending = len(got) - len([g for g in got if g in ("confirmed", "by_hand", "skipped")])
+    if pending:
+        parts.append(f"{pending} not asked")
+    return ("Stopped: " if pending else "Done: ") + (", ".join(parts) or "nothing mapped") + "."
+
+
 def _manual_map_via_server(api, serial: str, lines=None) -> int:
     """`printer map --manual`: Map by loading filament in the terminal, on the running server's session (the same one
     the setup page, the phone web app and the Android app show; one session per printer). The owner loads each
-    position; the printer reports what it sees; the owner answers here. Nothing is sent to the printer."""
+    position; the printer reports what it sees; the owner answers here. Nothing is sent to the printer. The Hub's own
+    sentences are printed as they come; the command line adds only the answer line (06 8.6)."""
     import queue
     from .web.slots import SlotError
     base = f"/api/printers/{serial}/manual-map"
@@ -1213,11 +2293,14 @@ def _manual_map_via_server(api, serial: str, lines=None) -> int:
     except SlotError as e:
         _err_line(str(e))
         return 1
-    print("Map by loading filament. Load each position named below to the nozzle on the printer; the kit watches what "
-          "the printer reports. Nothing is sent to the printer.", flush=True)
+    print(f"Map by loading filament: {_printer_name(serial)}\n"
+          "Load each slot to the nozzle when asked. Nothing is sent to the printer.\n", flush=True)
     lines = lines if lines is not None else _stdin_lines()
     said, done_input = None, False
     stopped: list = []
+    held = None                                     # the wait is paused while a question stands
+    waiting = output.wait("Waiting for the printer to report a change…")
+    waiting.__enter__()
     old = _on_stop_signals(lambda signum, frame: stopped.append(signum))
     try:
         while v.get("open"):
@@ -1227,9 +2310,15 @@ def _manual_map_via_server(api, serial: str, lines=None) -> int:
                 except SlotError:
                     pass
                 break
-            text = _manual_prompt(v)
+            asked = _manual_prompt(v)
+            text = "\n".join(asked[0]) if asked else None
             if text and text != said:
                 print(text, flush=True)
+                if asked[1]:
+                    if held is None:
+                        held = waiting.paused()
+                        held.__enter__()
+                    print("Answer: ", end="", flush=True)
                 said = text
             line = None
             if not done_input:
@@ -1251,6 +2340,9 @@ def _manual_map_via_server(api, serial: str, lines=None) -> int:
                     step, body = ans
                     v = api.post(f"{base}/{step}", {"session": v.get("session"), **body})
                     said = None
+                    if held is not None:
+                        held.__exit__(None, None, None)
+                        held = None
                 else:
                     v = api.get(base)
             except SlotError as e:
@@ -1263,12 +2355,18 @@ def _manual_map_via_server(api, serial: str, lines=None) -> int:
                     return 1
     finally:
         _restore_signals(old)
-    print(v.get("summary") or "Manual mapping ended.")
+        if held is not None:
+            held.__exit__(None, None, None)
+        waiting.__exit__(None, None, None)
+    print()
+    print(_manual_done(v))
     for q in v.get("positions") or []:
-        print(f"  {q['label']}: {_manual_status(q)}")
+        print(f"  {q['label']}  {_manual_status(q)}")
+    if "Not mapped" in (v.get("summary") or ""):
+        print(v["summary"])
     if v.get("offer_report") and not stopped and not done_input:
-        print("Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you "
-              "choose to. [y/N]", flush=True)
+        print("Share this map in a printer report, so other owners of this model benefit?\n"
+              "Nothing is sent unless you choose to. [y/N]", flush=True)
         try:
             answer = lines.get(timeout=SHARE_WAIT)
         except queue.Empty:
@@ -2106,21 +3204,6 @@ def _apply_selection(cfg: dict, on, *, ask=None) -> str | None:
     return None
 
 
-def _modules_menu(cfg: dict) -> None:
-    """One checklist (menu_ui: cursor keys and Space, or numbers without a terminal): needs go on too, dependents
-    go off, a/s/t presets, Enter applies."""
-    on = modules.enabled(cfg)
-    print()
-    print(f"Modules (mode: {modules.mode_of(on)})")
-    chosen = menu_ui.run_menu(on, _ask)
-    if chosen is None or chosen == on:
-        print("Unchanged.")
-        return
-    err = _apply_selection(cfg, chosen)
-    if err:
-        _err_line(err)
-
-
 def _config_has_content() -> bool:
     """False for a first install: no config file, or one with nothing in it (as set_mode counts it)."""
     f = config.paths().etc / "config.json"
@@ -2129,51 +3212,6 @@ def _config_has_content() -> bool:
     except (OSError, ValueError):
         return False
 
-
-def cmd_modules_menu(raw: bool) -> int:
-    """The checklist on its own. --raw: prompts on stderr; stdout gets the chosen modules as a comma list, then
-    one `set <key>=<value>` line per setting asked for (install.sh custom mode). Changes nothing."""
-    cfg = config.load()
-    on = modules.enabled(cfg)
-    if not raw:
-        _modules_menu(cfg)
-        return 0
-    if not _config_has_content():
-        on = modules.MODES["server"]            # a first install: AI intake and the library start off
-    out = sys.stdout
-    sys.stdout = sys.stderr                     # prompts and the checklist go to the terminal, not the capture
-    try:
-        while True:
-            chosen = menu_ui.run_menu(on, _ask)
-            if chosen is None:
-                return 1
-            trial = _with_modules(cfg, chosen)
-            _station_link(trial, chosen)
-            if {"server", "station"} <= set(chosen):
-                _link_station(trial)
-            got = modules.collect_settings(chosen, trial, _ask)
-            if got is None:
-                print("A setting was left blank; change the selection (q cancels).")
-                on = chosen
-                continue
-            for key, value in got.items():
-                modules.set_setting(trial, key, value)
-            try:
-                modules.validate(trial)
-            except modules.ModuleError as e:
-                _err_line(f"{e}\nfix: change the selection and press Enter again (q cancels)")
-                on = chosen
-                continue
-            break
-    finally:
-        sys.stdout = out
-    print(",".join(n for n in modules.MODULES if n in chosen))
-    for key, value in got.items():
-        print(f"set {key}={value}")
-    return 0
-
-
-# ---------- uninstall ----------
 
 def _kept_release() -> tuple[str, Path] | None:
     """(version, tarball) of the kept release to uninstall with: the running version's copy, else the newest
@@ -2730,10 +3768,13 @@ def cmd_web_passphrase() -> int:
     from .web import auth  # needs the [web] extra
     if not _is_root():
         return output.need_sudo(_sudo_command("sudo filament-kit web passphrase"))
-    first = secret_input.ask(f"New web passphrase, at least {auth.MIN_PASSPHRASE} characters: ")
-    second = secret_input.ask("Again: ")
+    try:
+        first = secret_input.ask(f"New passphrase, at least {auth.MIN_PASSPHRASE} characters: ")
+        second = secret_input.ask("New passphrase again: ")
+    except EOFError:
+        return _input_ended()
     if first != second:
-        _err_line("the two passphrases do not match; nothing was changed")
+        _err_line("the two passphrases do not match.")
         return 1
     try:
         dest = write_passphrase(first)
@@ -2989,7 +4030,10 @@ def cmd_local_intake_token(remove: bool) -> int:
     if remove:
         print("Reader token removed." if local_reader.remove_token() else "No reader token was set.")
         return 0
-    token = secret_input.ask("The local reader's token (hidden): ")
+    try:
+        token = secret_input.ask("The local reader's token (hidden): ")
+    except EOFError:
+        return _input_ended()
     try:
         local_reader.write_token(token)
     except ValueError as e:
@@ -3096,6 +4140,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                          "(also SPOOLWARDEN_PLAIN=1; implied by TERM=dumb)")
     ap.add_argument("--no-progress", action="store_true",
                     help="print each progress line once, as a whole line, instead of rewriting it")
+    ap.add_argument("--numbered", action="store_true",
+                    help="menus and checklists as numbered lines, never full-screen (also SPOOLWARDEN_MENU=numbered; "
+                         "implied by --plain)")
     ap.add_argument("--json", action="store_true",
                     help="standard output is one JSON document; nothing asks (a command that would needs --yes)")
     ap.add_argument("-q", "--quiet", action="store_true",

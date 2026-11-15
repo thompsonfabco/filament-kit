@@ -1,8 +1,10 @@
 """`filament-kit web passphrase` and `web status`."""
 from __future__ import annotations
 
+import io
 import os
 import stat
+import sys
 
 import pytest
 
@@ -133,3 +135,13 @@ def test_web_passphrase_without_the_group(monkeypatch, capsys):
     assert "filament-kit" in err and "Fix:" in err and "Traceback" not in err
     etc = config.paths().etc
     assert not (etc / "web_passphrase").exists() and not list(etc.glob("web_passphrase*"))
+
+
+@pytest.mark.parametrize("argv", [["web", "passphrase"], ["local-intake", "token"]])
+def test_the_end_of_input_at_a_secret_prompt_is_input_ended_with_5(monkeypatch, chown, capsys, argv):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    assert cli.main(argv) == 5
+    cap = capsys.readouterr()
+    assert "Input ended." in cap.out and "Traceback" not in cap.err
+    assert not (config.paths().etc / "web_passphrase").exists() and chown == []

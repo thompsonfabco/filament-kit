@@ -32,6 +32,15 @@ def _command_line_output(monkeypatch):
     output.reset()
 
 
+@pytest.fixture
+def secret_terminal(monkeypatch):
+    """Standard input counts as a terminal for the secret prompts: they then go to getpass (which the test replaces).
+    Without it a secret prompt reads the next line of standard input, as it does when piped."""
+    import sys
+    from filament_kit import secret_input
+    monkeypatch.setattr(secret_input, "_isatty", lambda stream: stream is sys.stdin)
+
+
 def old_rows(out: str) -> list[str]:
     """`status` output as the lines it had before S5.1 (`OK   text`, `FAIL text`, `     fix: ...`, `--   text`), so a test
     of what a row says need not know the heading, glyph and wrapping of the new layout. The header, the group headings

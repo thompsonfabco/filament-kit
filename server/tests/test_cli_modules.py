@@ -1,4 +1,4 @@
-"""filament-kit modules list/set/enable/disable and the config Modules menu (spec sections 3-4)."""
+"""filament-kit modules list/set/enable/disable and the Features checklist (spec sections 3-4; 06 8.5)."""
 import io
 import sys
 
@@ -239,10 +239,15 @@ def test_unknown_module_fails(applied, capsys):
     assert "unknown module" in capsys.readouterr().err
 
 
+def _features(monkeypatch, script, *args):
+    """`config --numbered` with `script`: 11 opens the Features checklist."""
+    _stdin(monkeypatch, script)
+    return cli.main(["config", "--numbered", *args])
+
+
 def test_config_menu_toggle_printers_then_apply(applied, monkeypatch):
-    # 6 Modules, 4 = printers (server mode has it on), Enter applies the checklist, 0 save and exit
-    _stdin(monkeypatch, "6\n4\n\n0\n")
-    assert cli.main(["config"]) == 0
+    # 11 Features, 4 = printers (server mode has it on), s applies the checklist, q leaves config
+    assert _features(monkeypatch, "11\n4\ns\nq\n") == 0
     assert config.load()["modules"]["printers"] is False
     assert set(config.load()["modules"]) == set(modules.MODULES) - set(modules.NEWER)
     assert applied[0]["modules"]["printers"] is False
@@ -250,8 +255,7 @@ def test_config_menu_toggle_printers_then_apply(applied, monkeypatch):
 
 
 def test_config_menu_no_module_change_does_not_apply(applied, monkeypatch):
-    _stdin(monkeypatch, "6\n0\n0\n")
-    cli.main(["config"])
+    assert _features(monkeypatch, "11\nq\nq\n") == 0
     assert applied == []
     assert "modules" not in config.load()
 
@@ -263,36 +267,35 @@ def test_config_menu_station_on_asks_address_and_refuses_range(applied, monkeypa
     cfg["modules"]["station"] = False
     cfg["modules"]["backup"] = True
     config.save(cfg)
-    # 8 = station: range refused, then a single address accepted
-    _stdin(monkeypatch, "6\n8\n\n192.168.1.0/24\n192.168.1.5\n0\n")
-    assert cli.main(["config"]) == 0
-    out = capsys.readouterr().out
-    assert "single address" in out
+    # 8 = station: s applies; the Hub's address: a range is refused, then a single address accepted
+    assert _features(monkeypatch, "11\n8\ns\n192.168.1.0/24\n192.168.1.5\nq\n") == 0
+    cap = capsys.readouterr()
+    assert "Weigh Station only needs the Hub's address." in cap.out
+    assert "Error: enter one address or name, not a range or wildcard." in cap.err
     cfg = config.load()
     assert cfg["modules"]["station"] is True
     assert cfg["station"]["allow"] == ["192.168.1.5"]
 
 
 def test_config_menu_choose_mode(applied, monkeypatch):
-    _stdin(monkeypatch, "6\na\n\n0\n")  # a = all-in-one preset
-    cli.main(["config"])
+    assert _features(monkeypatch, "11\nb\ns\nq\n") == 0      # b = Hub with Weigh Station (all-in-one)
     assert config.load()["modules"] == {n: n not in modules.OPT_IN or n in ("ai_intake", "library") for n in modules.MODULES
                               if n not in modules.NEWER}  # legacy cfg: AI kept; klipper never named stays out
     assert config.load()["station"]["url"] == "http://127.0.0.1:5003"
 
 
 def test_modules_menu_raw_prints_choice_only_on_stdout(monkeypatch, capsys):
-    _stdin(monkeypatch, "t\n1\n\n192.168.1.5\n")   # station preset, spoolman on, Enter, the server's address
-    assert cli.main(["modules", "menu", "--raw"]) == 0
+    _stdin(monkeypatch, "w\n1\ns\n192.168.1.5\n")   # Weigh Station setup, spoolman on, apply, the Hub's address
+    assert cli.main(["modules", "menu", "--raw", "--numbered"]) == 0
     cap = capsys.readouterr()
     assert cap.out.splitlines() == ["spoolman,station", "set station.allow=192.168.1.5"]
-    assert "[x]" in cap.err and "OPTIONAL AI" in cap.err
+    assert "[x]" in cap.err and "needs: Hub service" in cap.err
     assert "modules" not in config.load()          # --raw changes nothing
 
 
 def test_modules_menu_raw_cancel(monkeypatch, capsys):
     _stdin(monkeypatch, "q\n")
-    assert cli.main(["modules", "menu", "--raw"]) == 1
+    assert cli.main(["modules", "menu", "--raw", "--numbered"]) == 1
     assert capsys.readouterr().out == ""
 
 
@@ -301,9 +304,9 @@ def test_config_menu_turning_on_remote_pulls_web_and_says_so(applied, monkeypatc
     cfg["web"] = {"public_url": "https://mcp.example.com/filament", "lan": ["192.168.1.0/24"]}
     config.save(cfg)
     n = list(modules.MODULES).index("remote") + 1
-    _stdin(monkeypatch, f"6\n{n}\n\n0\n")
-    assert cli.main(["config"]) == 0
-    assert "now on too" in capsys.readouterr().out
+    assert _features(monkeypatch, f"11\n{n}\ns\nq\n") == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "now on too" in out and "Turns on: Web access (Remote access needs it), Remote access." in out
     assert config.load()["modules"]["web"] is True and config.load()["modules"]["remote"] is True
 
 
@@ -363,8 +366,7 @@ def test_disable_station_after_all_in_one_drops_local_url(applied):
 
 def test_config_menu_mode_server_after_all_in_one_drops_local_url(applied, monkeypatch):
     config.save(modules.set_mode(config.load(), "all-in-one"))
-    _stdin(monkeypatch, "6\ns\n\n0\n")  # s = server preset
-    assert cli.main(["config"]) == 0
+    assert _features(monkeypatch, "11\nh\ns\nq\n") == 0      # h = Hub setup
     assert config.load()["station"].get("url") is None
 
 
@@ -413,18 +415,19 @@ def test_config_menu_refused_by_plan_leaves_config_untouched(monkeypatch, capsys
     config.save(config.load())
     before = (config.paths().etc / "config.json").read_bytes()
     ran = _real_plan_fake_apply(monkeypatch)
-    _stdin(monkeypatch, "6\nt\n\nbadname\n0\n")  # t = station preset, server "badname"
-    assert cli.main(["config"]) == 1
+    assert _features(monkeypatch, "11\nw\ns\nbadname\nq\n") == 1     # w = Weigh Station only, the Hub's address
     assert "fix:" in capsys.readouterr().err
     assert (config.paths().etc / "config.json").read_bytes() == before and ran == []
 
 
 def test_modules_menu_raw_revalidates_and_reshows(monkeypatch, capsys):
-    # default server mode: 1 = spoolman off leaves a server with no Spoolman -> error, menu again, 1 back on
-    _stdin(monkeypatch, "1\n\n1\n\n")
-    assert cli.main(["modules", "menu", "--raw"]) == 0
+    # default server mode: 1 = spoolman off leaves a server with no Spoolman: its address is asked, an empty answer
+    # goes back to the checklist, 1 switches it on again, s applies
+    _stdin(monkeypatch, "1\ns\n\n1\ns\n")
+    assert cli.main(["modules", "menu", "--raw", "--numbered"]) == 0
     cap = capsys.readouterr()
-    assert "spoolman_url" in cap.err
+    assert "The Hub service needs a Spoolman: none runs on this machine." in cap.err
+    assert "Not applied: Hub service needs that setting." in cap.err
     assert "spoolman" in cap.out.split(",")
 
 
@@ -434,29 +437,29 @@ def _n(name):
 
 def test_raw_menu_asks_web_and_orders_settings(monkeypatch, capsys):
     # web: a non-https answer is refused, then accepted; orders: the file path
-    _stdin(monkeypatch, f"{_n('web')} {_n('orders')}\n\nhttp://x\nhttps://mcp.example.com/filament\n/srv/orders.json\n")
-    assert cli.main(["modules", "menu", "--raw"]) == 0
+    _stdin(monkeypatch, f"{_n('web')} {_n('orders')}\ns\nhttp://x\nhttps://mcp.example.com/filament\n/srv/orders.json\n")
+    assert cli.main(["modules", "menu", "--raw", "--numbered"]) == 0
     cap = capsys.readouterr()
     lines = cap.out.splitlines()
     assert "web" in lines[0].split(",") and "orders" in lines[0].split(",")
     assert "set web.public_url=https://mcp.example.com/filament" in lines
     assert "set orders.file=/srv/orders.json" in lines
-    assert "https address" in cap.err
+    assert "Error: give the https address people use, e.g. https://hub.example/filament." in cap.err
     assert "modules" not in config.load()
 
 
 def test_raw_menu_blank_setting_returns_to_checklist(monkeypatch, capsys):
-    # web on, blank url -> back to the checklist; web off again, Enter -> no settings lines
-    _stdin(monkeypatch, f"{_n('web')}\n\n\n{_n('web')}\n\n")
-    assert cli.main(["modules", "menu", "--raw"]) == 0
+    # web on, blank url -> back to the checklist; web off again, s -> no settings lines
+    _stdin(monkeypatch, f"{_n('web')}\ns\n\n{_n('web')}\ns\n")
+    assert cli.main(["modules", "menu", "--raw", "--numbered"]) == 0
     cap = capsys.readouterr()
-    assert "left blank" in cap.err
+    assert "Not applied: Web access needs that setting." in cap.err
     assert not any(ln.startswith("set ") for ln in cap.out.splitlines())
 
 
 def test_config_menu_web_and_orders_ask_settings_and_store_them(applied, monkeypatch):
-    _stdin(monkeypatch, f"6\n{_n('web')} {_n('orders')}\n\nhttps://mcp.example.com/filament\n/srv/orders.json\n0\n")
-    assert cli.main(["config"]) == 0
+    assert _features(monkeypatch, f"11\n{_n('web')} {_n('orders')}\ns\nhttps://mcp.example.com/filament\n"
+                                  "/srv/orders.json\nq\n") == 0
     cfg = config.load()
     assert cfg["modules"]["web"] and cfg["modules"]["orders"]
     assert cfg["web"]["public_url"] == "https://mcp.example.com/filament"
@@ -464,21 +467,21 @@ def test_config_menu_web_and_orders_ask_settings_and_store_them(applied, monkeyp
 
 
 def test_raw_menu_first_install_starts_without_ai_and_library(monkeypatch, capsys):
-    _stdin(monkeypatch, "\n")                        # no config file at all: Enter on the untouched list
-    assert cli.main(["modules", "menu", "--raw"]) == 0
+    _stdin(monkeypatch, "s\n")                      # no config file at all: apply the untouched list
+    assert cli.main(["modules", "menu", "--raw", "--numbered"]) == 0
     cap = capsys.readouterr()
     chosen = set(cap.out.splitlines()[0].split(","))
     assert chosen == modules.MODES["server"] and not {"ai_intake", "library"} & chosen
-    assert "[ ]  3 ai_intake" in cap.err and "[ ]  6 library" in cap.err
+    assert "[ ] Label Reader: Cloud (Claude)" in cap.err and "[ ] Filament Catalog" in cap.err
 
 
 def test_raw_menu_existing_legacy_config_keeps_legacy_set_and_station_preset_drops_library(monkeypatch, capsys):
     config.save(config.load())                       # a config file without `modules`: a legacy install
-    _stdin(monkeypatch, "\n")
-    assert cli.main(["modules", "menu", "--raw"]) == 0
+    _stdin(monkeypatch, "s\n")
+    assert cli.main(["modules", "menu", "--raw", "--numbered"]) == 0
     assert {"ai_intake", "library"} <= set(capsys.readouterr().out.splitlines()[0].split(","))
-    _stdin(monkeypatch, "t\n\n192.168.1.5\n")
-    assert cli.main(["modules", "menu", "--raw"]) == 0
+    _stdin(monkeypatch, "w\ns\n192.168.1.5\n")
+    assert cli.main(["modules", "menu", "--raw", "--numbered"]) == 0
     assert capsys.readouterr().out.splitlines()[0] == "station"
 
 

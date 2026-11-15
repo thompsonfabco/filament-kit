@@ -207,15 +207,15 @@ def test_a_new_address_with_the_access_code_saves_both_like_the_api(both, manage
 
 
 def test_the_terminal_menu_takes_a_name_too(env, names, monkeypatch, capsys):
-    answers = iter(["H2D", "h2d.local", SERIAL, "H2D"])
+    answers = iter(["b", "h2d.local", "H2D", SERIAL, "H2D"])        # Bambu, address, name, serial, model
     monkeypatch.setattr(cli, "_ask", lambda q: next(answers))
     monkeypatch.setattr(cli.secret_input, "ask", lambda q: "12345678")
-    cli._printers_action("2", [])
+    cli._printer_add(None)
     assert registry.load()[SERIAL].ip == "h2d.local"
-    answers = iter(["H2D", "nosuch.local", "0948ZZ0A0000002"])
+    answers = iter(["b", "nosuch.local", "", "0948ZZ0A0000002", ""])
     monkeypatch.setattr(cli, "_ask", lambda q: next(answers))
-    cli._printers_action("2", [])
-    assert "Not added" in capsys.readouterr().out and "0948ZZ0A0000002" not in registry.load()
+    cli._printer_add(None)
+    assert "not added" in capsys.readouterr().err.lower() and "0948ZZ0A0000002" not in registry.load()
 
 
 # ---------- Klipper: no Access Code, an optional key ----------

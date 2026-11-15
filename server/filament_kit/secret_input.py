@@ -1,7 +1,10 @@
 """Secret prompts (Access Code, Anthropic key, web passphrase, tokens): one `*` per character typed, Backspace works.
 
 At a terminal the line is read key by key with echo off (termios on Linux, msvcrt on Windows); the secret itself is
-never echoed, printed or logged. Without a terminal (a pipe, a test) it falls back to getpass.getpass.
+never echoed, printed or logged. Without a terminal on standard input (a pipe, `--numbered` with piped answers) the
+next line of standard input is the answer, as for every other question: getpass would read /dev/tty and the piped
+answers would slip by one. With `--plain` nothing is echoed at all and the prompt ends with `(typing is not shown)`,
+so a screen reader does not say "star" for each key (07 CLI-8).
 """
 from __future__ import annotations
 
@@ -9,6 +12,10 @@ import codecs
 import getpass
 import os
 import sys
+
+from . import output
+
+PLAIN_NOTE = "(typing is not shown)"
 
 _ENTER = ("\r", "\n")
 _BACKSPACE = ("\x7f", "\b")
@@ -116,9 +123,30 @@ def _windows(prompt: str) -> str:
     return line.text
 
 
+def plain_prompt(prompt: str) -> str:
+    """`prompt` with the note that nothing is echoed: `New passphrase: ` -> `New passphrase (typing is not shown): `."""
+    head = prompt.rstrip()
+    colon = head.endswith(":")
+    return f"{head[:-1].rstrip() if colon else head} {PLAIN_NOTE}{':' if colon else ''} "
+
+
+def _piped(prompt: str) -> str:
+    """The next line of standard input, the prompt on standard error (a secret is never echoed or captured);
+    EOFError at the end of input, as getpass raises it."""
+    sys.stderr.write(prompt)
+    sys.stderr.flush()
+    line = sys.stdin.readline()
+    if not line:
+        raise EOFError
+    return line.rstrip("\r\n")
+
+
 def ask(prompt: str) -> str:
-    """Read a secret, echoing `*` per character. Returns it without the line end (getpass behaviour)."""
+    """Read a secret, echoing `*` per character (nothing in plain mode). Returns it without the line end (getpass
+    behaviour)."""
     stdin = sys.stdin
+    if output.plain():
+        return getpass.getpass(plain_prompt(prompt)) if _isatty(stdin) else _piped(plain_prompt(prompt))
     if _isatty(stdin):
         try:
             fd = stdin.fileno()
@@ -133,4 +161,5 @@ def ask(prompt: str) -> str:
                 pass
             else:
                 return _posix(prompt, fd)
-    return getpass.getpass(prompt)
+        return getpass.getpass(prompt)
+    return _piped(prompt)

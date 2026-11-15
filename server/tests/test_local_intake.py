@@ -412,17 +412,23 @@ def test_cli_status_and_test(sm, spoolman_url, fake_reader, dead_url, capsys, tm
 
 
 def test_cli_config_label_reader(monkeypatch):
-    from filament_kit import cli
-    answers = iter(["2", "http://gpu-box.example:7915", "gpu"])
-    monkeypatch.setattr(cli, "_ask", lambda prompt: next(answers))
-    cfg = {"modules": BOTH}
-    cli._label_reader_menu(cfg)
-    assert cfg["intake"]["reader"] == "cloud-then-local" and cfg["local_intake"] == {
+    """4 Label Reader with both readers on: 1 Engine order, 5 Address, 6 Tier (06 8.3)."""
+    import io
+    import sys
+    from filament_kit import cli, config
+    monkeypatch.setenv("FK_NO_SYSTEMD", "1")
+    cfg = config.load()
+    cfg["modules"] = {**{n: True for n in BOTH}, "local_intake": True}
+    config.save(cfg)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("4\n1\n3\n5\nhttp://gpu-box.example:7915\n6\n3\nq\ns\nq\n"))
+    assert cli.main(["config", "--numbered"]) == 0
+    got = config.load()
+    assert got["intake"]["reader"] == "cloud-then-local" and got["local_intake"] == {
         "url": "http://gpu-box.example:7915", "tier": "gpu"}
-    assert cli._reader_name(cfg) == "Claude then local"
-    answers = iter(["", "not a url", "tpu"])
-    cli._label_reader_menu(cfg)
-    assert cfg["intake"]["reader"] == "cloud-then-local" and cfg["local_intake"]["tier"] == "gpu"
+    monkeypatch.setattr(sys, "stdin", io.StringIO("4\n1\n\n5\nnot a url\n\n6\n\nq\nq\n"))   # empty answers keep
+    assert cli.main(["config", "--numbered"]) == 0
+    got = config.load()
+    assert got["intake"]["reader"] == "cloud-then-local" and got["local_intake"]["tier"] == "gpu"
 
 
 # ---------- the intake history's "correct it" with the local reader ----------
