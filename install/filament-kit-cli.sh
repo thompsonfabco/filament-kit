@@ -35,31 +35,45 @@ if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; t
     fi
 fi
 
+# The switches every command takes (`--plain`, `--no-progress`, `--color <when>`) may stand before the command, as in
+# `sudo filament-kit --plain backup create`: they are set aside here, so the route below is chosen on the command
+# itself, and they go on to the program in front of it.
+SWITCHES=()
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --plain | --no-progress | --color=*) SWITCHES+=("$1"); shift ;;
+        --color) SWITCHES+=("$1"); shift; if [ "$#" -gt 0 ]; then SWITCHES+=("$1"); shift; fi ;;
+        *) break ;;
+    esac
+done
+run_as_root() { exec "$BIN" ${SWITCHES[@]+"${SWITCHES[@]}"} "$@"; }
+run_as_user() { exec runuser -u filament-kit -- "$BIN" ${SWITCHES[@]+"${SWITCHES[@]}"} "$@"; }
+
 case "${1:-}" in
     config | cert | modules | remote | update | uninstall | station | setup-code)
-        exec "$BIN" "$@"
+        run_as_root "$@"
         ;;
 esac
 # `backup` and `restore` read and write everything the kit keeps, its root-owned files too.
 case "${1:-}" in
-    backup | restore) exec "$BIN" "$@" ;;
+    backup | restore) run_as_root "$@" ;;
 esac
 # `web passphrase` writes the root-owned passphrase file (and refuses unless root); `web status` reads as the user.
 if [ "${1:-}" = web ] && [ "${2:-}" = passphrase ]; then
-    exec "$BIN" "$@"
+    run_as_root "$@"
 fi
 # `reader token` / `reader revoke` write the reader token file (handed to the service user) and refuse unless root;
 # `reader setup` makes a token the same way and writes or flashes the reader's secrets.h for the caller;
 # `reader tokens` only reads and runs as the user below.
 if [ "${1:-}" = reader ] && { [ "${2:-}" = token ] || [ "${2:-}" = revoke ] || [ "${2:-}" = setup ]; }; then
-    exec "$BIN" "$@"
+    run_as_root "$@"
 fi
 # `local-intake install` / `remove` install or remove the local reader's service, `token` writes its root-owned token
 # file and `plan` saves what an install needs in the root-owned store for the setup page; `status` and `test` only
 # read and run as the user below.
 if [ "${1:-}" = local-intake ] && { [ "${2:-}" = install ] || [ "${2:-}" = remove ] || [ "${2:-}" = token ] \
         || [ "${2:-}" = plan ]; }; then
-    exec "$BIN" "$@"
+    run_as_root "$@"
 fi
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -70,14 +84,14 @@ if [ "$(id -u)" -eq 0 ]; then
             printf 'error: %s: no such file (give the path to a library entry JSON file)\n' "$3" >&2
             exit 1
         fi
-        exec runuser -u filament-kit -- "$BIN" library add - < "$3"
+        run_as_user library add - < "$3"
     fi
     # `status`: the station's pairing folder is closed to the service user, so root looks and status gets the answer
     # (one line, never the token). With no folder there is no pairing to find, and status says so itself.
     if [ "${1:-}" = status ] && [ -d "$STATION_DIR" ]; then
         state="$("$BIN" station pairing-state 2>/dev/null)" || state=failed
-        exec runuser -u filament-kit -- "$BIN" "$@" "--station-pairing=$state"
+        run_as_user "$@" "--station-pairing=$state"
     fi
-    exec runuser -u filament-kit -- "$BIN" "$@"
+    run_as_user "$@"
 fi
-exec "$BIN" "$@"
+run_as_root "$@"

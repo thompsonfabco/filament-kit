@@ -50,9 +50,11 @@ def lines_of(text: str) -> list[str]:
 
 
 def check_width(*texts):
+    """No line over 79 columns, but one word that is longer than that (the test machine's long temporary path) stays
+    whole on its own line: a path or address cut in two cannot be used (06 6.3)."""
     for text in texts:
         for line in lines_of(text):
-            assert len(line) <= 79, line
+            assert len(line) <= 79 or " " not in line.strip(), line
 
 
 # ---------- AUT-9: status ----------
@@ -62,7 +64,7 @@ def test_status_has_no_line_over_79_columns(cfg, capsys):
     assert rc == 1
     assert max(len(line) for line in lines_of(out)) > 60        # the long rows are really in it
     check_width(out, err)
-    assert err == "" or "Checking" in err
+    assert err == ""
 
 
 def test_status_is_grouped_as_the_overview_with_a_header_and_a_summary(cfg, capsys):
@@ -263,15 +265,40 @@ def test_a_long_error_wraps_at_spaces_and_lines_up(capsys):
     assert any(x.startswith("Fix: word") for x in rest) and rest[-1].startswith("     ")
 
 
-def test_wrap_never_cuts_a_word_that_fits_and_cuts_one_that_cannot(monkeypatch):
+def test_wrap_never_cuts_a_word_and_keeps_one_too_long_whole_on_its_own_line(monkeypatch):
     from filament_kit import output
     assert output.wrap("a " * 50, indent=4, first=0)[1].startswith("    a")
     address = "https://192.0.2.10:8710/some/long/path"
     got = output.wrap("Answering at " + address, indent=18, first=0)
     assert all(len(x) <= 79 for x in got)
     assert address in " ".join(x.strip() for x in got)
-    got = output.wrap("x" * 200, indent=2)
-    assert all(len(x) <= 79 for x in got) and "".join(x.strip() for x in got) == "x" * 200
+    assert output.wrap("x" * 200, indent=2) == ["  " + "x" * 200]
+    path = "/var/lib/filament-kit/releases/0.5.2/some/deeper/folder/than/a/line/holds/uninstall.sh"
+    assert output.wrap("cannot read " + path + " now", indent=7, first=0) == ["cannot read", "       " + path,
+                                                                            "       now"]
+
+
+def test_wrap_breaks_only_at_spaces_outside_backtick_spans():
+    from filament_kit import output
+    text = ("this host has no pairing yet, and the next step cannot go on until it has one: run `sudo filament-kit "
+            "station pair` here, then run `sudo filament-kit status` again")
+    got = output.wrap(text, indent=5, first=0)
+    assert len(got) > 1 and all(len(x) <= 79 for x in got)
+    for line in got:
+        assert line.count("`") % 2 == 0, line               # no command is split over two lines
+    assert "`sudo filament-kit station pair`" in " ".join(got) and any("`sudo filament-kit status`" in x for x in got)
+    long_span = "run `" + "sudo filament-kit " * 6 + "end` now"
+    assert [x.strip() for x in output.wrap(long_span, indent=2)] == ["run", long_span[4:-4], "now"]
+
+
+def test_the_no_terminal_error_of_station_pair_keeps_its_command_whole(capsys):
+    from filament_kit import output
+    output.error("`sudo filament-kit station pair` needs a terminal: it asks for the link and for you to compare the "
+                 "fingerprint. Nothing was saved.")
+    err = capsys.readouterr().err
+    check_width(err)
+    assert all(x.count("`") % 2 == 0 for x in err.splitlines())
+    assert "`sudo filament-kit station pair`" in err
 
 
 def test_long_state_word_pushes_its_own_row_only(monkeypatch):
@@ -451,3 +478,142 @@ def test_status_shows_the_checking_line_on_standard_error_only(cfg, capsys, monk
     monkeypatch.setattr(cli.Spoolman, "ping", slow)
     rc, out, err = run(capsys, "status")
     assert err == "~ Checking...\n" and "Checking" not in out
+
+
+# ---------- a wait never draws over what is written, or over a question ----------
+
+def screen(text: str) -> list[str]:
+    """What a terminal shows after `text`: a carriage return goes back to the start of the row, later text overwrites."""
+    rows: list[str] = []
+    cur: list[str] = []
+    col = 0
+    for ch in text:
+        if ch == "\n":
+            rows.append("".join(cur).rstrip())
+            cur, col = [], 0
+        elif ch == "\r":
+            col = 0
+        else:
+            if col < len(cur):
+                cur[col] = ch
+            else:
+                cur.append(ch)
+            col += 1
+    if cur:
+        rows.append("".join(cur).rstrip())
+    return rows
+
+
+@pytest.fixture
+def terminal(monkeypatch):
+    """Called in the test (the capture of the run puts its own streams back before it): standard output and error
+    become one terminal, with no colour so the text can be compared."""
+    def use() -> Tty:
+        monkeypatch.setenv("NO_COLOR", "1")
+        t = Tty()
+        monkeypatch.setattr("sys.stdout", t)
+        monkeypatch.setattr("sys.stderr", t)
+        return t
+    return use
+
+
+def test_a_plain_print_during_a_wait_starts_on_its_own_line(quick, terminal):
+    terminal = terminal()
+    with quick.wait("Updating…"):
+        time.sleep(0.5)
+        print("==> step 3 of 3 done", flush=True)
+        time.sleep(0.05)
+    assert "~ Updating... 0 s" in terminal.getvalue()          # the line was up before the print
+    assert screen(terminal.getvalue()) == ["==> step 3 of 3 done"]
+
+
+def test_a_print_restarts_the_two_seconds(quick, terminal):
+    terminal = terminal()
+    with quick.wait("Updating…"):
+        for _ in range(6):                  # six prints 0.05 s apart: never 0.15 s of quiet
+            time.sleep(0.05)
+            print("tick", flush=True)
+    assert "Updating" not in terminal.getvalue()
+
+
+def test_the_line_is_not_drawn_after_text_that_has_not_ended_its_line(quick, terminal):
+    terminal = terminal()
+    with quick.wait("Updating…"):
+        print("half a line", end="", flush=True)
+        time.sleep(0.5)
+    assert "Updating" not in terminal.getvalue()
+
+
+def test_the_streams_are_the_same_objects_again_after_the_wait(quick, terminal):
+    terminal = terminal()
+    import sys
+    with quick.wait("Updating…"):
+        assert sys.stdout is not terminal and sys.stderr is not terminal
+    assert sys.stdout is terminal and sys.stderr is terminal
+
+
+def test_restore_asks_before_its_wait_starts_and_its_lines_start_clean(quick, terminal, monkeypatch, tmp_path):
+    terminal = terminal()
+    import sys
+    from filament_kit import backup
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    zip_path = tmp_path / "b.zip"
+    zip_path.write_bytes(b"x")
+    seen: list[str] = []
+
+    def answer(prompt):                     # the real input() writes its prompt below Python's streams
+        terminal.write(prompt)
+        time.sleep(0.6)
+        seen.append(terminal.getvalue())
+        terminal.write("restore\n")
+        return "restore"
+
+    def fake_restore(path, *, yes, ask, step):
+        print("Backup of Workshop made today.")
+        assert ask("Type restore to go on: ") == "restore"
+        time.sleep(0.4)
+        print("==> step 3 of 3 Putting the backup in place", flush=True)
+        return 0
+    monkeypatch.setattr(backup, "restore", fake_restore)
+    monkeypatch.setattr("builtins.input", answer)
+    assert cli.cmd_restore(str(zip_path)) == 0
+    assert seen[0].endswith("Type restore to go on: ") and "Restoring" not in seen[0]
+    assert "Restoring" in terminal.getvalue()              # the wait did start, after the answer
+    assert screen(terminal.getvalue())[:3] == ["Backup of Workshop made today.", "Type restore to go on: restore",
+                                              "==> step 3 of 3 Putting the backup in place"]
+
+
+def test_the_line_at_a_terminal_is_cut_to_the_width_and_keeps_its_counter(quick, terminal, monkeypatch):
+    terminal = terminal()
+    monkeypatch.setenv("COLUMNS", "30")
+    with quick.wait("Mapping the slots of Workshop X1 in the back room…"):
+        time.sleep(0.5)
+    frames = terminal.getvalue().split("\r")
+    assert max(len(f) for f in frames) <= 29
+    assert any(f.rstrip().endswith("... 0 s") for f in frames)
+
+
+def test_colour_needs_a_terminal_and_a_terminal_type_that_can_show_it(monkeypatch):
+    from filament_kit import output
+    monkeypatch.delenv("TERM")
+    assert output.colour_on(Tty()) is False                 # TERM unset: no colour even at a terminal
+    monkeypatch.setenv("TERM", "dumb")
+    assert output.colour_on(Tty()) is False
+    monkeypatch.setenv("TERM", "xterm-256color")
+    assert output.colour_on(Tty()) is True
+    assert output.colour_on(io.StringIO()) is False         # not a terminal
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert output.colour_on(Tty()) is False
+    assert output.colour_on(Tty()) is False
+
+
+def test_old_rows_gives_back_the_old_lines_and_refuses_one_it_does_not_know():
+    from conftest import old_rows
+    shown = ("filament-kit 0.5.2 - Workshop hub - 2026-11-14\n\nHub\n  + OK            service active\n"
+             "  ! needs a look  Spoolman not reachable\n                  Fix: start it\n  * note          a note\n\n"
+             "1 needs a look - 1 OK - 1 note\n")
+    assert old_rows(shown) == ["OK   service active", "FAIL Spoolman not reachable", "     fix: start it", "--   a note"]
+    for stray in ("an unexpected line\n", "  o off           a row with a word old_rows has no old line for\n",
+                  "Not a group\n"):
+        with pytest.raises(AssertionError):
+            old_rows(shown + stray)

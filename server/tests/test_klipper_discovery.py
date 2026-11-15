@@ -1,6 +1,7 @@
 """Klipper discovery (mDNS + on-demand scan) and the `filament-kit klipper` commands."""
 import ipaddress
 import json
+import re
 import socket
 from pathlib import Path
 
@@ -239,10 +240,9 @@ def test_cli_detect_output_is_unchanged(moonraker, capsys):
         0, "SV08 MAX (127.0.0.1:PORT)\n  model: Klipper printer (generic)\n  filament system: afc; slots: from the "
            "printer\n    no model entry matched: generic Klipper printer\n    filament system afc (object AFC)\n", "")
     moonraker.api_key = "k"
-    rc, out, err = _detect_cli(moonraker, capsys, "detect", "sv08-max")      # the long line wraps at the width
-    assert (rc, " ".join(out.split()), err) == (
-        0, "SV08 MAX (127.0.0.1:PORT) 127.0.0.1:PORT wants a Moonraker API key: run "
-           "`filament-kit klipper api-key sv08-max`", "")
+    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (       # the long line wraps at the width
+        0, "SV08 MAX (127.0.0.1:PORT)\n  127.0.0.1:PORT wants a Moonraker API key: run\n"
+           "  `filament-kit klipper api-key sv08-max`\n", "")
 
 
 def test_cli_detect_offline_output_is_unchanged(capsys):
@@ -251,7 +251,10 @@ def test_cli_detect_offline_output_is_unchanged(capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert out.startswith("Gone (127.0.0.1:9)\n  Moonraker at 127.0.0.1:9 is not answering (")
-    assert " ".join(out.split()).endswith("); the server keeps trying once it runs") and out.count("\n") >= 2
+    # the second line wraps at the width: each space after "answering (...);" may be a line break and its indent
+    assert re.fullmatch(r"Gone \(127\.0\.0\.1:9\)\n  Moonraker at 127\.0\.0\.1:9 is not answering \([^)\n]*\); the"
+                        r"(?: |\n  )server(?: |\n  )keeps(?: |\n  )trying(?: |\n  )once(?: |\n  )it(?: |\n  )runs\n",
+                        out), out
 
 
 def test_detect_returns_what_the_cli_prints(moonraker):

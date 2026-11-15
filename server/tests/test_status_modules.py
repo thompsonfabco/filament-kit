@@ -59,7 +59,7 @@ def test_status_station_unreachable_fails_naming_url(capsys):
     _cfg("http://127.0.0.1:1")
     assert cli.main(["status"]) == 1
     out = capsys.readouterr().out
-    assert "needs a look" in out and "http://127.0.0.1:1" in "".join(out.split())
+    assert "needs a look" in out and "http://127.0.0.1:1" in out
 
 
 @pytest.mark.parametrize("status,body", [(500, {"error": "boom"}), (503, b""), (200, b"not json"), (200, [1, 2])])
@@ -71,7 +71,7 @@ def test_status_station_error_or_invalid_body_fails_naming_url(capsys, status, b
     finally:
         srv.shutdown()
     out = capsys.readouterr().out
-    assert "needs a look" in out and url in "".join(out.split()) and "Weigh Station answering" not in out
+    assert "needs a look" in out and url in out and "Weigh Station answering" not in out
 
 
 def test_status_station_not_seen_is_informational(capsys):

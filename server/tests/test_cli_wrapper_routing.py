@@ -29,7 +29,7 @@ USER_COMMANDS = [
 ]
 
 
-def _route(tmp_path, args):
+def _route(tmp_path, args, station=False):
     stubs = tmp_path / "bin"
     stubs.mkdir(exist_ok=True)
     for name, body in (("id", 'echo 0'), ("runuser", 'shift 3; echo "AS-USER $*"'),
@@ -39,7 +39,10 @@ def _route(tmp_path, args):
         p.chmod(0o755)
     text = WRAPPER.read_text(encoding="utf-8")
     text = text.replace("BIN=/opt/filament-kit/venv/bin/filament-kit", f"BIN={stubs / 'fk'}")
-    text = text.replace("STATION_DIR=/etc/filament-kit-station", f"STATION_DIR={tmp_path / 'no-station'}")
+    if station:
+        (tmp_path / "station").mkdir(exist_ok=True)
+    text = text.replace("STATION_DIR=/etc/filament-kit-station",
+                        f"STATION_DIR={tmp_path / ('station' if station else 'no-station')}")
     text = text.replace("KIT_OPT=/opt/filament-kit", f"KIT_OPT={tmp_path / 'no-opt'}")
     script = tmp_path / "wrapper.sh"
     script.write_text(text, encoding="utf-8", newline="\n")
@@ -63,3 +66,25 @@ def test_root_commands_run_as_root(tmp_path, args):
 @pytest.mark.parametrize("args", USER_COMMANDS, ids=" ".join)
 def test_other_commands_run_as_the_service_user(tmp_path, args):
     assert _route(tmp_path, args).startswith("AS-USER ")
+
+
+SWITCHED = [["--plain"], ["--no-progress"], ["--color", "never"], ["--color=always"],
+            ["--plain", "--color", "never", "--no-progress"]]
+
+
+@pytest.mark.parametrize("switches", SWITCHED, ids=" ".join)
+@pytest.mark.parametrize("args", [["backup", "create"], ["restore", "x.zip"], ["config", "show"], ["web", "passphrase"],
+                                  ["reader", "token", "a"]], ids=" ".join)
+def test_switches_before_a_root_command_do_not_change_who_runs_it(tmp_path, switches, args):
+    assert _route(tmp_path, [*switches, *args]) == "AS-ROOT " + " ".join([*switches, *args])
+
+
+@pytest.mark.parametrize("switches", SWITCHED, ids=" ".join)
+def test_switches_before_a_user_command_stay_in_front_of_it(tmp_path, switches):
+    got = _route(tmp_path, [*switches, "web", "status"])
+    assert got.startswith("AS-USER ") and got.endswith(" ".join([*switches, "web", "status"]))
+
+
+def test_status_keeps_its_station_pairing_answer_after_switches(tmp_path):
+    got = _route(tmp_path, ["--plain", "status"], station=True)
+    assert got.startswith("AS-USER ") and " --plain status --station-pairing=" in got

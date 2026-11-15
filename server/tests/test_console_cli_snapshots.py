@@ -62,8 +62,7 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
     cfg["modules"]["ai_intake"] = True
     config.save(cfg)
     assert cli.main(["status"], client_factory=lambda k: None) == 1
-    # a long path is cut at the width, so the rows are compared without spaces
-    assert [x.replace(" ", "") for x in lines(capsys)] == [x.replace(" ", "") for x in [
+    assert lines(capsys) == [
         "--   service checks skipped (FK_NO_SYSTEMD=1)",
         f"FAIL certificate missing ({config.paths().etc / 'cert.pem'})",
         "     fix: run: sudo filament-kit cert",
@@ -77,7 +76,7 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
         "     fix: check the Weigh Station machine: sudo systemctl status filament-kit-station  (url http://192.0.2.30:5003)",
         "--   paired devices: 0",
         "--   Filament Catalog version 7 (bundled), 1 local addition",
-    ]]
+    ]
 
 
 def test_web_status_lines(cfg, capsys, monkeypatch):
@@ -88,14 +87,18 @@ def test_web_status_lines(cfg, capsys, monkeypatch):
     assert cli.main(["web", "status"]) == 0
     port = cfg["web"]["port"]
     out = capsys.readouterr().out
-    assert [x[:1] for x in out.splitlines()] == [" "] * len(out.splitlines())      # no group: no heading
-    assert " ".join(out.split()) == (
-        "+ OK web module is on + OK public URL https://printer.example.com/filament "
-        "connector: https://printer.example.com/filament/mcp phone app: https://printer.example.com/filament/intake "
-        "* note sign-in passphrase not set: the Claude connector cannot sign in until "
-        "`sudo filament-kit web passphrase` "
-        f"+ OK web unit answers on 127.0.0.1:{port} "
-        "connectors: none signed in yet printer slots: none; tag readers: 0 + no station")
+    print(repr(out.splitlines()))
+    assert out.splitlines() == [                      # no group, so no heading and no summary
+        "  + OK            web module is on",
+        "  + OK            public URL https://printer.example.com/filament",
+        "                  connector: https://printer.example.com/filament/mcp   phone",
+        "                  app: https://printer.example.com/filament/intake",
+        "  * note          sign-in passphrase not set: the Claude connector cannot sign",
+        "                  in until `sudo filament-kit web passphrase`",
+        f"  + OK            web unit answers on 127.0.0.1:{port}",
+        "                  connectors: none signed in yet",
+        "                  printer slots: none; tag readers: 0 + no station",
+    ]
 
 
 class Fetcher:

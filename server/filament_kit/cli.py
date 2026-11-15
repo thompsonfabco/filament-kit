@@ -331,8 +331,13 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             _err_line(f"{zip_path}: no such file")
             return 1
     try:
-        with output.wait("Restoring…"):
-            return backup.restore(path, yes=yes, step=steps.Steps(backup.restore_steps()).next)
+        waiting = output.wait("Restoring…")
+
+        def ask(prompt: str) -> str:
+            with waiting.paused():              # the wait starts after the answer, never over the question
+                return input(prompt)
+        with waiting:
+            return backup.restore(path, yes=yes, ask=ask, step=steps.Steps(backup.restore_steps()).next)
     finally:
         if uploaded:
             path.unlink(missing_ok=True)

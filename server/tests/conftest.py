@@ -19,12 +19,14 @@ def _restore_app_logger():
 @pytest.fixture(autouse=True)
 def _command_line_output(monkeypatch):
     """What the command line writes (glyphs, colour, width) is the same on every machine: ASCII glyphs, no colour,
-    80 columns, and the switches of the last run forgotten."""
+    80 columns, a colour-capable terminal type (colour then follows the stream, as on a real machine, whatever TERM the
+    tests run under), and the switches of the last run forgotten."""
     from filament_kit import output
     for name in ("NO_COLOR", "SPOOLWARDEN_PLAIN", "LC_ALL", "LC_CTYPE", "LANG"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SPOOLWARDEN_GLYPHS", "ascii")
     monkeypatch.setenv("COLUMNS", "80")
+    monkeypatch.setenv("TERM", "xterm")
     output.reset()
     yield
     output.reset()
@@ -32,14 +34,16 @@ def _command_line_output(monkeypatch):
 
 def old_rows(out: str) -> list[str]:
     """`status` output as the lines it had before S5.1 (`OK   text`, `FAIL text`, `     fix: ...`, `--   text`), so a test
-    of what a row says need not know the heading, glyph and wrapping of the new layout. The header, the headings and the
-    summary are left out; a row wrapped at the width is joined again."""
+    of what a row says need not know the heading, glyph and wrapping of the new layout. The header, the group headings
+    and the summary are left out; a row wrapped at the width is joined again. Any other line is an AssertionError, so a
+    stray line, a wrong word or a row that lost its layout fails the test that reads the output through here."""
     import re
+    from filament_kit import status
     mark = {"OK": "OK   ", "needs a look": "FAIL ", "note": "--   "}
     rows: list[str] = []
-    for line in out.splitlines():
-        m = re.match(r"^(?:  [+!*o~x] |)(OK|needs a look|note)(?: {2,}|$)(.*)$", line)
-        if m and (line.startswith("  ") or re.match(r"^(OK|needs a look|note)  ", line)):
+    for n, line in enumerate(l for l in out.splitlines() if l.strip()):
+        m = re.match(r"^(?:  [+!*o~x] |)([A-Za-z][A-Za-z ]*?)(?: {2,}|$)(.*)$", line)
+        if line.startswith("  ") and not line.startswith(" " * 5) and m and m[1] in mark:
             rows.append(mark[m[1]] + m[2])
         elif line.startswith(" " * 18) and rows:
             text = line.strip()
@@ -47,6 +51,11 @@ def old_rows(out: str) -> list[str]:
                 rows.append("     fix: " + text[5:])
             else:
                 rows[-1] += " " + text
+        elif line in status.GROUPS or re.fullmatch(r"\d+ (?:needs? a look|OK|notes?)(?: - \d+ (?:needs? a look|OK|notes?))*", line) or (
+                n == 0 and re.match(r"filament-kit \S+ - ", line)):
+            continue
+        else:
+            raise AssertionError(f"a status line that is no row, heading, header or summary: {line!r}")
     return rows
 
 

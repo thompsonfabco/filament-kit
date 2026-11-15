@@ -13,10 +13,12 @@ the environment and from what `configure` was given, so a test that sets `NO_COL
     status_row(word, text, fix) -> [str]      the lines of one status row (06 9.1)
     table(headers, rows, long=, right=)       a table as lines (06 6.3)
     wrap(text, indent=, first=) -> [str]      running text at the width
-    wait(text)                                a progress line once 2 seconds pass with no other output (06 6.6)
+    wait(text)                                a progress line once 2 seconds pass with no other output (06 6.6);
+                                              `paused()` holds it while the command asks a question
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -181,10 +183,25 @@ def _visible(s: str) -> int:
     return len(re.sub(r"\x1b\[[0-9;]*m", "", s))
 
 
+def _words(para: str) -> list[str]:
+    """`para` split at its spaces, except those inside a `backtick span`: a command stays whole on a line."""
+    words, cur, inside = [], "", False
+    for ch in para:
+        if ch == "`":
+            inside = not inside
+        if ch == " " and not inside:
+            words.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    return words + [cur]
+
+
 def wrap(text: str, *, indent: int = 0, first: int | None = None) -> list[str]:
-    """`text` as lines of at most width - 1 characters, wrapped at spaces. The first line starts at column `first`
-    (default `indent`), the others at `indent`, so a continuation lines up with where the text began. Newlines in
-    `text` start a new line. A word too long for a line on its own is cut, as a last resort."""
+    """`text` as lines of at most width - 1 characters, wrapped at spaces outside backtick spans. The first line starts
+    at column `first` (default `indent`), the others at `indent`, so a continuation lines up with where the text began.
+    Newlines in `text` start a new line. A word, number, address, path or backtick span longer than a line stays whole
+    on a line of its own (06 6.3): a command or address cut in two cannot be copied."""
     limit = width() - 1
     first = indent if first is None else first
     lines: list[str] = []
@@ -192,13 +209,10 @@ def wrap(text: str, *, indent: int = 0, first: int | None = None) -> list[str]:
         lead = len(para) - len(para.lstrip(" "))          # spaces a line starts with stay, and carry to its wrap
         para = para[lead:]
         cur, col = "", (first if not lines else indent) + lead
-        for word in para.split(" "):
+        for word in _words(para):
             if cur and col + len(cur) + 1 + len(word) > limit:
                 lines.append(" " * col + cur)
                 cur, col = "", indent + lead
-            while col + len(word) > limit and not cur and limit > col:
-                lines.append(" " * col + word[:limit - col])
-                word, col = word[limit - col:], indent + lead
             cur = f"{cur} {word}" if cur else word
         lines.append(" " * col + cur)
     return lines
@@ -239,12 +253,59 @@ def table(headers: list[str], rows: list[list], *, long: int = 0, right: tuple[i
 
 _lock = threading.RLock()
 _waits: list["wait"] = []
+_midline = [False]          # the last text written to the terminal did not end its line: no progress line yet
+
+
+def _other_output() -> None:
+    with _lock:
+        for w in _waits:
+            w._other_output()
+
+
+class _Guard:
+    """Stands in for standard output and error while a wait is on, so that anything written to them, a plain `print`
+    of the code that waits included, first takes the progress line off and starts the 2 seconds again."""
+
+    def __init__(self, real):
+        self.real = real
+
+    def write(self, text):
+        with _lock:
+            if text:
+                _other_output()
+            n = self.real.write(text)
+            if text:
+                _midline[0] = not text.endswith("\n")
+            return n
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+def _raw(stream):
+    return stream.real if isinstance(stream, _Guard) else stream
+
+
+def _guard_streams() -> None:
+    for name in ("stdout", "stderr"):
+        if not isinstance(getattr(sys, name), _Guard):
+            setattr(sys, name, _Guard(getattr(sys, name)))
+
+
+def _unguard_streams() -> None:
+    for name in ("stdout", "stderr"):
+        if isinstance(getattr(sys, name), _Guard):
+            setattr(sys, name, _raw(getattr(sys, name)))
+    _midline[0] = False
 
 
 def _write(stream, lines: list[str]) -> None:
     with _lock:
-        for w in _waits:
-            w._other_output()
+        _other_output()
         stream.write("".join(line + "\n" for line in lines))
         stream.flush()
 
@@ -322,7 +383,11 @@ class wait:
     """`with output.wait("Checking…"):` shows `◐ Checking… 3 s` on standard error once 2 seconds pass with no other
     output: at a terminal rewritten in place each second, with `(Ctrl-C stops)` after 5. Not at a terminal, or with
     `--no-progress`, one whole line, once. In plain mode the line has no glyph and comes again every 10 seconds with
-    the time so far. `step(k, n)` adds `step k of n` in place of the seconds. Never on standard output."""
+    the time so far. `step(k, n)` adds `step k of n` in place of the seconds. Never on standard output.
+
+    While it is on, standard output and error are guarded: any write, from anywhere, takes the line off first and
+    restarts the 2 seconds, and the line is never drawn after text that has not ended its line. A command that asks a
+    question does it inside `with t.paused():`, so its wait begins after the answer."""
 
     def __init__(self, text: str, *, steps: tuple[int, int] | None = None):
         self.text = text
@@ -331,6 +396,7 @@ class wait:
         self._started = self._since = time.monotonic()
         self._printed = False           # a line is on the screen (in place) or was written (once)
         self._inplace = False
+        self._held = False
         self._cols = 0
         self._thread: threading.Thread | None = None
 
@@ -341,6 +407,7 @@ class wait:
 
     def __enter__(self):
         with _lock:
+            _guard_streams()
             _waits.append(self)
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -354,12 +421,28 @@ class wait:
             self._erase()
             if self in _waits:
                 _waits.remove(self)
+            if not _waits:
+                _unguard_streams()
         return False
+
+    @contextlib.contextmanager
+    def paused(self):
+        """A question is asked inside this: no progress line meanwhile, and the wait counts from the answer."""
+        with _lock:
+            self._held = True
+            self._erase()
+        try:
+            yield
+        finally:
+            with _lock:
+                self._held = False
+                self._since = self._started = time.monotonic()
 
     def _erase(self) -> None:
         if self._inplace and self._printed:
-            sys.stderr.write("\r" + " " * self._cols + "\r")
-            sys.stderr.flush()
+            err = _raw(sys.stderr)
+            err.write("\r" + " " * self._cols + "\r")
+            err.flush()
             self._printed = False
 
     def _other_output(self) -> None:
@@ -368,12 +451,20 @@ class wait:
 
     def _line(self, seconds: int | None) -> str:
         s = self.text.rstrip().replace("…", "…" if unicode_glyphs() else "...")
+        tail = ""
         if self.steps:
-            s += f" step {self.steps[0]} of {self.steps[1]}"
+            tail = f" step {self.steps[0]} of {self.steps[1]}"
         elif seconds is not None:
-            s += f" {seconds} s"
+            tail = f" {seconds} s"
         if seconds is not None and self._inplace and seconds >= STOP_HINT_AFTER:
-            s += " (Ctrl-C stops)"
+            tail += " (Ctrl-C stops)"
+        if self._inplace:                  # rewritten in place: one line at most, or the \r cannot take it off
+            room = width() - 1 - (0 if plain() else 2)
+            if len(s) + len(tail) > room:
+                ell = sym("ellipsis")
+                s = s[:max(0, room - len(tail) - len(ell))] + ell
+                tail = tail[:max(0, room - len(s))]
+        s += tail
         if plain():
             return s
         return paint(f"{_GLYPHS['working'][0 if unicode_glyphs() else 1]} {s}", "accent", sys.stderr)
@@ -383,8 +474,8 @@ class wait:
         while not self._stop.wait(0.1):
             pause = False
             with _lock:
-                err, now = sys.stderr, time.monotonic()
-                if now - self._since < PROGRESS_AFTER:
+                err, now = _raw(sys.stderr), time.monotonic()
+                if self._held or _midline[0] or now - self._since < PROGRESS_AFTER:
                     continue
                 if _switches["no_progress"] or (not plain() and not _is_tty(err)):
                     if not self._printed:                      # once, whole, without the counter
