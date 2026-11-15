@@ -555,7 +555,7 @@ footBtn(region, "Cancel").click();
 await until(() => text($(".detail__foot .result", region)), "the warning");
 out.busy = { warning: text($(".detail__foot .result", region)), open: !!open(), asked: !!$("dialog[open]:not(.dialog--drawer)"), posts: posts.length };
 release();
-for (let i = 0; i < 300 && open(); i++) await sleep(100);
+for (let i = 0; i < 300 && (open() || $(".detail--drawer")); i++) await sleep(100);   // until the closed drawer is gone too, as the leave step waits
 out.end = { left: leftOver(), hash: location.hash, still: open() ? text(open()) : null };
 return out;
 """)
