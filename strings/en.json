@@ -1868,6 +1868,7 @@
   "add_row_no_brand": "No brand",
   "add_card_colour_pick": "Pick a colour",
   "add_card_price_error": "Enter a price above 0.",
+  "add_card_grams_plain": "Enter grams as a plain number, e.g. 1000.",
   "add_bar_field_error": "Spool {number}, {field}: {message}",
   "add_preview_opened": "Opened",
   "add_preview_placement": "{spools} in {location}",

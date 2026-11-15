@@ -769,11 +769,11 @@ READY = {
   await waitPage(); const KEY = 'spoolwarden.draft.add';
   if (!sessionStorage.getItem('s38-corrupt')) {                         // the first pass leaves bad drafts; the next ones load the page with them
     sessionStorage.setItem('s38-corrupt', '1');
-    localStorage.setItem(KEY, JSON.stringify({ v: 1, items: [null, {}, { vendor: 5, count: 'abc' }] })); localStorage.setItem(KEY + '-new', 'not json');
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, items: [null, 7, 'x'] })); localStorage.setItem(KEY + '-new', 'not json');
     return;
   }
   need('the page started and says nothing of the bad drafts', $('.add__bar-text') && !$('.add__draft .banner'));
-  need('they are dropped', !localStorage.getItem(KEY) && !localStorage.getItem(KEY + '-new'));
+  need('the unusable second slot is dropped, the odd entries are not used', !localStorage.getItem(KEY + '-new') && !$$('.add__card').length);
 """,
     "draft_partial": r"""
   await waitPage(); const KEY = 'spoolwarden.draft.add';
@@ -803,6 +803,8 @@ READY = {
   const card = await newFilament('Elegoo' + stamp, 'PLA Red' + stamp, 'PLA', '160');
   typeIn(field('Density', card).querySelector('input'), '1,240');
   need('in a decimal field the comma is the point: 1,240 is 1.24', field('Density', card).querySelector('.field__error').hidden);
+  typeIn(field('Net weight', card).querySelector('input'), '1.000');
+  need('1.000 g is flagged, not read as 1 g', !field('Net weight', card).querySelector('.field__error').hidden && field('Net weight', card).querySelector('.field__error').textContent.includes('Enter grams as a plain number, e.g. 1000.'));
   typeIn(field('Net weight', card).querySelector('input'), '0,500');
   need('0,500 g is a half gram, not 500', $('.add__sum', card).textContent.includes('0.5 g'));
   typeIn(field('Spools', card).querySelector('input'), '1,000');
@@ -833,6 +835,9 @@ READY = {
   need('Undo does nothing while the Add is written', $$('.add__card').length === 1);
   g.release(); await until('the result', () => text('.add__added').includes('Added 1 spool:'));
   need('the Add finished cleanly, no card is left half added', !$$('.add__card').length && n === 2);
+  await until('Undo is offered again', () => button('Undo', $('.toasts')));
+  button('Undo', $('.toasts')).click();
+  need('and it brings the removed card back', $$('.add__card').length === 1 && $('.add__card').textContent.includes('Extra Spool'));
 """,
     "restore_during_add": r"""
   await waitPage(); const KEY = 'spoolwarden.draft.add';
@@ -848,6 +853,27 @@ READY = {
   g.release(); await until('the result', () => text('.add__added').includes('Added 1 spool:'));
   need('the waiting draft is still there, whole', localStorage.getItem(KEY) && button('Restore them', $('.add__draft')) && !$$('.add__card').length);
   button('Restore them', $('.add__draft')).click(); await until('the drafted card is back', () => $$('.add__card').length >= 1);
+""",
+    "draft_text_in_progress": r"""
+  await waitPage(); const KEY = 'spoolwarden.draft.add';
+  const base = { sealed: true, location: 'Sealed stock', hand: true, match: 'new filament', estimates: [], photos: [], net: 1000, tare: 160, density: 1.24, color_hex: '', price_per_kg: '' };
+  if (!sessionStorage.getItem('s38-progress')) {                        // what was being typed: a cleared Spools, a bad Spools, a null brand and material
+    sessionStorage.setItem('s38-progress', '1');
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, started: Date.now(), changed: Date.now(), note: '', readId: null, tag: null, found: null, items: [
+      { ...base, vendor: 'Elegoo', name: 'PLA Red', material: 'PLA', count: null, _text: { count: '' } },
+      { ...base, vendor: 'Elegoo', name: 'PLA Blue', material: 'PLA', count: null, _text: { count: 'abc' } },
+      { ...base, vendor: null, name: 'Mystery', material: null, count: 1 },
+      { ...base, vendor: 'Elegoo', name: 'PLA Green', material: 'PLA', count: true }] }));
+    return;
+  }
+  need('the draft is offered, not deleted', text('.add__draft').includes('You have a draft from') && !!localStorage.getItem(KEY));
+  button('Restore them').click(); await until('four cards', () => $$('.add__card').length === 4);
+  const [one, two, three, four] = $$('.add__card');
+  need('a cleared Spools stays cleared and is checked at Preview', field('Spools', one).querySelector('input').value === '' && one.textContent.includes('Needs: Spools'));
+  need('an unparsable Spools stays as typed', field('Spools', two).querySelector('input').value === 'abc');
+  need('a null brand and material are empty fields', field('Brand', three).querySelector('input').value === '' && field('Material', three).querySelector('input').value === '' && three.textContent.includes('Needs: Brand, Material'));
+  need('a count of true is not shown as "true"', field('Spools', four).querySelector('input').value === '');
+  need('the bar names the first spool', text('.add__bar-text').startsWith('3 spools need fields. Spool 1 is first.'));
 """,
     "card_fields": r"""
   await waitPage(); const card = await newFilament('', '', '');
@@ -885,7 +911,7 @@ def _states(url: str, name: str, *extra: str) -> dict:
     return out
 
 
-MULTI_PASS = ("draft", "draft_restored", "draft_discard", "draft_waiting", "draft_corrupt", "draft_partial", "restore_during_add")
+MULTI_PASS = ("draft", "draft_restored", "draft_discard", "draft_waiting", "draft_corrupt", "draft_partial", "restore_during_add", "draft_text_in_progress")
 
 
 @pytest.mark.parametrize("name", [n for n in READY if n not in MULTI_PASS])

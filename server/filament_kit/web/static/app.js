@@ -995,6 +995,7 @@ function addTab() {
     if (k === "density") return n > 0 ? null : SW.t("add_review_error_density");
     if (k === "nozzle" || k === "bed") return Number.isInteger(n) && n > 0 ? null : SW.t("add_review_error_degrees");
     if (k === "price_per_kg") return n > 0 ? null : SW.t("add_card_price_error");
+    if (ADD_GRAMS.has(k) && /^\d+\.0{3}$|^\d+[.,]0{4,}$/.test(t)) return SW.t("add_card_grams_plain");
     return n > 0 ? null : SW.t(k === "gross" ? "field_error_grams" : "common_error_grams");
   }
   const sentence = (it, k) => it._problems[k] || wrong(it, k);
@@ -1032,10 +1033,22 @@ function addTab() {
     works() { try { localStorage.setItem(ADD_DRAFT + ".probe", "1"); localStorage.removeItem(ADD_DRAFT + ".probe"); return true; } catch { return false; } },
   };
   // a stored draft is only used when it has the shape this page writes; whatever else is in it is left out (04 4.7)
+  // one stored item: the text fields are text (null is empty), a number field is a number or stays as typed in `_text`
+  function tidy(it) {
+    const out = { ...it }, typed = isObj(it._text) ? { ...it._text } : {};
+    for (const k of ["vendor", "name", "material"]) out[k] = typeof it[k] === "string" ? it[k] : it[k] == null || typeof it[k] === "object" || typeof it[k] === "boolean" ? "" : String(it[k]);
+    for (const k of ADD_NUMBER) {
+      const v = out[k];
+      if (v == null || v === "" || (typeof v === "number" && Number.isFinite(v))) continue;
+      if (typeof v === "string" && !(k in typed)) typed[k] = v;
+      out[k] = null;                                            // checked at Preview, like any empty or unparsable value
+    }
+    out._text = typed;
+    return out;
+  }
   function clean(d) {
     if (!isObj(d) || d.v !== 1 || !Array.isArray(d.items)) return null;
-    const its = d.items.filter((it) => isObj(it) && ["vendor", "name", "material"].every((k) => typeof it[k] === "string") && Number.isFinite(Number(it.count)) && it.count !== null && it.count !== ""),
-      note = typeof d.note === "string" ? d.note : "";
+    const its = d.items.filter(isObj).map(tidy), note = typeof d.note === "string" ? d.note : "";
     if (!its.length && !note.trim()) return null;
     const f = isObj(d.found) ? d.found : null, list = (v) => (Array.isArray(v) ? v : []), sum = f && isObj(f.summary) ? f.summary : null;
     return { ...d, items: its, note, readId: typeof d.readId === "string" ? d.readId : null, tag: isObj(d.tag) ? d.tag : null,
@@ -1332,14 +1345,19 @@ function addTab() {
   }
   const addCard = (it) => { const c = buildCard(it); cards.set(it._id, c); listBox.append(c.el); return c; };
   const dropCard = (it) => { const c = cards.get(it._id); if (c) { c.el.remove(); cards.delete(it._id); } };
+  const deferred = [];                                          // removed cards whose Undo was pressed while an Add was written
   function removeItem(it) {
     if (working === "add") return;
     const at = items.indexOf(it), c = cards.get(it._id);
     items.splice(at, 1); c.el.remove(); cards.delete(it._id);
     drawList(); changed();
     listHead.focus();
+    offerUndo(it, at, c);
+  }
+  function offerUndo(it, at, c) {
     SW.toast(SW.t("add_review_removed"), "ok", { action: { label: SW.t("common_undo"), run: () => {
-      if (working === "add" || items.includes(it)) return;       // not while an Add is written: it would be dropped with the sent cards
+      if (working === "add") { deferred.push({ it, at, c }); return; }    // it would be dropped with the sent cards: offered again when the Add is done
+      if (items.includes(it)) return;
       const to = Math.min(at, items.length);
       items.splice(to, 0, it); cards.set(it._id, c); listBox.insertBefore(c.el, listBox.children[to] || null);
       drawList(); changed();
@@ -1568,6 +1586,7 @@ function addTab() {
     } finally {
       working = null; paintBar();
       for (const part of [inputs, foundBox, listGroup, draftBox]) part.inert = false;
+      for (const d of deferred.splice(0)) offerUndo(d.it, d.at, d.c);
       if (previewBox.firstElementChild) previewBox.firstElementChild.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }
@@ -1597,8 +1616,9 @@ function addTab() {
   listHead.replaceChildren(SW.t("add_group_list"), " ", count);
   const el = h("section", { class: "add hidden" }, intro, lines, draftBox, addedBox, inputs, foundBox, listGroup, previewBox, bar);
   if (!store.works()) noStorage(true);
-  pending = clean(store.get());
-  if (!pending) store.drop();                                   // a draft this page cannot use is dropped
+  const stored = store.get();
+  pending = clean(stored);
+  if (!pending && !(isObj(stored) && stored.v === 1 && Array.isArray(stored.items) && stored.items.length)) store.drop();   // a draft that is no draft at all; one with odd items is left alone
   const extra = clean(store.get(ADD_NEW));
   if (extra) {                                                  // work started while a draft waited, in an earlier visit: it joins that draft
     pending = pending ? { ...pending, items: [...pending.items, ...extra.items], note: [pending.note, extra.note].filter(Boolean).join("\n"), changed: extra.changed || pending.changed,
