@@ -654,9 +654,47 @@ def test_density_lookup_matches_by_prefix():
 
 
 def test_picker_names_filaments_without_a_vendor():
+    src = _add_src()
+    assert 'SW.t("add_row_no_brand")' in src          # a filament without a brand is listed by its name, with a word for the brand
+
+
+# ---------- S3.8: Add spools in the new design ----------
+
+def _add_src() -> str:
+    """The Add spools part of app.js: from its heading to Open spool."""
     from pathlib import Path
     src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
-    assert '"(no vendor)"' in src
+    return src[src.index("// ---------- Add spools"):src.index("// ---------- Open spool")]
+
+
+def test_add_spools_keeps_every_action_of_today_and_the_requests():
+    src = _add_src()
+    for call in ('call("read", { form: fd })', 'call("add", { body: { items: items.map(wire), dry_run: dry, link_tag: tag ? tag.nfc_id : null, read_id: readId } })',
+                 'api("vendors")', "filaments?q=${encodeURIComponent(q)}", 'fd.append("hint"', 'fd.append("photos", p.blob, `photo${i}.jpg`)'):
+        assert call in src, call
+    assert "const ADD_MAX_PHOTOS = 8" in src and "MAX_EDGE / Math.max(" in src and 'c.toBlob(ok, "image/jpeg", QUALITY)' in src   # 8 photos, 1568 px, JPEG 0.85
+    assert 'k[0] !== "_"' in src                                                    # the page's own keys never reach the Hub
+    for feature in ("existing_filament_id: f.id", 'match: "existing filament"', 'match: "new filament"', "hand: true", "sealed_reason", "price_line", "densityFor(it.material)",
+                    "vendorTare.get(", "add_summary_error_preview", "add_added_set_up_presets", "add_replace_title", "link_tag"):
+        assert feature in src, feature
+
+
+def test_add_spools_keeps_the_draft_under_its_key_and_wraps_storage():
+    src = _add_src()
+    assert 'const ADD_DRAFT = "spoolwarden.draft.add";' in src
+    for call in ("localStorage.getItem(ADD_DRAFT)", "localStorage.setItem(ADD_DRAFT, text)", "localStorage.removeItem(ADD_DRAFT)", 'sessionStorage.getItem("spoolwarden.tab")'):
+        i = src.index(call)
+        assert "try {" in src[max(0, i - 160):i], call                              # every read and write is in a try
+    assert 'addEventListener("pagehide", save)' in src and 'visibilityState === "hidden"' in src and "setTimeout(save, 400)" in src
+
+
+def test_add_spools_texts_come_from_the_catalogue():
+    import re
+    from pathlib import Path
+    keys = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    used = set(re.findall(r'SW\.t\(\s*"([a-z0-9_]+)"', _add_src()))
+    assert used and not sorted(k for k in used if k not in keys)
+    assert not [k for k in used if k.startswith("web_")]
 
 
 # ---------- the public prefix (nginx strips it) ----------

@@ -143,7 +143,7 @@ def _serving(param, tmp_path, monkeypatch, spoolman_url, history):
         vendors = {}
         for i, (vendor, name, material, colour) in enumerate(FILAMENTS):
             if vendor not in vendors:
-                vendors[vendor] = c.post(api + "/vendor", json={"name": vendor}).json()["id"]
+                vendors[vendor] = c.post(api + "/vendor", json={"name": vendor, "empty_spool_weight": 200}).json()["id"]
             f = c.post(api + "/filament", json={"vendor_id": vendors[vendor], "name": name, "material": material,
                                                 "color_hex": colour, "density": 1.24, "diameter": 1.75, "weight": 1000,
                                                 "spool_weight": 200}).json()
@@ -237,6 +237,59 @@ def served_changing(tmp_path, monkeypatch, spoolman_url):
         yield running.url + "/intake"
     finally:
         running.stop()
+
+
+class HttpsOrigin:
+    """The web app answers a change only from its own https address, and this test's server is plain http: the Origin the browser
+    sends is written as https here (shipped code is untouched), so Preview and Add can run in the page."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            scope["headers"] = [(k, b"https://" + v[len(b"http://"):] if k == b"origin" and v.startswith(b"http://") else v)
+                                for k, v in scope["headers"]]
+        await self.app(scope, receive, send)
+
+
+def _serving_add(tmp_path, monkeypatch, spoolman_url, ai):
+    for name in ("etc", "state", "opt"):
+        (tmp_path / name).mkdir()
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+    mods = {n: False for n in modules.MODES["server"]}
+    mods.update(web=True, ai_intake=ai, presets=True)
+    config.save({"placement": RULES, "modules": mods, "server_name": "Workshop hub", "web": {"lan": ["127.0.0.0/8"]}})
+    api = spoolman_url + "/api/v1"
+    with httpx.Client() as c:
+        vendors = {}
+        for i, (vendor, name, material, colour) in enumerate(FILAMENTS):
+            if vendor not in vendors:
+                vendors[vendor] = c.post(api + "/vendor", json={"name": vendor, "empty_spool_weight": 200}).json()["id"]
+            f = c.post(api + "/filament", json={"vendor_id": vendors[vendor], "name": name, "material": material,
+                                                "color_hex": colour, "density": 1.24, "diameter": 1.75, "weight": 1000,
+                                                "spool_weight": 200}).json()
+            c.post(api + "/spool", json={"filament_id": f["id"], "location": "Rack 1" if i % 2 else "Sealed stock",
+                                         "remaining_weight": 1000 - 150 * i})
+    sm = Spoolman(spoolman_url)
+    sm.ensure_fields()
+    app = Starlette(routes=IntakeApp(mcp_tools.Tools(sm), public_url=None, lan_cidrs=["127.0.0.0/8"], push=False).routes())
+    running = serving.start(HttpsOrigin(app))
+    try:
+        yield running.url + "/intake"
+    finally:
+        running.stop()
+
+
+@pytest.fixture
+def served_add(tmp_path, monkeypatch, spoolman_url):
+    yield from _serving_add(tmp_path, monkeypatch, spoolman_url, True)
+
+
+@pytest.fixture
+def served_off(tmp_path, monkeypatch, spoolman_url):
+    """The same Hub with the Label Reader switched off."""
+    yield from _serving_add(tmp_path, monkeypatch, spoolman_url, False)
 
 
 def _node() -> str | None:
@@ -346,6 +399,343 @@ def test_the_allow_list_names_a_later_step_and_a_count_on_every_line(allow):
         if line.strip() and not line.startswith("#"):
             check, where, count, reason = (x.strip() for x in line.split("|"))
             assert check and where and count.isdigit() and int(count) > 0 and "rebuilt by S3." in reason, line
+
+
+# ---- Add spools (design 09 S3.8): every state of 04 4, driven in the page and audited -------------------------------------
+# The Label Reader is not run here: the page's fetch answers `read` with a made-up reading (a small stand-in the state's
+# script puts in), everything else (find, vendors, preview, add) is the real Hub on a fake Spoolman. A state script throws
+# when the page is not in the state it names, then the runner audits that state at 1280 px and 320 px, light and dark.
+
+READING = {"read_id": "r-1", "reader": "cloud", "tier": None, "confidence": None, "unsure": False, "confidence_rated": True,
+           "engine": {"reader": "cloud", "model": "model-name", "tier": None},
+           "confidence_summary": {"level": "low", "low": ["tare"], "medium": ["color_hex", "density"], "not_on_label": ["price_per_kg"]},
+           "usage": {"model": "model-name", "input_tokens": 1800, "cached": 1200, "output_tokens": 240},
+           "questions": ["Are the two orange spools the same lot?"], "note": "",
+           "tag": {"nfc_id": "04:77:90:E", "age_seconds": 40, "reader": "station"}, "scale": {"grams": 1212, "age_seconds": 8},
+           "items": [
+               {"vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black", "material": "PLA", "net": 1000, "tare": 200, "density": 1.24,
+                "count": 1, "color_hex": "2B2B2E", "sealed": False, "gross": 1212, "photos": [0], "estimates": ["density"],
+                "price_line": "Price: $19.99/kg - order of 2026-10-02", "price_per_kg": 19.99, "existing_filament_id": None,
+                "confidence_levels": {"vendor": "high", "name": "high", "material": "high", "color_hex": "medium", "net": "high",
+                                      "tare": "high", "density": "medium", "nozzle": "high", "bed": "high", "price_per_kg": "high"}},
+               {"vendor": "Bambu Lab", "name": "PETG HF Orange", "material": "PETG", "net": 1000, "tare": 250, "density": 1.27,
+                "count": 2, "color_hex": "F2762E", "sealed": True, "sealed_reason": "The bag is closed.", "photos": [1], "estimates": ["tare"],
+                "price_line": "", "existing_filament_id": None,
+                "confidence_levels": {"vendor": "high", "name": "high", "material": "high", "color_hex": "high", "net": "high",
+                                      "tare": "low", "density": "high", "nozzle": "high", "bed": "high", "price_per_kg": "not_on_label"}}]}
+UNRATED = {**READING, "confidence_rated": False, "confidence_summary": {"level": "not_rated", "low": [], "medium": ["tare"], "not_on_label": []},
+           "tag": None, "scale": None, "questions": [],
+           "items": [{**i, "confidence_levels": {k: (None if v in ("high", "low") else v) for k, v in i["confidence_levels"].items()}} for i in READING["items"]]}
+
+PRELUDE = r"""
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (what, fn, ms = 10000) => { const t0 = Date.now(); for (;;) { const v = fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('Add spools: ' + what); await sleep(50); } };
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const text = (s) => ($(s) ? $(s).textContent.replace(/\s+/g, ' ').trim() : '');
+const need = (what, ok) => { if (!ok) throw new Error('Add spools: ' + what); };
+const typeIn = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+const reply = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+const stub = (path, answer) => { const real = window.fetch.bind(window); window.fetch = (u, i) => (String(u).includes('/api/' + path) ? answer(u, i) : real(u, i)); };
+const photo = async (n) => { const c = document.createElement('canvas'); c.width = 80; c.height = 60; const g = c.getContext('2d'); g.fillStyle = ['#c0392b', '#2980b9', '#27ae60'][n % 3]; g.fillRect(0, 0, 80, 60); const b = await new Promise((ok) => c.toBlob(ok, 'image/jpeg')); return new File([b], 'label' + n + '.jpg', { type: 'image/jpeg' }); };
+const give = async (n) => { const dt = new DataTransfer(); for (let i = 0; i < n; i++) dt.items.add(await photo(i)); const want = Math.min(8, $$('.add__photo').length + n), input = $('input[type=file][multiple]'); input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); await until('the photos', () => $$('.add__photo').length === want); };
+const button = (label, root = document) => $$('button', root).find((b) => b.textContent.trim() === label);
+const field = (label, root = document) => $$('.field', root).find((f) => f.querySelector('.field__label').firstChild.textContent.trim() === label);
+const search = async (q) => { typeIn($('.add__search .field__control'), q); await until('no rows for ' + q, () => $('.add__row') || $('.add__none'), 6000); };
+const waitPage = () => until('the page did not draw', () => $('.add__bar-text') && !document.querySelector('[aria-busy="true"]:not(button)'));
+const newFilament = async (vendor, name, material, tare) => {
+  button('New filament').click();
+  const card = $$('.add__card').pop();
+  typeIn(field('Brand', card).querySelector('input'), vendor);
+  typeIn(field('Name', card).querySelector('input'), name);
+  typeIn(field('Material', card).querySelector('input'), material);
+  if (tare) typeIn(field('Empty spool weight', card).querySelector('input'), tare);
+  return card;
+};
+const reading = async (answer) => { stub('read', answer); await give(2); button('Read labels').click(); };
+"""
+
+READY = {
+    "empty": r"""
+  await waitPage();
+  need('the intro', text('.add__intro').includes('Nothing is saved until you preview and press Add.'));
+  need('the empty state', text('.add').includes('No spools yet. Photograph the labels, or find a filament you already have.'));
+  need('the bar says what to do', text('.add__bar-text') === 'Add a spool first: photograph a label or find a filament.');
+  need('Preview is aria-disabled and described by the bar', $('.add__bar-btn').getAttribute('aria-disabled') === 'true' && $('.add__bar-btn').getAttribute('aria-describedby') === $('.add__bar-text').id);
+  need('the photo group comes first', $('.add__inputs').firstElementChild.querySelector('.add__buttons'));
+  need('Read labels says why', text('.add__read').includes('Add a photo first.') && $('.add__read .btn').getAttribute('aria-disabled') === 'true');
+  need('the title takes the focus order: one h1', $$('h1').length === 1);
+""",
+    "results": r"""
+  await waitPage(); await search('pla');
+  need('two rows for pla', $$('.add__row').length === 2);
+  need('a swatch and a filament number in a row', $('.add__row .swatch') && /^F\d+$/.test(text('.add__row-id')));
+  need('the row says material, weight and spools', /PLA · 1000 g · 1 spool/.test(text('.add__row-text')));
+  typeIn($('.add__search .field__control'), 'zzzz');
+  await until('no match', () => $('.add__none'), 6000);
+  need('no match says so, with the button', text('.add__none').startsWith('No filament matches. Use New filament.') && button('New filament', $('.add__none')));
+""",
+    "cards": r"""
+  await waitPage(); await search('pla');
+  $('.add__row').click();
+  await newFilament('', '', '');
+  const cards = $$('.add__card');
+  need('two cards', cards.length === 2);
+  need('the first is collapsed and the second open', cards[0].querySelector('.add__body').hidden && !cards[1].querySelector('.add__body').hidden);
+  need('the first says existing filament', /Existing filament F\d+/.test(cards[0].textContent));
+  need('the second says what it needs', cards[1].textContent.includes('Needs: Brand, Name, Material'));
+  need('the bar names the spool', text('.add__bar-text') === 'Spool 2 needs: Brand, Name, Material.');
+  $('.add__bar-btn').click();
+  need('pressing Preview focuses Brand', document.activeElement.closest('.field').querySelector('.field__label').textContent.startsWith('Brand'));
+  $('button[aria-label="Edit Polymaker PolyTerra PLA Charcoal Black"]').click();
+  need('the expand button opens the card', !cards[0].querySelector('.add__body').hidden);
+""",
+    "photos": r"""
+  await waitPage(); await give(2);
+  await until('two photos', () => $$('.add__photo').length === 2);
+  need('the count', text('.add__photo-count') === '2 of 8 photos');
+  need('Read labels is the filled button now', button('Read labels').classList.contains('btn--primary') && !button('Take photo').classList.contains('btn--primary'));
+  need('a thumbnail and its own remove button', $('.add__thumb').getAttribute('aria-label') === 'Photo 1 of 2, enlarge' && $$('.add__photo .btn--icon')[1].getAttribute('aria-label') === 'Remove photo 2 of 2');
+  typeIn($('.add__read').closest('.group__body').querySelector('textarea'), 'e.g. 3 of the grey ones');
+  need('Read labels is available', $('.add__read .btn').getAttribute('aria-disabled') !== 'true');
+""",
+    "photo_limit": r"""
+  await waitPage(); await give(8);
+  await until('eight photos', () => $$('.add__photo').length === 8);
+  need('the count', text('.add__photo-count') === '8 of 8 photos');
+  need('both buttons say why', ['Take photo', 'Choose photos'].every((l) => button(l).getAttribute('aria-disabled') === 'true') && text('.add__limit') === '8 photos at a time. Remove one to add another.');
+  await give(1);
+  need('a ninth is not added', $$('.add__photo').length === 8);
+""",
+    "photo_viewer": r"""
+  await waitPage(); await give(2);
+  await until('two photos', () => $$('.add__photo').length === 2);
+  $$('.add__thumb')[1].click();
+  await until('the viewer', () => $('dialog[open] .add__big'));
+  need('titled by position, with Remove this photo and Close', text('dialog[open] .sheet__title') === 'Photo 2 of 2' && button('Remove this photo') && button('Close', $('dialog[open]')));
+""",
+    "photo_removed": r"""
+  await waitPage(); await give(3);
+  await until('three photos', () => $$('.add__photo').length === 3);
+  $$('.add__photo .btn--icon')[1].click();
+  need('two left and the toast offers Undo', $$('.add__photo').length === 2 && button('Undo', $('.toasts')));
+  button('Undo', $('.toasts')).click();
+  need('Undo puts it back', $$('.add__photo').length === 3);
+  $$('.add__photo .btn--icon')[0].click();
+""",
+    "reading": r"""
+  await waitPage(); stub('read', () => new Promise(() => {})); await give(2);
+  button('Read labels').click();
+  await until('the reading line', () => text('.add__read').includes('The Label Reader is reading 2 photos… (up to a minute)'));
+  need('the button shows Reading…', button('Reading…') && button('Reading…').getAttribute('aria-busy') === 'true');
+  need('the bar waits for the Label Reader', text('.add__bar-text') === 'Wait for the Label Reader.');
+  need('the photo buttons stay usable', button('Choose photos').getAttribute('aria-disabled') !== 'true');
+""",
+    "read_summary": r"""
+  await waitPage(); await reading(() => reply(%(READING)s));
+  await until('the cards', () => $$('.add__card').length === 2);
+  const found = $('.group[aria-labelledby]:not(.add__group:first-child)') && $$('.group').find((g) => g.textContent.includes('What the Label Reader found'));
+  need('the summary group', found);
+  const t = found.textContent.replace(/\s+/g, ' ');
+  for (const part of ['Found 2 spools in 2 photos.', 'Label Reader: Cloud (Claude) · model-name', 'Low: check Empty spool weight', 'Medium: Colour, Density', 'Not on the label: Price per kg',
+    'The Label Reader asks', 'Are the two orange spools the same lot?', 'Tag 04:77:90:E was tapped 40 s before the photos on the Weigh Station', 'Weigh Station scale: 1212 g, 8 s ago (not used: only for one opened spool).'])
+    need('the summary says "' + part + '"', t.includes(part));
+  need('Details hold the tokens', found.querySelector('details').textContent.includes('1800 tokens in (1200 cached), 240 out'));
+  const [one, two] = $$('.add__card');
+  need('both cards open: both need a look', !one.querySelector('.add__body').hidden && !two.querySelector('.add__body').hidden);
+  need('the colour carries its Medium mark', field('Colour', one).querySelector('.add__mark').textContent.includes('Medium'));
+  need('a medium field says to check it', field('Colour', one).textContent.includes('The Label Reader was not sure: check this.'));
+  need('an estimate says so', field('Density', one).textContent.includes('Estimated by the Label Reader: not printed on the label.'));
+  need('a low field has the Low mark', field('Empty spool weight', two).querySelector('.add__mark').textContent.includes('Low: check this'));
+  need('not on the label has its mark', field('Price per kg', two).querySelector('.add__mark').textContent.includes('Not on the label'));
+  need('the price line is the helper', field('Price per kg', one).textContent.includes('From the label: $19.99/kg - order of 2026-10-02'));
+  need('the sealed reason is under the toggle', two.textContent.includes('Label Reader: The bag is closed.'));
+  need('an opened spool has its weight', field('Weight with spool', one) && !field('Weight with spool', one).hidden && field('Weight with spool', two).hidden);
+  need('the summary line of a card', one.querySelector('.add__sum').textContent.includes('Opened, 1212 g on the scale'));
+  need('the bar counts the fields to check', text('.add__bar-text') === '3 fields to check · 3 spools · not previewed');
+  typeIn(field('Colour', one).querySelector('input'), '#2B2B2F');
+  need('an edit clears the mark and the hint', !field('Colour', one).querySelector('.add__mark') && !field('Colour', one).textContent.includes('not sure'));
+""" % {"READING": json.dumps(READING)},
+    "read_unrated": r"""
+  await waitPage(); await reading(() => reply(%(UNRATED)s));
+  await until('the cards', () => $$('.add__card').length === 2);
+  const found = $$('.group').find((g) => g.textContent.includes('What the Label Reader found')).textContent.replace(/\s+/g, ' ');
+  need('not rated, then the medium fields', found.includes('Not rated') && found.includes('Medium: Colour, Density'));
+  need('the reader says it does not rate', found.includes('This reader does not say how sure it is. Check the values against the label.'));
+  need('no High mark on an unrated field', !$$('.add__card .status').some((s) => s.textContent.trim() === 'High'));
+""" % {"UNRATED": json.dumps(UNRATED)},
+    "read_limit": r"""
+  await waitPage(); stub('read', () => reply({ error: "Today's label reads on the Hub are used up." }, 429)); await give(2);
+  button('Read labels').click();
+  await until('the line', () => $('.add__read [data-state=bad]'));
+  need('the Hub text, then the way on', text('.add__read').includes("Today's label reads on the Hub are used up. Add by hand, or try again tomorrow."));
+  need('the photos are kept', $$('.add__photo').length === 2);
+""",
+    "read_failed": r"""
+  await waitPage(); stub('read', () => reply({ error: 'The Label Reader did not answer.', read_id: null }, 502)); await give(2);
+  button('Read labels').click();
+  await until('the line', () => $('.add__read [data-state=bad]'));
+  need('the Hub text, then the photos are kept, with Try again', text('.add__read').includes('The Label Reader did not answer. Your photos and edits are kept.') && button('Try again', $('.add__read')));
+""",
+    "read_replace": r"""
+  await waitPage(); await reading(() => reply(%(READING)s));
+  await until('the cards', () => $$('.add__card').length === 2);
+  typeIn(field('Brand', $$('.add__card')[0]).querySelector('input'), 'Polymaker Edited');
+  button('Read labels').click();
+  await until('the sheet', () => $('dialog[open]'));
+  need('it asks before replacing', text('dialog[open] .dialog__title') === 'Replace the spools from the last read?' && text('dialog[open] .dialog__text').startsWith('You changed 1 spool from the last read.'));
+  need('Keep them and Read and replace', button('Keep them', $('dialog[open]')) && button('Read and replace', $('dialog[open]')));
+""" % {"READING": json.dumps(READING)},
+    "preview": r"""
+  await waitPage(); await search('galaxy'); $('.add__row').click();
+  need('ready to preview', text('.add__bar-text') === '1 spool · not previewed');
+  $('.add__bar-btn').click();
+  await until('the preview', () => $('.add__result-row'));
+  need('the result group', text('.add__results').includes('Existing filament F') && text('.add__results').includes('1 spool') && text('.add__results').includes('Sealed'));
+  need('nothing is saved yet', text('.add').includes('Nothing is saved yet.') && text('.add').includes('Preview ready. Nothing is saved yet.'));
+  need('the bar offers Add', text('.add__bar-text') === 'Preview ready: 1 spool.' && $('.add__bar-btn').textContent.trim() === 'Add 1 spool');
+  need('the Hub text is under the line', $('.add__results').closest('.group').querySelector('.code'));
+  typeIn(field('Net weight', $('.add__card')).querySelector('input'), '900');
+  need('an edit makes it out of date', text('.add__bar-text') === 'You changed spool 1. Preview again.' && $('.add__bar-btn').textContent.trim() === 'Preview' && !$('.add__result-row'));
+  $('.add__bar-btn').click();
+  await until('the preview again', () => $('.add__result-row'));
+""",
+    "preview_problems": r"""
+  await waitPage(); await newFilament('Elegoo', 'PLA Red', 'PLA', '');
+  need('the card is ready for Preview', text('.add__bar-text') === '1 spool · not previewed');
+  $('.add__bar-btn').click();
+  await until('the problem at its field', () => { const f = field('Empty spool weight'); return f && !f.querySelector('.field__error').hidden; });
+  need('the sentence is at the field, which has the focus', field('Empty spool weight').querySelector('.field__error').textContent.includes('tare') && document.activeElement === field('Empty spool weight').querySelector('input'));
+  need('the bar says what to do', text('.add__bar-text') === 'The Hub found problems. Fix them and preview again.');
+  need('no results beside the problems', !$('.add__result-row'));
+  typeIn(field('Empty spool weight').querySelector('input'), '160');
+  need('an edit clears the sentence', field('Empty spool weight').querySelector('.field__error').hidden);
+""",
+    "added": r"""
+  const stamp = String(Date.now());                          // each pass of the run adds a brand and a filament of its own
+  await waitPage(); await newFilament('Elegoo' + stamp, 'PLA Red' + stamp, 'PLA', '160');
+  $('.add__bar-btn').click();
+  await until('the preview', () => $('.add__result-row'));
+  need('a new filament, and a new brand', text('.add__results').includes('New filament') && text('.add__results').includes('New brand'));
+  $('.add__bar-btn').click();
+  await until('the add', () => $('.add__added .group') && text('.add__added').includes('Added 1 spool:'));
+  const done = text('.add__added');
+  need('the group says what was added', done.includes('Spools added') && /Added 1 spool: \d+\./.test(done));
+  need('new filaments need a preset line', done.includes('1 new filament needs a preset line.') && button('Set up Slicer presets', $('.add__added')));
+  need('the add is cleared', !$$('.add__card').length && text('.add__bar-text') === 'Add a spool first: photograph a label or find a filament.');
+  need('no draft is left', !localStorage.getItem('spoolwarden.draft.add'));
+""",
+    "draft": r"""
+  await waitPage();
+  if (!localStorage.getItem('spoolwarden.draft.add')) {               // the first pass keeps a draft; the later passes load it
+    await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+    await until('the draft is kept', () => localStorage.getItem('spoolwarden.draft.add'));
+    return;
+  }
+  need('the draft banner', text('.add__draft').includes('You have a draft from') && /1 spool\./.test(text('.add__draft')));
+  need('Restore them and Discard', button('Restore them', $('.add__draft')) && button('Discard', $('.add__draft')));
+  need('the Add destination has its badge', $('.nav__item[href="#add"] .nav__badge').textContent === '1' && $('.nav__item[href="#add"]').getAttribute('aria-label') === 'Add, 1 spool waiting');
+  need('nothing is drawn yet', !$$('.add__card').length);
+""",
+    "draft_restored": r"""
+  await waitPage();
+  if (!localStorage.getItem('spoolwarden.draft.add')) {
+    await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+    await until('the draft is kept', () => localStorage.getItem('spoolwarden.draft.add'));
+    return;
+  }
+  button('Restore them').click();
+  await until('the card', () => $$('.add__card').length === 1);
+  need('the values are back', field('Brand', $('.add__card')).querySelector('input').value === 'Elegoo' && field('Empty spool weight', $('.add__card')).querySelector('input').value === '160');
+  need('the banner is gone and the bar is not previewed', !button('Discard', $('.add__draft')) && text('.add__bar-text') === '1 spool · not previewed');
+""",
+    "draft_discard": r"""
+  await waitPage();
+  if (!localStorage.getItem('spoolwarden.draft.add')) {
+    await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+    await until('the draft is kept', () => localStorage.getItem('spoolwarden.draft.add'));
+    return;
+  }
+  button('Discard', $('.add__draft')).click();
+  await until('the sheet', () => $('dialog[open]'));
+  need('it asks', text('dialog[open] .dialog__title') === 'Discard this add?' && text('dialog[open] .dialog__text').startsWith('The 1 spool on this phone is deleted.') && button('Keep', $('dialog[open]')));
+""",
+    "draft_other_tab": r"""
+  await waitPage(); await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  window.dispatchEvent(new StorageEvent('storage', { key: 'spoolwarden.draft.add', storageArea: localStorage }));
+  need('this tab says it no longer keeps the draft', text('.add__notes').includes('This add is also open in another tab, which now keeps it. Reload this tab to continue here.'));
+""",
+    "draft_no_storage": r"""
+  await waitPage();
+  Storage.prototype.setItem = function () { throw new DOMException('full', 'QuotaExceededError'); };
+  await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  await until('the notice', () => text('.add__notes').includes('This browser cannot keep a draft. Finish before leaving the page.'), 4000);
+""",
+    "card_removed": r"""
+  await waitPage(); await search('pla'); $('.add__row').click();
+  button('Remove', $('.add__card')).click();
+  need('the card is gone and the toast offers Undo', !$$('.add__card').length && button('Undo', $('.toasts')));
+  button('Undo', $('.toasts')).click();
+  need('Undo puts it back', $$('.add__card').length === 1);
+""",
+    "card_fields": r"""
+  await waitPage(); const card = await newFilament('', '', '');
+  need('six groups', $$('.add__legend', card).map((l) => l.textContent).join('|') === 'Identity|Amount|State|Print settings|Storage|Other');
+  typeIn(field('Brand', card).querySelector('input'), 'Polymaker');
+  need('a known brand fills the empty spool weight from the vendor list', await until('the vendor list', () => field('Empty spool weight', card).querySelector('input').value === '200', 4000) && field('Empty spool weight', card).textContent.includes('Filled in from the brand list'));
+  typeIn(field('Material', card).querySelector('input'), 'PETG');
+  need('a known material fills the density', field('Density', card).querySelector('input').value === '1.27' && field('Density', card).textContent.includes('Typical for PETG'));
+  typeIn(field('Name', card).querySelector('input'), 'PETG HF Orange');
+  typeIn(field('Colour', card).querySelector('input'), 'F2762E');
+  need('the swatch follows the colour', getComputedStyle($('.add__colour-tools .swatch', card)).getPropertyValue('--swatch').trim().toLowerCase() === '#f2762e');
+  typeIn(field('Net weight', card).querySelector('input'), '0');
+  need('the bar names the grams', text('.add__bar-text') === 'Spool 1: enter grams above 0 for Net weight.');
+  typeIn(field('Net weight', card).querySelector('input'), '1000');
+  typeIn(field('Colour', card).querySelector('input'), 'F2762');
+  need('a colour that is not 6 digits is refused in words', field('Colour', card).querySelector('.field__error').textContent.includes('Enter a colour as 6 hex digits, e.g. #2B2B2E.'));
+  typeIn(field('Colour', card).querySelector('input'), '#F2762E');
+  const sealed = $('.toggle__input', card);
+  need('sealed is on and the weight is hidden', sealed.checked && field('Weight with spool', card).hidden);
+  sealed.click();
+  need('opened shows the weight and Location goes to Automatic', !field('Weight with spool', card).hidden && field('Location', card).querySelector('select').value === '' && text('.add__sum').includes('Opened'));
+  typeIn(field('Spools', card).querySelector('input'), '2');
+  need('with two spools the weight is not used', field('Weight with spool', card).querySelector('input').readOnly && field('Weight with spool', card).textContent.includes('Only used for one opened spool.') && card.textContent.includes('x2'));
+""",
+}
+
+
+def _states(url: str, name: str, *extra: str) -> dict:
+    """Run the state's script, then audit that state: no finding of the page (the other screens' hidden markup is allowed by
+    the run's allow-list, which counts for six views, so only the findings are read, not the counts)."""
+    run = _run("--url", url, "--views", "#add", "--allow", str(ALLOW), "--ready", "(async () => {" + PRELUDE + READY[name] + "})()", *extra)
+    assert run.returncode in (0, 1), run.stdout + run.stderr
+    out = json.loads(run.stdout)
+    assert not out.get("report"), name + ": " + json.dumps(out["report"], indent=1)
+    return out
+
+
+@pytest.mark.parametrize("name", [n for n in READY if n not in ("draft", "draft_restored", "draft_discard")])
+def test_add_spools_state_passes_the_audit(served_add, name):
+    out = _states(served_add, name)
+    assert out["views"] == 4
+
+
+@pytest.mark.parametrize("name", ["draft", "draft_restored", "draft_discard"])
+def test_add_spools_draft_states_pass_the_audit(served_add, name):
+    """The first pass of the run keeps a draft in the browser's storage; the next three load the page with it."""
+    assert _states(served_add, name)["views"] == 4
+
+
+def test_add_spools_with_the_label_reader_off_says_so_and_leads_with_by_hand(served_off):
+    ready = """(async () => {""" + PRELUDE + r"""
+  await waitPage();
+  need('By hand comes first', $('.add__inputs').firstElementChild.querySelector('.add__search'));
+  need('the photo group is one line', text('.add__inputs').includes('The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page.') && !button('Take photo'));
+  await search('pla'); $('.add__row').click();
+  need('by hand still works', $$('.add__card').length === 1);
+})()"""
+    run = _run("--url", served_off, "--views", "#add", "--allow", str(ALLOW), "--ready", ready)
+    assert run.returncode in (0, 1), run.stdout + run.stderr
+    assert not json.loads(run.stdout).get("report"), run.stdout
 
 
 # ---- the runner's own checks fire (R261): a probe page with a wide view, a view that does not open, a page error ----

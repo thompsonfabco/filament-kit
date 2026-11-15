@@ -872,71 +872,249 @@ function navigation() {
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page
 }
 
-// ---------- Add spools ----------
+// ---------- Add spools (04 4) ----------
+// What is being added is `items`, one object per card, in the shape the Hub takes (keys that start with "_" are the page's own
+// and never leave it). Each card is drawn once and an edit changes only what it touches, so a field in use is never redrawn.
+// Nothing is written until the person previews and then adds; the unfinished add is kept on the phone as a draft (04 4.7).
 function addTab() {
-  let readId = null;
-  const photos = []; // {blob, url}
-  let items = [], checked = false, tag = null; // tag: unlinked tag tapped just before the photos (server links it)
-  const thumbs = h("div", { class: "thumbs" });
-  const hint = h("textarea", { placeholder: "Optional note for the label reader, e.g. \"3 of the grey ones\" or \"all the PETG is white\"" });
-  const picker = h("input", { type: "file", accept: "image/*", multiple: true, on: { change: addFiles } });
-  const readBtn = h("button", { textContent: "Read labels", on: { click: read } });
-  const readBox = answer();       // the Label Reader's answer: the line, and what it found under it
-  const readOut = h("div");
-  const itemsBox = h("div");
-  const actBox = h("div");
-  const ans = answer();           // the answer to Check and Add: the line, and the Hub's own text under it
-  let sending = false;
-  // ---- by hand: pick an existing filament, or start a new one ----
-  const fq = h("input", { type: "search", placeholder: "Existing filament: brand, colour, material", "aria-label": "Search existing filaments", enterKeyHint: "search",
-                          on: { keydown: (e) => { if (e.key === "Enter") findFilaments(); } } });
-  const filBox = h("div", { class: "list" });
-  const filLine = resultLine();   // the search's own line: Searching…, or why it failed
-  const vendorList = h("datalist", { id: "vendors" });
-  let vendorTare = new Map(); // vendor name (lower case) -> empty spool weight
-  const byHand = h("div", { class: "card" },
-    h("h3", { textContent: "Add by hand" }),
-    h("p", { class: "muted", textContent: "Pick a filament you already have, or start a new one; fill in the spool and check before saving." }),
-    h("div", { class: "row" }, fq, h("button", { class: "fit", textContent: "Search", on: { click: (e) => findFilaments(e.currentTarget) } })),
-    filLine, filBox,
-    h("p", {}, h("button", { class: "secondary", textContent: "New filament (type it in)", on: { click: () => addItem(blankItem()) } })),
-    vendorList);
-  const photoPart = AI ? [
-    h("h2", { textContent: "From label photos" }),
-    h("p", { class: "muted", textContent: "Photograph each label (several photos of one spool are fine). The label reader (Claude or a local one) reads them; you check and edit before anything is saved." }),
-    h("label", { class: "filebtn wide" }, h("button", { textContent: "Take or choose photos", tabIndex: -1 }), picker),
-    thumbs, hint, h("p", {}, readBtn), readBox.el, readOut] : [];
-  const el = h("section", {},
-    byHand, ...photoPart, itemsBox, actBox);
-  if (AI) readable();                                         // Read labels waits for a photo, and says so (04 3.4)
-  api("vendors").then((res) => {
-    vendorTare = new Map(res.vendors.map((v) => [v.name.toLowerCase(), v.tare]));
-    vendorList.replaceChildren(...res.vendors.map((v) => h("option", { value: v.name })));
-  }).catch(() => {}); // no list: the vendor is typed in
+  // the constants and helpers are inside: this function runs while the page's script is still building the tabs, before the
+  // top-level constants below it exist
+  const ADD_MAX_PHOTOS = 8, ADD_PAGE = 50, ADD_FIND_LIMIT = 60;
+  const ADD_DRAFT = "spoolwarden.draft.add";
+  // the fields a read rates that the card shows, in the order of the card; and the names of the fields in sentences
+  const ADD_RATED = "vendor name material color_hex net tare density nozzle bed price_per_kg".split(" "), COL = ADD_RATED[3];
+  const ADD_LABEL = { vendor: "common_field_brand", name: "common_field_name", material: "common_field_material", color_hex: "common_field_colour",
+    count: "common_field_spools", density: "common_field_density", net: "common_field_net_weight", tare: "common_field_empty_spool_weight",
+    gross: "common_field_weight_with_spool", nozzle: "common_field_nozzle", bed: "common_field_bed", price_per_kg: "common_field_price_per_kg",
+    lot: "common_field_lot", line: "common_field_line", note: "common_field_note", location: "common_field_location" };
+  const ADD_REQUIRED = ["vendor", "name", "material", "count", "net"];     // a label without "(optional)"
+  const ADD_NUMBER = new Set(["count", "net", "tare", "density", "nozzle", "bed", "gross", "price_per_kg"]);
+  const ADD_HEX = /^#?[0-9a-f]{6}$/i;
+  const addHex = (s) => (ADD_HEX.test(String(s || "")) ? "#" + String(s).replace("#", "").toUpperCase() : "");   // for a swatch
+  const addParse = (text) => { const t = String(text).trim().replace(",", "."), n = Number(t); return t !== "" && Number.isFinite(n) ? n : NaN; };
 
-  function blankItem() {
-    return { vendor: "", name: "", material: "", count: 1, net: 1000, tare: null, density: null, color_hex: "",
-             sealed: true, location: SEALED, price_per_kg: "", photos: [], estimates: [], match: "new filament", hand: true };
+  // the record summary of 02 7.2, for the levels of one or more items: the level, then the fields at each level
+  function addSummary(levelsList) {
+    const out = { low: [], medium: [], not_on_label: [] };
+    let unrated = false, any = false;
+    for (const lv of levelsList) {
+      for (const k of ADD_RATED) {
+        const v = lv[k];
+        if (!(k in lv)) continue;
+        any = true;
+        if (v == null) unrated = true;
+        else if (v in out && !out[v].includes(k)) out[v].push(k);
+      }
+    }
+    if (!any) return null;
+    const level = out.low.length ? "low" : unrated ? "not_rated" : out.medium.length ? "medium" : out.not_on_label.length ? "not_on_label" : "high";
+    return { level, ...out };
   }
-  function addItem(it) {
-    items.push(it); drawItems(); dirty();
-    itemsBox.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-  async function findFilaments(button) {
-    await act(filLine, SW.t("common_searching"), async () => {
-      const res = await api(`filaments?q=${encodeURIComponent(fq.value)}`);
-      if (!res.filaments.length) { filBox.replaceChildren(h("p", { class: "muted", textContent: "No filament matches: use New filament." })); return null; }
-      filBox.replaceChildren(...[...res.filaments.slice(0, 60).map((f) => h("button", {
-        class: "pick", on: { click: () => addItem({ ...blankItem(), vendor: f.vendor, name: f.name, material: f.material || "",
-          net: f.net ?? 1000, tare: f.tare, density: f.density, color_hex: f.color_hex || "", nozzle: f.nozzle, bed: f.bed,
-          existing_filament_id: f.id, match: "existing filament" }) } },
-        h("strong", { textContent: `F${f.id} ` }), `${f.vendor || "(no vendor)"} ${f.name}`,
-        h("div", { class: "muted", textContent: `${f.material || "?"} · ${f.net ?? "?"} g · ${f.spools} spool${f.spools === 1 ? "" : "s"}` }))),
-        more(60, res.filaments.length)].filter(Boolean));
-      return null;
-    }, { button });
+  // the line of a summary: "High", or the levels' marks and fields in the order low, medium, not on the label, joined by " · "
+  function addSummaryLine(sum) {
+    if (!sum) return null;
+    const names = (keys) => keys.map((k) => SW.t(ADD_LABEL[k])).join(", ");
+    const parts = [];
+    if (sum.level === "high") parts.push(SW.status("high", { small: true }));
+    if (sum.low.length) parts.push(SW.status("low", { small: true, text: SW.t("confidence_summary_low", { fields: names(sum.low) }) }));
+    if (sum.level === "not_rated") parts.push(h("span", { class: "muted", textContent: SW.t("add_found_not_rated") }));
+    if (sum.medium.length) parts.push(SW.status("medium", { small: true, text: SW.t("confidence_summary_medium", { fields: names(sum.medium) }) }));
+    if (sum.not_on_label.length) parts.push(SW.status("not_on_label", { small: true, text: SW.t("confidence_summary_not_on_label", { fields: names(sum.not_on_label) }) }));
+    const line = h("p", { class: "add__summary" });
+    parts.forEach((p, i) => line.append(...(i ? [" · ", p] : [p])));
+    return parts.length ? line : null;
   }
 
+  const tabId = (() => {                                        // which tab wrote the draft (04 4.7)
+    try { let v = sessionStorage.getItem("spoolwarden.tab"); if (!v) sessionStorage.setItem("spoolwarden.tab", v = Math.random().toString(36).slice(2)); return v; }
+    catch { return Math.random().toString(36).slice(2); }
+  })();
+  let items = [], photos = [], readId = null, tag = null, found = null;      // photos: { blob, url }
+  let previewed = false, edited = null, problemsShown = false, working = null, hubDown = false, hubTimer = 0;   // working: read, preview, add
+  let started = 0, changedAt = 0, pending = null, keeping = true, wrote = false, saveTimer = 0, nextId = 1, memo = null;
+  const cards = new Map();                                      // item _id -> its card
+  let vendorTare = new Map();                                   // vendor name (lower case) -> empty spool weight
+  let rows = [], page = 1, findStamp = 0;                       // the filament search results, and the page shown
+
+  // ---- the page: title area, groups, list, action bar ----
+  const lines = h("div", { class: "add__notes" });              // this add is open in another tab; no draft can be kept
+  const draftBox = h("div", { class: "add__draft" });
+  const addedBox = h("div", { class: "add__added" });           // the result of an Add stays at the top until a new add starts
+  const photoGroup = h("section", { class: "group add__group" });
+  const handGroup = h("section", { class: "group add__group" });
+  const foundBox = h("div");
+  const listHead = h("h2", { class: "group__title", tabindex: "-1", id: SW.uid("list") });
+  const count = h("span", { class: "mono add__count" });
+  const empty = SW.empty({ icon: "spool", title: SW.t("add_empty"), level: 3 });
+  const listBox = h("div", { class: "add__cards" });
+  const previewBox = h("div");
+  const vendorList = h("datalist", { id: "addVendors" });
+  const ans = answer();                                         // the answer to Preview and Add: the line, and the Hub's own text under it
+  const itemsBox = h("div", { class: "add__results" });         // what the preview says each spool does (04 4.6)
+  const extras = h("div", { class: "add__extras" });            // the buttons after an Add
+  ans.el.insertBefore(itemsBox, ans.code);
+  ans.el.append(extras);
+
+  // the line that starts with its shape and is not cleared when the person leaves the page (04 3.3); `result` lines are
+  const line = (kind, text) => h("p", { class: "add__line", "data-state": kind },
+    SW.shape({ ok: "s-filled", bad: "s-octagon", warn: "s-triangle", info: "s-diamond", neutral: "s-hollow" }[kind]), h("span", {}, text));
+  const group = (title, ...kids) => { const id = SW.uid("g"); return h("section", { class: "group add__group", "aria-labelledby": id }, h("header", { class: "group__head" },
+    h("h2", { class: "group__title", id }, title)), h("div", { class: "group__body" }, ...kids)); };
+  const spoolsOf = (list = items) => list.reduce((n, it) => n + (Number.isInteger(Number(it.count)) && Number(it.count) > 0 ? Number(it.count) : 0), 0);
+
+  // ---- the Hub, and what it does to the action bar when it does not answer ----
+  async function call(path, opts) {
+    try { const r = await api(path, opts); if (hubDown) { hubDown = false; paintBar(); } return r; }
+    catch (e) {
+      if (e instanceof SW.HubError && e.unreachable) { hubDown = true; clearTimeout(hubTimer); hubTimer = setTimeout(() => { hubDown = false; paintBar(); }, 15000); paintBar(); }
+      throw e;
+    }
+  }
+  window.addEventListener("online", () => { if (hubDown) { hubDown = false; paintBar(); } });
+
+  // ============ the card's values: what is missing and what is wrong ============
+  const textOf = (it, k) => String(k in it._text ? it._text[k] : it[k] ?? "").trim();
+  function missing(it) { return ADD_REQUIRED.filter((k) => textOf(it, k) === ""); }
+  // the sentence for a value that is not right (null when it is fine or empty and optional)
+  function wrong(it, k) {
+    const t = textOf(it, k), n = ADD_NUMBER.has(k) ? addParse(t) : 0;
+    if (k === COL) return t === "" || ADD_HEX.test(t) ? null : SW.t("add_card_colour_error");
+    if (!ADD_NUMBER.has(k) || t === "") return null;
+    if (k === "count") return Number.isInteger(n) && n >= 1 ? null : SW.t("add_card_spools_error");
+    if (k === "density") return n > 0 ? null : SW.t("add_review_error_density");
+    if (k === "nozzle" || k === "bed") return Number.isInteger(n) && n > 0 ? null : SW.t("add_review_error_degrees");
+    if (k === "price_per_kg") return n > 0 ? null : SW.t("add_card_price_error");
+    return n > 0 ? null : SW.t(k === "gross" ? "field_error_grams" : "common_error_grams");
+  }
+  const sentence = (it, k) => it._problems[k] || wrong(it, k);
+  const invalid = (it) => [...ADD_REQUIRED, "density", "tare", "gross", "nozzle", "bed", "price_per_kg", COL].filter((k) => (k === "gross" && (it.sealed || Number(it.count) > 1) ? false : wrong(it, k)));
+  // the first spool that cannot be previewed yet, and why
+  function firstBlock() {
+    const needs = items.filter((it) => missing(it).length);
+    if (needs.length) return { kind: "missing", it: needs[0], keys: missing(needs[0]), many: needs.length };
+    for (const it of items) { const bad = invalid(it); if (bad.length) return { kind: "wrong", it, keys: bad }; }
+    return null;
+  }
+  const wire = (it) => {                                        // what the Hub gets: the item without the page's own keys
+    const w = Object.fromEntries(Object.entries(it).filter(([k]) => k[0] !== "_"));
+    if (Number(w.count) > 1) delete w.gross;                    // a weight with the spool counts for one opened spool only (04 4.5)
+    return w;
+  };
+  const adopt = (it, read) => {
+    const levels = it.confidence_levels || {};
+    delete it.confidence_levels; delete it.confidence_filled;
+    return Object.assign(it, { _id: it._id || nextId++, _levels: { ...levels }, _est: [...(it.estimates || [])], _fill: {}, _text: {}, _problems: {},
+      _open: undefined, _read: !!read, _edited: false });
+  };
+
+  // ============ the draft (04 4.7) ============
+  const store = {
+    get() { try { const v = localStorage.getItem(ADD_DRAFT); return v ? JSON.parse(v) : null; } catch { return null; } },
+    put(text) { try { localStorage.setItem(ADD_DRAFT, text); return true; } catch { return false; } },
+    drop() { try { localStorage.removeItem(ADD_DRAFT); } catch { /* nothing to drop */ } },
+    works() { try { localStorage.setItem(ADD_DRAFT + ".probe", "1"); localStorage.removeItem(ADD_DRAFT + ".probe"); return true; } catch { return false; } },
+  };
+  function noStorage(on) {
+    lines.querySelector(".add__nostore")?.remove();
+    if (on) lines.append(Object.assign(line("warn", SW.t("add_draft_no_storage")), { className: "add__line add__nostore" }));
+  }
+  function save() {
+    clearTimeout(saveTimer);
+    if (!keeping || pending) return;
+    if (!items.length && !noteField._control.value.trim()) { if (wrote) store.drop(); paintBadge(); return; }   // a tab that never wrote leaves another one's draft alone
+    started = started || Date.now(); changedAt = Date.now();
+    const ok = store.put(JSON.stringify({ v: 1, tab: tabId, started, changed: changedAt, items, note: noteField._control.value, readId, tag, found }));
+    wrote = wrote || ok;
+    noStorage(!ok);
+    paintBadge();
+  }
+  const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 400); };
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") save(); });
+  window.addEventListener("pagehide", save);
+  window.addEventListener("storage", (e) => {                   // another tab keeps the draft now
+    if (e.key !== ADD_DRAFT || e.storageArea !== localStorage || !keeping) return;
+    keeping = false;
+    lines.append(Object.assign(line("warn", SW.t("add_draft_other_tab")), { className: "add__line add__other" }));
+  });
+  const clearDraft = () => { started = 0; if (keeping && !pending) store.drop(); paintBadge(); };
+  function ageText(ms) {
+    const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 3600) return SW.t("common_age_minutes", { count: Math.max(1, Math.round(s / 60)) });
+    if (s < 86400) return SW.t("common_age_hours", { count: Math.round(s / 3600) });
+    return s < 172800 ? SW.t("home_draft_yesterday") : new Date(ms).toLocaleDateString();
+  }
+  function drawDraft() {
+    draftBox.replaceChildren();
+    if (!pending) return;
+    const n = spoolsOf(pending.items || []);
+    draftBox.append(SW.banner({ kind: "info", inline: true, text: SW.t("add_draft_banner", { age: ageText(pending.changed || pending.started || Date.now()), count: n }),
+      actions: [SW.btn(SW.t("common_restore_them"), { cls: "btn--primary", run: restore }), SW.btn(SW.t("common_discard"), { run: discard })] }));
+  }
+  function restore() {
+    const d = pending; pending = null; draftBox.replaceChildren();
+    const mine = items;
+    items = [];
+    for (const raw of d.items || []) {
+      const it = Object.assign(raw, { _id: nextId++, _problems: {}, _levels: raw._levels || {}, _est: raw._est || raw.estimates || [], _fill: raw._fill || {}, _text: raw._text || {} });
+      items.push(it);
+    }
+    items.push(...mine);
+    listBox.replaceChildren(...items.map((it) => (cards.get(it._id) || addCard(it)).el));
+    if (!noteField._control.value && d.note) noteField._control.value = d.note;
+    if (!found && !readId && !tag) { found = d.found || null; readId = d.readId || null; tag = d.tag || null; }
+    started = d.started || Date.now();
+    if (d.readId || d.found) draftBox.append(line("info", SW.t("add_draft_photos_not_kept")));
+    drawFound(); drawList(); changed(); save();
+    SW.announce(SW.t("add_draft_banner", { age: ageText(d.changed || started), count: spoolsOf(d.items || []) }));
+  }
+  async function discard(e) {
+    const ok = await SW.ask({ kind: "destructive", title: SW.t("home_draft_discard_title"), text: SW.t("add_draft_discard_body", { count: spoolsOf(pending.items || []) }),
+      confirm: SW.t("common_discard"), cancel: SW.t("common_keep"), open: openHere, opener: e && e.currentTarget });
+    if (!ok) return;
+    pending = null; store.drop(); draftBox.replaceChildren(); paintBadge();
+    SW.toast(SW.t("add_draft_discarded"));
+    if (items.length || noteField._control.value) save();
+  }
+  // the badge on the Add destination while an add is unfinished (04 2.1)
+  function paintBadge() {
+    const a = document.querySelector('.nav__item[href="#add"]');
+    if (!a) return;
+    const n = spoolsOf() + (pending ? spoolsOf(pending.items || []) : 0);
+    a.querySelector(".nav__badge")?.remove();
+    if (n > 0) { a.append(h("span", { class: "nav__badge", "aria-hidden": "true", textContent: String(n) })); a.setAttribute("aria-label", SW.t("nav_add_waiting", { count: n })); }
+    else a.removeAttribute("aria-label");
+  }
+
+  // ============ an edit, an added or removed card, a new read: the preview is out of date ============
+  function changed(it) {
+    if (previewed) { previewBox.replaceChildren(); memo = null; edited = it ? it._id : null; }
+    previewed = false; problemsShown = false;
+    changedAt = Date.now();
+    paintBar(); saveSoon(); paintBadge();
+  }
+
+  // ============ From label photos (04 4.3) ============
+  const takeIn = h("input", { type: "file", accept: "image/*", capture: "environment", hidden: true, "aria-labelledby": "add-take-label", on: { change: () => addFiles(takeIn) } });
+  const pickIn = h("input", { type: "file", accept: "image/*", multiple: true, hidden: true, "aria-labelledby": "add-pick-label", on: { change: () => addFiles(pickIn) } });
+  const takeBtn = SW.btn(SW.t("add_photos_take"), { icon: "camera", run: () => takeIn.click() });
+  takeBtn.id = "add-take-label";
+  const pickBtn = SW.btn(SW.t("add_choose_photos"), { run: () => pickIn.click() });
+  pickBtn.id = "add-pick-label";
+  const photoCount = h("span", { class: "add__photo-count mono" });
+  const strip = h("div", { class: "add__strip" });
+  const photoLimit = h("p", { class: "add__limit muted", id: SW.uid("limit"), hidden: true });
+  const photoNote = h("p", { class: "add__line", "data-state": "warn", hidden: true });
+  const noteField = SW.field({ type: "textarea", label: SW.t("add_note_label"), optional: true, placeholder: SW.t("add_note_placeholder"), max: 2000 });
+  noteField._control.addEventListener("input", saveSoon);
+  const readBtn = SW.btn(SW.t("add_read_labels"), { run: read });
+  const readBox = answer();                                     // the Label Reader's answer under its button
+  const photoBody = AI ? [h("div", { class: "add__buttons" }, takeBtn, pickBtn, takeIn, pickIn), photoLimit, h("div", { class: "add__photos" }, strip, photoCount), photoNote,
+    noteField, h("div", { class: "add__read" }, readBtn, readBox.el)] : null;
+  if (AI) photoGroup.replaceChildren(h("header", { class: "group__head" }, h("h2", { class: "group__title", textContent: SW.t("add_group_photos") })),
+    h("div", { class: "group__body" }, ...photoBody));
+  else photoGroup.replaceChildren(h("div", { class: "group__body" }, SW.banner({ kind: "info", inline: true, text: SW.t("home_label_reader_off") })));
+
+  // a photo is shrunk on the phone before it is sent: at most MAX_EDGE px on the long side, as JPEG
   async function shrink(file) {
     const url = URL.createObjectURL(file);
     try {
@@ -948,147 +1126,433 @@ function addTab() {
       return await new Promise((ok) => c.toBlob(ok, "image/jpeg", QUALITY));
     } finally { URL.revokeObjectURL(url); }
   }
-  async function addFiles() {
-    const files = [...picker.files]; picker.value = "";
+  async function addFiles(input) {
+    const files = [...input.files]; input.value = "";
+    photoNote.hidden = true;
     for (const f of files) {
-      if (photos.length >= 8) { SW.result(readBox.line, "warn", SW.t("add_photo_limit", { count: 8 })); break; }
+      if (photos.length >= ADD_MAX_PHOTOS) break;
       try { const blob = await shrink(f); photos.push({ blob, url: URL.createObjectURL(blob) }); }
-      catch (e) { SW.result(readBox.line, "warn", SW.t("add_photo_unreadable", { name: f.name })); }
+      catch { photoNote.replaceChildren(SW.shape("s-triangle"), h("span", {}, SW.t("add_photo_unreadable", { name: f.name }))); photoNote.hidden = false; }
     }
-    drawThumbs();
+    drawPhotos();
+    saveSoon();
   }
-  function drawThumbs() {
-    thumbs.replaceChildren(...photos.map((p, i) => h("figure", {}, h("img", { src: p.url, alt: `photo ${i + 1}` }),
-      h("figcaption", { textContent: i + 1 }),
-      h("button", { textContent: "✕", "aria-label": "remove photo", on: { click: () => { URL.revokeObjectURL(p.url); photos.splice(i, 1); drawThumbs(); } } }))));
+  function drawPhotos(focusIndex) {
+    const full = photos.length >= ADD_MAX_PHOTOS;
+    strip.replaceChildren(...photos.map((p, i) => {
+      const args = { number: i + 1, count: photos.length };
+      const thumb = h("button", { class: "add__thumb", type: "button", "aria-label": SW.t("add_photo_enlarge", args), on: { click: (e) => openPhoto(i, e.currentTarget) } },
+        h("img", { src: p.url, alt: "" }), h("span", { class: "add__thumb-n mono", "aria-hidden": "true", textContent: String(i + 1) }));
+      const off = SW.iconBtn("close", SW.t("add_photo_remove", args), { run: () => removePhoto(i) });
+      return h("div", { class: "add__photo" }, thumb, off);
+    }));
+    photoCount.textContent = photos.length ? SW.t("add_photo_count", { count: photos.length, max: ADD_MAX_PHOTOS }) : "";
+    for (const b of [takeBtn, pickBtn]) {                       // a full set: both buttons say why (04 3.4)
+      if (full) { b.setAttribute("aria-disabled", "true"); b.setAttribute("aria-describedby", photoLimit.id); }
+      else { b.removeAttribute("aria-disabled"); b.removeAttribute("aria-describedby"); }
+    }
+    photoLimit.hidden = !full; photoLimit.textContent = full ? SW.t("add_photo_limit", { count: ADD_MAX_PHOTOS }) : "";
+    takeBtn.classList.toggle("btn--primary", !photos.length);   // the filled button is the next step: a photo, then Read labels
+    readBtn.classList.toggle("btn--primary", photos.length > 0);
     readable();
+    if (focusIndex != null) {
+      const spot = strip.querySelectorAll(".add__photo .btn")[Math.min(focusIndex, photos.length - 1)];
+      (spot || takeBtn).focus();
+    }
   }
-  function readable() { disabled(readBtn, photos.length ? null : SW.t("add_reason_photo_first"), () => picker); }
+  function removePhoto(i) {
+    const [p] = photos.splice(i, 1);
+    const drop = setTimeout(() => URL.revokeObjectURL(p.url), 11000);       // the Undo toast lasts 10 s
+    drawPhotos(i);
+    SW.toast(SW.t("add_photos_removed"), "ok", { action: { label: SW.t("common_undo"), run: () => {
+      clearTimeout(drop); if (photos.length < ADD_MAX_PHOTOS) { photos.splice(i, 0, p); drawPhotos(i); } else URL.revokeObjectURL(p.url);
+    } } });
+  }
+  function openPhoto(i, opener) {                               // the photo large, with Remove and Close (04 4.3)
+    const p = photos[i];
+    const dlg = SW.sheet({ title: SW.t("photo_position", { number: i + 1, total: photos.length }),
+      body: h("img", { class: "add__big", src: p.url, alt: "" }),
+      foot: [SW.btn(SW.t("add_photo_remove_this"), { cls: "btn--danger", run: () => { dlg.close(); removePhoto(i); } }),
+        SW.btn(SW.t("common_close"), { run: () => dlg.close() })] });
+    openHere(dlg, opener);
+  }
+  function readable() { disabled(readBtn, photos.length ? null : SW.t("add_reason_photo_first"), () => takeBtn); }
+
   async function read() {
+    if (working) return;
+    const old = items.filter((it) => it._read);
+    if (old.some((it) => it._edited)) {
+      const ok = await SW.ask({ kind: "confirm", title: SW.t("add_replace_title"), text: SW.t("add_replace_body", { count: old.filter((it) => it._edited).length }),
+        confirm: SW.t("add_replace_confirm"), cancel: SW.t("add_replace_keep"), open: openHere, opener: readBtn });
+      if (!ok) return;
+    }
     const fd = new FormData();
     photos.forEach((p, i) => fd.append("photos", p.blob, `photo${i}.jpg`));
-    fd.append("hint", hint.value);
-    actBox.replaceChildren(); readOut.replaceChildren();
+    fd.append("hint", noteField._control.value);
+    working = "read"; paintBar();
     await act(readBox, SW.t("add_reading", { count: photos.length }), async () => {
-      const res = await api("read", { form: fd });
-      tag = res.tag;
-      readId = res.read_id || null;                      // the intake history keeps this read's photos with the save
-      const got = res.items.map((it) => ({ price_per_kg: "", ...it, location: it.sealed ? SEALED : "" }));
-      items = [...items.filter((it) => it.hand), ...got]; // a new read replaces the last read, not spools added by hand
-      checked = false; drawItems();
-      const filled = got.length === 1 && got[0].gross != null;
-      readOut.replaceChildren(...[res.tag ? h("p", { class: "muted", textContent: `New tag ${res.tag.nfc_id} was tapped on the ${res.tag.reader} reader ${res.tag.age_seconds} s before the photos, so this spool counts as opened; Add links the tag to it (one opened spool only).` }) : null,
-        res.scale ? h("p", { class: "muted", textContent: `Station scale: ${res.scale.grams} g, ${res.scale.age_seconds} s ago${filled ? " (filled in as the scale weight)" : " (not used: only for one opened spool)"}.` }) : null,
-        res.questions.length ? h("div", { class: "card" }, h("h3", { textContent: res.reader === "local" ? "The local reader asks" : "Claude asks" }),
-        ...res.questions.map((q) => h("p", { textContent: "• " + q }))) : null,
-        res.note ? h("p", { class: "muted", textContent: "Note: " + res.note }) : null,
-        h("p", { class: "muted", textContent: readerText(res) })].filter(Boolean));
-      return got.length ? SW.t("add_found_result", { count: got.length, photos: photos.length }) : { kind: "warn", text: SW.t("add_found_none") };
-    }, { button: readBtn, kept: true });
-    readable();
+      let res;
+      try { res = await call("read", { form: fd }); }
+      catch (e) { if (e instanceof SW.HubError && e.status === 429) e.message = `${e.text("")} ${SW.t("add_daily_limit")}`; throw e; }
+      for (const it of old) dropCard(it);
+      items = items.filter((it) => !it._read);                  // a new read replaces the last read, not the spools added by hand
+      tag = res.tag || null; readId = res.read_id || null;
+      const got = res.items.map((raw) => adopt({ price_per_kg: "", ...raw, location: raw.sealed ? SEALED : "" }, true));
+      const eng = res.engine || {};
+      found = { count: got.length, photos: photos.length, reader: eng.reader || res.reader, model: eng.model || (res.usage && res.usage.model) || "", tier: eng.tier || res.tier || "",
+        rated: !!res.confidence_rated, summary: addSummary(got.map((it) => it._levels)), questions: res.questions || [], tag: res.tag || null, scale: res.scale || null,
+        usage: res.usage || null, note: res.note || "", filled: got.length === 1 && got[0].gross != null };
+      for (const it of got) { it._open = needsLook(it); items.push(it); addCard(it); }
+      addedBox.replaceChildren();
+      drawFound(); drawList(); changed();
+      return null;
+    }, { button: readBtn, kept: true, busy: SW.t("common_reading") });
+    working = null; paintBar(); readable();
   }
-  function pct(c) { return Math.round(c * 100) + " %"; }
-  function readerText(res) { // which reader answered, and how sure it was
-    if (res.reader === "local") {
-      return `read by the local reader (${res.tier || "?"} tier${res.escalated ? ", after the CPU tier" : ""})` +
-        (res.confidence != null ? `, ${pct(res.confidence)} sure${res.unsure ? " (unsure: check the fields)" : ""}` : "") +
-        (res.usage && res.usage.ms != null ? ` · ${(res.usage.ms / 1000).toFixed(1)} s` : "");
-    }
-    return `read by Claude · ${res.usage.model}, ${res.usage.input_tokens} in (${res.usage.cached} cached) / ${res.usage.output_tokens} out tokens`;
+  // what the Label Reader said, above the cards (04 4.4)
+  function drawFound() {
+    if (!found) { foundBox.replaceChildren(); return; }
+    const f = found, kids = [line(f.count ? "ok" : "warn", f.count ? SW.t("add_found_result", { count: f.count, photos: f.photos }) : SW.t("add_found_none"))];
+    const tier = String(f.tier || "").toLowerCase(), cpuGpu = tier === "cpu" ? SW.t("add_found_tier_cpu") : tier === "gpu" ? SW.t("add_found_tier_gpu") : "";
+    const engine = f.reader === "local" ? SW.t("add_found_engine_local") : SW.t("add_found_engine_cloud"), model = f.reader === "local" ? cpuGpu : f.model;
+    kids.push(h("p", { class: "muted", textContent: model ? SW.t("add_found_reader", { engine, model }) : SW.t("add_found_reader_only", { engine }) }));
+    const sum = addSummaryLine(f.summary);
+    if (sum) kids.push(sum);
+    if (f.count && !f.rated) kids.push(h("p", { class: "muted", textContent: SW.t("add_found_not_rated_hint") }));
+    if (f.questions.length) kids.push(h("div", { class: "add__asks" }, h("h3", { class: "add__asks-title", textContent: SW.t("add_found_questions") }),
+      h("ul", {}, ...f.questions.map((q) => h("li", { textContent: q })))));
+    if (f.tag) kids.push(SW.banner({ kind: "info", inline: true, text: SW.t("add_found_tag_notice", { tag: f.tag.nfc_id, seconds: f.tag.age_seconds,
+      reader: SW.t(/^station$/.test(f.tag.reader) ? "common_reader_the_weigh_station" : "common_reader_the_tag_reader") }) }));
+    if (f.scale) kids.push(SW.banner({ kind: "info", inline: true, text: SW.t(f.filled ? "add_found_scale_used" : "add_found_scale_unused", { grams: f.scale.grams, seconds: f.scale.age_seconds }) }));
+    if (f.note) kids.push(h("p", { class: "muted", textContent: f.note }));
+    const u = f.usage, used = u && u.input_tokens != null ? SW.t("add_found_usage", { tokens_in: u.input_tokens, tokens_cached: u.cached || 0, tokens_out: u.output_tokens || 0 })
+      : u && u.ms != null ? SW.t("add_found_usage_time", { seconds: (u.ms / 1000).toFixed(1) }) : "";
+    if (used) kids.push(h("details", { class: "add__details" }, h("summary", { textContent: SW.t("common_details") }), h("p", { class: "mono", textContent: used })));
+    foundBox.replaceChildren(group(SW.t("add_found_title"), ...kids));
   }
-  function colourText(it) { // the local reader's colour name and family, and its least sure fields
-    const parts = [];
-    if (it.color_name || it.color_family) {
-      const name = it.color_name && it.color_name !== "unknown" ? it.color_name : "colour name not in the library";
-      parts.push("colour: " + name + (it.color_family ? ` (${it.color_family})` : ""));
-    }
-    if (it.confidence != null) parts.push(pct(it.confidence) + " sure");
-    const low = Object.entries(it.field_confidence || {}).filter(([, c]) => c < 0.78).map(([k]) => k);
-    if (low.length) parts.push("least sure: " + low.join(", "));
-    return parts.join(" · ");
+
+  // ============ By hand (04 4.2) ============
+  const searchField = SW.field({ type: "search", label: SW.t("add_search_label"), placeholder: SW.t("common_search_placeholder"), onSearch: (q) => find(q) });
+  searchField.classList.add("add__search");
+  searchField.querySelector(".field__box").append(SW.iconBtn("search", SW.t("common_search"), { run: () => find(searchField._control.value.trim()) }));
+  const findLine = resultLine();
+  const findBox = h("div", { class: "add__finds" });
+  const newBtn = () => SW.btn(SW.t("add_new_filament"), { icon: "plus", run: () => addItem(blankItem()) });
+  handGroup.replaceChildren(h("header", { class: "group__head" }, h("h2", { class: "group__title", textContent: SW.t("add_group_hand") })),
+    h("div", { class: "group__body" }, searchField, findLine, findBox, h("div", {}, newBtn()), vendorList));
+  api("vendors").then((res) => {
+    vendorTare = new Map(res.vendors.map((v) => [v.name.toLowerCase(), v.tare]));
+    vendorList.replaceChildren(...res.vendors.map((v) => h("option", { value: v.name })));
+  }).catch(() => {});                                           // no list: the brand is typed in
+
+  const blankItem = () => ({ vendor: "", name: "", material: "", count: 1, net: 1000, tare: null, density: null, color_hex: "",
+    sealed: true, location: SEALED, price_per_kg: "", photos: [], estimates: [], match: "new filament", hand: true });
+  function addItem(raw) {
+    const it = adopt(raw, false);
+    it._open = needsLook(it);
+    items.push(it); const c = addCard(it);
+    addedBox.replaceChildren();
+    drawList(); changed(it);
+    c.el.scrollIntoView({ behavior: "smooth", block: "start" });
+    c.el.focus({ preventScroll: true });
   }
-  function field(it, key, label, type = "text", extra = {}, ins = {}) {
-    const inp = h("input", {
-      type, value: it[key] ?? "", inputMode: type === "number" ? "decimal" : undefined, step: "any",
-      list: key === "vendor" ? "vendors" : undefined,
-      on: { input: (e) => { it[key] = type === "number" ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value;
-                            if (key === "color_hex") swatchFor(it);
-                            if (key === "material") fillBlank(it, "density", densityFor(it.material), ins);
-                            if (key === "vendor") fillBlank(it, "tare", vendorTare.get(it.vendor.trim().toLowerCase()), ins);
-                            dirty(); } } });
-    ins[key] = inp;
-    return h("label", extra, label, inp);
-  }
-  function fillBlank(it, key, value, ins) { // a known default for a field the user left blank
-    if (value == null || (it[key] != null && it[key] !== "")) return;
-    it[key] = value; if (ins[key]) ins[key].value = value;
-  }
-  const swatches = new Map();
-  function swatchFor(it) { const s = swatches.get(it); if (s) s.style.background = /^[0-9a-f]{6}$/i.test(it.color_hex || "") ? "#" + it.color_hex : "transparent"; }
-  function drawItems() {
-    swatches.clear();
-    itemsBox.replaceChildren(...items.map((it, idx) => {
-      const ins = {}; // this card's inputs by field, for filled-in defaults
-      const f = (key, label, type, extra) => field(it, key, label, type, extra, ins);
-      const sw = h("span", { class: "swatch" }); swatches.set(it, sw); swatchFor(it);
-      const loc = h("select", { on: { change: (e) => { it.location = e.target.value; dirty(); } } },
-        h("option", { value: "", textContent: "Auto: " + AUTO, selected: !it.location }),
-        ...LOCATIONS.map((l) => h("option", { value: l, textContent: l, selected: l === it.location })));
-      const sealed = h("input", { type: "checkbox", checked: it.sealed, on: { change: (e) => {
-        it.sealed = e.target.checked;
-        if (it.location === (it.sealed ? "" : SEALED)) { it.location = it.sealed ? SEALED : ""; loc.value = it.location; }
-        dirty(); } } });
-      return h("div", { class: "card" },
-        h("h3", {}, sw, h("span", { textContent: `${it.vendor} ${it.name}`.trim() || "New spool" }),
-          h("span", { class: "badge " + (it.existing_filament_id ? "ok" : "new"), textContent: it.match })),
-        it.photos.length ? h("p", { class: "muted", textContent: `photos ${it.photos.map((n) => n + 1).join(", ")}${it.estimates.length ? " · estimated: " + it.estimates.join(", ") : ""}` }) : null,
-        colourText(it) ? h("p", { class: "muted", textContent: colourText(it) }) : null,
-        h("p", { class: "muted", textContent: it.price_line ? it.price_line.replace(/^Price: /, "") : "no price" }),
-        h("div", { class: "grid" },
-          f("vendor", "Vendor"), f("material", "Material"),
-          f("name", "Name (with the colour)", "text", { class: "wide" }),
-          f("count", "Spools", "number"), f("net", "Net g", "number"),
-          f("tare", "Empty spool g", "number"), f("density", "Density", "number"),
-          f("color_hex", "Colour hex"), f("lot", "Lot"),
-          f("nozzle", "Nozzle °C", "number"), f("bed", "Bed °C", "number"),
-          f("gross", "Opened: scale weight g (with spool, blank = full)", "number", { class: "wide" }),
-          h("label", { class: "check wide" }, sealed, "Still sealed (in its bag or box)",
-            it.sealed_reason ? h("span", { class: "muted", textContent: ` · ${it.sealed_reason}` }) : null),
-          f("price_per_kg", "Price $/kg", "number"), h("label", {}, "Location", loc),
-          f("note", "Note", "text", { class: "wide" })),
-        h("p", {}, h("button", { class: "secondary", textContent: "Remove", on: { click: () => { items.splice(idx, 1); drawItems(); dirty(); } } })));
-    }));
-    drawActions();
-  }
-  function dirty() { if (checked) { checked = false; SW.result(ans.line, null); ans.code.replaceChildren(); drawActions(); } }   // an edit makes the last check stale
-  const total = () => items.reduce((n, it) => n + (Number(it.count) || 0), 0);
-  function drawActions() {
-    if (!items.length) { actBox.replaceChildren(ans.el); return; }
-    const check = h("button", { class: checked ? "secondary" : "", textContent: "Check (dry run)", on: { click: (e) => submit(true, e.currentTarget) } });
-    const add = h("button", { textContent: `Add ${total()} spool${total() === 1 ? "" : "s"}`, on: { click: (e) => submit(false, e.currentTarget) } });
-    actBox.replaceChildren(h("div", { class: "row" }, check, add), ans.el);
-    disabled(add, checked ? null : SW.t("add_reason_check_first"), () => check);   // pressing it goes to Check
-  }
-  async function submit(dry, button) {
-    if (sending) return;
-    sending = true;
+  async function find(q) {
+    const stamp = ++findStamp;
+    if (q.length < 2) { rows = []; findBox.replaceChildren(); clear(findLine); return; }
+    searchField._busy(true);
+    SW.announce(SW.t("common_searching"));
     try {
-      await act(ans, dry ? SW.t("common_checking") : SW.t("add_preview_adding"), async () => {
-        const n = total();
-        const res = await api("add", { body: { items, dry_run: dry, link_tag: tag ? tag.nfc_id : null, read_id: readId } });
-        checked = dry && !res.exit_code;
-        if (res.exit_code) { drawActions(); return { kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output }; }
-        if (dry) { drawActions(); return { text: SW.t("add_summary_preview_ok"), code: res.output }; }
-        const ids = res.spool_ids || [];
-        items = []; tag = null; readId = null; itemsBox.replaceChildren(); filBox.replaceChildren(); photos.splice(0).forEach((p) => URL.revokeObjectURL(p.url)); drawThumbs();
-        drawActions();
-        SW.toast(SW.t("add_added_toast", { count: ids.length || n }));
-        return { text: ids.length ? SW.t("add_summary_added", { count: ids.length, ids: ids.join(", ") }) : SW.t("add_done_none"), code: res.output,
-          action: { label: SW.t("add_added_set_up_presets"), run: () => { location.hash = "#presets"; } } };
-      }, { button, busy: dry ? null : SW.t("common_adding") });
-    } finally { sending = false; }
+      const res = await call(`filaments?q=${encodeURIComponent(q)}&limit=${ADD_FIND_LIMIT}`);
+      if (stamp !== findStamp) return;
+      clear(findLine); rows = res.filaments; page = 1; drawRows(false);
+      if (!rows.length) SW.announce(SW.t("add_picker_none"));
+    } catch (e) { if (stamp === findStamp) { rows = []; findBox.replaceChildren(); failed(findLine, e, () => find(q)); } }
+    finally { if (stamp === findStamp) searchField._busy(false); }
   }
-  return { el };
+  function drawRows(focus) {
+    if (!rows.length) { findBox.replaceChildren(h("p", { class: "add__none" }, SW.t("add_picker_none") + " ", newBtn())); return; }
+    const shown = rows.slice((page - 1) * ADD_PAGE, page * ADD_PAGE), kids = [];
+    kids.push(h("ul", { class: "add__rows" }, ...shown.map((f) => h("li", {}, h("button", { class: "add__row", type: "button", on: { click: () => addItem({ ...blankItem(), vendor: f.vendor, name: f.name, material: f.material || "",
+        net: f.net ?? 1000, tare: f.tare, density: f.density, color_hex: f.color_hex || "", nozzle: f.nozzle, bed: f.bed, existing_filament_id: f.id, match: "existing filament" }) } },
+      SW.swatch(addHex(f.color_hex)),
+      h("span", { class: "add__row-text" }, h("b", { textContent: [f.vendor || SW.t("add_row_no_brand"), f.name].join(" ") }),
+        h("span", { class: "muted", textContent: SW.t("add_row_detail", { material: f.material || "?", net: f.net ?? "?", count: f.spools }) })),
+      h("span", { class: "add__row-id mono", textContent: SW.t("common_filament_number", { id: f.id }) }),
+      h("span", { class: "sr", textContent: SW.t("a11y_swatch", { hex: addHex(f.color_hex) || SW.t("common_no_colour") }) }))))));
+    if (rows.length > ADD_PAGE) kids.push(SW.pager({ from: (page - 1) * ADD_PAGE + 1, to: Math.min(rows.length, page * ADD_PAGE), total: rows.length, page, pages: Math.ceil(rows.length / ADD_PAGE),
+      go: (p) => { page = p; drawRows(true); } }));
+    if (rows.length >= ADD_FIND_LIMIT) kids.push(h("p", { class: "muted", textContent: SW.t("add_results_cut", { count: ADD_FIND_LIMIT }) }));
+    findBox.replaceChildren(...kids);
+    if (focus) findBox.querySelector(".add__row")?.focus();
+  }
+
+  // ============ The spool list and its cards (04 4.5) ============
+  const needsLook = (it) => missing(it).length > 0 || ["low", "medium"].some((l) => Object.values(it._levels).includes(l));
+  function drawList() {
+    count.textContent = items.length ? String(spoolsOf()) : "";
+    empty.hidden = items.length > 0; listBox.hidden = !items.length;
+    paintBar();
+  }
+  const addCard = (it) => { const c = buildCard(it); cards.set(it._id, c); listBox.append(c.el); return c; };
+  const dropCard = (it) => { const c = cards.get(it._id); if (c) { c.el.remove(); cards.delete(it._id); } };
+  function removeItem(it) {
+    const at = items.indexOf(it), c = cards.get(it._id);
+    items.splice(at, 1); c.el.remove(); cards.delete(it._id);
+    drawList(); changed();
+    listHead.focus();
+    SW.toast(SW.t("add_review_removed"), "ok", { action: { label: SW.t("common_undo"), run: () => {
+      const to = Math.min(at, items.length);
+      items.splice(to, 0, it); cards.set(it._id, c); listBox.insertBefore(c.el, listBox.children[to] || null);
+      drawList(); changed();
+    } } });
+  }
+
+  function buildCard(it) {
+    const id = SW.uid("spool"), fields = {};
+    const sw = SW.swatch(""), toolSw = SW.swatch(""), title = h("h3", { class: "add__title", id: id + "-title" }), chips = h("span", { class: "add__chips" });
+    const sum = h("p", { class: "add__sum muted" }), att = h("div", { class: "add__att" });
+    const body = h("div", { class: "add__body", id: id + "-body" });
+    const expand = h("button", { class: "btn btn--ghost btn--icon add__expand", type: "button", "aria-controls": body.id, on: { click: () => open(body.hidden) } }, SW.icon("chevron"));
+    const el = h("article", { class: "add__card", tabindex: "-1", "aria-labelledby": title.id }, h("header", { class: "add__head" }, sw,
+      h("div", { class: "add__main" }, title, chips, sum, att), expand), body);
+    const paintSwatch = () => { const hex = addHex(it.color_hex); for (const s of [sw, toolSw]) { SW.paint(s, hex); s.classList.toggle("swatch--none", !hex); } };
+    function open(on) { it._open = on; body.hidden = !on; expand.setAttribute("aria-expanded", String(on)); el.classList.toggle("add__card--open", on); if (on) saveSoon(); }
+
+    // one field: its label, mark and hint follow the item's values; an edit clears the mark and the hint of a reading
+    const mk = (key, o = {}) => {
+      const f = SW.field({ label: SW.t(o.label || ADD_LABEL[key]), optional: o.optional, hint: "", mono: o.mono, unit: o.unit, decimal: o.decimal, type: o.type || "text",
+        value: ADD_NUMBER.has(key) ? (key in it._text ? it._text[key] : it[key] ?? "") : o.value ?? it[key] ?? "", placeholder: o.placeholder, attrs: o.attrs, options: o.options, row: false });
+      fields[key] = f;
+      const control = f._control;
+      control.addEventListener("input", () => edit(key, control.value));
+      control.addEventListener("change", () => SW.fieldError(f, sentence(it, key)));
+      return f;
+    };
+    function edit(key, value) {
+      if (ADD_NUMBER.has(key)) { it._text[key] = value; const n = addParse(value); it[key] = value.trim() === "" || Number.isNaN(n) ? null : n; }
+      else if (key === COL) it.color_hex = value.trim().replace(/^#/, "");
+      else it[key] = value;
+      it._edited = true; delete it._levels[key]; delete it._fill[key]; delete it._problems[key];
+      it._est = it._est.filter((x) => x !== key);
+      if (key === "material") fill("density", densityFor(it.material), it.material.trim());
+      if (key === "vendor") fill("tare", vendorTare.get(it.vendor.trim().toLowerCase()), "brand");
+      if (fields[key]._error && fields[key].dataset.state === "error") SW.fieldError(fields[key], sentence(it, key));
+      if (key === "count") paintGross();
+      paint(); changed(it);
+    }
+    function fill(key, value, why) {                             // a known default for a field left blank
+      if (value == null || textOf(it, key) !== "") return;
+      it[key] = value; fields[key]._control.value = String(value); it._fill[key] = why;
+    }
+    const mark = (key) => { const lv = it._levels[key]; return lv === "medium" || lv === "low" || lv === "not_on_label" ? SW.status(lv, { small: true, cls: "add__mark" }) : null; };
+    const hintOf = (key) => {
+      if (it._fill[key]) return it._fill[key] === "brand" ? SW.t("add_hint_from_brand_list") : SW.t("add_hint_typical_for", { material: it._fill[key] });
+      if (it._est.includes(key)) return SW.t("add_hint_estimated");
+      if (it._levels[key] === "medium" || it._levels[key] === "low") return SW.t("confidence_unsure_hint");
+      if (key === "name") return SW.t("add_card_name_help");
+      if (key === "line") return SW.t("add_card_line_help");
+      if (key === "note") return SW.t("add_card_note_help");
+      if (key === "price_per_kg") return it.price_line ? SW.t("add_card_price_help", { price_line: it.price_line.replace(/^Price: /, "") }) : "";
+      if (key === "gross") return Number(it.count) > 1 ? SW.t("add_card_gross_single") : SW.t("common_hint_leave_empty_full");
+      return "";
+    };
+    function paintGross() {
+      const f = fields.gross; if (!f) return;
+      f.hidden = !!it.sealed;
+      const one = Number(it.count) > 1;
+      f._control.readOnly = one; f._control.setAttribute("aria-disabled", String(one)); if (!one) f._control.removeAttribute("aria-disabled");
+    }
+    function paint() {                                          // the summary, the attention line, every mark and hint
+      const name = `${it.vendor} ${it.name}`.trim() || SW.t("add_card_new_spool");
+      title.textContent = name;
+      expand.setAttribute("aria-label", SW.t("add_card_expand", { title: name }));
+      expand.setAttribute("aria-expanded", String(!body.hidden));
+      paintSwatch();
+      chips.replaceChildren(h("span", { class: "add__chip", textContent: it.existing_filament_id ? SW.t("add_existing_filament", { id: SW.t("common_filament_number", { id: it.existing_filament_id }) }) : SW.t("add_new_filament") }),
+        ...(Number(it.count) > 1 ? [h("span", { class: "add__chip mono", textContent: SW.t("add_card_chip_count", { count: it.count }) })] : []));
+      const hex = addHex(it.color_hex);
+      sum.textContent = [it.material, hex || SW.t("common_no_colour"), it.net != null ? SW.t("common_grams", { grams: it.net }) : "",
+        it.sealed ? SW.t("common_sealed") : it.gross != null ? SW.t("add_card_opened", { grams: it.gross }) : SW.t("add_preview_opened"),
+        it.location || SW.t("common_option_automatic")].filter(Boolean).join(" · ");
+      const miss = missing(it), kids = [];
+      if (miss.length) kids.push(line("bad", SW.t("add_review_needs", { fields: miss.map((k) => SW.t(ADD_LABEL[k])).join(", ") })));
+      const conf = addSummaryLine(addSummary([it._levels]));
+      if (conf && Object.values(it._levels).some((v) => v === "low" || v === "medium" || v === "not_on_label")) kids.push(conf);
+      for (const [k, msg] of Object.entries(it._problems)) if (!fields[k] || fields[k].closest("[hidden]")) kids.push(line("bad", msg));
+      att.replaceChildren(...kids);
+      for (const [key, f] of Object.entries(fields)) {
+        f._hint.textContent = hintOf(key);
+        const label = f.querySelector(".field__label");
+        label.querySelector(".add__mark")?.remove();
+        const m = mark(key); if (m) label.append(" ", m);
+      }
+    }
+    function problems(list) {                                   // the Hub's sentences at their fields (04 4.6)
+      it._problems = {};
+      for (const p of list) it._problems[p.field || "_"] = p.message;
+      for (const [k, f] of Object.entries(fields)) SW.fieldError(f, sentence(it, k));
+      paint();
+    }
+    function showErrors() { for (const [k, f] of Object.entries(fields)) SW.fieldError(f, sentence(it, k)); }
+
+    // ---- the fields, in the six groups of the Android app ----
+    const colourField = mk(COL, { optional: true, mono: true, unit: "#", placeholder: SW.t("add_card_colour_placeholder"), value: it.color_hex ? addHex(it.color_hex) : "" });
+    const picker = h("input", { class: "add__picker", type: "color", value: addHex(it.color_hex).toLowerCase() || "#808080", "aria-labelledby": id + "-pick",
+      on: { input: (e) => { colourField._control.value = e.target.value.toUpperCase(); edit(COL, colourField._control.value); SW.fieldError(colourField, sentence(it, COL)); } } });
+    const box = colourField.querySelector(".field__box");        // the swatch and the picker sit inside the field's box, at its right
+    box.querySelector(".field__unit").remove();
+    box.append(h("span", { class: "add__colour-tools" }, toolSw, h("span", { class: "sr", id: id + "-pick", textContent: SW.t("add_card_colour_pick") }), picker));
+    colourField.classList.add("add__colour");
+    const pair = (...kids) => h("div", { class: "add__pair" }, ...kids);
+    const set = (name, ...kids) => h("fieldset", { class: "add__set" }, h("legend", { class: "add__legend", textContent: name }), ...kids);
+    const locations = [...LOCATIONS]; if (SEALED && !locations.includes(SEALED)) locations.push(SEALED);
+    const location = mk("location", { type: "select", value: it.location || "", options: [{ value: "", label: SW.t("add_card_location_automatic_rule", { rule: AUTO }) }, ...locations.map((l) => ({ value: l, label: l }))] });
+    location._control.value = it.location || "";
+    location._control.setAttribute("aria-required", "false");
+    const sealed = SW.toggle({ label: SW.t("common_still_sealed"), checked: !!it.sealed, hint: it.sealed_reason ? SW.t("add_review_reader_reason", { reason: it.sealed_reason }) : undefined });
+    sealed._control.addEventListener("change", () => {
+      it.sealed = sealed._control.checked; it.location = it.sealed ? SEALED : ""; location._control.value = it.location;
+      it._edited = true; paintGross(); paint(); changed(it);
+    });
+    const gross = mk("gross", { optional: true, decimal: true, unit: "g" }); paintGross();
+    body.append(h("div", { class: "add__sets" },
+      set(SW.t("common_group_identity"), mk("vendor", { attrs: { list: "addVendors", autocapitalize: "words" } }), mk("name"), mk("material"),
+        colourField, mk("line", { optional: true })),
+      set(SW.t("add_group_amount"), pair(mk("count", { type: "number" }), mk("density", { type: "number", optional: true, decimal: true, unit: "g/cm³" })),
+        pair(mk("net", { type: "number", decimal: true, unit: "g" }), mk("tare", { type: "number", optional: true, decimal: true, unit: "g" }))),
+      set(SW.t("add_group_state"), sealed, gross),
+      set(SW.t("add_group_print"), pair(mk("nozzle", { type: "number", optional: true, unit: "°C" }), mk("bed", { type: "number", optional: true, unit: "°C" }))),
+      set(SW.t("add_group_storage"), location),
+      set(SW.t("common_group_other"), mk("lot", { optional: true, mono: true }), mk("price_per_kg", { type: "number", optional: true, decimal: true }), mk("note", { optional: true }))),
+      h("div", { class: "add__foot" }, SW.btn(SW.t("common_remove"), { cls: "btn--ghost", icon: "trash", run: () => removeItem(it) })));
+    open(it._open === undefined ? needsLook(it) : it._open);
+    paint();
+    return { el, open, problems, showErrors, paint, control: (k) => (fields[k] ? fields[k]._control : null) };
+  }
+
+  // ============ The action bar: Preview, then Add (04 4.6) ============
+  const barText = h("p", { class: "add__bar-text", id: SW.uid("bar") });
+  const barBtn = h("button", { class: "btn btn--primary add__bar-btn", type: "button", "aria-describedby": barText.id, on: { click: () => (previewed && !working ? submit(false) : submit(true)) } }, SW.t("common_preview"));
+  const bar = h("div", { class: "add__bar" }, barText, barBtn);
+  // how many fields the Label Reader was not sure of, over all the cards
+  const toCheck = () => items.reduce((n, it) => n + ADD_RATED.filter((k) => it._levels[k] === "low" || it._levels[k] === "medium").length, 0);
+  function paintBar() {
+    const n = spoolsOf(), block = items.length ? firstBlock() : null;
+    let text, label = SW.t("common_preview"), off = false, plain = false;
+    if (working === "read") { text = SW.t("add_wait_reader"); off = true; }
+    else if (!items.length) { text = SW.t("add_bar_empty"); off = true; }
+    else if (block) {
+      const num = items.indexOf(block.it) + 1;
+      if (block.kind === "missing") text = block.many > 1 ? SW.t("add_bar_missing_many", { count: block.many, number: num }) : SW.t("add_bar_missing", { number: num, fields: block.keys.map((k) => SW.t(ADD_LABEL[k])).join(", ") });
+      else { const k = block.keys[0]; text = ["net", "tare", "gross"].includes(k) ? SW.t("add_bar_invalid", { number: num, field: SW.t(ADD_LABEL[k]) })
+        : SW.t("add_bar_field_error", { number: num, field: SW.t(ADD_LABEL[k]), message: wrong(block.it, k) }); }
+      off = true;
+    } else if (hubDown) { text = SW.t("add_bar_offline"); off = true; }
+    else if (working === "preview") text = SW.t("add_preview_checking");
+    else if (working === "add") text = SW.t("add_preview_adding");
+    else if (problemsShown) text = SW.t("add_bar_problems");
+    else if (previewed) { text = SW.t("add_bar_previewed", { count: n }); label = SW.t("add_preview_add", { count: n }); plain = true; }
+    else if (edited && cards.has(edited)) { text = SW.t("add_bar_changed", { number: items.findIndex((it) => it._id === edited) + 1 }); }
+    else { text = SW.t("add_bar_ready", { count: n }); plain = true; }
+    const check = toCheck();
+    if (check && (plain || previewed)) text = `${SW.t("add_bar_to_check", { count: check })} · ${text}`;
+    barText.textContent = text;
+    if (barBtn.getAttribute("aria-busy") !== "true") barBtn.textContent = label;
+    barBtn._blocker = off && block ? () => { const c = cards.get(block.it._id); c.open(true); c.showErrors(); return c.control(block.keys[0]); } : null;
+    barBtn._reason = off ? barText : null;
+    if (off || working) barBtn.setAttribute("aria-disabled", "true"); else barBtn.removeAttribute("aria-disabled");
+    if (working && working !== "read") barBtn.setAttribute("aria-disabled", "true");
+  }
+  // what the preview says each spool does: existing or new filament, how many spools, where (04 4.6, N18)
+  function drawResults(list) {
+    itemsBox.replaceChildren(...list.map((r) => {
+      const where = (r.placements || []).map((p) => (r.placements.length > 1 ? SW.t("add_preview_placement", { spools: p.spools, location: p.location }) : p.location)).join(", ") || r.location;
+      return h("p", { class: "add__result-row" }, h("b", { textContent: [r.vendor, r.name].join(" ") }), " · ",
+        r.filament === "new" ? SW.t("add_new_filament") : SW.t("add_existing_filament", { id: SW.t("common_filament_number", { id: r.filament_id }) }), " · ",
+        SW.t("add_review_summary_spools", { count: r.spools }), " · ", r.opened ? SW.t("add_preview_opened") : SW.t("common_sealed"), " · ", where,
+        r.new_vendor ? [" · ", SW.t("add_preview_new_vendor")] : null);
+    }));
+  }
+  function showProblems(list) {                                 // every sentence at its field; the first spool that has one opens (04 4.6)
+    const by = new Map();
+    for (const p of list) { const it = items[p.item]; if (it) by.set(it, [...(by.get(it) || []), p]); }
+    for (const it of items) cards.get(it._id).problems(by.get(it) || []);
+    const first = items.find((it) => by.has(it));
+    if (first) { const c = cards.get(first._id); c.open(true); const key = by.get(first)[0].field; (c.control(key) || c.el).focus(); }
+    problemsShown = true;
+  }
+  async function submit(dry) {
+    if (working || barBtn.getAttribute("aria-disabled") === "true") return;
+    working = dry ? "preview" : "add"; edited = null; paintBar();
+    ans.code.replaceChildren(); itemsBox.replaceChildren(); extras.replaceChildren();
+    previewBox.replaceChildren(resultGroup(dry ? SW.t("add_preview_title") : SW.t("common_add"), dry));
+    const n = spoolsOf();
+    try {
+      await act(ans, dry ? SW.t("add_preview_checking") : SW.t("add_preview_adding"), async () => {
+        let res;
+        try { res = await call("add", { body: { items: items.map(wire), dry_run: dry, link_tag: tag ? tag.nfc_id : null, read_id: readId } }); }
+        catch (e) {
+          if (e instanceof SW.HubError && e.data && Array.isArray(e.data.problems)) {
+            showProblems(e.data.problems);
+            return shown({ kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change") });
+          }
+          if (e instanceof SW.HubError && e.status === 409) e.message = `${e.text("")} ${SW.t("add_tag_conflict")}`;
+          throw e;
+        }
+        if (res.exit_code) { previewed = false; problemsShown = true; return shown({ kind: "bad", text: SW.t(dry ? "add_summary_error_preview" : "add_summary_error_change"), code: res.output }); }
+        if (dry) {
+          previewed = true; problemsShown = false;
+          for (const it of items) cards.get(it._id).problems([]);
+          drawResults(res.items || []);
+          return shown({ text: SW.t("add_summary_preview_ok"), code: res.output });
+        }
+        const ids = res.spool_ids || [], made = (res.items || []).filter((r) => r.filament === "new").length;
+        const done = previewBox.firstElementChild;
+        previewBox.replaceChildren(); addedBox.replaceChildren(done);
+        done.querySelector(".group__title").textContent = SW.t("add_done_title");
+        done.querySelector(".add__sub")?.remove();
+        everything(); SW.toast(SW.t("add_added_toast", { count: ids.length || n }));
+        if (HISTORY && res.history_id) extras.append(SW.btn(SW.t("add_added_check_recent"), { run: () => { location.hash = "#recent/" + encodeURIComponent(res.history_id); } }));
+        if (made || !res.items) extras.append(h("p", {}, made ? SW.t("add_added_new_filaments", { count: made }) : null),
+          SW.btn(SW.t("add_added_set_up_presets"), { run: () => { location.hash = "#presets"; } }));
+        done.scrollIntoView({ behavior: "smooth", block: "start" });
+        return shown({ text: ids.length ? SW.t("add_summary_added", { count: ids.length, ids: ids.join(", ") }) : SW.t("add_done_none"), code: res.output });
+      }, { button: barBtn, busy: dry ? SW.t("common_checking") : SW.t("common_adding") });
+    } finally {
+      working = null; paintBar();
+      if (previewBox.firstElementChild) previewBox.firstElementChild.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }
+  const shown = (r) => { memo = r; return r; };
+  // the group of the answer: its title, "Nothing is saved yet." for a preview, then the line, the spools and the Hub's text
+  function resultGroup(title, dry) {
+    const g = group(title, dry ? h("p", { class: "add__sub muted", textContent: SW.t("add_preview_nothing_saved") }) : null, ans.el);
+    return g;
+  }
+  // everything of the add is cleared after an Add: cards, photos, note, tag, search (04 4.6)
+  function everything() {
+    for (const it of items) dropCard(it);
+    items = []; tag = null; readId = null; found = null; previewed = false; problemsShown = false; edited = null;
+    photos.splice(0).forEach((p) => URL.revokeObjectURL(p.url));
+    noteField._control.value = ""; searchField._control.value = ""; rows = []; findBox.replaceChildren(); clear(findLine);
+    drawFound(); drawPhotos(); drawList(); clearDraft();
+  }
+
+  // ---- put the page together ----
+  const intro = h("p", { class: "muted add__intro", textContent: SW.t("add_intro") });
+  const inputs = h("div", { class: "add__inputs" }, ...(AI ? [photoGroup, handGroup] : [handGroup, photoGroup]));
+  const listGroup = h("section", { class: "group add__group", "aria-labelledby": listHead.id }, h("header", { class: "group__head" }, listHead),
+    h("div", { class: "group__body" }, empty, listBox));
+  listHead.replaceChildren(SW.t("add_group_list"), " ", count);
+  const el = h("section", { class: "add hidden" }, intro, lines, draftBox, addedBox, inputs, foundBox, listGroup, previewBox, bar);
+  if (!store.works()) noStorage(true);
+  pending = store.get();
+  if (pending && (!Array.isArray(pending.items) || !(pending.items.length || pending.note))) { store.drop(); pending = null; }
+  drawDraft(); drawPhotos(); drawList(); paintBar();
+  setTimeout(paintBadge, 0);                                    // the bottom bar is built after this tab
+  return { el, enter: () => {
+    if (memo && !ans.line.dataset.state) SW.result(ans.line, memo.kind || "ok", memo.text);       // the result lines are cleared when the person leaves the page
+  } };
 }
 
 // ---------- Open spool ----------
