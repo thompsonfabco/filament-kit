@@ -41,6 +41,7 @@ from starlette.routing import Route
 from . import library as library_mod
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
+from .web.errors import Problem as PresetProblem
 
 log = logging.getLogger(__name__)
 
@@ -539,6 +540,27 @@ def restore_deleted(device, what: str) -> dict:
     return {"ok": True}
 
 
+def _phone_field(field: str, check, body: dict, *key_and_required):
+    """`check(body, ...)` for a phone route, a refusal carrying the `field` the app shows it on."""
+    try:
+        return check(body, *key_and_required)
+    except ProfileError as e:
+        raise ProfileError(e.status, e.code, e.message, **{"field": field, **e.extra}) from None
+
+
+def _problem_field(message: str) -> str | None:
+    """The request field a `web.presets` refusal is about (it sets none; the web routes keep their replies)."""
+    if message.startswith(("name ", "line ")):
+        return "name"
+    if message.startswith("vendor "):
+        return "vendor"
+    if message.startswith(("bs_template ", "orca_parent ")):
+        return "parent"
+    if message.startswith(("filament", "no Spoolman filament")):
+        return "ids"
+    return None
+
+
 def web_routes(authed, sm) -> list[Route]:
     """The MCP tools' and phone web app's preset writes, as the web unit sends them through its kit token:
     `web.presets` runs here, in the kit (the owner of profiles/), so the web unit only reads that folder."""
@@ -576,7 +598,62 @@ def web_routes(authed, sm) -> list[Route]:
         await _json(request)
         return JSONResponse(await run_in_threadpool(restore_deleted, request.state.device, "web restore deleted"))
 
-    return [Route("/api/profiles/web/line_add", line_add, methods=["POST"]),
+    @authed
+    async def uncovered(request: Request):
+        """`GET /api/profiles/uncovered` (any paired device, S4.13): the Spoolman filaments no preset line records
+        yet, as the web app lists them. Reply: `{"uncovered_filaments": [{"id": int, "vendor": text, "name": text,
+        "material": text, "lines_for_vendor": [line names of that brand, sorted]}]}`; empty when every filament has a
+        line. An uncovered filament joins a line by its name at the next build; this is for the wrong-line case."""
+        st = await run_in_threadpool(presets.status, sm)
+        return JSONResponse({"uncovered_filaments": st["uncovered_filaments"]})
+
+    @authed
+    async def phone_line_new(request: Request):
+        """`POST /api/profiles/lines` {name, vendor, ids, bs_template, orca_parent?}: create a line and put the
+        filaments in it (as `web/line_new`); the reply is that route's (the line, `notes`, `output`). A refusal is
+        400 `bad_request` with `message`, and `field` ("name", "vendor", "parent" or "ids") when it is about one; an
+        unknown parent keeps its code `unknown_parent` and gains `field: "parent"`."""
+        body = await _json(request)
+        args = (_phone_field("name", _text_field, body, "name"), _phone_field("vendor", _text_field, body, "vendor"),
+                _phone_field("ids", _ids, body), _phone_field("orca_parent", _text_field, body, "orca_parent", False),
+                _phone_field("parent", _text_field, body, "bs_template"))
+
+        def run() -> dict:
+            try:
+                return presets.add_line(sm, *args)
+            except ProfileError as e:
+                if e.code != "unknown_parent":
+                    raise
+                raise ProfileError(e.status, e.code, e.message, **{"field": "parent", **e.extra}) from None
+            except PresetProblem as e:
+                field = _problem_field(str(e))
+                if field is None:
+                    raise
+                raise ProfileError(400, "bad_request", str(e), field=field) from None
+        return JSONResponse(await run_in_threadpool(_audit, "line new", request.state.device, run))
+
+    @authed
+    async def phone_line_add(request: Request):
+        """`POST /api/profiles/lines/{line_id}/filaments` {ids}: add filaments to that line (as `web/line_add`;
+        the line is its line_id); the reply is that route's (the line, `notes`, `output`)."""
+        body = await _json(request)
+        line, ids = request.path_params["line_id"], _ids(body)
+        return JSONResponse(await run_in_threadpool(
+            _audit, "line add", request.state.device, lambda: presets.add_ids(sm, line, ids)))
+
+    @authed
+    async def phone_build(request: Request):
+        """`POST /api/profiles/build` {}: ask for a preset build now (as `web/generate`); the reply is
+        `{requested, last_build, output}`."""
+        await _json(request)
+        return JSONResponse(await run_in_threadpool(
+            _audit, "build now", request.state.device, presets.generate))
+
+    return [Route("/api/profiles/uncovered", uncovered),
+            Route("/api/profiles/lines", phone_line_new, methods=["POST"]),
+            Route("/api/profiles/lines/{line_id}/filaments", phone_line_add, methods=["POST"]),
+            Route("/api/profiles/build", phone_build, methods=["POST"]),
+            Route("/api/profiles/web/line_add", line_add, methods=["POST"]),
             Route("/api/profiles/web/line_new", line_new, methods=["POST"]),
             Route("/api/profiles/web/generate", generate, methods=["POST"]),
             Route("/api/profiles/web/updates_accept", updates_accept, methods=["POST"]),
