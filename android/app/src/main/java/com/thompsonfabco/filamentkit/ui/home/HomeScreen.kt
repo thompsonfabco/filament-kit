@@ -38,11 +38,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -117,8 +119,8 @@ internal fun HomeScreen(
     /** The panel's Updates dialog; null: not offered (no server). [onPresetsChanged]: reload the panel. */
     presetUpdates: PresetUpdatesViewModel? = null,
     onPresetsChanged: () -> Unit = {},
-    /** Opens the Filament Catalog's new-line form from the presets panel (until S4.14 moves it). */
-    onAddCatalogLine: () -> Unit = {},
+    /** Opens the Slicer presets screen (the panel's header is its link, 05-android-app 11.1). */
+    onOpenPresets: () -> Unit = {},
     /**
      * The Hub said its Label Reader is off ([labelReaderOff]): the photo button goes and "Add by hand" is the main one.
      * Unknown (cold start, offline) is not off: photos are kept on the phone and read when the Hub is back.
@@ -152,8 +154,9 @@ internal fun HomeScreen(
         if (showPresets) {
             var updatesOpen by remember { mutableStateOf(false) }
             PresetsCard(
-                presets, onBuild = onBuildPresets, building = buildingPresets, buildNote = presetsNote,
-                buildFailed = presetsNoteIsError, onAddLine = onAddCatalogLine,
+                presets, LocalContext.current.resources, now, onOpen = onOpenPresets,
+                onBuild = onBuildPresets, building = buildingPresets, buildNote = presetsNote,
+                buildFailed = presetsNoteIsError,
                 onUpdates = presetUpdates?.takeIf { presets != null }?.let { vm -> { vm.load(); updatesOpen = true } },
             )
             if (updatesOpen && presetUpdates != null) {
@@ -211,11 +214,13 @@ private fun tickingNow(): Long {
 
 /** A panel (05-android-app 3.1): `surface` with a hairline `border`, a header row of at least 48 dp with the title and an optional count and action. */
 @Composable
-private fun HomePanel(
+internal fun HomePanel(
     title: String,
     modifier: Modifier = Modifier,
     count: Int? = null,
     action: (@Composable () -> Unit)? = null,
+    /** The whole header is a link to the panel's screen (chevron at its end). */
+    onHeaderClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = SpoolwardenTheme.colors
@@ -227,7 +232,11 @@ private fun HomePanel(
         border = BorderStroke(SpoolwardenTheme.sizes.hairline, colors.border),
     ) {
         Column(Modifier.padding(horizontal = space.s4).padding(bottom = space.s4)) {
-            Row(Modifier.fillMaxWidth().heightIn(min = space.s7), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = space.s7)
+                    .then(if (onHeaderClick != null) Modifier.clickable(role = Role.Button, onClick = onHeaderClick) else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Row(
                     Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically,
@@ -245,6 +254,7 @@ private fun HomePanel(
                     }
                 }
                 action?.invoke()
+                if (onHeaderClick != null) SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
             }
             Column(verticalArrangement = Arrangement.spacedBy(space.s2), content = content)
         }

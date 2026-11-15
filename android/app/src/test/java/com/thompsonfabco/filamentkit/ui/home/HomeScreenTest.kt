@@ -79,7 +79,7 @@ class HomeScreenTest {
                     onPairAgain = { calls += "pair" }, onInstallUpdate = { calls += "install" },
                     onConfirmInstall = { calls += "confirm" },
                     showPrinters = showPrinters, labelReaderOff = labelReaderOff,
-                    onAddCatalogLine = { calls += "catalog" },
+                    onOpenPresets = { calls += "presets" },
                     localNetworkPanel = { SwButton("Allow", {}, kind = SwButtonKind.Main) },
                 )
             }
@@ -385,10 +385,13 @@ class HomeScreenTest {
         assertEquals(listOf("review"), calls)
     }
 
-    @Test fun thePresetsPanelKeepsAWayIntoTheFilamentCatalog() {
+    @Test fun thePresetsPanelHeaderIsTheLinkToTheSlicerPresetsScreen() {
         show()
-        text("Add a line to the Filament Catalog").performClick()
-        assertEquals(listOf("catalog"), calls)
+        text("Slicer preset status is not available right now.").assertExists()
+        text("Slicer presets").performClick()
+        assertEquals(listOf("presets"), calls)
+        // the way into the Filament Catalog moved to that screen (05-android-app 11.2)
+        text("Add a line to the Filament Catalog").assertDoesNotExist()
     }
 
     @Test fun aPhoneThatIsNoLongerPairedOffersToPairAgain() {

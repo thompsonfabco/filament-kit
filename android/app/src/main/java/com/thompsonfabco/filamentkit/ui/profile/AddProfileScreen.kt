@@ -3,9 +3,7 @@ package com.thompsonfabco.filamentkit.ui.profile
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -34,11 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -55,11 +50,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
-import com.thompsonfabco.filamentkit.ui.components.SwIcon
-import com.thompsonfabco.filamentkit.ui.components.SwIconSize
-import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
-import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 
@@ -114,7 +105,6 @@ fun AddProfileScreen(
                 Group(R.string.catalog_group_material, s, vm, ProfileField.Density, ProfileField.MaxVolumetric)
                 Group(R.string.catalog_group_slicer, s, vm, ProfileField.Parent)
                 Group(R.string.catalog_group_notes, s, vm, ProfileField.Notes)
-                ExistingLines(s, vm, paired, onPairAgain)
             }
         }
         // the action bar stays in view; what the save answered sits directly above it (05 8, 6.2)
@@ -170,88 +160,16 @@ fun AddProfileScreen(
     }
 }
 
-/** A failed Hub call as a notice; [onTryAgain] adds the button to the ones that are about reaching the Hub. */
+/** A failed Hub call as a notice. */
 @Composable
-private fun FailureNotice(failure: SaveFailure?, message: String?, onPairAgain: () -> Unit, onTryAgain: (() -> Unit)? = null) {
-    val again = onTryAgain?.let { listOf(SwAction(stringResource(R.string.common_try_again), it)) }.orEmpty()
+private fun FailureNotice(failure: SaveFailure?, message: String?, onPairAgain: () -> Unit) {
     when (failure) {
         null -> Unit
         SaveFailure.CertificateChanged -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
         SaveFailure.NotPaired -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-        SaveFailure.Unreachable -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_unreachable), actions = again)
-        SaveFailure.Unknown -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_answer_unknown), actions = again)
-        SaveFailure.Message -> NoticeCard(NoticeKind.Bad, message.orEmpty(), actions = again)
-    }
-}
-
-/** The lines the Hub already has, each with "Change parent" (moves to the Slicer presets screen in S4.14). */
-@Composable
-private fun ExistingLines(s: AddProfileUiState, vm: AddProfileViewModel, paired: Boolean, onPairAgain: () -> Unit) {
-    val lines = s.lines
-    // not paired: the notice above Save says why there is no list
-    if (!paired) return
-    if (lines != null && lines.isEmpty() && !s.linesLoadFailed) return
-    val space = SpoolwardenTheme.space
-    val colors = SpoolwardenTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
-        Text(
-            stringResource(R.string.catalog_lines_title), Modifier.semantics { heading() },
-            style = MaterialTheme.typography.titleSmall, color = colors.muted,
-        )
-        if (lines == null) {
-            SwSkeletonRows(3)
-            return@Column
-        }
-        FailureNotice(s.lineFailure, s.lineMessage, onPairAgain, vm::retryLines.takeIf { s.linesLoadFailed })
-        lines.forEach { line ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.catalog_line_name, line.vendor, line.product),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Text(
-                        stringResource(
-                            R.string.catalog_line_material, line.material,
-                            pluralStringResource(R.plurals.presets_built_presets, line.presets, line.presets),
-                        ),
-                        style = MaterialTheme.typography.bodySmall, color = colors.muted,
-                    )
-                    val parent = line.bambuParent
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space.s1)) {
-                        if (parent == null) SwIcon(R.drawable.sw_st_triangle, null, size = SwIconSize.Small, tint = colors.warn)
-                        Text(
-                            if (parent == null) stringResource(R.string.catalog_line_parent_none)
-                            else stringResource(R.string.catalog_line_parent, parent),
-                            style = MaterialTheme.typography.bodySmall, color = colors.muted,
-                        )
-                    }
-                    if (s.parentSavedFor == line.lineId) {
-                        Text(
-                            stringResource(R.string.catalog_parent_saved),
-                            Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-                Box {
-                    SwButton(stringResource(R.string.catalog_change_parent), { vm.editParent(line) }, kind = SwButtonKind.Quiet)
-                    val edit = s.editing?.takeIf { it.lineId == line.lineId }
-                    SwMenu(expanded = edit != null, onDismiss = vm::cancelEditParent) {
-                        val parents = edit?.parents
-                        when {
-                            parents == null ->
-                                SwMenuItem(stringResource(R.string.catalog_parent_loading), {}, enabled = false)
-                            !parents.synced ->
-                                SwMenuItem(stringResource(R.string.catalog_parent_unsynced), {}, enabled = false)
-                            else -> parents.parents.forEach { p ->
-                                SwMenuItem(p, { vm.setLineParent(p) }, checked = p == line.bambuParent)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        SaveFailure.Unreachable -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_unreachable))
+        SaveFailure.Unknown -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_answer_unknown))
+        SaveFailure.Message -> NoticeCard(NoticeKind.Bad, message.orEmpty())
     }
 }
 

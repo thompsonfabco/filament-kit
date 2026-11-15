@@ -720,6 +720,30 @@ data class ProfileLine(
     @Serializable(with = LenientInt::class) val presets: Int = 0,
 )
 
+/** Text where the Hub may send null (a Spoolman field left empty): null reads as "". */
+internal object TextOrEmpty : KSerializer<String> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("TextOrEmpty", PrimitiveKind.STRING)
+    override fun deserialize(decoder: Decoder): String {
+        val el = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement()
+        return (el as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content.orEmpty()
+    }
+    override fun serialize(encoder: Encoder, value: String) = encoder.encodeString(value)
+}
+
+/** One Spoolman filament no preset line records (`GET /api/profiles/uncovered`); [linesForVendor]: the lines of its brand. */
+@Serializable
+data class UncoveredFilament(
+    @Serializable(with = LenientInt::class) val id: Int = 0,
+    @Serializable(with = TextOrEmpty::class) val vendor: String = "",
+    @Serializable(with = TextOrEmpty::class) val name: String = "",
+    @Serializable(with = TextOrEmpty::class) val material: String = "",
+    @SerialName("lines_for_vendor") val linesForVendor: List<String> = emptyList(),
+)
+
+/** `POST /api/profiles/build`: [requested] true when the Hub took the request; [output] is the Hub's own text. */
+@Serializable
+data class BuildRequested(val requested: Boolean = false, val output: String = "")
+
 /** `POST /api/profiles/propose`: the line and parent the server would use; [exists] when the line is known. */
 @Serializable
 data class Proposal(

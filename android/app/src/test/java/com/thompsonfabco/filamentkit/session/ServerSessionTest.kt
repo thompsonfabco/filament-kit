@@ -115,6 +115,29 @@ class ServerSessionTest {
         assertEquals(listOf(cert.fingerprint(), "ab".repeat(32)), built)
     }
 
+    @Test fun everyStoredTokenIsAPairingEvenWhenTheApiObjectStays() {
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.9"), 1))
+        val s = session(configs)
+        val first = await { s.api.first { it != null } }
+        assertEquals(1, s.pairings.value)
+
+        // the same Hub's token is revoked: nothing is paired, nothing is counted
+        configs.value = config(listOf("127.0.0.9"), 1, token = "")
+        await { s.config.first { it?.token == "" } }
+        assertEquals(1, s.pairings.value)
+
+        // pairing again with the same Hub (same fingerprint): the same Api, but a new pairing
+        configs.value = config(listOf("127.0.0.9"), 1, token = "tok3")
+        await { s.pairings.first { it == 2 } }
+        assertSame(first, s.api.value)
+        assertEquals(1, built.size)
+
+        // a save that keeps the token (endpoints re-ordered) is not a pairing
+        configs.value = config(listOf("127.0.0.8", "127.0.0.9"), 1, token = "tok3")
+        await { s.config.first { it?.endpoints?.size == 2 } }
+        assertEquals(2, s.pairings.value)
+    }
+
     @Test fun noConfigMeansNoApi() {
         val configs = MutableStateFlow<ServerConfig?>(null)
         val s = session(configs)
