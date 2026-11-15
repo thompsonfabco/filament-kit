@@ -1,8 +1,7 @@
 server/filament_kit/web/static/app.js | "station" | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | blank = | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/web/static/app.js | color | 5 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+server/filament_kit/web/static/app.js | color | 6 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | dry run | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | gross weight | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | presets | 68 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/web/static/app.js | scale weight | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-server/filament_kit/web/static/app.js | setup page | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
