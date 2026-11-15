@@ -78,6 +78,8 @@ a{color:var(--accent-text)}
 .nav--sheet .nav__summary{display:block;grid-column:2;color:var(--muted);font-size:var(--fs-s)}
 .nav--sheet .nav__chevron{display:block;grid-area:1 / 3 / span 2}
 .nav--sheet .nav__icon{grid-row:1 / span 2}
+.btn.topbar__back{display:none}
+.topbar__back .icon{transform:rotate(180deg)}
 /* buttons (4.1) */
 .btn{display:inline-flex;justify-content:center;min-width:var(--btn-min,0);padding:0 var(--s4);line-height:var(--lh-title);text-decoration:none;transition:var(--t-fast);transition-property:background-color,border-color,color}
 .btn--primary{border-color:var(--accent);background:var(--accent);color:var(--on-accent)}
@@ -560,4 +562,78 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 /* the shared script moves an open detail into the detail host; a wide screen keeps the right-hand sheet of the host, a phone gets it from the top bar's height to the bottom */
 @media (max-width:600px){
   :root[data-look="palette"] .sheet--detail{height:calc(100% - var(--top) - env(safe-area-inset-top));max-height:none}
+}
+/* profile: nav=list */
+/* the section list: the left pane from tablet up, on a phone the root page where a section drills in (the shared script sets .shell data-drill and shows the top bar's Back) (02 2.3) */
+@media (min-width:601px){
+  :root[data-look="panes"] .shell{grid-template-columns:min(var(--list-w),40%) minmax(0,1fr)}
+}
+:root[data-look="panes"] .shell>.nav{padding:var(--s3) var(--s3) var(--s5);background:var(--bg)}
+:root[data-look="panes"] .shell .nav__heading{position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:normal;padding:var(--s3) var(--s3) var(--s2);color:var(--muted);font-size:var(--fs-xs);font-weight:var(--fw-label);letter-spacing:calc(var(--fs-xs) * 0.05);text-transform:uppercase}
+:root[data-look="panes"] .shell .nav__group,:root[data-look="panes"] .shell .nav__group+.nav__heading+.nav__group{display:block;overflow:hidden;margin:0;padding:0;border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface)}
+:root[data-look="panes"] .shell .nav__group>li{position:relative;display:block}
+:root[data-look="panes"] .shell .nav__group>li+li::before{content:"";position:absolute;top:0;right:0;left:calc(var(--s3) * 2 + var(--s5) + var(--s1));border-top:var(--hairline) solid var(--border)}
+:root[data-look="panes"] .shell .nav__item,:root[data-look="panes"] .shell .nav__more{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;align-content:center;column-gap:var(--s3);flex:none;min-height:calc(var(--s7) + var(--s1));margin:0;padding:var(--s2) var(--s3);border-radius:0;color:var(--text);text-align:left}
+:root[data-look="panes"] .shell .nav__item[data-state="off"]{color:var(--muted)}
+:root[data-look="panes"] .shell .nav__item[aria-current="page"]{background:var(--surface-3);color:var(--text)}
+:root[data-look="panes"] .shell .nav__item[aria-current="page"]::before{content:none}
+:root[data-look="panes"] .shell .nav__icon{grid-row:1 / span 2;box-sizing:border-box;width:calc(var(--s5) + var(--s1));height:calc(var(--s5) + var(--s1));padding:var(--s1);border-radius:var(--r-s);background:var(--surface-3);color:var(--text)}
+:root[data-look="panes"] .shell .nav__item[aria-current="page"] .nav__icon{background:var(--accent);color:var(--on-accent)}
+:root[data-look="panes"] .shell .nav__label{grid-column:2;font-size:var(--fs-b);font-weight:var(--fw-label)}
+:root[data-look="panes"] .shell .nav__label-full{position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:normal}
+:root[data-look="panes"] .shell .nav__label-short{display:none}
+:root[data-look="panes"] .shell .nav__summary{display:block;grid-column:2;color:var(--muted);font-size:var(--fs-s)}
+:root[data-look="panes"] .shell .nav__summary:empty{display:none}
+:root[data-look="panes"] .shell .nav__chevron{display:block;grid-area:1 / 3 / span 2;color:var(--muted)}
+:root[data-look="panes"] .shell .nav__item:not(:has(.nav__chevron))::after{content:"";grid-area:1 / 3 / span 2;width:var(--s2);height:var(--s2);border:solid var(--muted);border-width:0 calc(var(--hairline) * 2) calc(var(--hairline) * 2) 0;transform:rotate(-45deg)}
+:root[data-look="panes"] .shell .nav__more{display:none}
+@media (max-width:600px){
+  :root[data-look="panes"] .shell>.nav{position:static;z-index:auto;grid-area:main;flex-direction:column;height:auto;border-top:0}
+  :root[data-look="panes"] .shell[data-drill="list"] .shell__main,:root[data-look="panes"] .shell[data-drill="page"]>.nav{display:none}
+  :root[data-look="panes"] .shell[data-drill="page"] .topbar__back{display:inline-flex}
+  :root[data-look="panes"] .shell__main{padding-bottom:var(--s7)}
+  :root[data-look="panes"] body[data-ai] .shell .nav__more{display:grid;grid-template-columns:auto minmax(0,1fr);width:100%;margin-top:var(--s4);border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface)}
+}
+/* a tablet keeps the light/dark switch on the top bar's one row (02 4.3) */
+@media (min-width:601px) and (max-width:1024px){
+  :root[data-look="panes"] .topbar{flex-wrap:nowrap}
+  :root[data-look="panes"] .topbar__brand{flex:0 1 auto;min-width:0;overflow:hidden}
+  :root[data-look="panes"] .topbar__tools{flex:none;flex-wrap:nowrap}
+  :root[data-look="panes"] .topbar .chip__hint{display:none}
+  :root[data-look="panes"] .topbar .appearance.segmented{flex-wrap:nowrap}
+}
+/* profile: collection=rows */
+/* one block of rows with an inset hairline between them: title and sub-line, first-priority fields, state, chevron (02 6.1) */
+:root[data-look="panes"] .coll{display:block;border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface)}
+:root[data-look="panes"] .coll__head{display:block;border:0;border-bottom:var(--hairline) solid var(--border);border-radius:0;background:none}
+:root[data-look="panes"] .coll__head .coll__row{display:flex;flex-wrap:wrap;gap:var(--s2);min-height:0;padding:var(--s2) var(--s4)}
+:root[data-look="panes"] .coll__head .coll__cell{display:block;min-height:0;padding:0;font-size:var(--fs-m);letter-spacing:normal;text-transform:none}
+:root[data-look="panes"] .coll__head .coll__cell:not(:has(.coll__sort)),:root[data-look="panes"] .coll__head:not(:has(.coll__sort)){display:none}
+:root[data-look="panes"] .coll__sort{padding:0 var(--s3);border:var(--hairline) solid var(--border-strong);border-radius:var(--r);background:var(--surface);color:var(--text);font-weight:var(--fw-label)}
+:root[data-look="panes"] .coll__sort:hover{background:var(--surface-2)}
+:root[data-look="panes"] .coll__head [aria-sort]>.coll__sort{border-color:var(--accent-text);background:var(--accent-soft);color:var(--accent-text)}
+:root[data-look="panes"] .coll__item{display:block;margin:0;padding:0;border:0;border-radius:0;background:none}
+:root[data-look="panes"] .coll__item+.coll__item::before{content:"";position:absolute;top:0;right:0;left:var(--s4);border-top:var(--hairline) solid var(--border)}
+:root[data-look="panes"] .coll__item:has(>.coll__row--detail:not([hidden]))>.coll__row:first-child{background:var(--surface-3)}
+:root[data-look="panes"] .coll__row{display:flex;flex-wrap:wrap;align-items:center;grid-column:auto;gap:var(--s1) var(--s3);min-height:var(--row);padding:var(--s3) var(--s4)}
+:root[data-look="panes"] .coll__row--result,:root[data-look="panes"] .coll__row--note{min-height:0;padding:0 var(--s4) var(--s3)}
+:root[data-look="panes"] .coll__row--detail{display:block;min-height:0;padding:0}
+:root[data-look="panes"] .coll__cell{display:block;min-height:0;padding:0}
+:root[data-look="panes"] .coll__cell[data-prio="2"],:root[data-look="panes"] .coll__cell[data-prio="3"]{display:none}
+:root[data-look="panes"] .coll__cell[data-col="title"]{flex:1 1 calc(var(--s7) * 3);order:-1;min-width:0}
+:root[data-look="panes"] .coll__cell[data-col="visual"]{display:flex;order:-2}
+:root[data-look="panes"] .coll__cell[data-col="expand"]{order:9}
+:root[data-look="panes"] .coll__cell[data-col="actions"]{margin-left:auto}
+:root[data-look="panes"] .coll__key,:root[data-look="panes"] .coll__expand>span:not(.sr){display:none}
+:root[data-look="panes"] .coll__title{font-weight:var(--fw-label)}
+/* profile: detail=pane */
+/* an open detail stays in its row: from a desktop width the third column (fixed below the top bar, own scroll, 22rem), below that it covers the other rows of its list (02 6.2) */
+:root[data-look="panes"] .coll__row--detail .detail{padding:var(--s4) var(--s4) var(--s5);border:0;background:none}
+:root[data-look="panes"] .coll__row--detail .detail__body{grid-template-columns:minmax(0,1fr)}
+@media (min-width:1025px){
+  :root[data-look="panes"] .shell__main:has(.coll__row--detail:not([hidden])){margin-right:22rem}
+  :root[data-look="panes"] .coll__row--detail:not([hidden]){position:fixed;top:calc(var(--top) + env(safe-area-inset-top));right:0;bottom:0;z-index:15;width:22rem;overflow-y:auto;border-left:var(--hairline) solid var(--border);background:var(--surface)}
+}
+@media (max-width:1024px){
+  :root[data-look="panes"] .coll:has(.coll__row--detail:not([hidden])) .coll__head,:root[data-look="panes"] .coll:has(.coll__row--detail:not([hidden])) .coll__item:not(:has(>.coll__row--detail:not([hidden]))){display:none}
 }

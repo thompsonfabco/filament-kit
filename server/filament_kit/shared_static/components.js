@@ -373,7 +373,7 @@ function setLook(look) {
   return store.set("spoolwarden.look", look);
 }
 // the picker (3.4): one entry per theme that is built; a theme built later is one more entry here
-const THEMES = ["console", "workbench", "palette"];
+const THEMES = ["console", "workbench", "palette", "panes"];
 function themePicker(o = {}) {
   const now = root.getAttribute("data-look") || "console", chosen = THEMES.includes(now) ? now : null;   // a theme with no tile: none is checked
   const fs = h("fieldset", { class: "theme-picker" }, h("legend", { class: o.legend ? "theme-picker__legend" : "sr" }, t("appearance_theme_title")));
@@ -916,14 +916,21 @@ function loading(region, o = {}) {
 }
 
 // ----- the shell (2.1 to 2.5): shell({hub, home, titleOf(section), onSection(section)}) -----
+// Panes on a phone (F6): the list of sections is the first page, marked in the history entry of a page opened with no address
+const panes = () => profile().nav === "list" && phone(), listNow = () => panes() && !!(history.state && history.state.swList);
+if (panes() && !location.hash.slice(1)) history.replaceState({ ...history.state, swList: true }, "");
 function shell(o = {}) {
-  const nav = $(".nav"), more = $(".nav__more", nav);
+  const nav = $(".nav"), more = $(".nav__more", nav), frame = nav.parentElement, topbar = $(".topbar", frame);
+  let last = "", drawn = false;
   if (o.hub != null) conf.hub = o.hub;
   const section = () => location.hash.slice(1).split(/[/?]/)[0] || o.home || "";
   const hidden = () => $$(".nav__group > li", nav).filter((li) => li.offsetParent === null);
   const paint = (focus) => {
+    const list = listNow();
     let cur = null;
-    for (const a of $$(".nav__group .nav__item", nav)) { const is = a.hash === "#" + section(); attr(a, "aria-current", is ? "page" : null); if (is) cur = a; }
+    drawn = list; attr(frame, "data-drill", list ? "list" : "page");
+    if (!list) last = section();
+    for (const a of $$(".nav__group .nav__item", nav)) { const is = !list && a.hash === "#" + section(); attr(a, "aria-current", is ? "page" : null); if (is) cur = a; }
     if (more) {
       const inMore = cur && hidden().includes(cur.closest("li")), mc = $(".nav__more-current", more);
       const name = cur ? ($(".nav__label-full", cur) || $(".nav__label", cur)).textContent.trim() : "";
@@ -933,13 +940,21 @@ function shell(o = {}) {
     }
     const h1 = $("main h1"), page = o.titleOf ? o.titleOf(section()) : h1 ? h1.textContent.trim() : "";
     if (page) doc.title = t("shell_title", { page, hub: conf.hub });
-    if (focus) focusTitle();
+    if (!focus) return;
+    if (list) ($(`.nav__group .nav__item[href="#${last}"]`, nav) || $(".nav__group .nav__item", nav)).focus();
+    else focusTitle();
   };
   on(window, "hashchange", () => { if (o.onSection) o.onSection(section()); paint(true); });
+  on(window, "popstate", () => { if (listNow() !== drawn) paint(true); });
   on(nav, "click", (e) => {
     const a = e.target.closest(".nav__item");
+    if (a && listNow() && a.hash === location.hash) { e.preventDefault(); history.pushState(null, "", a.href); paint(true); return; }
     if (a && a.hash === location.hash) window.scrollTo({ top: 0, behavior: reduced() ? "auto" : "smooth" });
   });
+  if (topbar) topbar.prepend(iconBtn("chevron", t("common_back"), { cls: "topbar__back", run: () => {
+    const x = $('.shell__main .coll__expand[aria-expanded="true"]');       // Back closes an open row first
+    if (x) { x.click(); x.focus(); } else { history.pushState({ swList: true }, "", location.href); paint(true); }
+  } }));
   if (more) {
     attr(more, "aria-expanded", "false");
     on(more, "click", () => {

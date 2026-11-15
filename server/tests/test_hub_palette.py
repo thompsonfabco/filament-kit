@@ -35,7 +35,7 @@ def test_the_three_palette_groups_are_keyed_on_palette_and_the_other_groups_are_
 def test_a_palette_rule_stays_in_its_own_group_and_the_looks_keyed_are_workbench_and_palette():
     groups = _groups(CSS)
     seen = {m for sels in groups.values() for s in sels for m in re.findall(r'data-look="([a-z]+)"', s)}
-    assert seen == {"workbench", "palette"}                      # Panes arrives with S6.8
+    assert seen == {"workbench", "palette", "panes"}
     assert [g for g, sels in groups.items() if any("workbench" in s for s in sels)] == [("nav", "sidebar"), ("collection", "cards"), ("detail", "card")]
     assert [g for g, sels in groups.items() if any("palette" in s for s in sels)] == [("nav", "pills"), ("collection", "tiles"), ("detail", "sheet")]
 
@@ -235,18 +235,18 @@ return out;
 
 
 def _check_choose(page):
-    names = [T("theme_console_name"), T("theme_workbench_name"), T("theme_palette_name")]
+    names = [T("theme_console_name"), T("theme_workbench_name"), T("theme_palette_name"), T("theme_panes_name")]
     assert [(t["name"], t["on"], t["look"], t["preview"]) for t in page["start"]] == [(names[0], True, "console", "console"), (names[1], False, "workbench", "workbench"),
-                                                                                       (names[2], False, "palette", "palette")]
+                                                                                       (names[2], False, "palette", "palette"), (names[3], False, "panes", "panes")]
     assert page["start"][2]["line"] == T("theme_palette_line")
     chose = page["chose"]
     assert chose["stored"] == "palette" and chose["look"] == "palette"
-    assert [t["on"] for t in chose["tiles"]] == [False, False, True]
+    assert [t["on"] for t in chose["tiles"]] == [False, False, True, False]
     assert chose["result"] == T("appearance_theme_saved", name=names[2])
     assert chose["metas"] == [chose["surface"]] * 2 and chose["surface"] in _surfaces("palette")
-    assert [t["on"] for t in page["again"]] == [False, False, True]               # the choice survives the redraw
+    assert [t["on"] for t in page["again"]] == [False, False, True, False]               # the choice survives the redraw
     assert page["console"]["stored"] == "console" and page["console"]["look"] == "console"
-    assert [t["on"] for t in page["console"]["tiles"]] == [True, False, False]
+    assert [t["on"] for t in page["console"]["tiles"]] == [True, False, False, False]
 
 
 def test_the_hub_settings_picker_offers_palette_and_keeps_the_choice(hub, tmp_path):
