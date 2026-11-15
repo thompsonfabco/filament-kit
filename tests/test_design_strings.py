@@ -4,20 +4,21 @@ strings/en.json is the source; strings/strings.js and res/values/strings.xml are
 tokens/build_tokens.py. Test 7 reads both generated files back (undoing the escaping and the placeholder numbering) and
 compares them with the source, keeps the product's and the command's name out of every entry but their own, and scans
 the hand-written Kotlin of the app (the whole main source set) and the page scripts for text that reaches the screen without the catalogue.
-Today's literals are in strings_allowlist.txt, one line each: `<path> | <literal> | <reason>`. A literal outside the
+Today's literals are in allowlists/strings/ (one file per source file), one line each: `<path> | <literal> | <reason>`. A literal outside the
 list fails, and so does a line whose literal is gone (09 open point 4).
 """
 import json
 import re
 import xml.etree.ElementTree as ET
 
+from allowlist_files import text as allowlist_text
 from test_design_lints import _Scan, _rel, _script_sources, TESTS
 from test_design_sources import ROOT, TOKENS, _kotlin_sources
 
 SOURCE = ROOT / "strings" / "en.json"
 STRINGS_JS = ROOT / "strings" / "strings.js"
 STRINGS_XML = ROOT / "android" / "app" / "src" / "main" / "res" / "values" / "strings.xml"
-ALLOWLIST = TESTS / "strings_allowlist.txt"
+ALLOWLIST = TESTS / "allowlists" / "strings"
 
 RESERVED = {"product": "app_name", "command": "command_name"}
 PLACEHOLDER = re.compile(r"\{([a-z][a-z0-9_]*)\}")
@@ -160,7 +161,7 @@ def _screen_sources():
 
 def _entries():
     entries = {}
-    for line in ALLOWLIST.read_text(encoding="utf-8").splitlines():
+    for line in allowlist_text(ALLOWLIST).splitlines():
         if line.strip() and not line.startswith("#"):
             path, sep, rest = line.partition(" | ")
             literal, sep2, reason = rest.rpartition(" | ")
@@ -203,8 +204,8 @@ def test_the_names_are_held_once():
 
 def test_no_text_reaches_the_screen_without_the_catalogue():
     new, stale = literal_verdict(collect_literals(), _entries())
-    assert not new, "not in strings_allowlist.txt:\n" + "\n".join(new)
-    assert not stale, "in strings_allowlist.txt but no longer found, drop the line:\n" + "\n".join(stale)
+    assert not new, "not in allowlists/strings:\n" + "\n".join(new)
+    assert not stale, "in allowlists/strings but no longer found, drop the line:\n" + "\n".join(stale)
 
 
 # ---- A reserved name is never a run-time argument ----

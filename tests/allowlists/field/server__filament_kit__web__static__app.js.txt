@@ -1,0 +1,3 @@
+server/filament_kit/web/static/app.js | input | 14 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/app.js | select | 4 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/web/static/app.js | textarea | 2 | built inline today; moves into the field component when the view is rebuilt

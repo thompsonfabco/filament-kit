@@ -130,7 +130,7 @@ def _printer_views(voron: str) -> str:
 def test_printers_rows_expansions_and_both_drawers_pass_the_audit(printers_hub):
     """The collection, a Bambu Lab row open, a Klipper row open, an offline row with its problem line, the Map by loading
     filament drawer and the Saved reports drawer. The three cards S2.5 rebuilds (Add a printer, Find Klipper printers, the
-    add-on) are in the page and keep their findings, which tests/aut5_hub_allowlist.txt lists; nothing else may be found."""
+    add-on) are in the page and keep their findings, which tests/allowlists/aut5_hub/ lists; nothing else may be found."""
     url, voron = printers_hub
     views = _printer_views(voron)
     run = _run("--url", url, "--views", views, "--settle", "500")

@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/Weights.kt | Empty spool weight must be more than 0 g | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/Weights.kt | Type a weight in grams, more than 0. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/Weights.kt | Type the weight on the scale to update it. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)

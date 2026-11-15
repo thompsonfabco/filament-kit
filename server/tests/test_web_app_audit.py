@@ -2,7 +2,7 @@
 light and dark, at 1280 px and 320 px, through tests/aut5_run.mjs in a headless Chrome, Edge or Chromium already on
 the machine. Example data only (mockups/CONTENT-SPEC.md: "Workshop hub", invented filaments).
 
-Findings of today's markup that a later step rebuilds are listed in tests/aut5_allowlist.txt; a line nothing matches
+Findings of today's markup that a later step rebuilds are listed in tests/allowlists/aut5/; a line nothing matches
 fails the run. Skipped when Node 22+ or a Chromium-family browser is missing (the runner exits 2 for "no browser")."""
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from filament_kit.web.intake_app import IntakeApp
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
-ALLOW = ROOT / "tests" / "aut5_allowlist.txt"
+ALLOW = ROOT / "tests" / "allowlists" / "aut5"      # a folder, one file per screen
 VIEWS = "#add,#spools,#printers,#recent,#presets,#settings"
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2, "overflow": "Overflow",
          "sealed_location": "Sealed stock"}
@@ -98,7 +98,7 @@ def test_the_page_audit_passes_on_every_view(served):
 
 
 def test_the_allow_list_names_a_later_step_and_a_count_on_every_line():
-    for line in ALLOW.read_text(encoding="utf-8").splitlines():
+    for line in "".join(p.read_text(encoding="utf-8") for p in sorted(ALLOW.glob("*.txt"))).splitlines():
         if line.strip() and not line.startswith("#"):
             check, where, count, reason = (x.strip() for x in line.split("|"))
             assert check and where and count.isdigit() and int(count) > 0 and "rebuilt by S3." in reason, line

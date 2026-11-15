@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/SettingsScreen.kt | /setup | path of the Hub page, not text on the screen
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/SettingsScreen.kt | https:// | scheme of the Hub page address, not text on the screen
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/SettingsScreen.kt | https://unpaired.invalid | address the app uses while no Hub is paired, not text on the screen

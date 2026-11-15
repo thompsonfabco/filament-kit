@@ -1,0 +1,5 @@
+```
+# --accent outside a labelled fill (07 CON-9, AUT-2). One line each:
+#   <path from the repository root> | <finding> | <count> | <reason>
+# A line whose finding is gone must be dropped (09 open point 4); a rewritten file removes its lines.
+```

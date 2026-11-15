@@ -1,0 +1,2 @@
+server/filament_kit/setup_static/setup_intake.js | input | 1 | built inline today; moves into the field component when the view is rebuilt
+server/filament_kit/setup_static/setup_intake.js | textarea | 1 | built inline today; moves into the field component when the view is rebuilt

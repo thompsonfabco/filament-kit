@@ -1,0 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/LicencesScreen.kt | LICENSE | name of a bundled asset file, not text on the screen
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/LicencesScreen.kt | THIRD-PARTY.md | name of a bundled asset file, not text on the screen

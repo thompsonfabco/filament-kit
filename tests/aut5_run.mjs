@@ -3,7 +3,7 @@
 // tests/page_audit.js in it and prints the findings as JSON. Test-only: never shipped, never run on a Hub.
 //
 //   node tests/aut5_run.mjs --url http://127.0.0.1:8799/intake --views "#add,#spools" [--widths 1280,320]
-//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/aut5_allowlist.txt] [--wide-font] [--font-dir <dir>] [--ready "<js>"]
+//        [--schemes light,dark] [--browser <path>] [--settle 100] [--allow tests/allowlists/aut5] [--wide-font] [--font-dir <dir>] [--ready "<js>"]
 //
 // Besides the audit's own checks, each pass fails on: sideways scroll (content wider than the layout viewport), a view
 // that did not open (the address or title is not the one asked for), and an uncaught error in the page.
@@ -88,9 +88,16 @@ const CALL_TIMEOUT = 30000;
 const PROFILE_PREFIX = "aut5-";
 const AUDIT = readFileSync(join(HERE, "page_audit.js"), "utf8");
 
+// --allow is a file, or a folder of .txt files (tests/allowlists/<list>/: one file per source file or section)
+function allowLines(path) {
+  const files = statSync(path).isDirectory()
+    ? readdirSync(path).filter((n) => n.endsWith(".txt")).sort().map((n) => join(path, n)) : [path];
+  return files.flatMap((f) => readFileSync(f, "utf8").split(/\r?\n/));
+}
+
 // allow-list: "view | check | where" -> { want, seen }; a line without a view has an empty view (matches in every view)
 const ALLOW = new Map();
-for (const line of args.allow ? readFileSync(args.allow, "utf8").split(/\r?\n/) : []) {
+for (const line of args.allow ? allowLines(args.allow) : []) {
   if (!line.trim() || /^#(\s|$)/.test(line)) continue;      // "# ..." is a comment, "#view | ..." a line
   const f = line.split("|").map((x) => x.trim());
   const [view, check, where, count] = f[0].startsWith("#") ? f : ["", ...f];

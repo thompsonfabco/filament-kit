@@ -11,15 +11,16 @@ import re
 import warnings
 from pathlib import Path
 
+from allowlist_files import text as allowlist_text
 from test_design_sources import ROOT, _kotlin_sources, _web_sources
 
 TESTS = ROOT / "tests"
-LITERAL_ALLOWLIST = TESTS / "literal_allowlist.txt"
-DIALOG_ALLOWLIST = TESTS / "dialog_allowlist.txt"
-FIELD_ALLOWLIST = TESTS / "field_allowlist.txt"
-PRESS_ALLOWLIST = TESTS / "press_allowlist.txt"
-WORDS_ALLOWLIST = TESTS / "words_allowlist.txt"
-ACCENT_ALLOWLIST = TESTS / "accent_allowlist.txt"
+LITERAL_ALLOWLIST = TESTS / "allowlists" / "literal"
+DIALOG_ALLOWLIST = TESTS / "allowlists" / "dialog"
+FIELD_ALLOWLIST = TESTS / "allowlists" / "field"
+PRESS_ALLOWLIST = TESTS / "allowlists" / "press"
+WORDS_ALLOWLIST = TESTS / "allowlists" / "words"
+ACCENT_ALLOWLIST = TESTS / "allowlists" / "accent"
 
 # The field component (07 AUT-4): inside this file only the bodies of these builders may create fields; each renders a
 # visible label.
@@ -172,7 +173,7 @@ def _rel(f):
 def _entries(path):
     """Allow-list lines as {(file, finding): (count, reason)}."""
     entries = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in allowlist_text(path).splitlines():
         if line.strip() and not line.startswith("#"):
             parts = [x.strip() for x in line.split("|", 3)]
             assert len(parts) == 4 and all(parts) and parts[2].isdigit() and int(parts[2]) > 0, \

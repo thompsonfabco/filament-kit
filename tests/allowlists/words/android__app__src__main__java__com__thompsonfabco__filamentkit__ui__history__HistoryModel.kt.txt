@@ -1,0 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | "station" | 1 | the Hub's source value station, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | color | 5 | the Hub's field name color_hex, matched as given; not a text

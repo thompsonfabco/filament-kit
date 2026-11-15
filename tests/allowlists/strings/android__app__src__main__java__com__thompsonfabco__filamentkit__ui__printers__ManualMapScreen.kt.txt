@@ -1,0 +1,5 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMapScreen.kt | by_hand | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMapScreen.kt | confirmed | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMapScreen.kt | left | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMapScreen.kt | right | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMapScreen.kt | skipped | Hub identifier (printer state, job state, error code or field name), never shown

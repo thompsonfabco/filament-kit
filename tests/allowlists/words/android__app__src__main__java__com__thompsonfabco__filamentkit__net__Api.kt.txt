@@ -1,0 +1,6 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | dry run | 5 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | intake | 4 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | job id | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | profile | 8 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | retry | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | the server | 13 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last

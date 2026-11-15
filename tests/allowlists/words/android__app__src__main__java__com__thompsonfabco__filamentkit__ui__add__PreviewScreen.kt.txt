@@ -1,0 +1,1 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | color | 1 | wire identifier (the item key `color_hex`), never shown (S4.7)
