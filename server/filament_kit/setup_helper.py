@@ -124,9 +124,9 @@ APPLYING = "the last change is still being applied; wait until it has finished"
 BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has finished",
         "rollback": "a rollback is running; wait until it has finished",
         "check": "the check for updates is running; try again in a moment",
-        "station_pair": "the station is being paired; wait until it has finished",
-        "library_update": "the library is being updated; wait until it has finished",
-        "library_rollback": "the library is going back; wait until it has finished",
+        "station_pair": "the Weigh Station is being paired; wait until it has finished",
+        "library_update": "the Filament Catalog is being updated; wait until it has finished",
+        "library_rollback": "the Filament Catalog is going back; wait until it has finished",
         "remote_issue": "the certificate is being issued; wait until it has finished",
         "backup": "a backup is being written; wait until it has finished",
         "restore": "a restore is running; wait until it has finished",
@@ -456,10 +456,10 @@ def station_url_error(value: str) -> str | None:
         u = urlparse(value)
         u.port
     except ValueError:
-        return "give the station's address, e.g. http://station.local:5003"
+        return "give the Weigh Station's address, e.g. http://station.local:5003"
     if u.scheme not in ("http", "https") or not u.hostname or u.username or u.password or u.query or u.fragment \
             or u.path not in ("", "/"):
-        return "give the station's address, e.g. http://station.local:5003"
+        return "give the Weigh Station's address, e.g. http://station.local:5003"
     return None
 
 
@@ -875,7 +875,7 @@ def _reader_usb(req: dict) -> dict:
     if port is None and not ports:
         raise Refused(409, "no ESP32 board on this Hub's USB: plug the Tag Reader in with a data cable")
     if port is None and len(ports) > 1:
-        raise Refused(409, "there are several ESP32 boards on this server's USB: pick one")
+        raise Refused(409, "there are several ESP32 boards on this Hub's USB: pick one")
     _not_applying()
     reader_flash.write_pending({"ssid": ssid, "pass": password, "buzzer": buzzer, "port": port or ports[0],
                                 "name": name})

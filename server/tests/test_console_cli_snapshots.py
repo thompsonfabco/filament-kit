@@ -85,7 +85,7 @@ def test_web_status_lines(cfg, capsys, monkeypatch):
     assert cli.main(["web", "status"]) == 0
     port = cfg["web"]["port"]
     assert lines(capsys) == [
-        "OK   web feature is on",
+        "OK   Web access is on",
         "OK   public URL https://printer.example.com/filament",
         "     connector: https://printer.example.com/filament/mcp   web app: https://printer.example.com/filament/intake",
         "--   sign-in passphrase not set: the Claude connector cannot sign in until `sudo filament-kit web passphrase`",

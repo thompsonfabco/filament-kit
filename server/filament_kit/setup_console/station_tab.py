@@ -30,7 +30,7 @@ def routes(page) -> list[tuple]:
                 r = await anyio.to_thread.run_sync(station_requests.decide, rid, approve)
             except station_requests.RequestError as e:
                 raise Refused(e.status, str(e)) from None
-            page.audit(request, f"station pairing request {rid} {'approved' if approve else 'refused'}")
+            page.audit(request, f"Weigh Station pairing request {rid} {'approved' if approve else 'refused'}")
             return {"ok": True, **r}
         return route
 

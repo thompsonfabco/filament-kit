@@ -587,7 +587,7 @@ def test_over_the_stream_cap_the_phone_gets_a_message(env, kit):
     pa.streams = printers_app.MAX_STREAMS
     r = asyncio.run(pa.events_route(_Req()))
     text = r.body.decode()
-    assert text.startswith("retry: 30000") and "Too many open views" in text and not kit.calls
+    assert text.startswith("retry: 30000") and "Too many phones and tabs are watching the printers" in text and not kit.calls
 
 
 def test_hls_relay_passes_the_kit_error_through(app, kit):

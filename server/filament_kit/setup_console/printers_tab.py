@@ -164,7 +164,7 @@ def routes(page) -> list[tuple]:
             if not subnet:
                 net = discovery.own_subnet()
                 if net is None:
-                    raise Refused(400, "can't tell this server's network; give a subnet such as 192.168.1.0/24", field="subnet")
+                    raise Refused(400, "can't tell this Hub's network; give a subnet such as 192.168.1.0/24", field="subnet")
                 return net
             try:
                 net = ipaddress.ip_network(str(subnet).strip(), strict=False)
@@ -309,7 +309,7 @@ def routes(page) -> list[tuple]:
     def mapper_of(serial: str):
         bambu_entry(serial)
         if page.mapper is None:
-            raise Refused(409, "slot mapping isn't running on this server")
+            raise Refused(409, "slot mapping isn't running on this Hub")
         return page.mapper
 
     async def map_start(request, body):
