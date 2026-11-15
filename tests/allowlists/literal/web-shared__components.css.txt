@@ -1,1 +1,2 @@
+web-shared/components.css | 14rem | 1 | the tile minimum width of the Palette tiles, in rem so tiles grow with the text size (02 6.1)
 web-shared/components.css | 18rem | 1 | the card minimum width of the Workbench cards, in rem so cards grow with the text size (02 6.1)
