@@ -348,6 +348,34 @@ def uninstall(run: Run, rel: Releases, name: str) -> None:
            timeout=600)
 
 
+def parse_reader_token(text: str) -> str | None:
+    """The token `filament-kit reader token` printed: `--json`'s {"token": ...}, the new layout (alone on the line
+    after "New Tag Reader token <id> (<name>):") or the old one (after "only this once:" on the same line)."""
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict) and isinstance(data.get("token"), str) and data["token"]:
+            return data["token"]
+    except ValueError:
+        pass
+    m = re.search(r"only this once:[ \t]+(\S+)", text)
+    if m:
+        return m[1]
+    m = re.search(r"^New Tag Reader token .*:[ \t]*\r?\n[ \t]*(\S+)[ \t]*$", text, re.M)
+    return m[1] if m else None
+
+
+def knows_yes(help_text: str) -> bool:
+    """Whether `filament-kit update --help` lists --yes (the old command line rejects it)."""
+    return re.search(r"--yes\b", help_text) is not None
+
+
+def update_check_sees(text: str, version: str) -> bool:
+    """`update --check` names a newer release: "<v> is available" (old) or "Latest release: <v>." (new; the same
+    line ends "(up to date)" when nothing is newer)."""
+    v = re.escape(version)
+    return re.search(rf"{v} is available|Latest release: v?{v}\.", text) is not None
+
+
 def version_tuple(version: str) -> tuple[int, ...]:
     return tuple(int(x) for x in version.split("."))
 
@@ -564,12 +592,12 @@ class E2E:
         # the reader token, made as the docs say: sudo filament-kit reader token
         r = run.sh(["/usr/local/bin/filament-kit", "reader", "token", "--name", "e2e"], name="reader-token",
                    log=False)
-        m = re.search(r"only this once:\s+(\S+)", r.stdout)
-        run.check(sc, "sudo filament-kit reader token makes a token", r.returncode == 0 and m is not None,
+        token = parse_reader_token(r.stdout)
+        run.check(sc, "sudo filament-kit reader token makes a token", r.returncode == 0 and token is not None,
                   r.stderr[-400:])
-        if not m:
+        if not token:
             raise Fail("no reader token")
-        rt = {"X-Auth-Token": m[1]}
+        rt = {"X-Auth-Token": token}
         reader = f"{WEB}/reader"
 
         def connected():
@@ -642,6 +670,12 @@ class E2E:
                                                        "problems": []}), encoding="utf-8")
         subprocess.run(["chown", "-R", "filament-kit:filament-kit", str(prof)], check=True)
 
+    def _update(self, *args: str, name: str, timeout: float = 1800, fk: str = "/usr/local/bin/filament-kit"):
+        """`filament-kit update ARGS`; --yes only when the installed command line has it (no terminal to ask on)."""
+        h = self.run.sh([fk, "update", "--help"], name=name + "-help", log=False)
+        yes = ["--yes"] if knows_yes(h.stdout) else []
+        return self.run.sh([fk, "update", *args, *yes], name=name, timeout=timeout)
+
     # ---- b) updater and the hardware data feed
     def b_updater(self, sc="b") -> None:
         run, rel = self.run, self.rel
@@ -656,9 +690,9 @@ class E2E:
         assert hw11 != hw
         rel.publish(self.v2, hardware=hw11)
         r = run.sh([fk, "update", "--check"], name="update-check-newer")
-        run.check(sc, f"update --check sees {self.v2}", r.returncode == 0 and f"{self.v2} is available" in r.stdout,
+        run.check(sc, f"update --check sees {self.v2}", r.returncode == 0 and update_check_sees(r.stdout, self.v2),
                   r.stdout + r.stderr)
-        r = run.sh([fk, "update"], name="update", timeout=3600)
+        r = self._update(name="update", timeout=3600)
         run.check(sc, f"update installs {self.v2}", r.returncode == 0 and installed_version() == self.v2,
                   r.stdout[-1500:] + r.stderr[-800:])
         act = wait_for(lambda: (lambda a: a if set(a.values()) == {"active"} else None)(
@@ -671,18 +705,18 @@ class E2E:
                   ov.is_file() and ov.read_bytes() == hw11, r.stdout[-600:])
         hw12 = hw.replace(b'<bambu-hardware version="1">', b'<bambu-hardware version="1.2">', 1)
         rel.publish(self.v2, hardware=hw12)
-        r = run.sh([fk, "update"], name="update-feed-1.2")
+        r = self._update(name="update-feed-1.2")
         run.check(sc, "hardware feed: a newer valid file (1.2) swaps in, the old one kept as .previous",
                   r.returncode == 0 and ov.read_bytes() == hw12 and
                   (ETC / "bambu_hardware.xml.previous").read_bytes() == hw11, r.stdout + r.stderr)
         bad = hw.replace(b'<bambu-hardware version="1">', b'<bambu-hardware version="1.3">', 1) \
             .replace(b'name="H2D"', b'name=""', 1)
         rel.publish(self.v2, hardware=bad)
-        r = run.sh([fk, "update"], name="update-feed-invalid")
+        r = self._update(name="update-feed-invalid")
         run.check(sc, "hardware feed: an invalid (signed) file is refused, the installed one stays",
                   r.returncode == 1 and "not installed" in r.stderr and ov.read_bytes() == hw12, r.stdout + r.stderr)
         rel.publish(self.v2, hardware=hw12)               # leave a good release in place
-        r = run.sh([fk, "update", "--rollback"], name="rollback", timeout=3600)
+        r = self._update("--rollback", name="rollback", timeout=3600)
         run.check(sc, f"update --rollback restores {self.v1}", r.returncode == 0 and installed_version() == self.v1,
                   r.stdout[-1500:] + r.stderr[-800:])
         code, info = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(jhttp("GET", f"{KIT}/api/info")),
@@ -710,7 +744,7 @@ class E2E:
                   [STATION_SERVER], str(cfg.get("station")))
         cfg["updates"] = {"api": rel.api, "repo": OWNER_REPO}
         write_cfg(cfg)
-        r = run.sh(["/usr/local/bin/filament-kit", "update"], name="update-station", timeout=3600)
+        r = self._update(name="update-station", timeout=3600)
         run.check(sc, f"update installs {self.v2} on the station", r.returncode == 0 and installed_version() == self.v2,
                   r.stdout[-1500:] + r.stderr[-800:])
         cfg = read_cfg()
@@ -816,7 +850,7 @@ class E2E:
         modules_before = cfg.get("modules")
         rel.publish(self.v2, repo=repo)
         fk = "/usr/local/bin/filament-kit"
-        r = run.sh([fk, "update"], name="cross-tag-update", timeout=3600)
+        r = self._update(name="cross-tag-update", timeout=3600)
         run.check(sc, f"{old}'s own updater installs {self.v2}", r.returncode == 0 and installed_version() == self.v2,
                   r.stdout[-1500:] + r.stderr[-800:])
         self._still_works(sc, f"after the update to {self.v2}", auth, spool["id"], self.v2)
@@ -826,7 +860,7 @@ class E2E:
         run.check(sc, "after the update: the printer, the General setting and the intake-history record are unchanged",
                   owned_after == owned_before, f"before {json.dumps(owned_before)} after {json.dumps(owned_after)}")
         self._console_page(sc)
-        r = run.sh([fk, "update", "--rollback"], name="cross-tag-rollback", timeout=3600)
+        r = self._update("--rollback", name="cross-tag-rollback", timeout=3600)
         run.check(sc, f"this checkout's rollback restores {old}", r.returncode == 0 and installed_version() == old,
                   r.stdout[-1500:] + r.stderr[-800:])
         self._still_works(sc, f"after the rollback to {old}", auth, spool["id"], old)
