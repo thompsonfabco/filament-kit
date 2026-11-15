@@ -1096,10 +1096,13 @@ app · M · Depends on: S6.5 · Beside: S6.6
 - **Check:** AUT-8 in Palette.
 
 ### S6.11 Details through the shared opener
-Hub page · M · Depends on: S6.6 · Beside: S6.7 to S6.10
+Hub page · L · Depends on: S6.6, S6.8 · Beside: S6.7, S6.9, S6.10
 - **Files today:** `setup_static/setup_printers.js`, `setup_presets.js` (each toggles its in-row details itself).
 - **Change:** these screens open and close details through the shared opener (02 6.2), so `sheet` (Palette) and
-  `pane` (Panes) draw them in their hosts.
+  `pane` (Panes) draw them in their hosts. With it, what Panes still lacks: one detail open at a time and Escape
+  returning focus to the row; the row's actions and every hidden field (Slicer presets: material, "Set parent")
+  inside the detail; the empty pane with its text on desktop; Back in the detail head on tablet and phone;
+  Settings one group per pane (02 5.11). The script and styles go into the detail part (F12 rule 7), not the core.
 - **Keep:** addresses (`#printers/<id>`), what a detail holds, the Console look.
 - **Other interfaces:** the web app and the app already open details as their own places; the command line has none.
 - **Check:** AUT-5 in Console and Palette on Printers and Slicer presets; focus returns to the row on close.
@@ -1109,7 +1112,8 @@ Hub page, web app · L · Depends on: S6.6 · Beside: S6.9
 - **Files today:** `components.css`; the navigation part of the shared component script.
 - **Change:** the `list`, `rows` and `pane` profile groups keyed on Panes, with drill-in navigation on phones (F6);
   the Panes tile.
-- **Keep:** addresses: the same `#section/<id>` places open the same things.
+- **Keep:** addresses: the same `#section/<id>` places open the same things. Until S6.11, Printers and Slicer
+  presets show details in place under Panes too; Panes is listed as unfinished in the release notes until then.
 - **Check:** AUT-5 in Panes light and dark; manual: release checklist step 4 (drill into a printer and back, focus
   returns to the row).
 
@@ -1267,7 +1271,7 @@ Stage 5   S2.1 > S5.1 > S5.2 > S5.4      S2.17 > S5.4
 
 Stage 6   S2.17 > S6.1 > S6.2 > S6.4 > S6.6 > S6.8 \
                   S6.1 > S6.3 > S6.5 > S6.7 > S6.9  > S6.10 (also needs S5.8)
-                  S6.6 > S6.11
+                  S6.6 + S6.8 > S6.11
 
 Stage 7   S2.11 > S7.1 > S7.2 (after every interface step of Stages 1 to 5)      S5.8 > S7.3 (command names after S5.9)
 ```

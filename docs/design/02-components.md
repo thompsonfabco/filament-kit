@@ -325,7 +325,8 @@ rail (Console)     sidebar (Workbench)       pills (Palette)                    
 | Group heading | visually hidden; groups split by a 1 px `--border` hairline | `--fs-xs` uppercase, 0.05em spacing, `--muted` | hidden (System group lives in More) | `--fs-xs` uppercase, `--muted`, above a grouped `--surface` block with `--r` |
 | Active | `--accent-soft` ground, `--accent-text`, weight 650, 3 px `--accent-text` mark on the outer edge | same, mark on the left edge | `--accent-soft` ground, `--accent-text` | `--surface-3` ground, icon tile `--accent` with `--on-accent` |
 
-Ground of the rail, sidebar and section pane: `--surface` with a 1 px `--border` edge. Icon colour `--muted`, active
+Ground of the rail and sidebar: `--surface` with a 1 px `--border` edge. Ground of the section pane (`list`):
+`--bg` with the same edge, so its grouped `--surface` blocks stand out. Icon colour `--muted`, active
 `--accent-text`.
 
 **States.**

@@ -342,8 +342,10 @@ except progress indicators. Everything respects `prefers-reduced-motion`.
 7. Fast on a phone: the shared core stylesheet stays under 60 KB and the shared core script under 60 KB
    uncompressed. The stylesheet's limit covers all four looks: every look's profile groups are in the one core
    file, so changing the look loads nothing and moves nothing (a look is chosen in the browser, so the Hub
-   cannot send only one look's rules). Parts only some pages need (the job strip, photos and the photo viewer)
-   are separate files of at most 30 KB each, loaded only by those pages. Totals count everything a page links
+   cannot send only one look's rules). Parts only some pages need (the job strip, photos and the photo viewer,
+   and the detail part: the opener, the hosts and the pane behaviour of `02-components.md` 6.2 that are not in the
+   core today) are separate files of at most 30 KB each, a script and a stylesheet where needed, loaded only by
+   those pages. The core limits are not raised for them. Totals count everything a page links
    as it is served, its own files included: the phone web app loads at most 110 KB of styles, the Hub page
    (one page that links every section's stylesheet) at most 140 KB, and no page more than 120 KB of script.
    A test checks the totals. No layout shift after the first paint; lists of more than 50 items are paged or
