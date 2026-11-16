@@ -2015,7 +2015,7 @@ function openTab() {
           }
           if (dry && mine !== rev) { link(STALE[lastKind]); return null; }   // an edit or a newer tag came meanwhile: this answer is for what was
           previewed = dry && !res.exit_code; problem = !!res.exit_code;
-          if (previewed) stale = false;
+          if (previewed) { stale = false; if (dry && res.nfc_id) { seenId = uidOf(res.nfc_id); seenKey = tapKey(res.nfc_id, res.read_at); } }   // the tap the Hub used is seen: a poll that brings it is nothing new, and a re-tap is "again" (R345)
           // Link names the tap the Hub used for this preview, also when the page showed no tag (null: an explicit "no tag")
           shot = previewed ? { rev: mine, body: dry ? { ...body, nfc_id: res.nfc_id ?? null, read_at: res.read_at ?? null } : body } : null;
           link(previewed ? null : problem ? "spool_sheet_reason_problem" : "spool_sheet_reason_preview_first");
@@ -2192,15 +2192,21 @@ function openTab() {
     } });
     if (how === "push") history.pushState({ sheet: true }, "", `#spools/${id}`);
     const rec = track(dlg, "address", how === "direct");
-    let seenId = lastTag && lastTag.nfc_id;
+    // the Hub writes a tag id as bytes in lower-case hex without leading zeros (tags.format_uid), the poll as the reader sent it: compare these forms
+    const uidOf = (v) => { const s = String(v).replace(/\s+/g, ""), p = s.includes(":") ? s.split(":") : s.match(/../g) || [];
+      return p.length && p.every((x) => /^[0-9a-f]{1,2}$/i.test(x)) ? p.map((x) => parseInt(x, 16).toString(16)).join(":") : s; };
+    const tapKey = (id, at) => `${uidOf(id)}|${at}`;
+    let seenId = lastTag && lastTag.nfc_id ? uidOf(lastTag.nfc_id) : null, seenKey = lastTag && lastTag.nfc_id ? tapKey(lastTag.nfc_id, lastTag.read_at) : null;   // the tap this sheet knows
     sheet = { id, dlg, rec, tag(t, fresh, key) {
       paintTag(t);
-      if (!fresh) return;
+      const tapped = t.nfc_id ? tapKey(t.nfc_id, t.read_at) : null;
+      if (!fresh || !tapped || tapped === seenKey) return;       // a poll that brings no tap, or the tap the sheet already knows (shown or previewed): nothing is out of date
+      seenKey = tapped;
       tagNote.textContent = "";
       if (key !== spentKey && onScale(t) && !weightTyped) {   // a new station tap: that spool is on the scale (04 5.2)
         weight._control.value = t.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: t.scale.age_seconds });
       }
-      const again = t.nfc_id === seenId; seenId = t.nfc_id;       // the same tag tapped again, or another one
+      const again = uidOf(t.nfc_id) === seenId; seenId = uidOf(t.nfc_id);       // the same tag tapped again, or another one
       outOfDate(again ? "again" : "tag");
     } };
     paintTag(lastTag);
