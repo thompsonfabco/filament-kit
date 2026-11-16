@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import tarfile
 
 import pytest
@@ -596,6 +597,48 @@ def test_install_syncs_reader_token_for_auth_required_health(key, server, fake_r
     assert (tmp_path / "etc" / "local_intake_token").read_text(encoding="utf-8").strip() == "reader-secret-42"
     h = lii.local_reader.health({"local_intake": {"url": url, "tier": "cpu"}})
     assert h["ok"] is True and h["auth_required"] is True
+
+
+def _run_writing_config(state_dir, writer):
+    class R(Run):
+        def __call__(self, cmd, log):
+            writer(state_dir / "service_config.xml")
+            return super().__call__(cmd, log)
+    return R()
+
+
+def test_token_save_failure_is_a_clear_error_and_leaves_settings(key, server, fake_reader, tmp_path, monkeypatch):
+    state_dir = tmp_path / "reader_state"
+    state_dir.mkdir()
+    monkeypatch.setenv("FK_LOCAL_INTAKE_STATE_DIR", str(state_dir))
+    for exc in (OSError(13, "Permission denied"), ValueError("bad")):
+        def boom(token, exc=exc):
+            raise exc
+        monkeypatch.setattr(lii.local_reader, "write_token", boom)
+        s = server({"0.2.4": mrf.make_release(key, "0.2.4")})
+        run = _run_writing_config(state_dir, lambda p: p.write_text('<c token="abc"/>', encoding="utf-8"))
+        with pytest.raises(lii.InstallError) as e:
+            lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=run)
+        assert "could not save its token" in str(e.value) and "local-intake token" in str(e.value)
+        assert "abc" not in str(e.value)
+        assert not (lii.store() / lii.RECORD).exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks and O_NOFOLLOW")
+def test_reader_config_symlink_or_non_regular_is_not_read(tmp_path):
+    real = tmp_path / "real.xml"
+    real.write_text('<c token="abc"/>', encoding="utf-8")
+    link = tmp_path / "service_config.xml"
+    link.symlink_to(real)
+    assert lii._read_reader_config(link) is None
+    assert lii._read_reader_config(real) == b'<c token="abc"/>'
+    assert lii._read_reader_config(tmp_path) is None            # a directory
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    assert lii._read_reader_config(fifo) is None
+    big = tmp_path / "big.xml"
+    big.write_bytes(b"x" * 70000)
+    assert lii._read_reader_config(big) is None
 
 
 def test_wait_healthy_timeout_by_tier(monkeypatch):

@@ -512,19 +512,47 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     return rec
 
 
+def _read_reader_config(path: Path) -> bytes | None:
+    """The reader's service_config.xml, read by root from the reader user's folder: opened without following a
+    symlink and only when it is a regular file (a small one), else None."""
+    import stat
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_size > 65536:
+            return None
+        with os.fdopen(fd, "rb", closefd=False) as fh:
+            return fh.read(65537)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
 def _sync_reader_token() -> None:
-    """Save the installed reader's bearer token into `<etc>/local_intake_token` so health/read calls authenticate."""
+    """Save the installed reader's bearer token into `<etc>/local_intake_token` so health/read calls authenticate.
+    A token that cannot be saved ends in an InstallError that says what to do; the kit's settings stay unchanged."""
     import xml.etree.ElementTree as ET
     state_dir = Path(os.environ.get("FK_LOCAL_INTAKE_STATE_DIR") or f"/var/lib/{NAME}")
-    cfg_xml = state_dir / "service_config.xml"
-    if not cfg_xml.is_file():
+    raw = _read_reader_config(state_dir / "service_config.xml")
+    if raw is None:
         return
     try:
-        token = (ET.parse(cfg_xml).getroot().attrib.get("token") or "").strip()
-    except (OSError, ET.ParseError):
+        token = (ET.fromstring(raw).attrib.get("token") or "").strip()
+    except ET.ParseError:
         return
-    if token:
+    if not token:
+        return
+    try:
         local_reader.write_token(token)
+    except (ValueError, OSError) as e:
+        why = "it is not a usable token" if isinstance(e, ValueError) else f"{e.__class__.__name__}: {e.strerror or e}"
+        raise InstallError("the reader is installed, but the kit could not save its token "
+                           f"({why}). The kit's settings were not changed. Set the token on the setup page "
+                           "(Settings, Local label reader) or with sudo spoolwarden local-intake token") from e
 
 
 def _prune(keep: set) -> None:
