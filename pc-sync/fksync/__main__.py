@@ -1,11 +1,11 @@
-"""filament-kit-sync: pair this PC with a filament-kit server, run one sync, show status, unpair.
+"""filament-kit-sync: pair this PC with a Hub, run one sync, show status, unpair.
 
 The only module that reads the real environment (%APPDATA% for Bambu Studio and Orca Slicer, %LOCALAPPDATA% for
 the sync's own files, %ProgramFiles% and the uninstall registry for the Orca Slicer install); the hidden
 --appdata / --localappdata options override the first two. On Linux it reads $HOME and the XDG folders instead
 (studio.LinuxLayout, store.linux_data_dir), unless --appdata / --localappdata are given (the tests' Windows-style
 trees), and has two more commands: install-timer / uninstall-timer (the systemd user timer, fksync.timer). The pairing token is
-read from stdin (inside the pasted link, or from the server after the 6-digit code), never from the
+read from stdin (inside the pasted link, or from the Hub after the 6-digit code), never from the
 command line, and is never printed or logged.
 """
 import argparse
@@ -40,12 +40,12 @@ def _ask(prompt: str) -> str:
 
 def _ask_link() -> str:
     """The pairing link carries the token, so at a terminal it is read without echo (not left in the scrollback);
-    empty means "type the server address instead". Piped stdin (tests, scripts) keeps the one visible line, and
+    empty means "type the Hub address instead". Piped stdin (tests, scripts) keeps the one visible line, and
     FKSYNC_SHOW_LINK=1 switches the hiding off."""
     if os.environ.get("FKSYNC_SHOW_LINK") == "1" or sys.stdin is None or not sys.stdin.isatty():
-        return _ask("Paste the pairing link, or type the server address:")
+        return _ask("Paste the pairing link, or type the Hub address:")
     try:
-        text = getpass.getpass("Paste the pairing link (it is not shown), or press Enter to type the server address: ")
+        text = getpass.getpass("Paste the pairing link (it is not shown), or press Enter to type the Hub address: ")
     except (EOFError, OSError):
         return ""
     return text.strip() or _ask("Server address:")
@@ -103,7 +103,7 @@ def _settle_pair(dirs: store.AppDirs, cfg: dict, token: str, echo) -> tuple[dict
     cfg["device"] = st.get("you")
     store.save_config(dirs, cfg)
     store.drop_pair_aside(dirs)
-    store.log(dirs, f"paired with {info.get('name', 'the server')} at {cfg['host']}:{cfg['port']} (device {cfg['device']})")
+    store.log(dirs, f"paired with {info.get('name', 'the Hub')} at {cfg['host']}:{cfg['port']} (device {cfg['device']})")
     return cfg, token
 
 
@@ -137,11 +137,11 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | Non
             else:
                 _out(f"Not paired: {e}")
             if isinstance(e, client.ApiError) and e.status == 401:
-                _out("The link has expired or was already used: run 'sudo filament-kit pair --pc' again for a new one.")
+                _out("The link has expired or was already used: run 'sudo spoolwarden pair --pc' again for a new one.")
             return 1
         if had_old:
             store.mark_pair_waiting(dirs)
-            _out(f"Saved, but not confirmed yet: {e}. It is tried again within 10 minutes; if the server refuses it, your "
+            _out(f"Saved, but not confirmed yet: {e}. It is tried again within 10 minutes; if the Hub refuses it, your "
                  "previous pairing comes back.")
         else:
             store.drop_pair_aside(dirs)
@@ -150,15 +150,15 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | Non
     cfg["device"] = st.get("you")
     store.save_config(dirs, cfg)
     store.drop_pair_aside(dirs)
-    store.log(dirs, f"paired with {info.get('name', 'the server')} at {cfg['host']}:{cfg['port']} "
+    store.log(dirs, f"paired with {info.get('name', 'the Hub')} at {cfg['host']}:{cfg['port']} "
                     f"(device {cfg['device']})")
-    _out(f"Paired with {info.get('name', 'the server')} ({cfg['host']}:{cfg['port']}). "
+    _out(f"Paired with {info.get('name', 'the Hub')} ({cfg['host']}:{cfg['port']}). "
          "The sync runs every 10 minutes and waits while Bambu Studio (or Orca Slicer) is open "
          "('filament-kit-sync status' shows a wait).")
     owner = st.get("owner")
     if owner and owner != st.get("you"):
-        _out("Another pairing owns the sync for this server (another PC, or this PC's earlier pairing). On the server: "
-             f"sudo filament-kit unpair {owner}")
+        _out("Another pairing owns the sync for this Hub (another PC, or this PC's earlier pairing). On the Hub: "
+             f"sudo spoolwarden unpair {owner}")
     if appdata is not None or layout is not None:   # information only: the pairing is done whatever this finds
         try:
             folders, _why = studio.primary(appdata, cfg, sync.load_state(dirs).get("folder"), layout=layout)
@@ -196,16 +196,16 @@ def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.Li
     try:
         fp, ip = client.fetch_peer(host, port)
     except client.Offline as e:
-        _out(f"Could not reach the server: {e}")
+        _out(f"Could not reach the Hub: {e}")
         return 1
-    _out(f"The server at {host}:{port} shows this certificate fingerprint:")
+    _out(f"The Hub at {host}:{port} shows this certificate fingerprint:")
     _out(f"  {_grouped(fp)}")
-    if _ask("Does this match the fingerprint shown by 'sudo filament-kit pair'? [y/N]").lower() not in ("y", "yes"):
+    if _ask("Does this match the fingerprint shown by 'sudo spoolwarden pair'? [y/N]").lower() not in ("y", "yes"):
         _out("Not paired. Check that you typed the right address.")
         return 1
     code = _ask("6-digit code:")
     if not re.fullmatch(r"[0-9]{6}", code):
-        _out("The code is the 6 digits shown by 'sudo filament-kit pair'. Not paired.")
+        _out("The code is the 6 digits shown by 'sudo spoolwarden pair'. Not paired.")
         return 1
     cfg = {"host": host, "port": port, "fp": fp, "ips": [ip]}  # the IP connected to: fallback if the name stops resolving
     try:
@@ -253,10 +253,10 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
                 return _fail(dirs, echo, e.message, "no_studio", cfg, token)
             except client.ApiError as e:
                 if e.status == 401:
-                    return _fail(dirs, echo, f"the server no longer accepts this PC (unpaired?); run '{APP} pair'",
+                    return _fail(dirs, echo, f"the Hub no longer accepts this PC (unpaired?); run '{APP} pair'",
                                  "refused")
                 return _fail(dirs, echo, str(e), "server", cfg, token)
-            except client.Offline as e:  # the PC is away from home, the server is off: try next run
+            except client.Offline as e:  # the PC is away from home, the Hub is off: try next run
                 store.log(dirs, f"warning: {e}")
                 _remember_error(dirs, "offline", str(e))
                 if echo:
@@ -289,13 +289,13 @@ def _when(t) -> str:
 
 
 def _differ_line(variant: str, names, key: str | None = None) -> None:
-    """Kept presets that differ from the build. The primary's updates are accepted on the server; another folder's
+    """Kept presets that differ from the build. The primary's updates are accepted on the Hub; another folder's
     with apply-updates --folder on this PC (`key`)."""
     names = [n for n in names or [] if isinstance(n, str)]
     if names:
         more = f", and {len(names) - 20} more" if len(names) > 20 else ""
         how = (f"; to take the build's copies: {APP} apply-updates --folder {key} --all (or --name <preset>)" if key
-               else "; to take the generated ones: sudo filament-kit profiles apply-updates")
+               else "; to take the generated ones: sudo spoolwarden profiles apply-updates")
         _out(f"Kept, differ:    {variant}: {len(names)} ({', '.join(names[:20])}{more}){how}")
 
 
@@ -337,7 +337,7 @@ def _remember_error(dirs: store.AppDirs, kind: str, detail: str) -> None:
 
 
 def _fail(dirs: store.AppDirs, echo, msg: str, kind: str, cfg: dict | None = None, token: str | None = None) -> int:
-    """Log it, keep it for `status`, and when the server can be told, tell it the class: never `msg`, which can hold a
+    """Log it, keep it for `status`, and when the Hub can be told, tell it the class: never `msg`, which can hold a
     path with the Bambu Studio user folder. `cfg`/`token` are left out for a failure that means it can't be told."""
     store.log(dirs, f"error: {msg}")
     if echo:
@@ -376,16 +376,16 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
     paired = bool(cfg.get("host")) and store.load_token(dirs) is not None
     if cfg.get("host"):
         ips = f" (also {', '.join(cfg['ips'])})" if cfg.get("ips") else ""
-        _out(f"Server:          {cfg['host']}:{cfg.get('port', client.DEFAULT_PORT)}{ips}"
+        _out(f"Hub:             {cfg['host']}:{cfg.get('port', client.DEFAULT_PORT)}{ips}"
              f"{'' if paired else ' - not paired'}")
         _out(f"Fingerprint:     {_grouped(str(cfg.get('fp', '')))}")
         if cfg.get("device"):
             _out(f"Device id:       {cfg['device']}")
         if store.pair_waiting(dirs):
-            _out("Pairing:         not confirmed yet; the next run tries it, and if the server refuses it the previous "
+            _out("Pairing:         not confirmed yet; the next run tries it, and if the Hub refuses it the previous "
                  "pairing comes back")
     else:
-        _out(f"Server:          not paired; run '{APP} pair'")
+        _out(f"Hub:             not paired; run '{APP} pair'")
     st = sync.load_state(dirs)
     f = None
     try:
@@ -434,12 +434,12 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
     if failed:
         when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(failed.get("at") or 0)))
         if failed.get("class") == "offline":
-            _out(f"Last try:        could not reach the server at {when}; the next run tries again: {failed.get('detail')}")
+            _out(f"Last try:        could not reach the Hub at {when}; the next run tries again: {failed.get('detail')}")
         else:
             _out(f"Last run:        FAILED at {when}: {failed.get('detail')}")
     for kind, rec in (st.get("rejected") or {}).items():
         if isinstance(rec, dict):
-            _out(f"Upload refused:  the server refused the {kind} upload: {rec.get('error')}. It is tried again later.")
+            _out(f"Upload refused:  the Hub refused the {kind} upload: {rec.get('error')}. It is tried again later.")
     partial = st.get("partial") if isinstance(st.get("partial"), dict) else None
     if partial:
         _out(f"Install stopped: build {partial.get('stamp')} was not fully installed; the next run finishes it.")
@@ -498,7 +498,7 @@ def cmd_unpair(dirs: store.AppDirs) -> int:
     store.log(dirs, "unpaired this PC (token and config removed)")
     dev = cfg.get("device")
     _out("This PC is unpaired: its token is deleted.")
-    _out(f"On the server, also run 'sudo filament-kit unpair {dev or '<id>'}' so another PC can become the sync PC.")
+    _out(f"On the Hub, also run 'sudo spoolwarden unpair {dev or '<id>'}' so another PC can become the sync PC.")
     return 0
 
 
@@ -529,20 +529,19 @@ def _linux() -> bool:
 # --- entry ---------------------------------------------------------------------------------------
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog=APP, description="Sync Bambu Studio (and Orca Slicer) filament presets with a "
-                                                      "filament-kit server.")
+    p = argparse.ArgumentParser(prog=APP, description="Sync Bambu Studio (and Orca Slicer) filament presets with the Hub (Spoolwarden).")
     p.add_argument("--version", action="version", version=f"{APP} {__version__}")
     p.add_argument("--appdata", help=argparse.SUPPRESS)
     p.add_argument("--localappdata", help=argparse.SUPPRESS)
     cmds = "pair,run,status,unpair,apply-updates" + (",install-timer,uninstall-timer" if _linux() else "")
     sub = p.add_subparsers(dest="cmd", required=True, metavar="{" + cmds + "}")
-    sub.add_parser("pair", help="pair this PC with the server (paste the link from 'sudo filament-kit pair --pc')")
+    sub.add_parser("pair", help="pair this PC with the Hub (paste the link from 'sudo spoolwarden pair --pc')")
     r = sub.add_parser("run", help="run one sync now (the scheduled task runs this every 10 minutes)")
     r.add_argument("--quiet", action="store_true", help="print nothing (the log still gets every line)")
-    sub.add_parser("status", help="show the server, the Bambu Studio folders (the one uploaded and the others it "
+    sub.add_parser("status", help="show the Hub, the Bambu Studio folders (the one uploaded and the others it "
                                   "installs into) and Orca Slicer's, a wait for a slicer to close, the last run "
                                   "and the installed build")
-    sub.add_parser("unpair", help="forget the server and delete this PC's token")
+    sub.add_parser("unpair", help="forget the Hub and delete this PC's token")
     au = sub.add_parser("apply-updates", help="in one of the other Bambu Studio folders, replace presets listed as "
                                               "differing ('status': Kept, differ) with the build's copy")
     au.add_argument("--folder", required=True, help="the folder, as <variant>-<user id> (e.g. BambuStudioBeta-123)")

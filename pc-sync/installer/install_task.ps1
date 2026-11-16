@@ -38,6 +38,6 @@ $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -Ru
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $every, $logon -Settings $settings `
     -Principal $principal -Force `
-    -Description 'filament-kit PC sync: uploads Bambu Studio filament presets to the filament-kit server and installs its preset builds while Bambu Studio is closed.' |
+    -Description 'Spoolwarden Slicer Sync: uploads Bambu Studio filament presets to the Hub and installs its preset builds while Bambu Studio is closed.' |
     Out-Null
 Write-Output "Registered scheduled task '$TaskName' (every 10 minutes and at logon)."

@@ -55,7 +55,7 @@ def main() -> int:
     try:
         app = build_app(cfg, kit_api=kit_api_at_start(cfg))
     except NotConfigured as e:
-        print(f"filament-kit web: {e}", file=sys.stderr)
+        print(f"spoolwarden web: {e}", file=sys.stderr)
         return 2
     uvicorn.run(app, **uvicorn_options(cfg))
     return 0

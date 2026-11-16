@@ -47,5 +47,5 @@ case ":$PATH:" in
     *":$bin:"*) ;;
     *) echo "Note: $bin is not on your PATH; log out and in again, or run $bin/filament-kit-sync" ;;
 esac
-echo "Next: filament-kit-sync pair   (paste the link from 'sudo filament-kit pair --pc' on the server)"
+echo "Next: filament-kit-sync pair   (paste the link from 'sudo spoolwarden pair --pc' on the Hub)"
 echo "To remove it: $opt/uninstall.sh   (add --purge to delete the token and settings too)"

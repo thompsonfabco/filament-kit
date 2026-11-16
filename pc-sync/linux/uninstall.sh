@@ -49,7 +49,7 @@ echo "Removed the filament-kit PC sync (timer, $opt, $link)."
 if [ "$PURGE" -eq 1 ]; then
     rm -rf "$data"
     echo "Deleted $data (token, settings, log, backups)."
-    echo "On the server, run 'sudo filament-kit unpair <id>' so another PC can become the sync PC."
+    echo "On the Hub, run 'sudo spoolwarden unpair <id>' so another PC can become the sync PC."
 else
     echo "Kept $data (the pairing token and settings); run with --purge to delete it."
 fi
