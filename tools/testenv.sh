@@ -8,6 +8,10 @@
 # --lint shellcheck. PYTEST-ARGS go to the server suite (for example --durations=30). Every suite runs even after a failure, and
 # the last lines are each suite's counts and wall time; the exit code is non-zero if any of them failed.
 #
+# The server suite is two runs: everything but the tests marked browser_audit (Node + headless Chrome, test_*audit*.py) on
+# --workers N, then those alone on 2 workers: more browsers at once time out starting DevTools. Where Node or a browser is missing
+# they skip. The one command: bash tools/testenv.sh --only server.
+#
 # A test that fails in the crowd of a parallel run gets one more try alone, right after. Each one that passes alone is named as
 # FLAKY: a timing race in a test, or a real one in the code, so it's to be read, not ignored. The suite counts as passed only if
 # all of them did, and only if the first run reached every test: one that stopped early (xdist's limit on crashed workers, for
@@ -154,7 +158,13 @@ parallel() {
 }
 
 if wanted server; then
-    parallel server "$ROOT/server" "${EXTRA[@]}"
+    parallel server "$ROOT/server" -m "not browser_audit" "${EXTRA[@]}"
+    if grep -rqs --include='*.py' browser_audit "$ROOT/server/tests"; then      # a tree without any has nothing to run as a group
+        saved=$WORKERS
+        WORKERS=2
+        parallel server-audit "$ROOT/server" -m browser_audit
+        WORKERS=$saved
+    fi
 fi
 if wanted pc-sync; then
     parallel pc-sync "$ROOT/pc-sync"

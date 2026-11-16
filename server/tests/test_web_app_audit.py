@@ -26,6 +26,8 @@ from filament_kit.web import mcp_tools
 from filament_kit.web.intake_app import IntakeApp
 from test_web_printers import SERIAL, FakeKit
 
+pytestmark = pytest.mark.browser_audit      # tools/testenv runs the browser audits as a group of 2 workers
+
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
 ALLOW = ROOT / "tests" / "allowlists" / "aut5"      # a folder, one file per screen

@@ -6,6 +6,9 @@
 # with -Only pc-sync,server, where its golden build needs the Python CI uses (3.12). -Only tests runs the design checks of the
 # root tests/ folder (the token files' equality and contrast; on Linux they are in testenv.sh's "other" suite).
 #
+# The server is two runs, as in testenv.sh: everything but the tests marked browser_audit on -Workers, then those (Node + Chrome) on
+# 2 workers, because more browsers at once time out starting DevTools. The one command: testenv.ps1 -Only server
+#
 # It reuses a venv under %LOCALAPPDATA%\filament-kit while server\pyproject.toml, pc-sync\pyproject.toml and the Python version
 # stay the same, and the program under test is always this tree's (PYTHONPATH). Exit code non-zero if a suite failed.
 param(
@@ -63,8 +66,15 @@ foreach ($suite in $Only) {
     $started = Get-Date
     Push-Location (Join-Path $root $suite)
     try {
-        & $py -m pytest -q -rfEs -p no:cacheprovider -n $Workers "--basetemp=$run\$suite"
-        $rc = $LASTEXITCODE
+        if ($suite -eq "server") {
+            & $py -m pytest -q -rfEs -p no:cacheprovider -n $Workers -m "not browser_audit" "--basetemp=$run\$suite"
+            $rc = $LASTEXITCODE
+            & $py -m pytest -q -rfEs -p no:cacheprovider -n 2 -m browser_audit "--basetemp=$run\$suite-audit"
+            if ($LASTEXITCODE -ne 0) { $rc = $LASTEXITCODE }
+        } else {
+            & $py -m pytest -q -rfEs -p no:cacheprovider -n $Workers "--basetemp=$run\$suite"
+            $rc = $LASTEXITCODE
+        }
     } finally {
         Pop-Location
     }
