@@ -577,7 +577,7 @@ def test_the_printers_tab_links_the_live_view_in_the_phone_web_app():
     is the phone web app's Printers tab; the setup page links it, only when the printers module gives the web app
     that tab, at /intake beside /setup on the same server."""
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    assert 'replace(/\/setup\/?$/, "") + "/intake#printers"' in text
+    assert 'replace(/\/(setup)?\/?$/, "") + "/intake#printers"' in text
     head = text.split("function header(found)")[1].split("\n}\n")[0]
     assert 'P.bambu ? X("a"' in head and "href: url" in head and 'rel: "noopener"' in head and "printers_live_view" in head
 
@@ -590,10 +590,10 @@ def test_the_live_view_link_resolves_beside_the_setup_page():
     import subprocess
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     expr = re.search(r"const liveUrl = \(\) => (location\.pathname\..*);$", text, re.M).group(1)
-    probe = ["/setup", "/setup/", "/kit/setup"]
+    probe = ["/setup", "/setup/", "/kit/setup", "/", "/kit/"]      # the Hub page is served at / as well as /setup
     js = f"console.log(JSON.stringify({json.dumps(probe)}.map((p) => {{ const location = {{ pathname: p }}; return {expr}; }})));"
     out = subprocess.run([shutil.which("node"), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
-    assert json.loads(out) == ["/intake#printers", "/intake#printers", "/kit/intake#printers"]
+    assert json.loads(out) == ["/intake#printers", "/intake#printers", "/kit/intake#printers", "/intake#printers", "/kit/intake#printers"]
 
 
 # ---------- printer reports on the setup page (the user, 2026-11-10: "available on the computer setup page as well") ----------

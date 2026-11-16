@@ -145,6 +145,17 @@ def test_page_is_served_with_a_strict_csp_and_no_external_assets(app):
     assert client(app).get("/setup/setup.js").status_code == 200
 
 
+def test_the_base_address_serves_the_hub_page_like_setup(app):
+    base, setup = client(app).get("/"), client(app).get("/setup")
+    assert base.status_code == 200 and base.text == setup.text
+    assert base.headers["content-security-policy"] == setup.headers["content-security-policy"]
+    assert client(app).get("/setup/setup.js").status_code == 200                # /setup and its files are as before
+    assert client(app).get("/nope").status_code == 404                          # only the root is new
+    assert client(app).post("/", json={}).status_code == 405
+    assert client(app, AWAY).get("/").status_code == client(app, AWAY).get("/setup").status_code == 403
+    assert client(app, base="https://wrong.example:8710").get("/").status_code == 403    # the Host check applies as on /setup
+
+
 def test_shared_files_are_served_and_the_sprite_comes_first(app):
     c = client(app)
     r = c.get("/setup")

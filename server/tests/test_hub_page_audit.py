@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -184,6 +185,18 @@ def _run(*args: str) -> subprocess.CompletedProcess:
     if run.returncode == 3:          # a browser was found but cannot run headless on this machine (its error is shown)
         _missing("AUT-5: " + run.stderr.strip().replace("AUT-5: ", "", 1))
     return run
+
+
+def test_the_base_address_loads_the_hub_page_with_every_asset_found(hub):
+    base = hub[:-len("/setup")] + "/"
+    with httpx.Client() as c:
+        page = c.get(base)
+        assert page.status_code == 200 and page.text == c.get(hub).text
+        assets = re.findall(r"(?:src|href)='(/[^']+)'", page.text)
+        assert assets and all(c.get(base.rstrip("/") + a).status_code == 200 for a in assets), assets
+    run = _run("--url", base.rstrip("/"), "--views", "#overview", "--allow", str(ALLOW))      # the page itself renders from /
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert json.loads(run.stdout)["views"] == 2 * 2
 
 
 def test_the_page_audit_passes_on_every_section(hub):
