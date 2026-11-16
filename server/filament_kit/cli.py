@@ -30,7 +30,7 @@ from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
-from .station_client import StationClient, StationUnreachable
+from .station_client import StationClient, StationUnreachable, station_reach
 
 KEY_FILE = "anthropic_key"
 
@@ -543,16 +543,20 @@ def cmd_devices(yes: bool = False, forget: str | None = None) -> int:
     from .web.slots import CLI_DEVICE, INTAKE_DEVICE
     devs = pairing.devices()
     built_in = lambda d: d["name"] in (INTAKE_DEVICE, CLI_DEVICE)       # noqa: E731
-    output.emit([{"id": d["id"], "name": d["name"], "paired": _iso(d["paired"]), "last_seen": _iso(d["last_seen"]),
-                  "built_in": built_in(d)} for d in devs])
+    reach = station_reach(devs, (config.load().get("station") or {}).get("url"))    # an idle station is not a dead one
+    output.emit([{"id": d["id"], "name": d["name"], "type": d.get("type"), "paired": _iso(d["paired"]),
+                  "last_seen": _iso(d["last_seen"]), "reachable": reach.get(d["id"]), "built_in": built_in(d)} for d in devs])
     if not devs:
         output.out("Nothing paired yet.")
         output.out("Pair a phone: sudo spoolwarden pair")
         return 0
+    word = lambda d: {True: "answering", False: "not answering"}.get(reach.get(d["id"]), "")      # noqa: E731
+    seen = lambda d: (_fmt_time(d["last_seen"]) + " (last intake)") if d.get("type") == "station" and d["last_seen"] else _fmt_time(d["last_seen"])      # noqa: E731
     output.out_lines(output.table(
-        ["Name", "Paired", "Last seen", "ID"],
-        [[d["name"], "built in: this Hub's own pairing" if built_in(d) else _fmt_time(d["paired"]),
-          "" if built_in(d) else _fmt_time(d["last_seen"]), d["id"]] for d in devs], whole=True))     # `forget` takes the id or the name
+        ["Name", "Type", "Paired", "Last seen", "Status", "ID"],
+        [[d["name"], "Weigh Station" if d.get("type") == "station" else "",
+          "built in: this Hub's own pairing" if built_in(d) else _fmt_time(d["paired"]),
+          "" if built_in(d) else seen(d), word(d), d["id"]] for d in devs], whole=True))     # `forget` takes the id or the name
     return 0
 
 

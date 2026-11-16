@@ -527,7 +527,7 @@ def test_devices_lists_name_paired_last_seen_and_id_and_marks_the_built_in_ones(
     built = pair_device(INTAKE_DEVICE)
     rc, out, err = run(capsys, "devices")
     lines = out.splitlines()
-    assert rc == 0 and err == "" and lines[0].split() == ["NAME", "PAIRED", "LAST", "SEEN", "ID"]
+    assert rc == 0 and err == "" and lines[0].split() == ["NAME", "TYPE", "PAIRED", "LAST", "SEEN", "STATUS", "ID"]
     assert re.fullmatch(rf"Shop phone +\d{{4}}-\d\d-\d\d \d\d:\d\d +\d{{4}}-\d\d-\d\d \d\d:\d\d +{shop['id']}", lines[1])
     assert lines[2].startswith("Studio PC") and lines[2].endswith(studio["id"])
     assert re.fullmatch(rf"{re.escape(INTAKE_DEVICE)} +built in: this Hub's own pairing +{built['id']}", lines[3])
@@ -543,7 +543,7 @@ def test_devices_json_is_the_hubs_list_with_iso_times(capsys):
     from filament_kit.web.slots import CLI_DEVICE
     shop, built = pair_device("Shop phone"), pair_device(CLI_DEVICE)
     got = doc(run(capsys, "devices", "--json")[1])
-    assert [set(d) for d in got] == [{"id", "name", "paired", "last_seen", "built_in"}] * 2
+    assert [set(d) for d in got] == [{"id", "name", "type", "paired", "last_seen", "reachable", "built_in"}] * 2
     assert [d["built_in"] for d in got] == [False, True] and got[0]["id"] == shop["id"]
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", got[0]["paired"])
 

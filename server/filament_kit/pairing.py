@@ -380,7 +380,7 @@ def authorize(token: str) -> tuple[str, str | None] | None:
                     d["last_seen"] = now
                     _write("devices.json", devs)
                 # a device paired as "station" before scopes existed is scoped too
-                if d.get("scope") or d.get("name") == "station":
+                if d.get("scope") or device_type(d):
                     return d["id"], d.get("scope") or "station"
                 return d["id"], "web" if d.get("role") == WEB_ROLE else None
         return None
@@ -429,10 +429,16 @@ def set_role_by_name(name: str, role: str) -> int:
         return n
 
 
+def device_type(d: dict) -> str | None:
+    """What a pairing is for: "station" (a Weigh Station), else None. A pairing made before scopes existed has no
+    scope, only the name `pair --station` gave it, so the name counts as well (as in `authorize`)."""
+    return "station" if d.get("scope") == "station" or d.get("name") == "station" else None
+
+
 def devices() -> list[dict]:
     with _locked():
         return [
-            {k: d[k] for k in ("id", "name", "paired", "last_seen")}
+            {**{k: d[k] for k in ("id", "name", "paired", "last_seen")}, "type": device_type(d)}
             for d in _load_devices()
             if d.get("claimed") is not None
         ]

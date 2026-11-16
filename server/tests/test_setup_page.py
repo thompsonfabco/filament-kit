@@ -1350,3 +1350,17 @@ def test_the_names_setting_takes_dns_names_only():
         with pytest.raises(ValueError):
             setup_helper._hosts(bad)
     assert setup_helper.GENERAL["setup.hosts"][1] is None          # saved without a restart: read on every request
+
+
+def test_the_state_lists_an_old_station_pairing_as_a_weigh_station_and_whether_it_answers(app, monkeypatch):
+    from filament_kit import station_client
+    pairing.make_cert("kit", ["192.0.2.5"], config.paths().etc)
+    p = pairing.issue(device_hint="station")
+    pairing.redeem_code(p.code)
+    station_client._reach.clear()
+    monkeypatch.setattr(station_client.StationClient, "state", lambda self: {})
+    cfg = config.load()
+    cfg["station"] = {**cfg["station"], "url": "http://192.0.2.9:5003"}
+    config.save(cfg)
+    got = client(app).get("/setup/api/state").json()["devices"]
+    assert [(d["name"], d["type"], d["reachable"]) for d in got] == [("station", "station", True)]
