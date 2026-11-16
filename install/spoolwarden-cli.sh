@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installed as /usr/local/bin/filament-kit.
+# Installed as /usr/local/bin/spoolwarden (the old name, /usr/local/bin/filament-kit, is filament-kit-wrapper.sh).
 # Settings and the certificate live in /etc/filament-kit (root-owned), so
 # `config` and `cert` run as root; so does `modules`, which installs and starts
 # services, `update`, which installs a new release, `uninstall`, which runs the kept release's
@@ -36,7 +36,7 @@ if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; t
 fi
 
 # The switches every command takes (`--plain`, `--no-progress`, `--json`, `--quiet`, `-q`, `--color <when>`) may stand
-# before the command, as in `sudo filament-kit --plain backup create`: they are set aside here, so the route below is
+# before the command, as in `sudo spoolwarden --plain backup create`: they are set aside here, so the route below is
 # chosen on the command itself, and they go on to the program in front of it.
 SWITCHES=()
 while [ "$#" -gt 0 ]; do
@@ -81,7 +81,12 @@ fi
 # file and `plan` saves what an install needs in the root-owned store for the setup page; `status` and `test` only
 # read and run as the user below.
 if [ "${1:-}" = local-intake ] && { [ "${2:-}" = install ] || [ "${2:-}" = remove ] || [ "${2:-}" = token ] \
-        || [ "${2:-}" = plan ]; }; then
+        || [ "${2:-}" = plan ] || [ "${2:-}" = share-corrections ]; }; then
+    run_as_root "$@"
+fi
+# `label-reader corrections` (list, remove, retry, package, send) uses the reader's root-owned token; `status` and
+# `test` read as the user below.
+if [ "${1:-}" = label-reader ] && [ "${2:-}" = corrections ]; then
     run_as_root "$@"
 fi
 

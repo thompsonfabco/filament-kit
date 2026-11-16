@@ -306,7 +306,8 @@ def test_prints_reporting_task_id_0_all_settle(rig, sd, spoolman_fake_store):
     assert len(usage.entries(SERIAL, 7)) == 6
 
 
-@pytest.mark.parametrize("name", [f"fk-calib-{SERIAL}", f"fk-calib-{SERIAL}-1a2b3c"])   # old name, per-run name
+@pytest.mark.parametrize("name", [f"fk-calib-{SERIAL}", f"fk-calib-{SERIAL}-1a2b3c",   # old name, per-run name
+                                  f"sw-calib-{SERIAL}", f"sw-calib-{SERIAL}-1a2b3c"])   # the new name too
 def test_our_calibration_job_is_not_settled(rig, sd, spoolman_fake_store, name):
     calibrate()
     r = rig()

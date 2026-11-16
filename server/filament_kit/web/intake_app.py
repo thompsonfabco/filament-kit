@@ -274,7 +274,9 @@ class IntakeApp:
             ("/intake/api/history/{hid}/photos/{n:int}", self.history_photo, ["GET"]),
             ("/intake/api/history/{hid}/revise", self.history_revise, ["POST"]),
             ("/intake/api/history/{hid}/apply", self.history_apply, ["POST"]),
-            ("/intake/api/history/{hid}/undo", self.history_undo, ["POST"]))]
+            ("/intake/api/history/{hid}/undo", self.history_undo, ["POST"]),
+            ("/intake/api/label-reader/corrections", self.corrections_list, ["GET"]),
+            ("/intake/api/label-reader/corrections/{cid}/remove", self.corrections_remove, ["POST"]))]
 
     @staticmethod
     def _hist(fn):
@@ -341,6 +343,26 @@ class IntakeApp:
         b = await self._body(request)
         return await anyio.to_thread.run_sync(intake_history.undo, self.tools.sm, request.path_params["hid"],
                                               b.get("revision"))
+
+    # the corrections waiting to be shared: the list and Remove; Send now is on the Hub page
+    @staticmethod
+    async def _corr_call(fn, *a):
+        from .. import reader_corrections
+
+        def run():
+            return fn(config.load(), *a)
+        try:
+            return await anyio.to_thread.run_sync(run)
+        except reader_corrections.CorrectionsError as e:
+            return JSONResponse({"error": str(e), "reason": e.code, **e.extra}, e.status)
+
+    async def corrections_list(self, request: Request):
+        from .. import reader_corrections
+        return await self._corr_call(reader_corrections.waiting)
+
+    async def corrections_remove(self, request: Request):
+        from .. import reader_corrections
+        return await self._corr_call(reader_corrections.remove, request.path_params["cid"])
 
     # ---------- home network ----------
     def _lan(self, request: Request) -> bool:

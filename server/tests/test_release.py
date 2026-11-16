@@ -209,14 +209,15 @@ class FakeRelease:
     /repos/o/r/releases/assets/<n> through a 302 (as GitHub does). Records every request's headers."""
 
     def __init__(self, priv, version="1.2.3", *, tamper_sig=False, tamper_tar=False, tarball=None, extra=None,
-                 unlisted=None, tamper_extra=False, drop=(), tar_unsigned=False):
-        """`extra`: more assets {name: bytes}, listed in SHA256SUMS; `unlisted`: assets left out of it;
+                 unlisted=None, tamper_extra=False, drop=(), tar_unsigned=False, brand="filament-kit"):
+        """`brand`: the tarball's name prefix (the old `filament-kit` or the new `spoolwarden`);
+        `extra`: more assets {name: bytes}, listed in SHA256SUMS; `unlisted`: assets left out of it;
         `tamper_extra`: the extra assets are changed after SHA256SUMS was made; `drop`: assets the release does not
         carry at all; `tar_unsigned`: the (signed) SHA256SUMS does not list the tarball."""
         self.version = version
         tar = tarball if tarball is not None else make_tarball(version)
         extra = dict(extra or {})
-        sums = (("" if tar_unsigned else f"{hashlib.sha256(tar).hexdigest()}  filament-kit-{version}.tar.gz\n")
+        sums = (("" if tar_unsigned else f"{hashlib.sha256(tar).hexdigest()}  {brand}-{version}.tar.gz\n")
                 + f"{'0' * 64}  get.sh\n"
                 + "".join(f"{hashlib.sha256(d).hexdigest()}  {n}\n" for n, d in extra.items())).encode()
         if tamper_extra:
@@ -226,7 +227,7 @@ class FakeRelease:
             sig = bytes([sig[0] ^ 1]) + sig[1:]
         if tamper_tar:
             tar = tar[:-1] + bytes([tar[-1] ^ 1])
-        self.files = {f"filament-kit-{version}.tar.gz": tar, "SHA256SUMS": sums,
+        self.files = {f"{brand}-{version}.tar.gz": tar, "SHA256SUMS": sums,
                       "SHA256SUMS.sig": base64.b64encode(sig) + b"\n", **extra, **(unlisted or {})}
         for name in drop:
             del self.files[name]
@@ -299,6 +300,36 @@ def test_fetch_good_release(serve, key, tmp_path):
     root = release.extract(tar, ver, tmp_path / "x")
     assert (root / "install.sh").read_bytes().startswith(b"#!/bin/bash")
     assert release.verify_dir(tmp_path / "dl", ver, _pub(key)) == tar
+
+
+def test_fetch_takes_the_new_tarball_name_and_still_the_old(serve, key, tmp_path):
+    assert release.tarball_names("1.2.3") == ("filament-kit-1.2.3.tar.gz", "spoolwarden-1.2.3.tar.gz")
+    assert release.tarball_name("1.2.3") == "filament-kit-1.2.3.tar.gz"          # what the kit publishes
+    for brand in ("filament-kit", "spoolwarden"):
+        fr = serve(tarball=make_tarball("1.2.3", top=f"{brand}-1.2.3"), brand=brand)
+        dl = tmp_path / brand
+        ver, tar = release.fetch(dl / "dl", repo="o/r", fetcher=release.Fetcher(fr.api), pubkey_b64=_pub(key))
+        assert tar.name == f"{brand}-1.2.3.tar.gz"
+        assert release.verify_dir(dl / "dl", ver, _pub(key)) == tar
+        kept = release.keep(ver, dl / "dl", dl / "store")
+        assert release.verify_dir(kept, ver, _pub(key)) == kept / tar.name
+        root = release.extract(tar, ver, dl / "x")
+        assert root.name == f"{brand}-1.2.3" and (root / "install.sh").is_file()
+
+
+def test_the_new_tarball_name_still_needs_its_own_signed_entry(serve, key, tmp_path):
+    fr = serve(brand="spoolwarden", tarball=make_tarball("1.2.3", top="spoolwarden-1.2.3"), tar_unsigned=True)
+    with pytest.raises(ReleaseError, match="does not list spoolwarden-1.2.3.tar.gz"):
+        release.fetch(tmp_path / "dl", repo="o/r", fetcher=release.Fetcher(fr.api), pubkey_b64=_pub(key))
+    assert not list((tmp_path / "dl").iterdir())
+
+
+@pytest.mark.parametrize("repo", [release.REPO, release.REPO.split("/")[0] + "/spoolwarden"])   # old and new name
+def test_either_repo_name_is_asked_for(serve, repo):
+    fr = serve()
+    with pytest.raises(ReleaseError, match="HTTP 404"):          # past the name check, then the fake has no such repo
+        release.Fetcher(fr.api).release(repo)
+    assert fr.requests[0][0] == f"/repos/{repo}/releases/latest"
 
 
 def test_fetch_by_version(serve, key, tmp_path):
@@ -579,7 +610,7 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     assert root == tmp_path / "x" / f"filament-kit-{version}"
     assert len(list(root.glob(f"filament_kit-{version}-*.whl"))) == 1
     assert (root / "LICENSE").is_file() and (root / "THIRD-PARTY.md").is_file()
-    for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/filament-kit-cli.sh",
+    for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/spoolwarden-cli.sh", "install/filament-kit-wrapper.sh",
                 "install/spoolman.sh", "install/avahi/filament-kit.service",
                 "install/remote/route.template", "install/remote/mcp-proxy.conf", "install/panel/VERSION",
                 "install/panel/intake-panel.bin", "install/reader/VERSION", "install/reader/printer-station.bin"):

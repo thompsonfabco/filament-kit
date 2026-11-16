@@ -40,7 +40,7 @@ from defusedxml import ElementTree as SafeET
 from . import API_VERSION, __version__, config, modules, output, release
 
 FORMAT = "1"
-WRAPPER = "/usr/local/bin/filament-kit"
+WRAPPER = "/usr/local/bin/spoolwarden"
 PREFIX = "filament-kit-backup"
 PRE_RESTORE = "pre-restore"
 NEW, OLD = ".fk-restore-new", ".fk-restore-old"
@@ -51,7 +51,7 @@ UPLOAD = "restore-upload"      # in the state folder: what the setup page receiv
 # Relative to their root: left out, as install/backup.sh leaves them out.
 EXCLUDE = {"var/lib/filament-kit": ("profiles/live/system", "library/versions", UPLOAD)}
 EXCLUDE_GLOB = {"var/lib/filament-kit": (re.compile(r"profiles/builds/[^/]+\.tmp(/.*)?"),)}
-NAME = re.compile(r"(filament-kit-backup|pre-restore)-[A-Za-z0-9-]{1,63}-\d{8}-\d{4}(-\d+)?-v\d+\.\d+\.\d+\.zip")
+NAME = re.compile(r"(filament-kit-backup|spoolwarden-backup|pre-restore)-[A-Za-z0-9-]{1,63}-\d{8}-\d{4}(-\d+)?-v\d+\.\d+\.\d+\.zip")
 DAILY = re.compile(r"\d{4}-\d{2}-\d{2}\.tar\.gz")
 
 
@@ -474,7 +474,7 @@ def verify(path: Path) -> Manifest:
             root = SafeET.fromstring(zf.read(info))
         except Exception:  # noqa: BLE001 - defusedxml raises its own and the parser's errors
             raise BackupError("the manifest cannot be read") from None
-        if root.tag != "filament-kit-backup" or root.get("format") != FORMAT:
+        if root.tag not in ("filament-kit-backup", "spoolwarden-backup") or root.get("format") != FORMAT:
             raise BackupError("this backup has a format this kit does not know")
         kit = root.get("kit") or ""
         try:
@@ -733,7 +733,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             out(f"error: the restore stopped ({why}); what was here is back in place and running again.")
         else:
             out(f"error: the restore stopped ({why}); what was here is back in place. Start the kit again with: "
-                "sudo filament-kit modules apply")
+                "sudo spoolwarden modules apply")
         return 1
     if other_host:
         for n in ("cert.pem", "key.pem"):
@@ -756,7 +756,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
         if services:
             run(["systemctl", "try-restart", *services])
     if rc != 0:
-        out("error: the data is back, but setting up the modules failed. Finish with: sudo filament-kit modules apply"
+        out("error: the data is back, but setting up the modules failed. Finish with: sudo spoolwarden modules apply"
             + "".join(f"\n  the earlier {t} is in {o}" for t, o in swapped if o is not None))
         return 1
     for _target, old in swapped:

@@ -1817,7 +1817,7 @@ drawer and form hosts are drawn as bottom sheets (9.1).
   Back closes it. The collection's title links use the same address, so every profile opens in the same way.
 - **Screens that open their own details.** A screen that still toggles its details itself, without the shared
   opener (Printers and Slicer presets on the Hub page today), shows them in place in every profile; under `sheet`
-  the detail then sits inside its tile, which grows to the full width, as under `card`. Step S6.11 moves those
+  the detail then sits inside its tile, which grows to the full width, as under `card`. Steps S6.11 and S6.12 move those
   screens onto the shared opener.
 - **How many open.** `inline` and `card`: several at once (an open card grows to the full width of the grid, one
   under another). `sheet` and `pane`: one; opening another closes the first (asking first if it holds a dirty

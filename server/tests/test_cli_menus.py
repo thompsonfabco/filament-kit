@@ -64,10 +64,10 @@ def test_the_main_list_has_the_hub_pages_groups_in_order_then_printers_and_featu
 def test_a_group_screen_is_headed_by_its_place_and_ends_with_the_actions_that_are_commands_elsewhere(capsys, monkeypatch):
     assert run(monkeypatch, "5\nq\n6\nq\n8\nq\nq\n") == 0
     out = say(capsys.readouterr().out)
-    assert "Settings > Backups and restore" in out and "Back up now: sudo filament-kit backup create" in out
-    assert "Restore: sudo filament-kit restore <zip>" in out
-    assert "Settings > Network and addresses" in out and "Firewall rules: filament-kit remote firewall" in out
-    assert "Settings > Filament Catalog" in out and "Update now: sudo filament-kit catalog update" in out
+    assert "Settings > Backups and restore" in out and "Back up now: sudo spoolwarden backup create" in out
+    assert "Restore: sudo spoolwarden restore <zip>" in out
+    assert "Settings > Network and addresses" in out and "Firewall rules: spoolwarden remote firewall" in out
+    assert "Settings > Filament Catalog" in out and "Update now: sudo spoolwarden catalog update" in out
 
 
 def test_a_staged_change_is_saved_with_s_and_the_group_shows_what_is_stored(capsys, monkeypatch):

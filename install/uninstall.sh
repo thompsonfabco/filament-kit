@@ -64,7 +64,7 @@ fi
 
 rm -f /etc/avahi/services/filament-kit.service
 systemctl reload avahi-daemon 2>/dev/null || true
-rm -f /usr/local/bin/filament-kit
+rm -f /usr/local/bin/spoolwarden /usr/local/bin/filament-kit
 # remote: the kit's own nginx and certbot files, as `modules disable remote` removes them: its routes (only files
 # mcp-route wrote), its router conf and its deploy hook. nginx, certbot, the certificate (/etc/mcp-router/tls),
 # mcp-route, its hook and other routes stay. While /etc/nginx/mcp.d holds routes the kit did not add (the owner's
@@ -126,11 +126,11 @@ fi
 rm -rf /opt/filament-kit
 if [ "$KIT_SPOOLMAN" -eq 1 ]; then
     rm -rf /opt/spoolman /opt/spoolman.new /opt/spoolman.old /etc/systemd/system/spoolman.service.d
-    REMOVED="filament-kit and Spoolman"
+    REMOVED="Spoolwarden and Spoolman"
     KEPT_SPOOLMAN=" /var/lib/spoolman"
 else
     echo "Left the Spoolman the kit did not install: its program, unit, settings, data and user."
-    REMOVED="filament-kit"
+    REMOVED="Spoolwarden"
     KEPT_SPOOLMAN=""
 fi
 

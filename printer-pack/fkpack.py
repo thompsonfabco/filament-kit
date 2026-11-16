@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""filament-kit printer pack: the on-printer side of filament-kit for Klipper printers (spec §7).
+"""Spoolwarden printer pack: the on-printer side of Spoolwarden for Klipper printers (spec §7).
 
 Run on the printer as its normal user (not root): `./fk-printer-pack.sh install | status | uninstall`.
 Python 3.9+, standard library only.
@@ -463,7 +463,7 @@ class Pack:
                      "points there (--spoolman sets it)")
         if not has_section(text, "zeroconf"):
             new = text.rstrip("\n") + "\n\n[zeroconf]\n"
-            if self.edit(path, new, "moonraker.conf: announce Moonraker on the LAN so filament-kit finds it"):
+            if self.edit(path, new, "moonraker.conf: announce Moonraker on the LAN so Spoolwarden finds it"):
                 self._add(m["moonraker"], "[zeroconf]")
                 self.moonraker_changed = True
 
@@ -562,7 +562,7 @@ class Pack:
     def status(self):
         objs = self.objects()
         m = self.manifest()
-        self.out("filament-kit printer pack in {}".format(self.dest))
+        self.out("Spoolwarden printer pack in {}".format(self.dest))
         self.out("  files: {}".format(", ".join(m["files"]) or "none"))
         self.out("  include line in printer.cfg: {}".format("yes" if m["include"] else "no"))
         for name in ("SET_ACTIVE_SPOOL", "CLEAR_ACTIVE_SPOOL", "FK_SET_TOOL_SPOOL", "FK_SPOOL_CHECK",
@@ -689,7 +689,7 @@ def nfc_config(upstream, device, spoolman, moonraker, web):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="fk-printer-pack.sh", description="filament-kit printer pack")
+    ap = argparse.ArgumentParser(prog="fk-printer-pack.sh", description="Spoolwarden printer pack")
     ap.add_argument("command", choices=("install", "status", "uninstall"))
     ap.add_argument("--data", default="~/printer_data", help="the printer_data folder (default ~/printer_data)")
     ap.add_argument("--moonraker", default="http://localhost:7125")

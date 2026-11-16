@@ -1,4 +1,4 @@
-"""The updater (module `updates`, `filament-kit update`) against a local fake release server."""
+"""The updater (module `updates`, `spoolwarden update`) against a local fake release server."""
 from __future__ import annotations
 
 import base64
@@ -274,7 +274,7 @@ def test_both_failing_keeps_previous_and_says_how_to_roll_back(env, srv, key, sy
     assert run.installed == ["filament-kit-1.1.0", "filament-kit-1.0.0"]
     assert run.cmds[-2:] == START
     assert updates._read_state()["previous"] == "1.0.0"
-    assert "sudo filament-kit update --rollback" in capsys.readouterr().err
+    assert "sudo spoolwarden update --rollback" in capsys.readouterr().err
     # the rollback afterwards works (this process may still report the old version after a half-done install)
     run = Runner()
     assert updates.rollback(cfg, run=run) == 0

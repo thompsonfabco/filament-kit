@@ -320,7 +320,7 @@ window.addEventListener("hashchange", () => {
   }
 });
 
-// ----- Appearance (03 10.2): this device, applied at once; Theme for new devices arrives with S6.10 -----
+// ----- Appearance (03 10.2): this device, applied at once; Theme for new devices (10.2) has its own button -----
 function groupAppearance() {
   const res = sbox(), hint = h("p", { class: "field__hint", textContent: SW.t("settings_appearance_mode_hint") });
   const choice = SW.segmented({ legend: SW.t("settings_appearance_mode"), cls: "appearance", name: "appearance-device", value: appearanceNow(),
@@ -329,7 +329,29 @@ function groupAppearance() {
   const look = SW.themePicker({ legend: true });    // built from the root's data-look each time, so a redraw keeps the choice
   look.addEventListener("change", () => setTimeout(paintList, 0));
   return setGroup("appearance", { desc: SW.t("settings_appearance_desc"), body: [h("div", { class: "settings__choice" }, choice, hint, res),
-    h("div", { class: "settings__choice" }, look, sbox())] });
+    h("div", { class: "settings__choice" }, look, sbox()), newDevices()] });
+}
+// Theme for new devices (03 10.2): the Hub's own default, saved with its own button, which needs the setup code
+const NEW_LOOKS = ["console", "workbench", "palette", "panes"];
+function newDevices() {
+  let saved = (S.appearance && S.appearance.theme) || "console";
+  const box = sbox();
+  const pick = SW.field({ type: "select", name: "appearance.theme", label: SW.t("appearance_theme_default_title"), hint: SW.t("settings_appearance_new_devices_hint"),
+    value: saved, optional: false, options: NEW_LOOKS.map((v) => ({ value: v, label: SW.t("theme_" + v + "_name") })) });
+  const save = SW.btn(SW.t("settings_appearance_save"), { cls: "btn--primary", action: "save-theme", run: () => {
+    const value = pick._control.value;
+    if (value === saved) return;
+    return settingAct(box, "settings/general", { values: { "appearance.theme": value } }, async () => {
+      saved = value;
+      try { S = await api("state"); } catch { /* the page keeps what it has */ }
+      sync();
+      say(box, SW.t("common_saved"), true);
+    });
+  } });
+  const sync = () => SW.disable(save, pick._control.value === saved ? SW.t("common_nothing_changed") : null);
+  pick._control.addEventListener("change", () => { SW.result(box, null); sync(); });
+  sync();
+  return h("div", { class: "settings__choice" }, pick, h("div", { class: "actions" }, save), box);
 }
 
 // ----- General (03 10.3) -----

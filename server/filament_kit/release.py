@@ -147,6 +147,12 @@ def tarball_name(version: str) -> str:
     return f"filament-kit-{version}.tar.gz"
 
 
+def tarball_names(version: str) -> tuple[str, str]:
+    """The names a release may carry its tarball under: the one the kit publishes, then the one after the rename."""
+    parse_version(version)
+    return f"filament-kit-{version}.tar.gz", f"spoolwarden-{version}.tar.gz"
+
+
 def parse_sums(data: bytes) -> dict[str, str]:
     """sha256sum output -> {file name: hex}; any other line, or a name listed twice, is an error."""
     try:
@@ -231,7 +237,8 @@ def check_hash(path: Path, table: dict[str, str]) -> None:
 def verify_dir(folder: Path, version: str, pubkey_b64: str | None = None) -> Path:
     """Re-check a kept release (folder with the tarball, SHA256SUMS and the signature); returns the tarball."""
     folder = Path(folder)
-    tarball = folder / tarball_name(version)
+    names = tarball_names(version)
+    tarball = next((folder / n for n in names if (folder / n).is_file()), folder / names[0])
     for f in (folder / SUMS, folder / SIG, tarball):
         if not f.is_file():
             raise ReleaseError(f"{f} is missing")
@@ -355,7 +362,7 @@ def fetch(dest: Path, *, repo: str = REPO, version: str | None = None, fetcher: 
     dest.mkdir(parents=True, exist_ok=True)
     rel = fetcher.release(repo, version)
     ver = rel["version"]
-    name = tarball_name(ver)
+    name = next((n for n in tarball_names(ver) if n in rel["assets"]), tarball_name(ver))
     for need in (SUMS, SIG, name):
         if need not in rel["assets"]:
             raise ReleaseError(f"release {ver} has no {need}")
@@ -389,11 +396,13 @@ def _member_ok(m: tarfile.TarInfo, top: str) -> bool:
 
 def extract(tarball: Path, version: str, dest: Path) -> Path:
     """Unpack a verified tarball into `dest`; returns the folder holding install.sh. Only plain files and
-    folders under filament-kit-<version>/ are accepted."""
-    top = f"filament-kit-{version}"
+    folders under filament-kit-<version>/ (or spoolwarden-<version>/) are accepted."""
     dest = Path(dest)
     with tarfile.open(tarball, "r:gz") as tf:
         members = tf.getmembers()
+        first = PurePosixPath(members[0].name).parts[:1] if members else ()
+        top = (first[0] if first and first[0] in (f"filament-kit-{version}", f"spoolwarden-{version}")
+               else f"filament-kit-{version}")
         bad = [m.name for m in members if not _member_ok(m, top)]
         if bad:
             raise ReleaseError(f"the tarball holds an unexpected entry {bad[0]!r}; nothing was installed")
@@ -429,7 +438,9 @@ def keep(version: str, src: Path, store: Path) -> Path:
     tmp = Path(store) / f".{version}.tmp"
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, mode=0o755)
-    for name in (tarball_name(version), SUMS, SIG):
+    names = tarball_names(version)
+    have = next((n for n in names if (Path(src) / n).is_file()), names[0])
+    for name in (have, SUMS, SIG):
         shutil.copyfile(Path(src) / name, tmp / name)
     shutil.rmtree(out, ignore_errors=True)
     os.replace(tmp, out)

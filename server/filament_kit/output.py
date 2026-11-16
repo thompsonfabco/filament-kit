@@ -247,7 +247,7 @@ _DASH = ("journalctl", "curl")                      # these start a command when
 _PROSE = frozenset(("a", "an", "and", "as", "at", "but", "by", "for", "from", "if", "in", "is", "it", "of", "on", "or",
                     "so", "the", "then", "to", "when", "which", "while", "with", "again", "now", "first", "installs",
                     "tries", "showed", "shows", "will", "needs", "does", "makes"))       # the words that follow a command in running text
-_PROGRAMS = frozenset(("filament-kit", "systemctl", "journalctl", "rm", "apt", "apt-get", "bash", "ufw", "usermod",
+_PROGRAMS = frozenset(("spoolwarden", "filament-kit", "systemctl", "journalctl", "rm", "apt", "apt-get", "bash", "ufw", "usermod",
                        "groupadd", "certbot", "pip", "pip3", "python", "python3", "tar", "pio", "curl", "tee", "cp", "mv"))
 _LEAD = "([{\"'`"
 _TRAIL = ",;.:)]}?`"                      # a word that ends with one of these ends its clause
@@ -271,7 +271,7 @@ def _starts(words: list[str], i: int) -> bool:
         return _bare(nxt) in _PROGRAMS or "/" in _bare(nxt) or nxt.startswith("-")
     if word in ("usermod", "groupadd"):
         return bool(_bare(nxt)) and _bare(nxt) not in _PROSE
-    if word == "filament-kit":
+    if word in ("spoolwarden", "filament-kit"):
         return _bare(nxt) in _KIT
     if word in _AFTER:
         return _bare(nxt) in _AFTER[word]

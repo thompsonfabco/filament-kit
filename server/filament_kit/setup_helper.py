@@ -111,9 +111,11 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update", "--yes"
         "local_intake_remove": ("local-intake", "remove", "--yes"),
         # Share corrections (label_reader.share_corrections): the module's own config command, then its restart
         "local_intake_share": ("local-intake", "share-corrections"),
+        # Send now on the corrections waiting: the reader does the upload, the job only asks it (and may wait long)
+        "corrections_send": ("label-reader", "corrections", "send"),
         # the "Flash a device" tab, Printer Station plugged into the server: the answers wait in reader_flash.PENDING
         "reader_setup": ("reader", "setup", "--pending")}
-WRAPPER = "/usr/local/bin/filament-kit"
+WRAPPER = "/usr/local/bin/spoolwarden"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
 JOURNAL_MAX = 64 * 1024
@@ -138,6 +140,7 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "local_intake_install": "the local label reader is being installed; wait until it has finished",
         "local_intake_remove": "the local label reader is being removed; wait until it has finished",
         "local_intake_share": "the Label Reader is being set for sharing corrections; wait until it has finished",
+        "corrections_send": "the corrections are being sent; wait until it has finished",
         "reader_setup": "a Tag Reader is being set up; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}

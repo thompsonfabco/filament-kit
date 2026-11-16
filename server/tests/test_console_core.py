@@ -322,8 +322,8 @@ def test_rollback_refused_with_nothing_kept_and_with_a_module_the_target_lacks(a
     config.save(cfg)
     r = post(client(app), "job", {"name": "rollback"})
     assert r.status_code == 409
-    assert r.json()["error"] == ("filament-kit 0.3.0 has no klipper module; run "
-                                 "`sudo filament-kit modules disable klipper` first")
+    assert r.json()["error"] == ("Spoolwarden 0.3.0 has no klipper module; run "
+                                 "`sudo spoolwarden modules disable klipper` first")
 
 
 def test_job_view_before_any_job(app):
@@ -1035,5 +1035,5 @@ def test_helper_ops_are_the_closed_list():
                                      "trust_revoke_all", "trust_enabled", "reader_usb"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
                                       "library_rollback", "remote_issue",
-                                      "backup", "restore", "local_intake_plan", "local_intake_install", "local_intake_remove", "local_intake_share", "reader_setup"}
+                                      "backup", "restore", "local_intake_plan", "local_intake_install", "local_intake_remove", "local_intake_share", "corrections_send", "reader_setup"}
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)

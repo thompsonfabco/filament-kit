@@ -6,8 +6,8 @@
 # (and offers custom). --server gives a station the kit server's address without a terminal;
 # station mode needs it (or a terminal to ask at). Safe to run again: an existing install is upgraded and keeps its data,
 # settings, modules, key and certificate; without --mode an upgrade asks nothing and changes no module.
-# This script installs the program; `filament-kit modules apply` (run at the end) sets up the
-# modules that are on, the same code path `sudo filament-kit config` uses later.
+# This script installs the program; `spoolwarden modules apply` (run at the end) sets up the
+# modules that are on, the same code path `sudo spoolwarden config` uses later.
 set -euo pipefail
 
 
@@ -57,7 +57,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 if [ -n "$RESTORE" ]; then
-    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup zip from the setup page or filament-kit backup create)"
+    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup zip from the setup page or spoolwarden backup create)"
     RESTORE="$(cd "$(dirname "$RESTORE")" && pwd)/$(basename "$RESTORE")"
 fi
 case "$MODE" in            # the Hub's setup names are the old words under new names
@@ -135,7 +135,7 @@ if [ "${ID:-}" != ubuntu ] || ! [ "$major" -ge 24 ] 2>/dev/null; then
     die "Ubuntu 24.04 or newer is required (found ${PRETTY_NAME:-unknown})"
 fi
 if [ "${FK_NO_SYSTEMD:-}" != 1 ] && [ ! -d /run/systemd/system ]; then
-    die "systemd is not running on this computer, and filament-kit runs as systemd services"
+    die "systemd is not running on this computer, and Spoolwarden runs as systemd services"
 fi
 if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
     echo "note: this is WSL, which is not a supported server: a phone on your network cannot reach a server inside it."
@@ -189,7 +189,7 @@ install -d -m 700 -o root -g root /var/backups/filament-kit
 # It carries the system Python version, so a distro Python upgrade rebuilds the venv.
 PYVER=$(python3 --version 2>&1)
 FK_MARKER="$OPT/.fk-installed"
-say "Installing filament-kit ($(basename "$WHEEL"))"
+say "Installing Spoolwarden ($(basename "$WHEEL"))"
 mkdir -p "$OPT"
 # Earlier versions bundled the spec library inside the program. Keep a copy of it before the venv is replaced and
 # hand it to the new program below, so an upgrade keeps its library (and its profiles do not change).
@@ -216,11 +216,13 @@ rm -f "$FK_MARKER"
 "$VENV/bin/python" -m pip install -q --force-reinstall --no-deps "$WHEEL"
 "$VENV/bin/python" -m compileall -q "$VENV/lib" >/dev/null || true
 if [ -n "$LEGACY_LIB" ]; then
-    runuser -u filament-kit -- "$VENV/bin/filament-kit" library adopt "$LEGACY_LIB"         || echo "warning: could not keep the earlier library; run: sudo filament-kit library update"
+    runuser -u filament-kit -- "$VENV/bin/filament-kit" library adopt "$LEGACY_LIB"         || echo "warning: could not keep the earlier library; run: sudo spoolwarden library update"
     rm -rf "$LEGACY_LIB"
 fi
 install -m 755 "$RES/backup.sh" "$OPT/backup.sh"
-install -m 755 "$RES/filament-kit-cli.sh" /usr/local/bin/filament-kit
+install -m 755 "$RES/spoolwarden-cli.sh" /usr/local/bin/spoolwarden
+# The old name: a small wrapper that prints one note on standard error and runs `spoolwarden` (06 section 2).
+install -m 755 "$RES/filament-kit-wrapper.sh" /usr/local/bin/filament-kit
 # Units, the avahi file and the Spoolman script: `modules apply` installs them from here.
 # Everything but the Piper voices (60-80 MB each; `modules apply` checks their hashes): kept across upgrades.
 if [ -d "$OPT/resources" ]; then
@@ -240,7 +242,7 @@ fi
 if [ -d "$RES/panel" ]; then PANEL_FW_SRC="$RES/panel"; else PANEL_FW_SRC="$HERE/../station/panel/firmware"; fi
 install -d -m 755 "$OPT/resources/panel"
 install -m 644 "$PANEL_FW_SRC/intake-panel.bin" "$PANEL_FW_SRC/VERSION" "$OPT/resources/panel/"
-# The Printer Station's firmware (no settings in it: `filament-kit reader setup` writes them over USB).
+# The Printer Station's firmware (no settings in it: `spoolwarden reader setup` writes them over USB).
 # In a release tarball it is install/reader/, in a source checkout reader/firmware/.
 if [ -d "$RES/reader" ]; then READER_FW_SRC="$RES/reader"; else READER_FW_SRC="$HERE/../reader/firmware"; fi
 install -d -m 755 "$OPT/resources/reader"
@@ -258,7 +260,7 @@ chmod -R go-w "$OPT"
 
 # ---------- restore: the backup's modules and data instead of the questions below ----------
 if [ -n "${RESTORE:-}" ]; then
-    exec /usr/local/bin/filament-kit restore --yes "$RESTORE"
+    exec /usr/local/bin/spoolwarden restore --yes "$RESTORE"
 fi
 
 # ---------- 4. install mode ----------
@@ -281,7 +283,7 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
         *) die "unknown choice '$choice'; run the install command again: $AGAIN" ;;
     esac
     if [ "$MODE" = custom ]; then
-        # the same checklist as `filament-kit config` -> Modules (cursor keys and Space; drawn on /dev/tty, as
+        # the same checklist as `spoolwarden config` -> Modules (cursor keys and Space; drawn on /dev/tty, as
         # stdout is captured here; the numbered list without a usable terminal); prompts on the terminal, the
         # choice on stdout
         # First line: the modules, comma separated. Then one `set <key>=<value>` per setting the menu asked for.
@@ -295,7 +297,7 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
 ' "$SETS" | sed -n 's/^set station\.allow=//p' | head -n 1)
         [ -z "$SERVER_ADDR" ] && SERVER_ADDR="$MENU_ADDR"
     elif [ "$MODE" != station ]; then
-        # AI is optional (off unless chosen here or later in `filament-kit config`); spools are added by hand without it
+        # AI is optional (off unless chosen here or later in `spoolwarden config`); spools are added by hand without it
         yn=""
         read -r -p "Read spool labels from photos with Claude (ai_intake; needs an Anthropic API key)? [y/N] " yn || true
         case "$yn" in
@@ -408,4 +410,4 @@ fi
 
 # ---------- 5. the modules ----------
 # (with the station on, `modules apply` also installs Piper, the [station-tts] extra, and its voice)
-exec /usr/local/bin/filament-kit modules apply
+exec /usr/local/bin/spoolwarden modules apply

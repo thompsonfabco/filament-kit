@@ -65,12 +65,12 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
     assert lines(capsys) == [
         "--   service checks skipped (FK_NO_SYSTEMD=1)",
         f"FAIL certificate missing ({config.paths().etc / 'cert.pem'})",
-        "     fix: run: sudo filament-kit cert",
+        "     fix: run: sudo spoolwarden cert",
         "--   display name: Workshop",
         f"FAIL Spoolman not reachable at {DEAD}: no answer",
         "     fix: check that the remote Spoolman is running and spoolman_url is right",
         f"FAIL Anthropic key missing ({config.paths().etc / 'anthropic_key'})",
-        "     fix: run: sudo filament-kit config  (option 4)",
+        "     fix: run: sudo spoolwarden config  (option 4)",
         f"--   reads used today: 0 of {cfg['reads_per_day']}",
         "FAIL Weigh Station not answering at http://192.0.2.30:5003",
         "     fix: check the Weigh Station machine: sudo systemctl status filament-kit-station  (url http://192.0.2.30:5003)",
@@ -93,7 +93,7 @@ def test_web_status_lines(cfg, capsys, monkeypatch):
         "                  connector: https://printer.example.com/filament/mcp   web",
         "                  app: https://printer.example.com/filament/intake",
         "  * note          sign-in passphrase not set: the Claude connector cannot sign",
-        "                  in until sudo filament-kit web passphrase",
+        "                  in until sudo spoolwarden web passphrase",
         f"  + OK            web unit answers on 127.0.0.1:{port}",
         "                  connectors: none signed in yet",
         "                  printer slots: none; tag readers: 0 + no Weigh Station",
@@ -123,7 +123,7 @@ def test_update_check_lines(cfg, capsys, monkeypatch):
     assert updates.check(cfg, fetcher=Fetcher("0.6.0")) == 0
     lines = raw_lines(capsys)
     assert lines[:2] == ["Installed: 0.5.0.", "Latest release: 0.6.0."] and lines[-1] == off
-    assert " ".join(lines[2:-1]) == ("0.6.0 was rolled back. Automatic updates skip it; sudo filament-kit update "
+    assert " ".join(lines[2:-1]) == ("0.6.0 was rolled back. Automatic updates skip it; sudo spoolwarden update "
                                      "installs it.")
 
 

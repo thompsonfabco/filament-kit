@@ -51,7 +51,7 @@ def service_text(exe: Path, env: Mapping[str, str] | None = None) -> str:
     """`env`: the installing shell's environment; its non-empty XDG_DATA_HOME / XDG_CONFIG_HOME go into the unit."""
     lines = "".join(f'Environment="{v}={_escape(env[v])}"\n' for v in XDG_VARS if env and env.get(v))
     return ("[Unit]\n"
-            "Description=filament-kit sync: Bambu Studio and Orca Slicer filament presets\n"
+            "Description=Spoolwarden Slicer Sync: Bambu Studio and Orca Slicer filament presets\n"
             "\n"
             "[Service]\n"
             "Type=oneshot\n"
@@ -61,7 +61,7 @@ def service_text(exe: Path, env: Mapping[str, str] | None = None) -> str:
 
 def timer_text() -> str:
     return ("[Unit]\n"
-            "Description=Run the filament-kit sync every 10 minutes\n"
+            "Description=Run Spoolwarden Slicer Sync every 10 minutes\n"
             "\n"
             "[Timer]\n"
             "OnBootSec=2min\n"

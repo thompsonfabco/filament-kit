@@ -71,7 +71,7 @@ def test_status_has_no_line_over_79_columns(cfg, capsys):
 def test_status_is_grouped_as_the_overview_with_a_header_and_a_summary(cfg, capsys):
     rc, out, _ = run(capsys, "status")
     lines = lines_of(out)
-    assert re.fullmatch(r"filament-kit \S+ - Workshop hub - \S+", lines[0])
+    assert re.fullmatch(r"Spoolwarden \S+ - Workshop hub - \S+", lines[0])
     assert lines[1] == ""
     headings = [x for x in lines if x and not x.startswith(" ") and x != lines[0]]
     assert headings[:-1] == ["Hub", "Spoolman", "Label Reader", "Devices", "Filament Catalog"]
@@ -204,7 +204,7 @@ def test_exit_codes_of_06_6_7(cfg, capsys, monkeypatch):
     assert (rc, out) == (3, "")                                           # needs sudo
     assert err == ("Error: this needs administrator rights.\n"
                    "Fix: run it with sudo:\n"
-                   "     sudo filament-kit backup create\n")
+                   "     sudo spoolwarden backup create\n")
     monkeypatch.setattr(cli, "_server_api", lambda: None)
     c = config.load()                                                     # printers are listed only with their module on
     c["modules"]["printers"] = True
@@ -230,7 +230,7 @@ def test_a_permission_error_is_one_error_with_the_command_to_run_with_sudo(cfg, 
     rc, out, err = run(capsys, "cert")
     assert (rc, out) == (3, "")
     assert err.splitlines()[0] == "Error: /etc/filament-kit/config.json: permission denied."
-    assert err.splitlines()[-1] == "     sudo filament-kit cert"
+    assert err.splitlines()[-1] == "     sudo spoolwarden cert"
 
 
 def test_notes_go_to_standard_error_with_the_word_note(cfg, capsys):
@@ -284,37 +284,37 @@ def test_wrap_never_cuts_a_word_and_keeps_one_too_long_whole_on_its_own_line(mon
 
 def test_wrap_breaks_only_at_spaces_outside_a_command():
     from filament_kit import output
-    text = ("this host has no pairing yet, and the next step cannot go on until it has one: run sudo filament-kit "
-            "station pair here, then run sudo filament-kit status again")
+    text = ("this host has no pairing yet, and the next step cannot go on until it has one: run sudo spoolwarden "
+            "station pair here, then run sudo spoolwarden status again")
     got = output.wrap(text, indent=5, first=0)
     assert len(got) > 1 and all(len(x) <= 79 for x in got)
     for line in got:
         assert "`" not in line and chr(2) not in line      # nothing is added to a command
-    assert "sudo filament-kit station pair" in " ".join(got) and any("sudo filament-kit status" in x for x in got)
-    long_cmd = "sudo filament-kit profiles apply-updates --line a-very-long-line-name --all --dry-run --output /tmp/some/path.txt"
+    assert "sudo spoolwarden station pair" in " ".join(got) and any("sudo spoolwarden status" in x for x in got)
+    long_cmd = "sudo spoolwarden profiles apply-updates --line a-very-long-line-name --all --dry-run --output /tmp/some/path.txt"
     assert len(long_cmd) > 80
     assert [x.strip() for x in output.wrap(f"run {long_cmd} now", indent=2)] == ["run", long_cmd, "now"]
 
 
 def test_the_no_terminal_error_of_station_pair_keeps_its_command_whole(capsys):
     from filament_kit import output
-    output.error("sudo filament-kit station pair needs a terminal: it asks for the link and for you to compare the "
+    output.error("sudo spoolwarden station pair needs a terminal: it asks for the link and for you to compare the "
                  "fingerprint. Nothing was saved.")
     err = capsys.readouterr().err
     check_width(err)
     assert "`" not in err
-    assert "sudo filament-kit station pair needs a terminal" in err
+    assert "sudo spoolwarden station pair needs a terminal" in err
 
 
 def test_the_local_pair_error_keeps_both_its_commands_whole(capsys):
     from filament_kit import output
     output.error("--local pairs a station with the kit server on the same machine, and the server module is off "
-                 "here.\nfix: run sudo filament-kit pair --station on the kit server, then sudo filament-kit station "
+                 "here.\nfix: run sudo spoolwarden pair --station on the kit server, then sudo spoolwarden station "
                  "pair here")              # the text of cli.py cmd_station_pair_local: its spans are mid-text
     err = capsys.readouterr().err
     check_width(err)
     assert "`" not in err
-    assert "sudo filament-kit pair --station" in err and "sudo filament-kit station pair" in err
+    assert "sudo spoolwarden pair --station" in err and "sudo spoolwarden station pair" in err
 
 
 def test_long_state_word_pushes_its_own_row_only(monkeypatch):
@@ -383,7 +383,7 @@ def test_unpair_list_and_backup_list_are_tables(cfg, capsys, monkeypatch):
     assert rc == 0 and lines[0].split() == ["NAME", "PAIRED", "LAST", "SEEN", "ID"]
     assert lines[1].startswith("Bench phone  ") and lines[1].split()[-2:] == ["never", "d1"]
     monkeypatch.setattr(cli.pairing, "devices", lambda: [])
-    assert run(capsys, "unpair")[1] == "Nothing paired yet.\nPair a phone: sudo filament-kit pair\n"
+    assert run(capsys, "unpair")[1] == "Nothing paired yet.\nPair a phone: sudo spoolwarden pair\n"
 
 
 def test_switches_are_taken_out_of_any_place_before_a_bare_dash_dash():
@@ -628,7 +628,7 @@ def test_colour_needs_a_terminal_and_a_terminal_type_that_can_show_it(monkeypatc
 
 def test_old_rows_gives_back_the_old_lines_and_refuses_one_it_does_not_know():
     from conftest import old_rows
-    shown = ("filament-kit 0.5.2 - Workshop hub - 2026-11-14\n\nHub\n  + OK            service active\n"
+    shown = ("Spoolwarden 0.5.2 - Workshop hub - 2026-11-14\n\nHub\n  + OK            service active\n"
              "  ! needs a look  Spoolman not reachable\n                  Fix: start it\n  * note          a note\n\n"
              "1 needs a look - 1 OK - 1 note\n")
     assert old_rows(shown) == ["OK   service active", "FAIL Spoolman not reachable", "     fix: start it", "--   a note"]
@@ -767,16 +767,16 @@ def test_update_and_remote_issue_without_root_exit_3_with_the_command(cfg, capsy
     monkeypatch.setattr(cli, "_invoked", ["update"])
     assert updates.update(cfg_) == 3
     err = capsys.readouterr().err
-    assert err.startswith("Error: this needs administrator rights.") and "     sudo filament-kit update\n" in err
+    assert err.startswith("Error: this needs administrator rights.") and "     sudo spoolwarden update\n" in err
     monkeypatch.setattr(cli, "_invoked", ["update", "--rollback"])
     assert updates.rollback(cfg_) == 3
-    assert "     sudo filament-kit update --rollback\n" in capsys.readouterr().err
+    assert "     sudo spoolwarden update --rollback\n" in capsys.readouterr().err
     monkeypatch.setattr(cli, "_invoked", ["remote", "issue"])
     monkeypatch.setattr(remote, "_is_root", lambda: False)
     cfg_["modules"]["remote"] = True
     assert remote.issue(cfg_) == 3
     got = capsys.readouterr()
-    assert got.out == "" and "Fix: run it with sudo:" in got.err and "sudo filament-kit remote issue" in got.err
+    assert got.out == "" and "Fix: run it with sudo:" in got.err and "sudo spoolwarden remote issue" in got.err
 
 
 def test_remote_errors_are_on_standard_error(cfg, capsys, monkeypatch):

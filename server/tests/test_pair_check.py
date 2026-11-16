@@ -71,7 +71,7 @@ def test_a_mismatch_without_a_previous_pair_is_fetched_again(tmp_path):
 
 def test_a_mismatch_with_nothing_to_fall_back_on_says_so_and_does_not_block(tmp_path):
     tls = _setup(tmp_path)
-    assert "filament-kit apply" in _check(tmp_path)
+    assert "spoolwarden apply" in _check(tmp_path)
     assert not _matches(tls)
 
 
@@ -107,7 +107,7 @@ def test_a_mismatched_previous_pair_is_never_served_even_when_expired(tmp_path):
     tls = _setup(tmp_path)
     _pair(tls / "previous", "old.example.org", LONG_AGO)
     shutil.copy(tmp_path / "other/privkey.pem", tls / "previous/privkey.pem")
-    assert "filament-kit apply" in _check(tmp_path)
+    assert "spoolwarden apply" in _check(tmp_path)
     assert not _matches(tls)
 
 

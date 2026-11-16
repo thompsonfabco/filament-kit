@@ -1,4 +1,4 @@
-"""The updater: module `updates` (off by default) and `filament-kit update [--check|--rollback]` (spec R 2.5).
+"""The updater: module `updates` (off by default) and `spoolwarden update [--check|--rollback]` (spec R 2.5).
 
 `update` finds the latest release, downloads and verifies it exactly as get.sh does (`release.fetch`: the
 signature over SHA256SUMS, then the tarball's hash), keeps it in /opt/filament-kit/releases/<version>/, stops the
@@ -252,7 +252,7 @@ def _install(cfg: dict, version: str, run: Callable[[list[str]], int]) -> bool:
     try:
         with _sigterm_exits():
             root = release.extract(tarball, version, work)
-            print(f"stopping {', '.join(timers + services) or 'nothing'}; installing filament-kit {version}")
+            print(f"stopping {', '.join(timers + services) or 'nothing'}; installing Spoolwarden {version}")
             stopped = (services, timers)
             _systemctl(run, "stop", timers)
             _systemctl(run, "stop", services)
@@ -298,14 +298,14 @@ def _remove_units_left_behind(before: set[str], version: str, run: Callable[[lis
             (Path(UNIT_DIR) / unit).unlink(missing_ok=True)
             removed.append(unit)
         except OSError as e:
-            print(f"warning: could not remove {UNIT_DIR}/{unit}, which filament-kit {version} does not use: {e}",
+            print(f"warning: could not remove {UNIT_DIR}/{unit}, which Spoolwarden {version} does not use: {e}",
                   file=sys.stderr)
     if removed:
         try:
             run(["systemctl", "daemon-reload"])
         except OSError as e:
             output.err(f"warning: systemctl daemon-reload: {e}")
-        print(f"Removed {', '.join(removed)}: filament-kit {version} does not have them.")
+        print(f"Removed {', '.join(removed)}: Spoolwarden {version} does not have them.")
 
 
 def _install_older(cfg: dict, version: str, run: Callable[[list[str]], int]) -> bool:
@@ -320,7 +320,7 @@ def _install_older(cfg: dict, version: str, run: Callable[[list[str]], int]) -> 
 def _require_root() -> bool:
     if os.environ.get("FK_NO_SYSTEMD") != "1" and hasattr(os, "geteuid") and os.geteuid() != 0:
         from .cli import _sudo_command
-        output.need_sudo(_sudo_command("sudo filament-kit update"))
+        output.need_sudo(_sudo_command("sudo spoolwarden update"))
         return False
     return True
 
@@ -407,10 +407,10 @@ def check(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
     output.out(f"Latest release: {latest}." if info["newer"] else f"Latest release: {latest} (up to date).")
     st = _read_state()
     if info["held"] == latest:
-        output.out(f"{latest} was rolled back. Automatic updates skip it; sudo filament-kit update installs it.")
+        output.out(f"{latest} was rolled back. Automatic updates skip it; sudo spoolwarden update installs it.")
     if isinstance(st.get("failed"), str) and st["failed"]:
         output.out(f"Installing {st['failed']} failed before. Automatic updates wait for a newer release; "
-                   "sudo filament-kit update tries it again.")
+                   "sudo spoolwarden update tries it again.")
     repair = half_install()
     if repair:
         output.out_lines(output.status_row("needs a look", "The last install or update stopped halfway.",
@@ -504,7 +504,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
     if not _require_root():
         return output.NEEDS_SUDO
     if not _installed():
-        print("error: filament-kit is not installed here (no config.json); install it with get.sh",
+        print("error: Spoolwarden is not installed here (no config.json); install it with get.sh",
               file=sys.stderr)
         return 1
     try:
@@ -531,12 +531,12 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
         if scheduled and st.get("held") == latest:
             _write_state(last_ok_at=now)
             output.out(f"{latest} was rolled back; the timer leaves it "
-                       f"(sudo filament-kit update installs it)")
+                       f"(sudo spoolwarden update installs it)")
             return _feed(fetcher, rel)
         if scheduled and st.get("failed") == latest:
             _write_state(last_ok_at=now)
             output.out(f"installing {latest} failed before; the timer waits for a newer release "
-                       f"(sudo filament-kit update tries it again)")
+                       f"(sudo spoolwarden update tries it again)")
             return _feed(fetcher, rel)
         if not _kept(cur) and not nightly_now:
             try:
@@ -563,7 +563,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
                 raise
             if not ok:
                 output.out_lines(output.status_row("failed", f"Updating to {latest} failed.",
-                                                   "see the whole log: sudo filament-kit logs"))
+                                                   "see the whole log: sudo spoolwarden logs"))
                 return _restore(cfg, cur, kept, old_previous, run)
     except Busy as e:
         print(f"{'skipped' if scheduled else 'error'}: printer {e} is mapping or loading; "
@@ -765,7 +765,7 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
         output.err(f"error: no kept copy of {cur} to go back to; reinstall it by hand: "
                    + f"curl -fsSL <get.sh url> | sudo bash -s -- --version {cur}")
         return 1
-    print(f"reinstalling filament-kit {cur}", file=sys.stderr)
+    print(f"reinstalling Spoolwarden {cur}", file=sys.stderr)
     try:
         restored = _install_older(cfg, cur, run)
     except ReleaseError as e:
@@ -773,10 +773,10 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
         restored = False
     if restored:
         _write_state(previous=old_previous)
-        print(f"filament-kit {cur} is back in place; the update failed", file=sys.stderr)
+        print(f"Spoolwarden {cur} is back in place; the update failed", file=sys.stderr)
     else:
         output.err(f"error: reinstalling {cur} failed too; try again with: "
-                   + "sudo filament-kit update --rollback")
+                   + "sudo spoolwarden update --rollback")
     return 1
 
 
@@ -798,8 +798,8 @@ def _modules_unfit(target: str) -> list[str]:
 
 
 def _unfit_text(target: str, on: list[str]) -> str:
-    return (f"filament-kit {target} has no {', '.join(on)} module; run "
-            + " and ".join(f"`sudo filament-kit modules disable {n}`" for n in on) + " first")
+    return (f"Spoolwarden {target} has no {', '.join(on)} module; run "
+            + " and ".join(f"`sudo spoolwarden modules disable {n}`" for n in on) + " first")
 
 
 def _modules_fit(target: str) -> bool:
@@ -819,7 +819,7 @@ def _modules_fit(target: str) -> bool:
         for n in unknown:
             del mods[n]
         config.save(raw)
-        print(f"Removed {', '.join(unknown)} (off) from config.json's modules: filament-kit {target} does not know it.")
+        print(f"Removed {', '.join(unknown)} (off) from config.json's modules: Spoolwarden {target} does not know it.")
     return True
 
 
@@ -843,7 +843,7 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
                 ok = _install_older(cfg, target, run)
             if not ok:
                 output.out_lines(output.status_row("failed", f"Rolling back to {target} failed.",
-                                                   "see the whole log: sudo filament-kit logs"))
+                                                   "see the whole log: sudo spoolwarden logs"))
                 return output.FAILED
     except Busy as e:
         print(f"error: printer {e} is mapping or loading; try again when it is done", file=sys.stderr)
@@ -855,5 +855,5 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
     _write_state(previous=None, held=held)
     output.out_lines(output.status_row("done", f"Rolled back to {target}. The Hub is back."))
     if held:
-        output.out(f"Automatic updates will not install {held} again; sudo filament-kit update does.")
+        output.out(f"Automatic updates will not install {held} again; sudo spoolwarden update does.")
     return 0

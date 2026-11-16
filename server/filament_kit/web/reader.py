@@ -330,7 +330,7 @@ class Reader:
             if not self._lan(request):
                 return reply(403, "error", "home network only")
             if not await run_in_threadpool(self.tokens.check, request.headers.get("x-auth-token")):
-                return reply(401, "error", "unauthorized: run filament-kit reader token")
+                return reply(401, "error", "unauthorized: run spoolwarden reader token")
             try:
                 return await fn(request)
             except slots.SlotError as e:

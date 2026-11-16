@@ -140,7 +140,7 @@ def _reader_revoke(m, rec, tmp_path):
             return True
     m.setattr(web_reader, "TokenStore", Store)
     return (["tag-reader", "revoke", "tr3"], "Revoke the token tr3? A Tag Reader using it is refused from now on. Set it "
-            "up again with sudo filament-kit tag-reader flash to give it a new token.")
+            "up again with sudo spoolwarden tag-reader flash to give it a new token.")
 
 
 def _reader_revoke_old(m, rec, tmp_path):
@@ -156,20 +156,20 @@ def _uninstall(m, rec, tmp_path):
     m.setattr(updates, "current_version", lambda: "1.2.0")
     m.setattr(release, "extract", lambda tarball, ver, work: root)
     m.setattr(cli, "_run_removal", lambda cmd, stdin_file: (rec("uninstall")() or 0, ""))
-    return ["uninstall"], "Remove filament-kit from this machine? Its data stays unless you add --purge."
+    return ["uninstall"], "Remove Spoolwarden from this machine? Its data stays unless you add --purge."
 
 
 def _update(m, rec, tmp_path):
     m.setattr(updates, "check_info", lambda cfg, **k: {"newer": True, "latest": "0.5.3"})
     m.setattr(updates, "update", lambda cfg, **k: rec("update")() or 0)
-    return ["update"], "Update to 0.5.3? filament-kit stops while it installs and starts again by itself."
+    return ["update"], "Update to 0.5.3? Spoolwarden stops while it installs and starts again by itself."
 
 
 def _rollback(m, rec, tmp_path):
     m.setattr(updates, "_read_state", lambda: {"previous": "0.5.1"})
     m.setattr(updates, "_kept", lambda version: True)
     m.setattr(updates, "rollback", lambda cfg, **k: rec("rollback")() or 0)
-    return ["update", "--rollback"], "Roll back to 0.5.1? filament-kit stops while it installs and starts again by itself."
+    return ["update", "--rollback"], "Roll back to 0.5.1? Spoolwarden stops while it installs and starts again by itself."
 
 
 def _remote_issue(m, rec, tmp_path):
@@ -362,7 +362,7 @@ def test_the_fix_line_names_the_command_again_with_yes(rec, monkeypatch, termina
     argv, _ = _unpair(monkeypatch, rec, tmp_path)
     terminal(False)
     err = run(capsys, argv)[2]
-    assert err.splitlines()[-1].strip() == "sudo filament-kit unpair d1 --yes"
+    assert err.splitlines()[-1].strip() == "sudo spoolwarden unpair d1 --yes"
 
 
 def test_purge_asks_only_for_the_typed_word(rec, monkeypatch, terminal, capsys, tmp_path):
@@ -395,7 +395,7 @@ def test_the_config_menu_asks_in_the_hub_pages_words_and_a_no_removes_nothing(re
     monkeypatch.setattr(sys, "stdin", io.StringIO("10\n1\nf\nn\nq\nq\nq\n"))        # Printers, the printer, forget: no
     assert cli.main(["config", "--numbered"]) == 0
     out = " ".join(capsys.readouterr().out.split())
-    assert SERIAL in registry.load() and "Forget Workshop X1? filament-kit stops connecting to it and deletes its Access Code." in out
+    assert SERIAL in registry.load() and "Forget Workshop X1? Spoolwarden stops connecting to it and deletes its Access Code." in out
     assert "To use it again, add it again." in out and "Nothing changed." in out
     monkeypatch.setattr(sys, "stdin", io.StringIO("10\n1\nf\nyes\nq\nq\n"))
     assert cli.main(["config", "--numbered"]) == 0

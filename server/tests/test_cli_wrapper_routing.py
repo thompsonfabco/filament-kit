@@ -1,4 +1,4 @@
-"""install/filament-kit-cli.sh: which commands run as root and which as the service user (FA-105).
+"""install/spoolwarden-cli.sh: which commands run as root and which as the service user (FA-105).
 
 A copy of the wrapper runs under bash with `id` saying root, and stub `runuser` and program that print what they were
 given, so each command's route is read off the output.
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-WRAPPER = ROOT / "install" / "filament-kit-cli.sh"
+WRAPPER = ROOT / "install" / "spoolwarden-cli.sh"
 BASH = shutil.which("bash")
 
 pytestmark = pytest.mark.skipif(BASH is None or os.name == "nt", reason="the wrapper is a bash script for the Hub")
@@ -21,7 +21,8 @@ ROOT_COMMANDS = [
     ["uninstall"], ["station", "pair"], ["setup-code"], ["backup", "create"], ["restore", "x.zip"],
     ["web", "passphrase"], ["reader", "token", "a"], ["reader", "revoke", "a"], ["reader", "setup"],
     ["local-intake", "install", "--yes", "--planned"], ["local-intake", "remove", "--yes"],
-    ["local-intake", "token"], ["local-intake", "plan"],
+    ["local-intake", "token"], ["local-intake", "plan"], ["local-intake", "share-corrections", "on"],
+    ["label-reader", "corrections"], ["label-reader", "corrections", "send"],
     ["certificate"], ["logs"], ["logs", "filament-kit-web", "--lines", "50"], ["features", "on", "web"],
     ["weigh-station", "pair"], ["spoolman", "address", "http://spoolman.example:7912"], ["catalog", "token"],
     ["catalog", "token", "--remove"], ["backup", "keep", "21"], ["remote", "get-certificate"], ["config", "set", "model", "x"],

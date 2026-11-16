@@ -99,7 +99,7 @@ def check_url(url: str) -> str | None:
 
 
 def write_token(token: str):
-    """Store the reader's bearer token (root: the setup page's helper, `filament-kit local-intake token`),
+    """Store the reader's bearer token (root: the setup page's helper, `spoolwarden local-intake token`),
     root:filament-kit 640 like the other secrets the service reads. The value is never printed or logged. ValueError
     for one that is not a single word of printable characters."""
     import os
@@ -222,7 +222,7 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
                 f": {msg}" if msg else "")
             if e.code == 401 or code == "unauthorized":
                 raise LocalReaderError("unauthorized", "the local reader's token is wrong or missing (set it on "
-                                                       "the setup page or with sudo filament-kit local-intake token)") from None
+                                                       "the setup page or with sudo spoolwarden local-intake token)") from None
             if code == "unsupported_api_version":
                 raise LocalReaderError("version", "the local reader does not speak this kit's API version: "
                                                   "update the local reader") from None
@@ -385,7 +385,7 @@ def health(cfg: dict, timeout: float = HEALTH_TIMEOUT) -> dict:
         out["error"] = f"the local reader is not ready ({h.get('status')!r})"
     if out["auth_required"] and out["ok"] and not _token():
         out["ok"], out["error"] = False, ("the local reader needs a token: set it on the setup page (Settings, Local "
-                                          "label reader) or with sudo filament-kit local-intake token")
+                                          "label reader) or with sudo spoolwarden local-intake token")
     return out
 
 
@@ -574,10 +574,12 @@ def feedback_list(cfg: dict) -> dict:
     out = _request(_feedback_base(cfg), body=None, timeout=FEEDBACK_TIMEOUT, auth=True, errors=_FEEDBACK_ERRORS)
     entries = out.get("entries") if isinstance(out.get("entries"), list) else out.get("items")
     mb = out.get("bundle_mb")
+    entries = [e for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []
+    count = _count(out.get("count"))
     return {"opt_in": out.get("opt_in") is True, "endpoint_configured": out.get("endpoint_configured") is True,
-            "count": _count(out.get("count")) or 0,
+            "count": len(entries) if count is None else count,
             "bundle_mb": float(mb) if isinstance(mb, (int, float)) and not isinstance(mb, bool) else 0.0,
-            "entries": [e for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []}
+            "entries": entries}
 
 
 def feedback_add(cfg: dict, images: list[bytes], predicted: dict, corrected: dict, note: str = "", *,

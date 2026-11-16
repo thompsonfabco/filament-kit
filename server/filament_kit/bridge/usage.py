@@ -99,6 +99,7 @@ ACTIVE = {'RUNNING', 'PAUSE', 'PREPARE', 'SLICING'}
 TERMINAL = {'FINISH', 'FAILED'}
 DIRS = ('/', '/cache')
 CALIB_PREFIX = 'fk-calib-'      # our calibration job (calib3mf): not a print, its file is deleted afterwards
+CALIB_PREFIXES = (CALIB_PREFIX, 'sw-calib-')     # the same job under the new name is skipped too
 MAX_SLICE_INFO = 4 * 1024 * 1024
 MAX_3MF = 512 * 1024 * 1024        # a sliced job is tens of MB; more is not read into memory
 MAX_USED_G = 5000.0        # more than this on one plate is a damaged or hostile file, not a print
@@ -574,7 +575,7 @@ class Tracker:
             job, w.job = w.job, None
             if first or gs not in TERMINAL or prev not in ACTIVE or job is None:
                 return
-            if job['subtask'].startswith(CALIB_PREFIX):
+            if job['subtask'].startswith(CALIB_PREFIXES):
                 return
             pct = 100.0 if gs == 'FINISH' else float(status._int(report.get('mc_percent'), 0) or 0)
             log.info("usage: printer %s: %s %s at %s %%", serial, job['subtask'], gs, pct)

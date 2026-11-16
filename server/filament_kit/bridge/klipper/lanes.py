@@ -11,13 +11,14 @@ from __future__ import annotations
 NAMESPACE = "lane_data"
 NEVER = ("afc", "lanedata")
 SOURCE = "filament-kit"      # every lane the kit writes says so: its own lane_data is not a lane_data printer
+SOURCES = (SOURCE, "spoolwarden")     # the kit recognises its lanes under either name
 
 
 def kit_written(db) -> bool:
     """The lane_data namespace holds only lanes the kit published (so detection must not pick the lanedata adapter
     for the printer the kit publishes them for)."""
     lanes_ = [v for v in (db or {}).values() if isinstance(v, dict)]
-    return bool(lanes_) and all(v.get("source") == SOURCE for v in lanes_)
+    return bool(lanes_) and all(v.get("source") in SOURCES for v in lanes_)
 
 
 def should_publish(printer, adapter) -> bool:
@@ -67,7 +68,7 @@ def retract(client, pl: dict, last: dict, db: dict | None = None) -> list[str]:
     """Delete the kit's own lanes that `pl` no longer holds (a unit lost slots; `pl` empty = publishing is off):
     those it wrote this run (`last`, updated in place) and, when `db` (the namespace as read) is given, those it wrote
     earlier. A lane without the kit's source is never touched. Returns the keys deleted."""
-    mine = set(last) | {k for k, v in (db or {}).items() if isinstance(v, dict) and v.get("source") == SOURCE}
+    mine = set(last) | {k for k, v in (db or {}).items() if isinstance(v, dict) and v.get("source") in SOURCES}
     gone = sorted(k for k in mine if k not in pl)
     for key in gone:
         client.db_delete(NAMESPACE, key)

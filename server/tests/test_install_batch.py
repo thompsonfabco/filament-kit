@@ -209,7 +209,7 @@ def test_the_prompt_comes_after_the_terminal_is_set_so_no_key_after_it_is_lost(m
     assert events.index(("set", termios.TCSAFLUSH)) < events.index(("write", "Token: "))
 
 
-# ---------- 4: `filament-kit pair` without sudo ----------
+# ---------- 4: `spoolwarden pair` without sudo ----------
 
 def test_pair_with_an_unreadable_certificate_says_use_sudo(monkeypatch, capsys):
     _save(modules.MODES["server"])
@@ -222,7 +222,7 @@ def test_pair_with_an_unreadable_certificate_says_use_sudo(monkeypatch, capsys):
     monkeypatch.setattr(Path, "read_bytes", read_bytes)
     assert cli.main(["pair"]) == 1
     err = capsys.readouterr().err
-    assert "run it with sudo: sudo filament-kit pair" in err
+    assert "run it with sudo: sudo spoolwarden pair" in err
     assert "create it first" not in err
 
 
@@ -232,14 +232,14 @@ def test_pair_with_an_unreadable_config_says_use_sudo(monkeypatch, capsys):
     monkeypatch.setattr(config, "load", load)
     assert cli.main(["pair", "--pc"]) == 3
     err = capsys.readouterr().err
-    assert err.startswith("Error: ") and "sudo filament-kit pair --pc" in err
+    assert err.startswith("Error: ") and "sudo spoolwarden pair --pc" in err
 
 
 def test_pair_without_a_certificate_as_a_user_says_use_sudo(monkeypatch, capsys):
     _save(modules.MODES["server"])
     monkeypatch.setattr(cli, "_is_root", lambda: False)
     assert cli.main(["pair"]) == 1
-    assert "run it with sudo: sudo filament-kit pair" in capsys.readouterr().err
+    assert "run it with sudo: sudo spoolwarden pair" in capsys.readouterr().err
 
 
 def test_pair_without_a_certificate_as_root_says_create_it(monkeypatch, capsys):
@@ -415,7 +415,7 @@ def test_finish_shows_the_app_qr_then_waits_then_pairs(finish_env, monkeypatch, 
     url = "https://192.0.2.5:8710/app.apk"
     assert f"[QR {url}]" in out
     i_app, i_wait = out.index(f"[QR {url}]"), out.index("Press Enter when the app is installed")
-    i_pair = out.index("$ /usr/local/bin/filament-kit pair")
+    i_pair = out.index("$ /usr/local/bin/spoolwarden pair")
     assert i_app < i_wait < i_pair
     assert "Android app" in out[:i_app]
     assert "or s to skip" in out
@@ -429,7 +429,7 @@ def test_finish_s_skips_the_pairing_code(finish_env, monkeypatch, capsys):
     apply.finish(config.load(), run=run)
     out = capsys.readouterr().out
     assert not any("pair" in c for c in calls)
-    assert "sudo filament-kit pair" in out
+    assert "sudo spoolwarden pair" in out
 
 
 def test_finish_without_a_terminal_prints_the_app_link_and_no_pairing_token(finish_env, monkeypatch, capsys):
@@ -443,7 +443,7 @@ def test_finish_without_a_terminal_prints_the_app_link_and_no_pairing_token(fini
     assert "https://192.0.2.5:8710/app.apk" in out and "[QR " not in out
     assert "Press Enter" not in out
     assert not [c for c in calls if c[:2] == [apply.WRAPPER, "pair"]]
-    assert "sudo filament-kit pair" in out and "fkit://" not in out
+    assert "sudo spoolwarden pair" in out and "fkit://" not in out
 
 
 def test_finish_without_an_apk_goes_straight_to_pairing(finish_env, monkeypatch, capsys):

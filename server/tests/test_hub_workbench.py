@@ -51,7 +51,7 @@ def test_the_three_workbench_groups_are_keyed_on_workbench_and_console_groups_ar
 def test_every_rule_of_the_workbench_groups_is_inside_a_group_of_a_profile_choice_and_no_other_theme_is_keyed():
     groups = _groups(CSS)
     seen = {m for sels in groups.values() for s in sels for m in re.findall(r'data-look="([a-z]+)"', s)}
-    assert seen == {"workbench", "palette"}                      # Panes arrives with S6.8
+    assert seen == {"workbench", "palette", "panes"}
 
 
 def test_the_card_width_is_18rem_so_cards_grow_with_the_text_size():
@@ -186,15 +186,15 @@ return out;
 def _check_choose(page):
     names = [T("theme_console_name"), T("theme_workbench_name")]
     assert page["start"][:2] == [{"name": names[0], "on": True, "look": "console", "preview": "console"},
-                                 {"name": names[1], "on": False, "look": "workbench", "preview": "workbench"}] and len(page["start"]) == 3
+                                 {"name": names[1], "on": False, "look": "workbench", "preview": "workbench"}] and len(page["start"]) == 4
     chose = page["chose"]
     assert chose["stored"] == "workbench" and chose["look"] == "workbench"
-    assert [t["on"] for t in chose["tiles"]] == [False, True, False]
+    assert [t["on"] for t in chose["tiles"]] == [False, True, False, False]
     assert chose["result"] == T("appearance_theme_saved", name=names[1])
     assert chose["metas"] == [chose["surface"]] * 2 and chose["surface"] in _surfaces("workbench")
-    assert [t["on"] for t in page["again"]] == [False, True, False]                      # the choice survives the redraw
+    assert [t["on"] for t in page["again"]] == [False, True, False, False]                      # the choice survives the redraw
     assert page["console"]["stored"] == "console" and page["console"]["look"] == "console"
-    assert [t["on"] for t in page["console"]["tiles"]] == [True, False, False]
+    assert [t["on"] for t in page["console"]["tiles"]] == [True, False, False, False]
 
 
 def test_the_hub_settings_picker_offers_workbench_and_keeps_the_choice(hub, tmp_path):

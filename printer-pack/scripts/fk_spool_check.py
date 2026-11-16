@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""filament-kit printer pack: compare the sliced filament with the active Spoolman spool (print start).
+"""Spoolwarden printer pack: compare the sliced filament with the active Spoolman spool (print start).
 
 Run by Klipper (RUN_SHELL_COMMAND CMD=fk_spool_check) from _FK_SPOOL_CHECK. Klipper waits for this script, so it
 only reads and prints. In cancel mode it starts a detached copy of itself (`--cancel MSG`) that, once the start macro

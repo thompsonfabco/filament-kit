@@ -33,9 +33,9 @@ line · 9 Stage 6: Themes · 10 Stage 7: wording · 11 Hub API additions · 12 D
    columns of the "Needs from the Hub" sections); section 11 lists every addition.
 7. **One feature, four interfaces.** A feature goes into the Hub page, the web app, the app and the command line,
    or the step says in one line why one of them cannot have it (foundations section 3).
-8. **The code rename is separate.** The command name, package and paths change in their own piece of work with its
-   own schedule. Steps that wait for it say so ("Waits for the rename"); everything else uses the new words on
-   screen and keeps the code names.
+8. **The rename comes in two parts.** What a person sees or types (the product name, the `spoolwarden` command)
+   changes in S5.9 and S7.4 to S7.8. The package, paths, unit names, protocol names and repository names change
+   in a later piece of work with its own schedule; until then every step keeps those code names.
 9. **Example data only.** Tests, fixtures and screenshots use the fake data of `mockups/CONTENT-SPEC.md` and the
    documentation addresses `192.0.2.x`, `printer.local` and `*.example` (foundations section 12, rule 8).
 
@@ -731,8 +731,10 @@ web app · S · Depends on: S3.2 · Beside: S3.3 to S3.6, S3.8, S3.10, S3.11, S3
 web app · M · Depends on: S3.15 · Beside: none
 - **Files today:** `web/static/app.js` and each screen's script.
 - **Change:** 04 10.3, third point: while the Hub cannot be reached, every group keeps its last data with
-  "Last update <age>: the Hub did not answer.", and each button that needs the Hub gets `aria-disabled` and the
-  reason "Needs the Hub." Each screen marks its own groups and buttons; the shell switches the marks on and off.
+  "Last update <age>: the Hub did not answer." ("Not loaded: the Hub did not answer." when it never loaded), and
+  each control that needs the Hub (buttons, switches, a list's search field and filters) gets `aria-disabled` and
+  the reason "Needs the Hub."; rows that only open something are not marked. Each screen marks its own groups
+  and controls; the shell switches the marks on and off.
 - **Keep:** until this step, a press while offline shows the screen's own error in place, as today.
 - **Other interfaces:** the app has its own offline state (S4.4); the Hub page shows "The Hub is not answering"
   (S1.9); the command line runs on the Hub.
@@ -1018,7 +1020,7 @@ command line · L · Depends on: S5.3; S2.18 when present · Beside: Stages 3 an
 - **Check:** AUT-9 at 80 columns; a test that `help --markdown` lists every command of 06 3.2.
 
 ### S5.9 The `spoolwarden` command
-command line · S · Depends on: S5.8 · Beside: S6.1 to S6.9 · **Waits for the rename**
+command line · S · Depends on: S5.8 · Beside: S6.1 to S6.9, S7.4 to S7.6
 - **Files today:** `cli.py` (program name, line 2260); the installed `filament-kit` entry point.
 - **Change:** 06 2: `spoolwarden` installed where `filament-kit` is today; `filament-kit` becomes the wrapper that
   prints its one-line note on standard error; help, messages and Fix lines name `spoolwarden`; `--version` prints
@@ -1065,9 +1067,7 @@ app · M · Depends on: S6.1, S4.15 · Beside: S6.2
 Hub page, web app · L · Depends on: S6.2 · Beside: S6.5
 - **Files today:** `components.css` (profile groups keyed on Console only); `tokens.json` already holds Workbench.
 - **Change:** the `sidebar`, `cards` and `card` profile groups keyed on Workbench (F6.1, 02 1.3); the Workbench tile
-  in both pickers. Two pieces of shared markup that every look carries, added here or in a step right after: the
-  "Sort by" label in the collection head (02 6.1) and the navigation's `data-state="off"` with its hidden suffix
-  for a switched-off section (02 2.2).
+  in both pickers. The two pieces of shared markup the look needs are step S6.4b.
 - **Keep:** markup and scripts: a theme brings no markup or script of its own (F6.1).
 - **Check:** AUT-5 in Workbench light and dark; manual: release checklist step 4 (Workbench part). This step sets
   the size test (`tests/test_design_components.py`) to the numbers of F12 rule 7 and adds its page totals.
@@ -1095,24 +1095,61 @@ app · M · Depends on: S6.5 · Beside: S6.6
 - **Keep:** screens and routes.
 - **Check:** AUT-8 in Palette.
 
-### S6.11 Details through the shared opener
-Hub page · L · Depends on: S6.6, S6.8 · Beside: S6.7, S6.9, S6.10
+### S6.4b Shared parts the looks need
+Hub page, web app · S · Depends on: S6.4 · Beside: S6.5, S6.6
+- **Files today:** the collection builder and the shell's navigation in `web-shared/components.js`.
+- **Change:** the "Sort by" label in every collection head (`coll__sortlabel`, catalogue key `coll_sort_by`; hidden
+  under `table`; 02 6.1); the navigation marks a switched-off section with `data-state="off"` and its hidden
+  suffix, from the Hub's list of features (02 2.2).
+- **Keep:** the Console look unchanged; no text outside the catalogue.
+- **Other interfaces:** the app draws both from its own composables (S6.5); the command line has neither.
+- **Check:** AUT-5 in Console and Workbench on Printers; AUT-6 on the navigation.
+
+### S6.6b Tiles keep second-priority fields where there is no detail
+Hub page, web app · S · Depends on: S6.6 · Beside: S6.7
+- **Files today:** `components.css` (the `tiles` group).
+- **Change:** a collection whose items have no detail (backups, preset lines, features) shows its prio-2 fields as
+  "key: value" under `tiles`, as under `cards` (02 6.1).
+- **Keep:** tiles with a detail show prio 1 only.
+- **Other interfaces:** the app's tiles follow the same rule (S6.7).
+- **Check:** AUT-5 in Palette on Backups, Slicer presets lines and Features.
+
+### S6.11 Details through the shared opener (Palette sheets)
+Hub page · M · Depends on: S6.6b · Beside: S6.7, S6.9, S6.10
 - **Files today:** `setup_static/setup_printers.js`, `setup_presets.js` (each toggles its in-row details itself).
-- **Change:** these screens open and close details through the shared opener (02 6.2), so `sheet` (Palette) and
-  `pane` (Panes) draw them in their hosts. With it, what Panes still lacks: one detail open at a time and Escape
-  returning focus to the row; the row's actions and every hidden field (Slicer presets: material, "Set parent")
-  inside the detail; the empty pane with its text on desktop; Back in the detail head on tablet and phone;
-  Settings one group per pane (02 6.4). The script and styles go into the detail part (F12 rule 7), not the core.
+- **Change:** these screens open and close details through the shared opener (02 6.2), so `sheet` (Palette) draws
+  them in the detail host. The opener's script and styles go into the detail part (F12 rule 7), not the core.
 - **Keep:** addresses (`#printers/<id>`), what a detail holds, the Console look.
 - **Other interfaces:** the web app and the app already open details as their own places; the command line has none.
 - **Check:** AUT-5 in Console and Palette on Printers and Slicer presets; focus returns to the row on close.
+
+### S6.12 Details in the pane (Panes)
+Hub page · M · Depends on: S6.8, S6.11 · Beside: S6.9, S6.10
+- **Files today:** the detail part (S6.11); `setup_static/setup_settings.js`.
+- **Change:** what Panes still lacks (02 6.2): one detail open at a time and Escape returning focus to the row; the
+  row's actions and every hidden field (Slicer presets: material, "Set parent") inside the detail; the empty pane
+  with its text on desktop; Back in the detail head on tablet and phone; Settings one group per pane (02 6.4).
+- **Keep:** addresses; the other three looks.
+- **Other interfaces:** the app's pane style is S6.13; the web app and the command line have no panes.
+- **Check:** AUT-5 in Panes on Printers, Slicer presets and Settings; manual: release checklist step 4 (drill in
+  and back). Until this step is on main the release notes list Panes as unfinished.
+
+### S6.13 Android: detail styles and the Panes summaries
+app · M · Depends on: S6.5, S6.7, S6.9 · Beside: S6.11, S6.12
+- **Files today:** the composables that read `LocalDetailStyle`; the Panes section list.
+- **Change:** `DetailStyle.Card`, `Sheet` and `Pane` where the app has an in-place detail (deferred from S6.5,
+  S6.7 and S6.9); the Panes section list shows a summary for Printers, Recently added and Slicer presets from
+  Home's requests (02 2.2).
+- **Keep:** screens and routes; no request made only for a summary.
+- **Other interfaces:** the web steps are S6.11 and S6.12.
+- **Check:** AUT-8 in each look.
 
 ### S6.8 Panes on the web
 Hub page, web app · L · Depends on: S6.6 · Beside: S6.9
 - **Files today:** `components.css`; the navigation part of the shared component script.
 - **Change:** the `list`, `rows` and `pane` profile groups keyed on Panes, with drill-in navigation on phones (F6);
   the Panes tile.
-- **Keep:** addresses: the same `#section/<id>` places open the same things. Until S6.11, Printers and Slicer
+- **Keep:** addresses: the same `#section/<id>` places open the same things. Until S6.12, Printers and Slicer
   presets show details in place under Panes too; Panes is listed as unfinished in the release notes until then.
 - **Check:** AUT-5 in Panes light and dark; manual: release checklist step 4 (drill into a printer and back, focus
   returns to the row).
@@ -1170,6 +1207,59 @@ documents · M · Depends on: S5.8; command names wait for S5.9 · Beside: S7.2
 - **Change:** the names of F2 throughout; the user guide's command table from `help --markdown` (06 3.2).
 - **Keep:** the instructions' steps and their order.
 - **Check:** the word list of AUT-7 run over `docs/` and `README.md`.
+
+### S7.4 Hub: the product name, the installer's words and the bridge
+Hub · L · Depends on: S7.2 · Beside: S5.9, S7.5, S7.6
+- **Files today:** `strings/en.json` (`app_name`, `command_name`); texts that spell the name out; `install/`; the
+  updater, the backup reader, discovery and the link parsers.
+- **Change:** the product is Spoolwarden and the command `spoolwarden` in the two catalogue entries; every text
+  that bypasses them moves onto the placeholders; page titles; the installer's first line and its once-only line
+  about the new name; the units' `Description=` lines. The bridge, with no visible effect: the updater, the backup
+  reader, discovery, link parsers and prefix checks accept the old and the new names.
+- **Keep:** paths, users, unit names, the Python package, `FK_*`, protocol and scheme names, repository and asset
+  names: nothing outside what a person reads changes name.
+- **Other interfaces:** S5.9 (command line), S7.5 (app), S7.6 (web app, Slicer Sync, Klipper add-on), S7.7 (documents).
+- **Check:** AUT-7 with the product-name entry gone from its allow-list; the upgrade tests of S7.8.
+
+### S7.5 App: label and texts
+app · S · Depends on: S7.4 · Beside: S5.9, S7.6
+- **Files today:** `android/app/build.gradle.kts`, the manifest, `strings.xml`.
+- **Change:** the app label "Spoolwarden" (05 1); every text that names the product or the command follows the
+  catalogue.
+- **Keep:** the application id, the signing keys, the link scheme.
+- **Other interfaces:** S7.4, S7.6.
+- **Check:** AUT-8; an installed 0.6 app updates in place and stays paired.
+
+### S7.6 Web app, Slicer Sync and Klipper add-on: visible names
+web app, PC tool, add-on · S · Depends on: S7.4 · Beside: S5.9, S7.5
+- **Files today:** the web app's manifests and title; `pc-sync/installer/`; the add-on's messages.
+- **Change:** the web app is "Spoolwarden" in its manifests, title and top bar; the PC tool is "Spoolwarden Slicer
+  Sync" with the Start menu entries "Pair Slicer Sync", "Slicer Sync status" and "Uninstall Spoolwarden Slicer Sync",
+  and the checkbox "Pair this PC with the Hub now"; the add-on's messages say Spoolwarden.
+- **Keep:** the program file `filament-kit-sync`, the installer id and state folder; macro, variable and file names
+  of the add-on.
+- **Other interfaces:** S7.4, S7.5.
+- **Check:** AUT-5 on the web app; the PC tool installs over the earlier version and keeps its pairing.
+
+### S7.7 Documents in the new name
+documents · M · Depends on: S5.9, S7.4 · Beside: S7.5, S7.6
+- **Files today:** `README.md`, `docs/`, the notes of the next release.
+- **Change:** Spoolwarden and `spoolwarden` throughout; one sentence says it was called filament-kit and that the
+  old command still works; the user guide's command table from `spoolwarden help --markdown`.
+- **Keep:** addresses, file names and on-device paths that did not change; the earlier release notes as history.
+- **Other interfaces:** none.
+- **Check:** the names test of S7.3 without its skip of the old name, with the history files and unchanged
+  addresses as its only exceptions.
+
+### S7.8 The rename's gate
+all four · S · Depends on: S5.9, S7.4 to S7.7 · Beside: none
+- **Files today:** the words lints; the upgrade scenarios.
+- **Change:** a words test that fails on a visible "filament-kit" outside the history files and unchanged
+  addresses; upgrade from the last release and from the last pre-release keeps pairing, discovery, the old
+  command and restoring an older backup.
+- **Keep:** every installed kit can update, pair and be found as before.
+- **Other interfaces:** each is covered once.
+- **Check:** both upgrade runs pass before the tag.
 
 ---
 
@@ -1268,14 +1358,17 @@ Stage 4   S0.4 + S0.9 > S4.1 > S4.2 > S4.3 > S4.4 > each of S4.5 to S4.12 and S4
           S4.6 + S4.13 > S4.14      S3.7 > S4.7      S3.9 > S4.8, S4.11      S4.10 > S4.11
 
 Stage 5   S2.1 > S5.1 > S5.2 > S5.4      S2.17 > S5.4
-                 S5.1 > S5.3 > S5.5 / S5.6 / S5.7 / S5.8 > S5.9 (waits for the rename)
+                 S5.1 > S5.3 > S5.5 / S5.6 / S5.7 / S5.8 > S5.9
           S2.8 > S5.6      S2.11 > S5.7      (every Stage 5 step edits cli.py: one at a time)
 
 Stage 6   S2.17 > S6.1 > S6.2 > S6.4 > S6.6 > S6.8 \
                   S6.1 > S6.3 > S6.5 > S6.7 > S6.9  > S6.10 (also needs S5.8)
-                  S6.6 + S6.8 > S6.11
+                  S6.4 > S6.4b      S6.6 > S6.6b > S6.11      S6.8 + S6.11 > S6.12      S6.5 + S6.7 + S6.9 > S6.13
+
+Stage 8   V1.1 > V1.2 > V1.3 > V1.4 > V2.1 / V2.2 / V2.3 / V2.4      V2.1 > V3      V2.1 to V2.4 + V3 > V4
 
 Stage 7   S2.11 > S7.1 > S7.2 (after every interface step of Stages 1 to 5)      S5.8 > S7.3 (command names after S5.9)
+          S7.2 > S7.4 > S7.5 / S7.6      S5.9 + S7.4 > S7.7      S5.9 + S7.4 to S7.7 > S7.8
 ```
 
 Stages 3 and 4 do not wait for Stages 1 and 2: once Stage 0 is done they run beside them, each needing only the Hub
@@ -1419,7 +1512,7 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 
 | Section or command group | Steps |
 |---|---|
-| 2 The command name | S5.9 (waits for the rename) |
+| 2 The command name | S5.9; the rest of the visible rename S7.4 to S7.8 |
 | 3 The command tree | S5.8 (help), S5.9 |
 | 4 Old and new spellings | S5.5 to S5.8 |
 | 5 Naming a printer, device or record | S5.5, S5.6 |
@@ -1451,3 +1544,102 @@ The parity gaps that the parts keep on purpose stay open after the last step: th
 Add spools on the Hub page (feature ideas B1, B2, B7); a Hub summary in the web app and the app (B4); Find Klipper
 printers and adding a Filament Catalog entry in the web app (B3, B8); licences outside the app (B9). The other ideas
 of `10-feature-ideas.md` are not scheduled here either.
+
+---
+
+## 15. Stage 8: Share corrections
+
+The Label Reader's opt-in list of corrections (03 10.5.1 and 10.5.2, 04 7.5, 05 10.6, 06 9.9). It is not part of
+0.6: it ships in the first release where all four interfaces have it. The steps keep the ids the build uses: V,
+after the reader's own name (the vision module).
+
+### V1.1 Hub: what the reader can do
+Hub · S · Depends on: S2.18 · Beside: Stage 6
+- **Files today:** `local_reader.py`; the fake reader under `server/tests/fakes/`.
+- **Change:** the Hub reads the reader's capabilities from its health reply (none for an old reader); the fake
+  reader gains the corrections endpoints.
+- **Keep:** reading labels with an old reader.
+- **Other interfaces:** none see this step.
+- **Check:** the reader tests with an old and a new fake reader.
+
+### V1.2 Hub: the setting
+Hub · S · Depends on: V1.1 · Beside: Stage 6
+- **Files today:** the settings registry; the root job runner.
+- **Change:** `label_reader.share_corrections` (off); a root job writes it to the reader and restarts it; status
+  shows the reader's actual state. No address is a setting or is passed to the reader.
+- **Keep:** the reader's own default.
+- **Other interfaces:** each shows the switch's state in its V2 step.
+- **Check:** the settings tests; the job against the fake reader.
+
+### V1.3 Hub: corrections wait with the reader
+Hub · M · Depends on: V1.2 · Beside: Stage 6
+- **Files today:** `intake_history.py`; the Add spools Check step.
+- **Change:** a correction (Revise, Edit, a changed field at Check) is handed to the reader with its photos, the
+  stored reading and the corrected values; it never blocks or fails the save; a failed hand-over is shown as
+  "Not waiting" with the reason; no photo kept, no entry.
+- **Keep:** the save and the history record.
+- **Other interfaces:** the "will wait" line is in each V2 step.
+- **Check:** history tests with the fake reader down, slow and refusing.
+
+### V1.4 Hub: routes for the list
+Hub · M · Depends on: V1.3 · Beside: Stage 6
+- **Files today:** the Hub page's and the phones' route tables.
+- **Change:** list, remove, remove all, the package download and Send now, as thin authenticated routes (the
+  upload itself is the reader's); the command line's `label-reader corrections` commands on the same functions.
+- **Keep:** list and download need no code; remove, Try again and Send now do (03 10.5.2).
+- **Other interfaces:** used by V2.1 to V2.4.
+- **Check:** route tests per guard; 08 test 7 for the new texts.
+
+### V2.1 Hub page: the group and "Corrections waiting"
+Hub page · M · Depends on: V1.4 · Beside: V2.2, V2.3, V2.4
+- **Files today:** `setup_static/setup_settings.js` (Label Reader group).
+- **Change:** 03 4.2, 6.2, 6.4, 9.4, 10.1, 10.5.1, 10.5.2, 10.11: the switch and its paragraph, the card, the
+  three dialogs, the one link line, the Features note.
+- **Keep:** the rest of the Label Reader group.
+- **Other interfaces:** V2.2 to V2.4.
+- **Check:** AUT-5 on the group with 0, 1 and several corrections waiting.
+
+### V2.2 Web app: the list and the lines
+web app · S · Depends on: V1.4 · Beside: V2.1, V2.3, V2.4
+- **Files today:** `web/static/app.js` (Recently added, Add spools).
+- **Change:** 04 7.1, 7.5: the "will wait" line where a correction is saved, the read-only list with Remove at
+  `#recent/corrections`, sending named as done on the Hub page.
+- **Keep:** settings stay on the Hub page.
+- **Other interfaces:** V2.1, V2.3, V2.4.
+- **Check:** AUT-5 on the list; manual: correct a record with the switch on.
+
+### V2.3 App: the list and the lines
+app · S · Depends on: V1.4 · Beside: V2.1, V2.2, V2.4
+- **Files today:** the Recently added and Add spools screens.
+- **Change:** 05 2.5, 10.3, 10.6: the same as V2.2, at the route `recent/corrections`.
+- **Keep:** screens and routes.
+- **Other interfaces:** V2.1, V2.2, V2.4.
+- **Check:** AUT-8 on the list.
+
+### V2.4 Command line: `label-reader corrections`
+command line · S · Depends on: V1.4 · Beside: V2.1, V2.2, V2.3 (one `cli.py` step at a time)
+- **Files today:** `cli.py` (the commands V1.4 added).
+- **Change:** 06 3, 5, 7, 8.3, 9.1, 9.9: `list`, `remove`, `package`, `send`, the config item, the status row,
+  the four confirmations, `--json`; gaps against 06 filled.
+- **Keep:** list and package need no sudo.
+- **Other interfaces:** V2.1 to V2.3.
+- **Check:** the command tests; AUT-9.
+
+### V3 Reader updates
+Hub, Hub page, command line · M · Depends on: V2.1 · Beside: V2.2 to V2.4
+- **Files today:** the Updates section; `status`; the reader's installer wrapper.
+- **Change:** the installed reader's version and a newer signed release are shown in Updates and `status`;
+  "Update" runs the verified install over the old one; `local-intake update` on the command line.
+- **Keep:** the reader's settings, token and corrections waiting across an update.
+- **Other interfaces:** the web app and the app show the reader's state only.
+- **Check:** upgrade tests with the fake release.
+
+### V4 End-to-end test and documents
+all four · M · Depends on: V2.1 to V2.4, V3; the reader's next version · Beside: none
+- **Files today:** the e2e scenarios; `docs/user-guide.md`.
+- **Change:** the scenario (install the reader, switch sharing on, correct a reading, see it waiting, download
+  the package and check it holds no location or camera data, send to a local fake address, switch off,
+  uninstall); the guide section "Share corrections"; the release notes.
+- **Keep:** never a real upload address in a test or a document.
+- **Other interfaces:** the scenario touches each once.
+- **Check:** the scenario passes on the supported Ubuntu versions; it gates the release that carries the feature.

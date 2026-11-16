@@ -9,7 +9,7 @@ user with the module's prefix, and restarts the reader's service:
     systemctl restart filament-kit-vision.service
 
 Never `--feedback-endpoint`: the reader's review address is its own, and the Hub neither shows nor sets it (plan
-section 8). The job is `local_intake_share` (`filament-kit local-intake share-corrections`); the page's helper starts it
+section 8). The job is `local_intake_share` (`spoolwarden local-intake share-corrections`); the page's helper starts it
 when a save changes the value, and the page can start it again when the reader's own state differs (`state`).
 
 The reader's actual state comes from its health (`capabilities.opt_in`) or, when that does not say, from

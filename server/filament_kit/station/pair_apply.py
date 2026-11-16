@@ -123,7 +123,7 @@ def apply_drop(path: Path, *, refresh=apply.refresh_station) -> str:
         try:
             refresh(cfg)
         except (apply.ApplyError, modules.ModuleError) as e:
-            raise DropError(f"paired, but the station could not be updated ({e}); run: sudo filament-kit modules apply") from None
+            raise DropError(f"paired, but the station could not be updated ({e}); run: sudo spoolwarden modules apply") from None
     return "saved"
 
 

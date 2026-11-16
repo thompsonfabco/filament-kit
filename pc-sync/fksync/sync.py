@@ -38,7 +38,7 @@
 
   Existing presets are never replaced (the owner's rule, 2026-11-06): an install writes only the presets the
   slicer does not have yet (installer step 6). The updates the owner accepted on the server
-  (`sudo filament-kit profiles apply-updates`; state `accepted_updates: {stamp, base, orca}`) are the only ones
+  (`sudo spoolwarden profiles apply-updates`; state `accepted_updates: {stamp, base, orca}`) are the only ones
   written over an existing preset: with the build they belong to when it is installed, or, for the build that is
   already installed (nothing changed in the app since), by installing it again with them. The report names what
   was written (`installed(stamp, trees, written)`, kept as `report_written` while it is owed), and the server
@@ -174,7 +174,7 @@ def _read_bytes(path: Path) -> bytes | None:
 
 LABELS = {"live": "live presets", "system": "Bambu Studio system presets",
           "orca_live": "Orca Slicer live presets", "orca_system": "Orca Slicer system presets"}
-ORCA_UNSUPPORTED = ("the server does not take Orca Slicer presets (update filament-kit on the server); "
+ORCA_UNSUPPORTED = ("the server does not take Orca Slicer presets (update Spoolwarden on the Hub); "
                     "only Bambu Studio is synced")
 ORCA_NO_TARGET = ("the server makes no Orca Slicer presets (no Orca printers are set up there); only Bambu Studio "
                   "is synced")
@@ -248,7 +248,7 @@ class _Run:
         try:
             self.c.heartbeat(outcome, since, app)
         except ApiError as e:
-            why = ("the server does not take heartbeats (update filament-kit on the server)" if e.status == 404
+            why = ("the server does not take heartbeats (update Spoolwarden on the Hub)" if e.status == 404
                    else str(e))
             store.log(self.d, f"heartbeat not sent: {why}")
         except (Offline, CertChanged) as e:
@@ -293,7 +293,7 @@ class _Run:
                 self.st.pop("fresh_owed", None)
                 if not (isinstance(res, dict) and res.get("fresh") is True):
                     self.log("warning: the server did not confirm this Bambu Studio folder's first sync (update "
-                             "filament-kit on the server); it may read this folder's presets as edits of the "
+                             "Spoolwarden on the Hub); it may read this folder's presets as edits of the "
                              "other folder's install")
             elif self._partial():
                 res = self.c.upload(kind, data, user_id=self.f.user_id, partial=self._partial())
@@ -556,7 +556,7 @@ class _Run:
                      + ", ".join(stale_orca))
         if kept:
             self.log(f"{len(kept)} presets are already in the slicer and were left as they are (their updates, if "
-                     "any, are listed on the server: filament-kit profiles status)")
+                     "any, are listed on the Hub: spoolwarden profiles status)")
         self._log_differing(self.f, stamp, self.st["differing"])
         self.report(stamp, trees, written)  # first: a failed report must not leave the new live folder uploaded
         self.upload_live()
@@ -754,7 +754,7 @@ class _Run:
     def _log_differing(self, f: StudioFolders, stamp: str, names: list[str]) -> None:
         if names:
             self.log(f"{len(names)} presets in {f.variant} user {f.user_id} differ from build {stamp} and were kept "
-                     "(never replaced; to take the generated ones: filament-kit profiles apply-updates): "
+                     "(never replaced; to take the generated ones: spoolwarden profiles apply-updates): "
                      + ", ".join(names))
 
     def secondaries(self, stamp: str, build_dir: Path | None = None, accepted: list | None = None) -> None:
@@ -1005,7 +1005,7 @@ class _Run:
 
     def _other_pc(self, why: str) -> str:
         return self.finish("other_pc", f"another PC is the sync PC for this server ({why}); unpair it on the "
-                                       "server ('sudo filament-kit unpair <id>') to sync from this one")
+                                       "server ('sudo spoolwarden unpair <id>') to sync from this one")
 
 
 def _age(seconds: float) -> str:
@@ -1055,7 +1055,7 @@ def apply_folder_updates(dirs: store.AppDirs, key: str, names: list[str] | None,
     keys = folder_keys(dirs)
     if key not in keys:
         echo(f"No other Bambu Studio folder {key!r} is synced here. Folders: {', '.join(keys) or 'none'}. (The "
-             "primary's updates are accepted on the server: sudo filament-kit profiles apply-updates.)")
+             "primary's updates are accepted on the server: sudo spoolwarden profiles apply-updates.)")
         return 1
     sd = store.AppDirs(dirs.base / "folders" / key)
     rec = load_state(sd)

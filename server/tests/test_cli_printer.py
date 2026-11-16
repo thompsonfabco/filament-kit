@@ -154,7 +154,7 @@ def test_the_start_of_two_names_is_exit_2_with_the_matches_listed_in_list_order(
     rc, out, err = run(capsys, "printer", "show", "study")
     assert (rc, out) == (2, "")
     assert err == ('Error: "study" does not name one printer.\n'
-                   "Fix: use a name, serial or id from filament-kit printer list. Close matches:\n"
+                   "Fix: use a name, serial or id from spoolwarden printer list. Close matches:\n"
                    f"     Study A1 mini  {A1}\n     Study X  03000A000000003\n")
 
 
@@ -175,7 +175,7 @@ def test_no_close_match_ends_the_fix_line(capsys):
     rc, out, err = run(capsys, "printer", "show", "zzz")
     assert (rc, out) == (2, "")
     assert err == ('Error: "zzz" does not name one printer.\n'
-                   "Fix: use a name, serial or id from filament-kit printer list.\n")
+                   "Fix: use a name, serial or id from spoolwarden printer list.\n")
 
 
 def test_an_empty_name_names_nothing(capsys):
@@ -188,7 +188,7 @@ def test_the_error_of_a_name_under_json_is_one_document(capsys):
     rc, out, err = run(capsys, "printer", "show", "zzz", "--json")
     assert rc == 2 and err.startswith("Error: ")
     assert doc(out) == {"ok": False, "error": '"zzz" does not name one printer.',
-                        "fix": "use a name, serial or id from filament-kit printer list."}
+                        "fix": "use a name, serial or id from spoolwarden printer list."}
 
 
 @pytest.mark.parametrize("argv", [["rename", "mainsail", "X"], ["address", "mainsail", "192.0.2.60"],
@@ -201,14 +201,14 @@ def test_a_found_printer_is_not_added_for_the_commands_that_need_it_added(capsys
     rc, out, err = run(capsys, "printer", *argv)
     assert rc == 2 and out == ""
     assert err.startswith("Error: mainsailos is found on the network but not added yet.\n")
-    assert err.splitlines()[1] in ("Fix: sudo filament-kit printer use mainsailos",
-                                   "Fix: sudo filament-kit printer dismiss mainsailos")
+    assert err.splitlines()[1] in ("Fix: sudo spoolwarden printer use mainsailos",
+                                   "Fix: sudo spoolwarden printer dismiss mainsailos")
 
 
 def test_a_found_bambu_printer_points_to_add_with_its_address_not_use(capsys):
     registry.detected(X1, "192.0.2.77", "X1C")
     rc, out, err = run(capsys, "printer", "rename", X1, "Shed")
-    assert rc == 2 and err.splitlines()[1] == "Fix: sudo filament-kit printer add --address 192.0.2.77"
+    assert rc == 2 and err.splitlines()[1] == "Fix: sudo spoolwarden printer add --address 192.0.2.77"
 
 
 def test_forget_certificate_of_a_klipper_printer_uses_the_family_sentence(capsys):
@@ -220,7 +220,7 @@ def test_forget_certificate_of_a_klipper_printer_uses_the_family_sentence(capsys
 def test_forgetting_a_found_printer_points_to_dismiss(capsys):
     seed()
     err = run(capsys, "printer", "forget", "mainsailos", "--yes")[2]
-    assert err.splitlines()[1] == "Fix: sudo filament-kit printer dismiss mainsailos"
+    assert err.splitlines()[1] == "Fix: sudo spoolwarden printer dismiss mainsailos"
     assert "mainsailos" in registry.load()
 
 
@@ -236,9 +236,9 @@ def test_the_names_a_found_printer_may_have_are_show_test_use_and_dismiss(capsys
 
 @pytest.mark.parametrize("argv, what, fix", [
     (["access-code", "garage"], "Garage Voron is a Klipper printer; it has no Access Code.",
-     'Fix: sudo filament-kit printer api-key "Garage Voron"'),
+     'Fix: sudo spoolwarden printer api-key "Garage Voron"'),
     (["api-key", "workshop"], "Workshop X1 is a Bambu Lab printer; it has no Moonraker API key.",
-     'Fix: sudo filament-kit printer access-code "Workshop X1"'),
+     'Fix: sudo spoolwarden printer access-code "Workshop X1"'),
     (["lane-data", "workshop", "on"], "Workshop X1 is a Bambu Lab printer; it has no lane data.", None),
     (["detect", "workshop"], "Workshop X1 is a Bambu Lab printer; it has no model to detect.", None),
     (["reports", "garage"], "Garage Voron is a Klipper printer; it has no printer reports.", None)])
@@ -271,7 +271,7 @@ def test_list_says_what_is_set_up_and_how_to_add_the_found_one(capsys):
     seed()
     out = run(capsys, "printer", "list")[1]
     assert "3 set up. 1 found on the network, not added.\n" in out
-    assert out.splitlines()[-1] == "Add the found one: sudo filament-kit printer use mainsailos"
+    assert out.splitlines()[-1] == "Add the found one: sudo spoolwarden printer use mainsailos"
 
 
 def test_list_with_a_running_hub_gives_states_counts_and_what_needs_a_look(capsys, hub):
@@ -281,7 +281,7 @@ def test_list_with_a_running_hub_gives_states_counts_and_what_needs_a_look(capsy
     rows = {ln.split()[0]: ln for ln in out.splitlines() if ln.strip()}
     assert rows["Workshop"].endswith("connected") and rows["Study"].endswith("offline")
     assert "3 set up: 2 connected, 1 offline. 1 found on the network, not added." in out
-    assert 'Study A1 mini needs a look: filament-kit printer show "Study A1 mini"' in out
+    assert 'Study A1 mini needs a look: spoolwarden printer show "Study A1 mini"' in out
     assert hub.asked == ["/api/printers"]                               # one read for the whole list
 
 
@@ -336,7 +336,7 @@ def test_an_empty_list_says_how_to_add_one(capsys):
     rc, out, err = run(capsys, "printer", "list")
     assert rc == 0
     assert squash(out) == ("No printer yet. Printers on the network appear here once they announce themselves. "
-                           "Add one: sudo filament-kit printer add")
+                           "Add one: sudo spoolwarden printer add")
     assert doc(run(capsys, "printer", "list", "--json")[1]) == []
 
 
@@ -562,9 +562,9 @@ def test_a_module_that_is_off_says_how_to_turn_it_on(capsys):
     for argv in (["add", "--klipper", "--address", "127.0.0.1", "--port", "9"], ["scan", "--subnet", "192.0.2.0/24"]):
         rc, out, err = run(capsys, "printer", *argv)
         assert rc == 1 and "the klipper module is off on this server" in err
-        assert squash(err).endswith("Fix: sudo filament-kit modules enable klipper")
+        assert squash(err).endswith("Fix: sudo spoolwarden modules enable klipper")
     d = doc(run(capsys, "printer", "scan", "--json")[1])
-    assert d["ok"] is False and d["fix"] == "sudo filament-kit modules enable klipper"
+    assert d["ok"] is False and d["fix"] == "sudo spoolwarden modules enable klipper"
 
 
 @pytest.mark.parametrize("argv", [["list"], ["show", "garage"], ["detect", "garage"], ["add", "--klipper", "--address",
@@ -628,7 +628,7 @@ def test_use_on_a_printer_already_added_is_exit_1_and_on_a_found_bambu_printer_p
     assert run(capsys, "printer", "use", "garage")[0] == 1
     registry.detected("03000A000000009", "192.0.2.90", "A1M", "Found A1")
     rc, out, err = run(capsys, "printer", "use", "found a1")
-    assert rc == 2 and "Fix: sudo filament-kit printer add --address 192.0.2.90" in err
+    assert rc == 2 and "Fix: sudo spoolwarden printer add --address 192.0.2.90" in err
 
 
 def test_dismiss_asks_and_forgets_the_found_printer(capsys, terminal):
@@ -642,12 +642,12 @@ def test_dismiss_asks_and_forgets_the_found_printer(capsys, terminal):
 def test_dismiss_an_added_printer_points_to_forget(capsys):
     seed()
     rc, out, err = run(capsys, "printer", "dismiss", "garage", "--yes")
-    assert rc == 2 and err.splitlines()[1] == 'Fix: sudo filament-kit printer forget "Garage Voron"'
+    assert rc == 2 and err.splitlines()[1] == 'Fix: sudo spoolwarden printer forget "Garage Voron"'
 
 
-FORGET = [("printer forget workshop", f"Forget Workshop X1? filament-kit stops connecting to it and deletes its Access "
+FORGET = [("printer forget workshop", f"Forget Workshop X1? Spoolwarden stops connecting to it and deletes its Access "
                                       "Code. To use it again, add it again. [y/N] ", "Forgot Workshop X1.", X1),
-          ("printer forget garage", "Forget Garage Voron? filament-kit stops connecting to it and deletes its Moonraker "
+          ("printer forget garage", "Forget Garage Voron? Spoolwarden stops connecting to it and deletes its Moonraker "
                                     "API key, if one is saved. [y/N] ", "Forgot Garage Voron.", "garage-voron"),
           ("printer dismiss mainsailos", "Dismiss mainsailos? It leaves this list. A new scan may find it again. [y/N] ",
            "Dismissed mainsailos.", "mainsailos")]
@@ -778,7 +778,7 @@ def test_api_key_with_a_space_is_the_hubs_refusal(capsys, monkeypatch):
 def test_api_key_clear_asks_first(capsys, terminal):
     seed()
     registry.set_api_key("garage-voron", "s3cretkey")
-    question = ("Clear the Moonraker API key of Garage Voron? filament-kit then connects without a key. If Moonraker asks "
+    question = ("Clear the Moonraker API key of Garage Voron? Spoolwarden then connects without a key. If Moonraker asks "
                 "for one, the printer's test says so until a key is set. [y/N] ")
     terminal(False)
     rc, out, err = run(capsys, "printer", "api-key", "garage", "--clear")
@@ -830,7 +830,7 @@ def test_scan_lists_what_it_found_and_what_is_added(capsys, monkeypatch):
     assert rc == 0, err
     found = next(p.serial for p in registry.load().values() if p.host == "192.0.2.99")
     assert squash(out) == (f"Found on 192.0.2.0/24: 192.0.2.60:7125 (added as Lathe) Found on 192.0.2.0/24: "
-                           f"192.0.2.99:7125 (add it: sudo filament-kit printer use {found})")
+                           f"192.0.2.99:7125 (add it: sudo spoolwarden printer use {found})")
     d = doc(run(capsys, "printer", "scan", "--subnet", "192.0.2.0/24", "--json")[1])
     assert d["ok"] is True and d["subnet"] == "192.0.2.0/24" and [f["configured"] for f in d["found"]] == [True, False]
     assert {"serial", "host", "port", "configured"} <= set(d["found"][0])
@@ -935,7 +935,7 @@ def test_menu_opens_the_printers_screen_and_refuses_json(capsys, monkeypatch):
     assert run(capsys, "printer", "menu")[0] == 0 and opened == [1]
     rc, out, err = run(capsys, "printer", "menu", "--json")
     assert rc == 2 and opened == [1]
-    assert doc(out) == {"ok": False, "error": "printer menu is a menu.", "fix": "use filament-kit printer list --json"}
+    assert doc(out) == {"ok": False, "error": "printer menu is a menu.", "fix": "use spoolwarden printer list --json"}
 
 
 def test_the_klipper_add_on_has_both_spellings(capsys, monkeypatch):

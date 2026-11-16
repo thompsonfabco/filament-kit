@@ -38,6 +38,12 @@ def fk_env(tmp_path, monkeypatch):
     monkeypatch.setattr(inventory, "_check_parents", lambda items: None)
 
 
+def test_parse_link_takes_the_new_scheme_and_still_the_old():
+    for scheme in ("fkit", "spoolwarden"):
+        link = server_api.parse_link(f"{scheme}://pair?h=srv.local&p=8710&t={'x' * 43}&fp={FP}&ip=192.0.2.5")
+        assert link.token == "x" * 43 and link.ips == ["192.0.2.5"]
+
+
 def test_parse_link():
     link = server_api.parse_link(f"fkit://pair?h=srv.local&p=8710&t={'x' * 43}&fp={FP}&ip=192.0.2.5&ip=192.0.2.6")
     assert (link.host, link.port, link.fp, link.ips) == ("srv.local", 8710, FP, ["192.0.2.5", "192.0.2.6"])
@@ -322,7 +328,7 @@ def test_station_pair_says_the_command_when_the_refresh_fails(monkeypatch, capsy
     code, probed = _pair_cli(monkeypatch, "station", ["192.0.2.5"], boom)
     assert code == 0 and probed == ["192.0.2.5"]  # no local server: the link's address only
     out = capsys.readouterr()
-    assert "sudo filament-kit modules apply" in out.out + out.err
+    assert "sudo spoolwarden modules apply" in out.out + out.err
 
 
 def test_save_pairing_server_file_is_world_readable_whatever_the_umask():
@@ -439,7 +445,7 @@ def test_station_pair_with_an_expired_link_does_not_say_paired(server, monkeypat
     assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
     out = capsys.readouterr()
     assert "Paired" not in out.out
-    assert "10 minutes" in out.err and "sudo filament-kit pair --station" in out.err
+    assert "10 minutes" in out.err and "sudo spoolwarden pair --station" in out.err
 
 
 def test_the_station_token_reaches_only_the_station_routes(server):
@@ -458,7 +464,7 @@ def test_the_station_token_reaches_only_the_station_routes(server):
 
 # ---------- final fix wave I2: an unpaired station says so (status, the install's finish, the OLED) ----------
 
-PAIR_STEPS = ("sudo filament-kit pair --station", "sudo filament-kit station pair")
+PAIR_STEPS = ("sudo spoolwarden pair --station", "sudo spoolwarden station pair")
 
 
 def _station_mode(monkeypatch):
@@ -477,7 +483,7 @@ def test_status_on_a_station_says_the_button_flow_is_not_paired(monkeypatch, cap
     _paired(["192.0.2.10"])
     cli.main(["status"])
     out = capsys.readouterr().out
-    assert "station paired with the kit server" in out and PAIR_STEPS[1] not in out
+    assert "station paired with the Hub" in out and PAIR_STEPS[1] not in out
 
 
 def test_finish_on_an_unpaired_station_names_both_pairing_steps(monkeypatch, capsys):
@@ -513,7 +519,7 @@ def test_pairing_lines_show_the_state_root_passed_in(monkeypatch):
     """The state comes from root (the wrapper, the console's helper); the reader needs no access to the pairing."""
     monkeypatch.setattr(server_api, "token_file", _Unreadable)
     assert server_api.pairing_lines("paired 192.0.2.10:8710") == [
-        "OK   station paired with the kit server (192.0.2.10:8710)"]
+        "OK   station paired with the Hub (192.0.2.10:8710)"]
     lines = server_api.pairing_lines("unpaired")
     assert "not paired" in lines[0] and all(c in lines[1] for c in PAIR_STEPS)
     assert "run it with sudo" in server_api.pairing_lines("unchecked")[0]
@@ -524,12 +530,12 @@ def test_pairing_lines_show_the_state_root_passed_in(monkeypatch):
 
 
 def test_status_prints_the_state_passed_in_even_when_the_files_are_closed(monkeypatch, capsys):
-    """What `sudo filament-kit status` runs: the wrapper's root check, then status as the service user."""
+    """What `sudo spoolwarden status` runs: the wrapper's root check, then status as the service user."""
     _station_mode(monkeypatch)
     monkeypatch.setattr(server_api, "token_file", _Unreadable)
     cli.main(["status", "--station-pairing=paired 192.0.2.10:8710"])
     out = old_rows(capsys.readouterr().out)
-    assert "OK   station paired with the kit server (192.0.2.10:8710)" in out and "run it with sudo" not in " ".join(out)
+    assert "OK   station paired with the Hub (192.0.2.10:8710)" in out and "run it with sudo" not in " ".join(out)
     cli.main(["status", "--station-pairing=unpaired"])
     assert PAIR_STEPS[1] in capsys.readouterr().out
     cli.main(["status"])  # no sudo: the wrapper passes nothing, and "run it with sudo" is the true advice
@@ -688,7 +694,7 @@ def test_pair_with_link_says_when_the_restart_failed(monkeypatch):
         raise apply.ApplyError("install_file: read-only")
     monkeypatch.setattr(apply, "refresh_station", boom)
     result = server_api.pair_with_link(_link())
-    assert result.status == "paired_not_restarted" and "sudo filament-kit modules apply" in result.message
+    assert result.status == "paired_not_restarted" and "sudo spoolwarden modules apply" in result.message
     assert server_api.ServerApi().paired
 
 

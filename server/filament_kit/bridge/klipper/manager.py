@@ -188,7 +188,7 @@ class _Conn:
             try:
                 ok = self._setup()
             except Unauthorized:
-                self._set("unauthorized", "Moonraker wants an API key: add it with `filament-kit klipper api-key`")
+                self._set("unauthorized", "Moonraker wants an API key: add it with `spoolwarden klipper api-key`")
             except Offline as e:
                 self._set("offline", str(e))
             except MoonrakerError as e:
