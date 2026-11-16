@@ -1,6 +1,6 @@
 # Maintainer notes
 
-The release chores of whoever maintains filament-kit. Users don't need this page. The tools named here are in
+The release chores of whoever maintains Spoolwarden. Users don't need this page. The tools named here are in
 `tools/`; the release workflow is `.github/workflows/release.yml`.
 
 ## What a release is
@@ -16,7 +16,7 @@ A tag `v<x.y.z>` pushed to GitHub builds and publishes one release, with:
 - the filament library, `library.tar.gz` (see [The filament library](#the-filament-library) below);
 - `SHA256SUMS` listing all of them, and `SHA256SUMS.sig`, its ed25519 signature.
 
-`get.sh` and `filament-kit update` refuse anything whose hash is not in a correctly signed `SHA256SUMS`.
+`get.sh` and `spoolwarden update` refuse anything whose hash is not in a correctly signed `SHA256SUMS`.
 
 ## Cutting a release
 
@@ -29,7 +29,7 @@ A tag `v<x.y.z>` pushed to GitHub builds and publishes one release, with:
 4. Watch the `release` workflow. It needs the three secrets below; without them it fails rather than publish
    an unsigned release.
 5. Edit the release notes on GitHub if you like. Installs with the `updates` module pick the release up within a
-   day; `sudo filament-kit update` does it now.
+   day; `sudo spoolwarden update` does it now.
 
 The Android app's `versionCode` comes from the tag: `MAJOR*10000 + MINOR*100 + PATCH` (so `v0.2.0` is 200).
 Phones only offer an update when the server's `app/version.txt` is above the installed app's code, so every
@@ -66,8 +66,8 @@ Android only installs an update over an installed app if it is signed with the *
 means everyone has to uninstall and reinstall the app.
 
 1. Once, on a Windows PC: `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1`. It creates
-   `%LOCALAPPDATA%\filament-kit\release.jks` and a random password stored (encrypted with Windows DPAPI) in
-   `%LOCALAPPDATA%\filament-kit\keystore.pw.dpapi`. You never type or see the password. It refuses to overwrite
+   `%LOCALAPPDATA%ilament-kit\release.jks` and a random password stored (encrypted with Windows DPAPI) in
+   `%LOCALAPPDATA%ilament-kit\keystore.pw.dpapi`. You never type or see the password. It refuses to overwrite
    an existing keystore, and uses `keytool` from `JAVA_HOME` if set, otherwise the one on `PATH`.
 2. Put the keystore (base64) and its password into the `FK_KEYSTORE_B64` and `FK_KEYSTORE_PASSWORD` secrets.
 3. **Back up both** `release.jks` **and** `keystore.pw.dpapi` together, somewhere safe and off this PC. A DPAPI
