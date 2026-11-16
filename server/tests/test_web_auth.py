@@ -422,7 +422,7 @@ def test_login_page_headers_and_escaping(store, passfile):
     for f in ("intake/shared/theme-init.js", "intake/shared/tokens.css", "intake/shared/components.css",
               "intake/app.css", "intake/signin.js"):
         assert f"'{f}'" in page.text, f
-    assert "<h1>Allow &lt;script&gt;x&lt;/script&gt;?</h1>" in page.text and "<title>filament-kit sign-in</title>" in page.text
+    assert "<h1>Allow &lt;script&gt;x&lt;/script&gt;?</h1>" in page.text and "<title>Spoolwarden sign-in</title>" in page.text
     assert "class=field__label for=pass>Passphrase</label>" in page.text and "autofocus" in page.text
     assert "aria-controls=pass" in page.text and ">Allow</button>" in page.text
     assert h["x-frame-options"] == "DENY" and h["cache-control"] == "no-store"
@@ -511,8 +511,8 @@ def test_outsiders_get_the_refusal_page_and_its_files(store, passfile):
     with TestClient(_app(store, passfile), client=AWAY) as c:
         page = c.get("/intake")
         assert page.status_code == 403 and "<h1>Only on the home network</h1>" in page.text
-        assert "filament-kit only works on the home network. Connect this phone" in page.text
-        assert "<title>filament-kit</title>" in page.text and ">Try again</a>" in page.text
+        assert "Spoolwarden only works on the home network. Connect this phone" in page.text
+        assert "<title>Spoolwarden</title>" in page.text and ">Try again</a>" in page.text
         assert "intake/shared/tokens.css" in page.text and "<form" not in page.text
         for path in ("/intake/shared/theme-init.js", "/intake/shared/tokens.css", "/intake/shared/components.css",
                      "/intake/app.css"):
