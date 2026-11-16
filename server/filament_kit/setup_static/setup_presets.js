@@ -112,6 +112,7 @@ const plainHead = (col, label, prio) => h("div", { class: "coll__cell", role: "c
 const cell = (col, prio, key, ...kids) => h("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": prio },
   key ? h("span", { class: "coll__key", "aria-hidden": "true" }, key) : null, ...kids);
 
+let openLineId = null;
 function lineItem(line, canOrca, cols) {
   const box = boxFor(`line:${line.line_id}`), id = "preset-line-" + line.line_id;       // a message here outlives the redraw a change brings
   const name = SW.t("presets_line_title", { vendor: line.vendor, line: line.product });
@@ -121,9 +122,12 @@ function lineItem(line, canOrca, cols) {
   expand.setAttribute("aria-expanded", "false");
   expand.setAttribute("aria-controls", id);
   const more = SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), icon: "chevron", action: "set-parent" });
-  const targets = [["bambu", true], ["orca", canOrca]].filter((t) => t[1]).map(([target]) => ({ label: SW.t(TARGET[target]), run: () => setParent(line, target, box, more) }));
-  SW.menu(more, targets, { label: SW.t("presets_set_parent") });
+  const targets = (opener) => [["bambu", true], ["orca", canOrca]].filter((t) => t[1]).map(([target]) => ({ label: SW.t(TARGET[target]), run: () => setParent(line, target, box, opener) }));
+  SW.menu(more, targets(more), { label: SW.t("presets_set_parent") });
+  const detailMore = SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), icon: "chevron", action: "set-parent" });
+  SW.menu(detailMore, targets(detailMore), { label: SW.t("presets_set_parent") });
   const facts = h("dl", { class: "kv" },
+    h("div", { class: "kv__row panes-only" }, h("dt", { class: "kv__key" }, SW.t("common_field_material")), h("dd", { class: "kv__value" }, line.material)),
     h("div", { class: "kv__row" }, h("dt", { class: "kv__key" }, SW.t("common_field_bambu_parent")), h("dd", { class: "kv__value" }, bambu)),
     canOrca ? h("div", { class: "kv__row" }, h("dt", { class: "kv__key" }, SW.t("presets_col_orca_parent")), h("dd", { class: "kv__value" }, orca)) : null);
   return h("div", { class: "coll__item", role: "rowgroup", "data-key": line.line_id, "data-id": line.line_id },
@@ -137,7 +141,13 @@ function lineItem(line, canOrca, cols) {
       cell("actions", 1, null, h("div", { class: "actions" }, more))),
     h("div", { class: "coll__row coll__row--result", role: "row", hidden: !box.dataset.state }, h("div", { class: "coll__cell", role: "cell", "aria-colspan": cols }, box)),
     h("div", { class: "coll__row coll__row--detail", role: "row", hidden: true }, h("div", { class: "coll__cell", role: "cell", "aria-colspan": cols },
-      h("section", { class: "detail", id, hidden: true, "aria-label": name }, facts))));
+      h("section", { class: "detail", id, hidden: true, "aria-labelledby": id + "-title" },
+        h("header", { class: "detail__head" },
+          SW.iconBtn("chevron", SW.t("detail_back", { name: SW.t("presets_lines_title") }), { cls: "detail__back" }),
+          h("h2", { class: "detail__title", id: id + "-title", tabindex: "-1" }, name),
+          SW.iconBtn("close", SW.t("detail_close", { name }), { cls: "detail__close" })),
+        facts,
+        h("div", { class: "actions panes-only" }, detailMore)))));
 }
 
 function linesCard(v) {
@@ -154,7 +164,19 @@ function linesCard(v) {
       canOrca ? plainHead("orca_parent", SW.t("presets_col_orca_parent"), 3) : null,
       h("div", { class: "coll__cell", role: "columnheader", "data-col": "actions" }, h("span", { class: "sr" }, SW.t("common_actions"))))),
     ...v.lines.map((l) => lineItem(l, canOrca, cols)));
-  SW.collection(table, { name: "presets-lines", sort: "title:ascending" });
+  SW.collection(table, { name: "presets-lines", sort: "title:ascending", emptyPane: SW.t("presets_pane_empty") });
+  table.addEventListener("click", (e) => {
+    const x = e.target.closest(".coll__expand");
+    if (x) openLineId = x.getAttribute("aria-expanded") === "true" ? x.closest(".coll__item").dataset.id : null;
+  });
+  table.addEventListener("sw:detail-close", (e) => {
+    const it = e.target.closest(".coll__item");
+    if (it && it.dataset.id === openLineId) openLineId = null;
+  });
+  if (openLineId && SW.profile().detail === "pane") {
+    const reg = table.querySelector(`.coll__item[data-id="${CSS.escape(openLineId)}"] .detail`);
+    if (reg) setTimeout(() => SW.openDetail(reg, { focusTitle: false }), 0);
+  }
   return card(SW.t("presets_lines_title"), table);
 }
 

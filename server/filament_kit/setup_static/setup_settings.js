@@ -279,7 +279,7 @@ function paintList() {
 // ----- the sub-navigation and the address (03 10.1) -----
 function markCurrent(id) {
   if (!setEl) return;
-  for (const a of setEl.querySelectorAll(".subnav__link")) { if (a.dataset.id === id) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); }
+  for (const a of setEl.querySelectorAll(".subnav__link, .settings__row")) { if (a.dataset.id === id) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); }
 }
 function onScroll() {
   if (!setEl || !setEl.isConnected) { setScrollOn = false; window.removeEventListener("scroll", onScroll); return; }

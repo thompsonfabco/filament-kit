@@ -53,6 +53,17 @@
   /* the Save stays at the bottom, above the bottom bar, while the group has unsaved changes */
   .settings .group[data-state="dirty"] > .group__foot { position: sticky; bottom: calc(var(--tab) + env(safe-area-inset-bottom)); z-index: 4; border-top: var(--hairline) solid var(--border-strong); }
 }
+:root[data-look="panes"] .settings { grid-template-columns: calc(var(--s7) * 4 + var(--s1) * 2) minmax(0, 1fr); }
+:root[data-look="panes"] .settings .subnav { display: none; }
+:root[data-look="panes"] .settings__list { display: grid; gap: var(--s2); }
+:root[data-look="panes"] .settings__group:not([data-shown]) { display: none; }
+:root[data-look="panes"] .settings:not([data-open]) .settings__group:first-child { display: block; }
+@media (max-width: 1024px) {
+  :root[data-look="panes"] .settings { grid-template-columns: minmax(0, 1fr); }
+  :root[data-look="panes"] .settings:not([data-open]) .settings__main { display: none; }
+  :root[data-look="panes"] .settings[data-open] .settings__list { display: none; }
+  :root[data-look="panes"] .settings[data-open] .settings__back { display: inline-flex; justify-self: start; }
+}
 /* devices (S2.9) */
 /* the section is two columns from a wide tablet up: Paired devices across, then the cards in pairs (03 7.1) */
 @media (min-width: 1025px) {

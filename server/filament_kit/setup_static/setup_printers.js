@@ -543,14 +543,23 @@ function detailRegion(p, box, acts) {
   const id = "detail-" + keyOf(p.serial), slotsBox = E("div", "printers-slots");
   slotsBox.append(slotLines(p));
   rowViews.get(p.serial).detailSlots = slotsBox;
-  return X("section", { class: "detail", id, "aria-labelledby": id + "-title", hidden: !expanded.has(p.serial) },
-    E("header", "detail__head", X("h2", { class: "detail__title", id: id + "-title", tabindex: "-1", text: p.name }), rowViews.get(p.serial).detailStatus = E("span", null, stateBlock(p)[0])),
+  const back = SW.iconBtn("chevron", SW.t("detail_back", { name: SW.t("nav_printers") }), { cls: "detail__back" });
+  const close = SW.iconBtn("close", SW.t("detail_close", { name: p.name }), { cls: "detail__close" });
+  const testBtn = SW.btn(SW.t("printers_test"), { cls: "btn panes-only", name: SW.t("printers_test_name", { name: p.name }), run: (e) => testConnection(p, box, e.currentTarget) });
+  const region = X("section", { class: "detail", id, "aria-labelledby": id + "-title", hidden: !expanded.has(p.serial) },
+    E("header", "detail__head", back, X("h2", { class: "detail__title", id: id + "-title", tabindex: "-1", text: p.name }), rowViews.get(p.serial).detailStatus = E("span", null, stateBlock(p)[0]), close),
     E("div", "detail__body",
       E("div", "detail__section", E("h3", "detail__heading", SW.t(klipperOf(p) ? "printers_slots_tool" : "printers_slots_ams")), slotsBox, facts(p, box)),
       E("div", "detail__section",
-        E("h3", "detail__heading", SW.t("printers_group_actions")), E("div", "actions", acts.act1.map(actionButton)),
+        E("h3", "detail__heading", SW.t("printers_group_actions")), E("div", "actions", [testBtn, ...acts.act1.map(actionButton)]),
         E("h3", "detail__heading", SW.t("printers_group_change")), E("div", "actions actions--list", acts.change1.map(ghostButton)),
         E("div", "detail__remove", E("h3", "detail__heading", SW.t("printers_group_remove")), E("div", "actions", acts.remove1.map(dangerButton))))));
+  region.addEventListener("sw:detail-close", () => {
+    expanded.delete(p.serial);
+    if (!drawer && location.hash === addressHash(p)) history.replaceState(null, "", "#printers");
+    setTitle(expandedTitle());
+  });
+  return region;
 }
 
 // ----- a printer's row: the main row, its message row and its expansion (03 5.2) -----
@@ -592,7 +601,7 @@ function watchNote(row, slots, shown) {
   watchers.add(o);
 }
 function printerItem(p) {
-  const box = boxFor("printer:" + p.serial), acts = actionsOf(p, box), id = "detail-" + keyOf(p.serial), open = expanded.has(p.serial);
+  const box = boxFor("printer:" + p.serial), acts = actionsOf(p, box), id = "detail-" + keyOf(p.serial), open = expanded.has(p.serial) && SW.profile().detail !== "sheet";
   rowViews.set(p.serial, {});
   const view = rowViews.get(p.serial);
   if (p.mapping) followMap(p, box);      // a job already running (a reload, another browser): progress and Stop again
@@ -656,7 +665,7 @@ function printerTable(found, configured) {
   const group = found.length ? E("div", "printers-found", E("div", "coll__item", { role: "rowgroup" }, E("div", "coll__row", { role: "row" },
     X("div", { class: "coll__cell", role: "cell", "aria-colspan": 7 }, E("strong", null, SW.t("printers_found_group"))))), found.map(foundItem)) : null;
   const table = X("div", { class: "coll coll--printers", role: "table", "aria-label": SW.t("nav_printers") }, head, configured.map(printerItem), group);
-  SW.collection(table, { name: "printers", sort: "title:ascending" });
+  SW.collection(table, { name: "printers", sort: "title:ascending", emptyPane: SW.t("printers_pane_empty") });
   if (group) table.append(group);
   table.addEventListener("click", (e) => {
     const t = e.target.closest(".coll__sort");
@@ -964,8 +973,13 @@ async function followAddress() {
     expanded.add(p.serial);
     const it = listEl && listEl.querySelector(`.coll__item[data-id="${CSS.escape(keyOf(p.serial))}"]`);
     const x = it && it.querySelector(".coll__expand");
-    if (x && x.getAttribute("aria-expanded") !== "true") x.click();
+    const reg = document.getElementById("detail-" + keyOf(p.serial));
+    if (SW.profile().detail === "sheet" && !a.what && !drawer && reg && !reg.closest("dialog")) SW.openDetail(reg, { opener: x || it, focusTitle: true });
+    else if (x && x.getAttribute("aria-expanded") !== "true") x.click();
     if (it && !a.what && !drawer) it.scrollIntoView({ block: "start" });
+  } else {
+    const openDlg = document.querySelector("#detail-host .detail");
+    if (openDlg) SW.closeDetail(openDlg);
   }
   if (drawer && !(wantsAdd && drawer.kind === "add") && (!p || a.what !== drawer.kind || p.serial !== drawer.serial)) {
     if (drawer.running() || drawer.busy() || drawer.dirty()) { history.pushState(null, "", drawer.address); requestClose(); return; }

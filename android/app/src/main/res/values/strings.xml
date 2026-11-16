@@ -363,6 +363,7 @@
     <string name="detail_gone">%1$s is no longer on this Hub.</string>
     <string name="detail_newer">Newer record</string>
     <string name="detail_older">Older record</string>
+    <string name="detail_pane_empty">Choose an item to see its details.</string>
     <string name="detail_pane_empty_line">Choose a product line to change its parent.</string>
     <string name="detail_pane_empty_printer">Choose a printer to see its details.</string>
     <string name="detail_pane_empty_record">Choose a record to see its details.</string>
@@ -1097,6 +1098,7 @@
     <!-- 1=vendor 2=line -->
     <string name="presets_line_title">%1$s %2$s</string>
     <string name="presets_lines_none">No product lines yet. They are made from the filaments in Spoolman at the next build or when spools are added.</string>
+    <string name="presets_pane_empty">Choose a line to see its details.</string>
     <string name="presets_lines_title">Product lines</string>
     <!-- 1=stamp 2=count -->
     <plurals name="presets_meta_build_plain">
@@ -1228,6 +1230,7 @@
     <string name="printers_empty_bambu">Bambu Lab printers on the network appear here once they announce themselves.</string>
     <string name="printers_empty_klipper">Klipper printers are found by a scan.</string>
     <string name="printers_empty_title">No printers yet</string>
+    <string name="printers_pane_empty">Choose a printer to see its details.</string>
     <string name="printers_error_key">Enter the API key.</string>
     <string name="printers_fact_certificate">Certificate</string>
     <string name="printers_fact_lane_data">Lane data</string>

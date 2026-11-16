@@ -100,7 +100,7 @@ def test_palette_shows_in_the_hub_page_at_three_widths_and_console_is_unchanged(
     _check_styles(*(_drive(hub, tmp_path, STYLES, width=w) for w in (1280, 768, 320)))
 
 
-# the rework items: the tablet top bar keeps the light/dark switch on one row (02 4.3), an open in-row detail spans the grid, the pill
+# the rework items: the tablet top bar keeps the light/dark switch on one row (02 4.3), a detail opens in the sheet (not in its row, S6.11), the pill
 # row stays under the top bar while the page scrolls (02 2.3), and the active pill is not bolder than the others (02 2.3 table)
 REWORK = """
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -115,23 +115,24 @@ const cur = $('.shell .nav__item[aria-current="page"] .nav__label'), other = $('
 const out = { topbarH: Math.round(box($(".topbar")).height), segTops: tops, weights: [getComputedStyle(cur).fontWeight, getComputedStyle(other).fontWeight],
   scrollW: r.scrollWidth, clientW: r.clientWidth };
 $(".coll--printers .coll__expand").click();
-await sleep(500);
-const region = $(".coll--printers .coll__row--detail:not([hidden]) .detail"), coll = $(".coll--printers");
-out.detailW = Math.round(box(region).width); out.collW = Math.round(box(coll).width);
+const dlg = await until(() => $("#detail-host[open]"), "the detail sheet");               // Palette opens a detail as a sheet (S6.11), not in its row
+out.sheetHasDetail = !!$(".detail", dlg);
+dlg.close();
+await until(() => !dlg.open, "the detail sheet closed");
 scrollTo(0, 400); await sleep(400);
 out.navGap = Math.round(box($(".shell > .nav")).top - box($(".topbar")).bottom); out.scrolled = Math.round(scrollY);
 return out;
 """
 
 
-def test_the_palette_tablet_top_bar_stays_one_row_the_detail_spans_the_grid_and_the_pills_stay_with_the_top_bar(hub, tmp_path):
+def test_the_palette_tablet_top_bar_stays_one_row_the_detail_opens_as_a_sheet_and_the_pills_stay_with_the_top_bar(hub, tmp_path):
     tablet = _drive(hub, tmp_path, REWORK, width=768)
     assert len(tablet["segTops"]) == 3 and len(set(tablet["segTops"])) == 1, tablet           # the three options on one row
     assert tablet["topbarH"] <= 80 and tablet["scrollW"] <= tablet["clientW"], tablet          # not 139 px; no sideways scroll
-    assert tablet["detailW"] >= tablet["collW"] - 48 and tablet["navGap"] in (0, 1) and tablet["scrolled"] > 100, tablet
+    assert tablet["sheetHasDetail"] and tablet["navGap"] in (0, 1) and tablet["scrolled"] > 100, tablet
     assert tablet["weights"][0] == tablet["weights"][1], tablet
     wide = _drive(hub, tmp_path, REWORK, width=1280)
-    assert wide["detailW"] >= wide["collW"] - 48 and wide["navGap"] in (0, 1) and wide["scrolled"] > 100, wide
+    assert wide["sheetHasDetail"] and wide["navGap"] in (0, 1) and wide["scrolled"] > 100, wide
 
 
 # the web app's body carries data-ai: pills under the top bar from tablet up (no side column at any width), the bottom bar on a phone
