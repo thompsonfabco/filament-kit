@@ -328,7 +328,8 @@ class SetupPage:
             ("/pair", w(self.pair), "POST"), ("/devices/{id}/revoke", w(self.device_revoke), "POST"),
             ("/modules", hw(self.module), "POST"), ("/settings", hw(self.setting), "POST"),
             ("/apply", hw(self.apply_start), "POST")] + setup_console.routes(self)
-        return ([Route("/setup", self.page, methods=["GET"]),
+        return ([Route("/", self.page, methods=["GET"]),          # the Hub's base address answers with the same page
+                 Route("/setup", self.page, methods=["GET"]),
                  Route("/setup/setup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_tabs.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_overview.js", self.asset, methods=["GET"]),
