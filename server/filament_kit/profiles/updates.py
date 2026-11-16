@@ -22,7 +22,7 @@ under another file name. An install report without `written` (an older PC sync, 
 the snapshot the build as it is.
 
 The owner's accepted updates (`profiles/updates.json` {"accepted": {"base"|"orca": {name: hash}}}, written by
-`sudo filament-kit profiles apply-updates`) hold the hash of the generated preset the owner approved
+`sudo spoolwarden profiles apply-updates`) hold the hash of the generated preset the owner approved
 (`preset_hash`); an acceptance counts only while the current build's preset has that hash, so new values go back
 to pending. They are sent to the PC in the sync state (`accepted_updates`);
 the next sync writes them over the existing presets and the install report clears them. An update is pending

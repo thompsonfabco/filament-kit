@@ -707,7 +707,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
     def not_mapping(serial: str) -> None:
         """Slot mapping changes the slots (test colours, the calibration job): no load or unload meanwhile, also
-        when `filament-kit printer map` runs it in another process (dry runs too: the slots are in flux)."""
+        when `spoolwarden printer map` runs it in another process (dry runs too: the slots are in flux)."""
         if mapper.in_progress(serial):
             raise mapping.AlreadyRunning(serial)
 
@@ -770,7 +770,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
     @_authed
     async def map_stop(request: Request):
-        """Stop a running slot mapping (the slots are put back first); `filament-kit printer map` on Ctrl-C."""
+        """Stop a running slot mapping (the slots are put back first); `spoolwarden printer map` on Ctrl-C."""
         serial = request.path_params["id"]
         await run_in_threadpool(bambu_only, serial)
         await run_in_threadpool(audited, "slot mapping stopped", request.state.device, lambda: mapper.abort(serial, pending=False),
@@ -1173,7 +1173,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def station_hello(request: Request):
-        """`filament-kit station pair` calls this once: the first authenticated call claims the station's token."""
+        """`spoolwarden station pair` calls this once: the first authenticated call claims the station's token."""
         return JSONResponse({"ok": True})
 
     @_handle

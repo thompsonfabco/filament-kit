@@ -229,7 +229,7 @@ def test_menu_is_the_checklist_and_takes_no_json(capsys, monkeypatch):
     assert cli.main(["features", "menu", "--numbered"]) == 0
     assert "Spoolman" in capsys.readouterr().out
     rc, out, err = run(capsys, "features", "menu", "--json")
-    assert rc == 2 and json.loads(out)["fix"] == "use filament-kit features --json"
+    assert rc == 2 and json.loads(out)["fix"] == "use spoolwarden features --json"
 
 
 # ---------------------------------------------------------------- AUT-9
@@ -330,7 +330,7 @@ def test_pair_asks_for_the_link_then_the_fingerprint_and_names_the_hub(monkeypat
     monkeypatch.setattr(server_api, "pair_with_link", pair_with_link)
     prompts, answers = [], iter(["link", "y"])
     assert cli.cmd_station_pair(ask=lambda p: prompts.append(p) or next(answers)) == 0
-    assert prompts == ["Paste the link from the Hub (sudo filament-kit pair --weigh-station): ",
+    assert prompts == ["Paste the link from the Hub (sudo spoolwarden pair --weigh-station): ",
                        "Does it match the fingerprint the Hub shows? [y/N] "]
     out = capsys.readouterr().out
     assert out.splitlines()[:2] == ["  " + " ".join(["abab"] * 8)] * 2

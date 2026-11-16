@@ -1,4 +1,4 @@
-"""`filament-kit status` checks only the modules that are on."""
+"""`spoolwarden status` checks only the modules that are on."""
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer

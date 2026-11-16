@@ -1,6 +1,6 @@
 """The corrections waiting to be shared ("Share corrections"): the Hub's thin pass-through to the local reader's queue
 (local_reader.feedback_*), one set of functions for the setup page, the phone app's API and the phone web app. The queue
-lives in the reader; the Hub keeps nothing, and the upload is the reader's own (the Send job, `filament-kit local-intake
+lives in the reader; the Hub keeps nothing, and the upload is the reader's own (the Send job, `spoolwarden local-intake
 corrections send`, only asks the reader to do it: the Hub names no address and makes no new outbound connection).
 
     waiting(cfg)          {opt_in, endpoint_configured, count, bytes, bundle_mb, capabilities, entries, not_queued}

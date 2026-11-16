@@ -603,7 +603,7 @@ def klipper_at(printers: dict, host: str, port: int) -> Printer | None:
 
 def detected_klipper(host: str, port: int, name: str = "", lookups: bool = True) -> Printer:
     """Record a Klipper printer found on the LAN (mDNS or a scan): a new one is added unconfigured (the owner adds it
-    with `filament-kit klipper add` or the app); a known host:port, or a configured name that resolves to it, is left
+    with `spoolwarden klipper add` or the app); a known host:port, or a configured name that resolves to it, is left
     as it is. `lookups` False compares text only, for a caller that has looked or can't wait: an unconfigured twin the
     sync's next round removes. Anything on the LAN can announce itself, so at most MAX_FOUND such entries stay in this
     file, which also holds the Access Codes: the oldest goes."""

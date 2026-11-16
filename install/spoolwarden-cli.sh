@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installed as /usr/local/bin/filament-kit.
+# Installed as /usr/local/bin/spoolwarden (the old name, /usr/local/bin/filament-kit, is filament-kit-wrapper.sh).
 # Settings and the certificate live in /etc/filament-kit (root-owned), so
 # `config` and `cert` run as root; so does `modules`, which installs and starts
 # services, `update`, which installs a new release, `uninstall`, which runs the kept release's
@@ -36,7 +36,7 @@ if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; t
 fi
 
 # The switches every command takes (`--plain`, `--no-progress`, `--json`, `--quiet`, `-q`, `--color <when>`) may stand
-# before the command, as in `sudo filament-kit --plain backup create`: they are set aside here, so the route below is
+# before the command, as in `sudo spoolwarden --plain backup create`: they are set aside here, so the route below is
 # chosen on the command itself, and they go on to the program in front of it.
 SWITCHES=()
 while [ "$#" -gt 0 ]; do

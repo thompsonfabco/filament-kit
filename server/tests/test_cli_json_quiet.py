@@ -196,7 +196,7 @@ def test_revoking_trusted_computers_gives_ok_with_json(capsys):
 def test_an_error_is_the_document_the_text_and_the_exit_code(capsys):
     rc, out, err = run(capsys, ["unpair", "nosuch", "--json"])
     assert rc == output.USAGE and doc(out)["ok"] is False and doc(out)["error"] == '"nosuch" does not name one device.'
-    assert doc(out)["fix"] == "use a name or id from filament-kit devices." and err.startswith('Error: "nosuch" does not name')
+    assert doc(out)["fix"] == "use a name or id from spoolwarden devices." and err.startswith('Error: "nosuch" does not name')
 
 
 def test_an_error_with_a_fix_gives_both(capsys, monkeypatch):
@@ -299,7 +299,7 @@ def test_modules_enable_json_stops_on_a_missing_setting_with_exit_2(capsys, monk
     rc, out, err = run(capsys, ["modules", "enable", "web", "--json", "--yes"])
     got = doc(out)
     assert rc == 2 and got["ok"] is False
-    assert got["fix"] == "set it first, then run this again: sudo filament-kit config set web.public_url <value>"
+    assert got["fix"] == "set it first, then run this again: sudo spoolwarden config set web.public_url <value>"
     assert config.load() == before
 
 
@@ -359,8 +359,8 @@ def test_a_restore_has_no_word_to_type_under_json(capsys, tmp_path):
     assert rc == 2 and "needs a yes" in doc(out)["error"]
 
 
-@pytest.mark.parametrize("argv,fix", [(["config"], "filament-kit config show --json"),
-                                      (["features", "menu"], "filament-kit features --json")])
+@pytest.mark.parametrize("argv,fix", [(["config"], "spoolwarden config show --json"),
+                                      (["features", "menu"], "spoolwarden features --json")])
 def test_menus_refuse_json(capsys, argv, fix):
     rc, out, err = run(capsys, [*argv, "--json"])
     assert rc == 2 and doc(out)["error"].endswith("is a menu.") and doc(out)["fix"] == "use " + fix
@@ -392,7 +392,7 @@ def test_status_quiet_prints_only_the_rows_that_need_a_look(capsys):
     rc, out, _ = run(capsys, ["status", "--quiet"])
     assert rc == 1                                             # the exit code still says there was one
     assert "Spoolman" in out and "needs a look" in out and "Fix:" in out
-    assert "filament-kit " not in out.splitlines()[0]          # no header
+    assert "Spoolwarden " not in out.splitlines()[0]          # no header
     assert "OK" not in out and "note" not in out and "need a look" not in out and "need" not in out.splitlines()[-1][:5]
     assert not any(ln.strip().startswith(("+", "o ")) for ln in out.splitlines())      # no row that is fine
 

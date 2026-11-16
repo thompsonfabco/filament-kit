@@ -317,7 +317,7 @@ def test_periodic_sync_picks_up_a_cli_add(moonraker):
     fam = KlipperFamily(NoSpoolman(), backoff=(0.1, 0.4), sync_every=0.3)
     fam.start()
     try:
-        pid = add(moonraker, "Voron")                # e.g. `filament-kit klipper add` in another process
+        pid = add(moonraker, "Voron")                # e.g. `spoolwarden klipper add` in another process
         assert wait_for(lambda: fam.state(pid) == "unknown_model", 8)
     finally:
         fam.stop()

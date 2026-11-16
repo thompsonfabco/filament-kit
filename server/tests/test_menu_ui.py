@@ -557,7 +557,7 @@ def _read_until(fd, needle: bytes, timeout=15.0) -> bytes:
 
 
 def _run_in_pty(tmp_path, keys: list[bytes]):
-    """`filament-kit modules menu --raw` with the pty as its terminal and stdout on a pipe (as install.sh runs it):
+    """`spoolwarden modules menu --raw` with the pty as its terminal and stdout on a pipe (as install.sh runs it):
     the screen must be drawn on /dev/tty. Returns (exit code, stdout, screen bytes)."""
     import pty
     env = dict(os.environ, TERM="xterm", FK_ETC=str(tmp_path / "etc"), FK_STATE=str(tmp_path / "state"),

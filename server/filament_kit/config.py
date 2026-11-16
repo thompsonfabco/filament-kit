@@ -65,7 +65,7 @@ def grant_web_read(path) -> None:
             import logging
             logging.getLogger(__name__).warning(
                 "cannot let %s read %s (%s); the web unit will fail to read it: check that the file system "
-                "supports ACLs, then run: sudo filament-kit modules apply", WEB_USER, path, e)
+                "supports ACLs, then run: sudo spoolwarden modules apply", WEB_USER, path, e)
 
 
 # The one install line (README). It also repairs an install: get.sh fetches the release, unlike an ./install.sh it deleted.

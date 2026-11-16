@@ -598,7 +598,7 @@ class Mapper:
             return j is not None and j.state == "running"
 
     def in_progress(self, serial: str) -> bool:
-        """A job runs for `serial` in this process or another one (`filament-kit printer map`)."""
+        """A job runs for `serial` in this process or another one (`spoolwarden printer map`)."""
         return self.running(serial) or _ProcessLock.held_elsewhere(serial)
 
     # ---------------------------------------------------------------- start-up restore

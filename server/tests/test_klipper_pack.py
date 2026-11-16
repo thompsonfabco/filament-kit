@@ -1,4 +1,4 @@
-"""`filament-kit klipper add-on` (once `klipper pack`): the printer-pack install command, pinned to the running version and checked
+"""`spoolwarden klipper add-on` (once `klipper pack`): the printer-pack install command, pinned to the running version and checked
 against the signed SHA256SUMS (review 2026-11-08 B2)."""
 from __future__ import annotations
 

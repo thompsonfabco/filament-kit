@@ -1,5 +1,5 @@
 """The station's intake flow end to end against the REAL kit API: uvicorn with the kit's TLS certificate, the fake
-Spoolman and FakeClaude, the station paired the way `filament-kit station pair` pairs it, and flow.api() building
+Spoolman and FakeClaude, the station paired the way `spoolwarden station pair` pairs it, and flow.api() building
 its ServerApi from those pairing files. Only the hardware is fake: the camera, the scale reading and the panel's
 serial port. tag -> camera -> recognise -> weigh -> long press -> spool created and tag linked."""
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """The Printer Station reader tokens (`FK_STATE/web/reader_tokens`, XML, sha256 of each token only): made, listed and
-revoked by `filament-kit reader token | tokens | revoke` and the server's /setup page, checked by the web unit's
+revoked by `spoolwarden reader token | tokens | revoke` and the server's /setup page, checked by the web unit's
 reader API (web/reader.py, which re-exports these). No `mcp` import here: the kit server uses it too."""
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ def parse_tokens(data: bytes, where: str = "reader_tokens") -> tuple[list[dict],
 def render_tokens(tokens: list[dict], next_id: int = 1) -> bytes:
     lines = ['<?xml version="1.0" encoding="utf-8"?>',
              "<!-- filament-kit reader tokens: sha256 of each token (the tokens themselves are not kept). "
-             "Change with: filament-kit reader token | tokens | revoke -->",
+             "Change with: spoolwarden reader token | tokens | revoke -->",
              f'<reader-tokens version="1" next-id="{int(next_id)}">']
     for t in tokens:
         lines.append(f"  <token id={quoteattr(t['id'])} name={quoteattr(t['name'])} sha256={quoteattr(t['sha256'])}"

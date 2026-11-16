@@ -216,7 +216,7 @@ def test_release_ships_no_ops_export_script():
 
 def test_install_hands_over_to_modules_apply():
     text = _read("install/install.sh")
-    assert "exec /usr/local/bin/filament-kit modules apply" in text
+    assert "exec /usr/local/bin/spoolwarden modules apply" in text
     assert "--mode" in text
     assert "Install mode: 1) server 2) station 3) all-in-one 4) custom [1]" in text
     assert "Server address (name or IP): " in text
@@ -256,7 +256,7 @@ def test_web_extra_pins_mcp_exactly():
 
 
 def test_wrapper_runs_modules_as_root():
-    text = _read("install/filament-kit-cli.sh")
+    text = _read("install/spoolwarden-cli.sh")
     # the first case list that runs as root: its words, however the lines are split (S5.8 added the new names)
     start = text.index('case "${1:-}" in')
     block = text[start:text.index('run_as_root "$@"', start)]
@@ -269,7 +269,7 @@ def test_wrapper_runs_modules_as_root():
 def test_wrapper_runs_web_passphrase_as_root():
     """`web passphrase` writes /etc/filament-kit/web_passphrase (root:filament-kit 640) and refuses unless root:
     the wrapper must not drop to the service user for it (other `web` commands still do)."""
-    text = _read("install/filament-kit-cli.sh")
+    text = _read("install/spoolwarden-cli.sh")
     assert re.search(r'^if \[ "\$\{1:-\}" = web \] && \[ "\$\{2:-\}" = passphrase \]; then\s*$', text, re.M)
     i = text.index('= passphrase ]')
     assert 'run_as_root "$@"' in text[i:i + 120]  # run_as_root is `exec "$BIN"` with the leading switches kept
@@ -703,7 +703,7 @@ def _stubs_first(script: str) -> str:
 
 
 def _wrapper_run(tmp_path, *args) -> str:
-    """Run install/filament-kit-cli.sh as root with stand-ins: the program prints `as-root ...`, runuser prints
+    """Run install/spoolwarden-cli.sh as root with stand-ins: the program prints `as-root ...`, runuser prints
     `as-user ...`. Returns what was printed."""
     import os
     import subprocess
@@ -714,7 +714,7 @@ def _wrapper_run(tmp_path, *args) -> str:
         f = stubs / name
         f.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8", newline="\n")
         f.chmod(0o755)
-    text = _read("install/filament-kit-cli.sh").replace("BIN=/opt/filament-kit/venv/bin/filament-kit",
+    text = _read("install/spoolwarden-cli.sh").replace("BIN=/opt/filament-kit/venv/bin/filament-kit",
                                                         "BIN=./stubs/prog")
     assert "BIN=./stubs/prog" in text
     (tmp_path / "w.sh").write_text(_stubs_first(text), encoding="utf-8", newline="\n")
@@ -727,7 +727,7 @@ def _wrapper_run(tmp_path, *args) -> str:
 @pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_wrapper_runs_reader_token_and_revoke_as_root(tmp_path):
     """`reader token` and `reader revoke` refuse unless root (they write the token file, chowned to the service
-    user): `sudo filament-kit reader token` must reach the program as root. `reader tokens` (a list) drops to
+    user): `sudo spoolwarden reader token` must reach the program as root. `reader tokens` (a list) drops to
     the service user like every other read."""
     assert _wrapper_run(tmp_path, "reader", "token", "--name", "bench") == "as-root reader token --name bench"
 
@@ -765,7 +765,7 @@ def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installin
         (kit / ".fk-installed").write_text("x\n")
     if state:
         (kit / "releases" / "state.json").write_text(state, encoding="utf-8")
-    text = _read("install/filament-kit-cli.sh")
+    text = _read("install/spoolwarden-cli.sh")
     for old, new in (("BIN=/opt/filament-kit/venv/bin/filament-kit", "BIN=./stubs/prog"),
                      ("KIT_OPT=/opt/filament-kit", "KIT_OPT=./kit")):
         assert old in text
@@ -822,7 +822,7 @@ def _wrapper_status(tmp_path, *, uid="0", folder=True, prog='echo "paired 192.0.
         f.chmod(0o755)
     if folder:
         (tmp_path / "pairing").mkdir()
-    text = _read("install/filament-kit-cli.sh")
+    text = _read("install/spoolwarden-cli.sh")
     for old, new in (("BIN=/opt/filament-kit/venv/bin/filament-kit", "BIN=./stubs/prog"),
                      ("STATION_DIR=/etc/filament-kit-station", "STATION_DIR=./pairing")):
         assert old in text

@@ -64,9 +64,9 @@ case "$1" in
     elif take_pair "$T/previous"; then
       echo "filament-kit: the saved certificate and key did not belong together, so the previous working pair was put back."
     elif take_pair "$T/previous" expired-ok; then
-      echo "filament-kit: the saved certificate and key did not belong together and the only working pair has run out, so it is served anyway to keep the web server up; renew it with 'sudo certbot renew' (or 'sudo filament-kit modules apply' for the kit's own certificate)."
+      echo "filament-kit: the saved certificate and key did not belong together and the only working pair has run out, so it is served anyway to keep the web server up; renew it with 'sudo certbot renew' (or 'sudo spoolwarden modules apply' for the kit's own certificate)."
     else
-      echo "filament-kit: the saved certificate and key do not belong together and no good copy was found; run 'filament-kit apply' to make them again."
+      echo "filament-kit: the saved certificate and key do not belong together and no good copy was found; run 'spoolwarden apply' to make them again."
     fi
     exit 0 ;;
   *) echo "usage: $0 pre|post|deploy|check"; exit 2 ;;

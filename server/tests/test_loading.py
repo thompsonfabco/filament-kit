@@ -617,7 +617,7 @@ def test_cross_process_load_takes_a_shared_lock(rig, sm, fil, monkeypatch):
     s = spool(sm, fil, "Shelf 1")
     loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
     assert fake.LOCK_SH | fake.LOCK_NB in fake.ops and fake.mine == {}
-    fake.other = 'ex'                                    # `filament-kit printer map` in another process
+    fake.other = 'ex'                                    # `spoolwarden printer map` in another process
     with pytest.raises(mapping.AlreadyRunning):
         loading.load(m, sm, SERIAL, "A1", s["id"], False, preset_for=FakePresets())
     fake.other = 'sh'                                    # a load in another process: loads go on

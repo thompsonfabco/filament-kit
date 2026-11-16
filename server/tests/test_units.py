@@ -129,7 +129,7 @@ def test_backup_excludes():
 
 
 def test_cli_wrapper_library_add_uses_stdin():
-    text = _text(INSTALL / "filament-kit-cli.sh")
+    text = _text(INSTALL / "spoolwarden-cli.sh")
     assert 'run_as_user "$1" add - < "$3"' in text  # root opens the file; the service user reads it on stdin
     # the new name and the old spelling both read from stdin
     assert '{ [ "${1:-}" = catalog ] || [ "${1:-}" = library ]; } && [ "${2:-}" = add ]' in text

@@ -115,7 +115,7 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update", "--yes"
         "corrections_send": ("label-reader", "corrections", "send"),
         # the "Flash a device" tab, Printer Station plugged into the server: the answers wait in reader_flash.PENDING
         "reader_setup": ("reader", "setup", "--pending")}
-WRAPPER = "/usr/local/bin/filament-kit"
+WRAPPER = "/usr/local/bin/spoolwarden"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
 JOURNAL_MAX = 64 * 1024

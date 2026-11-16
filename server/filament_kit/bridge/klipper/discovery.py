@@ -6,7 +6,7 @@ anything but the standard mDNS query.
 
 `scan(subnet, port=7125, workers=64, timeout=0.3)` probes TCP `port` on every address of `subnet` (at most a /24)
 and keeps the ones whose `/server/info` answers like Moonraker. It runs only when the owner asks (CLI
-`filament-kit klipper scan`, the app's Scan button), never in the background. `own_subnet()` is the /24 of this
+`spoolwarden klipper scan`, the app's Scan button), never in the background. `own_subnet()` is the /24 of this
 machine's default-route address (found without sending a packet). `check_range(net)` is what a client of the server may
 ask for (`KlipperFamily.scan`); the CLI's `--subnet` is explicit and runs outside the service, so it isn't held to it.
 """

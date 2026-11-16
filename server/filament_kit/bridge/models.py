@@ -3,7 +3,7 @@ camera each has.
 
 Thin readers of `bambu_hardware.xml` (see `hardware.py`, which documents `ModelInfo`). Codes come from Bambu Studio
 `resources/printers/<model_id>.json`; X1/X1 Carbon report their `printer_type` ("3DPrinter-X1",
-"3DPrinter-X1-Carbon") over SSDP, the others the short code. Hand-typed names (`filament-kit config` → Printers)
+"3DPrinter-X1-Carbon") over SSDP, the others the short code. Hand-typed names (`spoolwarden config` → Printers)
 work too, with or without "Bambu Lab ".
 """
 from __future__ import annotations

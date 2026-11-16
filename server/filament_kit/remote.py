@@ -141,7 +141,7 @@ def certificate_warning(info: dict | None, now: datetime.datetime | None = None)
         return None
     day = info["not_after"].strftime("%Y-%m-%d")
     kind = "self-signed certificate" if info["self_signed"] else "certificate"
-    fix = ("if it's the kit's placeholder, sudo filament-kit modules apply makes a new one, and the phone then asks you to "
+    fix = ("if it's the kit's placeholder, sudo spoolwarden modules apply makes a new one, and the phone then asks you to "
            "accept it again; one you placed yourself is yours to replace"
            if info["self_signed"] else "sudo certbot renew; see the remote section of the guide")
     return (left.total_seconds() <= 0, f"the web address's {kind} {'ended' if left.total_seconds() <= 0 else 'ends'} "
@@ -193,7 +193,7 @@ def timer_dropin(window: str) -> str:
 
 def _remote_dir(resources: Path) -> Path:
     d = Path(resources) / "remote"
-    if not d.is_dir():  # `filament-kit remote firewall` before any apply: use the source checkout
+    if not d.is_dir():  # `spoolwarden remote firewall` before any apply: use the source checkout
         d = Path(__file__).resolve().parents[2] / "install" / "remote"
     return d
 
@@ -237,7 +237,7 @@ def firewall_text(s: dict, resources: Path) -> str:
         f"  DNS      {host} must resolve to your public address (and, at home, to this machine)",
         "",
         "Port 80 is only for certbot: it binds :80 itself during the run (nginx steps aside meanwhile).",
-        "Open it, then run:  sudo filament-kit remote get-certificate",
+        "Open it, then run:  sudo spoolwarden remote get-certificate",
         "Until that succeeds, nginx serves a self-signed placeholder certificate.",
         "",
         "Optional hardening, save as /etc/systemd/system/nginx.service.d/filament-kit.conf",
@@ -253,17 +253,17 @@ def _is_root() -> bool:
 
 
 def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
-    """`filament-kit remote get-certificate` (06 9.12; `remote issue` is its old spelling): certbot standalone for
+    """`spoolwarden remote get-certificate` (06 9.12; `remote issue` is its old spelling): certbot standalone for
     remote.hostname, with the kit's hooks."""
     from .modules import enabled
     if run is None:
         from .apply import run_checked as run
     if "remote" not in enabled(cfg):
-        output.error("Remote access is off.", "turn it on first:", cmd="sudo filament-kit features on remote")
+        output.error("Remote access is off.", "turn it on first:", cmd="sudo spoolwarden features on remote")
         return output.FAILED
     if not _is_root():
         from .cli import _sudo_command
-        return output.need_sudo(_sudo_command("sudo filament-kit remote get-certificate"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden remote get-certificate"))
     try:
         s = settings(cfg)
     except ModuleError as e:
@@ -288,10 +288,10 @@ def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
 
 
 def firewall(cfg: dict) -> int:
-    """`filament-kit remote firewall` (06 9.12): the rules to add by hand; nothing is changed."""
+    """`spoolwarden remote firewall` (06 9.12): the rules to add by hand; nothing is changed."""
     from .modules import enabled
     if "remote" not in enabled(cfg):
-        output.error("Remote access is off.", "turn it on first:", cmd="sudo filament-kit features on remote")
+        output.error("Remote access is off.", "turn it on first:", cmd="sudo spoolwarden features on remote")
         return output.FAILED
     try:
         text = firewall_text(settings(cfg), config.paths().opt / "resources")
@@ -304,6 +304,6 @@ def firewall(cfg: dict) -> int:
                      "/opt/filament-kit/resources/remote)")
         return output.FAILED
     output.emit({"text": text})
-    output.out("filament-kit never changes your firewall or router. These are the rules to add:")
+    output.out("Spoolwarden never changes your firewall or router. These are the rules to add:")
     print(text)
     return 0

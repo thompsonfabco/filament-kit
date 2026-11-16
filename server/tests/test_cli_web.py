@@ -1,4 +1,4 @@
-"""`filament-kit web passphrase` and `web status`."""
+"""`spoolwarden web passphrase` and `web status`."""
 from __future__ import annotations
 
 import io
@@ -93,7 +93,7 @@ def test_web_status(monkeypatch, capsys):
     config.save({"modules": mods, "web": {"port": port, "public_url": "https://mcp.example.test/filament"}})
     assert cli.main(["web", "status"]) == 1          # no passphrase, nothing answering
     out = capsys.readouterr().out
-    assert "needs a look" in out and "filament-kit web passphrase" in out
+    assert "needs a look" in out and "spoolwarden web passphrase" in out
     (config.paths().etc / "web_passphrase").write_text(auth.hash_passphrase(PASS), encoding="utf-8")
     with served:
         assert cli.main(["web", "status"]) == 0

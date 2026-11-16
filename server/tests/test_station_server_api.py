@@ -328,7 +328,7 @@ def test_station_pair_says_the_command_when_the_refresh_fails(monkeypatch, capsy
     code, probed = _pair_cli(monkeypatch, "station", ["192.0.2.5"], boom)
     assert code == 0 and probed == ["192.0.2.5"]  # no local server: the link's address only
     out = capsys.readouterr()
-    assert "sudo filament-kit modules apply" in out.out + out.err
+    assert "sudo spoolwarden modules apply" in out.out + out.err
 
 
 def test_save_pairing_server_file_is_world_readable_whatever_the_umask():
@@ -445,7 +445,7 @@ def test_station_pair_with_an_expired_link_does_not_say_paired(server, monkeypat
     assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
     out = capsys.readouterr()
     assert "Paired" not in out.out
-    assert "10 minutes" in out.err and "sudo filament-kit pair --station" in out.err
+    assert "10 minutes" in out.err and "sudo spoolwarden pair --station" in out.err
 
 
 def test_the_station_token_reaches_only_the_station_routes(server):
@@ -464,7 +464,7 @@ def test_the_station_token_reaches_only_the_station_routes(server):
 
 # ---------- final fix wave I2: an unpaired station says so (status, the install's finish, the OLED) ----------
 
-PAIR_STEPS = ("sudo filament-kit pair --station", "sudo filament-kit station pair")
+PAIR_STEPS = ("sudo spoolwarden pair --station", "sudo spoolwarden station pair")
 
 
 def _station_mode(monkeypatch):
@@ -530,7 +530,7 @@ def test_pairing_lines_show_the_state_root_passed_in(monkeypatch):
 
 
 def test_status_prints_the_state_passed_in_even_when_the_files_are_closed(monkeypatch, capsys):
-    """What `sudo filament-kit status` runs: the wrapper's root check, then status as the service user."""
+    """What `sudo spoolwarden status` runs: the wrapper's root check, then status as the service user."""
     _station_mode(monkeypatch)
     monkeypatch.setattr(server_api, "token_file", _Unreadable)
     cli.main(["status", "--station-pairing=paired 192.0.2.10:8710"])
@@ -694,7 +694,7 @@ def test_pair_with_link_says_when_the_restart_failed(monkeypatch):
         raise apply.ApplyError("install_file: read-only")
     monkeypatch.setattr(apply, "refresh_station", boom)
     result = server_api.pair_with_link(_link())
-    assert result.status == "paired_not_restarted" and "sudo filament-kit modules apply" in result.message
+    assert result.status == "paired_not_restarted" and "sudo spoolwarden modules apply" in result.message
     assert server_api.ServerApi().paired
 
 
