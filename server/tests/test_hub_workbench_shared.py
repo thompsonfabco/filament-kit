@@ -125,10 +125,10 @@ const d = document, $ = (s) => d.querySelector(s), cs = (el, p) => getComputedSt
 await until(() => $('.shell .nav__item[href="#presets"][data-state="off"]'), "presets off");
 location.hash = "#presets";
 await sleep(100);
-const a = $('.shell .nav__item[href="#presets"]'), lbl = $(".nav__label", a);
+const a = $('.shell .nav__item[href="#presets"]'), lbl = a.querySelector(".nav__label");
 return {
   state: a.getAttribute("data-state"),
-  sr: $(".sr", lbl).textContent,
+  sr: lbl.querySelector(".sr").textContent,
   color: cs(a).color,
   ringDisplay: cs(lbl, "::after").display,
   moreLabel: $(".nav__more").getAttribute("aria-label"),

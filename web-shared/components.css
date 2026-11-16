@@ -222,7 +222,7 @@ textarea.field__control{min-height:calc(var(--s7) + var(--s6) + var(--s1));max-h
 /* detail region, key-value list (6.2, 6.3) */
 .detail__head{margin-bottom:var(--s3)}
 .detail__head>.status{margin-right:auto}
-.detail__back,.detail__close,.coll__pane-empty{display:none}
+.detail__back,.detail__close,.coll__pane-empty,.coll__pane-empty.empty{display:none}
 dialog .detail__close{display:inline-flex;margin-left:auto}
 .detail__body{display:grid;gap:var(--s5)}
 .detail__section{display:grid;align-content:start;gap:var(--s3);min-width:0}
