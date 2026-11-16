@@ -1,1 +1,1 @@
-android/app/src/main/java/com/thompsonfabco/filamentkit/update/UpdateTexts.kt | filament-kit | 2 | product name, waits for the rename
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/UpdateTexts.kt | filament-kit | 1 | repository URL in REFUSED_GUIDE_URL, kept (rename strings request section 3)
