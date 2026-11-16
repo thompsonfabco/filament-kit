@@ -1,6 +1,6 @@
 """Install, upgrade and remove the local label reader (the `local_intake` module) from its own signed releases.
 
-The reader is a separate program in its own repository (filament-kit-vision). The kit ships none of its code: this
+The reader is a separate program in its own repository (spoolwarden-vision). The kit ships none of its code: this
 file downloads a release, checks it the way the kit checks its own (`release.py`: ed25519 over SHA256SUMS, the key
 pinned here), unpacks it and runs that release's installer. The scheme is in the handoff
 `2026-11-12-1214-server-builder-release-signing-scheme.md`; the release layout this file expects:
@@ -9,12 +9,12 @@ pinned here), unpacks it and runs that release's installer. The scheme is in the
     manifest.json                                      {"version", "api_version": "1.x", "kit_min": "X.Y.Z",
                                                         "tiers": {"cpu": {"assets": [...], "disk_mb", "minutes",
                                                                           "download_mb"?}, "gpu": {...}, ...}}
-    filament-kit-vision-<version>.tar.gz                the code; top folder filament-kit-vision-<version>/ with
-                                                        install/filament-kit-vision.sh
+    spoolwarden-vision-<version>.tar.gz                 the code; top folder spoolwarden-vision-<version>/ with
+                                                        install/spoolwarden-vision.sh
     the tier's model assets (named in the manifest)    put next to the code, given to the installer by --assets
 
-The installer runs as `bash install/filament-kit-vision.sh --tier T --port P --bind 127.0.0.1 --user
-filament-kit-vision --prefix <PREFIX> --assets <dir>` (and `--uninstall --prefix <PREFIX>`); it owns its systemd unit,
+The installer runs as `bash install/spoolwarden-vision.sh --tier T --port P --host 127.0.0.1 --user
+spoolwarden-vision --prefix <PREFIX> --assets <dir>` (and `--uninstall --prefix <PREFIX>`); it owns its systemd unit,
 is idempotent (an upgrade is the newer release's installer over the old one), and exits 0 only when /v1/health
 answers. The kit then switches the module on, points `local_intake.url` at it and checks its health.
 
@@ -41,16 +41,23 @@ from . import local_reader, output, release
 # the kit's), published by its builder in KIT-INTEGRATION-STATUS.md on 2026-11-12 with the repository name. Empty
 # would mean no release can be verified, so nothing is installed.
 MODULE_PUBKEY = "adkFwUZin7sdhZJ1fdr9sOn8BtFIFuiFHrm2d5O0TPU="
-MODULE_REPO = "thompsonfabco/filament-kit-vision"
-NAME = "filament-kit-vision"
+MODULE_REPO = "thompsonfabco/spoolwarden-vision"
+NAME = "spoolwarden-vision"
+LEGACY_NAME = "filament-kit-vision"
+SERVICE = f"{NAME}.service"
+LEGACY_SERVICE = f"{LEGACY_NAME}.service"
 MANIFEST = "manifest.json"
 STORE = Path("/opt/filament-kit/local-intake")
-PREFIX = "/opt/filament-kit-vision"
-SERVICE_USER = "filament-kit-vision"
+PREFIX = "/opt/spoolwarden-vision"
+LEGACY_PREFIX = "/opt/filament-kit-vision"
+SERVICE_USER = "spoolwarden-vision"
+LEGACY_SERVICE_USER = "filament-kit-vision"
 DEFAULT_PORT = 7915
+MIN_VERSION = "0.2.1"
 LIMIT_MANIFEST = 256 << 10
 LIMIT_ASSET = 8 << 30            # a model file: the GPU adapter is large
-HEALTH_WAIT = 180                # seconds after the installer: the first start loads the models
+HEALTH_WAIT = 120                # seconds after the installer (cpu/auto > 90s)
+HEALTH_WAIT_GPU = 270            # seconds after the installer (gpu > 240s)
 API_MAJOR = local_reader.API_MAJOR
 
 
@@ -100,6 +107,19 @@ def installed() -> dict | None:
     if d.get("previous") is not None and not _valid_version(d["previous"]):
         d["previous"] = None
     return d
+
+
+def installed_identity(have: dict | None = None) -> tuple[str, str, str, str]:
+    """Return `(name, prefix, service_user, unit)` for the active install (legacy or renamed)."""
+    have = installed() if have is None else have
+    if have:
+        home = store().resolve()
+        ver = have["version"]
+        legacy_script = (home / ver / f"{LEGACY_NAME}-{ver}" / "install" / f"{LEGACY_NAME}.sh").resolve()
+        new_script = (home / ver / f"{NAME}-{ver}" / "install" / f"{NAME}.sh").resolve()
+        if legacy_script.is_relative_to(home) and legacy_script.is_file() and not new_script.is_file():
+            return LEGACY_NAME, LEGACY_PREFIX, LEGACY_SERVICE_USER, LEGACY_SERVICE
+    return NAME, PREFIX, SERVICE_USER, SERVICE
 
 
 def _write_json(name: str, d: dict | None) -> None:
@@ -156,6 +176,8 @@ def _manifest(raw: bytes, version: str) -> dict:
         raise InstallError("the release's manifest.json is not JSON") from None
     if not isinstance(m, dict) or m.get("version") != version or not isinstance(m.get("tiers"), dict):
         raise InstallError("the release's manifest.json does not describe this release")
+    if release.parse_version(version) < release.parse_version(MIN_VERSION):
+        raise InstallError(f"reader release {version} is older than {MIN_VERSION}: use {MIN_VERSION} or later")
     major = local_reader._major(m.get("api_version"))
     if major != API_MAJOR:
         raise InstallError(f"this reader release speaks API {m.get('api_version')!r}; this kit speaks {API_MAJOR}.x: "
@@ -196,6 +218,19 @@ def _mb(v) -> int | None:
     return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 else None
 
 
+def _conflicting_server_install() -> str | None:
+    """Return a description if standalone filament-vision-server is present, else None."""
+    raw = os.environ.get("FK_VISION_SERVER_PATHS", "").strip()
+    if raw:
+        paths = [Path(p) for p in raw.split(os.pathsep) if p]
+    else:
+        paths = [Path("/etc/systemd/system/filament-vision-server.service"), Path("/opt/filament-vision-server")]
+    for p in paths:
+        if p.exists():
+            return f"filament-vision-server is installed at {p}"
+    return None
+
+
 def plan(cfg: dict, *, tier: str | None = None, version: str | None = None,
          fetcher: release.Fetcher | None = None) -> dict:
     """What an install would do, before anything is downloaded beyond the signed list and the manifest: the
@@ -221,12 +256,15 @@ def plan(cfg: dict, *, tier: str | None = None, version: str | None = None,
             "installed_tier": have.get("tier") if have else None, "tier": tier, "asked_tier": asked, "tiers": tiers,
             "upgrade": newer, "downgrade": older,
             "same": bool(have) and have["version"] == rel["version"] and have.get("tier") == tier,
+            "conflict": _conflicting_server_install(),
             "notes": rel.get("notes", "")[:2000]}
 
 
 def plan_text(p: dict) -> list[str]:
     """The lines the CLI and the page show before the owner confirms."""
     lines = []
+    if p.get("conflict"):
+        lines.append(f"Blocked: {p['conflict']}. Remove filament-vision-server first; this installer will not remove it.")
     if p["installed"]:
         lines.append(f"Installed: version {p['installed']} ({p['installed_tier'] or '?'} tier).")
     t = p["tiers"].get(p["tier"])
@@ -265,6 +303,9 @@ def _signed(fetcher: release.Fetcher, s: dict, version: str | None):
     try:
         release.public_key(s["pubkey"])
         rel = fetcher.release(s["repo"], version)
+        if code_name(rel["version"]) not in rel["assets"] and f"{LEGACY_NAME}-{rel['version']}.tar.gz" in rel["assets"]:
+            raise InstallError(f"reader release {rel['version']} uses the old {LEGACY_NAME} layout and cannot be "
+                               f"installed by name: use 0.2.2 or later")
         for need in (release.SUMS, release.SIG, MANIFEST, code_name(rel["version"])):
             if need not in rel["assets"]:
                 raise InstallError(f"reader release {rel['version']} has no {need}")
@@ -399,6 +440,9 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     """Download, verify, unpack and install the reader on this machine; returns the new installed record. The
     caller switches the module on and applies (cli.cmd_local_intake_install). Raises InstallError; on a failure
     before the installer ran nothing on the machine changed."""
+    conflict = _conflicting_server_install()
+    if conflict:
+        raise InstallError(f"cannot install Spoolwarden Vision while {conflict}: remove filament-vision-server first")
     fetcher = fetcher or default_fetcher(cfg)
     run = run or default_run
     s = settings(cfg)
@@ -426,7 +470,8 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
         say(f"Downloading the local label reader {ver} ({tier} tier) and checking each file against the signed list...")
         _save_listed(fetcher, rel, table, code_name(ver), work)
         for name in entry["assets"]:
-            _save_listed(fetcher, rel, table, name, assets)
+            if name != code_name(ver):
+                _save_listed(fetcher, rel, table, name, assets)
         root = _extract_code(work / code_name(ver), ver, work)
         (work / release.SUMS).write_bytes(sums)
         (work / release.SIG).write_bytes(sig)
@@ -438,8 +483,16 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     shutil.rmtree(final, ignore_errors=True)
     os.replace(work, final)
     root = final / root.name
+    if have:
+        legacy_script = (home / have["version"] / f"{LEGACY_NAME}-{have['version']}" / "install" / f"{LEGACY_NAME}.sh").resolve()
+        if legacy_script.is_relative_to(home.resolve()) and legacy_script.is_file():
+            say("Removing previous filament-kit-vision service before installing Spoolwarden Vision (preserving state)...")
+            rc_old = run(["bash", str(legacy_script), "--uninstall", "--prefix", LEGACY_PREFIX], say)
+            if rc_old != 0:
+                raise InstallError(f"the previous reader's uninstaller failed (exit {rc_old}); its output is above. "
+                                   "The kit's settings were not changed")
     port = _port(cfg)
-    cmd = ["bash", str(root / "install" / f"{NAME}.sh"), "--tier", tier, "--port", str(port), "--bind", "127.0.0.1",
+    cmd = ["bash", str(root / "install" / f"{NAME}.sh"), "--tier", tier, "--port", str(port), "--host", "127.0.0.1",
            "--user", SERVICE_USER, "--prefix", PREFIX, "--assets", str(final / "assets")]
     say("Running the reader's own installer (this can take a while)...")
     rc = run(cmd, say)
@@ -449,6 +502,7 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     if rc != 0:
         raise InstallError(f"the reader's installer failed (exit {rc}); its output is above. The kit's settings were "
                            "not changed")
+    _sync_reader_token()
     before = have
     rec = {"version": ver, "tier": tier, "port": port, "at": int(time.time()),
            "previous": before["version"] if before and before["version"] != ver else
@@ -456,6 +510,49 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     _write_state(rec)
     _prune(keep={ver, rec.get("previous"), RECORD, PLAN})
     return rec
+
+
+def _read_reader_config(path: Path) -> bytes | None:
+    """The reader's service_config.xml, read by root from the reader user's folder: opened without following a
+    symlink and only when it is a regular file (a small one), else None."""
+    import stat
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_size > 65536:
+            return None
+        with os.fdopen(fd, "rb", closefd=False) as fh:
+            return fh.read(65537)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
+def _sync_reader_token() -> None:
+    """Save the installed reader's bearer token into `<etc>/local_intake_token` so health/read calls authenticate.
+    A token that cannot be saved ends in an InstallError that says what to do; the kit's settings stay unchanged."""
+    import xml.etree.ElementTree as ET
+    state_dir = Path(os.environ.get("FK_LOCAL_INTAKE_STATE_DIR") or f"/var/lib/{NAME}")
+    raw = _read_reader_config(state_dir / "service_config.xml")
+    if raw is None:
+        return
+    try:
+        token = (ET.fromstring(raw).attrib.get("token") or "").strip()
+    except ET.ParseError:
+        return
+    if not token:
+        return
+    try:
+        local_reader.write_token(token)
+    except (ValueError, OSError) as e:
+        why = "it is not a usable token" if isinstance(e, ValueError) else f"{e.__class__.__name__}: {e.strerror or e}"
+        raise InstallError("the reader is installed, but the kit could not save its token "
+                           f"({why}). The kit's settings were not changed. Set the token on the setup page "
+                           "(Settings, Local label reader) or with sudo spoolwarden local-intake token") from e
 
 
 def _prune(keep: set) -> None:
@@ -467,8 +564,10 @@ def _prune(keep: set) -> None:
             shutil.rmtree(d, ignore_errors=True)
 
 
-def wait_healthy(cfg: dict, seconds: float = HEALTH_WAIT, sleep: Callable[[float], None] = time.sleep) -> dict:
+def wait_healthy(cfg: dict, seconds: float | None = None, sleep: Callable[[float], None] = time.sleep) -> dict:
     """The reader's health, asked until it is usable or `seconds` have passed."""
+    if seconds is None:
+        seconds = HEALTH_WAIT_GPU if local_reader.settings(cfg)["tier"] == "gpu" else HEALTH_WAIT
     end = time.monotonic() + seconds
     while True:
         h = local_reader.health(cfg)
@@ -485,12 +584,17 @@ def remove(*, run: Callable[..., int] | None = None, say: Callable[[str], None] 
     if have is None:
         return False
     home = store().resolve()
-    script = (home / have["version"] / f"{NAME}-{have['version']}" / "install" / f"{NAME}.sh").resolve()
-    if not script.is_relative_to(home) or not script.is_file():
+    ver = have["version"]
+    candidates = [
+        ((home / ver / f"{NAME}-{ver}" / "install" / f"{NAME}.sh").resolve(), PREFIX),
+        ((home / ver / f"{LEGACY_NAME}-{ver}" / "install" / f"{LEGACY_NAME}.sh").resolve(), LEGACY_PREFIX),
+    ]
+    script, prefix = next(((s, p) for s, p in candidates if s.is_relative_to(home) and s.is_file()), (None, PREFIX))
+    if script is None:
         raise InstallError(f"the installed release's uninstaller is not in {home}; remove the reader by hand: "
                            f"{NAME}'s own uninstaller, then delete {home / RECORD}")
     say("Running the reader's own uninstaller...")
-    rc = run(["bash", str(script), "--uninstall", "--prefix", PREFIX], say)   # the prefix is fixed, never read
+    rc = run(["bash", str(script), "--uninstall", "--prefix", prefix], say)   # the prefix is fixed, never read
     if rc != 0:
         raise InstallError(f"the reader's uninstaller failed (exit {rc}); its output is above. Nothing was changed")
     _write_state(None)

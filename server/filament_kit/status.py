@@ -393,8 +393,10 @@ def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
         if h["last_read_at"]:
             yield Row(INFO, f"local label reader: last read {h['last_read_at']}")
     else:
+        from . import local_intake_install as lii
+        unit = lii.installed_identity()[3].removesuffix(".service")
         yield Row(FAIL, f"local label reader at {h['url']}: {h['error']}",
-                  "check that it runs (on its machine: systemctl status filament-kit-vision"
+                  f"check that it runs (on its machine: systemctl status {unit}"
                   + "), or set its address: spoolwarden config, 9) Label reader")
     order = intake.reader_order(cfg)
     names = {"local": "the local reader", "cloud": "Claude"}
