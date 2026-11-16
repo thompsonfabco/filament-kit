@@ -137,7 +137,12 @@ function lineItem(line, canOrca, cols) {
       cell("actions", 1, null, h("div", { class: "actions" }, more))),
     h("div", { class: "coll__row coll__row--result", role: "row", hidden: !box.dataset.state }, h("div", { class: "coll__cell", role: "cell", "aria-colspan": cols }, box)),
     h("div", { class: "coll__row coll__row--detail", role: "row", hidden: true }, h("div", { class: "coll__cell", role: "cell", "aria-colspan": cols },
-      h("section", { class: "detail", id, hidden: true, "aria-label": name }, facts))));
+      h("section", { class: "detail", id, hidden: true, "aria-labelledby": id + "-title" },
+        h("header", { class: "detail__head" },
+          SW.iconBtn("chevron", SW.t("detail_back", { name: SW.t("presets_lines_title") }), { cls: "detail__back" }),
+          h("h2", { class: "detail__title", id: id + "-title", tabindex: "-1" }, name),
+          SW.iconBtn("close", SW.t("detail_close", { name }), { cls: "detail__close" })),
+        facts))));
 }
 
 function linesCard(v) {

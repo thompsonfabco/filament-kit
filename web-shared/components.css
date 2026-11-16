@@ -80,7 +80,7 @@ a{color:var(--accent-text)}
 .nav--sheet .nav__chevron{display:block;grid-area:1 / 3 / span 2}
 .nav--sheet .nav__icon{grid-row:1 / span 2}
 .btn.topbar__back{display:none}
-.topbar__back .icon{transform:rotate(180deg)}
+.topbar__back .icon,.detail__back .icon{transform:rotate(180deg)}
 /* buttons (4.1) */
 .btn{display:inline-flex;justify-content:center;min-width:var(--btn-min,0);padding:0 var(--s4);line-height:var(--lh-title);text-decoration:none;transition:var(--t-fast);transition-property:background-color,border-color,color}
 .btn--primary{border-color:var(--accent);background:var(--accent);color:var(--on-accent)}
@@ -223,7 +223,7 @@ textarea.field__control{min-height:calc(var(--s7) + var(--s6) + var(--s1));max-h
 /* detail region, key-value list (6.2, 6.3) */
 .detail__head{margin-bottom:var(--s3)}
 .detail__head>.status{margin-right:auto}
-.detail__back,.detail__close{display:none}
+.detail__back,.detail__close,.coll--lines .detail__head{display:none}
 dialog .detail__close{display:inline-flex;margin-left:auto}
 .detail__body{display:grid;gap:var(--s5)}
 .detail__section{display:grid;align-content:start;gap:var(--s3);min-width:0}
@@ -523,7 +523,7 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   :root[data-look="palette"] .shell .nav__item .nav__label{font-size:var(--fs-m);font-weight:var(--fw-label)}
   :root[data-look="palette"] .shell .nav__item[aria-current="page"]::before{content:none}
 }
-/* on a tablet the light/dark switch stays on the top bar's one row (02 4.3): the lock chip drops its hint and the Hub name gives way */
+/* tablet: light/dark switch stays on top bar's one row (02 4.3) */
 @media (min-width:601px) and (max-width:1024px){
   :root[data-look="palette"] .topbar{flex-wrap:nowrap}
   :root[data-look="palette"] .topbar__brand{flex:0 1 auto;min-width:0;overflow:hidden}
@@ -565,11 +565,13 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 :root[data-look="palette"] .coll__title{font-size:var(--fs-l);font-weight:var(--fw-title)}
 /* profile: detail=sheet */
 /* wide: right-hand sheet; phone: below top bar (02 6.2) */
+:root[data-look="palette"] .sheet--detail .steps__step:not([aria-current="step"],[data-state="failed"]) .steps__body>:not(.steps__title){display:none}
 @media (max-width:600px){
   :root[data-look="palette"] .sheet--detail{height:calc(100% - var(--top) - env(safe-area-inset-top));max-height:none}
+  :root[data-look="palette"] .sheet--detail .detail__back{display:inline-flex}
 }
 /* profile: nav=list */
-/* tablet+: left pane; phone: root list, topbar__back returns (02 2.3) */
+/* tablet+: left pane; phone: root list (02 2.3) */
 @media (min-width:601px){
   :root[data-look="panes"] .shell{grid-template-columns:min(var(--list-w),40%) minmax(0,1fr)}
 }

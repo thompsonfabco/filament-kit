@@ -756,19 +756,14 @@ function collection(el, o = {}) {
     const text = t(dir === "ascending" ? "coll_sorted_ascending" : "coll_sorted_descending", { column: $(".coll__sort", head).firstChild.textContent.trim() });
     if (o.result) result(o.result, "info", text); else announce(text);
   };
-  const expand = (x, open) => {
-    attr(x, "aria-expanded", String(open));
-    const region = doc.getElementById(x.getAttribute("aria-controls"));
-    if (region) renumber(region.closest(".coll__row--detail"), region.hidden = !open);
-  };
   on(el, "click", (e) => {
     const s = e.target.closest(".coll__sort"), x = e.target.closest(".coll__expand");
     if (s) sortBy(s.dataset.sort, s.closest("[role=columnheader]").getAttribute("aria-sort") === "ascending" ? "descending" : "ascending");
     if (x) {
       const open = x.getAttribute("aria-expanded") !== "true", region = doc.getElementById(x.getAttribute("aria-controls"));
-      const dirty = region ? dirtyGroups().filter((g) => region.contains(g.form)) : [];
-      if (open || !dirty.length) expand(x, open);
-      else leaveAsk(leaveText(dirty)).then((ok) => { if (ok) { for (const g of dirty) g.reset(); expand(x, false); } });
+      if (!region) return;
+      if (open) openDetail(region, { opener: x, focusTitle: profile().detail === "sheet" || profile().detail === "pane" });
+      else closeDetail(region);
     }
   });
   const kept = (store.get("spoolwarden.sort." + o.name) || o.sort || "").split(":");
@@ -802,16 +797,29 @@ function host(id) {
 }
 // openDetail(region, {opener, focusTitle}): in place, or moved into the profile's host
 function openDetail(region, o = {}) {
-  const p = profile().detail, row = region.closest(".coll__row--detail");
+  const p = profile().detail, row = region.closest(".coll__row--detail"), x = $(`[aria-controls="${region.id}"]`);
   const hostId = p === "sheet" ? "detail-host" : row || p === "pane" ? null : p === "card" ? "form-host" : "drawer-host";
   if (!hostId) {
-    if (row) { renumber(row, false); const x = $(`[aria-controls="${region.id}"]`); if (x) attr(x, "aria-expanded", "true"); }
+    if (row) { renumber(row, false); if (x) attr(x, "aria-expanded", "true"); }
     region.hidden = false;
   } else {
-    const dlg = host(hostId), home = [region.parentNode, region.nextSibling];
+    const dlg = host(hostId), prev = dlg.open && $(".detail", dlg);
+    if (prev && prev !== region) { closeDetail(prev).then((ok) => { if (ok) openDetail(region, o); }); return; }
+    if (prev === region) return;
+    const home = [region.parentNode, region.nextSibling];
+    if (row) renumber(row, true);
+    if (x) attr(x, "aria-expanded", "true");
     dlg.append(region); region.hidden = false;
     attr(dlg, "aria-labelledby", region.getAttribute("aria-labelledby"));
-    on(dlg, "close", () => { region.hidden = true; home[0].insertBefore(region, home[1]); }, { once: true });
+    attr(dlg, "aria-label", region.getAttribute("aria-labelledby") ? null : region.getAttribute("aria-label"));
+    on(dlg, "close", () => {
+      region.hidden = true;
+      if (home[0].isConnected) home[0].insertBefore(region, home[1]);
+      const btn = $(`[aria-controls="${region.id}"]`);
+      if (btn) attr(btn, "aria-expanded", "false");
+      if (o.opener && !o.opener.isConnected && btn) btn.focus({ preventScroll: true });
+      region.dispatchEvent(new CustomEvent("sw:detail-close", { bubbles: true }));
+    }, { once: true });
     openModal(dlg, o.opener);
   }
   const tt = $(".detail__title", region);
