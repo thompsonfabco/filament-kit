@@ -702,7 +702,7 @@ new MutationObserver(() => { if (titleOverride && tabNow() === PRINTERS && docum
 window.addEventListener("hashchange", () => { if (tabNow() !== PRINTERS) { titleOverride = null; if (addonOut) addonOut.replaceChildren(); } });
 
 // the live printer view is the web app's Printers tab, served by the same Hub
-const liveUrl = () => location.pathname.replace(/\/setup\/?$/, "") + "/intake#printers";
+const liveUrl = () => location.pathname.replace(/\/(setup)?\/?$/, "") + "/intake#printers";
 // the header: what is there, and the three ways to the rest (03 5.1)
 function printersMeta(list, found) {
   const on = list.filter((p) => p.configured), up = on.filter((p) => stateOf(p) === "connected").length;
