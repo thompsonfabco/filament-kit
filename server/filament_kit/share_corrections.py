@@ -5,8 +5,8 @@ The setting is the Hub's; the reader keeps its own copy (`feedback-opt-in` in it
 v0.2.0 reader has no route to change it. So the Hub does what the module's own command does, as the module's service
 user with the module's prefix, and restarts the reader's service:
 
-    <PREFIX>/.venv/bin/filament-kit-vision config --feedback-opt-in true|false      (runuser -u filament-kit-vision)
-    systemctl restart filament-kit-vision.service
+    <PREFIX>/.venv/bin/spoolwarden-vision config --feedback-opt-in true|false      (runuser -u spoolwarden-vision)
+    systemctl restart spoolwarden-vision.service
 
 Never `--feedback-endpoint`: the reader's review address is its own, and the Hub neither shows nor sets it (plan
 section 8). The job is `local_intake_share` (`spoolwarden local-intake share-corrections`); the page's helper starts it
@@ -25,7 +25,7 @@ from typing import Callable
 from . import local_intake_install as lii, local_reader, modules
 
 KEY = "label_reader.share_corrections"
-SERVICE = "filament-kit-vision.service"
+SERVICE = lii.SERVICE
 
 
 class ShareError(Exception):
@@ -113,17 +113,20 @@ def delete_waiting(cfg: dict) -> int:
 
 def config_command(on: bool) -> list[str]:
     """The module's own configuration command, run as its service user. No endpoint, ever."""
-    return ["runuser", "-u", lii.SERVICE_USER, "--", f"{lii.PREFIX}/.venv/bin/{lii.NAME}", "config",
+    name, prefix, user, _ = lii.installed_identity()
+    return ["runuser", "-u", user, "--", f"{prefix}/.venv/bin/{name}", "config",
             "--feedback-opt-in", "true" if on else "false"]
 
 
 def restart_command() -> list[str]:
-    return ["systemctl", "restart", SERVICE]
+    _, _, _, service = lii.installed_identity()
+    return ["systemctl", "restart", service]
 
 
 def default_run(cmd: list[str], log: Callable[[str], None]) -> int:
     """lii.default_run, started in the module's prefix when it exists (the unit's WorkingDirectory)."""
-    cwd = lii.PREFIX if Path(lii.PREFIX).is_dir() else None
+    _, prefix, _, _ = lii.installed_identity()
+    cwd = prefix if Path(prefix).is_dir() else None
     p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                          errors="replace", cwd=cwd)
     assert p.stdout is not None

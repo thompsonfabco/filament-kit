@@ -270,7 +270,7 @@ def test_the_token_goes_with_reads_only(sm, fake_reader):
 def test_health(fake_reader, dead_url):
     url, data = fake_reader
     h = local_reader_health(url)
-    assert h["ok"] and not h["degraded"] and h["api_version"] == "1.0" and h["version"] == "0.1.0" and h["revise"]
+    assert h["ok"] and not h["degraded"] and h["api_version"] == "1.0" and h["version"] == "0.2.2" and h["revise"]
     assert h["tiers"]["cpu"] == {"usable": True, "reason": None} and h["tiers"]["gpu"]["reason"] == "no CUDA device"
     data["health"] = {**data["health"], "status": "degraded"}
     h = local_reader_health(url)
@@ -709,3 +709,21 @@ def test_the_address_test_needs_the_setup_code_and_the_origin(fake_reader, env):
     r = _ask(c, {"url": url}, headers={**H, "Origin": "https://evil.example"})
     assert r.status_code == 403 and r.json()["error"] == "bad origin"
     assert c.get("/setup/api/" + TEST).status_code in (404, 405)
+
+
+def test_feedback_image_and_async_submit_poll(fake_reader):
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    cfg = config.load()
+    lrf.feedback_health(data)
+    added = local_reader.feedback_add(cfg, [b"JPEGDATA"], {"vendor": "X"}, {"vendor": "SUNLU"}, "fix")
+    eid = added["id"]
+    assert local_reader.feedback_image(cfg, eid, 0) == b"JPEGDATA"
+    res = local_reader.feedback_submit(cfg, poll_interval=0.05)
+    assert res["ok"] is True and res["sent"] == 1 and data["queue"] == []
+    # Polling error state surfaces upload_failed
+    local_reader.feedback_add(cfg, [b"JPEG2"], {"vendor": "X"}, {"vendor": "eSUN"}, "fix2")
+    data["submit"] = (502, "feedback_upload_failed")
+    with pytest.raises(local_reader.LocalReaderError) as ei:
+        local_reader.feedback_submit(cfg, poll_interval=0.05)
+    assert ei.value.code == "upload_failed"

@@ -18,9 +18,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 INSTALLER = b"#!/bin/bash\necho fake installer \"$@\"\n"
 
 
-def code_tarball(version: str, *, extra: tarfile.TarInfo | None = None, script: bool = True) -> bytes:
+def code_tarball(version: str, *, extra: tarfile.TarInfo | None = None, script: bool = True,
+                 name: str = "spoolwarden-vision") -> bytes:
     buf = io.BytesIO()
-    top = f"filament-kit-vision-{version}"
+    top = f"{name}-{version}"
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         for d in (top, f"{top}/install"):
             ti = tarfile.TarInfo(d)
@@ -28,9 +29,9 @@ def code_tarball(version: str, *, extra: tarfile.TarInfo | None = None, script: 
             tf.addfile(ti)
         files = {f"{top}/README.md": b"reader\n"}
         if script:
-            files[f"{top}/install/filament-kit-vision.sh"] = INSTALLER
-        for name, data in files.items():
-            ti = tarfile.TarInfo(name)
+            files[f"{top}/install/{name}.sh"] = INSTALLER
+        for fname, data in files.items():
+            ti = tarfile.TarInfo(fname)
             ti.size, ti.mode = len(data), 0o755
             tf.addfile(ti, io.BytesIO(data))
         if extra is not None:
@@ -39,7 +40,7 @@ def code_tarball(version: str, *, extra: tarfile.TarInfo | None = None, script: 
 
 
 def manifest(version: str, **over) -> dict:
-    m = {"version": version, "api_version": "1.0", "kit_min": "0.5.0",
+    m = {"version": version, "api_version": "1.1", "kit_min": "0.5.0",
          "tiers": {"cpu": {"assets": [f"cpu-models-{version}.tar.gz"], "download_mb": 180, "disk_mb": 420,
                            "minutes": 3},
                    "gpu": {"assets": [f"cpu-models-{version}.tar.gz", f"gpu-adapter-{version}.tar.gz"],
@@ -51,9 +52,9 @@ def manifest(version: str, **over) -> dict:
     return m
 
 
-def make_release(priv, version: str = "0.1.0", *, manifest_over: dict | None = None, tarball: bytes | None = None,
-                 tamper_asset: bool = False, tamper_sig: bool = False) -> dict[str, bytes]:
-    files = {f"filament-kit-vision-{version}.tar.gz": tarball if tarball is not None else code_tarball(version),
+def make_release(priv, version: str = "0.2.1", *, manifest_over: dict | None = None, tarball: bytes | None = None,
+                 tamper_asset: bool = False, tamper_sig: bool = False, name: str = "spoolwarden-vision") -> dict[str, bytes]:
+    files = {f"{name}-{version}.tar.gz": tarball if tarball is not None else code_tarball(version, name=name),
              f"cpu-models-{version}.tar.gz": b"CPU MODELS " + version.encode(),
              f"gpu-adapter-{version}.tar.gz": b"GPU ADAPTER " + version.encode(),
              "manifest.json": json.dumps(manifest(version, **(manifest_over or {}))).encode()}

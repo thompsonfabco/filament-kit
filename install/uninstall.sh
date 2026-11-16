@@ -115,12 +115,20 @@ fi
 LI_STORE=/opt/filament-kit/local-intake
 if [ -f "$LI_STORE/installed.json" ]; then
     LI_VER=$(sed -n 's/.*"version": *"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' "$LI_STORE/installed.json" | head -n 1)
-    LI_SH="$LI_STORE/$LI_VER/filament-kit-vision-$LI_VER/install/filament-kit-vision.sh"
-    if [ -n "$LI_VER" ] && [ -f "$LI_SH" ]; then
-        bash "$LI_SH" --uninstall --prefix /opt/filament-kit-vision \
-            || echo "The local label reader's uninstaller failed: its unit and /opt/filament-kit-vision may be left."
-    else
-        echo "The local label reader's uninstaller was not found: its unit and /opt/filament-kit-vision may be left."
+    # the reader under its current name, or under the old one (the kit that installed it may be older)
+    LI_FOUND=0
+    for LI_NAME in spoolwarden-vision filament-kit-vision; do
+        LI_SH="$LI_STORE/$LI_VER/$LI_NAME-$LI_VER/install/$LI_NAME.sh"
+        if [ -n "$LI_VER" ] && [ -f "$LI_SH" ]; then
+            LI_FOUND=1
+            bash "$LI_SH" --uninstall --prefix "/opt/$LI_NAME" \
+                || echo "The local label reader's uninstaller failed: its unit and /opt/$LI_NAME may be left."
+            break
+        fi
+    done
+    if [ "$LI_FOUND" -eq 0 ]; then
+        echo "The local label reader's uninstaller was not found: its unit and /opt/spoolwarden-vision (or"
+        echo "/opt/filament-kit-vision) may be left."
     fi
 fi
 rm -rf /opt/filament-kit
@@ -136,6 +144,8 @@ fi
 
 if [ "$PURGE" -eq 1 ]; then
     rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/lib/filament-kit-station /var/backups/filament-kit
+    # the local label reader's data, under its current and its old name
+    rm -rf /var/lib/spoolwarden-vision /var/lib/filament-kit-vision
     if [ "$KIT_SPOOLMAN" -eq 1 ]; then
         rm -rf /var/lib/spoolman
     fi
@@ -150,6 +160,7 @@ if [ "$PURGE" -eq 1 ]; then
     if [ "$KIT_SPOOLMAN" -eq 1 ]; then
         KIT_USERS="$KIT_USERS spoolman"
     fi
+    KIT_USERS="$KIT_USERS spoolwarden-vision filament-kit-vision"   # the local label reader's, under either name
     for u in $KIT_USERS; do
         if id -u "$u" >/dev/null 2>&1; then
             userdel "$u" || true
