@@ -123,7 +123,10 @@ function lineItem(line, canOrca, cols) {
   const more = SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), icon: "chevron", action: "set-parent" });
   const targets = [["bambu", true], ["orca", canOrca]].filter((t) => t[1]).map(([target]) => ({ label: SW.t(TARGET[target]), run: () => setParent(line, target, box, more) }));
   SW.menu(more, targets, { label: SW.t("presets_set_parent") });
+  const detailMore = SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), icon: "chevron", action: "set-parent" });
+  SW.menu(detailMore, targets, { label: SW.t("presets_set_parent") });
   const facts = h("dl", { class: "kv" },
+    h("div", { class: "kv__row panes-only" }, h("dt", { class: "kv__key" }, SW.t("common_field_material")), h("dd", { class: "kv__value" }, line.material)),
     h("div", { class: "kv__row" }, h("dt", { class: "kv__key" }, SW.t("common_field_bambu_parent")), h("dd", { class: "kv__value" }, bambu)),
     canOrca ? h("div", { class: "kv__row" }, h("dt", { class: "kv__key" }, SW.t("presets_col_orca_parent")), h("dd", { class: "kv__value" }, orca)) : null);
   return h("div", { class: "coll__item", role: "rowgroup", "data-key": line.line_id, "data-id": line.line_id },
@@ -142,7 +145,8 @@ function lineItem(line, canOrca, cols) {
           SW.iconBtn("chevron", SW.t("detail_back", { name: SW.t("presets_lines_title") }), { cls: "detail__back" }),
           h("h2", { class: "detail__title", id: id + "-title", tabindex: "-1" }, name),
           SW.iconBtn("close", SW.t("detail_close", { name }), { cls: "detail__close" })),
-        facts))));
+        facts,
+        h("div", { class: "actions panes-only" }, detailMore)))));
 }
 
 function linesCard(v) {
@@ -159,7 +163,7 @@ function linesCard(v) {
       canOrca ? plainHead("orca_parent", SW.t("presets_col_orca_parent"), 3) : null,
       h("div", { class: "coll__cell", role: "columnheader", "data-col": "actions" }, h("span", { class: "sr" }, SW.t("common_actions"))))),
     ...v.lines.map((l) => lineItem(l, canOrca, cols)));
-  SW.collection(table, { name: "presets-lines", sort: "title:ascending" });
+  SW.collection(table, { name: "presets-lines", sort: "title:ascending", emptyPane: SW.t("presets_pane_empty") });
   return card(SW.t("presets_lines_title"), table);
 }
 

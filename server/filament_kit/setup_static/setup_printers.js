@@ -545,12 +545,13 @@ function detailRegion(p, box, acts) {
   rowViews.get(p.serial).detailSlots = slotsBox;
   const back = SW.iconBtn("chevron", SW.t("detail_back", { name: SW.t("nav_printers") }), { cls: "detail__back" });
   const close = SW.iconBtn("close", SW.t("detail_close", { name: p.name }), { cls: "detail__close" });
+  const testBtn = SW.btn(SW.t("printers_test"), { cls: "btn panes-only", name: SW.t("printers_test_name", { name: p.name }), run: (e) => testConnection(p, box, e.currentTarget) });
   const region = X("section", { class: "detail", id, "aria-labelledby": id + "-title", hidden: !expanded.has(p.serial) },
     E("header", "detail__head", back, X("h2", { class: "detail__title", id: id + "-title", tabindex: "-1", text: p.name }), rowViews.get(p.serial).detailStatus = E("span", null, stateBlock(p)[0]), close),
     E("div", "detail__body",
       E("div", "detail__section", E("h3", "detail__heading", SW.t(klipperOf(p) ? "printers_slots_tool" : "printers_slots_ams")), slotsBox, facts(p, box)),
       E("div", "detail__section",
-        E("h3", "detail__heading", SW.t("printers_group_actions")), E("div", "actions", acts.act1.map(actionButton)),
+        E("h3", "detail__heading", SW.t("printers_group_actions")), E("div", "actions", [testBtn, ...acts.act1.map(actionButton)]),
         E("h3", "detail__heading", SW.t("printers_group_change")), E("div", "actions actions--list", acts.change1.map(ghostButton)),
         E("div", "detail__remove", E("h3", "detail__heading", SW.t("printers_group_remove")), E("div", "actions", acts.remove1.map(dangerButton))))));
   region.addEventListener("sw:detail-close", () => {
@@ -664,7 +665,7 @@ function printerTable(found, configured) {
   const group = found.length ? E("div", "printers-found", E("div", "coll__item", { role: "rowgroup" }, E("div", "coll__row", { role: "row" },
     X("div", { class: "coll__cell", role: "cell", "aria-colspan": 7 }, E("strong", null, SW.t("printers_found_group"))))), found.map(foundItem)) : null;
   const table = X("div", { class: "coll coll--printers", role: "table", "aria-label": SW.t("nav_printers") }, head, configured.map(printerItem), group);
-  SW.collection(table, { name: "printers", sort: "title:ascending" });
+  SW.collection(table, { name: "printers", sort: "title:ascending", emptyPane: SW.t("printers_pane_empty") });
   if (group) table.append(group);
   table.addEventListener("click", (e) => {
     const t = e.target.closest(".coll__sort");

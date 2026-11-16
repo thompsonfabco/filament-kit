@@ -768,6 +768,7 @@ function collection(el, o = {}) {
   });
   const kept = (store.get("spoolwarden.sort." + o.name) || o.sort || "").split(":");
   if (kept[0]) sortBy(kept[0], kept[1] || "ascending", true); else number();
+  if ($(".coll__row--detail", el) && !$(".coll__pane-empty", el)) el.append(E("p", "coll__pane-empty", o.emptyPane || t("detail_pane_empty")));
   return {
     sortBy, number,
     patch(id, col, content) {
@@ -800,6 +801,12 @@ function openDetail(region, o = {}) {
   const p = profile().detail, row = region.closest(".coll__row--detail"), x = $(`[aria-controls="${region.id}"]`);
   const hostId = p === "sheet" ? "detail-host" : row || p === "pane" ? null : p === "card" ? "form-host" : "drawer-host";
   if (!hostId) {
+    if (p === "pane") {
+      const prev = $$(".coll__row--detail .detail:not([hidden])").find((r) => r !== region);
+      if (prev) { closeDetail(prev).then((ok) => { if (ok) openDetail(region, o); }); return; }
+      const it = region.closest(".coll__item");
+      if (it) attr(it, "aria-current", "true");
+    }
     if (row) { renumber(row, false); if (x) attr(x, "aria-expanded", "true"); }
     region.hidden = false;
   } else {
@@ -832,8 +839,11 @@ async function closeDetail(region) {
   const dlg = region.closest("dialog"), row = region.closest(".coll__row--detail"), x = $(`[aria-controls="${region.id}"]`);
   if (dlg) { dlg.close(); return true; }
   region.hidden = true;
+  const it = region.closest(".coll__item");
+  if (it) attr(it, "aria-current", null);
   if (row) renumber(row, true);
   if (x) { attr(x, "aria-expanded", "false"); x.focus(); }
+  region.dispatchEvent(new CustomEvent("sw:detail-close", { bubbles: true }));
   return true;
 }
 
@@ -855,6 +865,11 @@ on(doc, "click", (e) => {
   const code = b.closest(".code"), src = code ? $(".code__text", code) : b.closest(".kv__value");
   const res = (code || b.parentElement).querySelector(".result");
   if (res) copy(b.dataset.copy != null ? b.dataset.copy : src.textContent, res, src);
+});
+on(doc, "keydown", (e) => {
+  if (e.key !== "Escape" || profile().detail !== "pane" || $("dialog[open]")) return;
+  const r = e.target.closest(".coll__row--detail .detail:not([hidden])") || $(".coll__row--detail .detail:not([hidden])");
+  if (r && (r.contains(doc.activeElement) || matchMedia("(max-width: 1024px)").matches)) { e.preventDefault(); closeDetail(r); }
 });
 
 // ----- swatch and spool ring (7.3, 7.4): checked colour as --swatch, amount as --level -----

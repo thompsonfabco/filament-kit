@@ -1,5 +1,4 @@
-/* Spoolwarden shared components (02-components.md 2 to 10), after tokens.css. Base rules draw Console; the rules of
-one profile choice are grouped at the end under a profile comment (08 section 9). */
+/* Spoolwarden shared components (02 2-10). Base = Console; profile groups at end (08 9). */
 /* base */
 *,*::before,*::after{box-sizing:border-box}
 html{height:100%;-webkit-text-size-adjust:100%}
@@ -223,7 +222,7 @@ textarea.field__control{min-height:calc(var(--s7) + var(--s6) + var(--s1));max-h
 /* detail region, key-value list (6.2, 6.3) */
 .detail__head{margin-bottom:var(--s3)}
 .detail__head>.status{margin-right:auto}
-.detail__back,.detail__close,.coll--lines .detail__head{display:none}
+.detail__back,.detail__close,.coll__pane-empty{display:none}
 dialog .detail__close{display:inline-flex;margin-left:auto}
 .detail__body{display:grid;gap:var(--s5)}
 .detail__section{display:grid;align-content:start;gap:var(--s3);min-width:0}
@@ -261,7 +260,7 @@ dialog .detail__close{display:inline-flex;margin-left:auto}
 .slot-strip__row:has(.slot-strip__actions):hover{background:var(--surface-2)}
 .slot-strip__none{padding:var(--s3)}
 .slot-strip--compact,.slot-strip__swatches{display:inline-flex;align-items:center;gap:var(--s1);border:0;background:none}
-/* code block (7.7); thumbnails and the viewer, the QR block (7.6, 7.8) are in components-media.css */
+/* code block (7.7); media/QR in components-media.css */
 .code{background:var(--code)}
 .code__text{margin:0;padding:var(--s2) var(--s3);overflow:auto;font-family:var(--mono);font-size:var(--fs-s);line-height:var(--lh-body);white-space:pre}
 .code__text--log,.error-state__details pre{white-space:pre-wrap;overflow-wrap:anywhere}
@@ -390,7 +389,7 @@ dialog .detail__close{display:inline-flex;margin-left:auto}
   .dialog,.sheet--detail{width:100%;height:auto;max-height:92%;margin:auto 0 0;padding-bottom:env(safe-area-inset-bottom);border-width:var(--hairline) 0 0;border-radius:var(--r-l) var(--r-l) 0 0}
   .dialog__foot>.btn{flex:1}
 }
-/* profile: nav=rail; the bar rules are scoped to the shell, so the More sheet's nav (2.5) keeps its rows */
+/* profile: nav=rail */
 .shell{grid-template-columns:var(--rail) minmax(0,1fr);grid-template-areas:"top top" "nav main"}
 .shell__main{grid-area:main}
 .shell>.nav{position:sticky;top:calc(var(--top) + env(safe-area-inset-top));grid-area:nav;display:flex;flex-direction:column;height:calc(100vh - var(--top) - env(safe-area-inset-top));overflow-y:auto;padding:var(--s2) 0;border-right:var(--hairline) solid var(--border);background:var(--surface)}
@@ -532,7 +531,6 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   :root[data-look="palette"] .topbar .appearance.segmented{flex-wrap:nowrap}
 }
 /* profile: collection=tiles */
-/* two tiles wide from 420px, one below; title at top, main action full width at foot (02 6.1) */
 :root[data-look="palette"] .coll{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,14rem),1fr));gap:var(--s4);border:0;background:none}
 :root[data-look="palette"] .coll__head{grid-column:1 / -1;display:block;border:0;border-radius:0;background:none}
 :root[data-look="palette"] .coll__head:not(:has(.coll__sort)){position:absolute;width:var(--hairline);height:var(--hairline);overflow:hidden;clip-path:inset(50%)}
@@ -611,7 +609,6 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   :root[data-look="panes"] .topbar .appearance.segmented{flex-wrap:nowrap}
 }
 /* profile: collection=rows */
-/* inset hairlines, title + sub-line, prio-1 fields, state, chevron (02 6.1) */
 :root[data-look="panes"] .coll{display:block;border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface)}
 :root[data-look="panes"] .coll__head{display:block;border:0;border-bottom:var(--hairline) solid var(--border);border-radius:0;background:none}
 :root[data-look="panes"] .coll__head .coll__row{display:flex;flex-wrap:wrap;gap:var(--s2);min-height:0;padding:var(--s2) var(--s4)}
@@ -632,17 +629,19 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 :root[data-look="panes"] .coll__cell[data-col="title"]{flex:1 1 calc(var(--s7) * 3);order:-1;min-width:0}
 :root[data-look="panes"] .coll__cell[data-col="visual"]{display:flex;order:-2}
 :root[data-look="panes"] .coll__cell[data-col="expand"]{order:9}
-:root[data-look="panes"] .coll__cell[data-col="actions"]{margin-left:auto}
+:root[data-look="panes"] .coll__cell[data-col="actions"]{display:none}
 :root[data-look="panes"] .coll__key,:root[data-look="panes"] .coll__expand>span:not(.sr){display:none}
 :root[data-look="panes"] .coll__title{font-weight:var(--fw-label)}
 /* profile: detail=pane */
-/* desktop: 22rem third column; tablet/phone: covers list (02 6.2) */
 :root[data-look="panes"] .coll__row--detail .detail{padding:var(--s4) var(--s4) var(--s5);border:0;background:none}
 :root[data-look="panes"] .coll__row--detail .detail__body{grid-template-columns:minmax(0,1fr)}
 @media (min-width:1025px){
-  :root[data-look="panes"] .shell__main:has(.coll__row--detail:not([hidden])){margin-right:22rem}
-  :root[data-look="panes"] .coll__row--detail:not([hidden]){position:fixed;top:calc(var(--top) + env(safe-area-inset-top));right:0;bottom:0;z-index:15;width:22rem;overflow-y:auto;border-left:var(--hairline) solid var(--border);background:var(--surface)}
+  :root[data-look="panes"] .shell__main:has(.coll__row--detail){margin-right:22rem}
+  :root[data-look="panes"] .coll__row--detail:not([hidden]),:root[data-look="panes"] .coll:not(:has(.coll__row--detail:not([hidden]))) .coll__pane-empty{position:fixed;top:calc(var(--top) + env(safe-area-inset-top));right:0;bottom:0;z-index:15;width:22rem;overflow-y:auto;border-left:var(--hairline) solid var(--border);background:var(--surface)}
+  :root[data-look="panes"] .coll:not(:has(.coll__row--detail:not([hidden]))) .coll__pane-empty{display:flex;align-items:center;justify-content:center;padding:var(--s5);color:var(--muted);text-align:center}
+  :root[data-look="panes"] .coll__row--detail .detail__close{display:inline-flex;margin-left:auto}
 }
 @media (max-width:1024px){
   :root[data-look="panes"] .coll:has(.coll__row--detail:not([hidden])) .coll__head,:root[data-look="panes"] .coll:has(.coll__row--detail:not([hidden])) .coll__item:not(:has(>.coll__row--detail:not([hidden]))){display:none}
+  :root[data-look="panes"] .coll__row--detail .detail__back{display:inline-flex}
 }
