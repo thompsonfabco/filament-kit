@@ -70,6 +70,16 @@ class PrintersKit(FakeKit):
         return super().get(path)
 
 
+class WaitingKit(PrintersKit):
+    """PrintersKit with an assignment waiting on two slots: the empty A4 (the case of the spool put there before it is loaded) and the loaded A2."""
+
+    def __init__(self):
+        super().__init__()
+        slots = self.status["ams"][0]["slots"]
+        slots[1]["pending"] = {"spool_id": 12, "text": "Waiting for A2 to load"}
+        slots[3]["pending"] = {"spool_id": 13, "text": "Waiting for the filament in A4"}
+
+
 class ChangingKit(PrintersKit):
     """PrintersKit that keeps its printer list: an add makes a printer (still connecting, so its page says Added.), a forget removes it."""
 
@@ -223,6 +233,15 @@ def _serve_printers(tmp_path, monkeypatch, spoolman_url, kit):
 def served_printers(tmp_path, monkeypatch, spoolman_url):
     """The same state with the Printers module on, over a fake kit (no printer, no kit server)."""
     running = _serve_printers(tmp_path, monkeypatch, spoolman_url, PrintersKit)
+    try:
+        yield running.url + "/intake"
+    finally:
+        running.stop()
+
+
+@pytest.fixture
+def served_waiting(tmp_path, monkeypatch, spoolman_url):
+    running = _serve_printers(tmp_path, monkeypatch, spoolman_url, WaitingKit)
     try:
         yield running.url + "/intake"
     finally:
@@ -385,6 +404,15 @@ def test_forgetting_a_printer_closes_its_page(served_changing, width):
     assert out["hash"] == "#printers" and "Workshop X1" not in out["cardsAfter"] and len(out["cardsAfter"]) == 2, json.dumps(out)
     if width > 600:
         assert out["hashBefore"] == "#printers", out        # the case that has no hashchange to rely on
+
+
+@pytest.mark.parametrize("width", [375, 768])
+def test_a_slot_with_a_waiting_assignment_says_so_in_its_row(served_waiting, width):
+    """15b: the slot's `pending` text is shown in the new slot row, on the loaded slot and on the empty one; the others show nothing of it."""
+    rows = {r["label"]: r for r in _flow(served_waiting, "waiting", width)["rows"]}
+    assert rows["A2"]["waiting"] == ["Waiting for A2 to load"] and rows["A2"]["name"] == "Bambu Lab PETG HF Orange", rows
+    assert rows["A4"]["waiting"] == ["Waiting for the filament in A4"] and rows["A4"]["name"] == "Empty", rows
+    assert rows["A1"]["waiting"] == [] and rows["A3"]["waiting"] == [], rows
 
 
 def test_an_address_for_no_printer_does_not_put_its_id_in_the_heading_or_title(served_printers):

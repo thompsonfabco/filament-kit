@@ -151,6 +151,12 @@ async function main() {
       facts.openAfter = await evaluate(`!!document.querySelector(".printer") && !document.querySelector(".printer").hidden && document.querySelector(".printer").childElementCount > 0`);
       facts.cardsAfter = await evaluate(`[...document.querySelectorAll(".pcard__name")].map((a) => a.textContent)`);
       facts.has404 = await evaluate(`document.body.innerText.includes("404")`);
+    } else if (flow === "waiting") {
+      // a slot with an assignment waiting for it to load (sl.pending) says so in its row
+      const serial = await evaluate(`decodeURIComponent(document.querySelector(".pcard__name").getAttribute("href").split("/")[1] || "")`);
+      await load("#printers/" + serial);
+      await until(`document.querySelectorAll(".pslot").length >= 4`, 12000);
+      facts.rows = await evaluate(`[...document.querySelectorAll(".pslot")].map((r) => ({ label: r.querySelector(".pslot__label").textContent, name: r.querySelector(".pslot__name").textContent, detail: [...r.querySelectorAll(".pslot__text .muted")].map((m) => m.textContent), waiting: [...r.querySelectorAll(".pslot__waiting")].map((m) => m.textContent) }))`);
     } else if (flow === "unknown") {
       await load("#printers/NOPE123");
       await sleep(1500);

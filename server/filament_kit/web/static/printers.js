@@ -484,11 +484,12 @@ function printersTab() {
         load.dataset.key = key("load"); if (unload) unload.dataset.key = key("unload");
         const actions = h("div", { class: "pslot__actions" }, load, unload);
         if (!up) { disabled(load, t("slot_load_disabled")); if (unload) disabled(unload, t("slot_load_disabled")); }
-        const detail = sl.present === false ? t("common_empty") : sl.reading ? t("common_reading")
+        const waiting = sl.pending && sl.pending.text ? String(sl.pending.text) : "";   // an assignment waiting for the slot to load
+        const detail = waiting ? waiting : sl.present === false ? t("common_empty") : sl.reading ? t("common_reading")
           : [hex, gr != null ? t("spool_left_grams", { grams: gr }) : ""].filter(Boolean).join(" · ");
         return h("li", { class: "slot-strip__row pslot", "data-state": sl.active ? "active" : undefined },
           h("span", { class: "mono pslot__label" }, sl.label), SW.swatch(hex, { empty: sl.present === false }),
-          h("div", { class: "pslot__text" }, h("span", { class: "pslot__name" }, sl.present === false ? t("common_empty") : slotName(sl)), detail && sl.present !== false ? h("span", { class: "muted" }, detail) : null),
+          h("div", { class: "pslot__text" }, h("span", { class: "pslot__name" }, sl.present === false ? t("common_empty") : slotName(sl)), detail && (waiting || sl.present !== false) ? h("span", { class: "muted" + (waiting ? " pslot__waiting" : "") }, detail) : null),
           sl.active ? h("span", { class: "slot-strip__use" }, t("slot_in_use")) : null, actions, slotLine(sl.label));
       });
       return h("div", { class: "punit" }, h("h3", { class: "punit__title" }, [u.label, u.type_name].filter(Boolean).join(" · ")),
