@@ -1,4 +1,4 @@
-"""The local label reader (the `local_intake` module): a separate program (filament-kit-vision, its own repository and
+"""The local label reader (the `local_intake` module): a separate program (spoolwarden-vision, its own repository and
 release), on this machine or another one on the network, that reads spool label photos without the cloud. The kit
 only talks to it over HTTP; this file is the whole of that conversation, so a change to the reader's API changes
 this file and nothing else.
@@ -616,8 +616,35 @@ def feedback_bundle(cfg: dict, cap: int = BUNDLE_CAP) -> bytes:
                     errors=_FEEDBACK_ERRORS, raw_cap=cap)
 
 
-def feedback_submit(cfg: dict) -> dict:
-    """Ask the reader to send what is waiting to where the reader itself sends it; the answer is the reader's (ok,
-    sent count ...). No address of ours goes along, ever. May take long (the reader's proof of work, the upload)."""
-    return _request(f"{_feedback_base(cfg)}/submit", body=_check_body({"api_version": API_SENT}),
-                    timeout=SUBMIT_TIMEOUT, auth=True, errors=_FEEDBACK_ERRORS)
+def feedback_image(cfg: dict, entry_id: str, index: int = 0, cap: int = BUNDLE_CAP) -> bytes:
+    """Fetch a single queued correction photo (`GET /v1/feedback/<id>/image`)."""
+    eid = str(entry_id or "").strip()
+    if not eid:
+        raise LocalReaderError("not_found", "no such correction")
+    return _request(f"{_feedback_base(cfg)}/{quote(eid, safe='')}/image?index={int(index)}", body=None,
+                    timeout=FEEDBACK_TIMEOUT, auth=True, errors=_FEEDBACK_ERRORS, raw_cap=cap)
+
+
+def feedback_submit(cfg: dict, *, poll_interval: float = 1.0) -> dict:
+    """Ask the reader to send what is waiting to where the reader itself sends it; handles both synchronous 200 and
+    v0.2.1+ asynchronous 202 + GET /v1/feedback/submit polling. No address of ours goes along, ever."""
+    out = _request(f"{_feedback_base(cfg)}/submit", body=_check_body({"api_version": API_SENT}),
+                   timeout=SUBMIT_TIMEOUT, auth=True, errors=_FEEDBACK_ERRORS)
+    if out.get("ok") is True and out.get("status") != "running":
+        return out
+    if out.get("accepted") is True or out.get("status") == "running":
+        deadline = time.monotonic() + SUBMIT_TIMEOUT
+        while True:
+            if time.monotonic() >= deadline:
+                raise LocalReaderError("upload_failed", "the local reader's feedback upload timed out")
+            time.sleep(poll_interval)
+            st = _request(f"{_feedback_base(cfg)}/submit", body=None, method="GET", timeout=FEEDBACK_TIMEOUT,
+                          auth=True, errors=_FEEDBACK_ERRORS)
+            status = str(st.get("status") or "").lower()
+            if status in ("running", "pending"):
+                continue
+            if status in ("error", "failed") or st.get("ok") is False:
+                msg = str(st.get("error") or st.get("message") or "upload failed")
+                raise LocalReaderError("upload_failed", f"the local reader could not send the corrections: {msg}")
+            return st
+    return out

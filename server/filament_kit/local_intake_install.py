@@ -41,16 +41,20 @@ from . import local_reader, output, release
 # the kit's), published by its builder in KIT-INTEGRATION-STATUS.md on 2026-11-12 with the repository name. Empty
 # would mean no release can be verified, so nothing is installed.
 MODULE_PUBKEY = "adkFwUZin7sdhZJ1fdr9sOn8BtFIFuiFHrm2d5O0TPU="
-MODULE_REPO = "thompsonfabco/filament-kit-vision"
-NAME = "filament-kit-vision"
+MODULE_REPO = "thompsonfabco/spoolwarden-vision"
+NAME = "spoolwarden-vision"
+LEGACY_NAME = "filament-kit-vision"
 MANIFEST = "manifest.json"
 STORE = Path("/opt/filament-kit/local-intake")
-PREFIX = "/opt/filament-kit-vision"
-SERVICE_USER = "filament-kit-vision"
+PREFIX = "/opt/spoolwarden-vision"
+LEGACY_PREFIX = "/opt/filament-kit-vision"
+SERVICE_USER = "spoolwarden"
 DEFAULT_PORT = 7915
+MIN_VERSION = "0.2.1"
 LIMIT_MANIFEST = 256 << 10
 LIMIT_ASSET = 8 << 30            # a model file: the GPU adapter is large
-HEALTH_WAIT = 180                # seconds after the installer: the first start loads the models
+HEALTH_WAIT = 120                # seconds after the installer (cpu/auto > 90s)
+HEALTH_WAIT_GPU = 270            # seconds after the installer (gpu > 240s)
 API_MAJOR = local_reader.API_MAJOR
 
 
@@ -156,6 +160,8 @@ def _manifest(raw: bytes, version: str) -> dict:
         raise InstallError("the release's manifest.json is not JSON") from None
     if not isinstance(m, dict) or m.get("version") != version or not isinstance(m.get("tiers"), dict):
         raise InstallError("the release's manifest.json does not describe this release")
+    if release.parse_version(version) < release.parse_version(MIN_VERSION):
+        raise InstallError(f"reader release {version} is older than {MIN_VERSION}: use {MIN_VERSION} or later")
     major = local_reader._major(m.get("api_version"))
     if major != API_MAJOR:
         raise InstallError(f"this reader release speaks API {m.get('api_version')!r}; this kit speaks {API_MAJOR}.x: "
@@ -196,6 +202,19 @@ def _mb(v) -> int | None:
     return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 else None
 
 
+def _conflicting_server_install() -> str | None:
+    """Return a description if standalone filament-vision-server is present, else None."""
+    raw = os.environ.get("FK_VISION_SERVER_PATHS", "").strip()
+    if raw:
+        paths = [Path(p) for p in raw.split(os.pathsep) if p]
+    else:
+        paths = [Path("/etc/systemd/system/filament-vision-server.service"), Path("/opt/filament-vision-server")]
+    for p in paths:
+        if p.exists():
+            return f"filament-vision-server is installed at {p}"
+    return None
+
+
 def plan(cfg: dict, *, tier: str | None = None, version: str | None = None,
          fetcher: release.Fetcher | None = None) -> dict:
     """What an install would do, before anything is downloaded beyond the signed list and the manifest: the
@@ -221,12 +240,15 @@ def plan(cfg: dict, *, tier: str | None = None, version: str | None = None,
             "installed_tier": have.get("tier") if have else None, "tier": tier, "asked_tier": asked, "tiers": tiers,
             "upgrade": newer, "downgrade": older,
             "same": bool(have) and have["version"] == rel["version"] and have.get("tier") == tier,
+            "conflict": _conflicting_server_install(),
             "notes": rel.get("notes", "")[:2000]}
 
 
 def plan_text(p: dict) -> list[str]:
     """The lines the CLI and the page show before the owner confirms."""
     lines = []
+    if p.get("conflict"):
+        lines.append(f"Blocked: {p['conflict']}. Remove filament-vision-server first; this installer will not remove it.")
     if p["installed"]:
         lines.append(f"Installed: version {p['installed']} ({p['installed_tier'] or '?'} tier).")
     t = p["tiers"].get(p["tier"])
@@ -399,6 +421,9 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     """Download, verify, unpack and install the reader on this machine; returns the new installed record. The
     caller switches the module on and applies (cli.cmd_local_intake_install). Raises InstallError; on a failure
     before the installer ran nothing on the machine changed."""
+    conflict = _conflicting_server_install()
+    if conflict:
+        raise InstallError(f"cannot install Spoolwarden Vision while {conflict}: remove filament-vision-server first")
     fetcher = fetcher or default_fetcher(cfg)
     run = run or default_run
     s = settings(cfg)
@@ -426,7 +451,8 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
         say(f"Downloading the local label reader {ver} ({tier} tier) and checking each file against the signed list...")
         _save_listed(fetcher, rel, table, code_name(ver), work)
         for name in entry["assets"]:
-            _save_listed(fetcher, rel, table, name, assets)
+            if name != code_name(ver):
+                _save_listed(fetcher, rel, table, name, assets)
         root = _extract_code(work / code_name(ver), ver, work)
         (work / release.SUMS).write_bytes(sums)
         (work / release.SIG).write_bytes(sig)
@@ -467,8 +493,10 @@ def _prune(keep: set) -> None:
             shutil.rmtree(d, ignore_errors=True)
 
 
-def wait_healthy(cfg: dict, seconds: float = HEALTH_WAIT, sleep: Callable[[float], None] = time.sleep) -> dict:
+def wait_healthy(cfg: dict, seconds: float | None = None, sleep: Callable[[float], None] = time.sleep) -> dict:
     """The reader's health, asked until it is usable or `seconds` have passed."""
+    if seconds is None:
+        seconds = HEALTH_WAIT_GPU if local_reader.settings(cfg)["tier"] == "gpu" else HEALTH_WAIT
     end = time.monotonic() + seconds
     while True:
         h = local_reader.health(cfg)
@@ -485,12 +513,17 @@ def remove(*, run: Callable[..., int] | None = None, say: Callable[[str], None] 
     if have is None:
         return False
     home = store().resolve()
-    script = (home / have["version"] / f"{NAME}-{have['version']}" / "install" / f"{NAME}.sh").resolve()
-    if not script.is_relative_to(home) or not script.is_file():
+    ver = have["version"]
+    candidates = [
+        ((home / ver / f"{NAME}-{ver}" / "install" / f"{NAME}.sh").resolve(), PREFIX),
+        ((home / ver / f"{LEGACY_NAME}-{ver}" / "install" / f"{LEGACY_NAME}.sh").resolve(), LEGACY_PREFIX),
+    ]
+    script, prefix = next(((s, p) for s, p in candidates if s.is_relative_to(home) and s.is_file()), (None, PREFIX))
+    if script is None:
         raise InstallError(f"the installed release's uninstaller is not in {home}; remove the reader by hand: "
                            f"{NAME}'s own uninstaller, then delete {home / RECORD}")
     say("Running the reader's own uninstaller...")
-    rc = run(["bash", str(script), "--uninstall", "--prefix", PREFIX], say)   # the prefix is fixed, never read
+    rc = run(["bash", str(script), "--uninstall", "--prefix", prefix], say)   # the prefix is fixed, never read
     if rc != 0:
         raise InstallError(f"the reader's uninstaller failed (exit {rc}); its output is above. Nothing was changed")
     _write_state(None)
