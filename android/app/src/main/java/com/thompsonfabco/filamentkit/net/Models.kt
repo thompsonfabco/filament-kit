@@ -346,9 +346,30 @@ data class SlotSpool(
     @Serializable(with = LenientDouble::class) @SerialName("remaining_weight") val remainingWeight: Double? = null,
 )
 
+/** A spool assigned to an empty slot that waits to load there: [spoolId] is the Hub's spool, null when it sent none. */
+@Serializable
+data class SlotPending(
+    @Serializable(with = LenientNullableInt::class) @SerialName("spool_id") val spoolId: Int? = null,
+)
+
+/** `pending`: an object is a waiting spool; absent, null or any other shape is none (older Hubs send none). */
+@OptIn(ExperimentalSerializationApi::class)
+internal object LenientPending : KSerializer<SlotPending?> {
+    override val descriptor: SerialDescriptor = SlotPending.serializer().descriptor.nullable
+    override fun deserialize(decoder: Decoder): SlotPending? {
+        val d = decoder as? JsonDecoder ?: throw SerializationException("JSON only")
+        val obj = d.decodeJsonElement() as? JsonObject ?: return null
+        return SlotPending(spoolId = (obj["spool_id"] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.toDoubleOrNull()?.roundToInt())
+    }
+    override fun serialize(encoder: Encoder, value: SlotPending?) =
+        (encoder as JsonEncoder).encodeJsonElement(
+            if (value == null) JsonNull else JsonObject(mapOf("spool_id" to (value.spoolId?.let(::JsonPrimitive) ?: JsonNull))),
+        )
+}
+
 /**
  * [say] is how the slot is spoken (`["external", "left"]`); [present] / [reading] are null when unknown. Older
- * servers send none of the three.
+ * servers send none of the three. [pending] is a spool waiting to load into this empty slot.
  */
 @Serializable
 data class AmsSlot(
@@ -361,6 +382,7 @@ data class AmsSlot(
     @Serializable(with = SayWords::class) val say: List<String> = emptyList(),
     @Serializable(with = LenientNullableBool::class) val present: Boolean? = null,
     @Serializable(with = LenientNullableBool::class) val reading: Boolean? = null,
+    @Serializable(with = LenientPending::class) val pending: SlotPending? = null,
 )
 
 /**
