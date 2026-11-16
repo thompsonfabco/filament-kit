@@ -1145,14 +1145,15 @@ const field = (label, root = document) => $$('.field', root).find((f) => f.query
 const reason = (b) => { const id = b.getAttribute('aria-describedby'); return b.getAttribute('aria-disabled') === 'true' && id && document.getElementById(id) ? document.getElementById(id).textContent : null; };
 const TAG = (o) => Object.assign({ nfc_id: '04:77:90:E1', read_at: 1700000000, age_seconds: 12, reader: 'station', scale: null,
   text: 'last tag: 04:77:90:E1  12 s ago on the station reader\n  not linked to any spool yet (a new tag): ready to link' }, o);
-const tap = async (o) => { stub(/^tag$/, () => reply(TAG(o))); repoll(); await until('the tag is shown', () => text('.spools__tagid') === TAG(o).nfc_id && text('.spools__age') !== ''); };
+// repoll again and again: a poll already out (the first one, or the 3 s timer) makes repoll do nothing, and its answer is the old one
+const tap = async (o) => { stub(/^tag$/, () => reply(TAG(o))); await until('the tag is shown', () => { repoll(); return text('.spools__tagid') === TAG(o).nfc_id && text('.spools__age') !== ''; }); };
 const waitPage = () => until('the page did not draw', () => $('.spools__results .spools__row, .spools__none') && !document.querySelector('[aria-busy="true"]:not(button)'));
 const search = () => $('.spools__search .field__control');
 const sheetOpen = () => until('the sheet', () => $('dialog[open].sheet'));
 // the summary is drawn from the list row at once; the spool's own read comes after it, and until then Preview and Link
 // are held with "Loading Spool N…", so a press before it lands does nothing (seen in CI under load)
 const sheetReady = async () => { const d = await sheetOpen(); await until('the summary', () => $('.spools__sum-text') && !$('.spools__sum .skeleton'));
-  await until('the spool read', () => !/^Loading /.test(reason(button('Preview')) || '')); return d; };
+  await until('the spool read', () => !/^Loading /.test((button('Preview') && reason(button('Preview'))) || '')); return d; };
 const out = (s) => $$('.spools__sheet .result').find((r) => r.textContent.includes(s));
 const FRESH = () => localStorage.removeItem('spoolwarden.sealedOnly');
 """
@@ -1510,6 +1511,22 @@ SP_READY = {
   need('Preview names no tap: the page had none to name', !('nfc_id' in bodies[0]) && !('read_at' in bodies[0]));
   button('Link tag and open').click(); await until('opened', () => out('Spool __ID__ is open'));
   need('Link names the tap the Hub used for the preview', bodies[1].nfc_id === '04:AA:BB:CC' && bodies[1].read_at === 55 && bodies[1].dry_run === false);
+""",
+    "sheet_poll_between": r"""
+  const d = await sheetReady();
+  need('the page shows no tag', text('.spools__sheet-tag') === "No tag read yet: tap the spool's tag on a reader.");
+  const bodies = [], polls = [];
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'opened', exit_code: 0, nfc_id: '04:AA:BB:CC', read_at: 55 }); });
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
+  // a poll that brings no tap: still no tag, but not the answer the page last had
+  stub(/^tag$/, () => { polls.push('none'); return reply({ nfc_id: null, read_at: 7, age_seconds: null, reader: null, scale: null, text: '' }); });
+  await until('the poll without a tap is answered', () => { repoll(); return polls.length > 0; });
+  // then the poll that brings the tap the Preview already named
+  stub(/^tag$/, () => { polls.push('tap'); return reply(TAG({ nfc_id: '04:AA:BB:CC', read_at: 55 })); });
+  await until('the sheet names the tap', () => { repoll(); return text('.spools__sheet-tag').includes('04:AA:BB:CC'); });
+  need('neither poll made the Preview out of date: ' + reason(button('Link tag and open')), reason(button('Link tag and open')) === null && button('Link tag and open').getAttribute('aria-disabled') !== 'true');
+  button('Link tag and open').click(); await until('opened', () => out('Spool __ID__ is open'));
+  need('Link names the previewed tap', bodies.length === 2 && bodies[1].nfc_id === '04:AA:BB:CC' && bodies[1].read_at === 55 && bodies[1].dry_run === false);
 """,
     "sheet_tap_again": r"""
   const d = await sheetReady(); await tap({});
