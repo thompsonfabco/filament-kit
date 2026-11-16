@@ -762,13 +762,19 @@ function collection(el, o = {}) {
     if (x) {
       const open = x.getAttribute("aria-expanded") !== "true", region = doc.getElementById(x.getAttribute("aria-controls"));
       if (!region) return;
-      if (open) openDetail(region, { opener: x, focusTitle: profile().detail === "sheet" || profile().detail === "pane" });
-      else closeDetail(region);
+      if (doc.body.hasAttribute("data-ai")) {
+        const dirty = dirtyGroups().filter((g) => region.contains(g.form));
+        const toggle = (on) => { attr(x, "aria-expanded", String(on)); renumber(region.closest(".coll__row--detail"), region.hidden = !on); };
+        if (open || !dirty.length) toggle(open);
+        else leaveAsk(leaveText(dirty)).then((ok) => { if (ok) { for (const g of dirty) g.reset(); toggle(false); } });
+      } else if (open) openDetail(region, { opener: x, focusTitle: profile().detail === "sheet" || profile().detail === "pane" });
+      else closeDetail(region, { focus: false });
     }
   });
   const kept = (store.get("spoolwarden.sort." + o.name) || o.sort || "").split(":");
   if (kept[0]) sortBy(kept[0], kept[1] || "ascending", true); else number();
-  if ($(".coll__row--detail", el) && !$(".coll__pane-empty", el)) el.append(E("p", "coll__pane-empty", o.emptyPane || t("detail_pane_empty")));
+  if (o.emptyPane && $(".coll__row--detail", el) && !$(".coll__pane-empty", el))
+    el.append(h("div", { class: "coll__pane-empty empty", "aria-hidden": "true" }, E("p", "empty__text", o.emptyPane)));
   return {
     sortBy, number,
     patch(id, col, content) {
@@ -797,13 +803,27 @@ function host(id) {
   return el;
 }
 // openDetail(region, {opener, focusTitle}): in place, or moved into the profile's host
+function closeNow(region, o = {}) {
+  const dlg = region.closest("dialog"), row = region.closest(".coll__row--detail"), x = $(`[aria-controls="${region.id}"]`);
+  if (dlg) { dlg.close(); return true; }
+  region.hidden = true;
+  const it = region.closest(".coll__item");
+  if (it) attr(it, "aria-current", null);
+  if (row) renumber(row, true);
+  if (x) { attr(x, "aria-expanded", "false"); if (o.focus !== false) x.focus(); }
+  region.dispatchEvent(new CustomEvent("sw:detail-close", { bubbles: true }));
+  return true;
+}
 function openDetail(region, o = {}) {
   const p = profile().detail, row = region.closest(".coll__row--detail"), x = $(`[aria-controls="${region.id}"]`);
   const hostId = p === "sheet" ? "detail-host" : row || p === "pane" ? null : p === "card" ? "form-host" : "drawer-host";
   if (!hostId) {
     if (p === "pane") {
       const prev = $$(".coll__row--detail .detail:not([hidden])").find((r) => r !== region);
-      if (prev) { closeDetail(prev).then((ok) => { if (ok) openDetail(region, o); }); return; }
+      if (prev) {
+        if (dirtyGroups().some((g) => prev.contains(g.form))) { closeDetail(prev, { focus: false }).then((ok) => { if (ok) openDetail(region, o); }); return; }
+        closeNow(prev, { focus: false });
+      }
       const it = region.closest(".coll__item");
       if (it) attr(it, "aria-current", "true");
     }
@@ -811,7 +831,10 @@ function openDetail(region, o = {}) {
     region.hidden = false;
   } else {
     const dlg = host(hostId), prev = dlg.open && $(".detail", dlg);
-    if (prev && prev !== region) { closeDetail(prev).then((ok) => { if (ok) openDetail(region, o); }); return; }
+    if (prev && prev !== region) {
+      if (dirtyGroups().some((g) => prev.contains(g.form))) { closeDetail(prev, { focus: false }).then((ok) => { if (ok) openDetail(region, o); }); return; }
+      closeNow(prev, { focus: false });
+    }
     if (prev === region) return;
     const home = [region.parentNode, region.nextSibling];
     if (row) renumber(row, true);
@@ -832,19 +855,11 @@ function openDetail(region, o = {}) {
   const tt = $(".detail__title", region);
   if (tt && o.focusTitle !== false) tt.focus({ preventScroll: true });
 }
-async function closeDetail(region) {
+async function closeDetail(region, o = {}) {
   const dirty = dirtyGroups().filter((g) => region.contains(g.form));
   if (dirty.length && !(await leaveAsk(leaveText(dirty)))) return false;
   for (const g of dirty) g.reset();
-  const dlg = region.closest("dialog"), row = region.closest(".coll__row--detail"), x = $(`[aria-controls="${region.id}"]`);
-  if (dlg) { dlg.close(); return true; }
-  region.hidden = true;
-  const it = region.closest(".coll__item");
-  if (it) attr(it, "aria-current", null);
-  if (row) renumber(row, true);
-  if (x) { attr(x, "aria-expanded", "false"); x.focus(); }
-  region.dispatchEvent(new CustomEvent("sw:detail-close", { bubbles: true }));
-  return true;
+  return closeNow(region, o);
 }
 
 // ----- copy (6.3, 7.7): data-action="copy" buttons -----
@@ -968,7 +983,8 @@ function shell(o = {}) {
     }
     if (more) {
       const inMore = cur && hidden().includes(cur.closest("li")), mc = $(".nav__more-current", more);
-      const name = cur ? ($(".nav__label-full", cur) || $(".nav__label", cur)).textContent.trim() : "";
+      const lbl = cur && ($(".nav__label-full", cur) || $(".nav__label", cur));
+      const name = lbl ? [...lbl.childNodes].filter((n) => n.nodeType === 3 || !n.classList?.contains("sr")).map((n) => n.textContent).join("").trim() : "";
       if (mc) mc.textContent = inMore ? ", " + name : "";
       attr(more, "data-state", inMore ? "current" : null);
       attr(more, "aria-label", inMore ? t("nav_more_current", { section: name }) : null);
@@ -977,7 +993,10 @@ function shell(o = {}) {
     if (page) doc.title = t("shell_title", { page, hub: conf.hub });
     if (focus) list ? ($(`.nav__group .nav__item[href="#${last}"]`, nav) || $(".nav__group .nav__item", nav)).focus() : focusTitle();
   };
-  on(window, "hashchange", () => { if (o.onSection) o.onSection(section()); paint(true); });
+  on(window, "hashchange", (e) => {
+    if (sec(e.oldURL) !== sec(e.newURL)) { const d = $("#detail-host[open] .detail"); if (d) closeDetail(d, { focus: false }); }
+    if (o.onSection) o.onSection(section()); paint(true);
+  });
   on(window, "popstate", () => { if (listNow() !== drawn) paint(true); });
   on(nav, "click", (e) => {
     const a = e.target.closest(".nav__item");

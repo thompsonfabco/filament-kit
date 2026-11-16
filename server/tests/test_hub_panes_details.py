@@ -87,3 +87,24 @@ def test_panes_settings_shows_one_group_per_pane(hub, tmp_path):
     assert got["start"]["listVisible"] is True and got["start"]["subnavHidden"] is True
     assert len(got["start"]["shown"]) == 1
     assert got["after"]["shown"] == ["general"]
+
+
+def test_panes_keeps_non_detail_row_actions_and_palette_closes_sheet_on_nav(hub, tmp_path):
+    got = _drive(hub, tmp_path, """
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(look, what) { for (let i = 0; i < 300; i++) { const v = look(); if (v) return v; await sleep(100); } throw new Error("waited for " + what); }
+const d = document, r = d.documentElement, $ = (s) => d.querySelector(s), cs = (el) => getComputedStyle(el);
+r.setAttribute("data-look", "panes");
+location.hash = "#devices";
+const act = await until(() => $('.coll--paired .coll__item .coll__cell[data-col="actions"]'), "devices row action");
+const devActVisible = cs(act).display !== "none";
+r.setAttribute("data-look", "palette");
+location.hash = "#printers";
+const pe = await until(() => $(".coll--printers .coll__expand"), "printers expand");
+pe.click();
+await until(() => $("#detail-host[open]"), "sheet open");
+location.hash = "#overview";
+await sleep(150);
+return { devActVisible, sheetClosedOnNav: !$("#detail-host").open };
+""", width=1280)
+    assert got == {"devActVisible": True, "sheetClosedOnNav": True}

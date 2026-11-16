@@ -601,7 +601,7 @@ function watchNote(row, slots, shown) {
   watchers.add(o);
 }
 function printerItem(p) {
-  const box = boxFor("printer:" + p.serial), acts = actionsOf(p, box), id = "detail-" + keyOf(p.serial), open = expanded.has(p.serial);
+  const box = boxFor("printer:" + p.serial), acts = actionsOf(p, box), id = "detail-" + keyOf(p.serial), open = expanded.has(p.serial) && SW.profile().detail !== "sheet";
   rowViews.set(p.serial, {});
   const view = rowViews.get(p.serial);
   if (p.mapping) followMap(p, box);      // a job already running (a reload, another browser): progress and Stop again
