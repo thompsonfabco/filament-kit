@@ -119,3 +119,4 @@ job), and the Hub announces itself on the network under both service types. Ever
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the
 command line's wording and the other themes) are added here when each one merges.
 - **Spoolwarden Vision v0.2.2 local label reader:** the Hub now installs, upgrades, and removes Spoolwarden Vision (`thompsonfabco/spoolwarden-vision`, API 1.1, minimum v0.2.1), supports legacy `filament-kit-vision` upgrades/removals, refuses conflicting `filament-vision-server` installs, and handles the v0.2.1+ async `202` feedback upload flow and `/v1/feedback/<id>/image` endpoint.
+- **Uninstall knows the reader's new name:** `uninstall.sh` removes Spoolwarden Vision (`/opt/spoolwarden-vision`, its data and user with `--purge`) as well as the old `filament-kit-vision` set.

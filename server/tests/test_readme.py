@@ -5,7 +5,7 @@ import re
 import pytest
 from pathlib import Path
 
-from filament_kit import modules
+from filament_kit import local_intake_install, modules
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -120,7 +120,9 @@ PUBLIC_DOCS = ["README.md", "THIRD-PARTY.md", "reader/README.md"] + sorted(
 ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/filament-kit", "-R thompsonfabco/filament-kit",
                       "thompsonfabco/filament-kit", "github.com/thompsonfabco/filament-library",
                       "thompsonfabco/filament-library", "com.thompsonfabco.filamentkit", "com/thompsonfabco/filamentkit",
-                      "ko-fi.com/thompsonfabco")
+                      "ko-fi.com/thompsonfabco",
+                      # the reader's repository, from the constant (no owner value typed here)
+                      f"github.com/{local_intake_install.MODULE_REPO}", local_intake_install.MODULE_REPO)
 
 
 @pytest.mark.parametrize("rel", PUBLIC_DOCS)

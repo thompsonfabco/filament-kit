@@ -452,7 +452,13 @@ def test_the_kits_uninstaller_removes_the_reader_first():
     text = (Path(__file__).resolve().parents[2] / "install" / "uninstall.sh").read_text(encoding="utf-8")
     block = text.index('LI_STORE=/opt/filament-kit/local-intake')
     assert block < text.index("rm -rf /opt/filament-kit\n")
-    assert '--uninstall --prefix /opt/filament-kit-vision' in text[block:]
+    tail = text[block:]
+    # the reader under its current name or the old one, each with its own prefix
+    assert "for LI_NAME in spoolwarden-vision filament-kit-vision; do" in tail
+    assert '--uninstall --prefix "/opt/$LI_NAME"' in tail
+    # --purge removes both data folders and both service users
+    assert "rm -rf /var/lib/spoolwarden-vision /var/lib/filament-kit-vision" in text
+    assert 'KIT_USERS="$KIT_USERS spoolwarden-vision filament-kit-vision"' in text
 
 
 def test_the_uninstallers_version_read_is_digits_only(tmp_path):
