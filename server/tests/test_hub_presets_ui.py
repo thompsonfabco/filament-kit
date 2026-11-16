@@ -172,7 +172,7 @@ const item = $(".coll--lines .coll__item"), expand = $(".coll__expand", item), d
 const before = { hidden: detail.hidden, shown: !!detail.getClientRects().length, parentCells: [...item.querySelectorAll('[data-prio="3"]')].some((c) => c.getClientRects().length) };
 expand.click();
 await until(() => !detail.hidden, "the expansion");
-return { before, expanded: expand.getAttribute("aria-expanded"), facts: [...detail.querySelectorAll(".kv__key")].map(text), shown: !!detail.getClientRects().length };
+return { before, expanded: expand.getAttribute("aria-expanded"), facts: [...detail.querySelectorAll(".kv__key")].filter((k) => k.getClientRects().length).map(text), shown: !!detail.getClientRects().length };
 """, width=320)
     assert page["before"] == {"hidden": True, "shown": False, "parentCells": False}       # the parents are not in the row itself
     assert page["expanded"] == "true" and page["shown"] is True and page["facts"][0] == T("common_field_bambu_parent")
