@@ -576,6 +576,28 @@ def test_legacy_021_tarball_refused_by_name(key, server):
         lii.install(config.load(), tier="cpu", version="0.2.1", fetcher=fetcher(s), run=Run())
 
 
+def test_install_syncs_reader_token_for_auth_required_health(key, server, fake_reader, tmp_path, monkeypatch):
+    url, data = fake_reader
+    data["health"]["auth_required"] = True
+    data["token"] = "reader-secret-42"
+    state_dir = tmp_path / "reader_state"
+    state_dir.mkdir()
+    monkeypatch.setenv("FK_LOCAL_INTAKE_STATE_DIR", str(state_dir))
+
+    class RunWithToken(Run):
+        def __call__(self, cmd, log):
+            (state_dir / "service_config.xml").write_text(
+                '<service-config version="1" token="reader-secret-42"/>', encoding="utf-8"
+            )
+            return super().__call__(cmd, log)
+
+    s = server({"0.2.4": mrf.make_release(key, "0.2.4")})
+    lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=RunWithToken())
+    assert (tmp_path / "etc" / "local_intake_token").read_text(encoding="utf-8").strip() == "reader-secret-42"
+    h = lii.local_reader.health({"local_intake": {"url": url, "tier": "cpu"}})
+    assert h["ok"] is True and h["auth_required"] is True
+
+
 def test_wait_healthy_timeout_by_tier(monkeypatch):
     calls = []
     monkeypatch.setattr(lii.local_reader, "health", lambda cfg: {"ok": False})

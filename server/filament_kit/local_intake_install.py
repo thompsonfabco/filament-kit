@@ -502,6 +502,7 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     if rc != 0:
         raise InstallError(f"the reader's installer failed (exit {rc}); its output is above. The kit's settings were "
                            "not changed")
+    _sync_reader_token()
     before = have
     rec = {"version": ver, "tier": tier, "port": port, "at": int(time.time()),
            "previous": before["version"] if before and before["version"] != ver else
@@ -509,6 +510,21 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     _write_state(rec)
     _prune(keep={ver, rec.get("previous"), RECORD, PLAN})
     return rec
+
+
+def _sync_reader_token() -> None:
+    """Save the installed reader's bearer token into `<etc>/local_intake_token` so health/read calls authenticate."""
+    import xml.etree.ElementTree as ET
+    state_dir = Path(os.environ.get("FK_LOCAL_INTAKE_STATE_DIR") or f"/var/lib/{NAME}")
+    cfg_xml = state_dir / "service_config.xml"
+    if not cfg_xml.is_file():
+        return
+    try:
+        token = (ET.parse(cfg_xml).getroot().attrib.get("token") or "").strip()
+    except (OSError, ET.ParseError):
+        return
+    if token:
+        local_reader.write_token(token)
 
 
 def _prune(keep: set) -> None:
