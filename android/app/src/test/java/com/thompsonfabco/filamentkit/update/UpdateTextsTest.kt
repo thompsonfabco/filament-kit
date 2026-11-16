@@ -17,7 +17,7 @@ class UpdateTextsTest {
         "signatures do not match newer version; ignoring!"
 
     @Test fun bannerNamesTheServersRelease() {
-        assertEquals("Update available (filament-kit 0.5.0)", UpdateTexts.bannerTitle("0.5.0"))
+        assertEquals("Update available (Spoolwarden 0.5.0)", UpdateTexts.bannerTitle("0.5.0"))
         assertEquals("Update available", UpdateTexts.bannerTitle(null))
         assertEquals("Update available", UpdateTexts.bannerTitle(" "))
     }
