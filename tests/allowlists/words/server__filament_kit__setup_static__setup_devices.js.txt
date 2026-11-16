@@ -1,1 +1,2 @@
-server/filament_kit/setup_static/setup_devices.js | "station" | 3 | identifier, not shown
+server/filament_kit/setup_static/setup_devices.js | "station" | 5 | identifier, not shown (module name, device type and scope values)
+server/filament_kit/setup_static/setup_devices.js | intake | 1 | identifier, not shown (the catalogue key devices_last_intake)
