@@ -26,6 +26,8 @@ def product_name_uses(text):
     found = []
     for m in NAME.finditer(text):
         before, after = text[:m.start()], text[m.end():]
+        if after.startswith(" is now called"):          # the wrapper's note names the old command (S5.9, 06 2)
+            continue
         if before.endswith(("sudo ", "sudo|", "-u ", "-g ", ":")) or text == "filament-kit" or COMMAND.match(after.lstrip(" ") if after.startswith(" ") else "\0"):
             continue
         found.append(text[max(0, m.start() - 20):m.end() + 20])
