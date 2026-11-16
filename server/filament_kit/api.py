@@ -24,7 +24,7 @@ from starlette.routing import Route
 from . import (API_VERSION, __version__, config, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, reader_corrections, setup_page,
                station_flow, station_requests, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
-from .bridge import camera, family, hardware, loading, mapping, registry, usage
+from .bridge import camera, family, hardware, loading, mapping, pending, registry, usage
 from .bridge.klipper import discovery
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
@@ -818,7 +818,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
             not_cert_changed(serial)
             not_mapping(serial)
             try:
-                r = loading.load(printers, sm, serial, label, spool_id, dry, sealed_location=sealed())
+                r = pending.load_or_wait(printers, sm, serial, label, spool_id, dry, sealed_location=sealed())
             except loading.SlotWriteFailed as e:
                 if printers.state(serial) == "needs_developer_mode" or DEVELOPER_MODE_REASON.search(str(e)):
                     raise _Refused("needs_developer_mode",

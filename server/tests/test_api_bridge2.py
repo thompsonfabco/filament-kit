@@ -10,7 +10,7 @@ from starlette.testclient import TestClient
 
 from filament_kit import config, pairing, profiles
 from filament_kit.api import create_app
-from filament_kit.bridge import ams, calib3mf, loading, mapping, registry, slottest, usage
+from filament_kit.bridge import ams, calib3mf, loading, mapping, registry, slottest, status, usage
 from filament_kit.bridge.calib3mf import CalibResult
 from filament_kit.bridge.connection import PrinterOffline
 from filament_kit.bridge.slottest import PrinterBusy, SlotTestResult
@@ -59,7 +59,8 @@ class FakeManager:
         return {"gcode_state": self.report["gcode_state"], "percent": 0, "remaining_min": 0, "job": None}
 
     def status(self, serial):
-        return None
+        # the slots as the kit shows them (A1 holds PLA: present), which the load route checks before it writes
+        return status.summarize(self.report, [], model="O1D") if self.st == "connected" else None
 
     def wait_report(self, serial, predicate, timeout):
         if self.st not in ("connected", "needs_developer_mode"):

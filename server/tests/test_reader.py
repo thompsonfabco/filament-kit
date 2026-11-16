@@ -77,6 +77,7 @@ class FakeKit:
         self.load_error: slots.SlotError | None = None
         self.load_gate: threading.Event | None = None     # set: a load blocks until the test sets it
         self.preset = {"filament_id": "PFUS1", "name": "SUNLU PLA+ @H2D", "filament_type": "PLA"}
+        self.presence = None                  # the status's "presence" when set ("tray_type": no layout)
 
     def get(self, path):
         if path == "/api/printers":
@@ -93,7 +94,7 @@ class FakeKit:
             units.setdefault((k, s["label"] if k != "ams" else s["label"][0]), []).append(
                 {k2: v for k2, v in s.items() if k2 != "_kind"})
         return {"printer": {"id": sid, "name": "H2D", "state": self.state[sid]},
-                "status": {"gcode_state": "IDLE", "ams": [{"unit": i, "label": key[1], "kind": key[0], "slots": sl}
+                "status": {"gcode_state": "IDLE", **({"presence": self.presence} if self.presence else {}), "ams": [{"unit": i, "label": key[1], "kind": key[0], "slots": sl}
                                                           for i, (key, sl) in enumerate(units.items())]}}
 
     def post(self, path, body):
@@ -448,7 +449,7 @@ def new_queue(kit):
     return reader.LoadQueue(lambda: kit, clock=clock, start_thread=False), clock
 
 
-def test_queue_sends_after_settle_and_drops_once_verified(kit):
+def test_queue_sends_after_settle_and_keeps_watching_once_verified(kit):
     q, clock = new_queue(kit)
     a2 = kit.slots["SER1"][1]
     q.add("SER1", "A2", 7)
@@ -471,7 +472,7 @@ def test_queue_sends_after_settle_and_drops_once_verified(kit):
     a2.update(type="PLA", preset_id="PFUS1")
     clock.t += 3
     q.tick()
-    assert q.jobs() == {} and len(kit.loads) == 1
+    assert q.jobs()[("SER1", "A2")].applied and len(kit.loads) == 1       # watched on: the AMS may wipe it later
 
 
 def test_queue_gives_up_after_three_tries_and_expires(kit):
@@ -688,3 +689,124 @@ def test_drop_waits_for_a_send_in_progress(kit):
     d.join(5)
     assert dropped.is_set() and q.jobs() == {}
     assert [b["spool_id"] for _, b in kit.loads] == [8]
+
+
+# ---------- pending assignment: wait until loaded, set again after a late wipe ----------
+
+def applied_job(kit):
+    """A queued tap on A2 that was sent and shows the preset (watching)."""
+    q, clock = new_queue(kit)
+    a2 = kit.slots["SER1"][1]
+    q.add("SER1", "A2", 7, {"filament_id": "PFUS1", "filament_type": "PLA", "name": "SUNLU PLA+ @H2D"})
+    a2.update(present=True, reading=False)
+    q.tick()
+    clock.t += 3.5
+    q.tick()
+    assert len(kit.loads) == 1
+    a2.update(type="PLA", preset_id="PFUS1")
+    clock.t += 5
+    q.tick()
+    assert q.jobs()[("SER1", "A2")].applied
+    return q, clock, a2
+
+
+def test_queue_sets_the_slot_again_when_the_ams_wipes_it_after_the_check(kit, caplog):
+    import logging
+    q, clock, a2 = applied_job(kit)
+    a2.update(type="", preset_id="")                    # the AMS's own reset lands late
+    with caplog.at_level(logging.INFO, logger="filament_kit"):
+        for _ in range(4):
+            clock.t += 3
+            q.tick()
+    assert len(kit.loads) == 2 and kit.loads[1][1]["dry_run"] is False
+    a2.update(type="PLA", preset_id="PFUS1")
+    clock.t += 5
+    q.tick()
+    assert q.jobs()[("SER1", "A2")].applied
+    assert any("wiped, setting it again" in r.getMessage() for r in caplog.records)
+    clock.t += reader.QUEUE_TTL
+    q.tick()
+    assert q.jobs() == {}                               # 15 min after the tap the watch ends
+
+
+def test_queue_stops_watching_when_the_filament_is_out_or_another_setting_is_on(kit):
+    q, clock, a2 = applied_job(kit)
+    a2.update(type="PETG", preset_id="GFG99")           # the user set something else
+    clock.t += 3
+    q.tick()
+    assert q.jobs() == {} and len(kit.loads) == 1
+    kit = FakeKit()
+    q, clock, a2 = applied_job(kit)
+    a2.update(present=False, type="")
+    clock.t += 3
+    q.tick()
+    assert q.jobs() == {} and len(kit.loads) == 1
+
+
+def test_queue_does_not_override_a_spool_with_its_own_rfid(kit, caplog):
+    import logging
+    q, clock = new_queue(kit)
+    a2 = kit.slots["SER1"][1]
+    q.add("SER1", "A2", 7)
+    a2.update(present=True, reading=False, type="PLA", preset_id="GFA00", rfid=True)
+    with caplog.at_level(logging.INFO, logger="filament_kit"):
+        for _ in range(4):
+            clock.t += 5
+            q.tick()
+    assert kit.loads == [] and q.jobs() == {}
+    assert any("RFID" in r.getMessage() for r in caplog.records)
+
+
+def test_a_newer_tap_for_the_slot_replaces_the_older_and_a_restart_drops_all(kit):
+    q, clock = new_queue(kit)
+    q.add("SER1", "A2", 7)
+    q.add("SER1", "A2", 9)
+    assert [j.spool_id for j in q.jobs().values()] == [9]
+    q2, _ = new_queue(kit)                              # a restarted process: memory only
+    assert q2.jobs() == {}
+
+
+def test_an_older_tap_does_not_cancel_a_newer_assignment_waiting_in_the_kit(kit):
+    q, clock = new_queue(kit)
+    a2 = kit.slots["SER1"][1]
+    q.add("SER1", "A2", 7)                              # the tap, then a newer assignment of spool 9 in the kit
+    a2.update(present=True, reading=False, pending={"spool_id": 9, "text": "waiting"})
+    for _ in range(3):
+        clock.t += 4
+        q.tick()
+    assert kit.loads == [] and q.jobs() == {}           # not sent: the kit's job sends spool 9
+    q.add("SER1", "A2", 7, None, 9)                     # spool 9 was already waiting when the tap was made: older
+    clock.t += 4
+    q.tick()
+    clock.t += 4
+    q.tick()
+    assert len(kit.loads) == 1 and kit.loads[0][1]["spool_id"] == 7
+
+
+def test_an_emptied_slot_with_an_rfid_does_not_end_a_queued_tap(kit):
+    q, clock = new_queue(kit)
+    q.add("SER1", "A2", 7)
+    kit.slots["SER1"][1].update(present=False, rfid=True)
+    for _ in range(3):
+        clock.t += 4
+        q.tick()
+    assert set(q.jobs()) == {("SER1", "A2")} and kit.loads == []
+
+
+def test_scan_on_a_printer_without_a_presence_layout_sets_at_once(app, token, kit, queue):
+    kit.presence = "tray_type"
+    with client(app) as c:
+        r = scan(c, token, slot="A2")                   # present False here would be shown only by the type
+    assert r.json()["status"] == "set" and queue.jobs() == {}
+    assert kit.loads[-1][1]["dry_run"] is False
+
+
+def test_scan_on_a_slot_with_unknown_presence_queues_but_an_external_is_set_at_once(app, token, kit, queue):
+    with client(app) as c:
+        r = scan(c, token, slot="HT-A")                 # present null: not clearly loaded
+    assert r.json()["status"] == "queued" and set(queue.jobs()) == {("SER1", "HT-A")}
+    queue.clear()
+    kit.loads.clear()
+    with client(app) as c:
+        r = scan(c, token, slot="Ext-L")                # no sensor: sent at once, as before
+    assert r.json()["status"] == "set" and queue.jobs() == {}
