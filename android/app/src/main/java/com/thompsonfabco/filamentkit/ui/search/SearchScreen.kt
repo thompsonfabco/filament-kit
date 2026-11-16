@@ -204,6 +204,7 @@ fun SearchScreen(
     val usePaneDetail = presentation == DetailPresentation.Pane && spoolDetail != null
     var expandedIds by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     var sheetSpoolId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var cachedSpool by remember { mutableStateOf<SpoolSummary?>(null) }
     val rowFocus = remember { mutableMapOf<Int, FocusRequester>() }
     var returnFocusId by remember { mutableStateOf<Int?>(null) }
     val view = LocalView.current
@@ -213,6 +214,19 @@ fun SearchScreen(
         repeat(2) { withFrameNanos { } }
         rowFocus[id]?.let { requestDetailFocus(it, view) }
         returnFocusId = null
+    }
+    LaunchedEffect(presentation) {
+        if (presentation == DetailPresentation.Screen && spoolDetail != null) {
+            val activeId = sheetSpoolId ?: expandedIds.lastOrNull()
+            if (activeId != null) {
+                val target = ui.results.firstOrNull { it.id == activeId }
+                    ?: cachedSpool?.takeIf { it.id == activeId }
+                    ?: com.thompsonfabco.filamentkit.ui.spool.SpoolCache.get(activeId)
+                sheetSpoolId = null
+                expandedIds = emptyList()
+                if (target != null) onOpenSpool(target)
+            }
+        }
     }
     val listBody: @Composable (Modifier) -> Unit = { listModifier ->
         Column(listModifier.fillMaxSize()) {
@@ -281,8 +295,16 @@ fun SearchScreen(
                     ) {
                         val openOrToggle: (SpoolSummary) -> Unit = { spool ->
                             when {
-                                useCardDetail -> expandedIds = if (spool.id in expandedIds) expandedIds - spool.id else expandedIds + spool.id
-                                useSheetDetail || usePaneDetail -> sheetSpoolId = spool.id
+                                useCardDetail -> {
+                                    cachedSpool = spool
+                                    com.thompsonfabco.filamentkit.ui.spool.SpoolCache.put(spool)
+                                    expandedIds = if (spool.id in expandedIds) expandedIds - spool.id else expandedIds + spool.id
+                                }
+                                useSheetDetail || usePaneDetail -> {
+                                    cachedSpool = spool
+                                    com.thompsonfabco.filamentkit.ui.spool.SpoolCache.put(spool)
+                                    sheetSpoolId = spool.id
+                                }
                                 else -> onOpenSpool(spool)
                             }
                         }
@@ -319,7 +341,11 @@ fun SearchScreen(
             }
         }
     }
-    val openSpool = sheetSpoolId?.let { id -> ui.results.firstOrNull { it.id == id } }
+    val openSpool = sheetSpoolId?.let { id ->
+        ui.results.firstOrNull { it.id == id }
+            ?: cachedSpool?.takeIf { it.id == id }
+            ?: com.thompsonfabco.filamentkit.ui.spool.SpoolCache.get(id)
+    }
     if (usePaneDetail) {
         val close = {
             returnFocusId = openSpool?.id
@@ -327,7 +353,7 @@ fun SearchScreen(
         }
         SwPaneLayout(
             hasSelection = openSpool != null,
-            emptyText = stringResource(R.string.common_select_item, stringResource(R.string.nav_spools)),
+            emptyText = stringResource(R.string.detail_pane_empty_spool),
             onClose = close,
             modifier = modifier,
             list = { listBody(Modifier) },

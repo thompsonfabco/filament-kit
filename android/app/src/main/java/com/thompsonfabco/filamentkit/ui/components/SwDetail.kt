@@ -84,12 +84,13 @@ internal fun rememberDetailPresentation(): DetailPresentation =
 /**
  * Container for an expanded card's detail in Workbench (`DetailStyle.Card`).
  *
- * Moves focus into the detail when it opens and returns focus to [returnFocusTo] when it closes.
+ * Moves focus into the detail when it opens; the caller returns focus to the row on close.
  */
 @Composable
 internal fun SwCardDetail(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    canClose: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val space = SpoolwardenTheme.space
@@ -108,7 +109,7 @@ internal fun SwCardDetail(
             SwIconButton(
                 R.drawable.sw_ic_close,
                 stringResource(R.string.common_close),
-                onClose,
+                { if (canClose) onClose() },
                 modifier = Modifier.focusRequester(detailFocus).focusable(),
             )
         }
@@ -222,6 +223,7 @@ internal fun SwPaneLayout(
     emptyText: String,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    canClose: Boolean = true,
     list: @Composable () -> Unit,
     detail: @Composable () -> Unit,
 ) {
@@ -236,7 +238,7 @@ internal fun SwPaneLayout(
             repeat(2) { withFrameNanos { } }
             requestDetailFocus(detailFocus, view)
         }
-        BackHandler(enabled = true, onBack = onClose)
+        BackHandler(enabled = canClose, onBack = onClose)
     }
 
     if (window == WindowClass.Desktop) {
@@ -255,7 +257,7 @@ internal fun SwPaneLayout(
                         SwIconButton(
                             R.drawable.sw_ic_close,
                             stringResource(R.string.common_close),
-                            onClose,
+                            { if (canClose) onClose() },
                             modifier = Modifier.focusRequester(detailFocus).focusable(),
                         )
                     }
@@ -284,7 +286,7 @@ internal fun SwPaneLayout(
                     SwIconButton(
                         R.drawable.sw_ic_chevron,
                         stringResource(R.string.common_back),
-                        onClose,
+                        { if (canClose) onClose() },
                         modifier = Modifier.rotate(180f).focusRequester(detailFocus).focusable(),
                     )
                 }

@@ -363,6 +363,21 @@
     <string name="detail_gone">%1$s is no longer on this Hub.</string>
     <string name="detail_newer">Newer record</string>
     <string name="detail_older">Older record</string>
+    <string name="detail_pane_empty_line">Choose a product line to change its parent.</string>
+    <string name="detail_pane_empty_printer">Choose a printer to see its details.</string>
+    <string name="detail_pane_empty_record">Choose a record to see its details.</string>
+    <string name="detail_pane_empty_spool">Choose a spool to see its details.</string>
+    <!-- 1=count -->
+    <plurals name="section_printers_attention">
+        <item quantity="one">%1$d needs a look</item>
+        <item quantity="other">%1$d need a look</item>
+    </plurals>
+    <!-- 1=count -->
+    <string name="section_printers_connected">%1$d connected</string>
+    <!-- 1=count -->
+    <string name="section_printers_offline">%1$d offline</string>
+    <!-- 1=first 2=second -->
+    <string name="section_printers_summary_pair">%1$s · %2$s</string>
     <!-- 1=count 2=max -->
     <string name="field_count">%1$d of %2$s characters</string>
     <string name="field_error_grams">Enter grams above 0, or leave this empty.</string>

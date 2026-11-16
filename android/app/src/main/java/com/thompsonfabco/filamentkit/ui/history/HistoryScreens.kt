@@ -133,6 +133,16 @@ internal fun HistoryListScreen(
         rowFocus[id]?.let { requestDetailFocus(it, view) }
         returnFocusId = null
     }
+    LaunchedEffect(presentation) {
+        if (presentation == DetailPresentation.Screen && recordDetail != null) {
+            val activeId = sheetRecordId ?: expandedIds.lastOrNull()
+            if (activeId != null) {
+                sheetRecordId = null
+                expandedIds = emptyList()
+                onOpen(activeId)
+            }
+        }
+    }
     LifecycleStartEffect(vm) {
         vm.refresh()
         onStopOrDispose { }
@@ -227,7 +237,7 @@ internal fun HistoryListScreen(
         }
         SwPaneLayout(
             hasSelection = openId != null,
-            emptyText = stringResource(R.string.common_select_item, stringResource(R.string.nav_recent)),
+            emptyText = stringResource(R.string.detail_pane_empty_record),
             onClose = close,
             list = listBody,
             detail = { openId?.let { recordDetail(it, true, close) } },

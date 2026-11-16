@@ -129,6 +129,16 @@ fun PrintersScreen(
         rowFocus[id]?.let { requestDetailFocus(it, view) }
         returnFocusId = null
     }
+    LaunchedEffect(presentation) {
+        if (presentation == DetailPresentation.Screen && printerDetail != null) {
+            val activeId = sheetPrinterId ?: expandedIds.lastOrNull()
+            if (activeId != null) {
+                sheetPrinterId = null
+                expandedIds = emptyList()
+                onOpen(activeId)
+            }
+        }
+    }
     LifecycleStartEffect(viewModel) {
         viewModel.refresh()
         onStopOrDispose { }
@@ -196,7 +206,7 @@ fun PrintersScreen(
         }
         SwPaneLayout(
             hasSelection = openId != null,
-            emptyText = stringResource(R.string.common_select_item, stringResource(R.string.nav_printers)),
+            emptyText = stringResource(R.string.detail_pane_empty_printer),
             onClose = close,
             modifier = modifier,
             list = { listBody(Modifier) },

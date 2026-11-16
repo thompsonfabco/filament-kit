@@ -63,9 +63,11 @@ class PanesSummariesTest {
         assertEquals("No printers yet", printersSummary(emptyList(), resources))
         val p1 = Printer(id = "p1", name = "Workshop X1", serial = "S1", configured = true, state = "connected")
         val p2 = Printer(id = "p2", name = "Study A1", serial = "S2", configured = true, state = "offline")
-        val found = Printer(id = "p3", name = "Found P1S", serial = "S3", configured = false, state = "offline")
+        val p3 = Printer(id = "p3", name = "Garage P1S", serial = "S3", configured = true, state = "wrong_code")
+        val found = Printer(id = "p4", name = "Found P1S", serial = "S4", configured = false, state = "offline")
         assertEquals("1 connected", printersSummary(listOf(p1, found), resources))
         assertEquals("1 connected · 1 offline", printersSummary(listOf(p1, p2, found), resources))
+        assertEquals("1 connected · 1 offline · 1 needs a look", printersSummary(listOf(p1, p2, p3, found), resources))
         assertEquals("1 offline", printersSummary(listOf(p2), resources))
     }
 

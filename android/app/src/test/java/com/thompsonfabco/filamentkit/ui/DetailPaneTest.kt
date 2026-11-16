@@ -143,20 +143,23 @@ class DetailPaneTest {
         rule.onNodeWithText("Update weight").assertExists()
         rule.onNodeWithContentDescription("Close").assertIsFocused()
 
-        // Start a draft in Update weight and resize Desktop -> Tablet -> Phone -> Desktop.
+        // Start a draft in Update weight and resize Desktop -> Tablet -> Desktop.
         rule.onNodeWithText("Update weight").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Weight with spool").performTextInput("710")
         rule.waitForIdle()
         window = WindowClass.Tablet
         rule.waitForIdle()
-        window = WindowClass.Phone
-        rule.waitForIdle()
         window = WindowClass.Desktop
         rule.waitForIdle()
         rule.mainClock.advanceTimeBy(500)
         rule.waitForIdle()
         rule.onNodeWithText("710").assertExists()
+
+        // Resizing to Phone hands off the open detail to its own screen instead of losing it.
+        window = WindowClass.Phone
+        rule.waitForIdle()
+        assertEquals(listOf(214), opened)
     }
 
     @Test fun spoolsOnPanesPhoneStaysDrillInScreen() {

@@ -184,7 +184,8 @@ class DetailCardTest {
     }
 
     @Test fun openDetailAndDraftSurviveWindowClassSwitch() {
-        showSpools(Look.Workbench, WindowClass.Tablet)
+        val handedOff = mutableListOf<Int>()
+        showSpools(Look.Workbench, WindowClass.Tablet) { handedOff += it }
         rule.onNodeWithContentDescription(spool214Desc).performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Update weight").performClick()
@@ -192,8 +193,8 @@ class DetailCardTest {
         rule.onNodeWithText("Weight with spool").performTextInput("750")
         rule.waitForIdle()
 
-        // Switch to Phone (one-column) and back to Tablet: the expanded card and its typed draft survive.
-        window = WindowClass.Phone
+        // Switch Tablet -> Desktop -> Tablet: the expanded card and its typed draft survive.
+        window = WindowClass.Desktop
         rule.waitForIdle()
         window = WindowClass.Tablet
         rule.waitForIdle()
@@ -201,6 +202,11 @@ class DetailCardTest {
         rule.waitForIdle()
         rule.onNodeWithText("Weight with spool").assertExists()
         rule.onNodeWithText("750").assertExists()
+
+        // Switch Tablet -> Phone: the open detail hands off to its own screen instead of vanishing.
+        window = WindowClass.Phone
+        rule.waitForIdle()
+        assertEquals(listOf(214), handedOff)
     }
 
     // ---- Printers / One printer ----

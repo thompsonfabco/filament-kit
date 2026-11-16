@@ -166,9 +166,10 @@ fun PresetsScreen(
         }
         SwPaneLayout(
             hasSelection = edit != null,
-            emptyText = stringResource(R.string.common_select_item, stringResource(R.string.presets_lines_title)),
+            emptyText = stringResource(R.string.detail_pane_empty_line),
             onClose = close,
             modifier = modifier,
+            canClose = edit?.saving != true,
             list = { listBody(Modifier) },
             detail = { edit?.let { ParentEditorBody(it, vm, onPairAgain, onClose = close) } },
         )
@@ -447,7 +448,7 @@ private fun LinesPanel(
             if (editing) {
                 val edit = s.edit
                 HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                SwCardDetail(onClose = { onCloseCard(line.lineId) }) {
+                SwCardDetail(onClose = { onCloseCard(line.lineId) }, canClose = !edit.saving) {
                     ParentEditorBody(edit, vm, onPairAgain, onClose = { onCloseCard(line.lineId) })
                 }
             }

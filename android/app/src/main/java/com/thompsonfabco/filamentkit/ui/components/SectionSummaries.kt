@@ -12,13 +12,15 @@ internal fun printersSummary(printers: List<Printer>, resources: Resources): Str
     val configured = printers.filter { it.configured }
     if (configured.isEmpty()) return resources.getString(R.string.printers_empty_title)
     val connected = configured.count { it.state == "connected" }
-    val offline = configured.size - connected
-    val connectedWord = resources.getString(R.string.status_connected).lowercase()
-    val offlineWord = resources.getString(R.string.status_offline).lowercase()
-    return when {
-        connected > 0 && offline > 0 -> "$connected $connectedWord · $offline $offlineWord"
-        connected > 0 -> "$connected $connectedWord"
-        else -> "$offline $offlineWord"
+    val offline = configured.count { it.state == "offline" }
+    val attention = configured.size - connected - offline
+    val parts = buildList {
+        if (connected > 0) add(resources.getString(R.string.section_printers_connected, connected))
+        if (offline > 0) add(resources.getString(R.string.section_printers_offline, offline))
+        if (attention > 0) add(resources.getQuantityString(R.plurals.section_printers_attention, attention, attention))
+    }
+    return parts.reduce { acc, next ->
+        resources.getString(R.string.section_printers_summary_pair, acc, next)
     }
 }
 
