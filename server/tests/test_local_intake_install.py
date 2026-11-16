@@ -82,12 +82,50 @@ def test_the_plan_states_sizes_before_any_model_is_downloaded(key, server):
     assert p["tiers"]["cpu"] == {"download_mb": 180, "disk_mb": 420, "minutes": 3,
                                  "assets": ["cpu-models-0.2.1.tar.gz"], "fetched_at_install": ""}
     text = lii.plan_text(p)
-    assert text[0] == ("Install the local label reader 0.2.1, cpu tier: download about 180 MB, about 420 MB of disk, "
-                       "about 3 min.")
+    assert text[0] == "Install the local label reader 0.2.1, cpu tier, about 3 min."
+    assert text[1:4] == ["Download now: 180 MB (required).",
+                         "Also downloaded for the cpu tier: not stated by this release (missing: fetched_at_install).",
+                         "Disk used in total: 420 MB."]
     assert any(t.startswith("Other tiers: auto: 900 MB download") for t in text)
     assert s.downloaded() == ["SHA256SUMS", "SHA256SUMS.sig", "manifest.json"]
     g = lii.plan_text(lii.plan(config.load(), tier="gpu", fetcher=fetcher(s)))
-    assert "The installer also fetches: the base vision model from its publisher (about 5 GB)." in g
+    assert ("Also downloaded for the gpu tier (optional): the base vision model from its publisher (about 5 GB). "
+            "The release gives no size in MB for it, so it is not added to the figures here.") in g
+    assert g.index("Download now: 900 MB (required).") < g.index(next(t for t in g if t.startswith("Also downloaded")))         < g.index("Disk used in total: 9800 MB.")
+
+
+def test_the_cli_and_the_page_show_the_same_three_figures(key, server, capsys):
+    s = server({"0.2.1": mrf.make_release(key, manifest_over={"tiers": {"gpu": {
+        "assets": ["cpu-models-0.2.1.tar.gz"], "download_mb": 900, "disk_mb": 19500, "minutes": 25,
+        "fetched_at_install": "Pinned base model (~16.6 GB)"}}})})
+    config.save({**config.load(), "local_intake": {**config.load()["local_intake"], "tier": "gpu"}})
+    assert cli.cmd_local_intake_plan(fetcher=fetcher(s)) == 0
+    shown = capsys.readouterr().out
+    sp = lii.saved_plan()                                   # what the page reads
+    three = [t for t in sp["text"] if t.startswith(("Download now", "Also downloaded", "Disk used"))]
+    assert [t[:12] for t in three] == ["Download now", "Also downloa", "Disk used in"]
+    assert "Disk used in total: 19500 MB." in three and "Download now: 900 MB (required)." in three
+    assert "Pinned base model (~16.6 GB)" in three[1]
+    assert all(t in shown for t in three)
+
+
+def test_a_manifest_without_the_size_fields_names_what_is_missing(key, server):
+    s = server({"0.2.1": mrf.make_release(key, manifest_over={"tiers": {"cpu": {"assets": ["cpu-models-0.2.1.tar.gz"]}}})})
+    p = lii.plan(config.load(), tier="cpu", fetcher=fetcher(s))
+    assert p["sizes"]["cpu"]["missing"] == ["download_mb", "disk_mb", "fetched_at_install"]
+    text = lii.plan_text(p)
+    assert text[0] == "Install the local label reader 0.2.1, cpu tier."
+    assert text[1:4] == ["Download now: not stated by this release (missing: download_mb).",
+                         "Also downloaded for the cpu tier: not stated by this release (missing: fetched_at_install).",
+                         "Disk used in total: not stated by this release (missing: disk_mb)."]
+
+
+def test_an_empty_fetched_at_install_means_nothing_else_is_downloaded(key, server):
+    s = server({"0.2.1": mrf.make_release(key, manifest_over={"tiers": {"cpu": {
+        "assets": ["cpu-models-0.2.1.tar.gz"], "download_mb": 5, "disk_mb": 9, "fetched_at_install": ""}}})})
+    p = lii.plan(config.load(), tier="cpu", fetcher=fetcher(s))
+    assert p["sizes"]["cpu"]["missing"] == []
+    assert "Also downloaded for the cpu tier (optional): nothing." in lii.plan_text(p)
 
 
 @pytest.mark.parametrize("kw,match", [
@@ -209,7 +247,7 @@ def test_cli_install_shows_the_plan_asks_then_switches_the_module_on(key, server
     monkeypatch.setattr(cli, "_ask", lambda prompt: "n")
     assert cli.cmd_local_intake_install("cpu", None, False, fetcher=fetcher(s), run=Run()) == 0
     out = capsys.readouterr().out
-    assert "download about 180 MB, about 420 MB of disk, about 3 min" in out and "Nothing was installed." in out
+    assert "Download now: 180 MB (required)." in out and "Disk used in total: 420 MB." in out         and "Nothing was installed." in out
     assert lii.installed() is None and not applied
     # the fake reader stands in for the installed one (the CLI points local_intake.url at the port it installed on)
     monkeypatch.setattr(lii, "wait_healthy", lambda cfg, *a, **k: lii.local_reader.health(

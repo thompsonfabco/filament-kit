@@ -218,6 +218,20 @@ def _mb(v) -> int | None:
     return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 else None
 
 
+def _sizes(d: dict) -> dict:
+    """The three figures the owner is shown, as the manifest states them and nothing more. `required_mb`: the
+    tier's `download_mb` (the signed assets). `optional`: its `fetched_at_install` text (what the installer fetches
+    itself, e.g. the base model): the manifest gives it as prose, not as a number, so no figure is made up from it.
+    `total_mb`: its `disk_mb`. `missing`: the manifest fields this tier lacks."""
+    required, total = _mb(d.get("download_mb")), _mb(d.get("disk_mb"))
+    stated = isinstance(d.get("fetched_at_install"), str)
+    missing = [k for k, v in (("download_mb", required), ("disk_mb", total)) if v is None]
+    if not stated:
+        missing.append("fetched_at_install")
+    return {"required_mb": required, "optional": str(d.get("fetched_at_install") or "")[:200] if stated else "",
+            "optional_stated": stated, "total_mb": total, "missing": missing}
+
+
 def _conflicting_server_install() -> str | None:
     """Return a description if standalone filament-vision-server is present, else None."""
     raw = os.environ.get("FK_VISION_SERVER_PATHS", "").strip()
@@ -239,8 +253,9 @@ def plan(cfg: dict, *, tier: str | None = None, version: str | None = None,
     s = settings(cfg)
     rel, table, sums, sig = _signed(fetcher, s, version)
     m = _manifest(_get_listed(fetcher, rel, table, MANIFEST, LIMIT_MANIFEST), rel["version"])
-    tiers = {}
+    tiers, sizes = {}, {}
     for t, d in sorted(m["tiers"].items()):
+        sizes[t] = _sizes(d)
         tiers[t] = {"download_mb": _mb(d.get("download_mb")), "disk_mb": _mb(d.get("disk_mb")),
                     "minutes": _mb(d.get("minutes")), "assets": list(d["assets"]),
                     "fetched_at_install": str(d.get("fetched_at_install") or "")[:200]}
@@ -253,7 +268,7 @@ def plan(cfg: dict, *, tier: str | None = None, version: str | None = None,
     newer = bool(have) and release.parse_version(rel["version"]) > release.parse_version(have["version"])
     older = bool(have) and release.parse_version(rel["version"]) < release.parse_version(have["version"])
     return {"version": rel["version"], "installed": have["version"] if have else None,
-            "installed_tier": have.get("tier") if have else None, "tier": tier, "asked_tier": asked, "tiers": tiers,
+            "installed_tier": have.get("tier") if have else None, "tier": tier, "asked_tier": asked, "tiers": tiers, "sizes": sizes,
             "upgrade": newer, "downgrade": older,
             "same": bool(have) and have["version"] == rel["version"] and have.get("tier") == tier,
             "conflict": _conflicting_server_install(),
@@ -272,28 +287,39 @@ def plan_text(p: dict) -> list[str]:
         return lines + [f"Release {p['version']} has no {p['tier']} tier (it has: {', '.join(p['tiers'])})."]
     what = ("Upgrade to" if p["upgrade"] else "Go back (downgrade) to" if p.get("downgrade")
             else "Reinstall" if p["same"] else "Install")
-    parts = []
-    if t["download_mb"] is not None:
-        parts.append(f"download about {t['download_mb']} MB")
-    if t["disk_mb"] is not None:
-        parts.append(f"about {t['disk_mb']} MB of disk")
-    if t["minutes"] is not None:
-        parts.append(f"about {t['minutes']} min")
-    lines.append(f"{what} the local label reader {p['version']}, {p['tier']} tier: " + (", ".join(parts) or
-                                                                                         "sizes not stated") + ".")
+    head = f"{what} the local label reader {p['version']}, {p['tier']} tier"
+    lines.append(head + (f", about {t['minutes']} min." if t["minutes"] is not None else "."))
     if p.get("asked_tier") and p["asked_tier"] != p["tier"]:
         lines.append(f"This release has no {p['asked_tier']} tier: its {p['tier']} tier is used.")
     if p.get("downgrade"):
         lines.append(f"That is older than the installed {p['installed']}: it is installed only when that version is "
                      "asked for by name (spoolwarden local-intake install --version " + p["version"]
                      + ").")
-    if t["fetched_at_install"]:
-        lines.append(f"The installer also fetches: {t['fetched_at_install']}.")
+    lines += size_lines(p, p["tier"])
     others = [f"{k}: {v['download_mb'] or '?'} MB download, {v['disk_mb'] or '?'} MB disk"
               for k, v in p["tiers"].items() if k != p["tier"]]
     if others:
         lines.append("Other tiers: " + "; ".join(others) + ".")
     return lines
+
+
+def size_lines(p: dict, tier: str) -> list[str]:
+    """Mandatory download, optional download for the tier, then total disk: the one function behind the CLI and the
+    page (both show plan_text). A field the manifest lacks is named, never filled in with a guess."""
+    z = (p.get("sizes") or {}).get(tier) or _sizes({**p["tiers"][tier], "fetched_at_install": p["tiers"][tier].get("fetched_at_install") or None})
+    # (a plan saved before `sizes` existed: an empty text there may be a missing field)
+    out = [f"Download now: {z['required_mb']} MB (required)." if z["required_mb"] is not None
+           else "Download now: not stated by this release (missing: download_mb)."]
+    if not z["optional_stated"]:
+        out.append(f"Also downloaded for the {tier} tier: not stated by this release (missing: fetched_at_install).")
+    elif z["optional"]:
+        out.append(f"Also downloaded for the {tier} tier (optional): {z['optional']}. The release gives no size in MB "
+                   "for it, so it is not added to the figures here.")
+    else:
+        out.append(f"Also downloaded for the {tier} tier (optional): nothing.")
+    out.append(f"Disk used in total: {z['total_mb']} MB." if z["total_mb"] is not None
+               else "Disk used in total: not stated by this release (missing: disk_mb).")
+    return out
 
 
 def _signed(fetcher: release.Fetcher, s: dict, version: str | None):
