@@ -1075,7 +1075,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
             if not _show_app(cfg, tty):
                 print("\nPairing skipped: pair a phone later with: sudo spoolwarden pair")
             elif tty:
-                print("\n==> Pair a phone: open the filament-kit app and scan this code")
+                print("\n==> Pair a phone: open the Spoolwarden app and scan this code")
                 ex.ok([WRAPPER, "pair", "--no-wait"])
             else:
                 # no terminal (the updater, a provisioning script): the output goes to a log, so no pairing token

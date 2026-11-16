@@ -330,7 +330,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
                       group="Hub")
         if "server" in on:
             ok, url = cli._api_answers(cfg["port"])
-            yield Row(OK if ok else FAIL, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
+            yield Row(OK if ok else FAIL, f"Spoolwarden API {'answering' if ok else 'not answering'} at {url}",
                       "sudo journalctl -u filament-kit -n 50", group="Hub")
 
     if "server" in on or "spoolman" in on:

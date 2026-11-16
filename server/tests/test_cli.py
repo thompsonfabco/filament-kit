@@ -231,7 +231,7 @@ def test_status_api_not_answering_fails(capsys, monkeypatch):
     config.save(cfg)
     assert cli.main(["status"]) == 1
     out = old_rows(capsys.readouterr().out)
-    assert f"FAIL filament-kit API not answering at https://127.0.0.1:{cfg['port']}/api/info" in out
+    assert f"FAIL Spoolwarden API not answering at https://127.0.0.1:{cfg['port']}/api/info" in out
     assert "     fix: sudo journalctl -u filament-kit -n 50" in out
 
 
@@ -259,7 +259,7 @@ def test_status_api_answering_ok(capsys, monkeypatch):
     monkeypatch.setattr(cli.urllib.request, "urlopen", urlopen)
     cli.main(["status"])
     out = old_rows(capsys.readouterr().out)
-    assert "OK   filament-kit API answering at https://127.0.0.1:8710/api/info" in out
+    assert "OK   Spoolwarden API answering at https://127.0.0.1:8710/api/info" in out
     import ssl
     assert seen == {"url": "https://127.0.0.1:8710/api/info", "timeout": 5, "verify": ssl.CERT_NONE}
 
@@ -289,7 +289,7 @@ def test_status_api_bad_http_answer_fails(capsys, monkeypatch):
     assert cli.main(["status"]) == 1
     raw = capsys.readouterr().out
     out = " ".join(raw.split())
-    assert "needs a look filament-kit API not answering" in out
+    assert "needs a look Spoolwarden API not answering" in out
     assert any("sudo journalctl -u filament-kit -n 50" in x for x in raw.splitlines()), raw     # the command: one line
 
 
