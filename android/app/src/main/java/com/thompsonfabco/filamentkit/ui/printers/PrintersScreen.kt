@@ -84,6 +84,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
+import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwTile
@@ -110,6 +111,7 @@ fun PrintersScreen(
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && printerDetail != null
     val useSheetDetail = presentation == DetailPresentation.Sheet && printerDetail != null
+    val usePaneDetail = presentation == DetailPresentation.Pane && printerDetail != null
     var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var sheetPrinterId by rememberSaveable { mutableStateOf<String?>(null) }
     val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
@@ -138,55 +140,74 @@ fun PrintersScreen(
     val offline = state.problem is Problem.Unreachable
     ScreenTopBarActions { Overflow(!offline, viewModel::refresh, viewModel::openFind, { viewModel.openAddKlipper() }) }
     // the progress line shows a refresh, so the pull gesture only starts one
-    PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = modifier.fillMaxSize()) {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
-            verticalArrangement = Arrangement.spacedBy(space.s3),
-        ) {
-            if (state.mismatch != null) HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
-            if (state.unauthorized) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-            ScreenState(
-                loaded = state.loaded,
-                loading = state.loading,
-                isEmpty = state.printers.isEmpty(),
-                empty = {
-                    SwEmptyState(
-                        icon = R.drawable.sw_ic_printer,
-                        title = stringResource(R.string.printers_empty_title),
-                        text = stringResource(R.string.printer_list_empty_text),
-                        primary = SwAction(stringResource(R.string.common_refresh), viewModel::refresh),
-                        secondary = if (offline) null else SwAction(stringResource(R.string.common_add_klipper_printer)) { viewModel.openAddKlipper() },
-                    )
-                },
-                error = state.problem?.takeUnless { offline }?.let { problemText(it) },
-                onTryAgain = viewModel::refresh,
-                offline = offline,
-                loadedSecondsAgo = (System.currentTimeMillis() - state.loadedAt).coerceAtLeast(0) / MS_PER_S,
+    val listBody: @Composable (Modifier) -> Unit = { listModifier ->
+        PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = listModifier.fillMaxSize()) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+                verticalArrangement = Arrangement.spacedBy(space.s3),
             ) {
-                PrinterLists(
-                    state, offline, onOpen, onReplaceCode,
-                    onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper,
-                    useCardDetail = useCardDetail,
-                    useSheetDetail = useSheetDetail,
-                    expandedIds = expandedIds,
-                    rowFocus = rowFocus,
-                    onToggleCard = { id -> expandedIds = if (id in expandedIds) expandedIds - id else expandedIds + id },
-                    onCloseCard = { id -> expandedIds = expandedIds - id; returnFocusId = id },
-                    onOpenSheet = { id -> sheetPrinterId = id },
-                    printerDetail = printerDetail,
-                )
+                if (state.mismatch != null) HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+                if (state.unauthorized) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+                ScreenState(
+                    loaded = state.loaded,
+                    loading = state.loading,
+                    isEmpty = state.printers.isEmpty(),
+                    empty = {
+                        SwEmptyState(
+                            icon = R.drawable.sw_ic_printer,
+                            title = stringResource(R.string.printers_empty_title),
+                            text = stringResource(R.string.printer_list_empty_text),
+                            primary = SwAction(stringResource(R.string.common_refresh), viewModel::refresh),
+                            secondary = if (offline) null else SwAction(stringResource(R.string.common_add_klipper_printer)) { viewModel.openAddKlipper() },
+                        )
+                    },
+                    error = state.problem?.takeUnless { offline }?.let { problemText(it) },
+                    onTryAgain = viewModel::refresh,
+                    offline = offline,
+                    loadedSecondsAgo = (System.currentTimeMillis() - state.loadedAt).coerceAtLeast(0) / MS_PER_S,
+                ) {
+                    PrinterLists(
+                        state, offline, onOpen, onReplaceCode,
+                        onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper,
+                        useCardDetail = useCardDetail,
+                        useSheetDetail = useSheetDetail || usePaneDetail,
+                        expandedIds = expandedIds,
+                        rowFocus = rowFocus,
+                        onToggleCard = { id -> expandedIds = if (id in expandedIds) expandedIds - id else expandedIds + id },
+                        onCloseCard = { id -> expandedIds = expandedIds - id; returnFocusId = id },
+                        onOpenSheet = { id -> sheetPrinterId = id },
+                        printerDetail = printerDetail,
+                    )
+                }
             }
         }
     }
-    if (useSheetDetail) {
+    if (usePaneDetail && printerDetail != null) {
         val openId = sheetPrinterId
-        if (openId != null && printerDetail != null) {
-            val close = {
-                returnFocusId = openId
-                sheetPrinterId = null
-            }
-            SwSheetDetail(onClose = close) {
-                printerDetail(openId, true, close)
+        val close = {
+            returnFocusId = openId
+            sheetPrinterId = null
+        }
+        SwPaneLayout(
+            hasSelection = openId != null,
+            emptyText = stringResource(R.string.common_select_item, stringResource(R.string.nav_printers)),
+            onClose = close,
+            modifier = modifier,
+            list = { listBody(Modifier) },
+            detail = { openId?.let { printerDetail(it, true, close) } },
+        )
+    } else {
+        listBody(modifier)
+        if (useSheetDetail) {
+            val openId = sheetPrinterId
+            if (openId != null && printerDetail != null) {
+                val close = {
+                    returnFocusId = openId
+                    sheetPrinterId = null
+                }
+                SwSheetDetail(onClose = close) {
+                    printerDetail(openId, true, close)
+                }
             }
         }
     }

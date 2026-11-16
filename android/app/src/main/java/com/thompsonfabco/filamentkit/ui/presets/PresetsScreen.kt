@@ -59,6 +59,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconSize
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
+import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
@@ -111,6 +112,7 @@ fun PresetsScreen(
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card
     val useSheetDetail = presentation == DetailPresentation.Sheet
+    val usePaneDetail = presentation == DetailPresentation.Pane
     val lineFocus = remember { mutableMapOf<String, FocusRequester>() }
     var returnFocusLineId by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
@@ -120,45 +122,64 @@ fun PresetsScreen(
         lineFocus[id]?.let { requestDetailFocus(it, view) }
         returnFocusLineId = null
     }
-    Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    val listBody: @Composable (Modifier) -> Unit = { listModifier ->
         Column(
-            Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(space.s3),
+            listModifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            StatusPanel(s, vm, now, onPairAgain)
-            NoticeCard(NoticeKind.Info, stringResource(R.string.presets_info))
-            SettingsPanel {
-                SectionTitle(stringResource(R.string.presets_missing_title))
-                Text(stringResource(R.string.presets_missing_text), style = MaterialTheme.typography.bodyMedium)
-                SwButton(stringResource(R.string.catalog_add_line), onAddCatalogLine, Modifier.fillMaxWidth())
+            Column(
+                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(space.s3),
+            ) {
+                StatusPanel(s, vm, now, onPairAgain)
+                NoticeCard(NoticeKind.Info, stringResource(R.string.presets_info))
+                SettingsPanel {
+                    SectionTitle(stringResource(R.string.presets_missing_title))
+                    Text(stringResource(R.string.presets_missing_text), style = MaterialTheme.typography.bodyMedium)
+                    SwButton(stringResource(R.string.catalog_add_line), onAddCatalogLine, Modifier.fillMaxWidth())
+                }
+                UncoveredPanel(s, vm, onPairAgain)
+                LinesPanel(
+                    s, vm, onPairAgain,
+                    useCardDetail = useCardDetail,
+                    lineFocus = lineFocus,
+                    onCloseCard = { lineId ->
+                        vm.closeParent()
+                        returnFocusLineId = lineId
+                    },
+                )
+                if (updates != null) UpdatesPanel(s.status, updates, onChanged = vm::reload)
             }
-            UncoveredPanel(s, vm, onPairAgain)
-            LinesPanel(
-                s, vm, onPairAgain,
-                useCardDetail = useCardDetail,
-                lineFocus = lineFocus,
-                onCloseCard = { lineId ->
-                    vm.closeParent()
-                    returnFocusLineId = lineId
-                },
-            )
-            if (updates != null) UpdatesPanel(s.status, updates, onChanged = vm::reload)
         }
     }
-    when {
-        useSheetDetail -> s.edit?.let { edit ->
-            val close = {
-                returnFocusLineId = edit.lineId
-                vm.closeParent()
-            }
-            SwSheetDetail(onClose = close, gesturesEnabled = !edit.saving) {
-                ParentEditorBody(edit, vm, onPairAgain, onClose = close)
-            }
+    if (usePaneDetail) {
+        val edit = s.edit
+        val close = {
+            edit?.let { returnFocusLineId = it.lineId }
+            vm.closeParent()
         }
-        !useCardDetail -> s.edit?.let { ParentSheet(it, vm, onPairAgain) }
+        SwPaneLayout(
+            hasSelection = edit != null,
+            emptyText = stringResource(R.string.common_select_item, stringResource(R.string.presets_lines_title)),
+            onClose = close,
+            modifier = modifier,
+            list = { listBody(Modifier) },
+            detail = { edit?.let { ParentEditorBody(it, vm, onPairAgain, onClose = close) } },
+        )
+    } else {
+        listBody(modifier)
+        when {
+            useSheetDetail -> s.edit?.let { edit ->
+                val close = {
+                    returnFocusLineId = edit.lineId
+                    vm.closeParent()
+                }
+                SwSheetDetail(onClose = close, gesturesEnabled = !edit.saving) {
+                    ParentEditorBody(edit, vm, onPairAgain, onClose = close)
+                }
+            }
+            !useCardDetail -> s.edit?.let { ParentSheet(it, vm, onPairAgain) }
+        }
     }
 }
 

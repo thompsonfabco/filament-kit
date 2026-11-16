@@ -3,14 +3,18 @@ package com.thompsonfabco.filamentkit.ui.components
 import android.view.View
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.verticalScroll
@@ -28,9 +32,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -66,7 +72,8 @@ internal fun detailPresentation(style: DetailStyle, window: WindowClass): Detail
     DetailStyle.Inline -> DetailPresentation.Screen
     DetailStyle.Card -> if (window == WindowClass.Phone) DetailPresentation.Screen else DetailPresentation.Card
     DetailStyle.Sheet -> DetailPresentation.Sheet
-    DetailStyle.Pane -> DetailPresentation.Screen
+    // Panes: on phones drill-in stays its own screen; on Tablet (2 panes) and Desktop (3 panes) use Pane.
+    DetailStyle.Pane -> if (window == WindowClass.Phone) DetailPresentation.Screen else DetailPresentation.Pane
 }
 
 /** Reads [LocalDetailStyle] and [SpoolwardenTheme.window] to return the active [DetailPresentation]. */
@@ -195,6 +202,101 @@ internal fun SwDetailStep(
         Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
         if (stepExpanded(presentation, current)) {
             body()
+        }
+    }
+}
+
+internal const val EMPTY_PANE_TAG = "detail-empty-pane"
+
+/**
+ * Side-by-side detail layout for Panes (`DetailStyle.Pane`) on wide windows.
+ *
+ * On `Desktop` (three panes total with `SwNav`'s section list), shows the [list] pane beside the [detail] pane
+ * (or the [emptyText] empty-pane state when [hasSelection] is false).
+ * On `Tablet` (two panes total with `SwNav`'s section list), shows either the [list] or the active [detail]
+ * with a Back button and system Back support.
+ */
+@Composable
+internal fun SwPaneLayout(
+    hasSelection: Boolean,
+    emptyText: String,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    list: @Composable () -> Unit,
+    detail: @Composable () -> Unit,
+) {
+    val window = SpoolwardenTheme.window
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val detailFocus = remember { FocusRequester() }
+    val view = LocalView.current
+
+    if (hasSelection) {
+        LaunchedEffect(Unit) {
+            repeat(2) { withFrameNanos { } }
+            requestDetailFocus(detailFocus, view)
+        }
+        BackHandler(enabled = true, onBack = onClose)
+    }
+
+    if (window == WindowClass.Desktop) {
+        Row(modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                list()
+            }
+            Box(Modifier.width(SpoolwardenTheme.sizes.hairline).fillMaxHeight().background(colors.border))
+            Column(Modifier.widthIn(min = SpoolwardenTheme.sizes.drawer).weight(1f).fillMaxHeight()) {
+                if (hasSelection) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = space.s3),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SwIconButton(
+                            R.drawable.sw_ic_close,
+                            stringResource(R.string.common_close),
+                            onClose,
+                            modifier = Modifier.focusRequester(detailFocus).focusable(),
+                        )
+                    }
+                    HorizontalDivider(thickness = SpoolwardenTheme.sizes.hairline, color = colors.border)
+                    Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                        detail()
+                    }
+                } else {
+                    Box(
+                        Modifier.fillMaxSize().padding(space.s4).testTag(EMPTY_PANE_TAG),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(emptyText, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+                    }
+                }
+            }
+        }
+    } else {
+        if (hasSelection) {
+            Column(modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = space.s3),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SwIconButton(
+                        R.drawable.sw_ic_chevron,
+                        stringResource(R.string.common_back),
+                        onClose,
+                        modifier = Modifier.rotate(180f).focusRequester(detailFocus).focusable(),
+                    )
+                }
+                HorizontalDivider(thickness = SpoolwardenTheme.sizes.hairline, color = colors.border)
+                Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    detail()
+                }
+            }
+        } else {
+            Box(modifier.fillMaxSize()) {
+                list()
+            }
         }
     }
 }

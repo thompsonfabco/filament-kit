@@ -52,6 +52,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwLazyCollection
+import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
@@ -113,6 +114,7 @@ internal fun HistoryListScreen(
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && recordDetail != null
     val useSheetDetail = presentation == DetailPresentation.Sheet && recordDetail != null
+    val usePaneDetail = presentation == DetailPresentation.Pane && recordDetail != null
     var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var sheetRecordId by rememberSaveable { mutableStateOf<String?>(null) }
     val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
@@ -139,84 +141,102 @@ internal fun HistoryListScreen(
             vm.refresh()
         }
     }
-    PullToRefreshBox(isRefreshing = s.loading && h != null, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
-            when {
-                s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
-                s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-            }
-            val offline = failure == RecentFailure.Offline
-            val ago = remember(s.loadedAt, s.error) { s.loadedAt?.let { (System.currentTimeMillis() - it) / MS_PER_S } ?: 0L }
-            ScreenState(
-                loaded = h != null,
-                loading = s.loading,
-                modifier = Modifier.weight(1f),
-                error = if (failure != null && !offline) failureText(failure) else null,
-                onTryAgain = vm::refresh,
-                offline = offline,
-                loadedSecondsAgo = ago,
-            ) {
-                if (h != null) {
-                    if (h.keep > 0) {
-                        Text(
-                            pluralStringResource(R.plurals.recent_facts, h.keep, h.keep, RecentValues.megabytes(h.photoBytes ?: 0L)),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    if (!h.ai) ReaderOffLine()
-                    if (h.records.isEmpty()) {
-                        SwEmptyState(
-                            icon = R.drawable.sw_ic_clock,
-                            title = stringResource(R.string.recent_empty_title),
-                            text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
-                        )
-                    } else {
-                        val openOrToggle: (HistorySummary) -> Unit = { r ->
-                            when {
-                                useCardDetail -> expandedIds = if (r.id in expandedIds) expandedIds - r.id else expandedIds + r.id
-                                useSheetDetail -> sheetRecordId = r.id
-                                else -> onOpen(r.id)
-                            }
+    val listBody: @Composable () -> Unit = {
+        PullToRefreshBox(isRefreshing = s.loading && h != null, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
+                when {
+                    s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+                    s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+                }
+                val offline = failure == RecentFailure.Offline
+                val ago = remember(s.loadedAt, s.error) { s.loadedAt?.let { (System.currentTimeMillis() - it) / MS_PER_S } ?: 0L }
+                ScreenState(
+                    loaded = h != null,
+                    loading = s.loading,
+                    modifier = Modifier.weight(1f),
+                    error = if (failure != null && !offline) failureText(failure) else null,
+                    onTryAgain = vm::refresh,
+                    offline = offline,
+                    loadedSecondsAgo = ago,
+                ) {
+                    if (h != null) {
+                        if (h.keep > 0) {
+                            Text(
+                                pluralStringResource(R.plurals.recent_facts, h.keep, h.keep, RecentValues.megabytes(h.photoBytes ?: 0L)),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
                         }
-                        SwLazyCollection(
-                            h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
-                            visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
-                            tile = { r ->
-                                val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
-                                RecordTile(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
-                            },
-                            isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
-                            detail = if (useCardDetail) {
-                                { r ->
-                                    val close = {
-                                        expandedIds = expandedIds - r.id
-                                        returnFocusId = r.id
-                                    }
-                                    SwCardDetail(onClose = close) {
-                                        recordDetail(r.id, true, close)
-                                    }
+                        if (!h.ai) ReaderOffLine()
+                        if (h.records.isEmpty()) {
+                            SwEmptyState(
+                                icon = R.drawable.sw_ic_clock,
+                                title = stringResource(R.string.recent_empty_title),
+                                text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
+                            )
+                        } else {
+                            val openOrToggle: (HistorySummary) -> Unit = { r ->
+                                when {
+                                    useCardDetail -> expandedIds = if (r.id in expandedIds) expandedIds - r.id else expandedIds + r.id
+                                    useSheetDetail || usePaneDetail -> sheetRecordId = r.id
+                                    else -> onOpen(r.id)
                                 }
-                            } else {
-                                null
-                            },
-                        ) { r ->
-                            val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
-                            RecordRow(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                            }
+                            SwLazyCollection(
+                                h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
+                                visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
+                                tile = { r ->
+                                    val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
+                                    RecordTile(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                                },
+                                isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
+                                detail = if (useCardDetail) {
+                                    { r ->
+                                        val close = {
+                                            expandedIds = expandedIds - r.id
+                                            returnFocusId = r.id
+                                        }
+                                        SwCardDetail(onClose = close) {
+                                            recordDetail(r.id, true, close)
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
+                            ) { r ->
+                                val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
+                                RecordRow(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                            }
                         }
                     }
                 }
             }
         }
     }
-    if (useSheetDetail) {
+    if (usePaneDetail && recordDetail != null) {
         val openId = sheetRecordId
-        if (openId != null && recordDetail != null) {
-            val close = {
-                returnFocusId = openId
-                sheetRecordId = null
-            }
-            SwSheetDetail(onClose = close) {
-                recordDetail(openId, true, close)
+        val close = {
+            returnFocusId = openId
+            sheetRecordId = null
+        }
+        SwPaneLayout(
+            hasSelection = openId != null,
+            emptyText = stringResource(R.string.common_select_item, stringResource(R.string.nav_recent)),
+            onClose = close,
+            list = listBody,
+            detail = { openId?.let { recordDetail(it, true, close) } },
+        )
+    } else {
+        listBody()
+        if (useSheetDetail) {
+            val openId = sheetRecordId
+            if (openId != null && recordDetail != null) {
+                val close = {
+                    returnFocusId = openId
+                    sheetRecordId = null
+                }
+                SwSheetDetail(onClose = close) {
+                    recordDetail(openId, true, close)
+                }
             }
         }
     }
