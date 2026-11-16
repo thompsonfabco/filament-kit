@@ -387,8 +387,6 @@ OLD_NAME_LINES = [
     ("docs/user-guide.md", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
     ("release-notes/next.md", "`filament-kit` still works for a time", "the note about the old command"),
     ("docs/install-server.md", "OK   service filament-kit active", "a line the status check prints: the unit's name"),
-    ("docs/install-server.md", "OK   filament-kit API answering", "a line the status check prints (status.py still spells it out)"),
-    ("docs/install-server.md", "open the filament-kit app and scan", "a line the installer prints (apply.py still spells it out)"),
     ("docs/known-gaps.md", "verified filament-kit 0.2.0", "what an early version printed in a recorded run"),
     ("docs/user-guide.md", "group `filament-kit`", "the system group's name on the Hub"),
 ]
