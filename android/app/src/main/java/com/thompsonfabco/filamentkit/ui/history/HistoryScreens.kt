@@ -19,10 +19,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -36,23 +43,33 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.HistorySummary
+import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwLazyCollection
 import com.thompsonfabco.filamentkit.ui.components.SwTile
+import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 
 /** Recently added (05-android-app 10.1): the list of intake records. */
 @Composable
-fun HistoryListEntry(current: () -> Api, client: Any?, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+fun HistoryListEntry(
+    current: () -> Api,
+    client: Any?,
+    onOpen: (String) -> Unit,
+    onPairAgain: () -> Unit,
+    recordDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+) {
     val list = viewModel { HistoryListViewModel(HistoryBackend.of(current)) }
-    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain)
+    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain, recordDetail = recordDetail)
 }
 
 /**
@@ -72,19 +89,38 @@ fun HistoryRecordEntry(
     onOpenPhoto: (Int) -> Unit,
     onOpenSpool: (JsonObject) -> Unit,
     onPairAgain: () -> Unit,
+    embedded: Boolean = false,
 ) {
     val list = viewModel(viewModelStoreOwner = listOwner) { HistoryListViewModel(HistoryBackend.of(current)) }
     val vm = viewModel(key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
     RecordScreen(
         vm, list, client, online = online, onBack = { list.refresh(); onBack() }, onOpenRecord = onOpenRecord, onEdit = onEdit,
-        onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain,
+        onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain, embedded = embedded,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+internal fun HistoryListScreen(
+    vm: HistoryListViewModel,
+    client: Any?,
+    onOpen: (String) -> Unit,
+    onPairAgain: () -> Unit,
+    recordDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+) {
     val s by vm.state.collectAsState()
+    val presentation = rememberDetailPresentation()
+    val useCardDetail = presentation == DetailPresentation.Card && recordDetail != null
+    var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
+    var returnFocusId by remember { mutableStateOf<String?>(null) }
+    val view = LocalView.current
+    LaunchedEffect(returnFocusId) {
+        val id = returnFocusId ?: return@LaunchedEffect
+        repeat(2) { withFrameNanos { } }
+        rowFocus[id]?.let { requestDetailFocus(it, view) }
+        returnFocusId = null
+    }
     LifecycleStartEffect(vm) {
         vm.refresh()
         onStopOrDispose { }
@@ -136,8 +172,29 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (
                             h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
                             visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
                             tile = { r -> RecordTile(r, vm) { onOpen(r.id) } },
+                            isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
+                            detail = if (useCardDetail) {
+                                { r ->
+                                    val close = {
+                                        expandedIds = expandedIds - r.id
+                                        returnFocusId = r.id
+                                    }
+                                    SwCardDetail(onClose = close) {
+                                        recordDetail(r.id, true, close)
+                                    }
+                                }
+                            } else {
+                                null
+                            },
                         ) { r ->
-                            RecordRow(r, vm) { onOpen(r.id) }
+                            val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
+                            RecordRow(r, vm, Modifier.focusRequester(requester)) {
+                                if (useCardDetail) {
+                                    expandedIds = if (r.id in expandedIds) expandedIds - r.id else expandedIds + r.id
+                                } else {
+                                    onOpen(r.id)
+                                }
+                            }
                         }
                     }
                 }
@@ -159,7 +216,7 @@ internal fun ReaderOffLine(modifier: Modifier = Modifier) {
 
 /** One record (10.1): thumbnail with its photo count, the filaments, when and which spools, the state and the source. */
 @Composable
-private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, onClick: () -> Unit) {
+private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     val ids = RecentValues.spoolIds(r.spools)
@@ -169,7 +226,7 @@ private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, onClick: () -
         pluralStringResource(R.plurals.recent_spool_label, ids.size, RecentValues.idList(ids))
     }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(role = Role.Button, onClick = onClick)
+        modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(role = Role.Button, onClick = onClick)
             .padding(space.s3),
         horizontalArrangement = Arrangement.spacedBy(space.s3),
         verticalAlignment = Alignment.CenterVertically,

@@ -1072,6 +1072,26 @@ internal fun FilamentKitApp(
                             },
                             onPairAgain = app.router::pairAgain,
                             online = online,
+                            spoolDetail = { spool, embedded, _ ->
+                                val spoolVm: SpoolViewModel = viewModel(
+                                    key = "spool-${spool.id}",
+                                    factory = viewModelFactory {
+                                        initializer {
+                                            SpoolViewModel(
+                                                spool.id, SpoolBackend.of(::currentApi), spool, null, null, createSavedStateHandle(),
+                                            )
+                                        }
+                                    },
+                                )
+                                SpoolScreen(
+                                    vm = spoolVm,
+                                    onLoad = { nav.navigate(SpoolLoadRoute(spool.id)) },
+                                    onPairAgain = app.router::pairAgain,
+                                    online = online,
+                                    printersOn = info?.printersOn != false,
+                                    embedded = embedded,
+                                )
+                            },
                         )
                     }
                     sharedRoutes()
@@ -1090,7 +1110,18 @@ internal fun FilamentKitApp(
                                 nav.navigate(PrinterRoute(id))
                                 nav.navigate(PrinterSettingsRoute(id, replaceCode = true))
                             },
-                            onPairAgain = app.router::pairAgain)
+                            onPairAgain = app.router::pairAgain,
+                            printerDetail = { id, embedded, _ ->
+                                PrinterEntry(
+                                    a, ::currentApi, id,
+                                    onPairAgain = app.router::pairAgain,
+                                    onOpenSettings = { nav.navigate(PrinterSettingsRoute(id)) },
+                                    onMapByLoading = { nav.navigate(PrinterMapRoute(id)) },
+                                    onPickSlot = { nav.navigate(PrinterPickRoute(id, it)) },
+                                    onOpenSpool = { sp -> sp.id?.let { nav.navigate(SpoolRoute(it)) } },
+                                    embedded = embedded,
+                                )
+                            })
                     }
 
                     composable<PrinterRoute> { e ->
@@ -1156,7 +1187,7 @@ internal fun FilamentKitApp(
                 }
 
                 navigation<RecentGraph>(startDestination = RecentRoute) {
-                    composable<RecentRoute> {
+                    composable<RecentRoute> { e ->
                         val a = api
                         if (a == null) {
                             HubNoticePage(::pushPairing)
@@ -1166,6 +1197,22 @@ internal fun FilamentKitApp(
                             ::currentApi, a,
                             onOpen = { nav.navigate(RecordRoute(it)) },
                             onPairAgain = app.router::pairAgain,
+                            recordDetail = { hid, embedded, onClose ->
+                                HistoryRecordEntry(
+                                    ::currentApi, a, online, hid, listOwner = e,
+                                    onBack = onClose,
+                                    onOpenRecord = { nextHid -> nav.navigate(RecordRoute(nextHid)) },
+                                    onEdit = { item -> nav.navigate(RecordEditRoute(hid, item)) },
+                                    onOpenPhoto = { n -> nav.navigate(RecordPhotoRoute(hid, n)) },
+                                    onOpenSpool = { json ->
+                                        val spool = json.toSpoolSummary()
+                                        SpoolCache.put(spool)
+                                        nav.navigate(SpoolRoute(spool.id))
+                                    },
+                                    onPairAgain = app.router::pairAgain,
+                                    embedded = embedded,
+                                )
+                            },
                         )
                     }
 

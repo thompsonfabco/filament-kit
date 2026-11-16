@@ -23,13 +23,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.lifecycle.Lifecycle
@@ -39,12 +45,16 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
+import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubNoticeOf
 import com.thompsonfabco.filamentkit.ui.spool.hubFailureText
@@ -180,11 +190,25 @@ fun SearchScreen(
     nfc: NfcState = rememberNfcState(),
     online: Boolean = true,
     onNfcSettings: (() -> Unit)? = null,
+    spoolDetail: (@Composable (spool: SpoolSummary, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
+    val presentation = rememberDetailPresentation()
+    val useCardDetail = presentation == DetailPresentation.Card && spoolDetail != null
+    var expandedIds by rememberSaveable { mutableStateOf(emptyList<Int>()) }
+    val rowFocus = remember { mutableMapOf<Int, FocusRequester>() }
+    var returnFocusId by remember { mutableStateOf<Int?>(null) }
+    val view = LocalView.current
+    LaunchedEffect(returnFocusId) {
+        val id = returnFocusId ?: return@LaunchedEffect
+        // Wait for the collapsed card row to re-enter the layout and focus tree.
+        repeat(2) { withFrameNanos { } }
+        rowFocus[id]?.let { requestDetailFocus(it, view) }
+        returnFocusId = null
+    }
     Column(modifier.fillMaxSize()) {
         // the progress line sits right under the field; the results stay while it runs
         Column(
@@ -252,8 +276,33 @@ fun SearchScreen(
                     SwCollection(
                         ui.results, inset = SpoolwardenTheme.space.s4, surface = true, visual = SpoolwardenTheme.sizes.swatchRowW + SpoolwardenTheme.space.s3,
                         tile = { _, spool -> SpoolTile(spool, onClick = { onOpenSpool(spool) }) },
+                        isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
+                        detail = if (useCardDetail) {
+                            { _, spool ->
+                                val close = {
+                                    expandedIds = expandedIds - spool.id
+                                    returnFocusId = spool.id
+                                }
+                                SwCardDetail(onClose = close) {
+                                    spoolDetail(spool, true, close)
+                                }
+                            }
+                        } else {
+                            null
+                        },
                     ) { _, spool ->
-                        SpoolRow(spool, onClick = { onOpenSpool(spool) })
+                        val requester = rowFocus.getOrPut(spool.id) { FocusRequester() }
+                        SpoolRow(
+                            spool,
+                            modifier = Modifier.focusRequester(requester),
+                            onClick = {
+                                if (useCardDetail) {
+                                    expandedIds = if (spool.id in expandedIds) expandedIds - spool.id else expandedIds + spool.id
+                                } else {
+                                    onOpenSpool(spool)
+                                }
+                            },
+                        )
                     }
                 }
             }

@@ -31,11 +31,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -64,9 +69,13 @@ import com.thompsonfabco.filamentkit.ui.components.ScreenTopBarActions
 import com.thompsonfabco.filamentkit.ui.components.SpoolRing
 import com.thompsonfabco.filamentkit.ui.components.StatusKind
 import com.thompsonfabco.filamentkit.ui.components.StatusLabel
+import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
+import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
@@ -94,8 +103,21 @@ fun PrintersScreen(
     modifier: Modifier = Modifier,
     /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
     onReplaceCode: (id: String) -> Unit = onOpen,
+    printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val presentation = rememberDetailPresentation()
+    val useCardDetail = presentation == DetailPresentation.Card && printerDetail != null
+    var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
+    var returnFocusId by remember { mutableStateOf<String?>(null) }
+    val view = LocalView.current
+    LaunchedEffect(returnFocusId) {
+        val id = returnFocusId ?: return@LaunchedEffect
+        repeat(2) { withFrameNanos { } }
+        rowFocus[id]?.let { requestDetailFocus(it, view) }
+        returnFocusId = null
+    }
     LifecycleStartEffect(viewModel) {
         viewModel.refresh()
         onStopOrDispose { }
@@ -138,7 +160,16 @@ fun PrintersScreen(
                 offline = offline,
                 loadedSecondsAgo = (System.currentTimeMillis() - state.loadedAt).coerceAtLeast(0) / MS_PER_S,
             ) {
-                PrinterLists(state, offline, onOpen, onReplaceCode, onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper)
+                PrinterLists(
+                    state, offline, onOpen, onReplaceCode,
+                    onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper,
+                    useCardDetail = useCardDetail,
+                    expandedIds = expandedIds,
+                    rowFocus = rowFocus,
+                    onToggleCard = { id -> expandedIds = if (id in expandedIds) expandedIds - id else expandedIds + id },
+                    onCloseCard = { id -> expandedIds = expandedIds - id; returnFocusId = id },
+                    printerDetail = printerDetail,
+                )
             }
         }
     }
@@ -176,6 +207,12 @@ internal fun ColumnScope.PrinterLists(
     onReplaceCode: (String) -> Unit,
     onAdd: (Printer) -> Unit,
     onAddKlipper: (host: String, port: Int) -> Unit,
+    useCardDetail: Boolean = false,
+    expandedIds: List<String> = emptyList(),
+    rowFocus: MutableMap<String, FocusRequester> = mutableMapOf(),
+    onToggleCard: (String) -> Unit = {},
+    onCloseCard: (String) -> Unit = {},
+    printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
     val space = SpoolwardenTheme.space
     val configured = state.configured
@@ -185,8 +222,28 @@ internal fun ColumnScope.PrinterLists(
             tile = { _, p ->
                 PrinterTile(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
             },
+            isExpanded = if (useCardDetail && printerDetail != null) ({ it.id in expandedIds }) else null,
+            detail = if (useCardDetail && printerDetail != null) {
+                { _, p ->
+                    val close = { onCloseCard(p.id) }
+                    SwCardDetail(onClose = close) {
+                        printerDetail(p.id, true, close)
+                    }
+                }
+            } else {
+                null
+            },
         ) { _, p ->
-            PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
+            val requester = rowFocus.getOrPut(p.id) { FocusRequester() }
+            PrinterRow(p, state.swatches[p.id].orEmpty(), Modifier.focusRequester(requester)) {
+                if (p.state == "wrong_code") {
+                    onReplaceCode(p.id)
+                } else if (useCardDetail && printerDetail != null) {
+                    onToggleCard(p.id)
+                } else {
+                    onOpen(p.id)
+                }
+            }
         }
     }
     val found = state.found
@@ -244,12 +301,12 @@ private fun modelLine(p: Printer): String {
 }
 
 @Composable
-private fun PrinterRow(p: Printer, slots: List<SlotLook>, onClick: () -> Unit) {
+private fun PrinterRow(p: Printer, slots: List<SlotLook>, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val open = stringResource(R.string.a11y_action_open)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(onClickLabel = open, onClick = onClick)
+        modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(onClickLabel = open, onClick = onClick)
             .padding(space.s3),
         horizontalArrangement = Arrangement.spacedBy(space.s3),
         verticalAlignment = Alignment.CenterVertically,
