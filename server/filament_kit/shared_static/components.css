@@ -22,7 +22,7 @@ a{color:var(--accent-text)}
 .skip{position:absolute;top:var(--s2);left:var(--s2);z-index:100;padding:var(--s3) var(--s4);background:var(--accent);color:var(--on-accent);transform:translateY(calc(-100% - var(--s5)))}
 .skip:focus{transform:none}
 /* shared looks */
-.muted,.kv__heading,.page-head__crumbs,.page-head__crumbs a,.page-head__meta,.topbar__hub,.chip__hint,.nav__icon,.menu__desc,.menu__heading,.field__optional,.field__hint,.field__unit,.field__chevron,.check__desc,.toggle__word,.toggle__hint,.segmented__option,.theme-picker__line,.group__desc,.subnav__link,.coll__sub,.kv__key,.slot-strip__count,.code__caption,.changes__old,.empty__text,.error-state__text,.skeleton__slow,.coll__head .coll__cell,.btn__reason{color:var(--muted)}
+.muted,.kv__heading,.page-head__crumbs,.page-head__crumbs a,.page-head__meta,.topbar__hub,.chip__hint,.nav__icon,.menu__desc,.menu__heading,.field__optional,.field__hint,.field__unit,.field__chevron,.check__desc,.toggle__word,.toggle__hint,.segmented__option,.theme-picker__line,.group__desc,.subnav__link,.coll__sub,.kv__key,.slot-strip__count,.code__caption,.changes__old,.empty__text,.error-state__text,.skeleton__slow,.coll__head .coll__cell,.coll__sortlabel,.btn__reason{color:var(--muted)}
 .toggle__heading,.detail__heading,.kv__heading,.revisions__title,.changes__title,.menu__heading,.group__title,.detail__title,.dialog__title,.sheet__title,.empty__title,.error-state__title,.topbar__name,.page-head__title,.nav__item[aria-current="page"],.nav__more[data-state="current"],.segmented__input:checked+.segmented__option,.theme-picker__name,.subnav__link[aria-current="true"],.slot-strip__use,.banner__text b,.coll__head .coll__cell{font-weight:var(--fw-title)}
 .toggle__heading,.detail__heading,.kv__heading,.revisions__title,.changes__title,.menu__heading{font-size:var(--fs-s)}
 .group__title,.detail__title,.dialog__title,.sheet__title,.empty__title,.error-state__title,.topbar__name{font-size:var(--fs-l)}
@@ -69,8 +69,9 @@ a{color:var(--accent-text)}
 .nav__item[aria-current="page"],.nav__more[data-state="current"]{background:var(--accent-soft);color:var(--accent-text)}
 .nav__item[aria-current="page"] .nav__icon,.nav__more[data-state="current"] .nav__icon{color:var(--accent-text)}
 .nav__item[data-state="off"]{color:var(--muted)}
+.nav__item[data-state="off"] .nav__label::after{content:"";display:none;width:var(--s4);height:var(--s4);margin-left:var(--s2);border:2px solid;border-radius:50%;vertical-align:middle}
 .shell :is(.nav__item:not([aria-current]),.nav__more:not([data-state])):hover>*{color:var(--text)}
-.nav__label,.chip__word,.field__label,.theme-picker__legend,.field__error,.field__control::file-selector-button,.coll__title,.status,.changes__new,.steps__num{font-weight:var(--fw-label)}
+.nav__label,.chip__word,.field__label,.theme-picker__legend,.field__error,.field__control::file-selector-button,.coll__title,.coll__sortlabel,.status,.changes__new,.steps__num{font-weight:var(--fw-label)}
 .nav__label-short,.nav__summary,.nav__chevron,.nav__more{display:none}
 .nav--sheet{display:grid;gap:var(--s2)}
 .nav--sheet .nav__heading{position:static;width:auto;height:auto;margin:0;clip-path:none;color:var(--muted);font-size:var(--fs-xs)}
@@ -419,6 +420,7 @@ dialog .detail__close{display:inline-flex;margin-left:auto}
 .coll__head,.coll__item,.coll__row{display:grid;grid-column:1 / -1;grid-template-columns:subgrid}
 .coll__head{border-bottom:var(--hairline) solid var(--border);border-radius:var(--r) var(--r) 0 0;background:var(--surface-2)}
 .coll__head .coll__cell{min-height:calc(var(--s7) - var(--s1));padding-block:0;font-size:var(--fs-xs);letter-spacing:calc(var(--fs-xs) * 0.05);text-transform:uppercase}
+.coll__sortlabel{display:none;font-size:var(--fs-m)}
 .coll__cell{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s1) var(--s2);min-height:var(--row);padding:var(--s2) var(--s3)}
 .coll__cell[data-col="title"]{display:block;align-self:center}
 .coll__cell[data-col="actions"]{justify-content:flex-end}
@@ -463,7 +465,7 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   .dialog--drawer{width:100%;height:auto;max-height:92%;margin:auto 0 0;border-width:var(--hairline) 0 0;border-radius:var(--r-l) var(--r-l) 0 0}
 }
 /* profile: nav=sidebar */
-/* desktop only on the Hub page (the web app's body carries data-ai): a tablet keeps the rail form above and a phone the bottom bar (02 2.3, 04 2.3) */
+/* Hub page desktop only (web app body[data-ai] keeps rail; 02 2.3, 04 2.3) */
 @media (min-width:1025px){
   :root[data-look="workbench"] body:not([data-ai]) .shell{grid-template-columns:var(--side-w) minmax(0,1fr)}
   :root[data-look="workbench"] body:not([data-ai]) .shell>.nav{padding:var(--s2) var(--s2) var(--s5)}
@@ -471,17 +473,19 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   :root[data-look="workbench"] body:not([data-ai]) .shell .nav__group+.nav__heading+.nav__group{margin-top:0;padding-top:0;border-top:0}
   :root[data-look="workbench"] body:not([data-ai]) .shell .nav__item{flex-direction:row;justify-content:flex-start;gap:var(--s3);min-height:var(--ctl);margin:0;padding:0 var(--s3);color:var(--text);text-align:left}
   :root[data-look="workbench"] body:not([data-ai]) .shell .nav__item[data-state="off"]{color:var(--muted)}
+  :root[data-look="workbench"] body:not([data-ai]) .shell .nav__item[data-state="off"] .nav__label::after{display:inline-block}
   :root[data-look="workbench"] body:not([data-ai]) .shell .nav__item[aria-current="page"]{color:var(--accent-text)}
   :root[data-look="workbench"] body:not([data-ai]) .shell .nav__item .nav__label{font-size:var(--fs-m)}
   :root[data-look="workbench"] body:not([data-ai]) .shell .nav__item[aria-current="page"] .nav__label{font-weight:var(--fw-title)}
   :root[data-look="workbench"] body:not([data-ai]) .shell .nav__item[aria-current="page"]::before{top:var(--s2);bottom:var(--s2);left:0}
 }
 /* profile: collection=cards */
-/* one column of stacked cards on a phone comes from the minimum card width; the go chevron is for rows only (02 6.1) */
+/* stacked cards on phones via min width; go chevron is rows-only (02 6.1) */
 :root[data-look="workbench"] .coll{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr));gap:var(--s4);border:0;background:none}
 :root[data-look="workbench"] .coll__head{grid-column:1 / -1;display:block;border:0;border-radius:0;background:none}
 :root[data-look="workbench"] .coll__head:not(:has(.coll__sort)){position:absolute;width:var(--hairline);height:var(--hairline);overflow:hidden;clip-path:inset(50%)}
 :root[data-look="workbench"] .coll__head .coll__row{gap:var(--s2);padding:0}
+:root[data-look="workbench"] .coll__sortlabel{display:block}
 :root[data-look="workbench"] .coll__head .coll__cell{font-size:var(--fs-m);letter-spacing:normal;text-transform:none}
 :root[data-look="workbench"] .coll__head .coll__cell:not(:has(.coll__sort)){position:absolute;width:var(--hairline);height:var(--hairline);overflow:hidden;clip-path:inset(50%)}
 :root[data-look="workbench"] .coll__sort{padding:0 var(--s3);border:var(--hairline) solid var(--border-strong);border-radius:var(--r);background:var(--surface);color:var(--text);font-weight:var(--fw-label)}
@@ -505,10 +509,9 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 :root[data-look="workbench"] .coll__key::after{content:": "}
 :root[data-look="workbench"] .coll__title{font-size:var(--fs-l);font-weight:var(--fw-title)}
 /* profile: detail=card */
-/* only a detail open in its card; a form moved into a dialog keeps the dialog's own look */
 :root[data-look="workbench"] .coll__row--detail .detail{padding:var(--s4) 0 0;border-top:var(--hairline) solid var(--border);background:none}
 /* profile: nav=pills */
-/* a second row under the top bar from tablet up (a phone keeps the bottom bar); no side column, so the page uses the full width */
+/* tablet+: second row under top bar (phone keeps bottom bar); full width (02 2.3) */
 @media (min-width:601px){
   :root[data-look="palette"] .shell{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr;grid-template-areas:"top" "nav" "main"}
   :root[data-look="palette"] .shell>.nav{position:sticky;top:calc(var(--top) + var(--hairline) + env(safe-area-inset-top));z-index:19;flex-direction:row;flex-wrap:wrap;gap:var(--s2);height:auto;overflow:visible;padding:var(--s2) var(--s4);border-right:0;border-bottom:var(--hairline) solid var(--border)}
@@ -529,11 +532,12 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   :root[data-look="palette"] .topbar .appearance.segmented{flex-wrap:nowrap}
 }
 /* profile: collection=tiles */
-/* two tiles wide from 420 px, one below; the title row is the tile's top, the main action runs the full width at its foot (02 6.1) */
+/* two tiles wide from 420px, one below; title at top, main action full width at foot (02 6.1) */
 :root[data-look="palette"] .coll{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,14rem),1fr));gap:var(--s4);border:0;background:none}
 :root[data-look="palette"] .coll__head{grid-column:1 / -1;display:block;border:0;border-radius:0;background:none}
 :root[data-look="palette"] .coll__head:not(:has(.coll__sort)){position:absolute;width:var(--hairline);height:var(--hairline);overflow:hidden;clip-path:inset(50%)}
 :root[data-look="palette"] .coll__head .coll__row{gap:var(--s2);padding:0}
+:root[data-look="palette"] .coll__sortlabel{display:block}
 :root[data-look="palette"] .coll__head .coll__cell{font-size:var(--fs-m);letter-spacing:normal;text-transform:none}
 :root[data-look="palette"] .coll__head .coll__cell:not(:has(.coll__sort)){position:absolute;width:var(--hairline);height:var(--hairline);overflow:hidden;clip-path:inset(50%)}
 :root[data-look="palette"] .coll__sort{padding:0 var(--s3);border:var(--hairline) solid var(--border-strong);border-radius:var(--r);background:var(--surface);color:var(--text);font-weight:var(--fw-label)}
@@ -560,12 +564,12 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 :root[data-look="palette"] .coll:not(:has(.coll__expand)) .coll__item .coll__cell[data-prio="2"]{display:block}
 :root[data-look="palette"] .coll__title{font-size:var(--fs-l);font-weight:var(--fw-title)}
 /* profile: detail=sheet */
-/* the shared script moves an open detail into the detail host; a wide screen keeps the right-hand sheet of the host, a phone gets it from the top bar's height to the bottom */
+/* wide: right-hand sheet; phone: below top bar (02 6.2) */
 @media (max-width:600px){
   :root[data-look="palette"] .sheet--detail{height:calc(100% - var(--top) - env(safe-area-inset-top));max-height:none}
 }
 /* profile: nav=list */
-/* the section list: the left pane from tablet up, on a phone the root page where a section drills in (the shared script sets .shell data-drill and shows the top bar's Back) (02 2.3) */
+/* tablet+: left pane; phone: root list, topbar__back returns (02 2.3) */
 @media (min-width:601px){
   :root[data-look="panes"] .shell{grid-template-columns:min(var(--list-w),40%) minmax(0,1fr)}
 }
@@ -576,6 +580,7 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 :root[data-look="panes"] .shell .nav__group>li+li::before{content:"";position:absolute;top:0;right:0;left:calc(var(--s3) * 2 + var(--s5) + var(--s1));border-top:var(--hairline) solid var(--border)}
 :root[data-look="panes"] .shell .nav__item,:root[data-look="panes"] .shell .nav__more{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;align-content:center;column-gap:var(--s3);flex:none;min-height:calc(var(--s7) + var(--s1));margin:0;padding:var(--s2) var(--s3);border-radius:0;color:var(--text);text-align:left}
 :root[data-look="panes"] .shell .nav__item[data-state="off"]{color:var(--muted)}
+:root[data-look="panes"] .shell .nav__item[data-state="off"] .nav__label::after{display:inline-block}
 :root[data-look="panes"] .shell .nav__item[aria-current="page"]{background:var(--surface-3);color:var(--text)}
 :root[data-look="panes"] .shell .nav__item[aria-current="page"]::before{content:none}
 :root[data-look="panes"] .shell .nav__icon{grid-row:1 / span 2;box-sizing:border-box;width:calc(var(--s5) + var(--s1));height:calc(var(--s5) + var(--s1));padding:var(--s1);border-radius:var(--r-s);background:var(--surface-3);color:var(--text)}
@@ -604,10 +609,11 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   :root[data-look="panes"] .topbar .appearance.segmented{flex-wrap:nowrap}
 }
 /* profile: collection=rows */
-/* one block of rows with an inset hairline between them: title and sub-line, first-priority fields, state, chevron (02 6.1) */
+/* inset hairlines, title + sub-line, prio-1 fields, state, chevron (02 6.1) */
 :root[data-look="panes"] .coll{display:block;border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface)}
 :root[data-look="panes"] .coll__head{display:block;border:0;border-bottom:var(--hairline) solid var(--border);border-radius:0;background:none}
 :root[data-look="panes"] .coll__head .coll__row{display:flex;flex-wrap:wrap;gap:var(--s2);min-height:0;padding:var(--s2) var(--s4)}
+:root[data-look="panes"] .coll__sortlabel{display:block}
 :root[data-look="panes"] .coll__head .coll__cell{display:block;min-height:0;padding:0;font-size:var(--fs-m);letter-spacing:normal;text-transform:none}
 :root[data-look="panes"] .coll__head .coll__cell:not(:has(.coll__sort)),:root[data-look="panes"] .coll__head:not(:has(.coll__sort)){display:none}
 :root[data-look="panes"] .coll__sort{padding:0 var(--s3);border:var(--hairline) solid var(--border-strong);border-radius:var(--r);background:var(--surface);color:var(--text);font-weight:var(--fw-label)}
@@ -628,7 +634,7 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
 :root[data-look="panes"] .coll__key,:root[data-look="panes"] .coll__expand>span:not(.sr){display:none}
 :root[data-look="panes"] .coll__title{font-weight:var(--fw-label)}
 /* profile: detail=pane */
-/* an open detail stays in its row: from a desktop width the third column (fixed below the top bar, own scroll, 22rem), below that it covers the other rows of its list (02 6.2) */
+/* desktop: 22rem third column; tablet/phone: covers list (02 6.2) */
 :root[data-look="panes"] .coll__row--detail .detail{padding:var(--s4) var(--s4) var(--s5);border:0;background:none}
 :root[data-look="panes"] .coll__row--detail .detail__body{grid-template-columns:minmax(0,1fr)}
 @media (min-width:1025px){

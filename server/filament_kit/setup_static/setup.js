@@ -439,7 +439,9 @@ document.addEventListener("DOMContentLoaded", () => {
   app.replaceWith(skip, h("div", { class: "shell" }, topBar(), navigation(), main), hubJobs().strip,
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   pageTitle.textContent = SW.t(TABS[tabNow()][0]);
-  shellView = SW.shell({ hub: document.title, home: "overview", titleOf: documentTitle, onSection: () => {
+  shellView = SW.shell({ hub: document.title, home: "overview", titleOf: documentTitle,
+    off: () => !S ? [] : [!S.printers.on && "printers", S.modules && S.modules.some((m) => m.name === "presets" && !m.on) && "presets"].filter(Boolean),
+    onSection: () => {
     settleAddress();
     window.scrollTo(0, 0);
     if (S) render(); else pageTitle.textContent = SW.t(TABS[tabNow()][0]);

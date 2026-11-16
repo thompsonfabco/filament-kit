@@ -734,6 +734,9 @@ function renumber(row, hide) { row.hidden = hide; const c = row.closest(".coll")
 // collection(el, {name, sort, result, total, first}): paged when total (all pages' items) is given, first = items
 // before this page; then aria-rowcount, and aria-rowindex on every shown row
 function collection(el, o = {}) {
+  const headRow = $(".coll__head > .coll__row", el);
+  if (headRow && $(".coll__sort", headRow) && !$(".coll__sortlabel", headRow))
+    headRow.prepend(h("span", { class: "coll__sortlabel", "aria-hidden": "true", text: t("coll_sort_by") }));
   const items = () => $$(":scope > .coll__item", el);
   const number = el._number = () => {
     if (o.total == null) return;
@@ -921,16 +924,25 @@ const panes = () => profile().nav === "list" && phone(), listNow = () => panes()
 if (panes() && !location.hash.slice(1)) history.replaceState({ ...history.state, swList: true }, "");
 function shell(o = {}) {
   const nav = $(".nav"), more = $(".nav__more", nav), frame = nav.parentElement, topbar = $(".topbar", frame);
-  let last = "", drawn = false, via = false;
+  let last = "", drawn = false, via = false, offSet = null;
   if (o.hub != null) conf.hub = o.hub;
   const section = () => location.hash.slice(1).split(/[/?]/)[0] || o.home || "";
   const hidden = () => $$(".nav__group > li", nav).filter((li) => li.offsetParent === null);
-  const paint = (focus) => {
+  const paint = (focus, off) => {
+    if (off !== undefined || o.off) offSet = new Set(off !== undefined ? off : o.off());
     const list = listNow();
     let cur = null;
     via = !list && (drawn || via); drawn = list; attr(frame, "data-drill", list ? "list" : "page");
     if (!list) last = section();
-    for (const a of $$(".nav__group .nav__item", nav)) { const is = !list && a.hash === "#" + section(); attr(a, "aria-current", is ? "page" : null); if (is) cur = a; }
+    for (const a of $$(".nav__group .nav__item", nav)) {
+      const is = !list && a.hash === "#" + section(); attr(a, "aria-current", is ? "page" : null); if (is) cur = a;
+      if (offSet) {
+        const isOff = offSet.has(a.hash.slice(1)), lbl = $(".nav__label", a), was = lbl && $(".sr", lbl);
+        attr(a, "data-state", isOff ? "off" : null);
+        if (isOff && !was && lbl) lbl.append(E("span", "sr", t("nav_off_suffix")));
+        else if (!isOff && was) was.remove();
+      }
+    }
     if (more) {
       const inMore = cur && hidden().includes(cur.closest("li")), mc = $(".nav__more-current", more);
       const name = cur ? ($(".nav__label-full", cur) || $(".nav__label", cur)).textContent.trim() : "";
