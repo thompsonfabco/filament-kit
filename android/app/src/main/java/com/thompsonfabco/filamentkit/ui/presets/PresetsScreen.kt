@@ -60,6 +60,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconSize
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
+import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
@@ -109,6 +110,7 @@ fun PresetsScreen(
     val now = remember(nowMillis) { nowMillis ?: System.currentTimeMillis() }
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card
+    val useSheetDetail = presentation == DetailPresentation.Sheet
     val lineFocus = remember { mutableMapOf<String, FocusRequester>() }
     var returnFocusLineId by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
@@ -146,8 +148,17 @@ fun PresetsScreen(
             if (updates != null) UpdatesPanel(s.status, updates, onChanged = vm::reload)
         }
     }
-    if (!useCardDetail) {
-        s.edit?.let { ParentSheet(it, vm, onPairAgain) }
+    when {
+        useSheetDetail -> s.edit?.let { edit ->
+            val close = {
+                returnFocusLineId = edit.lineId
+                vm.closeParent()
+            }
+            SwSheetDetail(onClose = close, gesturesEnabled = !edit.saving) {
+                ParentEditorBody(edit, vm, onPairAgain, onClose = close)
+            }
+        }
+        !useCardDetail -> s.edit?.let { ParentSheet(it, vm, onPairAgain) }
     }
 }
 

@@ -52,6 +52,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
+import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
@@ -198,7 +199,9 @@ fun SearchScreen(
     val colors = SpoolwardenTheme.colors
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && spoolDetail != null
+    val useSheetDetail = presentation == DetailPresentation.Sheet && spoolDetail != null
     var expandedIds by rememberSaveable { mutableStateOf(emptyList<Int>()) }
+    var sheetSpoolId by rememberSaveable { mutableStateOf<Int?>(null) }
     val rowFocus = remember { mutableMapOf<Int, FocusRequester>() }
     var returnFocusId by remember { mutableStateOf<Int?>(null) }
     val view = LocalView.current
@@ -273,9 +276,19 @@ fun SearchScreen(
                     offline = !online,
                     loadedSecondsAgo = secondsSince(ui.loadedAt),
                 ) {
+                    val openOrToggle: (SpoolSummary) -> Unit = { spool ->
+                        when {
+                            useCardDetail -> expandedIds = if (spool.id in expandedIds) expandedIds - spool.id else expandedIds + spool.id
+                            useSheetDetail -> sheetSpoolId = spool.id
+                            else -> onOpenSpool(spool)
+                        }
+                    }
                     SwCollection(
                         ui.results, inset = SpoolwardenTheme.space.s4, surface = true, visual = SpoolwardenTheme.sizes.swatchRowW + SpoolwardenTheme.space.s3,
-                        tile = { _, spool -> SpoolTile(spool, onClick = { onOpenSpool(spool) }) },
+                        tile = { _, spool ->
+                            val requester = rowFocus.getOrPut(spool.id) { FocusRequester() }
+                            SpoolTile(spool, Modifier.focusRequester(requester), onClick = { openOrToggle(spool) })
+                        },
                         isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
                         detail = if (useCardDetail) {
                             { _, spool ->
@@ -295,16 +308,22 @@ fun SearchScreen(
                         SpoolRow(
                             spool,
                             modifier = Modifier.focusRequester(requester),
-                            onClick = {
-                                if (useCardDetail) {
-                                    expandedIds = if (spool.id in expandedIds) expandedIds - spool.id else expandedIds + spool.id
-                                } else {
-                                    onOpenSpool(spool)
-                                }
-                            },
+                            onClick = { openOrToggle(spool) },
                         )
                     }
                 }
+            }
+        }
+    }
+    if (useSheetDetail) {
+        val openSpool = sheetSpoolId?.let { id -> ui.results.firstOrNull { it.id == id } }
+        if (openSpool != null) {
+            val close = {
+                returnFocusId = openSpool.id
+                sheetSpoolId = null
+            }
+            SwSheetDetail(onClose = close) {
+                spoolDetail(openSpool, true, close)
             }
         }
     }

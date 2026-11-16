@@ -85,6 +85,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
+import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.components.TileField
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -108,7 +109,9 @@ fun PrintersScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && printerDetail != null
+    val useSheetDetail = presentation == DetailPresentation.Sheet && printerDetail != null
     var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var sheetPrinterId by rememberSaveable { mutableStateOf<String?>(null) }
     val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
     var returnFocusId by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
@@ -164,12 +167,26 @@ fun PrintersScreen(
                     state, offline, onOpen, onReplaceCode,
                     onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper,
                     useCardDetail = useCardDetail,
+                    useSheetDetail = useSheetDetail,
                     expandedIds = expandedIds,
                     rowFocus = rowFocus,
                     onToggleCard = { id -> expandedIds = if (id in expandedIds) expandedIds - id else expandedIds + id },
                     onCloseCard = { id -> expandedIds = expandedIds - id; returnFocusId = id },
+                    onOpenSheet = { id -> sheetPrinterId = id },
                     printerDetail = printerDetail,
                 )
+            }
+        }
+    }
+    if (useSheetDetail) {
+        val openId = sheetPrinterId
+        if (openId != null && printerDetail != null) {
+            val close = {
+                returnFocusId = openId
+                sheetPrinterId = null
+            }
+            SwSheetDetail(onClose = close) {
+                printerDetail(openId, true, close)
             }
         }
     }
@@ -208,19 +225,30 @@ internal fun ColumnScope.PrinterLists(
     onAdd: (Printer) -> Unit,
     onAddKlipper: (host: String, port: Int) -> Unit,
     useCardDetail: Boolean = false,
+    useSheetDetail: Boolean = false,
     expandedIds: List<String> = emptyList(),
     rowFocus: MutableMap<String, FocusRequester> = mutableMapOf(),
     onToggleCard: (String) -> Unit = {},
     onCloseCard: (String) -> Unit = {},
+    onOpenSheet: (String) -> Unit = {},
     printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
     val space = SpoolwardenTheme.space
     val configured = state.configured
     if (configured.isNotEmpty()) {
+        val openOrToggle: (Printer) -> Unit = { p ->
+            when {
+                p.state == "wrong_code" -> onReplaceCode(p.id)
+                useCardDetail && printerDetail != null -> onToggleCard(p.id)
+                useSheetDetail && printerDetail != null -> onOpenSheet(p.id)
+                else -> onOpen(p.id)
+            }
+        }
         SwCollection(
             configured,
             tile = { _, p ->
-                PrinterTile(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
+                val requester = rowFocus.getOrPut(p.id) { FocusRequester() }
+                PrinterTile(p, state.swatches[p.id].orEmpty(), Modifier.focusRequester(requester)) { openOrToggle(p) }
             },
             isExpanded = if (useCardDetail && printerDetail != null) ({ it.id in expandedIds }) else null,
             detail = if (useCardDetail && printerDetail != null) {
@@ -236,13 +264,7 @@ internal fun ColumnScope.PrinterLists(
         ) { _, p ->
             val requester = rowFocus.getOrPut(p.id) { FocusRequester() }
             PrinterRow(p, state.swatches[p.id].orEmpty(), Modifier.focusRequester(requester)) {
-                if (p.state == "wrong_code") {
-                    onReplaceCode(p.id)
-                } else if (useCardDetail && printerDetail != null) {
-                    onToggleCard(p.id)
-                } else {
-                    onOpen(p.id)
-                }
+                openOrToggle(p)
             }
         }
     }
@@ -344,7 +366,7 @@ internal const val SLOT_RING_TAG = "slot-ring"
  * status, the priority 1 field Slots with one small spool ring per slot, and "Open" the full width at the foot.
  */
 @Composable
-internal fun PrinterTile(p: Printer, slots: List<SlotLook>, onClick: () -> Unit) {
+internal fun PrinterTile(p: Printer, slots: List<SlotLook>, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val model = modelLine(p)
@@ -363,6 +385,7 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, onClick: () -> Unit)
         description = said,
         actionLabel = stringResource(R.string.a11y_action_open),
         onAction = onClick,
+        modifier = modifier,
         subtitle = model,
         status = { StatusLabel(kind, small = true) },
     ) {

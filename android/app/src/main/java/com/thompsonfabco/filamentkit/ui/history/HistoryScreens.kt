@@ -52,6 +52,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwLazyCollection
+import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
@@ -111,7 +112,9 @@ internal fun HistoryListScreen(
     val s by vm.state.collectAsState()
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && recordDetail != null
+    val useSheetDetail = presentation == DetailPresentation.Sheet && recordDetail != null
     var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var sheetRecordId by rememberSaveable { mutableStateOf<String?>(null) }
     val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
     var returnFocusId by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
@@ -168,10 +171,20 @@ internal fun HistoryListScreen(
                             text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
                         )
                     } else {
+                        val openOrToggle: (HistorySummary) -> Unit = { r ->
+                            when {
+                                useCardDetail -> expandedIds = if (r.id in expandedIds) expandedIds - r.id else expandedIds + r.id
+                                useSheetDetail -> sheetRecordId = r.id
+                                else -> onOpen(r.id)
+                            }
+                        }
                         SwLazyCollection(
                             h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
                             visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
-                            tile = { r -> RecordTile(r, vm) { onOpen(r.id) } },
+                            tile = { r ->
+                                val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
+                                RecordTile(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                            },
                             isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
                             detail = if (useCardDetail) {
                                 { r ->
@@ -188,16 +201,22 @@ internal fun HistoryListScreen(
                             },
                         ) { r ->
                             val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
-                            RecordRow(r, vm, Modifier.focusRequester(requester)) {
-                                if (useCardDetail) {
-                                    expandedIds = if (r.id in expandedIds) expandedIds - r.id else expandedIds + r.id
-                                } else {
-                                    onOpen(r.id)
-                                }
-                            }
+                            RecordRow(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
                         }
                     }
                 }
+            }
+        }
+    }
+    if (useSheetDetail) {
+        val openId = sheetRecordId
+        if (openId != null && recordDetail != null) {
+            val close = {
+                returnFocusId = openId
+                sheetRecordId = null
+            }
+            SwSheetDetail(onClose = close) {
+                recordDetail(openId, true, close)
             }
         }
     }
@@ -258,7 +277,7 @@ private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, modifier: Mod
  * time and spools under them and the state beside, the source as its field, and "Open" the full width at the foot.
  */
 @Composable
-private fun RecordTile(r: HistorySummary, vm: HistoryListViewModel, onClick: () -> Unit) {
+private fun RecordTile(r: HistorySummary, vm: HistoryListViewModel, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val ids = RecentValues.spoolIds(r.spools)
     val spools = if (ids.isEmpty()) {
         stringResource(R.string.recent_no_spools)
@@ -274,6 +293,7 @@ private fun RecordTile(r: HistorySummary, vm: HistoryListViewModel, onClick: () 
         description = listOf(title, meta, state, source).joinToString(", "),
         actionLabel = stringResource(R.string.a11y_action_open),
         onAction = onClick,
+        modifier = modifier,
         subtitle = meta,
         status = { IntakeStateLabel(r.state) },
         visual = { Thumb(vm, r, SpoolwardenTheme.space.s7 * 2) },
