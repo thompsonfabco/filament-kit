@@ -103,6 +103,7 @@ class Job:
     tried: float = 0.0                # when a send was last attempted (refused or not)
     applied: bool = False             # the printer shows the preset; the job keeps watching for a later wipe
     wipes: int = 0                    # times the slot was wiped after it was applied
+    pend: int | None = None           # spool the kit already had waiting for the slot when this tap was made (older)
 
 
 class LoadQueue:
@@ -117,9 +118,10 @@ class LoadQueue:
         self._sends: dict[tuple[str, str], threading.Lock] = {}   # held around a queued send, per slot
         self._thread: threading.Thread | None = None
 
-    def add(self, printer: str, label: str, spool_id: int, preset: dict | None = None) -> None:
+    def add(self, printer: str, label: str, spool_id: int, preset: dict | None = None,
+            pend: int | None = None) -> None:
         with self._lock:
-            self._jobs[(printer, label)] = Job(int(spool_id), self.clock(), preset=preset)
+            self._jobs[(printer, label)] = Job(int(spool_id), self.clock(), preset=preset, pend=pend)
         self._ensure_thread()
 
     def _send_lock(self, key: tuple[str, str]) -> threading.Lock:
@@ -217,8 +219,11 @@ class LoadQueue:
         st = self._slot(kit, printer, label)
         if st is None:
             return
-        if st.get("rfid"):
+        if st.get("present") is True and st.get("rfid"):
             return self._done(key, job, "dropped, the loaded spool's own RFID identifies it (not overridden)")
+        waits = (st.get("pending") or {}).get("spool_id")
+        if waits is not None and waits != job.pend:
+            return self._done(key, job, "dropped, a newer assignment is waiting for the slot")   # the kit sends it
         if job.applied:
             return self._watch(key, job, st)
         if not st.get("present") or st.get("reading"):
@@ -470,14 +475,15 @@ class Reader:
         cur = next((s for s in found if s["label"] == label), {})
         path = slots.load_path(printer, label)
         load = {"spool_id": int(sp["id"]), "dry_run": True}
-        if cur.get("reading") is True or (cur.get("present") is not True and cur.get("kind") != "ext"):
+        no_sensor = (view.get("status") or {}).get("presence") == "tray_type"    # present can never show a slot loaded
+        if not no_sensor and (cur.get("reading") is True or (cur.get("present") is not True and cur.get("kind") != "ext")):
             r = kit.post(path, load)                       # the preset check; nothing is sent
             preset = (r or {}).get("preset") or {}
             extra = {"filament": name, "preset": preset.get("name"), "slot": label}
             msg = f"{label} empty: load it now (waits {QUEUE_TTL // 60} min)"
             if dry:
                 return reply(200, "queued", msg, dry_run=True, **extra)
-            self.queue.add(printer, label, int(sp["id"]), preset or None)
+            self.queue.add(printer, label, int(sp["id"]), preset or None, (cur.get("pending") or {}).get("spool_id"))
             log.info("pending %s %s spool %s: waiting for the filament to load", _safe(printer), label, sp["id"])
             return reply(200, "queued", msg, **extra)
         if dry:

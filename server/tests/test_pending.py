@@ -130,11 +130,19 @@ def test_assign_to_an_empty_slot_waits_then_survives_the_wipe(rig, sm, store, ca
     assert sum(x.startswith("applied ") for x in msgs) == 2 and not any(x.startswith("dropped") for x in msgs)
 
 
-def test_unknown_presence_waits_instead_of_sending_blind(rig, sm, store):
+def test_a_printer_without_a_presence_layout_is_sent_at_once(rig, sm, store):
     _, p, c = rig
-    p.push({"ams": {"ams": report(EMPTY)["ams"]["ams"]}})       # no exist bits at all
+    p.push({"ams": {"tray_exist_bits": "", "ams": report(EMPTY)["ams"]["ams"]}})   # no exist bits: layout unknown
     r = assign(rig, sm, store)
-    assert r["pending"] is True and sends(c) == []
+    assert "pending" not in r and r["confirmed"] is True and len(sends(c)) == 1 and store.jobs() == {}
+
+
+def test_a_slot_that_keeps_its_rfid_when_emptied_does_not_end_the_wait(rig, sm, store):
+    _, _, c = rig
+    assign(rig, sm, store)
+    push(rig, RFID, "7000b")                                     # tray_uuid still reported, filament out
+    run(store, 3, 4)
+    assert set(store.jobs()) == {(SERIAL, "A3")} and sends(c) == []
 
 
 def test_a_loaded_slot_is_sent_at_once_and_cancels_the_older_one(rig, sm, store):

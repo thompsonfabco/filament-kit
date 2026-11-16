@@ -76,6 +76,7 @@ class FakeKit:
         self.load_error: slots.SlotError | None = None
         self.load_delay = 0.0
         self.preset = {"filament_id": "PFUS1", "name": "SUNLU PLA+ @H2D", "filament_type": "PLA"}
+        self.presence = None                  # the status's "presence" when set ("tray_type": no layout)
 
     def get(self, path):
         if path == "/api/printers":
@@ -92,7 +93,7 @@ class FakeKit:
             units.setdefault((k, s["label"] if k != "ams" else s["label"][0]), []).append(
                 {k2: v for k2, v in s.items() if k2 != "_kind"})
         return {"printer": {"id": sid, "name": "H2D", "state": self.state[sid]},
-                "status": {"gcode_state": "IDLE", "ams": [{"unit": i, "label": key[1], "kind": key[0], "slots": sl}
+                "status": {"gcode_state": "IDLE", **({"presence": self.presence} if self.presence else {}), "ams": [{"unit": i, "label": key[1], "kind": key[0], "slots": sl}
                                                           for i, (key, sl) in enumerate(units.items())]}}
 
     def post(self, path, body):
@@ -752,6 +753,41 @@ def test_a_newer_tap_for_the_slot_replaces_the_older_and_a_restart_drops_all(kit
     assert [j.spool_id for j in q.jobs().values()] == [9]
     q2, _ = new_queue(kit)                              # a restarted process: memory only
     assert q2.jobs() == {}
+
+
+def test_an_older_tap_does_not_cancel_a_newer_assignment_waiting_in_the_kit(kit):
+    q, clock = new_queue(kit)
+    a2 = kit.slots["SER1"][1]
+    q.add("SER1", "A2", 7)                              # the tap, then a newer assignment of spool 9 in the kit
+    a2.update(present=True, reading=False, pending={"spool_id": 9, "text": "waiting"})
+    for _ in range(3):
+        clock.t += 4
+        q.tick()
+    assert kit.loads == [] and q.jobs() == {}           # not sent: the kit's job sends spool 9
+    q.add("SER1", "A2", 7, None, 9)                     # spool 9 was already waiting when the tap was made: older
+    clock.t += 4
+    q.tick()
+    clock.t += 4
+    q.tick()
+    assert len(kit.loads) == 1 and kit.loads[0][1]["spool_id"] == 7
+
+
+def test_an_emptied_slot_with_an_rfid_does_not_end_a_queued_tap(kit):
+    q, clock = new_queue(kit)
+    q.add("SER1", "A2", 7)
+    kit.slots["SER1"][1].update(present=False, rfid=True)
+    for _ in range(3):
+        clock.t += 4
+        q.tick()
+    assert set(q.jobs()) == {("SER1", "A2")} and kit.loads == []
+
+
+def test_scan_on_a_printer_without_a_presence_layout_sets_at_once(app, token, kit, queue):
+    kit.presence = "tray_type"
+    with client(app) as c:
+        r = scan(c, token, slot="A2")                   # present False here would be shown only by the type
+    assert r.json()["status"] == "set" and queue.jobs() == {}
+    assert kit.loads[-1][1]["dry_run"] is False
 
 
 def test_scan_on_a_slot_with_unknown_presence_queues_but_an_external_is_set_at_once(app, token, kit, queue):

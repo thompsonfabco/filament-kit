@@ -12,8 +12,9 @@ Ends (one log line each: pending / applied / dropped):
 - the slot loads with a spool whose own RFID identifies it (`rfid`): that is not overridden;
 - after it was applied: the filament is taken out, or another setting is on the slot (the user set it);
 - a refusal waiting does not change (no preset, unknown spool, write refused).
-Externals have no sensor (presence follows the setting), so they are sent at once as before. Presence unknown
-(no layout, report missing a field) counts as not loaded: wait, never send blind.
+Externals have no sensor (presence follows the setting), so they are sent at once as before, and so is every slot
+of a printer whose presence layout is unknown (`presence` "tray_type": `present` is never True for an empty-typed
+slot, so a wait could not end). A slot whose presence is unknown on a printer with a layout waits.
 """
 from __future__ import annotations
 
@@ -161,7 +162,7 @@ class Store:
         if found is None:
             return                                   # no status (offline): keep waiting
         sl, kind = found
-        if sl.get("rfid"):
+        if sl.get("present") is True and sl.get("rfid"):
             return self._end(key, job, "the loaded spool's own RFID identifies it, not overridden")
         if job.applied:
             return self._watch(key, job, sl, kind, now)
@@ -225,6 +226,9 @@ def load_or_wait(manager, sm, serial: str, label: str, spool_id, dry: bool, *, s
     store = store or STORE
     if dry:
         return loading.load(manager, sm, serial, label, spool_id, True, **kw)
+    if (manager.status(serial) or {}).get("presence") == "tray_type":
+        store.cancel(serial, loading._label(serial, label))     # no presence sensor: present can never show
+        return loading.load(manager, sm, serial, label, spool_id, False, **kw)    # loaded, so send at once
     lab = loading._label(serial, label)
     found = slot_view(manager, serial, lab)
     if found is not None and is_loaded(*found):
