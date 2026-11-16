@@ -1,0 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SectionSummaries.kt | connected | Hub printer state identifier, never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/components/SectionSummaries.kt | offline | Hub printer state identifier, never shown

@@ -97,6 +97,7 @@ internal fun RecordScreen(
     onOpenSpool: (JsonObject) -> Unit,
     onPairAgain: () -> Unit,
     online: Boolean = false,
+    embedded: Boolean = false,
 ) {
     val s by vm.state.collectAsState()
     val ls by list.state.collectAsState()
@@ -123,8 +124,13 @@ internal fun RecordScreen(
     val failure = s.error
     val offline = failure == RecentFailure.Offline
     val ago = remember(s.loadedAt, s.error) { s.loadedAt?.let { (System.currentTimeMillis() - it) / MS_PER_S } ?: 0L }
+    val scrollModifier = if (embedded) {
+        Modifier.fillMaxWidth().padding(space.s4)
+    } else {
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4)
+    }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+        scrollModifier,
         verticalArrangement = Arrangement.spacedBy(space.s3),
     ) {
         when {

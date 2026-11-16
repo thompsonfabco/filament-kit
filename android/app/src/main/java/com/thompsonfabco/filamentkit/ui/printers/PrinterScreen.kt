@@ -110,6 +110,7 @@ fun PrinterScreen(
     /** The camera panel's Hide / Show, remembered per printer on this phone. */
     cameraShown: Boolean = true,
     onCameraShown: (Boolean) -> Unit = {},
+    embedded: Boolean = false,
 ) {
     val state by viewModel.state.collectAsState()
     val toolsState by tools.state.collectAsState()
@@ -162,20 +163,37 @@ fun PrinterScreen(
     var sheetSlot by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(state.unloadAsk) { if (state.unloadAsk != null) sheetSlot = null }
 
-    ScreenTopBarActions {
-        Overflow(
-            onSettings = onOpenSettings,
-            onReport = tools::collectReport,
-            onRefresh = { viewModel.retry(); tools.refreshUsage() },
-            reportEnabled = !toolsState.reportBusy && state.printer?.family != "klipper",
-        )
+    if (!embedded) {
+        ScreenTopBarActions {
+            Overflow(
+                onSettings = onOpenSettings,
+                onReport = tools::collectReport,
+                onRefresh = { viewModel.retry(); tools.refreshUsage() },
+                reportEnabled = !toolsState.reportBusy && state.printer?.family != "klipper",
+            )
+        }
     }
 
     val space = SpoolwardenTheme.space
+    val scrollModifier = if (embedded) {
+        Modifier.fillMaxWidth().padding(space.s4)
+    } else {
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4)
+    }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+        scrollModifier,
         verticalArrangement = Arrangement.spacedBy(space.s3),
     ) {
+        if (embedded) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Overflow(
+                    onSettings = onOpenSettings,
+                    onReport = tools::collectReport,
+                    onRefresh = { viewModel.retry(); tools.refreshUsage() },
+                    reportEnabled = !toolsState.reportBusy && state.printer?.family != "klipper",
+                )
+            }
+        }
         HubNotices(
             unauthorized = state.unauthorized || toolsState.unauthorized,
             mismatch = state.mismatch != null || toolsState.mismatch != null,

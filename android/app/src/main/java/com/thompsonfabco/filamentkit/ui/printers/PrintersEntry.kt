@@ -30,9 +30,16 @@ import kotlinx.serialization.json.put
 
 /** The printers list; its calls go to whatever client [currentApi] returns at that moment. */
 @Composable
-fun PrintersListEntry(currentApi: () -> Api, onOpen: (String) -> Unit, onReplaceCode: (String) -> Unit, onPairAgain: () -> Unit) {
+fun PrintersListEntry(
+    currentApi: () -> Api,
+    onOpen: (String) -> Unit,
+    onReplaceCode: (String) -> Unit,
+    onPairAgain: () -> Unit,
+    printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+    onSummary: (String) -> Unit = {},
+) {
     val vm = viewModel { PrintersViewModel(ApiPrinterBackend(currentApi)) }
-    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain, onReplaceCode = onReplaceCode)
+    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain, onReplaceCode = onReplaceCode, printerDetail = printerDetail, onSummary = onSummary)
 }
 
 /** One printer's screen. [api] gives the camera its client and stream addresses. */
@@ -46,10 +53,11 @@ fun PrinterEntry(
     onMapByLoading: () -> Unit,
     onPickSlot: (String) -> Unit,
     onOpenSpool: (SlotSpool) -> Unit,
+    embedded: Boolean = false,
 ) {
-    val backend = remember { ApiPrinterBackend(currentApi) }
-    val vm = viewModel { PrinterViewModel(backend, id) }
-    val tools = viewModel { PrinterToolsViewModel(backend, id) }
+    val backend = remember(currentApi) { ApiPrinterBackend(currentApi) }
+    val vm = viewModel(key = "printer-$id") { PrinterViewModel(backend, id) }
+    val tools = viewModel(key = "printer-tools-$id") { PrinterToolsViewModel(backend, id) }
     val camera = remember(api, id) {
         CameraSource(api.client, api.cameraHlsUrl(id), api.cameraMjpegUrl(id), api.authHeaders())
     }
@@ -68,6 +76,7 @@ fun PrinterEntry(
             shown = it
             prefs.edit().putBoolean(id, it).apply()
         },
+        embedded = embedded,
     )
 }
 

@@ -23,13 +23,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.lifecycle.Lifecycle
@@ -39,12 +45,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
+import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
+import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
+import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubNoticeOf
 import com.thompsonfabco.filamentkit.ui.spool.hubFailureText
@@ -180,82 +192,182 @@ fun SearchScreen(
     nfc: NfcState = rememberNfcState(),
     online: Boolean = true,
     onNfcSettings: (() -> Unit)? = null,
+    spoolDetail: (@Composable (spool: SpoolSummary, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
-    Column(modifier.fillMaxSize()) {
-        // the progress line sits right under the field; the results stay while it runs
-        Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space.s4),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+    val presentation = rememberDetailPresentation()
+    val useCardDetail = presentation == DetailPresentation.Card && spoolDetail != null
+    val useSheetDetail = presentation == DetailPresentation.Sheet && spoolDetail != null
+    val usePaneDetail = presentation == DetailPresentation.Pane && spoolDetail != null
+    var expandedIds by rememberSaveable { mutableStateOf(emptyList<Int>()) }
+    var sheetSpoolId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var cachedSpool by remember { mutableStateOf<SpoolSummary?>(null) }
+    val rowFocus = remember { mutableMapOf<Int, FocusRequester>() }
+    var returnFocusId by remember { mutableStateOf<Int?>(null) }
+    val view = LocalView.current
+    LaunchedEffect(returnFocusId) {
+        val id = returnFocusId ?: return@LaunchedEffect
+        // Wait for the collapsed card row to re-enter the layout and focus tree.
+        repeat(2) { withFrameNanos { } }
+        rowFocus[id]?.let { requestDetailFocus(it, view) }
+        returnFocusId = null
+    }
+    LaunchedEffect(presentation) {
+        if (presentation == DetailPresentation.Screen && spoolDetail != null) {
+            val activeId = sheetSpoolId ?: expandedIds.lastOrNull()
+            if (activeId != null) {
+                val target = ui.results.firstOrNull { it.id == activeId }
+                    ?: cachedSpool?.takeIf { it.id == activeId }
+                    ?: com.thompsonfabco.filamentkit.ui.spool.SpoolCache.get(activeId)
+                sheetSpoolId = null
+                expandedIds = emptyList()
+                if (target != null) onOpenSpool(target)
+            }
+        }
+    }
+    val listBody: @Composable (Modifier) -> Unit = { listModifier ->
+        Column(listModifier.fillMaxSize()) {
+            // the progress line sits right under the field; the results stay while it runs
             Column(
-                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(space.s3),
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space.s4),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column {
-                    OutlinedTextField(
-                        value = ui.query,
-                        onValueChange = vm::setQuery,
-                        label = { Text(stringResource(R.string.spools_search_label)) },
-                        leadingIcon = { SwIcon(R.drawable.sw_ic_search, null, tint = colors.muted) },
-                        trailingIcon = if (ui.query.isNotEmpty()) {
-                            { SwIconButton(R.drawable.sw_ic_close, stringResource(R.string.common_clear_search), vm::clear) }
-                        } else {
-                            null
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { vm.search() }),
-                        modifier = Modifier.fillMaxWidth(),
+                Column(
+                    Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(space.s3),
+                ) {
+                    Column {
+                        OutlinedTextField(
+                            value = ui.query,
+                            onValueChange = vm::setQuery,
+                            label = { Text(stringResource(R.string.spools_search_label)) },
+                            leadingIcon = { SwIcon(R.drawable.sw_ic_search, null, tint = colors.muted) },
+                            trailingIcon = if (ui.query.isNotEmpty()) {
+                                { SwIconButton(R.drawable.sw_ic_close, stringResource(R.string.common_clear_search), vm::clear) }
+                            } else {
+                                null
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { vm.search() }),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    // the whole chip toggles: no check icon (08 10.3)
+                    FilterChip(
+                        selected = ui.sealedOnly,
+                        onClick = { vm.setSealedOnly(!ui.sealedOnly) },
+                        label = { Text(stringResource(R.string.spools_sealed_only), style = MaterialTheme.typography.labelLarge) },
+                        modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row),
+                        shape = SpoolwardenTheme.shapes.rS,
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = colors.surface, labelColor = colors.text,
+                            selectedContainerColor = colors.accentSoft, selectedLabelColor = colors.accentText,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true, selected = ui.sealedOnly, borderColor = colors.border, selectedBorderColor = colors.border,
+                            borderWidth = SpoolwardenTheme.sizes.hairline, selectedBorderWidth = SpoolwardenTheme.sizes.hairline,
+                        ),
                     )
-                }
-                // the whole chip toggles: no check icon (08 10.3)
-                FilterChip(
-                    selected = ui.sealedOnly,
-                    onClick = { vm.setSealedOnly(!ui.sealedOnly) },
-                    label = { Text(stringResource(R.string.spools_sealed_only), style = MaterialTheme.typography.labelLarge) },
-                    modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row),
-                    shape = SpoolwardenTheme.shapes.rS,
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = colors.surface, labelColor = colors.text,
-                        selectedContainerColor = colors.accentSoft, selectedLabelColor = colors.accentText,
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true, selected = ui.sealedOnly, borderColor = colors.border, selectedBorderColor = colors.border,
-                        borderWidth = SpoolwardenTheme.sizes.hairline, selectedBorderWidth = SpoolwardenTheme.sizes.hairline,
-                    ),
-                )
-                if (ui.query.isBlank()) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
-                HubNoticeOf(ui.failure, onPairAgain)
-                val searched = ui.searched
-                // the states every Hub screen has (05 3.2): the progress line, the error card, offline
-                ScreenState(
-                    loaded = searched != null,
-                    loading = ui.busy,
-                    isEmpty = searched != null && ui.results.isEmpty(),
-                    empty = {
-                        Column {
-                            Text(stringResource(R.string.spools_empty, searched.orEmpty()), style = MaterialTheme.typography.bodyLarge)
-                            if (ui.sealedOnly) {
-                                SwButton(stringResource(R.string.spools_clear_sealed), { vm.setSealedOnly(false) }, kind = SwButtonKind.Quiet)
+                    if (ui.query.isBlank()) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
+                    HubNoticeOf(ui.failure, onPairAgain)
+                    val searched = ui.searched
+                    // the states every Hub screen has (05 3.2): the progress line, the error card, offline
+                    ScreenState(
+                        loaded = searched != null,
+                        loading = ui.busy,
+                        isEmpty = searched != null && ui.results.isEmpty(),
+                        empty = {
+                            Column {
+                                Text(stringResource(R.string.spools_empty, searched.orEmpty()), style = MaterialTheme.typography.bodyLarge)
+                                if (ui.sealedOnly) {
+                                    SwButton(stringResource(R.string.spools_clear_sealed), { vm.setSealedOnly(false) }, kind = SwButtonKind.Quiet)
+                                }
+                            }
+                        },
+                        error = ui.failure?.let { hubFailureText(it) },
+                        onTryAgain = { if (ui.query.isNotBlank()) vm.search() },
+                        offline = !online,
+                        loadedSecondsAgo = secondsSince(ui.loadedAt),
+                    ) {
+                        val openOrToggle: (SpoolSummary) -> Unit = { spool ->
+                            when {
+                                useCardDetail -> {
+                                    cachedSpool = spool
+                                    com.thompsonfabco.filamentkit.ui.spool.SpoolCache.put(spool)
+                                    expandedIds = if (spool.id in expandedIds) expandedIds - spool.id else expandedIds + spool.id
+                                }
+                                useSheetDetail || usePaneDetail -> {
+                                    cachedSpool = spool
+                                    com.thompsonfabco.filamentkit.ui.spool.SpoolCache.put(spool)
+                                    sheetSpoolId = spool.id
+                                }
+                                else -> onOpenSpool(spool)
                             }
                         }
-                    },
-                    error = ui.failure?.let { hubFailureText(it) },
-                    onTryAgain = { if (ui.query.isNotBlank()) vm.search() },
-                    offline = !online,
-                    loadedSecondsAgo = secondsSince(ui.loadedAt),
-                ) {
-                    SwCollection(
-                        ui.results, inset = SpoolwardenTheme.space.s4, surface = true, visual = SpoolwardenTheme.sizes.swatchRowW + SpoolwardenTheme.space.s3,
-                        tile = { _, spool -> SpoolTile(spool, onClick = { onOpenSpool(spool) }) },
-                    ) { _, spool ->
-                        SpoolRow(spool, onClick = { onOpenSpool(spool) })
+                        SwCollection(
+                            ui.results, inset = SpoolwardenTheme.space.s4, surface = true, visual = SpoolwardenTheme.sizes.swatchRowW + SpoolwardenTheme.space.s3,
+                            tile = { _, spool ->
+                                val requester = rowFocus.getOrPut(spool.id) { FocusRequester() }
+                                SpoolTile(spool, Modifier.focusRequester(requester), onClick = { openOrToggle(spool) })
+                            },
+                            isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
+                            detail = if (useCardDetail) {
+                                { _, spool ->
+                                    val close = {
+                                        expandedIds = expandedIds - spool.id
+                                        returnFocusId = spool.id
+                                    }
+                                    SwCardDetail(onClose = close) {
+                                        spoolDetail(spool, true, close)
+                                    }
+                                }
+                            } else {
+                                null
+                            },
+                        ) { _, spool ->
+                            val requester = rowFocus.getOrPut(spool.id) { FocusRequester() }
+                            SpoolRow(
+                                spool,
+                                modifier = Modifier.focusRequester(requester),
+                                onClick = { openOrToggle(spool) },
+                            )
+                        }
                     }
                 }
+            }
+        }
+    }
+    val openSpool = sheetSpoolId?.let { id ->
+        ui.results.firstOrNull { it.id == id }
+            ?: cachedSpool?.takeIf { it.id == id }
+            ?: com.thompsonfabco.filamentkit.ui.spool.SpoolCache.get(id)
+    }
+    if (usePaneDetail) {
+        val close = {
+            returnFocusId = openSpool?.id
+            sheetSpoolId = null
+        }
+        SwPaneLayout(
+            hasSelection = openSpool != null,
+            emptyText = stringResource(R.string.detail_pane_empty_spool),
+            onClose = close,
+            modifier = modifier,
+            list = { listBody(Modifier) },
+            detail = { openSpool?.let { spoolDetail(it, true, close) } },
+        )
+    } else {
+        listBody(modifier)
+        if (useSheetDetail && openSpool != null) {
+            val close = {
+                returnFocusId = openSpool.id
+                sheetSpoolId = null
+            }
+            SwSheetDetail(onClose = close) {
+                spoolDetail(openSpool, true, close)
             }
         }
     }
