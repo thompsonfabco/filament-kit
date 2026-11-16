@@ -144,7 +144,7 @@ The installer finishes with a status list, a QR code to download the app (Androi
 ==> Status
 OK   service spoolman active
 OK   service filament-kit active
-OK   filament-kit API answering at https://127.0.0.1:8710/api/info
+OK   Spoolwarden API answering at https://127.0.0.1:8710/api/info
 OK   Spoolman reachable at http://127.0.0.1:7912 (v0.27.0)
 OK   certificate present, fingerprint 7616...2eb8
 --   display name: my-server
@@ -158,7 +158,7 @@ It downloads filament-kit.apk from this server (https://192.0.2.10:8710/app.apk)
 kit's own certificate: continue, then open the file to install the app.
 Press Enter when the app is installed and you're ready to pair (or s to skip)
 
-==> Pair a phone: open the filament-kit app and scan this code
+==> Pair a phone: open the Spoolwarden app and scan this code
 (a large QR code)
 
 Certificate fingerprint (the phone asks for two groups of it):
