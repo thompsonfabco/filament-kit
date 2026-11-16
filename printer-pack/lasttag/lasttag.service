@@ -1,5 +1,5 @@
 [Unit]
-Description=lasttag: read-only last NFC tag for filament-kit (port 5002)
+Description=lasttag: read-only last NFC tag for Spoolwarden (port 5002)
 After=nfc2klipper_backend.service
 Wants=nfc2klipper_backend.service
 

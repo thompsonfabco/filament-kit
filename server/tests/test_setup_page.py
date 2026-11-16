@@ -1051,7 +1051,7 @@ def test_r2b_web_without_a_token_and_without_pairing_rights_says_how(env, monkey
     monkeypatch.setattr(slots.pairing, "issue", denied)
     with pytest.raises(slots.SlotError) as e:
         slots.KitApi("https://127.0.0.1:1")._token()
-    assert "sudo filament-kit modules apply" in str(e.value)
+    assert "sudo spoolwarden modules apply" in str(e.value)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="root runs this on Linux (folder descriptors)")

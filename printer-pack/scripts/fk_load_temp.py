@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""filament-kit printer pack: post a spool's load temperature back to Klipper as _FK_SPOOL_TEMP ID= TEMP=.
+"""Spoolwarden printer pack: post a spool's load temperature back to Klipper as _FK_SPOOL_TEMP ID= TEMP=.
 
 Started in the background by fk_load_temp.sh (RUN_SHELL_COMMAND CMD=fk_load_temp from _FK_LOAD_LOOKUP), so Klipper
 never waits on the network. The temperature is, in order: the filament's filament-kit `nozzle_range` extra field (its

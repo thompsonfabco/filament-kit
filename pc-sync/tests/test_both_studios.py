@@ -178,7 +178,7 @@ def test_updates_accepted_after_the_install_reach_the_secondary_too(two):
     c = _both_have_build1(two)
     c.st["live_hash"] = _live(stable)
     c.zip = _zip(presets={A: _p(A, nozzle_temperature=["220"]), NEW: _p(NEW, nozzle_temperature=["240"])})
-    c.st["accepted_updates"] = {"stamp": STAMP, "base": [NEW]}          # sudo filament-kit profiles apply-updates
+    c.st["accepted_updates"] = {"stamp": STAMP, "base": [NEW]}          # sudo spoolwarden profiles apply-updates
     assert _run(c, stable, dirs, [beta], now=T0 + 600) == "installed"
     assert _bs(stable, NEW)["nozzle_temperature"] == ["240"] and _bs(beta, NEW)["nozzle_temperature"] == ["240"]
 

@@ -29,7 +29,7 @@ def test_install_is_per_user_with_the_timer():
     assert 'opt="$HOME/.local/opt/filament-kit-sync"' in text
     assert 'ln -sfn "$opt/filament-kit-sync" "$bin/filament-kit-sync"' in text
     assert '"$opt/filament-kit-sync" install-timer' in text
-    assert "sudo " not in text.replace("'sudo filament-kit pair --pc'", "")
+    assert "sudo " not in text.replace("'sudo spoolwarden pair --pc'", "")
     assert 'die "run this as your own user, not as root' in text
 
 

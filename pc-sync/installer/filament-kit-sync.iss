@@ -1,4 +1,4 @@
-; Inno Setup 6 script: per-user installer for the filament-kit PC sync (no admin rights needed).
+; Inno Setup 6 script: per-user installer for the Spoolwarden Slicer Sync (no admin rights needed).
 ; Build (from the repo root, after `pyinstaller --noconfirm pc-sync/fksync.spec`):
 ;   ISCC /DAppVersion=0.2.0 pc-sync\installer\filament-kit-sync.iss
 ; Output: dist\filament-kit-sync-setup-<AppVersion>.exe
@@ -14,7 +14,7 @@
   #define OutDir "..\..\dist"
 #endif
 
-#define AppName "filament-kit sync"
+#define AppName "Spoolwarden Slicer Sync"
 #define ExeName "filament-kit-sync.exe"
 #define TaskExeName "filament-kit-sync-task.exe"
 
@@ -24,7 +24,7 @@ AppId={{B7461DED-A0F4-46B3-B2C9-C8F0EF762ABB}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=filament-kit
+AppPublisher=Spoolwarden
 VersionInfoVersion={#AppVersion}
 PrivilegesRequired=lowest
 DefaultDirName={localappdata}\Programs\filament-kit-sync
@@ -65,14 +65,14 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 
 [Icons]
 ; cmd /k keeps the window open so the result of pair/status stays readable.
-Name: "{group}\Pair filament-kit sync"; Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "{app}"
-Name: "{group}\filament-kit sync status"; Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" status"""; WorkingDir: "{app}"
-Name: "{group}\Uninstall filament-kit sync"; Filename: "{uninstallexe}"
+Name: "{group}\Pair Slicer Sync"; Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "{app}"
+Name: "{group}\Slicer Sync status"; Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" status"""; WorkingDir: "{app}"
+Name: "{group}\Uninstall Spoolwarden Slicer Sync"; Filename: "{uninstallexe}"
 
 [Run]
 ; 1) The scheduled task is registered in [Code] (CurStepChanged), where its exit code is checked.
-; 2) Pair this PC with the server, in a console (paste the link from 'sudo filament-kit pair --pc').
-Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "{app}"; Description: "Pair this PC with the filament-kit server now"; Flags: postinstall nowait skipifsilent
+; 2) Pair this PC with the Hub, in a console (paste the link from 'sudo spoolwarden pair --pc').
+Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "{app}"; Description: "Pair this PC with the Hub now"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\uninstall_task.ps1"""; RunOnceId: "RemoveScheduledTask"; Flags: runhidden waituntilterminated
@@ -128,8 +128,8 @@ begin
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
   begin
     Log('install_task.ps1 failed, exit code ' + IntToStr(ResultCode));
-    SuppressibleMsgBox('The scheduled task that runs the sync every 10 minutes could not be registered (exit code ' +
-      IntToStr(ResultCode) + '). The sync will not run by itself until it is.' + #13#10 + #13#10 +
+    SuppressibleMsgBox('The scheduled task that runs Slicer Sync every 10 minutes could not be registered (exit code ' +
+      IntToStr(ResultCode) + '). Slicer Sync will not run by itself until it is.' + #13#10 + #13#10 +
       'To finish, run this in PowerShell:' + #13#10 + 'powershell -ExecutionPolicy Bypass -File "' + Script +
       '" -ExePath "' + Exe + '"' + #13#10 + 'or run this installer again.', mbError, MB_OK, IDOK);
   end;
@@ -158,8 +158,8 @@ begin
     IDNO) = IDYES;
   if Wipe then
     DelTree(Data, True, True, True);
-  SuppressibleMsgBox('This PC is still paired on the server. To free its place for another PC, run on the server:' + #13#10 +
-    'sudo filament-kit unpair <id>' + #13#10 + '(the id is the "Device id" line of "filament-kit-sync status", run before uninstalling).', mbInformation, MB_OK, IDOK);
+  SuppressibleMsgBox('This PC is still paired with the Hub. To free its place for another PC, run on the Hub:' + #13#10 +
+    'sudo spoolwarden unpair <id>' + #13#10 + '(the id is the "Device id" line of "filament-kit-sync status", run before uninstalling).', mbInformation, MB_OK, IDOK);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

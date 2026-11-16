@@ -1,7 +1,7 @@
-"""HTTPS client for the filament-kit sync API, pinned to the server's certificate.
+"""HTTPS client for the filament-kit sync API, pinned to the Hub's certificate.
 
-The server uses a self-signed certificate. Its SHA-256 fingerprint (of the DER leaf, lowercase hex,
-the server's `pairing.fingerprint` and the Android app's pin) is stored in the sync config at pairing.
+The Hub uses a self-signed certificate. Its SHA-256 fingerprint (of the DER leaf, lowercase hex,
+the Hub's `pairing.fingerprint` and the Android app's pin) is stored in the sync config at pairing.
 Each request connects TLS with no CA or hostname check, then compares the leaf's fingerprint with
 the pinned one *before writing any request bytes*; on a mismatch the connection is closed unsent
 and the next address is tried. So the Authorization header only ever goes to the pinned server.
@@ -24,14 +24,14 @@ _TOKEN = re.compile(r"^[!-~]{1,512}$")  # printable ASCII, no spaces: safe in a 
 
 
 class Offline(Exception):
-    """No address of the server could be reached (or a connection broke mid-request)."""
+    """No address of the Hub could be reached (or a connection broke mid-request)."""
 
 
 class CertChanged(Exception):
     """Every reachable address presented a certificate other than the pinned one; nothing was sent."""
 
     def __init__(self, expected: str, actual: str):
-        super().__init__(f"the server's certificate changed (pinned {expected}, now {actual}); if the server was "
+        super().__init__(f"the Hub's certificate changed (pinned {expected}, now {actual}); if the Hub was "
                          "reinstalled, run 'filament-kit-sync pair' again")
         self.expected = expected
         self.actual = actual
@@ -60,9 +60,9 @@ def parse_link(text: str) -> PairLink:
     try:
         u = urllib.parse.urlsplit(text)
     except ValueError:
-        raise ValueError("not a filament-kit pairing link") from None
+        raise ValueError("not a Spoolwarden pairing link") from None
     if u.scheme.lower() != "fkit" or u.netloc.lower() != "pair":
-        raise ValueError("not a filament-kit pairing link")
+        raise ValueError("not a Spoolwarden pairing link")
     try:
         params = urllib.parse.parse_qs(u.query, keep_blank_values=True, strict_parsing=bool(u.query))
     except ValueError:
@@ -198,7 +198,7 @@ class Client:
             return self._result(status, data, raw)
         if mismatch:
             raise CertChanged(self.fp, mismatch)
-        raise Offline(f"could not reach the filament-kit server ({'; '.join(offline) or 'no address'})")
+        raise Offline(f"could not reach the Hub ({'; '.join(offline) or 'no address'})")
 
     @staticmethod
     def _result(status: int, data: bytes, raw: bool):
@@ -217,7 +217,7 @@ class Client:
         try:
             return json.loads(data) if data else {}
         except ValueError:
-            raise ApiError(status, "bad_response", "the server's answer is not JSON") from None
+            raise ApiError(status, "bad_response", "the Hub's answer is not JSON") from None
 
     # --- routes -----------------------------------------------------------------------------
 
@@ -228,7 +228,7 @@ class Client:
         res = self._request("POST", "/api/pair", json.dumps({"code": code}).encode(), "application/json", auth=False)
         token = res.get("token") if isinstance(res, dict) else None
         if not isinstance(token, str) or not token:
-            raise ApiError(200, "bad_response", "the server did not return a token")
+            raise ApiError(200, "bad_response", "the Hub did not return a token")
         return token
 
     def state(self) -> dict:
@@ -255,7 +255,7 @@ class Client:
         return self._request("PUT", path, data, "application/zip")
 
     def heartbeat(self, outcome: str, waiting_since: float | None = None, app: str | None = None) -> dict:
-        """Tell the server the sync is waiting for `app` to close since `waiting_since` (outcome
+        """Tell the Hub the sync is waiting for `app` to close since `waiting_since` (outcome
         studio_running), or that the wait is over (another outcome). Three plain fields; no live data."""
         body = {"outcome": outcome, "waiting_since": waiting_since, "app": app}
         return self._request("POST", "/api/sync/heartbeat", json.dumps(body).encode(), "application/json")
