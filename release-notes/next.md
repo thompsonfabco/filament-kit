@@ -22,7 +22,7 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 "Step 2 of 3" and a progress bar that fills step by step; until the new pages arrive, the bar behaves as before.
 
 Setting up the Label Reader on this Hub no longer waits forever when the reader's own installer hangs: after 15
-minutes without any output (or 4 hours in all) the kit stops it, says so in the log, and leaves its settings as they were.
+minutes without any output (or 4 hours in all) Spoolwarden stops it, says so in the log, and leaves its settings as they were.
 
 ## The setup page and the phone web app are on the new look
 
@@ -64,7 +64,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Recently added on the setup page** is in the new look: a list of the newest additions with the photo, what was added, when, where it came from, whether it was changed, and how sure the Label Reader was, with a **To check** filter for the ones to look at.
 - **One addition opens as a record:** its photos (tap one to enlarge), its values shown before you edit them, **Edit by hand** with **Save changes**, and **Ask the Label Reader to correct it**, which shows a before-and-after list of what it would change and waits for **Accept**. Every correction is listed with **Undo**.
 - **QR codes:** the Hub now draws its QR codes itself, on the Hub page (the pairing code and the phone web app's address) and in the terminal, so the `qrencode` package is no longer needed (the pairing link is shown when it cannot fit one).
-- **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `spoolwarden modules set` and `modules enable`; what the kit stores does not change. Feature titles use the names of the new Hub page.
+- **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `spoolwarden modules set` and `modules enable`; what is stored does not change. Feature titles use the names of the new Hub page.
 - **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
 - **Hub page, Printers:** pressing Add again while the Hub is still adding a printer says "Still working. Wait for it to finish.", the same words as the app.
 - **Hub page fixes:** the Trusted computers card no longer shows a stray `null` line and its switch is drawn in full, a failed read of the Weigh Stations asking to pair no longer shows an internal error name, the header name stays on one line on a 320 px phone, the setup command box wraps instead of cutting the command, and the Updates title, Logs service list and Devices card pairs line up with the other sections.
@@ -79,7 +79,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 - **Progress for waits, documented exit codes, plain output.** A wait longer than 2 seconds shows a progress line, each command ends with a documented exit code, and `--plain`, `--color` and `NO_COLOR` control the look for screen readers and pipes.
 - **Orca Slicer parents for a phone:** a paired phone can list the Orca Slicer parents a new preset line can use, as the setup page and the phone web app do.
 
-- **The command line asks before destructive commands.** Commands that delete, replace or overwrite something (forgetting a printer, unpairing a phone, flashing a board, updating, rolling back, removing the kit) now ask for a yes first. Answering no changes nothing and exits with 5. Scripts and anything run without a terminal need `--yes` from this version on; without it the command stops with exit 2 and says so.
+- **The command line asks before destructive commands.** Commands that delete, replace or overwrite something (forgetting a printer, unpairing a phone, flashing a board, updating, rolling back, removing Spoolwarden) now ask for a yes first. Answering no changes nothing and exits with 5. Scripts and anything run without a terminal need `--yes` from this version on; without it the command stops with exit 2 and says so.
 - **`--json` and `--quiet` on the command line.** Every command that prints data or a result takes `--json` (one JSON document on standard output, the Hub's own field names; errors as `{"ok": false, "error", "fix"}`; it never asks, so a command that would ask needs `--yes`) and `-q` / `--quiet` (only errors, lists you asked for and answers; no result lines, notes or progress).
 - **Menus and checklists with one set of keys.** `spoolwarden config` is now the Hub page's Settings in the same nine groups: you change values, they wait as staged changes, `s` saves them together and `q` leaves (asking first when changes would be lost; saying no stays, saying yes leaves with exit code 5). Printers and Features open their own screens, the Features checklist shows what a row needs before you switch it, and Map by loading filament follows the Hub's walkthrough. Numbers choose items and letters choose actions on every screen; `--numbered` (implied by `--plain`) gives the same screens as numbered lines. A menu needs a terminal, or `--numbered` with the answers on standard input.
 - **`printer` commands on the command line.** `printer list`, `show`, `test`, `add [--klipper]`, `use`, `dismiss`, `rename`, `address`, `access-code`, `api-key`, `lane-data`, `detect`, `scan`, `map`, `report`, `reports`, `forget-certificate`, `forget`, `live` and `menu` do what the Hub page's Printers does, and `klipper add-on` prints the add-on's install commands. A printer is named by its name, serial or id, or the start of its name; a name that fits two printers stops with exit 2 and lists the close matches. The old `klipper add|scan|detect|set|api-key|pack`, `printer unpin` and `printer map --manual` still work.
@@ -109,7 +109,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 
 The updater, the backup reader, the pairing link readers, the Klipper lane check and the Bambu calibration check now also
 accept the second set of names a later release will use (update download, backup, link, lane source and calibration
-job), and the Hub announces itself on the network under both service types. Everything the kit makes is named as before.
+job), and the Hub announces itself on the network under both service types. Everything Spoolwarden makes is named as before.
 - **The command is now `spoolwarden`.** Install and update put `spoolwarden` where `filament-kit` was; `spoolwarden --version` prints `Spoolwarden <version>`, and the help, messages and Fix lines name it. `filament-kit` still works for a time: it runs `spoolwarden` with the same arguments, input, output and exit code, and prints one line on standard error saying the name changed.
 
 - **The product is called Spoolwarden.** The Hub page, the installer and the update messages now say Spoolwarden; commands, folders and links stay as they are.
