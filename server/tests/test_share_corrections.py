@@ -180,9 +180,9 @@ def test_the_job_runs_the_modules_config_command_then_restarts(fake_reader, tmp_
     cfg = set_up(url, tmp_path=tmp_path, saved=want)
     run = Run(data)
     assert cli.cmd_local_intake_share(run=run, wait=lambda c: healthy(c)) == 0
-    assert run.calls == [["runuser", "-u", "filament-kit-vision", "--", "/opt/filament-kit-vision/.venv/bin/filament-kit-vision",
+    assert run.calls == [["runuser", "-u", "spoolwarden-vision", "--", "/opt/spoolwarden-vision/.venv/bin/spoolwarden-vision",
                           "config", "--feedback-opt-in", flag],
-                         ["systemctl", "restart", "filament-kit-vision.service"]]
+                         ["systemctl", "restart", "spoolwarden-vision.service"]]
     out = capsys.readouterr().out
     assert [ln.split(" ")[:5] for ln in out.splitlines() if ln.startswith("==> step")] == [
         ["==>", "step", "1", "of", "4"], ["==>", "step", "2", "of", "4"], ["==>", "step", "3", "of", "4"],

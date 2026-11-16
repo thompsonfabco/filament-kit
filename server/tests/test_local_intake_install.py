@@ -122,7 +122,7 @@ def test_install_downloads_checks_unpacks_and_runs_the_installer(key, server, tm
     cmd = run.calls[0]
     script = store / "spoolwarden-vision-0.2.1" / "install" / "spoolwarden-vision.sh"
     assert cmd[0] == "bash" and cmd[1] == str(script)
-    assert cmd[2:] == ["--tier", "cpu", "--port", "7915", "--bind", "127.0.0.1", "--user", "spoolwarden",
+    assert cmd[2:] == ["--tier", "cpu", "--port", "7915", "--host", "127.0.0.1", "--user", "spoolwarden-vision",
                        "--prefix", "/opt/spoolwarden-vision", "--assets", str(store / "assets")]
     assert "installer output line" in said and (store / "SHA256SUMS.sig").is_file()
 
@@ -551,13 +551,23 @@ def test_legacy_filament_kit_vision_upgrade_and_remove(key, server, tmp_path):
     r_rm = Run()
     assert lii.remove(run=r_rm) is True
     assert r_rm.calls[0][2:] == ["--uninstall", "--prefix", "/opt/filament-kit-vision"]
-    # Upgrade from legacy 0.2.1 to renamed 0.2.2 keeps previous version
+    # Upgrade from legacy 0.2.1 to renamed 0.2.2 runs legacy uninstaller first (without --purge), then new installer
     legacy_script.parent.mkdir(parents=True, exist_ok=True)
     legacy_script.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
     lii._write_state({"version": "0.2.1", "tier": "cpu", "port": 7915, "at": 1, "previous": None})
     s = server({"0.2.2": mrf.make_release(key, "0.2.2")})
-    rec = lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
+    r_up = Run()
+    rec = lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=r_up)
     assert rec["version"] == "0.2.2" and rec["previous"] == "0.2.1"
+    assert len(r_up.calls) == 2
+    assert r_up.calls[0][2:] == ["--uninstall", "--prefix", "/opt/filament-kit-vision"]
+    assert r_up.calls[1][2:8] == ["--tier", "cpu", "--port", "7915", "--host", "127.0.0.1"]
+
+
+def test_legacy_021_tarball_refused_by_name(key, server):
+    s = server({"0.2.1": mrf.make_release(key, "0.2.1", name="filament-kit-vision")})
+    with pytest.raises(lii.InstallError, match="use 0.2.2 or later"):
+        lii.install(config.load(), tier="cpu", version="0.2.1", fetcher=fetcher(s), run=Run())
 
 
 def test_wait_healthy_timeout_by_tier(monkeypatch):

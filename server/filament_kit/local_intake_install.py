@@ -1,6 +1,6 @@
 """Install, upgrade and remove the local label reader (the `local_intake` module) from its own signed releases.
 
-The reader is a separate program in its own repository (filament-kit-vision). The kit ships none of its code: this
+The reader is a separate program in its own repository (spoolwarden-vision). The kit ships none of its code: this
 file downloads a release, checks it the way the kit checks its own (`release.py`: ed25519 over SHA256SUMS, the key
 pinned here), unpacks it and runs that release's installer. The scheme is in the handoff
 `2026-11-12-1214-server-builder-release-signing-scheme.md`; the release layout this file expects:
@@ -9,12 +9,12 @@ pinned here), unpacks it and runs that release's installer. The scheme is in the
     manifest.json                                      {"version", "api_version": "1.x", "kit_min": "X.Y.Z",
                                                         "tiers": {"cpu": {"assets": [...], "disk_mb", "minutes",
                                                                           "download_mb"?}, "gpu": {...}, ...}}
-    filament-kit-vision-<version>.tar.gz                the code; top folder filament-kit-vision-<version>/ with
-                                                        install/filament-kit-vision.sh
+    spoolwarden-vision-<version>.tar.gz                 the code; top folder spoolwarden-vision-<version>/ with
+                                                        install/spoolwarden-vision.sh
     the tier's model assets (named in the manifest)    put next to the code, given to the installer by --assets
 
-The installer runs as `bash install/filament-kit-vision.sh --tier T --port P --bind 127.0.0.1 --user
-filament-kit-vision --prefix <PREFIX> --assets <dir>` (and `--uninstall --prefix <PREFIX>`); it owns its systemd unit,
+The installer runs as `bash install/spoolwarden-vision.sh --tier T --port P --host 127.0.0.1 --user
+spoolwarden-vision --prefix <PREFIX> --assets <dir>` (and `--uninstall --prefix <PREFIX>`); it owns its systemd unit,
 is idempotent (an upgrade is the newer release's installer over the old one), and exits 0 only when /v1/health
 answers. The kit then switches the module on, points `local_intake.url` at it and checks its health.
 
@@ -44,11 +44,14 @@ MODULE_PUBKEY = "adkFwUZin7sdhZJ1fdr9sOn8BtFIFuiFHrm2d5O0TPU="
 MODULE_REPO = "thompsonfabco/spoolwarden-vision"
 NAME = "spoolwarden-vision"
 LEGACY_NAME = "filament-kit-vision"
+SERVICE = f"{NAME}.service"
+LEGACY_SERVICE = f"{LEGACY_NAME}.service"
 MANIFEST = "manifest.json"
 STORE = Path("/opt/filament-kit/local-intake")
 PREFIX = "/opt/spoolwarden-vision"
 LEGACY_PREFIX = "/opt/filament-kit-vision"
-SERVICE_USER = "spoolwarden"
+SERVICE_USER = "spoolwarden-vision"
+LEGACY_SERVICE_USER = "filament-kit-vision"
 DEFAULT_PORT = 7915
 MIN_VERSION = "0.2.1"
 LIMIT_MANIFEST = 256 << 10
@@ -104,6 +107,19 @@ def installed() -> dict | None:
     if d.get("previous") is not None and not _valid_version(d["previous"]):
         d["previous"] = None
     return d
+
+
+def installed_identity(have: dict | None = None) -> tuple[str, str, str, str]:
+    """Return `(name, prefix, service_user, unit)` for the active install (legacy or renamed)."""
+    have = installed() if have is None else have
+    if have:
+        home = store().resolve()
+        ver = have["version"]
+        legacy_script = (home / ver / f"{LEGACY_NAME}-{ver}" / "install" / f"{LEGACY_NAME}.sh").resolve()
+        new_script = (home / ver / f"{NAME}-{ver}" / "install" / f"{NAME}.sh").resolve()
+        if legacy_script.is_relative_to(home) and legacy_script.is_file() and not new_script.is_file():
+            return LEGACY_NAME, LEGACY_PREFIX, LEGACY_SERVICE_USER, LEGACY_SERVICE
+    return NAME, PREFIX, SERVICE_USER, SERVICE
 
 
 def _write_json(name: str, d: dict | None) -> None:
@@ -287,6 +303,9 @@ def _signed(fetcher: release.Fetcher, s: dict, version: str | None):
     try:
         release.public_key(s["pubkey"])
         rel = fetcher.release(s["repo"], version)
+        if code_name(rel["version"]) not in rel["assets"] and f"{LEGACY_NAME}-{rel['version']}.tar.gz" in rel["assets"]:
+            raise InstallError(f"reader release {rel['version']} uses the old {LEGACY_NAME} layout and cannot be "
+                               f"installed by name: use 0.2.2 or later")
         for need in (release.SUMS, release.SIG, MANIFEST, code_name(rel["version"])):
             if need not in rel["assets"]:
                 raise InstallError(f"reader release {rel['version']} has no {need}")
@@ -464,8 +483,16 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     shutil.rmtree(final, ignore_errors=True)
     os.replace(work, final)
     root = final / root.name
+    if have:
+        legacy_script = (home / have["version"] / f"{LEGACY_NAME}-{have['version']}" / "install" / f"{LEGACY_NAME}.sh").resolve()
+        if legacy_script.is_relative_to(home.resolve()) and legacy_script.is_file():
+            say("Removing previous filament-kit-vision service before installing Spoolwarden Vision (preserving state)...")
+            rc_old = run(["bash", str(legacy_script), "--uninstall", "--prefix", LEGACY_PREFIX], say)
+            if rc_old != 0:
+                raise InstallError(f"the previous reader's uninstaller failed (exit {rc_old}); its output is above. "
+                                   "The kit's settings were not changed")
     port = _port(cfg)
-    cmd = ["bash", str(root / "install" / f"{NAME}.sh"), "--tier", tier, "--port", str(port), "--bind", "127.0.0.1",
+    cmd = ["bash", str(root / "install" / f"{NAME}.sh"), "--tier", tier, "--port", str(port), "--host", "127.0.0.1",
            "--user", SERVICE_USER, "--prefix", PREFIX, "--assets", str(final / "assets")]
     say("Running the reader's own installer (this can take a while)...")
     rc = run(cmd, say)
