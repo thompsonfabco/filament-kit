@@ -1,18 +1,18 @@
 # Third-party software and data
 
-filament-kit is free software under the GNU General Public License, version 3 or later ([LICENSE](LICENSE)).
-This page lists the components a filament-kit release contains or the installer fetches, and their licences.
+Spoolwarden is free software under the GNU General Public License, version 3 or later ([LICENSE](LICENSE)).
+This page lists the components a Spoolwarden release contains or the installer fetches, and their licences.
 
 - **Shipped**: inside a release file (the server tarball, the Android APK, the Windows PC sync setup, the
   firmware images).
 - **Installed**: fetched by the installer or `pip` onto your computer from the project's own source (Ubuntu's
-  package archive, PyPI, GitHub) and not redistributed by filament-kit.
+  package archive, PyPI, GitHub) and not redistributed by Spoolwarden.
 
 ## Shipped in the server tarball (`filament-kit-<version>.tar.gz`)
 
 | Component | Licence |
 |---|---|
-| filament-kit (the wheel, `install.sh`, `uninstall.sh`, units, `get.sh`) | GPL-3.0-or-later |
+| Spoolwarden (the wheel, `install.sh`, `uninstall.sh`, units, `get.sh`) | GPL-3.0-or-later |
 | `bambu_hardware.xml` | GPL-3.0-or-later |
 | Button-panel firmware `install/panel/intake-panel.bin` | GPL-3.0-or-later (our source, `station/panel/src`), built with the ESP32 Arduino core (arduino-esp32 3.x, LGPL-2.1) for the panel's ESP32-C3 |
 | Button-panel firmware: U8g2 2.36.5 (olikraus), the OLED library | BSD-2-Clause |
@@ -88,7 +88,7 @@ Built by the release workflow and shipped as `filament-kit.apk`. Everything belo
 
 | Component | Licence |
 |---|---|
-| filament-kit app | GPL-3.0-or-later |
+| Spoolwarden app | GPL-3.0-or-later |
 | Kotlin standard library, kotlinx-coroutines, kotlinx-serialization | Apache-2.0 |
 | AndroidX: all groups on the release classpath, including core, activity, compose (BOM 2026.09), material3, lifecycle, navigation, datastore, camera (CameraX), exifinterface, media3 (ExoPlayer, HLS, OkHttp datasource, UI) | Apache-2.0 |
 | OkHttp, Okio | Apache-2.0 |
@@ -155,7 +155,7 @@ The station's speech uses Piper with a voice model downloaded at install time fr
 
 Attribution (CC BY 4.0): the voice is based on LibriTTS-R, the sound-quality-restored version of LibriTTS
 (Koizumi et al., 2023; openslr.org/141), licensed CC BY 4.0 (creativecommons.org/licenses/by/4.0/), converted for
-Piper by the rhasspy/piper-voices project. Changes: none by filament-kit; the model is used as published.
+Piper by the rhasspy/piper-voices project. Changes: none by Spoolwarden; the model is used as published.
 
 ## Display library (planned, firmware 7)
 

@@ -1,7 +1,7 @@
 # End-to-end run on WSL
 
-`tools/e2e/run.sh` installs filament-kit for real on a Linux host, the way a user does, and checks that the pieces
-work together: the signed release and get.sh, the installer and its modules, the real Spoolman, the kit server, the
+`tools/e2e/run.sh` installs Spoolwarden for real on a Linux host, the way a user does, and checks that the pieces
+work together: the signed release and get.sh, the installer and its modules, the real Spoolman, the Hub, the
 web unit with the reader API, a fake Bambu printer with 16 AMS units, the updater with its hardware data feed and
 the rollback, and a station upgrade. It is made for the WSL Ubuntu on the dev PC and puts the host back as it
 found it.
@@ -20,9 +20,9 @@ debugging (it holds the throwaway release key and the command logs; delete it af
 
 - Ubuntu 24.04 or newer as root (`sudo` without a password in the WSL distro), with `python3` and
   `python3-cryptography`.
-- Internet: apt, PyPI (the kit's and Spoolman's Python packages, `build` for the wheel) and the Spoolman release
+- Internet: apt, PyPI (Spoolwarden's and Spoolman's Python packages, `build` for the wheel) and the Spoolman release
   zip on GitHub. Spoolman is the real one (0.27.0, from the `spoolman` module); nothing is stubbed.
-- No filament-kit on the host (it refuses when `/etc/filament-kit`, `/opt/filament-kit`, `/var/lib/spoolman` or
+- No Spoolwarden on the host (it refuses when `/etc/filament-kit`, `/opt/filament-kit`, `/var/lib/spoolman` or
   the like exist) and ports 7912, 8101, 8710 and 8883 free.
 - Nothing else: everything it starts listens on 127.0.0.1, and no live printer, VM or station is touched.
 
@@ -46,20 +46,20 @@ debugging (it holds the throwaway release key and the command logs; delete it af
 4. **Cleans up** (also after a failure or Ctrl-C): `uninstall.sh --purge`, the station's system changes undone
    (sleep targets unmasked unless they were masked before, ALSA state restored), packages the run installed
    purged (and any it removed put back), the work folder deleted. Then it compares the host with a snapshot taken
-   at the start: packages, unit files and `/etc/systemd/system`, the kit's loaded units, `/etc/passwd` and
-   `/etc/group`, the kit's paths, the ALSA state and root's home. Any difference is printed and fails the run. Not
+   at the start: packages, unit files and `/etc/systemd/system`, Spoolwarden's loaded units, `/etc/passwd` and
+   `/etc/group`, Spoolwarden's paths, the ALSA state and root's home. Any difference is printed and fails the run. Not
    compared: apt's package lists (`apt-get update`) and the journal.
 
 ## Scenarios
 
 | | Scenario | Checks |
 |---|---|---|
-| a | Install from the fake release server | A tampered tarball and a release signed by another key are refused and nothing is installed. `get.sh --modules spoolman,server,printers,web --set web.public_url=...` installs the first release: spoolman, filament-kit and filament-kit-web active, the kit API answers its version, Spoolman and the web unit answer, `filament-kit status` exits 0, the verified release is kept for rollback. |
+| a | Install from the fake release server | A tampered tarball and a release signed by another key are refused and nothing is installed. `get.sh --modules spoolman,server,printers,web --set web.public_url=...` installs the first release: spoolman, the Hub service and filament-kit-web active, the Hub's API answers its version, Spoolman and the web unit answer, `spoolwarden status` exits 0, the verified release is kept for rollback. |
 | d | Manual add without AI | Server mode with no API key: `ai_intake` off, no key file, `/api/intake/read` answers `module_off`. A phone is paired through `/api/pair`; `/api/intake/add` (dry run, then for real, with a tag) adds a spool that Spoolman shows with its filament, vendor and tag. |
-| c | Fake 16-unit printer through the reader API | `tools/e2e/fake_printer.py` is an MQTT 3.1.1 broker over TLS on 127.0.0.1:8883 around the unit tests' `FakePrinter`: 16 AMS units, 8 AMS HT units and both external holders, a self-signed leaf with CN = serial, user `bblp` and a throwaway Access Code. It is added as `filament-kit config` > Printers > add printer does (`registry.upsert`). `sudo filament-kit reader token` makes the reader token; `GET reader/printers` lists it, `GET reader/printers/<id>/slots` gives 74 unique labels (also ignoring case, at most 40 bytes), and `POST reader/scan` of the spool from d into P3 answers `set`. The printer received exactly one `ams_filament_setting`, for AMS 15 tray 2 with the preset's filament id, and Spoolman shows the spool in that slot. The preset comes from a one-preset build written into `/var/lib/filament-kit/profiles`, as the PC sync and `profiles build` leave it (the reader loads only with the user's exact preset). |
+| c | Fake 16-unit printer through the reader API | `tools/e2e/fake_printer.py` is an MQTT 3.1.1 broker over TLS on 127.0.0.1:8883 around the unit tests' `FakePrinter`: 16 AMS units, 8 AMS HT units and both external holders, a self-signed leaf with CN = serial, user `bblp` and a throwaway Access Code. It is added as `spoolwarden config` > Printers > add printer does (`registry.upsert`). `sudo spoolwarden reader token` makes the reader token; `GET reader/printers` lists it, `GET reader/printers/<id>/slots` gives 74 unique labels (also ignoring case, at most 40 bytes), and `POST reader/scan` of the spool from d into P3 answers `set`. The printer received exactly one `ams_filament_setting`, for AMS 15 tray 2 with the preset's filament id, and Spoolman shows the spool in that slot. The preset comes from a one-preset build written into `/var/lib/filament-kit/profiles`, as the PC sync and `profiles build` leave it (the reader loads only with the user's exact preset). |
 | b | Updater | `update --check` says up to date, then sees the second release once it is published; `update` installs it (services active again, the API answers the new version) and the hardware feed installs the release's newer `bambu_hardware.xml` (version 1.1) as `/etc/filament-kit/bambu_hardware.xml`. A newer valid file (1.2) swaps in with the old one kept as `.previous`; a signed but invalid one (1.3 with an empty model name) is refused (exit 1) and the installed file stays. `update --rollback` restores the first release, and `update --check` then says the rolled-back version is held from the timer. |
-| e | Station upgraded by the updater | After a purge: `get.sh --version <first> --mode station --server 192.0.2.10` (a documentation address), then `filament-kit update` to the second release. Still station mode, `station.allow` still the server address, and the station unit's drop-in still allows it. |
-| g | Backup and restore | `filament-kit backup create` writes a zip with the manifest, the Spoolman database and the kit's folders; after `uninstall --purge` and a fresh `get.sh --modules spoolman,server`, `filament-kit restore --yes` brings back the same modules, certificate, spools, tag, printers, setup code and trusted computer; the phone's token works without pairing; `status` exits 0; a pre-restore zip is kept. Needs d (and c for the printer). |
+| e | Station upgraded by the updater | After a purge: `get.sh --version <first> --mode station --server 192.0.2.10` (a documentation address), then `spoolwarden update` to the second release. Still station mode, `station.allow` still the server address, and the station unit's drop-in still allows it. |
+| g | Backup and restore | `spoolwarden backup create` writes a zip with the manifest, the Spoolman database and Spoolwarden's folders; after `uninstall --purge` and a fresh `get.sh --modules spoolman,server`, `spoolwarden restore --yes` brings back the same modules, certificate, spools, tag, printers, setup code and trusted computer; the phone's token works without pairing; `status` exits 0; a pre-restore zip is kept. Needs d (and c for the printer). |
 | f | The last released tag (`--previous`) | After a purge, the tag's own files build its release and its own `get.sh` installs it; a phone is paired and a spool added. The tag's own updater installs this checkout (one patch higher) and this checkout's `update --rollback` goes back: each time the services run, the API answers the right version, the token works and the spool is there. |
 
 ## On a runner, before a tag
@@ -78,5 +78,5 @@ status 0 means every scenario passed or was skipped and the host is as it was.
   word, so Python got a cut program (`test_inline_python_survives_shell_single_quotes`).
 - get.sh did not pass `--set` on to install.sh, so a piped `--modules ...,web` install could not be given
   `web.public_url` (`test_get_sh_takes_set_for_install_sh`).
-- `sudo filament-kit reader token` (and `revoke`) always refused: the wrapper ran them as the service user
+- `sudo spoolwarden reader token` (and `revoke`) always refused: the wrapper ran them as the service user
   (`test_wrapper_runs_reader_token_and_revoke_as_root`).

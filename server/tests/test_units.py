@@ -152,13 +152,13 @@ def test_readme_final_review_points():
     order, that devices forget covers the PC, and that a catalog rollback is undone by the next scheduled update unless
     updates are off."""
     readme = _text(ROOT / "docs" / "user-guide.md")
-    assert "sudo filament-kit presets restore-deleted" in readme
+    assert "sudo spoolwarden presets restore-deleted" in readme
     pair = readme[readme.index("## Pair your PC"):readme.index("## Everyday commands")]
     assert pair.index("Finish") < pair.index("paste the link")
-    assert "Pair this PC with the filament-kit server now" in pair
+    assert "Pair this PC with the Hub now" in pair
     row = next(line for line in readme.splitlines() if line.startswith("| `devices forget <device>`"))
     assert "Unpair a device" in row
-    assert "sudo filament-kit devices forget <device>" in pair  # the PC is removed with the same command
+    assert "sudo spoolwarden devices forget <device>" in pair  # the PC is removed with the same command
     lib = readme[readme.index("## Filament Catalog updates"):readme.index("## Troubleshooting")]
     assert '"schedule": "off"' in lib and "rollback" in lib and "next" in lib
 

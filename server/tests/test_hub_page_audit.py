@@ -29,6 +29,7 @@ from test_setup_page import CODE, Helper, FakeManager
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
 ALLOW = ROOT / "tests" / "allowlists" / "aut5_hub"      # a folder, one file per section
+COMMAND = json.loads((ROOT / "strings" / "en.json").read_text("utf-8"))["command_name"]     # the command the pages print
 SECTIONS = ["overview", "printers", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs"]
 VIEWS = ",".join("#" + s for s in SECTIONS)
 ITEM = {"vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black", "material": "PLA", "color_hex": "2B2B2E",
@@ -324,7 +325,7 @@ UPDATES_ROWS = {
 }
 
 UPDATES_READY = """(async () => {
-  const state = %s, [rows, refused] = %s, nightly = %s;
+  const state = %s, [rows, refused] = %s, nightly = %s, command = %s;
   const until = async (what, f) => {
     for (let i = 0; i < 80 && !f(); i++) await new Promise((r) => setTimeout(r, 100));
     if (!f()) throw new Error("Updates (" + state + "): " + what);
@@ -342,7 +343,7 @@ UPDATES_READY = """(async () => {
   if (!document.querySelector(".updates__cards .btn--danger") || label(document.querySelector(".updates__cards .btn--danger")) !== "Roll back to 0.5.1") throw new Error("Updates (" + state + "): no Roll back to 0.5.1");
   if (!document.querySelector(".updates__cards .banner--info .updates__going")) throw new Error("Updates (" + state + "): no going-back note");
   const foot = document.querySelector(".updates__foot .code");
-  if (!foot || !foot.textContent.includes("sudo filament-kit uninstall") || !foot.querySelector('[data-action="copy"]')) throw new Error("Updates (" + state + "): no uninstall code block with Copy");
+  if (!foot || !foot.textContent.includes("sudo " + command + " uninstall") || !foot.querySelector('[data-action="copy"]')) throw new Error("Updates (" + state + "): no uninstall code block with Copy");
   const notes = document.querySelector(".updates__notes");
   if (!!notes === (state === "nightly")) throw new Error("Updates (" + state + "): release notes");
   if (notes && (!notes.querySelector("h2").textContent.startsWith("What 0.5.3 brings") || !notes.querySelector(".code__text").textContent.includes("\\n"))) throw new Error("Updates (" + state + "): notes box");
@@ -367,7 +368,8 @@ def test_the_updates_section_passes_the_audit_with_an_update_available_held_back
     data = {**UPDATES, **UPDATES_STATES[state]}
     monkeypatch.setattr(updates, "view", lambda cfg: data)
     rows, refused = UPDATES_ROWS[state]
-    ready = UPDATES_READY % (json.dumps(state), json.dumps([rows, refused]), json.dumps(state == "nightly"))
+    ready = UPDATES_READY % (json.dumps(state), json.dumps([rows, refused]), json.dumps(state == "nightly"),
+                           json.dumps(COMMAND))
     fonts = ["--font-dir", os.environ["AUT5_FONT_DIR"]] if os.environ.get("AUT5_FONT_DIR") else ["--wide-font"]      # as a Linux runner draws it
     run = _run("--url", hub, "--views", "#updates", "--ready", ready, *fonts)
     assert run.returncode == 0, run.stdout + run.stderr

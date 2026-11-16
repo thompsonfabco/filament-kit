@@ -59,7 +59,7 @@ object UpdateTexts {
 
     /** `version` is the server's release, the one the update comes with; the APK's own name is always "1.0". */
     fun bannerTitle(version: String?): String =
-        version?.trim()?.ifBlank { null }?.let { "Update available (filament-kit $it)" } ?: "Update available"
+        version?.trim()?.ifBlank { null }?.let { "Update available (Spoolwarden $it)" } ?: "Update available"
 
     /**
      * What went wrong with a finished install session, or null when there is nothing to say (it worked, it is

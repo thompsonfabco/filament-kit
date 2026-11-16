@@ -158,7 +158,7 @@ def test_the_docs_show_the_pinned_checked_command():
     assert not re.search(re.escape(PACK) + r"\s*\|\s*tar", doc)
     assert "releases/download/v<version>/" + PACK in doc
     assert f'echo "<sha256>  {PACK}" | sha256sum -c - && tar xzf {PACK}' in doc
-    assert "sudo filament-kit klipper add-on" in doc
+    assert "sudo spoolwarden klipper add-on" in doc
 
 
 def test_a_repo_override_names_the_same_repo_in_the_url(env, srv, key, capsys):

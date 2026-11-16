@@ -1145,14 +1145,15 @@ const field = (label, root = document) => $$('.field', root).find((f) => f.query
 const reason = (b) => { const id = b.getAttribute('aria-describedby'); return b.getAttribute('aria-disabled') === 'true' && id && document.getElementById(id) ? document.getElementById(id).textContent : null; };
 const TAG = (o) => Object.assign({ nfc_id: '04:77:90:E1', read_at: 1700000000, age_seconds: 12, reader: 'station', scale: null,
   text: 'last tag: 04:77:90:E1  12 s ago on the station reader\n  not linked to any spool yet (a new tag): ready to link' }, o);
-const tap = async (o) => { stub(/^tag$/, () => reply(TAG(o))); repoll(); await until('the tag is shown', () => text('.spools__tagid') === TAG(o).nfc_id && text('.spools__age') !== ''); };
+// repoll again and again: a poll already out (the first one, or the 3 s timer) makes repoll do nothing, and its answer is the old one
+const tap = async (o) => { stub(/^tag$/, () => reply(TAG(o))); await until('the tag is shown', () => { repoll(); return text('.spools__tagid') === TAG(o).nfc_id && text('.spools__age') !== ''; }); };
 const waitPage = () => until('the page did not draw', () => $('.spools__results .spools__row, .spools__none') && !document.querySelector('[aria-busy="true"]:not(button)'));
 const search = () => $('.spools__search .field__control');
 const sheetOpen = () => until('the sheet', () => $('dialog[open].sheet'));
 // the summary is drawn from the list row at once; the spool's own read comes after it, and until then Preview and Link
 // are held with "Loading Spool N…", so a press before it lands does nothing (seen in CI under load)
 const sheetReady = async () => { const d = await sheetOpen(); await until('the summary', () => $('.spools__sum-text') && !$('.spools__sum .skeleton'));
-  await until('the spool read', () => !/^Loading /.test(reason(button('Preview')) || '')); return d; };
+  await until('the spool read', () => !/^Loading /.test((button('Preview') && reason(button('Preview'))) || '')); return d; };
 const out = (s) => $$('.spools__sheet .result').find((r) => r.textContent.includes(s));
 const FRESH = () => localStorage.removeItem('spoolwarden.sealedOnly');
 """
@@ -1280,14 +1281,14 @@ SP_READY = {
 """,
     "sheet_link": r"""
   const d = await sheetReady(); await tap({});
-  window.__open = []; stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); window.__open.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'Spool __ID__ opened and tag 04:77:90:E1 linked.', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }); });
+  window.__open = []; stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); window.__open.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'Spool __ID__ opened and tag 04:77:90:E1 linked.', exit_code: 0, nfc_id: '4:77:90:e1', read_at: 1700000000 }); });
   typeIn(field('Weight with spool', d).querySelector('input'), '1212'); typeIn(field('Location', d).querySelector('input'), 'Rack 1'); typeIn(field('Box humidity', d).querySelector('input'), '41,5');
   button('Preview').click();
   await until('the preview', () => out('Preview ready.') && reason(button('Link tag and open')) === null);
   button('Link tag and open').click();
   await until('the link', () => out('Spool __ID__ is open'));
   need('the Hub text follows it', $('.spools__sheet .code').textContent.includes('tag 04:77:90:E1 linked'));
-  need('the real request is the one of today', JSON.stringify(window.__open[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: 'Rack 1', humidity: '41.5', nfc_id: '04:77:90:E1', read_at: 1700000000, dry_run: false }));
+  need('the real request is the one of today', JSON.stringify(window.__open[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: 'Rack 1', humidity: '41.5', nfc_id: '4:77:90:e1', read_at: 1700000000, dry_run: false }));
   need('a toast says it', text('.toasts').includes('Spool __ID__ opened.'));
   need('the fields are clear and Link waits again', ['Weight with spool', 'Location', 'Box humidity'].every((l) => field(l, $('dialog[open]')).querySelector('input').value === '') && reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.');
 """,
@@ -1397,7 +1398,7 @@ SP_READY = {
     "sheet_race_link": r"""
   const d = await sheetReady(); await tap({});
   const bodies = []; let release = null;
-  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); if (b.dry_run) return reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 });
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); if (b.dry_run) return reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '4:77:90:e1', read_at: 1700000000 });
     return new Promise((ok) => { release = () => ok(new Response(JSON.stringify({ output: 'opened', exit_code: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }); });
   typeIn(field('Weight with spool', d).querySelector('input'), '1212'); button('Preview').click();
   await until('previewed', () => out('Preview ready.') && reason(button('Link tag and open')) === null);
@@ -1407,7 +1408,7 @@ SP_READY = {
   release();
   await until('opened', () => out('Spool __ID__ is open'));
   await sleep(300);
-  need('two requests in all, the real one with what was previewed', bodies.length === 2 && JSON.stringify(bodies[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', nfc_id: '04:77:90:E1', read_at: 1700000000, dry_run: false }));
+  need('two requests in all, the real one with what was previewed', bodies.length === 2 && JSON.stringify(bodies[1]) === JSON.stringify({ spool: __ID__, gross: '1212', location: '', humidity: '', nfc_id: '4:77:90:e1', read_at: 1700000000, dry_run: false }));
   need('Link waits again', reason(button('Link tag and open')) === 'Preview first: nothing changes until you link.');
 """,
     "sheet_race_save": r"""
@@ -1450,12 +1451,12 @@ SP_READY = {
   const d = await sheetReady(); await tap({});
   const bodies = [];
   stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b);
-    return b.dry_run ? reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }) : reply({ error: 'A new tag was tapped. Preview again.', code: 'tap_changed' }, 409); });
+    return b.dry_run ? reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '4:77:90:e1', read_at: 1700000000 }) : reply({ error: 'A new tag was tapped. Preview again.', code: 'tap_changed' }, 409); });
   button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null);
   need('Preview names the tap it looked at', bodies[0].nfc_id === '04:77:90:E1' && bodies[0].read_at === 1700000000);
   button('Link tag and open').click();
   await until('refused', () => text('.spools__sheet-note') === 'A new tag was tapped. Preview again.' && reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.');
-  need('Link named the same tap', bodies[1].nfc_id === '04:77:90:E1' && bodies[1].read_at === 1700000000 && bodies[1].dry_run === false);
+  need('Link named the same tap', bodies[1].nfc_id === '4:77:90:e1' && bodies[1].read_at === 1700000000 && bodies[1].dry_run === false);
   await tap({ nfc_id: '04:AA:BB:CC', read_at: 1700000600 });                               // the poll catches up: the reason is not lost
   await until('the sheet names the newer tag', () => text('.spools__sheet-tag').includes('04:AA:BB:CC')); await sleep(200);
   need('the reason stays after the poll', reason(button('Link tag and open')) === 'A new tag was tapped. Preview again.');
@@ -1505,15 +1506,42 @@ SP_READY = {
   const d = await sheetReady();
   need('the page shows no tag', text('.spools__sheet-tag') === "No tag read yet: tap the spool's tag on a reader.");
   const bodies = [];
-  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'opened', exit_code: 0, nfc_id: '04:AA:BB:CC', read_at: 55 }); });
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'opened', exit_code: 0, nfc_id: '4:aa:bb:cc', read_at: 55 }); });
   button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
   need('Preview names no tap: the page had none to name', !('nfc_id' in bodies[0]) && !('read_at' in bodies[0]));
   button('Link tag and open').click(); await until('opened', () => out('Spool __ID__ is open'));
-  need('Link names the tap the Hub used for the preview', bodies[1].nfc_id === '04:AA:BB:CC' && bodies[1].read_at === 55 && bodies[1].dry_run === false);
+  need('Link names the tap the Hub used for the preview', bodies[1].nfc_id === '4:aa:bb:cc' && bodies[1].read_at === 55 && bodies[1].dry_run === false);
+""",
+    "sheet_poll_between": r"""
+  const d = await sheetReady();
+  need('the page shows no tag', text('.spools__sheet-tag') === "No tag read yet: tap the spool's tag on a reader.");
+  const bodies = [], polls = [];
+  stub(/^open$/, (u, i) => { const b = JSON.parse(i.body); bodies.push(b); return reply({ output: b.dry_run ? 'dry run: nothing changed' : 'opened', exit_code: 0, nfc_id: '4:aa:bb:cc', read_at: 55 }); });
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
+  // a poll that brings no tap: still no tag, but not the answer the page last had
+  stub(/^tag$/, () => { polls.push('none'); return reply({ nfc_id: null, read_at: 7, age_seconds: null, reader: null, scale: null, text: '' }); });
+  await until('the poll without a tap is answered', () => { repoll(); return polls.length > 0; });
+  // then the poll that brings the tap the Preview already named
+  stub(/^tag$/, () => { polls.push('tap'); return reply(TAG({ nfc_id: '04:AA:BB:CC', read_at: 55 })); });
+  await until('the sheet names the tap', () => { repoll(); return text('.spools__sheet-tag').includes('04:AA:BB:CC'); });
+  need('neither poll made the Preview out of date: ' + reason(button('Link tag and open')), reason(button('Link tag and open')) === null && button('Link tag and open').getAttribute('aria-disabled') !== 'true');
+  button('Link tag and open').click(); await until('opened', () => out('Spool __ID__ is open'));
+  need('Link names the previewed tap', bodies.length === 2 && bodies[1].nfc_id === '4:aa:bb:cc' && bodies[1].read_at === 55 && bodies[1].dry_run === false);
+""",
+    "sheet_tap_again_unseen": r"""
+  const d = await sheetReady();
+  need('the page shows no tag', text('.spools__sheet-tag') === "No tag read yet: tap the spool's tag on a reader.");
+  stub(/^open$/, () => reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '4:aa:bb:cc', read_at: 55 }));      // the Hub writes the id as bytes in lower case
+  button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
+  await tap({ nfc_id: '04:AA:BB:CC', read_at: 55 });                                      // the raw form of the previewed tap
+  need('the previewed tap is not new', reason(button('Link tag and open')) === null);
+  await tap({ nfc_id: '04:AA:BB:CC', read_at: 56, age_seconds: 2 });                      // the same tag, tapped again
+  await until('the tap is shown', () => text('.spools__sheet-tag').includes('tapped 2 s ago'));
+  need('the reason says it was tapped again, not that a new tag came', reason(button('Link tag and open')) === 'The tag was tapped again. Preview again.');
 """,
     "sheet_tap_again": r"""
   const d = await sheetReady(); await tap({});
-  stub(/^open$/, () => reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '04:77:90:E1', read_at: 1700000000 }));
+  stub(/^open$/, () => reply({ output: 'dry run: nothing changed', exit_code: 0, nfc_id: '4:77:90:e1', read_at: 1700000000 }));
   button('Preview').click(); await until('previewed', () => reason(button('Link tag and open')) === null && out('Preview ready.'));
   await tap({ read_at: 1700000900, age_seconds: 2 });                                      // the same tag, tapped again
   await until('the tap is shown', () => text('.spools__sheet-tag').includes('tapped 2 s ago'));

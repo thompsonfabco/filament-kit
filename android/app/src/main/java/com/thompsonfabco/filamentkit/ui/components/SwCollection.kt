@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -98,6 +99,8 @@ internal fun <T> SwCollection(
     surface: Boolean = false,
     visual: Dp = 0.dp,
     tile: (@Composable (index: Int, item: T) -> Unit)? = null,
+    isExpanded: ((T) -> Boolean)? = null,
+    detail: (@Composable (index: Int, item: T) -> Unit)? = null,
     item: @Composable (index: Int, item: T) -> Unit,
 ) {
     val style = LocalCollectionStyle.current
@@ -109,18 +112,50 @@ internal fun <T> SwCollection(
         val tileMin = remWidth(TILE_MIN_WIDTH)
         BoxWithConstraints(modifier.fillMaxWidth()) {
             val columns = gridColumns(style, maxWidth, gap, cardMin, tileMin)
+            val expandCards = style == CollectionStyle.Cards && isExpanded != null && detail != null
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                items.withIndex().chunked(columns).forEach { line ->
-                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                        line.forEach { (i, entry) ->
-                            if (style == CollectionStyle.Tiles && tile != null) {
-                                Box(Modifier.weight(1f).fillMaxHeight()) { tile(i, entry) }
-                            } else {
-                                CollectionCard(Modifier.weight(1f).fillMaxHeight(), ground, inset) { item(i, entry) }
+                if (expandCards) {
+                    val pending = mutableListOf<IndexedValue<T>>()
+                    val flushPending: @Composable () -> Unit = {
+                        if (pending.isNotEmpty()) {
+                            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                                pending.forEach { (idx, entry) ->
+                                    CollectionCard(Modifier.weight(1f).fillMaxHeight(), ground, inset) { item(idx, entry) }
+                                }
+                                repeat(columns - pending.size) { Spacer(Modifier.weight(1f)) }
                             }
+                            pending.clear()
                         }
-                        // the last line keeps the width of a card for the places not filled
-                        repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                    items.withIndex().forEach { indexed ->
+                        if (isExpanded(indexed.value)) {
+                            flushPending()
+                            CollectionCard(Modifier.fillMaxWidth(), ground, inset) {
+                                Column(Modifier.fillMaxWidth()) {
+                                    item(indexed.index, indexed.value)
+                                    CollectionDivider()
+                                    detail(indexed.index, indexed.value)
+                                }
+                            }
+                        } else {
+                            pending.add(indexed)
+                            if (pending.size == columns) flushPending()
+                        }
+                    }
+                    flushPending()
+                } else {
+                    items.withIndex().chunked(columns).forEach { line ->
+                        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                            line.forEach { (i, entry) ->
+                                if (style == CollectionStyle.Tiles && tile != null) {
+                                    Box(Modifier.weight(1f).fillMaxHeight()) { tile(i, entry) }
+                                } else {
+                                    CollectionCard(Modifier.weight(1f).fillMaxHeight(), ground, inset) { item(i, entry) }
+                                }
+                            }
+                            // the last line keeps the width of a card for the places not filled
+                            repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
+                        }
                     }
                 }
             }
@@ -152,6 +187,8 @@ internal fun <T> SwLazyCollection(
     modifier: Modifier = Modifier,
     visual: Dp = 0.dp,
     tile: (@Composable (item: T) -> Unit)? = null,
+    isExpanded: ((T) -> Boolean)? = null,
+    detail: (@Composable (item: T) -> Unit)? = null,
     item: @Composable (item: T) -> Unit,
 ) {
     val style = LocalCollectionStyle.current
@@ -159,15 +196,36 @@ internal fun <T> SwLazyCollection(
     if (isGrid(style)) {
         val gap = SpoolwardenTheme.density.gap
         val cells = if (style == CollectionStyle.Tiles) TileCells(gap, remWidth(TILE_MIN_WIDTH)) else GridCells.Adaptive(remWidth(CARD_MIN_WIDTH))
+        val expandCards = style == CollectionStyle.Cards && isExpanded != null && detail != null
         LazyVerticalGrid(
             cells, modifier,
             horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap),
         ) {
-            items(items, key = key) { entry ->
-                if (style == CollectionStyle.Tiles && tile != null) {
-                    tile(entry)
-                } else {
-                    CollectionCard(Modifier, SpoolwardenTheme.colors.surface, 0.dp) { item(entry) }
+            if (expandCards) {
+                items(
+                    items,
+                    key = key,
+                    span = { entry -> GridItemSpan(if (isExpanded(entry)) maxLineSpan else 1) },
+                ) { entry ->
+                    CollectionCard(Modifier, SpoolwardenTheme.colors.surface, 0.dp) {
+                        if (isExpanded(entry)) {
+                            Column(Modifier.fillMaxWidth()) {
+                                item(entry)
+                                CollectionDivider()
+                                detail(entry)
+                            }
+                        } else {
+                            item(entry)
+                        }
+                    }
+                }
+            } else {
+                items(items, key = key) { entry ->
+                    if (style == CollectionStyle.Tiles && tile != null) {
+                        tile(entry)
+                    } else {
+                        CollectionCard(Modifier, SpoolwardenTheme.colors.surface, 0.dp) { item(entry) }
+                    }
                 }
             }
         }

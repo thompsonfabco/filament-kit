@@ -1,6 +1,6 @@
 # Use the web app on an iPhone
 
-There is no filament-kit app for iPhone. Instead, the Hub can run a **web app** that works in Safari,
+There is no Spoolwarden app for iPhone. Instead, the Hub can run a **web app** that works in Safari,
 and you can put it on your home screen so it opens like an app. It also works in any other phone browser,
 Android included.
 
@@ -14,7 +14,7 @@ The web app does most of what the app (Android) does:
 - **Printers** (when the Bambu Lab printers Feature is on): live status, the camera, pause, resume and stop, the
   chamber light, what is in each AMS slot and the filament usage log.
 
-It only works **on your home network**. Away from home it says "filament-kit only works on the home network."
+It only works **on your home network**. Away from home it says "Spoolwarden only works on the home network."
 There is no sign-in: anyone on your home Wi-Fi can use it.
 
 > **At home it needs no setup.** The Hub serves the web app itself at
@@ -36,7 +36,7 @@ There is no sign-in: anyone on your home Wi-Fi can use it.
 | | The built-in address | Way A: home only, nginx | Way B: a public name |
 |---|---|---|---|
 | Address | `https://<server name>.local:8710/intake` | `https://<computer name>.local/filament` | `https://filament.example.com/filament` (your own name) |
-| What you need | nothing: the Hub serves it | the `web` and `remote` Features (filament-kit installs nginx) | a domain name, ports 80 and 443 forwarded to the Hub |
+| What you need | nothing: the Hub serves it | the `web` and `remote` Features (Spoolwarden installs nginx) | a domain name, ports 80 and 443 forwarded to the Hub |
 | Safari | warns about the certificate (you accept it once) | warns about the certificate (you accept it once) | no warnings |
 | Also gives you | | an address without a port number | the Claude connector from outside |
 
@@ -61,25 +61,25 @@ Start with the built-in address. Use way A or B only to avoid the warning or to 
 2. Open the Features checklist:
 
    ```bash
-   sudo filament-kit features menu
+   sudo spoolwarden features menu
    ```
 
 3. A checklist of Features appears. Move with the arrow keys and press Space
    on **Web access** and on **Remote access** to tick them. Then press `s` to apply.
 4. When it asks `web needs its public https address`, type your address, for example
    `https://my-server.local/filament`, and press Enter.
-5. filament-kit installs nginx and sets it up. Among its
+5. Spoolwarden installs nginx and sets it up. Among its
    output it prints a list of firewall and router rules: for home-only use you can **ignore them**. Do not run
-   `sudo filament-kit remote get-certificate`: that only works with a public name.
+   `sudo spoolwarden remote get-certificate`: that only works with a public name.
 6. Check it:
 
    ```bash
-   sudo filament-kit web status
+   sudo spoolwarden web status
    ```
 
    You should see `OK   web module is on`, `OK   public URL ...` and `OK   web unit answers`. It also shows
    `--   sign-in passphrase not set`. That passphrase is only for the Claude connector, not for the web
-   app, so you can ignore it (or set one with `sudo filament-kit web passphrase`).
+   app, so you can ignore it (or set one with `sudo spoolwarden web passphrase`).
 
 nginx now serves the web app with a certificate the Hub made itself. Safari doesn't know that certificate, so
 it warns the first time (see below).
@@ -95,14 +95,14 @@ Use this if you have a domain name, or want the Claude connector to reach your H
 4. Print the rules you need and set them up on your router and firewall:
 
    ```bash
-   sudo filament-kit remote firewall
+   sudo spoolwarden remote firewall
    ```
 
    They are: port 443 to the Hub, and port 80 to the Hub while a certificate is issued.
 5. Get the certificate:
 
    ```bash
-      sudo filament-kit remote get-certificate
+      sudo spoolwarden remote get-certificate
    ```
 
    From then on the certificate renews itself.
@@ -159,28 +159,28 @@ re-mapping slots and optional notifications.
 
 ## Common problems
 
-- **"filament-kit only works on the home network"** while you are at home:
+- **"Spoolwarden only works on the home network"** while you are at home:
   - Check that the iPhone is on your home Wi-Fi, not mobile data.
-  - filament-kit counts addresses starting with `192.168.` and `10.` as home. If your home network uses addresses
+  - Spoolwarden counts addresses starting with `192.168.` and `10.` as home. If your home network uses addresses
     starting with `172.16.` to `172.31.`, add your network to `/etc/filament-kit/config.json` under `"web"`, for
-    example `"lan": ["172.20.0.0/16"]`, then run `sudo filament-kit features apply`. (On iPhone: Settings → Wi-Fi →
+    example `"lan": ["172.20.0.0/16"]`, then run `sudo spoolwarden features apply`. (On iPhone: Settings → Wi-Fi →
     the ⓘ next to your network shows the iPhone's address.)
   - Way B: if your router doesn't do NAT loopback, the phone goes out to the internet and back, and looks like it
     is away from home. Add the local DNS entry from way B, step 2.
 - **Safari can't find the Hub** (way A): `.local` names need the iPhone and the Hub on the same network.
-  Check `sudo filament-kit status` on the Hub. If Ubuntu's firewall (`ufw`) is on, allow
+  Check `sudo spoolwarden status` on the Hub. If Ubuntu's firewall (`ufw`) is on, allow
   `sudo ufw allow 443/tcp` and `sudo ufw allow 5353/udp`.
-- **`web needs web.public_url set`** when you run `sudo filament-kit features on web` without a terminal: it can
-  only ask for the address at a terminal. Run it in a Terminal, or use `sudo filament-kit features menu`
+- **`web needs web.public_url set`** when you run `sudo spoolwarden features on web` without a terminal: it can
+  only ask for the address at a terminal. Run it in a Terminal, or use `sudo spoolwarden features menu`
   as above.
 - **The certificate warning comes back** (way A): each time the Hub's certificate changes (after
   reinstalling), Safari asks again. Accept it again. The placeholder certificate lasts 825 days. Running
-  `sudo filament-kit features apply` makes a new one within 30 days of its end (`sudo filament-kit web status` warns
+  `sudo spoolwarden features apply` makes a new one within 30 days of its end (`sudo spoolwarden web status` warns
   before that), and Safari asks you to accept it again.
 - **The page says `This device reached the server over IPv6`**: the web address answers only the ranges in `web.lan`,
   and none of them is an IPv6 range by default. Add your home network's IPv6 prefix:
   [The home network ranges](user-guide.md#the-home-network-ranges-weblan). The Hub page is IPv4 only.
 - **Printer camera doesn't play**: the camera needs the Bambu Lab printers Feature and a printer added in the app or with
-  `sudo filament-kit printer add`.
+  `sudo spoolwarden printer add`.
 
 More about the web app and the Claude connector: [user guide, Claude connector and web app](user-guide.md#claude-connector-and-phone-web-app).

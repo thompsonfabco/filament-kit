@@ -78,6 +78,7 @@ fun SpoolScreen(
     modifier: Modifier = Modifier,
     online: Boolean = true,
     printersOn: Boolean = true,
+    embedded: Boolean = false,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val space = SpoolwardenTheme.space
@@ -96,33 +97,36 @@ fun SpoolScreen(
         }
     }
 
-    Column(modifier.fillMaxSize()) {
+    val scrollModifier = if (embedded) {
+        modifier.fillMaxWidth().padding(space.s4)
+    } else {
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4)
+    }
+    Column(
+        scrollModifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space.s4),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(space.s4),
         ) {
-            Column(
-                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(space.s4),
+            HubNoticeOf(ui.failure, onPairAgain)
+            val spool = ui.spool
+            // the states every Hub screen has (05 3.2): the progress line, the error card with Try again, offline
+            ScreenState(
+                loaded = spool != null,
+                loading = ui.loading,
+                error = ui.failure?.let { hubFailureText(it) },
+                onTryAgain = vm::retry,
+                offline = !online,
+                loadedSecondsAgo = secondsSince(ui.loadedAt),
             ) {
-                HubNoticeOf(ui.failure, onPairAgain)
-                val spool = ui.spool
-                // the states every Hub screen has (05 3.2): the progress line, the error card with Try again, offline
-                ScreenState(
-                    loaded = spool != null,
-                    loading = ui.loading,
-                    error = ui.failure?.let { hubFailureText(it) },
-                    onTryAgain = vm::retry,
-                    offline = !online,
-                    loadedSecondsAgo = secondsSince(ui.loadedAt),
-                ) {
-                    if (spool != null) {
-                        Header(spool, ui.openedByTag)
-                        Remaining(spool)
-                        ui.result?.let { ResultLine(it) }
-                        Actions(vm, ui, online, printersOn, onLoad)
-                        Details(spool)
-                    }
+                if (spool != null) {
+                    Header(spool, ui.openedByTag)
+                    Remaining(spool)
+                    ui.result?.let { ResultLine(it) }
+                    Actions(vm, ui, online, printersOn, onLoad)
+                    Details(spool)
                 }
             }
         }

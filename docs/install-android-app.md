@@ -1,6 +1,6 @@
 # Install the app
 
-The filament-kit app is how you add spools, look them up, load them into printer slots and see your printers
+The Spoolwarden app is how you add spools, look them up, load them into printer slots and see your printers
 from an Android phone. It talks only to your own Hub at home.
 
 > **Beta.** The app is not in the Google Play Store or F-Droid. It comes as a file, `filament-kit.apk`, on the
@@ -11,7 +11,7 @@ from an Android phone. It talks only to your own Hub at home.
 - An **Android phone or tablet with Android 10 or newer**.
 - The **Hub installed and running** on your home network: [Install the Hub](install-server.md).
 - The phone on the **same Wi-Fi network** as the Hub.
-- Access to the Hub's Terminal, to show the pairing code (`sudo filament-kit pair`).
+- Access to the Hub's Terminal, to show the pairing code (`sudo spoolwarden pair`).
 - Optional: a phone with **NFC**, to read spool tags. Turn NFC on in the phone's settings; the app asks for no
   permission for it. The app works without NFC, and without a camera (pair by typing the code instead).
 
@@ -47,7 +47,7 @@ Pairing lets the app trust your Hub and lets the Hub know your phone. You do it 
 1. **On the Hub**, in Terminal:
 
    ```bash
-   sudo filament-kit pair
+   sudo spoolwarden pair
    ```
 
    It shows a QR code, the Hub's certificate fingerprint and a 6-digit pairing code. They are good for about
@@ -61,7 +61,7 @@ Pairing lets the app trust your Hub and lets the Hub know your phone. You do it 
      **Allow** again; if Android no longer asks, tap **Open app settings** and allow it there.
 3. Tap **Scan QR code** and allow the camera when asked. Point it at the QR code in the Terminal. That's it: the
    app opens its home screen. **Keep the white border around the QR code:** scan it from the whole Terminal
-   window, and don't crop it or zoom in so far that the border is cut off. (`sudo filament-kit pair` draws the code
+   window, and don't crop it or zoom in so far that the border is cut off. (`sudo spoolwarden pair` draws the code
    with its own white background, so a dark Terminal is fine.)
 
 **If the camera can't read the QR code** (a small or blurry Terminal window helps neither):
@@ -75,7 +75,7 @@ Pairing lets the app trust your Hub and lets the Hub know your phone. You do it 
    address.
 3. Under **Enter the pairing code**, type the 6-digit code.
 
-To pair another phone, run `sudo filament-kit pair` again: each code works once.
+To pair another phone, run `sudo spoolwarden pair` again: each code works once.
 
 ## What you see after pairing
 
@@ -87,9 +87,9 @@ browser, for what the app doesn't do: Features, keys, devices, backups; it asks 
 
 ## Updates
 
-The app updates itself from your Hub. When the Hub has a newer app (after `sudo filament-kit update`),
+The app updates itself from your Hub. When the Hub has a newer app (after `sudo spoolwarden update`),
 the home screen shows **Update available**. Tap **Tap to install**. The first time, Android asks to let
-filament-kit install apps: allow it, go back and tap **Tap to install** again.
+Spoolwarden install apps: allow it, go back and tap **Tap to install** again.
 
 ### Update refused
 
@@ -107,16 +107,16 @@ below, which happens when you install a downloaded file over an older copy signe
 - **No Hubs found, or "Connecting..." never finishes**:
   - Check that the phone is on the home Wi-Fi, not mobile data or a guest network.
   - On Android 17 or newer, check that **local network access** is allowed (app settings → permissions).
-    - Check that the Hub is running: `sudo filament-kit status` on the Hub.
+    - Check that the Hub is running: `sudo spoolwarden status` on the Hub.
   - If the Hub's firewall is on, see [Install the Hub, Common problems](install-server.md#common-problems).
   - Use **Enter the address instead** with the Hub's IP address instead of its name.
-- **The code has expired or was already used**: run `sudo filament-kit pair` again and use the new code.
+- **The code has expired or was already used**: run `sudo spoolwarden pair` again and use the new code.
 - **The Hub's certificate has changed**: the app shows the new fingerprint. This is expected after you
   reinstalled the Hub or moved it to another computer. **Trust the new certificate** keeps this pairing;
   **Pair again** pairs as above with a new code, and after a reinstall with `--purge` that is what you need, because
   the Hub no longer knows this phone. If you did not expect the change, another device may be answering at that
   address, and trusting it gives that device this phone's access.
-- **To remove a phone from the Hub**: `sudo filament-kit devices` lists paired phones;
-  `sudo filament-kit devices forget <device>` removes one.
+- **To remove a phone from the Hub**: `sudo spoolwarden devices` lists paired phones;
+  `sudo spoolwarden devices forget <device>` removes one.
 
 Next: [Using the app](android-app.md) (set up a printer, map its slots, add spools). More on everything else: [user guide](user-guide.md).

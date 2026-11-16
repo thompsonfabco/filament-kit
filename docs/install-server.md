@@ -1,6 +1,6 @@
 # Install the Hub
 
-This guide puts filament-kit on a Linux computer at home. That computer is the Hub: it keeps your spool list and talks to your
+This guide puts Spoolwarden on a Linux computer at home. That computer is the Hub: it keeps your spool list and talks to your
 printers. The app (Android), the web app on an iPhone and Slicer Sync all connect to it, so install it first.
 
 > **Beta.** What is still rough is in [Known gaps](known-gaps.md). If the one command does not suit you, use
@@ -15,8 +15,8 @@ printers. The app (Android), the web app on an iPhone and Slicer Sync all connec
 - **About 15 minutes.**
 - Optional: an **Anthropic API key** (it starts with `sk-ant-`), only if you want the Label Reader to read spool labels from photos.
   Without one you type spools in yourself, and you can add the key later.
-- Good to know: some Bambu printers accept filament-kit's commands only in **LAN Only** mode with **Developer Mode** on,
-  which turns off Bambu Cloud for that printer. filament-kit cannot tell in advance which printers need it; the app tells
+- Good to know: some Bambu printers accept Spoolwarden's commands only in **LAN Only** mode with **Developer Mode** on,
+  which turns off Bambu Cloud for that printer. Spoolwarden cannot tell in advance which printers need it; the app tells
   you if yours does.
 
 The computer must be on the **same network as your printers and phone**: the same router and Wi-Fi, not a
@@ -112,7 +112,7 @@ time. For a first install, pressing **Enter** at every question is fine.
    ```
 
    Press Enter for yes. The defaults are **Sealed stock**, **Rack 1**, **Storage box** and **Overflow**. You can
-   rename them later in `sudo filament-kit config` under **Storage locations**.
+   rename them later in `sudo spoolwarden config` under **Storage locations**.
 
 5. **Anthropic API key**: only if you answered `y` to question 2. Paste the key and press Enter. Each character
    shows as a `*`.
@@ -144,7 +144,7 @@ The installer finishes with a status list, a QR code to download the app (Androi
 ==> Status
 OK   service spoolman active
 OK   service filament-kit active
-OK   filament-kit API answering at https://127.0.0.1:8710/api/info
+OK   Spoolwarden API answering at https://127.0.0.1:8710/api/info
 OK   Spoolman reachable at http://127.0.0.1:7912 (v0.27.0)
 OK   certificate present, fingerprint 7616...2eb8
 --   display name: my-server
@@ -158,7 +158,7 @@ It downloads filament-kit.apk from this server (https://192.0.2.10:8710/app.apk)
 kit's own certificate: continue, then open the file to install the app.
 Press Enter when the app is installed and you're ready to pair (or s to skip)
 
-==> Pair a phone: open the filament-kit app and scan this code
+==> Pair a phone: open the Spoolwarden app and scan this code
 (a large QR code)
 
 Certificate fingerprint (the phone asks for two groups of it):
@@ -166,7 +166,7 @@ Certificate fingerprint (the phone asks for two groups of it):
 Pairing code: 123456
 Expires at 10:07:30 (in 9 min)
 
-Done.   Spoolman: http://my-server.local:7912   Pair another phone: sudo filament-kit pair
+Done.   Spoolman: http://my-server.local:7912   Pair another phone: sudo spoolwarden pair
 
 Open https://my-server.local:8710/setup  (setup code: 1234-5678)
 ```
@@ -177,8 +177,8 @@ Open https://my-server.local:8710/setup  (setup code: 1234-5678)
   it with the phone's camera. The installer then waits. Press **Enter** when the app is installed to see the
   **pairing QR code and pairing code**: scan that one **inside the app**, not with the camera. Or type **s** to skip
   pairing. They expire after about 10 minutes. If you are not ready, type **s**; you can pair later from the Hub page
-  or with `sudo filament-kit pair`, which gives new ones. Without a terminal (a script) the app link is printed as text and
-  nothing waits; pair later with `sudo filament-kit pair`.
+  or with `sudo spoolwarden pair`, which gives new ones. Without a terminal (a script) the app link is printed as text and
+  nothing waits; pair later with `sudo spoolwarden pair`.
 - Typing a secret (the Access Code, the Anthropic key, the web passphrase) shows a `*` for each character.
 - **Spoolman**, where your spool list lives, opens in any web browser at home at the address on the `Done` line
   (`http://<computer name>.local:7912`).
@@ -196,7 +196,7 @@ Weigh Station, Tag Reader tokens, and switching Features on or off.
    name>.local:8710/setup`). It prints the **setup code** only when you are at a Terminal. To see them again:
 
    ```bash
-   sudo filament-kit setup-code
+   sudo spoolwarden setup-code
    ```
 
    The setup code is 8 digits, shown like `1234-5678`.
@@ -211,7 +211,7 @@ available from the internet, even when you turned on remote access.
 
 **A wrong code.** Five wrong codes from one device in 10 minutes lock that device out for a while. If wrong codes
 come in from many devices (30 in 10 minutes), everyone waits: 10 minutes, doubling each time up to 24 hours. Make
-a new code, which also clears the lock: `sudo filament-kit setup-code --new`. The old code stops working; computers
+a new code, which also clears the lock: `sudo spoolwarden setup-code --new`. The old code stops working; computers
 you trusted stay trusted (the command says so and how many), unless you add `--revoke-trusted`.
 
 **What the page can do.**
@@ -232,11 +232,11 @@ log (for example `setup: anthropic key replaced from 192.0.2.20`) without the va
 ### The sections (v0.4.3)
 
 From v0.4.3 the page has sections: **Overview**, **Features**, **Printers**, **Devices**, **Settings** and **Updates**
-(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.5.0 adds **Slicer presets** and **Logs**. **Flash a device** (between **Settings** and **Updates**) writes filament-kit's firmware to a Tag Reader or a Weigh Station display over USB ([the user guide](user-guide.md#flash-a-device)). The table above says what is on **Printers**,
+(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.5.0 adds **Slicer presets** and **Logs**. **Flash a device** (between **Settings** and **Updates**) writes Spoolwarden's firmware to a Tag Reader or a Weigh Station display over USB ([the user guide](user-guide.md#flash-a-device)). The table above says what is on **Printers**,
 **Devices** and **Settings**.
 
 - **Overview.** The installed version and Setup, with a note and a link to **Updates** when a newer release exists. Under
-  it are the same checks as `sudo filament-kit status`, each marked **OK**, **needs a look** or **note**, with a
+  it are the same checks as `sudo spoolwarden status`, each marked **OK**, **needs a look** or **note**, with a
   `Fix:` line for the ones that need a look and a **Make the fields** button where Spoolman is missing fields the
   Hub needs. **Still to do** lists what is missing: a setup code, printers, a paired phone, the Anthropic key (when the Label Reader's Cloud engine is on), the web passphrase (when Web access is on), each with a link to its tab. Addresses and
   serial numbers are hidden. Type the setup code to see them, and the Weigh Station's
@@ -246,7 +246,7 @@ From v0.4.3 the page has sections: **Overview**, **Features**, **Printers**, **D
   [use the web app on an iPhone](install-iphone-web-app.md) for the setup Safari needs.
 - **Features.** **Setup** buttons set a ready-made set of Features. Pick one to see what will be on afterwards and what it
   asks for, then **Apply**. Weigh Station only has no Hub and so no Hub page: its button is greyed, and you set it on the
-  Weigh Station with `sudo filament-kit features setup weigh-station --hub <address>`. Below the Setups, Features are switched on or off
+  Weigh Station with `sudo spoolwarden features setup weigh-station --hub <address>`. Below the Setups, Features are switched on or off
   one by one, as before. The changes are applied in a background job with a live log (see below).
 - **Slicer presets.** The last preset build and any problems with it, **Build now**, and **Bring back deleted presets**. Each
   product line can have its Bambu Studio and Orca Slicer parents set, picked from what Slicer Sync reported. **Show what
@@ -265,7 +265,7 @@ From v0.4.3 the page has sections: **Overview**, **Features**, **Printers**, **D
   [user guide, Backups and restore](user-guide.md#backups-and-restore-v050).
 - **Updates.** Shows the installed and the latest release, when it was last checked, and the release notes of the
   latest. **Check now** asks GitHub for the latest release and needs the setup code; the page itself cannot reach GitHub, so
-  a background job does it. **Update to <version>** asks you to confirm: filament-kit stops while it installs and starts
+  a background job does it. **Update to <version>** asks you to confirm: Spoolwarden stops while it installs and starts
   again by itself. **Roll back to <version>** goes back to the release the current one replaced and keeps your
   settings and data. Either is greyed, with the reason shown, while a printer is mapping or loading.
 - **Logs** (v0.5.0). The last lines of one service of a Feature that is on, with the setup code, because logs hold
@@ -275,7 +275,7 @@ From v0.4.3 the page has sections: **Overview**, **Features**, **Printers**, **D
   addresses and serial numbers; **Show the whole log** (with the setup code) shows them.
 
 Everything the page does can still be done from the Terminal, as the other sections of this guide describe.
-`sudo filament-kit features apply --no-pair` applies Feature changes without the pairing screen at the end (the page
+`sudo spoolwarden features apply --no-pair` applies Feature changes without the pairing screen at the end (the page
 uses it).
 
 ## After the install
@@ -284,7 +284,7 @@ uses it).
    [use the web app on an iPhone](install-iphone-web-app.md) (any phone browser; it needs extra setup).
 2. **Printer:** the Hub finds Bambu Lab printers on your network. Open **Printers** in the app and type each
    printer's Access Code (shown on the printer's screen). Steps:
-   [Set up a printer](android-app.md#2-set-up-a-printer). To add one by hand: `sudo filament-kit printer add`. More: [user guide, Bambu Lab printers](user-guide.md#bambu-lab-printers).
+   [Set up a printer](android-app.md#2-set-up-a-printer). To add one by hand: `sudo spoolwarden printer add`. More: [user guide, Bambu Lab printers](user-guide.md#bambu-lab-printers).
 3. **Slots:** [map the printer's slots](android-app.md#map-slots-needed-before-filament-use-is-taken-off-spools), so that
    filament used in a print is taken off the right spools, then
    [load a spool](android-app.md#load-and-unload-a-spool).
@@ -292,10 +292,10 @@ uses it).
 
 ## Change what is installed
 
-filament-kit is made of parts called **Features**. To see or change them:
+Spoolwarden is made of parts called **Features**. To see or change them:
 
 ```bash
-sudo filament-kit features menu
+sudo spoolwarden features menu
 ```
 
 A checklist appears. Each line says what the Feature needs:
@@ -314,24 +314,24 @@ Move with **Up/Down** (or `k`/`j`; **Home**, **End**, **PgUp**, **PgDn** too) an
 switch a Feature on or off. What it needs is switched on too, and switching one off switches off whatever needs it; the
 bottom lines show the row's needs, what the last key did, and the keys. The letters `h`, `w` and `b` pick the
 Hub, Weigh Station only or Hub with Weigh Station Setup. Press `s` to apply (Enter never applies), or `q` or **Esc** to cancel (nothing changes). Then
-answer any question it asks (for example Web access asks for its https address). filament-kit installs and starts what you turned on. Turning a Feature off never deletes its data.
+answer any question it asks (for example Web access asks for its https address). Spoolwarden installs and starts what you turned on. Turning a Feature off never deletes its data.
 
 Without a usable terminal (no terminal, `TERM` unset or `dumb`, or one smaller than 40 by 8) a numbered list
 appears instead: type a Feature's number (or several, like `9 10`) and press Enter to tick or untick it, `s` to apply, `q` to
 cancel.
 
-To use the Label Reader's Cloud engine later: in `sudo filament-kit config`, enter the API key under **Label Reader**, then run `sudo filament-kit features menu` and tick
+To use the Label Reader's Cloud engine later: in `sudo spoolwarden config`, enter the API key under **Label Reader**, then run `sudo spoolwarden features menu` and tick
 Label Reader: Cloud (Claude).
 
 ## Everyday commands
 
 | Command | What it does |
 |---|---|
-| `sudo filament-kit status` | Checks everything. A failing line has a `fix:` line under it. |
-| `sudo filament-kit pair` | New QR code and pairing code for another phone. |
-| `sudo filament-kit devices` | Lists paired phones and PCs; `sudo filament-kit devices forget <device>` removes one. |
-| `sudo filament-kit config` | Settings: display name, storage, API key, backups, addresses. |
-| `sudo filament-kit update` | Installs the newest release and keeps your data (`--check` only looks, `--rollback` goes back). |
+| `sudo spoolwarden status` | Checks everything. A failing line has a `fix:` line under it. |
+| `sudo spoolwarden pair` | New QR code and pairing code for another phone. |
+| `sudo spoolwarden devices` | Lists paired phones and PCs; `sudo spoolwarden devices forget <device>` removes one. |
+| `sudo spoolwarden config` | Settings: display name, storage, API key, backups, addresses. |
+| `sudo spoolwarden update` | Installs the newest release and keeps your data (`--check` only looks, `--rollback` goes back). |
 
 Every command is in the [user guide](user-guide.md#everyday-commands).
 
@@ -352,9 +352,9 @@ can't connect to it either. Two ways out:
 
   Then, in PowerShell, `wsl --shutdown`, and start Ubuntu again. The Linux side now shares the PC's network
   address: printers are discovered, and phones reach the Hub at the PC's name or IP address. If Windows
-  Firewall is on, allow filament-kit's ports through it (8710 for the app, 7912 for Spoolman, 5353 for `.local`
+  Firewall is on, allow Spoolwarden's ports through it (8710 for the app, 7912 for Spoolman, 5353 for `.local`
   names).
-- **Stay in NAT mode and add printers by hand**: `sudo filament-kit printer add`.
+- **Stay in NAT mode and add printers by hand**: `sudo spoolwarden printer add`.
   Phones still can't reach a NAT-mode Hub, so this only suits testing on the PC itself.
 
 Either way, the PC must stay on and awake for the Hub to answer.
@@ -369,42 +369,41 @@ Either way, the PC must stay on and awake for the Hub to answer.
 - **The install stops at "Installing system packages" for several minutes**: a new Ubuntu often installs its own
   updates in the background first. The installer waits up to 5 minutes for them. Let it run.
 - **A line in the status list starts with `FAIL`**: read the `fix:` line under it and do what it says, then run
-  `sudo filament-kit status` again.
+  `sudo spoolwarden status` again.
 - **The Hub page says "This Hub page only opens from the home network"** (v0.4.0): open it from a device on your
   home network, not from the internet or a guest network.
 - **The Hub page says "Open the Hub page by the Hub's own name or address"**: it does not list them (anyone
-  can see this page). `sudo filament-kit setup-code` shows its address; use the Hub's name or IP address, or add
+  can see this page). `sudo spoolwarden setup-code` shows its address; use the Hub's name or IP address, or add
   your name in Settings (Network and addresses: Names for this page).
   A local name of your own DNS (one word, `.local`, `.lan`, `.home.arpa`, or the network's own domain) that points at the Hub
   works without adding it.
-- **Locked out of the Hub page after wrong codes**: `sudo filament-kit setup-code --new` makes a new code and
+- **Locked out of the Hub page after wrong codes**: `sudo spoolwarden setup-code --new` makes a new code and
   clears the lock.
 - **The phone can't find the Hub**: the phone and the computer must be on the same Wi-Fi network. Type
   `hostname -I` on the computer to see its address. If you
   turned on Ubuntu's firewall (`ufw`), allow the app's port and name lookups:
   `sudo ufw allow 8710/tcp` and `sudo ufw allow 5353/udp`. For Spoolman in a browser, also `sudo ufw allow 7912/tcp`.
-- **`sudo filament-kit update` says a printer is mapping or loading**: it does nothing then. Try again when the
+- **`sudo spoolwarden update` says a printer is mapping or loading**: it does nothing then. Try again when the
   mapping or loading is done.
-- **`a Spoolman the kit did not install is in /opt/spoolman`**: filament-kit never replaces a Spoolman
-  it did not put there, and nothing was changed. To keep using that one, run `sudo filament-kit features off
-  spoolman` and set `spoolman_url` in `/etc/filament-kit/config.json` to its address. To let filament-kit replace the
+- **`a Spoolman the kit did not install is in /opt/spoolman`**: Spoolwarden never replaces a Spoolman
+  it did not put there, and nothing was changed. To keep using that one, run `sudo spoolwarden features off spoolman` and set `spoolman_url` in `/etc/filament-kit/config.json` to its address. To let Spoolwarden replace the
   Spoolman program (its database is not touched), run `sudo touch /opt/spoolman/.fk-installed` and the same command
   again.
 - **Printers don't show up**: the computer must be on the same network as the printers, and a firewall must allow
   UDP ports 2021 and 1990. A Hub inside WSL or a virtual machine with NAT networking can't see printers (see
-  [Running the Hub in WSL](#running-the-server-in-wsl)): add them by hand with `sudo filament-kit printer add`, with the name, IP address, serial number and Access Code from the printer's
+  [Running the Hub in WSL](#running-the-server-in-wsl)): add them by hand with `sudo spoolwarden printer add`, with the name, IP address, serial number and Access Code from the printer's
   screen.
-- **The pairing code expired**: run `sudo filament-kit pair` for a new one.
+- **The pairing code expired**: run `sudo spoolwarden pair` for a new one.
 
 ## Uninstall
 
 ```bash
-sudo filament-kit uninstall
+sudo spoolwarden uninstall
 ```
 
-This runs the uninstaller of the release copy filament-kit kept in `/opt/filament-kit/releases/`. It removes the
+This runs the uninstaller of the release copy Spoolwarden kept in `/opt/filament-kit/releases/`. It removes the
 programs and keeps your spools, settings and backups, so a later install picks up where you left off.
-`sudo filament-kit uninstall --purge` deletes those too; it asks you to type `purge` first. If there is no kept
+`sudo spoolwarden uninstall --purge` deletes those too; it asks you to type `purge` first. If there is no kept
 copy, it says where to download the release file; unpack it (`tar xzf filament-kit-<version>.tar.gz`) and run
 `sudo ./uninstall.sh` (or with `--purge`) in its folder instead. If you turned on remote
 access, nginx and certbot stay installed; remove them with `apt` if nothing else uses them.

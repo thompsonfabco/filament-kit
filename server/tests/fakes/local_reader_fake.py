@@ -1,4 +1,4 @@
-"""A stand-in for the local label reader service (filament-kit-vision's daemon; tests only, never real models), in the
+"""A stand-in for the local label reader service (spoolwarden-vision's daemon; tests only, never real models), in the
 forms of contract v1 (the module's docs/api-contract.md).
 
 One Starlette app, state in a dict the test changes:
@@ -43,13 +43,13 @@ def reply(confidence: float = 0.93, tier: str = "cpu", **item) -> dict:
             "items": [{**ITEM, "confidence": confidence, "color_name": "Grey", "color_family": "grey",
                        "field_confidence": {"vendor": 0.97, "material": 0.99, "color": confidence}, **item}],
             "questions": [],
-            "reader": {"service": "filament-kit-vision", "module_version": "0.1.0", "tier_used": tier,
+            "reader": {"service": "spoolwarden-vision", "module_version": "0.2.2", "tier_used": tier,
                        "escalated": False, "fallback_reason": None, "model": f"fake-{tier}", "latency_ms": 240.5},
-            "usage": {"model": f"filament-kit-vision/{tier}", "input_tokens": 0, "cached": 0, "output_tokens": 0}}
+            "usage": {"model": f"spoolwarden-vision/{tier}", "input_tokens": 0, "cached": 0, "output_tokens": 0}}
 
 
 def new_data() -> dict:
-    return {"health": {"service": "filament-kit-vision", "api_version": "1.0", "module_version": "0.1.0",
+    return {"health": {"service": "spoolwarden-vision", "api_version": "1.0", "module_version": "0.2.2",
                        "status": "ok", "default_tier": "auto", "revise": True, "auth_required": False,
                        "tiers": {"cpu": {"usable": True, "reason": None},
                                  "gpu": {"usable": False, "reason": "no CUDA device", "loaded": False}},
@@ -57,7 +57,8 @@ def new_data() -> dict:
             "health_status": 200, "read": reply(), "revise": reply(vendor="Polymaker", name="PolyLite PLA Grey"),
             "errors": [], "reads": [], "revises": [],
             "opt_in": True, "endpoint_configured": True, "queue": [], "next_id": 1, "token": None, "bodies": [],
-            "feedback_auth": [], "submits": [], "submit": None, "source_record": True, "accelerator": "cpu (fake)"}
+            "feedback_auth": [], "submits": [], "submit": None, "submit_state": {"api_version": "1.1", "status": "idle"},
+            "source_record": True, "accelerator": "cpu (fake)"}
 
 
 def capabilities(data: dict) -> dict:
@@ -175,6 +176,19 @@ def app(data: dict) -> Starlette:
                     z.writestr(f"{e['id']}_{n}.jpg", j)
         return Response(buf.getvalue(), media_type="application/zip")
 
+    async def feedback_image(request: Request):
+        if (r := _gate(request)):
+            return r
+        eid = request.path_params["entry_id"]
+        try:
+            idx = int(request.query_params.get("index", "0"))
+        except ValueError:
+            return _err(400, "bad_request")
+        entry = next((e for e in data["queue"] if e["id"] == eid), None)
+        if entry is None or idx < 0 or idx >= len(entry["jpegs"]):
+            return _err(404, "not_found")
+        return Response(entry["jpegs"][idx], media_type="image/jpeg")
+
     async def feedback_submit(request: Request):
         body = await request.json()
         data["submits"].append(body)
@@ -187,7 +201,13 @@ def app(data: dict) -> Starlette:
         if data["submit"]:
             return _err(*data["submit"])
         sent, data["queue"] = len(data["queue"]), []
-        return JSONResponse({"api_version": "1.1", "ok": True, "sent": sent})
+        data["submit_state"] = {"api_version": "1.1", "ok": True, "status": "ok", "sent": sent}
+        return JSONResponse({"api_version": "1.1", "accepted": True, "status": "running"}, status_code=202)
+
+    async def feedback_submit_status(request: Request):
+        if (r := _gate(request)):
+            return r
+        return JSONResponse(data["submit_state"])
 
     return Starlette(routes=[
         Route("/v1/health", health), Route("/v1/read", _post("read"), methods=["POST"]),
@@ -196,4 +216,6 @@ def app(data: dict) -> Starlette:
         Route("/v1/feedback", feedback_add, methods=["POST"]),
         Route("/v1/feedback/bundle.zip", feedback_bundle, methods=["GET"]),
         Route("/v1/feedback/submit", feedback_submit, methods=["POST"]),
+        Route("/v1/feedback/submit", feedback_submit_status, methods=["GET"]),
+        Route("/v1/feedback/{entry_id}/image", feedback_image, methods=["GET"]),
         Route("/v1/feedback/{entry_id}", feedback_delete, methods=["DELETE"])])

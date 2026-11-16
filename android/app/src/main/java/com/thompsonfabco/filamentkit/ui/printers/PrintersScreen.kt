@@ -31,11 +31,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -64,9 +69,14 @@ import com.thompsonfabco.filamentkit.ui.components.ScreenTopBarActions
 import com.thompsonfabco.filamentkit.ui.components.SpoolRing
 import com.thompsonfabco.filamentkit.ui.components.StatusKind
 import com.thompsonfabco.filamentkit.ui.components.StatusLabel
+import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
+import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.printersSummary
+import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
@@ -75,7 +85,9 @@ import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
+import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
+import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.components.TileField
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -94,8 +106,39 @@ fun PrintersScreen(
     modifier: Modifier = Modifier,
     /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
     onReplaceCode: (id: String) -> Unit = onOpen,
+    printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+    onSummary: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val resources = androidx.compose.ui.platform.LocalContext.current.resources
+    LaunchedEffect(state.loaded, state.printers) {
+        if (state.loaded) onSummary(printersSummary(state.printers, resources))
+    }
+    val presentation = rememberDetailPresentation()
+    val useCardDetail = presentation == DetailPresentation.Card && printerDetail != null
+    val useSheetDetail = presentation == DetailPresentation.Sheet && printerDetail != null
+    val usePaneDetail = presentation == DetailPresentation.Pane && printerDetail != null
+    var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var sheetPrinterId by rememberSaveable { mutableStateOf<String?>(null) }
+    val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
+    var returnFocusId by remember { mutableStateOf<String?>(null) }
+    val view = LocalView.current
+    LaunchedEffect(returnFocusId) {
+        val id = returnFocusId ?: return@LaunchedEffect
+        repeat(2) { withFrameNanos { } }
+        rowFocus[id]?.let { requestDetailFocus(it, view) }
+        returnFocusId = null
+    }
+    LaunchedEffect(presentation) {
+        if (presentation == DetailPresentation.Screen && printerDetail != null) {
+            val activeId = sheetPrinterId ?: expandedIds.lastOrNull()
+            if (activeId != null) {
+                sheetPrinterId = null
+                expandedIds = emptyList()
+                onOpen(activeId)
+            }
+        }
+    }
     LifecycleStartEffect(viewModel) {
         viewModel.refresh()
         onStopOrDispose { }
@@ -113,32 +156,74 @@ fun PrintersScreen(
     val offline = state.problem is Problem.Unreachable
     ScreenTopBarActions { Overflow(!offline, viewModel::refresh, viewModel::openFind, { viewModel.openAddKlipper() }) }
     // the progress line shows a refresh, so the pull gesture only starts one
-    PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = modifier.fillMaxSize()) {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
-            verticalArrangement = Arrangement.spacedBy(space.s3),
-        ) {
-            if (state.mismatch != null) HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
-            if (state.unauthorized) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-            ScreenState(
-                loaded = state.loaded,
-                loading = state.loading,
-                isEmpty = state.printers.isEmpty(),
-                empty = {
-                    SwEmptyState(
-                        icon = R.drawable.sw_ic_printer,
-                        title = stringResource(R.string.printers_empty_title),
-                        text = stringResource(R.string.printer_list_empty_text),
-                        primary = SwAction(stringResource(R.string.common_refresh), viewModel::refresh),
-                        secondary = if (offline) null else SwAction(stringResource(R.string.common_add_klipper_printer)) { viewModel.openAddKlipper() },
-                    )
-                },
-                error = state.problem?.takeUnless { offline }?.let { problemText(it) },
-                onTryAgain = viewModel::refresh,
-                offline = offline,
-                loadedSecondsAgo = (System.currentTimeMillis() - state.loadedAt).coerceAtLeast(0) / MS_PER_S,
+    val listBody: @Composable (Modifier) -> Unit = { listModifier ->
+        PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = listModifier.fillMaxSize()) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+                verticalArrangement = Arrangement.spacedBy(space.s3),
             ) {
-                PrinterLists(state, offline, onOpen, onReplaceCode, onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper)
+                if (state.mismatch != null) HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+                if (state.unauthorized) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+                ScreenState(
+                    loaded = state.loaded,
+                    loading = state.loading,
+                    isEmpty = state.printers.isEmpty(),
+                    empty = {
+                        SwEmptyState(
+                            icon = R.drawable.sw_ic_printer,
+                            title = stringResource(R.string.printers_empty_title),
+                            text = stringResource(R.string.printer_list_empty_text),
+                            primary = SwAction(stringResource(R.string.common_refresh), viewModel::refresh),
+                            secondary = if (offline) null else SwAction(stringResource(R.string.common_add_klipper_printer)) { viewModel.openAddKlipper() },
+                        )
+                    },
+                    error = state.problem?.takeUnless { offline }?.let { problemText(it) },
+                    onTryAgain = viewModel::refresh,
+                    offline = offline,
+                    loadedSecondsAgo = (System.currentTimeMillis() - state.loadedAt).coerceAtLeast(0) / MS_PER_S,
+                ) {
+                    PrinterLists(
+                        state, offline, onOpen, onReplaceCode,
+                        onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper,
+                        useCardDetail = useCardDetail,
+                        useSheetDetail = useSheetDetail || usePaneDetail,
+                        expandedIds = expandedIds,
+                        rowFocus = rowFocus,
+                        onToggleCard = { id -> expandedIds = if (id in expandedIds) expandedIds - id else expandedIds + id },
+                        onCloseCard = { id -> expandedIds = expandedIds - id; returnFocusId = id },
+                        onOpenSheet = { id -> sheetPrinterId = id },
+                        printerDetail = printerDetail,
+                    )
+                }
+            }
+        }
+    }
+    if (usePaneDetail && printerDetail != null) {
+        val openId = sheetPrinterId
+        val close = {
+            returnFocusId = openId
+            sheetPrinterId = null
+        }
+        SwPaneLayout(
+            hasSelection = openId != null,
+            emptyText = stringResource(R.string.detail_pane_empty_printer),
+            onClose = close,
+            modifier = modifier,
+            list = { listBody(Modifier) },
+            detail = { openId?.let { printerDetail(it, true, close) } },
+        )
+    } else {
+        listBody(modifier)
+        if (useSheetDetail) {
+            val openId = sheetPrinterId
+            if (openId != null && printerDetail != null) {
+                val close = {
+                    returnFocusId = openId
+                    sheetPrinterId = null
+                }
+                SwSheetDetail(onClose = close) {
+                    printerDetail(openId, true, close)
+                }
             }
         }
     }
@@ -176,17 +261,48 @@ internal fun ColumnScope.PrinterLists(
     onReplaceCode: (String) -> Unit,
     onAdd: (Printer) -> Unit,
     onAddKlipper: (host: String, port: Int) -> Unit,
+    useCardDetail: Boolean = false,
+    useSheetDetail: Boolean = false,
+    expandedIds: List<String> = emptyList(),
+    rowFocus: MutableMap<String, FocusRequester> = mutableMapOf(),
+    onToggleCard: (String) -> Unit = {},
+    onCloseCard: (String) -> Unit = {},
+    onOpenSheet: (String) -> Unit = {},
+    printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
     val space = SpoolwardenTheme.space
     val configured = state.configured
     if (configured.isNotEmpty()) {
+        val openOrToggle: (Printer) -> Unit = { p ->
+            when {
+                p.state == "wrong_code" -> onReplaceCode(p.id)
+                useCardDetail && printerDetail != null -> onToggleCard(p.id)
+                useSheetDetail && printerDetail != null -> onOpenSheet(p.id)
+                else -> onOpen(p.id)
+            }
+        }
         SwCollection(
             configured,
             tile = { _, p ->
-                PrinterTile(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
+                val requester = rowFocus.getOrPut(p.id) { FocusRequester() }
+                PrinterTile(p, state.swatches[p.id].orEmpty(), Modifier.focusRequester(requester)) { openOrToggle(p) }
+            },
+            isExpanded = if (useCardDetail && printerDetail != null) ({ it.id in expandedIds }) else null,
+            detail = if (useCardDetail && printerDetail != null) {
+                { _, p ->
+                    val close = { onCloseCard(p.id) }
+                    SwCardDetail(onClose = close) {
+                        printerDetail(p.id, true, close)
+                    }
+                }
+            } else {
+                null
             },
         ) { _, p ->
-            PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onReplaceCode(p.id) else onOpen(p.id) }
+            val requester = rowFocus.getOrPut(p.id) { FocusRequester() }
+            PrinterRow(p, state.swatches[p.id].orEmpty(), Modifier.focusRequester(requester)) {
+                openOrToggle(p)
+            }
         }
     }
     val found = state.found
@@ -244,12 +360,12 @@ private fun modelLine(p: Printer): String {
 }
 
 @Composable
-private fun PrinterRow(p: Printer, slots: List<SlotLook>, onClick: () -> Unit) {
+private fun PrinterRow(p: Printer, slots: List<SlotLook>, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val open = stringResource(R.string.a11y_action_open)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(onClickLabel = open, onClick = onClick)
+        modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(onClickLabel = open, onClick = onClick)
             .padding(space.s3),
         horizontalArrangement = Arrangement.spacedBy(space.s3),
         verticalAlignment = Alignment.CenterVertically,
@@ -287,7 +403,7 @@ internal const val SLOT_RING_TAG = "slot-ring"
  * status, the priority 1 field Slots with one small spool ring per slot, and "Open" the full width at the foot.
  */
 @Composable
-internal fun PrinterTile(p: Printer, slots: List<SlotLook>, onClick: () -> Unit) {
+internal fun PrinterTile(p: Printer, slots: List<SlotLook>, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val model = modelLine(p)
@@ -306,6 +422,7 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, onClick: () -> Unit)
         description = said,
         actionLabel = stringResource(R.string.a11y_action_open),
         onAction = onClick,
+        modifier = modifier,
         subtitle = model,
         status = { StatusLabel(kind, small = true) },
     ) {

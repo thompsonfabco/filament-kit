@@ -1,8 +1,8 @@
 If you enjoy what I do, consider supporting me! Every little bit means the world! https://ko-fi.com/thompsonfabco
 
-# filament-kit
+# Spoolwarden
 
-filament-kit keeps track of your 3D printer filament. It runs on a small computer at home, keeps every spool you
+Spoolwarden keeps track of your 3D printer filament. It runs on a small computer at home, keeps every spool you
 own in [Spoolman](https://github.com/Donkie/Spoolman), and connects those spools to your Bambu Lab printers: add
 a spool from your phone, load it into a printer slot, and the printer gets the right filament setting while the
 filament it uses comes off that spool. It also builds Slicer presets for every filament you own.
@@ -10,13 +10,15 @@ filament it uses comes off that spool. It also builds Slicer presets for every f
 The goal is a kit a normal user can set up without being a developer: one command installs it, a menu picks
 the Features you want and says what each one needs, AI is optional, every Bambu Lab printer is supported (Klipper
 printers work through Moonraker; Prusa printers are planned), the facts about printers live in data files you can correct yourself, and it
-can keep itself up to date. The whole of filament-kit is free software (GPL-3.0).
+can keep itself up to date. The whole of Spoolwarden is free software (GPL-3.0).
+
+Spoolwarden was called filament-kit until version 0.6.1; the command `filament-kit` still works and says so.
 
 ## What you need
 
 - A computer running **Ubuntu 24.04 or newer** on your home network that stays on (an old laptop or a mini PC).
 - An **Android phone** (Android 10 or newer), or an **iPhone** for the web app.
-- One or more **Bambu Lab printers** on the same network. filament-kit works without a printer too, as a spool list.
+- One or more **Bambu Lab printers** on the same network. Spoolwarden works without a printer too, as a spool list.
 - Optional: a Windows PC with Bambu Studio (for Slicer presets), an Anthropic API key (for the Label Reader's Cloud
   engine), a USB scale and a tag reader (for the Weigh Station).
 
@@ -55,7 +57,7 @@ Your spool list is also in any web browser at home, at `http://<computer name>.l
 the address). Spoolman has no sign-in, so it answers only this computer and your home network (by default
 `localhost`, `192.168.0.0/16` and `10.0.0.0/8`): anyone on those can open and edit it. The list is `spoolman.allow` in
 `/etc/filament-kit/config.json` (a list of networks; empty means this computer only). If you use Tailscale or Docker,
-or Spoolman runs on another machine, you may need to add that network, then run `sudo filament-kit features apply`. If something doesn't work, `sudo filament-kit status` on the Hub checks everything and says
+or Spoolman runs on another machine, you may need to add that network, then run `sudo spoolwarden features apply`. If something doesn't work, `sudo spoolwarden status` on the Hub checks everything and says
 what to do about a failing line.
 
 Everything else (every command, printers and slot mapping, Slicer presets, the Weigh Station, the Claude connector, remote
@@ -77,10 +79,10 @@ access) is in the **[user guide](docs/user-guide.md)**.
 <a id="modules"></a>
 ## Features
 
-filament-kit is made of Features. A **Setup** is a ready-made set: **Hub** (the default) is Spoolman, the Hub service,
+Spoolwarden is made of Features. A **Setup** is a ready-made set: **Hub** (the default) is Spoolman, the Hub service,
 printers, Slicer presets and backup; **Weigh Station only** is only the Weigh Station; **Hub with Weigh Station** is both. AI, web access,
 remote access, orders, the Filament Catalog and automatic updates are off until you turn them on. Change them any time with
-`sudo filament-kit features menu`: a checklist where each Feature says what it needs. Turning a Feature off never deletes its data.
+`sudo spoolwarden features menu`: a checklist where each Feature says what it needs. Turning a Feature off never deletes its data.
 
 | Feature | What it is | Needs |
 |---|---|---|
@@ -101,22 +103,22 @@ remote access, orders, the Filament Catalog and automatic updates are off until 
 
 ## The phone app
 
-On Android, install `filament-kit.apk` from the Releases page (Android 10 or newer), run `sudo filament-kit pair`
+On Android, install `filament-kit.apk` from the Releases page (Android 10 or newer), run `sudo spoolwarden pair`
 on the Hub and scan the QR code it prints: [Install the app](docs/install-android-app.md), then [Using the app](docs/android-app.md) for printers and spools. On an iPhone
 or in any phone browser, the `web` Feature (Web access) gives the same tasks as a web app you can put on the home screen:
-[Use the web app on an iPhone](docs/install-iphone-web-app.md). `sudo filament-kit devices` lists paired phones, and `sudo filament-kit devices forget <device>` removes one.
+[Use the web app on an iPhone](docs/install-iphone-web-app.md). `sudo spoolwarden devices` lists paired phones, and `sudo spoolwarden devices forget <device>` removes one.
 
 ## Pair your PC
 
 For Slicer presets in Bambu Studio: install `filament-kit-sync-setup-<version>.exe` from the Releases page on the
-Windows PC with Bambu Studio, run `sudo filament-kit pair --slicer-sync` on the Hub and paste the link it prints into
+Windows PC with Bambu Studio, run `sudo spoolwarden pair --slicer-sync` on the Hub and paste the link it prints into
 the setup's console. It keeps both stable and Beta Bambu Studio current (v0.4.0). Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide. On Linux, use
 `filament-kit-sync-linux-x86_64-<version>.tar.gz` instead: [Slicer Sync on Linux](docs/user-guide.md#pc-sync-on-linux).
 
 ## The reader
 
 A Tag Reader is a small ESP32-C3 box next to the printer: tap a spool's tag, turn the knob to a slot, and the spool is loaded
-there. It talks to the `web` Feature: make its token with `sudo filament-kit tag-reader new-token --name bench`. Its API and firmware build are in [reader/README.md](reader/README.md), and its parts and wiring in the
+there. It talks to the `web` Feature: make its token with `sudo spoolwarden tag-reader new-token --name bench`. Its API and firmware build are in [reader/README.md](reader/README.md), and its parts and wiring in the
 [hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/printer-station).
 
 ## Supported printers
@@ -132,25 +134,25 @@ bring new versions of it. To correct or add something yourself, see
 [Your own printer data](docs/user-guide.md#your-own-printer-data-override).
 
 Printers are found on the network (the computer must be on the same network segment; allow UDP 2021 and 1990 if
-it runs a firewall). Add one by hand with `sudo filament-kit printer add`. See
+it runs a firewall). Add one by hand with `sudo spoolwarden printer add`. See
 [Bambu Lab printers](docs/user-guide.md#bambu-lab-printers).
 
 ## Updates and rollback
 
-- `sudo filament-kit update --check`: says whether a newer release is out.
-- `sudo filament-kit update`: downloads it, checks its signature and hash as the installer does, and installs it.
+- `sudo spoolwarden update --check`: says whether a newer release is out.
+- `sudo spoolwarden update`: downloads it, checks its signature and hash as the installer does, and installs it.
   Your spools, settings and paired phones stay, and the version it replaced is kept. It does nothing while a
   printer is mapping slots or loading a spool. When the release carries a newer app (Android), paired phones
   offer it on their home screen.
-- `sudo filament-kit update --rollback`: goes back to that version.
-- `sudo filament-kit features on updates`: checks every day and installs on its own. Details:
+- `sudo spoolwarden update --rollback`: goes back to that version.
+- `sudo spoolwarden features on updates`: checks every day and installs on its own. Details:
   [Update](docs/user-guide.md#update).
 
 <a id="the-filament-library"></a>
 ## The Filament Catalog
 
 Published filament specs (temperatures, speeds) for Slicer presets. It is optional and nothing needs it: ask for it
-with `sudo filament-kit catalog update`, or turn on the `library` Feature to also check daily. See
+with `sudo spoolwarden catalog update`, or turn on the `library` Feature to also check daily. See
 [Filament Catalog updates](docs/user-guide.md#spec-library-updates).
 
 ## Where your data lives
@@ -166,7 +168,7 @@ with `sudo filament-kit catalog update`, or turn on the `library` Feature to als
 
 ## Uninstall
 
-`sudo filament-kit uninstall` removes the programs and keeps your spools, settings and backups;
+`sudo spoolwarden uninstall` removes the programs and keeps your spools, settings and backups;
 `--purge` deletes those too (it asks you to type `purge`). What stays behind, and what to do if there is no kept copy of the release: [Install the Hub, Uninstall](docs/install-server.md#uninstall).
 
 ## More
@@ -183,5 +185,5 @@ with `sudo filament-kit catalog update`, or turn on the `library` Feature to als
 - For contributors building the interfaces: [docs/design/](docs/design/README.md), the design system (names, tokens,
   components, every screen of the Hub page, web app, app and command line, accessibility rules, build order).
 
-filament-kit is GPL-3.0 (see [LICENSE](LICENSE)). What else a release contains or installs, and under what
+Spoolwarden is GPL-3.0 (see [LICENSE](LICENSE)). What else a release contains or installs, and under what
 terms: [THIRD-PARTY.md](THIRD-PARTY.md).
