@@ -394,7 +394,8 @@ def bridge_slots(kit, printer: str | None = None) -> dict:
         st = kit.get(printer_path(p["id"])).get("status") or {}
         slots = [{"slot": sl.get("label"), "unit": sl.get("unit"), "kind": sl.get("kind"), "type": sl.get("type"),
                   "color_hex": sl.get("color_hex"), "present": sl.get("present"),
-                  "feeding_now": bool(sl.get("active")), "spool": sl.get("spool")}
+                  "feeding_now": bool(sl.get("active")), "spool": sl.get("spool"),
+                  "pending": (sl.get("pending") or {}).get("text")}
                  for sl in status_slots(st)]
         out.append({"id": p["id"], "name": p.get("name"), "model": p.get("model"), "state": p.get("state"),
                     "printer_state": st.get("gcode_state"), "job": st.get("job") or None, "slots": slots})
@@ -415,6 +416,9 @@ def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str |
     res.update(printer=p["id"], slot=label)
     if dry_run:
         res["note"] = "dry run: nothing sent. Show the user, then call again with dry_run=false."
+    elif res.get("pending"):
+        res["note"] = (f"{res.get('message')}: nothing sent yet. It is set when the filament is in and read, "
+                       "up to 15 min; a newer assignment for the slot replaces it.")
     return res
 
 

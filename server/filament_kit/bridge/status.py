@@ -152,6 +152,11 @@ def _spool_view(s: dict) -> dict:
             'remaining_weight': s.get('remaining_weight')}
 
 
+def _rfid(t: dict) -> bool:
+    """The slot's spool carries an RFID tag the printer read (`tray_uuid` / `tag_uid` not all zeros)."""
+    return any(_s(t.get(k)).strip('0') for k in ('tray_uuid', 'tag_uid'))
+
+
 def _ams(p: dict, spools: list[dict], printer_name: str, lay) -> list[dict]:
     now = tray_now_tag(_d(p.get('ams')).get('tray_now'))
     by_location: dict[str, dict] = {}
@@ -172,7 +177,7 @@ def _ams(p: dict, spools: list[dict], printer_name: str, lay) -> list[dict]:
                           'type': _s(t.get('tray_type')), 'color_hex': _s(t.get('tray_color'))[:6],
                           'preset_id': _s(t.get('tray_info_idx')),
                           'active': now == f"{u.ams_id}:{sl.tray_id}",
-                          'present': sl.present, 'reading': sl.reading,
+                          'present': sl.present, 'reading': sl.reading, 'rfid': _rfid(t),
                           'spool': _spool_view(spool) if spool else None})
         units.append({'unit': u.ams_id, 'label': u.label, 'kind': u.kind, 'type_name': u.type_name,
                       'say': list(u.say), 'slots': slots})
@@ -200,7 +205,7 @@ def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updat
     `spools` are Spoolman spools; a slot shows the spool whose `location` is "<printer_name> – AMS <label>"
     (no join without a printer name). `updated` is when the last report arrived (unix seconds). `model` (code,
     name or None = generic) picks the externals' labels, unit types and the presence layout (`layout.build`).
-    Additive fields: unit `type_name`, `say`; slot `say`, `present`, `reading` (None = unknown), `preset_id` (the
+    Additive fields: unit `type_name`, `say`; slot `say`, `present`, `reading` (None = unknown), `rfid` (the spool's own RFID tag was read), `preset_id` (the
     slot's `tray_info_idx`; the reader's queue checks with it that a setting stuck); `presence`
     ("bits" | "tray_type") and `notes` (what is unknown about this printer)."""
     p = _d(report)

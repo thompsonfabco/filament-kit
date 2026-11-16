@@ -26,7 +26,10 @@ slot when filament goes in);
 the preset is checked with a dry run, then the tap waits in LoadQueue (memory only, QUEUE_TTL 900 s) until the slot
 is present and read, SETTLE 3 s more, is sent, and VERIFY_AFTER 4 s later must show the preset (`preset_id`, type),
 else it is sent again, MAX_TRIES 3 in all. A direct set of a slot replaces its queued tap. An unknown presence
-(`present` null) is sent directly, as the scanner did when its state was unknown. A refusal that will not change
+(`present` null) counts as not loaded and queues too (an external holder has no sensor and is set at once). Once
+the preset shows, the job keeps watching until QUEUE_TTL: a slot the AMS wipes later is set again (WIPES times at
+most); it ends when the filament is taken out, another setting is on the slot, or the slot's own RFID identifies
+the spool (never overridden). A refusal that will not change
 by waiting (write_refused, needs_developer_mode, no_preset, not_found) drops the job; a passing one (printer_busy,
 already_running, slot_in_use, unreachable, ...) keeps it waiting, logged only when the reason changes.
 
@@ -70,6 +73,7 @@ SCAN_WAIT = 4.0              # seconds from the start of a scan to its reply at 
 MIN_WAIT = 0.5               # the load gets at least this long, even when the lookups used up SCAN_WAIT
 QUEUE_TTL = 900              # seconds a tap on an empty slot waits for the filament
 SETTLE, VERIFY_AFTER, MAX_TRIES = 3, 4, 3
+WIPES = 3                    # times a wiped slot is set again after it was applied
 POLL = 2.0                   # seconds between queue checks
 WAIT_POLL = 10.0             # seconds between sends of a job whose last send was refused (busy, unreachable ...)
 # kit refusals that waiting does not change: the queued tap is dropped (others keep it waiting)
@@ -97,6 +101,8 @@ class Job:
     preset: dict | None = None
     waiting: str | None = None        # why the last send was refused (logged when it changes)
     tried: float = 0.0                # when a send was last attempted (refused or not)
+    applied: bool = False             # the printer shows the preset; the job keeps watching for a later wipe
+    wipes: int = 0                    # times the slot was wiped after it was applied
 
 
 class LoadQueue:
@@ -181,17 +187,40 @@ class LoadQueue:
         s = next((s for s in slots.status_slots(view.get("status") or {}) if s.get("label") == label), None)
         return s if s is not None and s.get("present") is not None else None
 
+    def _watch(self, key, job: Job, st: dict) -> None:
+        """After the preset showed: set it again when the AMS wipes the slot (present, no type); end when the
+        filament is taken out or another setting is on the slot."""
+        if st.get("present") is False:
+            return self._done(key, job, "dropped, the filament was taken out")
+        if st.get("reading"):
+            return
+        if st.get("type"):
+            p = job.preset or {}
+            if st.get("preset_id") != p.get("filament_id") or st.get("type") != p.get("filament_type"):
+                self._done(key, job, f"dropped, another setting is on the slot ({st.get('type')!r})")
+            return
+        job.wipes += 1
+        if job.wipes > WIPES:
+            return self._done(key, job, f"dropped, the slot was wiped {WIPES} times after it was set")
+        log.info("queued %s %s spool %s: the slot was wiped, setting it again", key[0], key[1], job.spool_id)
+        job.applied, job.seen, job.sent, job.tries = False, None, 0.0, 0
+
     def _process(self, key, job: Job) -> None:
         printer, label = key
         now = self.clock()
         if now - job.at > QUEUE_TTL:
-            return self._done(key, job, "expired, the filament was never loaded")
+            return self._done(key, job, "dropped, the watch ended" if job.applied
+                              else "dropped, the filament was not loaded within 15 min")
         if job.waiting and now - job.tried < WAIT_POLL:
             return                             # a refused send: back off (no kit call every POLL seconds)
         kit = self.kit_fn()
         st = self._slot(kit, printer, label)
         if st is None:
             return
+        if st.get("rfid"):
+            return self._done(key, job, "dropped, the loaded spool's own RFID identifies it (not overridden)")
+        if job.applied:
+            return self._watch(key, job, st)
         if not st.get("present") or st.get("reading"):
             job.seen = None
             return
@@ -202,7 +231,9 @@ class LoadQueue:
             return
         p = job.preset or {}
         if job.sent and p and st.get("type") == p.get("filament_type") and st.get("preset_id") == p.get("filament_id"):
-            return self._done(key, job, f"set to {p.get('name')} after loading")
+            job.applied = True                 # keep watching: the AMS may still wipe the slot after this
+            return log.info("applied %s %s spool %s: set to %s after loading", key[0], key[1], job.spool_id,
+                            p.get("name"))
         if job.tries >= MAX_TRIES:
             return self._done(key, job, f"the printer did not keep the setting after {MAX_TRIES} tries (slot shows "
                                         f"{st.get('type')!r} {st.get('preset_id')!r})")
@@ -439,7 +470,7 @@ class Reader:
         cur = next((s for s in found if s["label"] == label), {})
         path = slots.load_path(printer, label)
         load = {"spool_id": int(sp["id"]), "dry_run": True}
-        if cur.get("present") is False or cur.get("reading") is True:
+        if cur.get("reading") is True or (cur.get("present") is not True and cur.get("kind") != "ext"):
             r = kit.post(path, load)                       # the preset check; nothing is sent
             preset = (r or {}).get("preset") or {}
             extra = {"filament": name, "preset": preset.get("name"), "slot": label}
@@ -447,7 +478,7 @@ class Reader:
             if dry:
                 return reply(200, "queued", msg, dry_run=True, **extra)
             self.queue.add(printer, label, int(sp["id"]), preset or None)
-            log.info("queued %s %s spool %s until the filament is loaded", _safe(printer), label, sp["id"])
+            log.info("pending %s %s spool %s: waiting for the filament to load", _safe(printer), label, sp["id"])
             return reply(200, "queued", msg, **extra)
         if dry:
             r = kit.post(path, load)

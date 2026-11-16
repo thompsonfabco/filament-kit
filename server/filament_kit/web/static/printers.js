@@ -160,7 +160,7 @@ function printersTab() {
       const rows = (u.slots || []).map((sl) => {
         const sp = sl.spool;
         const col = HEX.test(sl.color_hex || "") ? "#" + sl.color_hex : "transparent";
-        const state = sl.present === false ? "empty" : sl.reading ? "reading" : "";
+        const state = sl.pending ? sl.pending.text : sl.present === false ? "empty" : sl.reading ? "reading" : "";
         const sw = h("span", { class: "sw" });
         sw.style.background = col;      // CSSOM, not a style attribute (the CSP allows no inline style)
         return h("div", { class: "slot" + (sl.active ? " active" : "") },
