@@ -258,16 +258,21 @@ function pairCard() {
     const unpair = d.built_in ? null : SW.btn(SW.t("devices_unpair"), { cls: "btn--ghost", name: SW.t("devices_unpair_named", { name: d.name }), action: "unpair",
       run: () => asking(at, `devices/${encodeURIComponent(d.id)}/revoke`, destroy("devices_unpair_title", "devices_unpair_body", "devices_unpair", { name: d.name }),
         undefined, () => say(at, SW.t("devices_unpaired", { name: d.name }), true)) });
-    return devRow(d.id, at, 4,
+    return devRow(d.id, at, 5,
       devCell("title", 1, null, h("span", { class: "devices__name", textContent: d.name }),
-        d.built_in ? [" ", SW.status("note", { text: SW.t("devices_built_in"), small: true }), h("span", { class: "coll__sub muted", textContent: SW.t("devices_built_in_line") })] : null),
+        d.built_in ? [" ", SW.status("note", { text: SW.t("devices_built_in"), small: true }), h("span", { class: "coll__sub muted", textContent: SW.t("devices_built_in_line") })] : null,
+        d.type === "station" ? h("span", { class: "coll__sub muted", textContent: SW.t("devices_type_station") }) : null),
       devCell("paired", 2, SW.t("devices_col_paired"), d.paired || SW.t("common_unknown")),
-      devCell("last_seen", 1, SW.t("devices_col_last_seen"), d.last_seen || SW.t("common_never")),
+      // a station only calls the Hub when it is used, so its time is its last intake, and the answer beside it says whether it is up
+      devCell("last_seen", 1, SW.t("devices_col_last_seen"), !d.last_seen ? SW.t("common_never")
+        : d.type === "station" ? SW.t("devices_last_intake", { time: d.last_seen }) : d.last_seen),
+      devCell("status", 1, SW.t("devices_col_status"), d.reachable === true ? SW.status("ok", { text: SW.t("devices_reach_ok"), small: true })
+        : d.reachable === false ? SW.status("offline", { text: SW.t("devices_reach_down"), small: true }) : null),
       devCell("actions", 1, null, h("div", { class: "actions" }, unpair)));
   });
   return card(SW.t("devices_paired_title"), box, S.devices.length
     ? devTable("coll--paired", SW.t("devices_paired_title"), [devHead("title", SW.t("devices_col_device")), devHead("paired", SW.t("devices_col_paired"), 2),
-      devHead("last_seen", SW.t("devices_col_last_seen"), 1), devActionsHead()], rows)
+      devHead("last_seen", SW.t("devices_col_last_seen"), 1), devHead("status", SW.t("devices_col_status"), 1), devActionsHead()], rows)
     : SW.empty({ icon: "devices", title: SW.t("devices_empty"), level: 3 }));
 }
 

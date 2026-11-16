@@ -66,6 +66,7 @@ from starlette.routing import Route
 
 from . import __version__, config, hostaddr, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
 from .bridge import registry
+from .station_client import station_reach
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
 
 log = logging.getLogger(__name__)
@@ -590,9 +591,7 @@ class SetupPage:
             "printers": {"on": bool(self.families), "bambu": "bambu" in self.families,
                          "klipper": "klipper" in self.families, "list": self._printer_rows()},
             "readers": {"list": readers, "error": readers_error},
-            "devices": [{"id": d["id"], "name": d["name"], "paired": _fmt_time(d["paired"]),
-                         "last_seen": _fmt_time(d["last_seen"]), "built_in": d["name"] in BUILT_IN_DEVICES}
-                        for d in pairing.devices()],
+            "devices": self._device_rows(cfg),
             # the public address is owner data (`redact` hides its host): this answers without the code, so only that it is set
             "web": {"public_set": bool((cfg.get("web") or {}).get("public_url"))},
             "station": {"url": (cfg.get("station") or {}).get("url")},
@@ -602,6 +601,15 @@ class SetupPage:
             # the Label Reader's Cloud reads in the last 24 h and the limit (the same count as the Overview's check)
             "cloud_reads": {"used": cli._reads_today(), "limit": cfg["reads_per_day"]},
         }
+
+    def _device_rows(self, cfg: dict) -> list[dict]:
+        """The paired devices: `type` ("station" for a Weigh Station, also an old pairing), `reachable` (does the station
+        answer at its address; None when that is not known), so an idle station does not look dead."""
+        devs = pairing.devices()
+        reach = station_reach(devs, (cfg.get("station") or {}).get("url"))
+        return [{"id": d["id"], "name": d["name"], "type": d.get("type"), "paired": _fmt_time(d["paired"]),
+                 "last_seen": _fmt_time(d["last_seen"]), "reachable": reach.get(d["id"]),
+                 "built_in": d["name"] in BUILT_IN_DEVICES} for d in devs]
 
     def _state(self) -> dict:
         from .setup_console import summaries

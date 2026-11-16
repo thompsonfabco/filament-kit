@@ -54,3 +54,27 @@ class StationClient:
     def _fail(self) -> None:
         with self._lock:
             self._failed_at = time.monotonic()
+
+
+REACH_KEEP = 30         # seconds a reachability answer is reused: the Hub page and `devices` must not wait on a dead station each time
+_reach: dict[str, tuple[float, bool]] = {}
+
+
+def station_reach(devs: list[dict], url: str | None) -> dict[str, bool]:
+    """{device id: does the Weigh Station answer at `url`} for the one station pairing. A station only calls the Hub when
+    someone uses it, so "last seen" alone makes an idle one look dead; this asks it instead (its `GET /state`, which every
+    station version has). Empty when no station address is set or the station pairing is not exactly one (which
+    pairing the address belongs to would be a guess)."""
+    ids = [d["id"] for d in devs if d.get("type") == "station"]
+    if not url or len(ids) != 1:
+        return {}
+    now = time.monotonic()
+    hit = _reach.get(url)
+    if hit is None or now - hit[0] > REACH_KEEP:
+        try:
+            StationClient(url, timeout=2, backoff=0).state()
+            hit = (now, True)
+        except StationUnreachable:
+            hit = (now, False)
+        _reach[url] = hit
+    return {ids[0]: hit[1]}

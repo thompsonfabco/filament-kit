@@ -656,7 +656,10 @@
     <string name="devices_col_device">Device</string>
     <string name="devices_col_last_seen">Last seen</string>
     <string name="devices_col_paired">Paired</string>
+    <string name="devices_col_status">Status</string>
     <string name="devices_empty">Nothing paired yet. Pair a phone to add spools from it.</string>
+    <!-- 1=time -->
+    <string name="devices_last_intake">%1$s (last intake)</string>
     <string name="devices_link_station">Link a Weigh Station</string>
     <string name="devices_link_sync">Link Slicer Sync</string>
     <!-- 1=count -->
@@ -691,6 +694,8 @@
     <string name="devices_pair_station_here">Pair the Weigh Station on this Hub</string>
     <string name="devices_pair_waiting">Waiting for the device…</string>
     <string name="devices_paired_title">Paired devices</string>
+    <string name="devices_reach_down">Not answering</string>
+    <string name="devices_reach_ok">Answering</string>
     <string name="devices_readers_col_id">ID</string>
     <string name="devices_readers_col_made">Made</string>
     <string name="common_col_id">ID</string>
@@ -768,6 +773,7 @@
     <string name="devices_trusted_this">This computer is trusted (%1$s).</string>
     <string name="devices_trusted_this_tag">(this computer)</string>
     <string name="devices_trusted_title">Trusted computers</string>
+    <string name="devices_type_station">Weigh Station</string>
     <string name="devices_unpair">Unpair</string>
     <string name="devices_unpair_body">It can no longer reach the Hub until it is paired again.</string>
     <!-- 1=name -->

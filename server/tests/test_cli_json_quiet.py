@@ -126,7 +126,7 @@ def test_reader_tokens_json_is_the_hubs_list(capsys):
 def test_the_devices_list_is_the_hubs_shape_with_iso_times(capsys, monkeypatch, tmp_path):
     _pair_device(monkeypatch, tmp_path)
     got = doc(run(capsys, ["unpair", "--json"])[1])
-    assert set(got[0]) == {"id", "name", "paired", "last_seen", "built_in"}
+    assert set(got[0]) == {"id", "name", "type", "paired", "last_seen", "reachable", "built_in"}
     assert got[0]["id"] == "d1" and got[0]["built_in"] is False and got[0]["last_seen"] is None
     assert got[0]["paired"][:4] == "2025" and got[0]["paired"][-6] in "+-" or got[0]["paired"].endswith("Z")
 
