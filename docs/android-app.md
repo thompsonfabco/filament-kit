@@ -18,7 +18,7 @@ the bottom shows the app's version and the Hub's.
 1. On the Hub, in a Terminal:
 
    ```bash
-   sudo filament-kit pair
+   sudo spoolwarden pair
    ```
 
    It prints a QR code, the Hub's certificate fingerprint and a 6-digit code, good for about 10 minutes. (The
@@ -43,15 +43,15 @@ the bottom shows the app's version and the Hub's.
    **It matches**. If they differ, tap **It does not match** and stop.
 3. Type the **6-digit code** from the Terminal.
 
-**If it fails:** the code works once and expires; run `sudo filament-kit pair` again for a new one. Other
+**If it fails:** the code works once and expires; run `sudo spoolwarden pair` again for a new one. Other
 problems are in [Install the app](install-android-app.md#common-problems).
 
 <img src="images/android-pair-fingerprint.png" width="240" alt="Check the Hub's fingerprint: the address and full fingerprint, with It matches and It does not match">
 
 **Unpair or pair again.** On the phone: **Settings** shows the Hub's name, address and certificate fingerprint.
 **Forget this Hub** (it asks to confirm; the spools stay on the Hub) unpairs this phone, and then you pair again
-as above. **Pair again** does it in one step. On the Hub, `sudo filament-kit devices`
-lists paired phones and `sudo filament-kit devices forget <device>` removes one; that phone is then asked to pair again. If the
+as above. **Pair again** does it in one step. On the Hub, `sudo spoolwarden devices`
+lists paired phones and `sudo spoolwarden devices forget <device>` removes one; that phone is then asked to pair again. If the
 app shows **The Hub's certificate has changed**, it lists the new fingerprint, which you can compare with the one shown with a pairing code on the Hub. Tap
 **Trust the new certificate** to keep this pairing, or **Pair again** to pair with a new code. If you didn't reinstall or move the Hub, another
 device may be answering at that address, and trusting it gives that device this phone's access. If the Hub no
@@ -92,7 +92,7 @@ You need a Bambu Lab printer on the same network as the Hub, switched on.
   with its Access Code; if not, check the printer's address first.
 - The camera needs **LAN Mode Liveview** switched on in the same printer menu.
 
-**Printer not in the list at all?** Add it from the Hub instead: `sudo filament-kit printer add`, with its name, IP address, serial number and Access Code. (A Hub in WSL or a virtual machine
+**Printer not in the list at all?** Add it from the Hub instead: `sudo spoolwarden printer add`, with its name, IP address, serial number and Access Code. (A Hub in WSL or a virtual machine
 behind NAT can't see printers; see [Running the Hub in WSL](install-server.md#running-the-server-in-wsl).)
 
 **Change or remove a printer:** at the bottom of a printer's screen, **Printer settings** has **Rename**, **Change
@@ -151,14 +151,14 @@ The printer must be connected and not printing. The app names one slot at a time
 
 At the end the app asks whether to share the map in a printer report; **Yes, how do I share it?** says how, and
 nothing is sent unless you choose to. The same flow is on the Hub page, in the web app and with
-`sudo filament-kit printer map --by-loading <printer>`; see the
+`sudo spoolwarden printer map --by-loading <printer>`; see the
 [user guide](user-guide.md#when-mapping-fails-map-by-loading-filament-v050).
 
 ### Collect a report
 
 On a Bambu printer's screen, **Collect a report** asks the Hub for a short file about the printer and opens the
 phone's share sheet, so you can save it or send it to an app. The button is filled, with the Hub's reason above it,
-when a report would help (a printer filament-kit does not know yet, or a mapping that failed). The file holds no serial
+when a report would help (a printer Spoolwarden does not know yet, or a mapping that failed). The file holds no serial
 number, address, name or account id. Read it before you attach it to an issue. More:
 [user guide](user-guide.md#when-mapping-fails-map-by-loading-filament-v050).
 
@@ -185,7 +185,7 @@ number, address, name or account id. Read it before you attach it to an issue. M
    | **Name** | The product and colour, for example `PETG Grey`. |
    | **Line** | The product line (every colour of a line shares Slicer presets). |
    | **Material** | `PLA`, `PETG`, `PLA+`, ... |
-   | **Bambu Studio parent** | Which Bambu preset the filament's preset starts from. Leave blank to let filament-kit choose, or tap **Pick**. |
+   | **Bambu Studio parent** | Which Bambu preset the filament's preset starts from. Leave blank to let Spoolwarden choose, or tap **Pick**. |
    | **Colour (hex)** | Six hex digits, for example `808080`. |
    | **Spools** | How many identical spools. |
    | **Net weight (g)** | The filament weight on the label, for example 1000. |

@@ -1,7 +1,7 @@
 # Android end-to-end test (emulator + real server)
 
 `android/app/src/androidTest/java/com/thompsonfabco/filamentkit/EndToEndTest.kt` drives the whole app
-(`MainActivity`) against a real filament-kit server. It is skipped unless `fkPhase` is passed, so a plain
+(`MainActivity`) against a real Spoolwarden server. It is skipped unless `fkPhase` is passed, so a plain
 `./gradlew connectedDebugAndroidTest` runs only the other instrumented tests.
 
 ## Phases
@@ -74,13 +74,13 @@ $ANDROID_HOME/emulator/emulator.exe -avd fk_test -no-window -no-audio -no-snapsh
 MSYS_NO_PATHCONV=1 $ADB push <label photo>.jpg /data/local/tmp/label.jpg
 $ADB shell pm clear com.thompsonfabco.filamentkit      # main starts from an unpaired app (ignore an error if not installed)
 
-# one phase; CODE from: wsl -d Ubuntu --exec bash -lc 'sudo filament-kit pair'   ("Pairing code: NNNNNN")
+# one phase; CODE from: wsl -d Ubuntu --exec bash -lc 'sudo spoolwarden pair'   ("Pairing code: NNNNNN")
 P=-Pandroid.testInstrumentationRunnerArguments
 cd android
 MSYS_NO_PATHCONV=1 ./gradlew connectedDebugAndroidTest \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
   $P.class=com.thompsonfabco.filamentkit.EndToEndTest $P.fkPhase=main \
-  $P.fkCode=$CODE $P.fkHost=10.0.2.2 $P.fkFingerprint=<fingerprint from 'filament-kit status'> \
+  $P.fkCode=$CODE $P.fkHost=10.0.2.2 $P.fkFingerprint=<fingerprint from 'spoolwarden status'> \
   $P.fkPhoto=/data/local/tmp/label.jpg
 ```
 
@@ -90,15 +90,15 @@ During `main` (and `unpair`), run this next to it; it waits for `UNPAIR_NOW` and
 it started (set `BASE` to the device ids listed before the run):
 
 ```bash
-BASE="<ids from: wsl -d Ubuntu --exec bash -lc 'sudo filament-kit unpair'>"
-list() { wsl -d Ubuntu --exec bash -lc 'sudo filament-kit unpair' 2>/dev/null | awk '{print $1}' | sort; }
+BASE="<ids from: wsl -d Ubuntu --exec bash -lc 'sudo spoolwarden unpair'>"
+list() { wsl -d Ubuntu --exec bash -lc 'sudo spoolwarden unpair' 2>/dev/null | awk '{print $1}' | sort; }
 until $ADB logcat -d -s FkE2E:I | grep -q UNPAIR_NOW; do sleep 1; done
 new=$(comm -13 <(echo $BASE | tr ' ' '\n' | sort) <(list))
-wsl -d Ubuntu --exec bash -lc "sudo filament-kit unpair $new"
+wsl -d Ubuntu --exec bash -lc "sudo spoolwarden unpair $new"
 ```
 
 Then `fkPhase=cold` (after `$ADB shell am force-stop com.thompsonfabco.filamentkit`) and `fkPhase=forget` (new
-code). Afterwards unpair the device `forget` paired (`sudo filament-kit unpair <id>`). `main` adds one real spool to
+code). Afterwards unpair the device `forget` paired (`sudo spoolwarden unpair <id>`). `main` adds one real spool to
 the server's Spoolman each run (the test logs `ADDED spool=N tag=…`); it is left in place.
 
 The test's progress is in logcat under the tag `FkE2E`.

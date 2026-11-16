@@ -1,4 +1,4 @@
-# filament-kit user guide
+# Spoolwarden user guide
 
 The reference for everything the [README](../README.md) and the how-tos leave out: Setups, every command,
 printers and slot mapping, Slicer presets in Bambu Studio and Orca Slicer, the Weigh Station, the Claude connector and
@@ -13,9 +13,9 @@ lives.
 
 - A computer running **Ubuntu 24.04 or newer**, on your home network, that stays on.
 - Optional: an **Anthropic API key** (starts with `sk-ant-`), only for the Label Reader's Cloud engine. Without one you add
-  spools by hand; you can turn the Label Reader on later (`sudo filament-kit config` for the key, then
-  `sudo filament-kit features on label-reader`).
-- An Android phone (Android 10 or newer) for the filament-kit app, or an iPhone (or any phone) for the
+  spools by hand; you can turn the Label Reader on later (`sudo spoolwarden config` for the key, then
+  `sudo spoolwarden features on label-reader`).
+- An Android phone (Android 10 or newer) for the Spoolwarden app, or an iPhone (or any phone) for the
   web app.
 - Optional: a Windows PC with Bambu Studio (and, if you like, Orca Slicer), for Slicer presets.
 - Optional: a **Weigh Station**: a DYMO M10 USB scale and a PN532 tag reader on the same computer or on a second
@@ -42,24 +42,24 @@ Running it again later (an update) asks no questions and keeps the Setup you hav
 <a id="install-modes"></a>
 ## Setups
 
-filament-kit is made of parts called **Features** (Spoolman, the Hub service, the Label Reader, printers, Slicer presets, the Filament
+Spoolwarden is made of parts called **Features** (Spoolman, the Hub service, the Label Reader, printers, Slicer presets, the Filament
 Catalog, the nightly backup and the Weigh Station). A **Setup** is a ready-made set of them. The installer asks
 for the Setup on the first install (it calls the question "Install mode"):
 
 | Setup | What it installs | Use it when |
 |---|---|---|
-| **Hub** (1, the default) | Spoolman, the Hub service, printers, Slicer presets, backup (the Label Reader and the Filament Catalog are switched on when you want them) | One computer runs filament-kit. |
+| **Hub** (1, the default) | Spoolman, the Hub service, printers, Slicer presets, backup (the Label Reader and the Filament Catalog are switched on when you want them) | One computer runs Spoolwarden. |
 | **Weigh Station only** (2) | Only the Weigh Station (USB scale and tag reader) | The Weigh Station is a second computer and the Hub runs on another one. It asks for the **Hub's address**. |
 | **Hub with Weigh Station** (3) | Everything, Weigh Station included | The scale and reader are plugged into the Hub computer. |
-| **custom** (4) | One checklist of Features: type a number to switch one, and what it needs goes on too (what depends on it is listed when you switch it off). The same checklist is in `sudo filament-kit features menu` | You know which parts you want. |
+| **custom** (4) | One checklist of Features: type a number to switch one, and what it needs goes on too (what depends on it is listed when you switch it off). The same checklist is in `sudo spoolwarden features menu` | You know which parts you want. |
 
 The Label Reader's Cloud engine (the `ai_intake` Feature) is in no Setup: the installer asks about it on the first install, and
-`sudo filament-kit features on label-reader` turns it on later. Without it, spools are added by hand in the
+`sudo spoolwarden features on label-reader` turns it on later. Without it, spools are added by hand in the
 app and the web app, unless you use the [Label Reader on this Hub](#local-label-reading) instead. A Weigh Station only computer needs no API key, certificate or Spoolman.
 
 You can also give the Setup on the command line, so the installer asks no Setup question. `--mode` takes
 `hub`, `weigh-station` or `hub-with-weigh-station`; for `custom`, answer 4 at the question, give `--modules spoolman,server,printers` (what they need is added; for web, orders or a Weigh Station add the setting they need with `--set web.public_url=https://...`, `--set orders.file=PATH` or `--set station.allow=ADDRESS`), or switch Features afterwards with
-`sudo filament-kit features on <feature>` and `sudo filament-kit features off <feature>`:
+`sudo spoolwarden features on <feature>` and `sudo spoolwarden features off <feature>`:
 
 ```
 sudo ./install.sh --mode hub
@@ -87,7 +87,7 @@ the usual Hub, this sets up:
 
 - the Weigh Station service `filament-kit-station`, which reads the scale and the reader and answers on port 5003,
   for this computer only (`http://127.0.0.1:5003/state`);
-- the Hub's link to it, so `sudo filament-kit status` shows a line `station answering at
+- the Hub's link to it, so `sudo spoolwarden status` shows a line `station answering at
   http://127.0.0.1:5003`, and the app can read the scale and the last tag;
 - the computer changes the Weigh Station needs (see [Weigh Station](#intake-station)): brltty removed, ModemManager
   off, sleep and suspend off, audio unmuted, and a rule that lets the Weigh Station read the DYMO scale.
@@ -100,36 +100,36 @@ Until a tag has been read and the scale has been switched on, `status` shows `st
 
 Use either way. Both install what the new Setup needs, start it, and stop what it no longer uses:
 
-- `sudo filament-kit features menu`. Move with Up/Down (or
+- `sudo spoolwarden features menu`. Move with Up/Down (or
   `k`/`j`), switch a Feature on or off with Space, press `h`, `w` or `b` for the Hub, Weigh Station only or Hub with Weigh Station Setup,
   `s` to apply (Enter only switches a row), `q` or Esc to cancel. A Feature's needs are switched on with it, and switching one off switches off
   what needs it. Choosing Weigh Station only asks for the Hub's address. Without a usable
   terminal a numbered list runs instead: type numbers and Enter to switch rows, `s` applies, `q` cancels.
-- `sudo filament-kit features setup <setup>`, for example `sudo filament-kit features setup hub-with-weigh-station`. For the Weigh Station only
-  Setup, add the Hub's address: `sudo filament-kit features setup weigh-station --hub 192.0.2.10`.
+- `sudo spoolwarden features setup <setup>`, for example `sudo spoolwarden features setup hub-with-weigh-station`. For the Weigh Station only
+  Setup, add the Hub's address: `sudo spoolwarden features setup weigh-station --hub 192.0.2.10`.
   A Setup never turns `web`, `remote` or `orders` on or off: the ones you turned on stay on, unless the new Setup
   lacks a Feature they need (then they go off, and the command says so).
-- One Feature at a time: `sudo filament-kit features on <feature>` or `sudo filament-kit features off <feature>`,
-  for example `sudo filament-kit features off printers`. `sudo filament-kit features list` shows the names and
+- One Feature at a time: `sudo spoolwarden features on <feature>` or `sudo spoolwarden features off <feature>`,
+  for example `sudo spoolwarden features off printers`. `sudo spoolwarden features list` shows the names and
   which are on. At a terminal, turning one off offers to turn off what needs it too, and turning one on offers to turn
   on what it needs and asks for any setting those need; it says what else changed. A script gets a refusal that names them.
 
 Turning a Feature off **never deletes its data**. Spoolman's spools, settings and paired phones stay where they
-are and come back when you turn the Feature on again. Only `sudo filament-kit uninstall --purge` deletes data. While a
+are and come back when you turn the Feature on again. Only `sudo spoolwarden uninstall --purge` deletes data. While a
 Feature is off, the app gets the message that it is turned off for anything that needs it.
 
-The older names still work wherever a Setup name is asked for: `server` for `hub`, `station` for `weigh-station` and `all-in-one` for `hub-with-weigh-station` (`install.sh --mode`, `filament-kit features`). `filament-kit features setup` and `features on` take `--hub` beside `--server`. Nothing stored changes.
+The older names still work wherever a Setup name is asked for: `server` for `hub`, `station` for `weigh-station` and `all-in-one` for `hub-with-weigh-station` (`install.sh --mode`, `spoolwarden features`). `spoolwarden features setup` and `features on` take `--hub` beside `--server`. Nothing stored changes.
 
 ## Install the app and pair your phone
 
 Step by step: [Install the app](install-android-app.md). In short: install `filament-kit.apk` from the
-Releases page (or from your Hub at `https://<computer name>.local:8710/app.apk`), run `sudo filament-kit pair`
+Releases page (or from your Hub at `https://<computer name>.local:8710/app.apk`), run `sudo spoolwarden pair`
 on the Hub, and scan the QR code it prints, or pick the Hub in the app, compare the fingerprint, tap
 **It matches** and type the 6-digit code. The code expires after about 10 minutes and works once;
-`sudo filament-kit pair` makes a new one. The switch **Check the fingerprint when pairing by address** in the app's **Settings** is on by default. On Android 17 and newer the app needs **Local network** access.
+`sudo spoolwarden pair` makes a new one. The switch **Check the fingerprint when pairing by address** in the app's **Settings** is on by default. On Android 17 and newer the app needs **Local network** access.
 
-The app updates itself: after `sudo filament-kit update` to a release with a newer app, the home screen offers
-it. `sudo filament-kit devices` lists the paired phones; `sudo filament-kit devices forget <device>` removes one. Using the app (printers, adding spools by hand or from label photos): [Using the app](android-app.md).
+The app updates itself: after `sudo spoolwarden update` to a release with a newer app, the home screen offers
+it. `sudo spoolwarden devices` lists the paired phones; `sudo spoolwarden devices forget <device>` removes one. Using the app (printers, adding spools by hand or from label photos): [Using the app](android-app.md).
 
 No Android phone? The web app ([Use the web app on an iPhone](install-iphone-web-app.md)) does the same
 tasks in any phone browser.
@@ -138,7 +138,7 @@ tasks in any phone browser.
 
 Do this once, on the PC where you use Bambu Studio (Windows below; Linux in [Slicer Sync on Linux](#pc-sync-on-linux)). Slicer Sync sends your Bambu Studio filament
 list to the Hub and installs the Slicer presets the Hub builds. One Hub works with **one** Slicer Sync PC: the
-first PC that syncs is the one. To move to another PC, remove the first one with `sudo filament-kit devices forget <device>`
+first PC that syncs is the one. To move to another PC, remove the first one with `sudo spoolwarden devices forget <device>`
 (see [Everyday commands](#everyday-commands)); the next PC that syncs then starts fresh, like a first install.
 
 1. On the PC, download `filament-kit-sync-setup-<version>.exe` from the same GitHub Releases page and run it.
@@ -156,18 +156,18 @@ first PC that syncs is the one. To move to another PC, remove the first one with
 2. On the Ubuntu computer, run:
 
    ```
-      sudo filament-kit pair --slicer-sync
+      sudo spoolwarden pair --slicer-sync
    ```
 
    It prints a long link that starts with `fkit://pair?`, the certificate fingerprint and a 6-digit code.
-3. Click **Finish** in the setup with **Pair this PC with the filament-kit server now** ticked. A console window
-   opens. (Missed it? Start menu, **Pair filament-kit sync**.)
+3. Click **Finish** in the setup with **Pair this PC with the Hub now** ticked. A console window
+   opens. (Missed it? Start menu, **Pair Slicer Sync**.)
 4. In that console, paste the link and press Enter. (No link? Type the Hub's name or address instead. The
    window shows the Hub's certificate fingerprint. Check that it matches the one on the Ubuntu computer and
    type `y` to confirm it. Then it asks for the 6-digit code.) From then on the PC syncs every 10 minutes. While
    Bambu Studio is open it waits and tries again later (see [While Bambu Studio is open](#while-bambu-studio-is-open-v040)).
 
-The link and the code expire after about 10 minutes. If they do, run `sudo filament-kit pair --slicer-sync` again. Pairing again
+The link and the code expire after about 10 minutes. If they do, run `sudo spoolwarden pair --slicer-sync` again. Pairing again
 keeps the pairing that works until the new one is proven: a refused link changes nothing.
 
 ### Stable and Beta Bambu Studio (v0.4.0)
@@ -191,8 +191,8 @@ builds are made from them. The other folders receive every build too.
 
 **Slicer presets are never replaced unless you accept an update.** In every folder only **new** Slicer presets are added.
 
-- In the **primary**, the updates you accept with `sudo filament-kit presets accept-updates` are written.
-- In the **other folders**, an accepted update is written only over a preset filament-kit itself put there and that you have
+- In the **primary**, the updates you accept with `sudo spoolwarden presets accept-updates` are written.
+- In the **other folders**, an accepted update is written only over a preset Spoolwarden itself put there and that you have
   not changed. Your own Slicer presets there are never replaced. Same-name Slicer presets that differ from the build are kept and
   listed: one line per folder in the log, and `Kept, differ:` lines in `filament-kit-sync status`.
 - To take the build's copy in one of the other folders yourself, on the PC, with Bambu Studio closed:
@@ -226,7 +226,7 @@ Beta. Close Bambu Studio to let new Slicer presets in.
 
 You can see the wait: `filament-kit-sync status` shows `Waiting: for Bambu Studio to close since <date> (<n> runs
 skipped)`. After 24 hours the log line becomes a warning saying how long it has waited. The Hub is told too (at
-most once an hour): `sudo filament-kit status` and `sudo filament-kit presets status` show "Slicer Sync waiting for
+most once an hour): `sudo spoolwarden status` and `sudo spoolwarden presets status` show "Slicer Sync waiting for
 Bambu Studio to close since <date>", and so does the preset status in the app and Claude's connector. It is
 shown only for the PC that is paired as the Slicer Sync PC, and clears at the first sync after Studio closes.
 
@@ -239,19 +239,18 @@ Linux they are under `~/.local/share/filament-kit-sync`. To go back, close Bambu
 backup folder over the ones in the slicer's filament folder, and start Bambu Studio again.
 
 **Warning.** Slicer Sync runs exactly when Bambu Studio is closed, so it can run again between your closing Studio and
-your copy. Copy the files back quickly, or stop the sync first (Task Scheduler on Windows, `systemctl --user stop
-filament-kit-sync.timer` on Linux). The Hub still holds the newer build, so the restored Slicer presets show as
+your copy. Copy the files back quickly, or stop the sync first (Task Scheduler on Windows, `systemctl --user stop filament-kit-sync.timer` on Linux). The Hub still holds the newer build, so the restored Slicer presets show as
 "differing" there; they are not reverted on the Hub.
 
 **Unpair this PC.** `filament-kit-sync unpair` deletes the PC's token and settings and prints the PC's id. It does not
 turn off the scheduled sync, which keeps running every 10 minutes and logging that the PC is not paired. The Hub still
-counts this PC as the Slicer Sync PC, so also run `sudo filament-kit devices forget <device>` on the Ubuntu computer. Until you do, another
+counts this PC as the Slicer Sync PC, so also run `sudo spoolwarden devices forget <device>` on the Ubuntu computer. Until you do, another
 PC's sync is refused with "Other PC".
 
-**Remove the program on Windows.** **Uninstall filament-kit sync** (Start menu, or Windows Settings, Apps) removes the
+**Remove the program on Windows.** **Uninstall Spoolwarden Slicer Sync** (Start menu, or Windows Settings, Apps) removes the
 scheduled sync and the program's entry on your PATH. It keeps the sync's data (pairing token, settings, backups,
 log) in `%LOCALAPPDATA%\filament-kit-sync`, so a later install is still paired. Slicer presets already in the slicers stay. To
-leave the Hub for good, run `filament-kit-sync unpair` first and then `sudo filament-kit devices forget <device>`, as above.
+leave the Hub for good, run `filament-kit-sync unpair` first and then `sudo spoolwarden devices forget <device>`, as above.
 
 <a id="pc-sync-on-linux"></a>
 ### Slicer Sync on Linux
@@ -273,7 +272,7 @@ systemd user timer (`filament-kit-sync.timer`) that runs Slicer Sync a couple of
 minutes after that. If `~/.local/bin` is not on your PATH yet, log out and in again. Run the same `install.sh` again
 to update.
 
-**Pair.** On the Hub run `sudo filament-kit pair --slicer-sync`. On the PC run `filament-kit-sync pair` and paste the link
+**Pair.** On the Hub run `sudo spoolwarden pair --slicer-sync`. On the PC run `filament-kit-sync pair` and paste the link
 (or type the Hub address and the 6-digit code), as on Windows.
 
 **Status.** `filament-kit-sync status` shows the Hub, the Bambu Studio and Orca Slicer folders it found, the last run
@@ -285,7 +284,7 @@ to update.
 
 **Uninstall.** `~/.local/opt/filament-kit-sync/uninstall.sh` turns the timer off and removes the program. Your pairing
 token and settings stay in `~/.local/share/filament-kit-sync`, so a reinstall is still paired. Add `--purge` to delete
-them too, then run `sudo filament-kit devices forget <device>` on the Hub. Slicer presets already installed in the slicers stay.
+them too, then run `sudo spoolwarden devices forget <device>` on the Hub. Slicer presets already installed in the slicers stay.
 
 **Flatpak and AppImage.**
 
@@ -316,12 +315,12 @@ Access Codes, the web passphrase and Catalog token, pairing a phone, Slicer Sync
 tokens, and switching Features on or off. How to find the code, what it asks for, the lock-out after wrong codes
 and the full list: [Install the Hub, The Hub page](install-server.md#the-setup-page-v040).
 
-`sudo filament-kit setup-code` shows the page's address and its 8-digit setup code (at a Terminal);
-`sudo filament-kit setup-code --new` makes a new one. Viewing needs no code; every change does, unless the computer
+`sudo spoolwarden setup-code` shows the page's address and its 8-digit setup code (at a Terminal);
+`sudo spoolwarden setup-code --new` makes a new one. Viewing needs no code; every change does, unless the computer
 is trusted: after the code works once, the page offers **Trust this computer** (v0.4.3), and that browser then needs
 no code for 90 days after its last use (a question like "Roll back?" is still asked). **Devices** lists the trusted
 computers, with Rename, Revoke and Revoke all, and a switch that turns the feature off and forgets them all. A new
-setup code keeps trusted computers trusted; `sudo filament-kit setup-code --revoke-trusted` forgets them, alone or
+setup code keeps trusted computers trusted; `sudo spoolwarden setup-code --revoke-trusted` forgets them, alone or
 with `--new`.
 
 **Light, dark or system.** The page header has a switch with three choices: Light, Dark and System (the default, which follows your device). The choice is kept in that browser only.
@@ -330,7 +329,7 @@ with `--new`.
 
 ## Everyday commands
 
-Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for example `filament-kit status`). A command's own help (`-h`) says if it needs `sudo`.
+Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example `spoolwarden status`). A command's own help (`-h`) says if it needs `sudo`.
 
 | Command | What it does | Hub page place |
 | --- | --- | --- |
@@ -344,7 +343,7 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 | `printer rename <printer> <new name>` | Rename | Rename |
 | `printer address <printer> <address>` | Change address | Change address |
 | `printer access-code <printer>` | Replace the Access Code (Bambu) | Replace Access Code |
-| `printer api-key <printer> [--clear]` | Set, replace or clear the Moonraker API key (Klipper) | Set / Replace / Clear key |
+| `printer api-key <printer> [--clear]` | Set, replace or clear the Moonraker API key (Klipper) | Set Moonraker API key / Replace Moonraker API key / Clear Moonraker API key |
 | `printer lane-data <printer> auto\|on\|off` | Klipper lane data | Lane data |
 | `printer detect <printer>` | Detect model and slots (Klipper) | Detect model and slots |
 | `printer scan [--subnet CIDR]` | Find Klipper printers on the network | Find Klipper printers |
@@ -362,9 +361,9 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
 | `devices` (same as `devices list`) | Paired devices | Devices |
-| `devices forget <device>` | Unpair a device | Revoke |
-| `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |
-| `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this machine |
+| `devices forget <device>` | Unpair a device | Unpair |
+| `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link Slicer Sync / Link a Weigh Station |
+| `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this Hub |
 | `weigh-station flash-display` | Write the Weigh Station display firmware over USB | Flash a device |
 | `weigh-station pairing-state` | Paired, not paired or not checked yet | (none) |
 | `tag-reader list` | Tag Reader tokens | Devices, Tag Readers |
@@ -375,18 +374,19 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 | `presets build` | Build now | Build now |
 | `presets lines` | Filament lines and their parents | Product lines |
 | `presets set-parent <line> <parent> [--orca]` | Set the Bambu Studio or Orca Slicer parent | Set parent |
-| `presets restore-deleted` | Bring back presets deleted in Bambu Studio | Restore deleted presets |
-| `presets updates (--line ID \| --all)` | Show what would be accepted (changes nothing) | Show what would be accepted |
+| `presets restore-deleted` | Bring back presets deleted in Bambu Studio | Bring back deleted presets |
+| `presets updates (--line ID \| --all)` | Show what would be accepted (changes nothing) | Show what would change |
 | `presets accept-updates (--line ID \| --all)` | Accept updates (asks) | Accept these |
 | `features` (same as `features list`) | Features, on or off | Features |
 | `features menu [--numbered] [--raw]` | The Features checklist | Features |
 | `features on <feature> [--hub ADDRESS]` / `features off <feature>` | Switch one feature (`--hub` when switching on the Weigh Station without the Hub service) | Turn on / Turn off |
 | `features setup <setup> [--hub ADDRESS]` | Choose the setup | Setup |
-| `features apply [--no-pair]` | Apply the features again | Apply again |
+| `features apply [--no-pair]` | Apply the features again | Apply the features again |
 | `features units` | The service files the features need, one per line | (none) |
 | `config [--numbered]` | The settings menu | Settings |
 | `config show` | All settings, in menu order | Settings |
 | `config set <key> <value>` | Change one setting | Settings, one field |
+| `config theme [<theme>]` | Show or set the theme for new devices | Settings > Appearance > Theme for new devices |
 | `label-reader status` | Label Reader engines and their health | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
 | `catalog status` | Filament Catalog version and last check | Settings > Filament Catalog |
@@ -394,10 +394,10 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 | `catalog rollback` | Go back to the version before | Go back to the version before |
 | `catalog add <file \| ->` | Add your own entry | Add entry |
 | `catalog adopt <folder>` | Take over a catalog folder from an older install | (none) |
-| `catalog token [--remove]` | Set, replace or remove the catalog token | Catalog token |
+| `catalog token [--remove]` | Set, replace or remove the catalog token | Catalog token (optional) |
 | `backup create [--out DIR]` | Back up now | Back up now |
-| `backup list` | Backups on this Hub | Show the backups |
-| `backup keep <days>` | Keep nightly backups for N days | Keep nightly backups for N days |
+| `backup list` | Backups on this Hub | Backups on the Hub |
+| `backup keep <days>` | Keep nightly backups for N days | Keep nightly backups for |
 | `restore <zip> \| --uploaded` | Restore (asks for the typed word) | Restore |
 | `web status` | Access from outside: rows as in `status` | Settings > Network and addresses |
 | `web passphrase` | Set or replace the web passphrase | Web passphrase |
@@ -405,10 +405,10 @@ Run these in a Terminal on the Ubuntu computer, after `filament-kit` (for exampl
 | `remote get-certificate` | Get the public certificate now | Get the certificate |
 | `setup-code [--new] [--revoke-trusted]` | Hub page address and setup code | Setup code, Trusted computers |
 | `certificate` | Make the Hub's certificate if missing; print its fingerprint | (none) |
-| `spoolman fields` | Make the kit's extra fields in Spoolman | Overview, Make the fields |
+| `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |
 | `spoolman address [<url>]` | Show or change the Spoolman in use (checked before saving) | Settings > General, Spoolman address |
 | `update [--check \| --rollback] [--scheduled]` | Updates | Updates |
-| `uninstall [--purge]` | Remove filament-kit (asks) | Updates, footer line |
+| `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
 | `add` | Prints where spools are added | (none) |
 | `spool` | Prints where spools are opened, tagged and moved | (none) |
@@ -440,7 +440,7 @@ Your spool inventory (Spoolman) is also in a web browser on any computer at home
 ## Bambu Lab printers
 
 Klipper printers (through Moonraker) are a separate, opt-in Feature that is never part of a Setup: switch it on with
-`sudo filament-kit features on klipper`. See [Klipper printers](klipper.md) (v0.4.0). The rest of this section is about
+`sudo spoolwarden features on klipper`. See [Klipper printers](klipper.md) (v0.4.0). The rest of this section is about
 Bambu Lab printers.
 
 The Hub finds Bambu Lab printers by listening for the announcements they send on your home network. For
@@ -455,7 +455,7 @@ that to work:
   not receive the announcements (and phones can't reach it). In WSL, switch to mirrored networking
   (`networkingMode=mirrored` in `.wslconfig`; see [Running the Hub in WSL](install-server.md#running-the-server-in-wsl)).
   Otherwise add the printers by hand with **Add a printer** on the Hub page's Printers section (below), or with
-  `sudo filament-kit printer add`.
+  `sudo spoolwarden printer add`.
 
 A printer appears in the app once it has been seen on the network (or added by hand with its IP address or its name,
 which is kept as you typed it and looked up each time it is used); you then enter its Access Code in the app to set it up.
@@ -471,7 +471,7 @@ Use any of these ways:
 - In the app: open **Printers**. The printer must already be in the list (the Hub finds it on the network).
   Tap it, and type its **Access Code**. To add a Klipper printer, tap **Add a Klipper printer** at the end of the list
   (name, address, port; the API key, if it needs one, is set later from the printer's own screen).
-- On the Ubuntu computer: `sudo filament-kit printer add`. Enter the name, IP
+- On the Ubuntu computer: `sudo spoolwarden printer add`. Enter the name, IP
   address, serial number and Access Code.
 
 Then run **Map slots** (next section), and load spools into the printer from the app.
@@ -479,7 +479,7 @@ Then run **Map slots** (next section), and load spools into the printer from the
 ### Map slots
 
 Before the Hub takes filament off your spools in Spoolman, it has to learn how the printer numbers its AMS
-slots. **Map slots** in the app (or `sudo filament-kit printer map <printer>` on the Ubuntu computer) does that:
+slots. **Map slots** in the app (or `sudo spoolwarden printer map <printer>` on the Ubuntu computer) does that:
 
 - It briefly changes the colour of each AMS slot that holds filament, and of each external holder, to a test colour,
   checks which slot showed it, and puts every slot back as it was. An AMS slot that the printer reports as empty is
@@ -529,7 +529,7 @@ text: load them again (or fix their location in Spoolman) so filament use finds 
 
 If **Map slots** keeps failing, map the printer by hand. On the Hub page, open **Printers** and tap **Map by loading
 filament** next to the printer (it is also offered under a failed mapping). The web app's Printers section and the
-app's printer screen have the same button, and `sudo filament-kit printer map --by-loading <printer>` does it in a
+app's printer screen have the same button, and `sudo spoolwarden printer map --by-loading <printer>` does it in a
 terminal (it needs the running Hub). All four share one session per printer. The page names one slot at a time:
 
 1. It says, for example, "Load A2 to the nozzle, then wait." Load that slot on the printer's screen.
@@ -543,9 +543,9 @@ not report what is loaded gets a list instead: pick the slot, and the page recor
 Afterwards, loading spools into those slots works. Filament use comes off the spools only once **Map slots** has
 proven the printer's slot numbering; until then it is only logged, and the page says so. A later **Map slots** never
 changes a slot you confirmed: if it finds something else, it says so instead. The page asks you once whether to
-share the map in a printer report for other owners of the same model. filament-kit sends nothing itself: **Yes** says how
+share the map in a printer report for other owners of the same model. Spoolwarden sends nothing itself: **Yes** says how
 to make the report (**Collect a report** on the Hub page's Printers section, on the printer's screen in the
-app or in the web app, or `sudo filament-kit printer report <printer>`) and attach it to an issue.
+app or in the web app, or `sudo spoolwarden printer report <printer>`) and attach it to an issue.
 
 A Klipper printer has the same button: it names its tools or lanes, and you make each one active. See the Klipper
 guide.
@@ -557,7 +557,7 @@ something else may be answering at the printer's address: check the printer's IP
 **Backups and restore (v0.4.0).** The web unit runs as its own user, `filament-kit-web`, with its state in
 `/var/lib/filament-kit-web` (the Claude connector's sign-ins, its token, push keys). Backups include it and keep the
 file permissions (`tar --acls --xattrs`). If you restore a backup by hand, extract it with `tar --acls --xattrs`
-into a removed or empty folder, or run `sudo filament-kit features apply` afterwards; otherwise the web unit loses
+into a removed or empty folder, or run `sudo spoolwarden features apply` afterwards; otherwise the web unit loses
 read access to the files it needs.
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
@@ -565,17 +565,17 @@ kept, unless you change that on the Hub page).
 
 ### Backups and restore (v0.5.0)
 
-A backup is **one zip file** with everything filament-kit keeps, so a new machine can be brought back to how this one was:
+A backup is **one zip file** with everything Spoolwarden keeps, so a new machine can be brought back to how this one was:
 
 - the Spoolman database (your spools and filaments);
 - the settings, the setup code, the trusted computers, the printers and their slot maps, the Hub's certificate;
 - the paired phones and Slicer Sync, the Tag Readers' tokens, the web unit's sign-ins, the Weigh Station's pairing;
-- `manifest.xml`, which lists every file with its checksum, and the filament-kit version and Features it came from.
+- `manifest.xml`, which lists every file with its checksum, and the Spoolwarden version and Features it came from.
 
 Not in it: the program itself, the downloaded releases, the logs, the Slicer presets from Bambu itself that Slicer Sync uploads and
 earlier Filament Catalog versions. Those come back by themselves.
 
-**Keep the zip somewhere safe.** It holds every secret filament-kit has: the Anthropic key, the printers' Access Codes and
+**Keep the zip somewhere safe.** It holds every secret Spoolwarden has: the Anthropic key, the printers' Access Codes and
 the certificate's private key. The zip is not encrypted.
 
 **Make one.** On the Hub page, open **Settings**, then **Backups and restore**, and tap **Back up now**. **Show the backups**
@@ -584,7 +584,7 @@ lists them (the nightly ones too, the newest first) and **Download** saves one a
 the Hub:
 
 ```bash
-sudo filament-kit backup create
+sudo spoolwarden backup create
 ```
 
 **Restore on a new machine.** Install the Hub as usual, then either:
@@ -594,12 +594,12 @@ sudo filament-kit backup create
 - copy the zip to the Hub and run:
 
   ```bash
-  sudo filament-kit restore filament-kit-backup-<...>.zip
+  sudo spoolwarden restore filament-kit-backup-<...>.zip
   ```
 
-The restore checks every file against the manifest first, and refuses a backup made by a newer version of filament-kit
+The restore checks every file against the manifest first, and refuses a backup made by a newer version of Spoolwarden
 (it says which version to install first). It keeps a backup of what is on the machine now, puts everything back,
-turns on the Features the backup names (installing what they need), and shows `filament-kit status`. Afterwards the
+turns on the Features the backup names (installing what they need), and shows `spoolwarden status`. Afterwards the
 setup code, the trusted computers, the printers and the pairings are the ones from the backup: phones and Slicer
 Sync keep working without pairing again.
 
@@ -609,14 +609,14 @@ step.
 
 ### Your own printer data (override)
 
-The facts about each printer model and AMS unit come from filament-kit's own `bambu_hardware.xml`. To correct or add
+The facts about each printer model and AMS unit come from Spoolwarden's own `bambu_hardware.xml`. To correct or add
 something, put your own file at `/etc/filament-kit/bambu_hardware.xml`. It wins element by element over
-filament-kit's own file, and the updater never replaces a file you made.
+Spoolwarden's own file, and the updater never replaces a file you made.
 
-Your file must carry a **version above filament-kit's own file**, in its first line: for example, when its own file
+Your file must carry a **version above Spoolwarden's own file**, in its first line: for example, when its own file
 says `<bambu-hardware version="1.0">`, write `<bambu-hardware version="1.1">`. A file whose version is the same
 as or lower than its own is **ignored**, so an old file never hides newer data that an upgrade brings.
-`sudo filament-kit status` then shows a note: `override version ... is not newer than the kit's own ...: ignored`. After an upgrade that ships a newer file, check that note: raise your file's version again, or delete
+`sudo spoolwarden status` then shows a note: `override version ... is not newer than the kit's own ...: ignored`. After an upgrade that ships a newer file, check that note: raise your file's version again, or delete
 your file if the new release already has what you added. A file with mistakes is refused whole (the last good
 data stays in use), and status names it.
 
@@ -635,16 +635,16 @@ then installs them in every Bambu Studio folder on the PC ([Stable and Beta Bamb
 - **Delete Slicer presets in Bambu Studio, never on disk.** Slicer Sync never deletes preset files. A preset that is
   no longer built is listed as "delete in Bambu Studio" in the sync log; delete it there yourself.
 - A generated preset you delete in Bambu Studio stays deleted: later builds leave it out. To get the deleted
-  ones back, run `sudo filament-kit presets restore-deleted`; the next build brings them back and Slicer Sync
+  ones back, run `sudo spoolwarden presets restore-deleted`; the next build brings them back and Slicer Sync
   installs them.
 - Bambu's cloud keeps about 100 filament Slicer presets. The rest stay on this PC only.
 - A line the Filament Catalog doesn't have: in the app tap **Add a line to the Filament Catalog** (on the Slicer presets screen), fill in the line and tap **Save to the catalog**. The Hub page has its own box for this, **Add your own entry**.
 - To change which Bambu preset a line starts from, change its **Bambu Studio parent**: in the app, on the
   **Check the spools** screen while you add spools (field **Bambu Studio parent**; it applies to every colour of
-  that line), or in **Add a line to the Filament Catalog**, or on the Ubuntu computer with `sudo filament-kit presets lines` (lists the
-  lines) and `sudo filament-kit presets set-parent <line> <parent>`.
-- To see how the last build went: `sudo filament-kit presets status`. To rebuild now:
-  `sudo filament-kit presets build`. (It needs Slicer Sync to have run once.)
+  that line), or in **Add a line to the Filament Catalog**, or on the Ubuntu computer with `sudo spoolwarden presets lines` (lists the
+  lines) and `sudo spoolwarden presets set-parent <line> <parent>`.
+- To see how the last build went: `sudo spoolwarden presets status`. To rebuild now:
+  `sudo spoolwarden presets build`. (It needs Slicer Sync to have run once.)
 
 ## Slicer presets in Orca Slicer
 
@@ -668,11 +668,11 @@ Slicer knows (for example a Sovol). This is off until you ask for it in `/etc/fi
   nozzle, the name of the printer preset in Orca Slicer that the filament preset belongs to; use it when your
   printers are named differently in Orca Slicer from the default.
 
-Then run `sudo filament-kit presets build` (or wait for the next sync).
+Then run `sudo spoolwarden presets build` (or wait for the next sync).
 
 - Names look like `<brand> <line> @<printer> <nozzle>`, for example `SUNLU PLA+ 2.0 @SV08 MAX 0.4`.
 - Each line also has an **Orca Slicer parent**, the Orca system preset it starts from. The Hub picks one;
-  `sudo filament-kit presets lines` shows it and `sudo filament-kit presets set-parent --orca <line> <parent>`
+  `sudo spoolwarden presets lines` shows it and `sudo spoolwarden presets set-parent --orca <line> <parent>`
   changes it (give the parent's name without ` @System`).
 - Slicer Sync finds Orca Slicer on the PC by itself (its folder in `%APPDATA%\OrcaSlicer`). It sends
   the Orca Slicer presets to the Hub along with the Bambu Studio ones and installs the Orca Slicer presets the Hub builds. It waits
@@ -682,7 +682,7 @@ Then run `sudo filament-kit presets build` (or wait for the next sync).
   Orca folder it uses.
 - The same rules as for Bambu Studio apply: your edits in Orca Slicer are kept, and Slicer presets are deleted in Orca
   Slicer, never on disk.
-- `sudo filament-kit presets status` shows the last build (its count is the Bambu Studio ones) and the
+- `sudo spoolwarden presets status` shows the last build (its count is the Bambu Studio ones) and the
   problems of both slicers, for example a line whose Orca parent is not in your Orca Slicer.
 
 <a id="spec-library-updates"></a>
@@ -690,17 +690,17 @@ Then run `sudo filament-kit presets build` (or wait for the next sync).
 
 The Filament Catalog holds published filament specs (temperatures, speeds). It is optional and is not part of the
 program: Slicer presets work without it, from your Spoolman values and Bambu's or Orca's own starting Slicer presets. Ask for it
-with `sudo filament-kit catalog update`, or switch the **Filament Catalog** Feature on (it then also checks every day). A
-copy you downloaded earlier keeps being used when filament-kit is upgraded.
+with `sudo spoolwarden catalog update`, or switch the **Filament Catalog** Feature on (it then also checks every day). A
+copy you downloaded earlier keeps being used when Spoolwarden is upgraded.
 
-- `sudo filament-kit catalog status`: shows the Filament Catalog version (or that none is downloaded), the last check, and any
+- `sudo spoolwarden catalog status`: shows the Filament Catalog version (or that none is downloaded), the last check, and any
   entries and fields left out of it because the Hub can't read them.
-- `sudo filament-kit catalog update`: downloads the Filament Catalog, or a newer version, now.
-- `sudo filament-kit catalog rollback`: goes back to the version before the last update, and says so. The daily
+- `sudo spoolwarden catalog update`: downloads the Filament Catalog, or a newer version, now.
+- `sudo spoolwarden catalog rollback`: goes back to the version before the last update, and says so. The daily
   check then skips the version you left until a newer one is published; `catalog update` by hand still installs it.
   Rolling back again goes forward and clears that. To stop checks altogether, set
   `/etc/filament-kit/config.json` to `"library": {"schedule": "off"}` (or `"weekly"`; the default is `"daily"`).
-- `sudo filament-kit catalog add <file>`: adds or replaces your own entry from a JSON file.
+- `sudo spoolwarden catalog add <file>`: adds or replaces your own entry from a JSON file.
 
 The download is the `library.tar.gz` asset of the latest release (`library.url` in the config can point to
 another `.tar.gz` or to a folder that serves `index.json` and the entries). The release's `library.tar.gz` is
@@ -742,7 +742,7 @@ other browsers can't reach USB from a page, and the page says so and disables th
 installed Hub, never from the internet. The Tag Reader also needs the Hub's public HTTPS address (`web.public_url`,
 see [Remote access](#remote-access)): it only calls the Hub over that address, and the page says so when it is missing.
 
-**Tag Reader, from the command line.** Plug it into the Hub and run `sudo filament-kit tag-reader flash`. It asks
+**Tag Reader, from the command line.** Plug it into the Hub and run `sudo spoolwarden tag-reader flash`. It asks
 the same three questions (Wi-Fi name, password twice, buzzer) and ends the same way. To update a reader later, run it
 again with the board plugged in: it keeps its settings and writes the Hub's newer firmware. A reader set up this way
 refuses updates over Wi-Fi unless you gave `--ota-pubkey`; see [reader/README.md](../reader/README.md).
@@ -778,7 +778,7 @@ the `station` Feature, on the Hub computer (Hub with Weigh Station) or on a seco
   the speech and the picture, and its user joins the `video` group to read the camera.
 
 Build guides, wiring diagrams and enclosures for the Weigh Station's devices are kept in the
-[filament-kit-hardware](https://github.com/thompsonfabco/filament-kit-hardware) repository.
+[`filament-kit-hardware`](https://github.com/thompsonfabco/filament-kit-hardware) repository.
 [station/PANEL.md](../station/PANEL.md) keeps the panel's behaviour, serial protocol and speech format. This guide keeps the list of supported devices above, and the Hub flashes a C3 panel
 itself when it runs other firmware than the one it carries.
 
@@ -810,10 +810,10 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
 - **The speaking voice.** The Weigh Station speaks with the Piper voice `en_US-libritts_r-medium` (speaker 0), downloaded
   when the Weigh Station is installed (60 to 80 MB, checked against a pinned hash). If the download fails or the file
   does not match, the install carries on with a warning and espeak-ng speaks. To use espeak-ng on purpose (no
-  download), choose **Weigh Station voice** in `sudo filament-kit config`. The voice is licensed **CC BY 4.0**
+  download), choose **Weigh Station voice** in `sudo spoolwarden config`. The voice is licensed **CC BY 4.0**
   (LibriTTS-R; credit in [THIRD-PARTY.md](../THIRD-PARTY.md#speech-voice)). To use the public-domain
   `en_US-ljspeech-medium` voice instead, set `station.voice` to it in `/etc/filament-kit/config.json` and run
-  `sudo filament-kit features apply`.
+  `sudo spoolwarden features apply`.
 - With the panel, Hold and Discard also speak (`"speech"`), and Hold takes a picture with the webcam
   (`"camera"`). `curl http://127.0.0.1:5003/state` then shows `"air"` (the BME280 reading) and `"photo"`, and the
   picture itself is at `/photo`. The Weigh Station only answers GET requests, and only the addresses it allows.
@@ -822,25 +822,25 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   an ALSA device such as `"plughw:1,0"`), `"speech"` (`true` or `false`) and `"camera"` (`"auto"` for the first
   USB camera, a device such as `"/dev/video0"`, or `"off"`), `"panel_flash"` (`true` or `false`, see the
   next point), `"panel_swap"` (`true` or `false`, see the point after that) and `"speaker_volume"` (0 to 100,
-  default 50: how loud the C3 panel speaks; environment `STATION_SPEAKER_VOLUME`). After a change, run `sudo filament-kit features apply`.
+  default 50: how loud the C3 panel speaks; environment `STATION_SPEAKER_VOLUME`). After a change, run `sudo spoolwarden features apply`.
 - **Panel firmware updates itself.** The Weigh Station carries the display's firmware. When it finds a panel running
   another version, it writes the bundled one to it over USB (once per version) and then uses it. If that does
   not work, the panel keeps running as it is. Set `"panel_flash": false` to never touch the panel's firmware.
   `curl http://127.0.0.1:5003/state` shows the panel's version as `"panel_version"`. A panel on older ESP8266
   firmware (9 or earlier) is used as it is and never reflashed.
 - **A blank display board.** A new ESP32-C3 has no firmware for the Weigh Station to find. Plug it in and run
-  `sudo filament-kit weigh-station flash-display`: it stops the Weigh Station, lists the C3 ports that give no answer, asks before
+  `sudo spoolwarden weigh-station flash-display`: it stops the Weigh Station, lists the C3 ports that give no answer, asks before
   flashing each one, checks the display answers afterwards and restarts the Weigh Station.
 - **Buttons and lamps the other way round (v0.4.0).** If your panel's yellow and red buttons and lamps are wired the
   opposite way to the C3 pin table in the [Weigh Station display hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/intake-panel) (the button you press for yellow acts as red, and the lamps are
   swapped too), set `"panel_swap": true` under `"station"` in `/etc/filament-kit/config.json`, then run
-  `sudo filament-kit features apply`. The default is `false`. This needs firmware 9 or later. A C3 panel already runs
+  `sudo spoolwarden features apply`. The default is `false`. This needs firmware 9 or later. A C3 panel already runs
   firmware 10 or later. An ESP8266 panel on older firmware has to be reflashed by hand, because the Weigh Station never reflashes
   it; until then yellow can't do a long press, so it can't save.
 
 ### Is it working?
 
-- `sudo filament-kit status` shows the Weigh Station's real pairing state (v0.4.1; before, it asked you to run it with
+- `sudo spoolwarden status` shows the Weigh Station's real pairing state (v0.4.1; before, it asked you to run it with
   `sudo` even when you had), and on the Hub it shows `station answering at ...`. `station reader not seen` means no
   tag has been read yet; `station scale not seen` means the scale has sent nothing yet (switch it on and put
   something on it).
@@ -849,10 +849,10 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   `NFC reader ...; retrying in 5 s` means the reader is not plugged in or not found.
 - The Weigh Station answers only its own computer and the Hub's address. Anything else gets no answer.
 - The button flow talks to the Hub with its own pairing (v0.3.0 and newer). On the Hub run
-  `sudo filament-kit pair --weigh-station`, then within 10 minutes run `sudo filament-kit weigh-station pair` on the Weigh Station
+  `sudo spoolwarden pair --weigh-station`, then within 10 minutes run `sudo spoolwarden weigh-station pair` on the Weigh Station
   computer and paste the link; it checks the link with the Hub and says "expired" if you were late. On a
   Hub with Weigh Station both run on the same machine. The Weigh Station's pairing can reach only the Weigh Station part of the Hub.
-  `sudo filament-kit pair` on a Weigh Station only computer says that pairing runs on the Hub.
+  `sudo spoolwarden pair` on a Weigh Station only computer says that pairing runs on the Hub.
 - **Pairing from the Weigh Station's own screen (v0.5.0).** An unpaired Weigh Station asks the Hub named in
   `station.allow` when it starts, and again when you hold yellow while it shows "Not paired". Its screen shows
   "Pair code" and six digits, and it says them. On the Hub page, open **Devices**; a Weigh Station that asks to
@@ -862,7 +862,7 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   saving a duplicate.
 - A Weigh Station on a second computer: on the **Hub**, put the Weigh Station's address in
   `/etc/filament-kit/config.json` under `"station"`, for example `"url": "http://station.local:5003"`. If the
-  Hub's address changes, run `sudo filament-kit features apply` on the Weigh Station computer so it answers the new
+  Hub's address changes, run `sudo spoolwarden features apply` on the Weigh Station computer so it answers the new
   one.
 
 ## Recently added
@@ -896,18 +896,18 @@ state, its location and its used weight.
 
 **Undo.** **Undo revision** takes back the newest correction that is not undone yet, one step at a time.
 
-**How many records are kept.** The newest 20 by default. Change the number under **Settings**, **Label Reader**, **Records kept** on the Hub page, or in `sudo filament-kit config`. 0 keeps none, and the highest is 500. The oldest
+**How many records are kept.** The newest 20 by default. Change the number under **Settings**, **Label Reader**, **Records kept** on the Hub page, or in `sudo spoolwarden config`. 0 keeps none, and the highest is 500. The oldest
 records and their photos go first. **Recently added** shows how much disk the photos use.
 
 **On the command line.**
 
 | Command | What it does |
 |---|---|
-| `filament-kit recent` (or `recent history`) | Lists the records, newest first, with their photo files on the Hub. |
-| `filament-kit recent show <record>` | One record with its corrections. |
-| `filament-kit recent revise <record> --note "brand is X" [--item N]` | Shows the values before and after, then asks before applying (`--yes` applies without asking). |
-| `filament-kit recent edit <record> [--item N] field=value ...` | Edits by hand. |
-| `filament-kit recent undo <record>` | Undoes the newest correction. |
+| `spoolwarden recent` (or `recent history`) | Lists the records, newest first, with their photo files on the Hub. |
+| `spoolwarden recent show <record>` | One record with its corrections. |
+| `spoolwarden recent revise <record> --note "brand is X" [--item N]` | Shows the values before and after, then asks before applying (`--yes` applies without asking). |
+| `spoolwarden recent edit <record> [--item N] field=value ...` | Edits by hand. |
+| `spoolwarden recent undo <record>` | Undoes the newest correction. |
 
 ## Tag readers and printer slots
 
@@ -973,20 +973,20 @@ spools shows a preview first in both, as in the app.
 3. Set the passphrase (at least 12 characters; you type it twice and each character shows as a `*`):
 
    ```
-   sudo filament-kit web passphrase
+   sudo spoolwarden web passphrase
    ```
 
 4. Turn the Feature on and check it:
 
    ```
-   sudo filament-kit features on web
-   sudo filament-kit web status
+   sudo spoolwarden features on web
+   sudo spoolwarden web status
    ```
 
    `web status` shows the public address, the connector and web app addresses, whether the passphrase is set,
    whether the service answers, and how many connectors are signed in. No line should start with
    `FAIL`. (At a terminal, `features on web` asks for `web.public_url` if it is not set; without a terminal it stops
-   with an error. The Features checklist (`sudo filament-kit features menu`) asks for it too, so steps 2 and 4 can be done
+   with an error. The Features checklist (`sudo spoolwarden features menu`) asks for it too, so steps 2 and 4 can be done
    there in one go.)
 
 ### Add the connector in Claude
@@ -1041,7 +1041,7 @@ The ranges above are IPv4. A phone or computer that reaches the web address over
    "web": {"lan": ["192.168.0.0/16", "10.0.0.0/8", "2001:db8:1234:5678::/64"]}
    ```
 
-3. Apply it: `sudo filament-kit features apply`. It refuses an entry that is not a network.
+3. Apply it: `sudo spoolwarden features apply`. It refuses an entry that is not a network.
 
 ## Remote access
 
@@ -1057,7 +1057,7 @@ them up yourself.
 3. Turn it on:
 
    ```
-   sudo filament-kit features on remote
+   sudo spoolwarden features on remote
    ```
 
    That sets up nginx with a router on port 443 (`/etc/nginx/conf.d/filament-kit-router.conf`), a route from
@@ -1067,7 +1067,7 @@ them up yourself.
 4. Print the rules you need and set them up on your firewall and router:
 
    ```
-   sudo filament-kit remote firewall
+   sudo spoolwarden remote firewall
    ```
 
    It lists port 443 from Claude's address range and your home network, port 80 for certbot, and an optional
@@ -1075,7 +1075,7 @@ them up yourself.
 5. Get the certificate, with port 80 reaching this computer:
 
    ```
-      sudo filament-kit remote get-certificate
+      sudo spoolwarden remote get-certificate
    ```
 
    nginx stops while certbot runs and starts again afterwards. From then on certbot renews the certificate by
@@ -1089,8 +1089,8 @@ timer then runs only at that time. Outside the window port 80 can stay closed.
 **HTTP/2.** The router speaks HTTP/1.1 only, so its nginx settings work on Ubuntu 24.04's nginx too. Claude and
 phone browsers work with that.
 
-Turning `remote` off removes only filament-kit's own router file, its certbot hook and its route. nginx, certbot,
-the certificate and any other routes stay. While `/etc/nginx/mcp.d` still holds routes filament-kit did not add, the
+Turning `remote` off removes only Spoolwarden's own router file, its certbot hook and its route. nginx, certbot,
+the certificate and any other routes stay. While `/etc/nginx/mcp.d` still holds routes Spoolwarden did not add, the
 router file stays too, because it is what serves them; it says so, and you remove it by hand once nothing
 needs those routes.
 
@@ -1101,16 +1101,16 @@ The `local_intake` Feature is the other way to read labels: instead of sending t
 to a label reader running on your own network, so nothing leaves your home. It is a separate service that you run
 yourself (on this computer or another one, for example one with a GPU); the Hub talks to it at an address you give it.
 It needs the `server` Feature (Hub service), and the Anthropic key is not needed for it. Turn it on with
-`sudo filament-kit features on label-reader-local`. You can have it on beside `ai_intake`, and the two work together.
+`sudo spoolwarden features on label-reader-local`. You can have it on beside `ai_intake`, and the two work together.
 
 **Install the reader on this computer.** The reader itself is the `filament-kit-vision` program, downloaded from its
-own public release. Run `sudo filament-kit local-intake install`: it shows the latest signed release with its
+own public release. Run `sudo spoolwarden local-intake install`: it shows the latest signed release with its
 download size, disk space and time for each tier, asks, installs it (the service `filament-kit-vision`, in
 `/opt/filament-kit-vision`, its own settings in `/etc/filament-kit-vision/`), switches `local_intake` on and points
 the Hub at it. `--tier auto|cpu|gpu` picks the tier (the default is the **Local reader tier** setting),
 `--version X.Y.Z` names a version (the only way back to an older one) and `--yes` skips the question.
-`filament-kit local-intake plan` only shows what the latest release needs. On the Hub page, **Settings**, **Label Reader**, **On this Hub**: **Check what an install needs**, then **Install <version> (<tier> tier)**; once it is installed the
-same place offers **Check for an upgrade** and **Remove**. `sudo filament-kit local-intake remove` runs the reader's
+`spoolwarden local-intake plan` only shows what the latest release needs. On the Hub page, **Settings**, **Label Reader**, **On this Hub**: **Check what an install needs**, then **Install <version> (<tier> tier)**; once it is installed the
+same place offers **Check for an upgrade** and **Remove**. `sudo spoolwarden local-intake remove` runs the reader's
 own uninstaller and switches `local_intake` off; its settings are kept.
 
 **A reader on another computer.** It needs no install here: switch `local_intake` on under **Features** and set the
@@ -1118,7 +1118,7 @@ own uninstaller and switches `local_intake` off; its settings are kept.
 
 **What the reader gets.** The photos, and a trimmed list of your filaments (names, materials and colours, no
 comments, prices, spool data or order history). If the reader asks for a token, set it on the Hub
-page under **Settings**, **Label Reader**, or run `sudo filament-kit local-intake token` (it asks with nothing
+page under **Settings**, **Label Reader**, or run `sudo spoolwarden local-intake token` (it asks with nothing
 shown; `--remove` clears it). The token is kept in `/etc/filament-kit/local_intake_token`, and the Hub sends it only
 with a read or a revision.
 
@@ -1144,10 +1144,10 @@ day**; local reads are free.
   and whether it can revise readings.
 - **Tier**: **Auto** (the CPU first, then the GPU when unsure), **CPU only** or **GPU only**.
 
-At a terminal, `sudo filament-kit config`, under **Label Reader**, asks the same three things.
-`filament-kit label-reader status` shows whether the reader answers, its tiers, why it is degraded if it is, and the
-last read. `filament-kit label-reader test <photo>... --engine local` sends photos to the local reader only, as a trial: nothing is
-saved and no daily read is used. `filament-kit status` and the Hub page's Overview show the reader's health and the
+At a terminal, `sudo spoolwarden config`, under **Label Reader**, asks the same three things.
+`spoolwarden label-reader status` shows whether the reader answers, its tiers, why it is degraded if it is, and the
+last read. `spoolwarden label-reader test <photo>... --engine local` sends photos to the local reader only, as a trial: nothing is
+saved and no daily read is used. `spoolwarden status` and the Hub page's Overview show the reader's health and the
 order.
 
 **What you see.** The web app's result screen says which reader answered, its tier, how sure it is, the colour
@@ -1175,8 +1175,8 @@ The Feature needs a Label Reader, `ai_intake` or `local_intake`, so turn one on 
 the file (it is saved as `orders.file` in `/etc/filament-kit/config.json`):
 
 ```
-sudo filament-kit features on label-reader
-sudo filament-kit features on orders
+sudo spoolwarden features on label-reader
+sudo spoolwarden features on orders
 ```
 
 The Hub's user must be able to read the file (for example owner `root`, group `filament-kit`, mode 640). If it
@@ -1185,7 +1185,7 @@ order list through the Hub: phones, Slicer Sync and the Weigh Station are refuse
 
 ## Troubleshooting
 
-- Run `sudo filament-kit status` on the Ubuntu computer. No line should start with `FAIL`; a failing line
+- Run `sudo spoolwarden status` on the Ubuntu computer. No line should start with `FAIL`; a failing line
   shows a `fix:` line.
 - Slicer presets don't appear in Bambu Studio: close Bambu Studio (Slicer Sync waits while it is open), then wait up to
   10 minutes. On the PC, run `filament-kit-sync status` to see the Hub, the Bambu Studio folder in use and
@@ -1194,29 +1194,31 @@ order list through the Hub: phones, Slicer Sync and the Weigh Station are refuse
   described under [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040).
 - The Slicer Sync log is `%LOCALAPPDATA%\filament-kit-sync\sync.log`. Backups of your Bambu Studio filament folder,
   made before each install (the 5 newest are kept), are in `%LOCALAPPDATA%\filament-kit-sync\backups`.
-- "Other PC" errors: another PC already syncs with this Hub. Remove it with `sudo filament-kit devices forget <device>`.
-- `sudo filament-kit presets build` says Slicer Sync hasn't run yet (this is a message, not an error): do [Pair your PC](#pair-your-pc).
+- "Other PC" errors: another PC already syncs with this Hub. Remove it with `sudo spoolwarden devices forget <device>`.
+- `sudo spoolwarden presets build` says Slicer Sync hasn't run yet (this is a message, not an error): do [Pair your PC](#pair-your-pc).
 
 ## Update
 
-`sudo filament-kit update` downloads the newest release, checks its signature and hash as get.sh does, stops
-filament-kit, installs it (no questions) and starts it again. It keeps your spools, settings, key and paired phones, and the
-version it replaced: `sudo filament-kit update --rollback` goes back to that one. `sudo filament-kit update --check`
+Spoolwarden was called filament-kit until version 0.6.1; the command `filament-kit` still works and says so.
+
+`sudo spoolwarden update` downloads the newest release, checks its signature and hash as get.sh does, stops
+Spoolwarden, installs it (no questions) and starts it again. It keeps your spools, settings, key and paired phones, and the
+version it replaced: `sudo spoolwarden update --rollback` goes back to that one. `sudo spoolwarden update --check`
 only says whether there is a newer release. It does nothing while a printer is mapping slots or loading a spool.
 If an update fails, the previous version is put back and the daily timer does not try the failed version again until
-a newer release appears; `sudo filament-kit update` by hand tries it again.
+a newer release appears; `sudo spoolwarden update` by hand tries it again.
 
-Automatic updates: `sudo filament-kit features on updates` (off by default) checks once a day and installs a
+Automatic updates: `sudo spoolwarden features on updates` (off by default) checks once a day and installs a
 new release on its own; it never reinstalls a version you rolled back from. For a weekly check, set
 `"updates": {"schedule": "weekly"}` in `/etc/filament-kit/config.json`. For a private repository, put a GitHub
 token in a file only root can read and set `"updates": {"token_file": "/etc/filament-kit/github_token"}`.
 
 **Updating from v0.3.0 to v0.4.0 with Slicer Sync (in this order).**
-1. Update the Hub: `sudo filament-kit update`.
+1. Update the Hub: `sudo spoolwarden update`.
 2. Update Slicer Sync: run the new `filament-kit-sync-setup-<version>.exe` (Windows) or the new Linux `install.sh`.
 3. Close Bambu Studio, so Slicer Sync can run.
-4. On the Hub, see what the updates would change: `sudo filament-kit presets updates --all`, then
-   accept the ones you want: `sudo filament-kit presets accept-updates --all`. These go to the primary Bambu Studio folder;
+4. On the Hub, see what the updates would change: `sudo spoolwarden presets updates --all`, then
+   accept the ones you want: `sudo spoolwarden presets accept-updates --all`. These go to the primary Bambu Studio folder;
    for the other folders use `filament-kit-sync apply-updates --folder ...` on the PC (see
    [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)).
 
@@ -1234,14 +1236,14 @@ Use `--dry-run` first to see what would be written. New Slicer presets still arr
 
 By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it and run `sudo ./install.sh` again.
 
-**Going back from v0.4.1 to v0.4.0.** `sudo filament-kit update --rollback` goes back to the release it replaced. The
+**Going back from v0.4.1 to v0.4.0.** `sudo spoolwarden update --rollback` goes back to the release it replaced. The
 Spoolman allow-list (`/etc/systemd/system/spoolman.service.d/kit.conf`) stays in place after the rollback, and v0.4.0
 cannot change it: edit it by hand if a range needs adding, then restart Spoolman.
 
-**Going back from v0.4.0 to v0.3.0.** `sudo filament-kit update --rollback` goes back to the release it replaced.
+**Going back from v0.4.0 to v0.3.0.** `sudo spoolwarden update --rollback` goes back to the release it replaced.
 
 - **Klipper first.** v0.3.0 has no `klipper` Feature and stops at a config that names it. If it is on, run
-  `sudo filament-kit features off klipper` before the rollback: the rollback refuses until you do. If it is off, the
+  `sudo spoolwarden features off klipper` before the rollback: the rollback refuses until you do. If it is off, the
   rollback takes the `"klipper"` entry out of `modules` in `/etc/filament-kit/config.json` for you. Your Klipper
   printers stay in `printers.xml` for when you upgrade again.
 - **What comes back.** The web app's Claude connector sign-ins, push subscriptions and its pairing come back as they
@@ -1269,30 +1271,30 @@ cannot change it: edit it by hand if a range needs adding, then restart Spoolman
   later, removing `/var/lib/filament-kit-web` first makes the upgrade copy the web app's current files again.
 
 **Upgrading a Weigh Station from v0.2.0 to v0.3.0:** the Weigh Station's button flow now needs pairing once. On the Hub run
-`sudo filament-kit pair --weigh-station`, then within 10 minutes run `sudo filament-kit weigh-station pair` on the Weigh Station
-computer (on a Hub with Weigh Station, both on the same machine) and paste the link. `sudo filament-kit status` and the install
+`sudo spoolwarden pair --weigh-station`, then within 10 minutes run `sudo spoolwarden weigh-station pair` on the Weigh Station
+computer (on a Hub with Weigh Station, both on the same machine) and paste the link. `sudo spoolwarden status` and the install
 say so until it is done.
 
 ## Uninstall
 
 ```
-sudo filament-kit uninstall
+sudo spoolwarden uninstall
 ```
 
-This runs the uninstaller of the release copy filament-kit kept. With no kept copy it says where to download the release
+This runs the uninstaller of the release copy Spoolwarden kept. With no kept copy it says where to download the release
 file, and you run `sudo ./uninstall.sh` from the unpacked folder.
 
 This removes the programs (Spoolman and the Weigh Station too, with its user and udev rule) but
 **keeps** your spools, settings and backups, so a later install picks up where you left off, in the same Setup.
 The Weigh Station's computer changes (brltty, ModemManager, sleep, audio) stay; see
 [What the installer changes on the computer](#what-the-installer-changes-on-the-computer) to undo them. With
-[Remote access](#remote-access) on, it also removes filament-kit's router file, its route and its certbot hook; nginx,
+[Remote access](#remote-access) on, it also removes Spoolwarden's router file, its route and its certbot hook; nginx,
 certbot, the certificate and any other routes stay (remove them with `apt` if nothing else uses them). The
 router file stays while other routes in `/etc/nginx/mcp.d` need it (it says so). To delete everything, including
 all spool data and backups:
 
 ```
-sudo filament-kit uninstall --purge
+sudo spoolwarden uninstall --purge
 ```
 
 It asks you to type `purge` to confirm. `--purge` also removes the certbot timer drop-in

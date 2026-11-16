@@ -21,7 +21,7 @@ def test_readme_opens_with_the_goal_then_the_one_command_install():
     first, _, rest = text.partition("\n\n")
     if "ko-fi.com/thompsonfabco" in first and "\n" not in first.strip() and not first.startswith("#"):
         text = rest
-    assert text.startswith("# filament-kit\n")
+    assert text.startswith("# Spoolwarden\n")
     install = text.index("\n## Install\n")
     assert "## What you need" in text[:install]
     # download-then-run, not `curl | sudo bash`: piped into sudo, the installer hangs at apt (no controlling tty)
@@ -339,10 +339,10 @@ def test_readme_sections_a_user_needs():
 # tests/test_design_lints.py (AUT-7); it is read from that file, not copied.
 PLAIN_NAME_DOCS = ("README.md", "docs/user-guide.md", "docs/install-server.md", "docs/install-iphone-web-app.md",
                    "docs/install-android-app.md", "docs/android-app.md", "docs/klipper.md", "docs/known-gaps.md")
-# Whole kinds of text that are not checked: the product and command are still written filament-kit (the names table
-# changes them in a later step); code (commands, paths, file names, settings keys, a quoted message) and link targets
-# and anchors stay as they are.
-PLAIN_NAME_SKIPPED = {"filament-kit"}
+# Whole kinds of text that are not checked here: code (commands, paths, file names, settings keys, a quoted message) and
+# link targets and anchors stay as they are. The old product name is not skipped: in prose it fails like any other old
+# word, and in code `test_documents_keep_the_old_name_only_where_it_is_kept` checks it.
+PLAIN_NAME_SKIPPED = set()
 # The reviewed lines that keep an old word, at most ten: (file, the old word it excuses, a part of the line, why). Only
 # that one word is excused, and only on a line that holds the part; any other old word on the line still fails.
 PLAIN_NAME_EXCEPTIONS = [
@@ -350,8 +350,9 @@ PLAIN_NAME_EXCEPTIONS = [
     ("docs/install-server.md", "presets", "Bring back deleted presets", "the button's name on the Hub page"),
     ("docs/android-app.md", "presets", "Bring back deleted presets", "the button's name in the app"),
     ("docs/user-guide.md", "presets", "`presets restore-deleted`", "a row of the command table, which is the output of `help --markdown`"),
-    ("docs/user-guide.md", "the kit", "`spoolman fields`", "a row of the command table, which is the output of `help --markdown`"),
     ("docs/user-guide.md", "module", "Module V3 in I2C mode", "the second line of the name of a hardware product (Elechouse NFC Module V3)"),
+    ("README.md", "filament-kit", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
+    ("docs/user-guide.md", "filament-kit", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
 ]
 
 
@@ -373,6 +374,42 @@ def _prose(text: str) -> str:
     for pattern in (r"`[^`\n]+`", r"\]\([^)]*\)", r"https?://\S+", r"<a id=\"[^\"]*\"></a>", r"src=\"[^\"]*\""):
         text = re.sub(pattern, blank, text, flags=re.S)
     return text
+
+
+# Where the old name `filament-kit` stays in a document, apart from the exceptions above (prose) and URLs: a path, an
+# asset, a unit, the program `filament-kit-sync` or the package (`filament-kit[push]`) is one word with something joined
+# to it; the bare name only on a line listed here, each about the old command or quoting a text the code still prints.
+OLD_NAME_DOCS = PLAIN_NAME_DOCS + ("docs/maintainer.md", "docs/testing-e2e.md", "docs/android-e2e.md", "THIRD-PARTY.md",
+                                   "release-notes/next.md")
+OLD_NAME_JOINED = re.compile(r"[/\_]|filament-kit-|filament-kit\.(?:apk|service|timer)\b|filament-kit\[|-filament-kit")
+OLD_NAME_LINES = [
+    ("README.md", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
+    ("docs/user-guide.md", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
+    ("release-notes/next.md", "`filament-kit` still works for a time", "the note about the old command"),
+    ("docs/install-server.md", "OK   service filament-kit active", "a line the status check prints: the unit's name"),
+    ("docs/install-server.md", "OK   filament-kit API answering", "a line the status check prints (status.py still spells it out)"),
+    ("docs/install-server.md", "open the filament-kit app and scan", "a line the installer prints (apply.py still spells it out)"),
+    ("docs/known-gaps.md", "verified filament-kit 0.2.0", "what an early version printed in a recorded run"),
+    ("docs/user-guide.md", "group `filament-kit`", "the system group's name on the Hub"),
+]
+
+
+def test_documents_keep_the_old_name_only_where_it_is_kept():
+    found, used = [], set()
+    for rel in OLD_NAME_DOCS:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        text = re.sub(r"https?://\S+|\]\([^)]*\)", lambda m: " " * len(m[0]), text)    # addresses and link targets
+        for n, line in enumerate(text.split("\n"), 1):
+            for m in re.finditer(r"[\w./\~<>\[\],*@-]*filament-kit[\w./\<>\[\],*@-]*", line):
+                if OLD_NAME_JOINED.search(m[0].rstrip(".,")):
+                    continue
+                why = next((i for i, (f, part, _) in enumerate(OLD_NAME_LINES) if f == rel and part in line), None)
+                if why is None:
+                    found.append(f"{rel}:{n}: {line.strip()[:100]}")
+                else:
+                    used.add(why)
+    assert not found, "\n".join(found)
+    assert used == set(range(len(OLD_NAME_LINES))), "a listed line no longer applies: remove it"
 
 
 def test_user_documents_use_the_plain_names():

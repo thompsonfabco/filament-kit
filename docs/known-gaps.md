@@ -12,7 +12,7 @@ fixed.
 2. ~~The repository is private.~~ Fixed 2026-11-03: the repository is public, so the one command and the
    Releases page downloads need no GitHub account.
 3. ~~No library asset.~~ Fixed in v0.3.0: v0.3.0 and v0.4.0 carry `library.tar.gz` (v0.2.0 does not, so
-   `filament-kit catalog update` finds nothing in that release).
+   `spoolwarden catalog update` finds nothing in that release).
 
 ## App (Android)
 
@@ -52,18 +52,18 @@ fixed.
     with no rule (8710/tcp for the app, 5353/udp for `.local` names, 7912/tcp for Spoolman, 443/tcp for the web app);
     running them is up to you. Ubuntu ships with `ufw` off, so most users won't hit this.
 13. ~~Uninstalling after a one-command install needed the kept tarball.~~ Fixed in v0.3.0:
-    `sudo filament-kit uninstall [--purge]` runs the kept release's uninstaller.
+    `sudo spoolwarden uninstall [--purge]` runs the kept release's uninstaller.
 14. **Not checked here:** pairing from a real phone, and the APK install on a phone.
 15. **Klipper printers (v0.4.0).** Add one from the app's **Printers** screen (**Add a Klipper printer**), on the Hub page's
     Printers section (**Add a printer**, type Klipper, v0.4.3), in the web app's **Manage printers**, or with
-    `sudo filament-kit printer add --klipper`. Sovol SV08 MAX is verified; Sovol M1D is an unverified placeholder. The usage entries the Hub logs for a Klipper printer can't be undone
+    `sudo spoolwarden printer add --klipper`. Sovol SV08 MAX is verified; Sovol M1D is an unverified placeholder. The usage entries the Hub logs for a Klipper printer can't be undone
     from the Hub; correct the spool in Spoolman.
 
 16. **The Hub page's data still shows serials and addresses on the home network (v0.4.3).** The new Overview and job
     log hide them until you give the setup code, but the page's older state (`/setup/api/state`) still lists printer
     serial numbers and addresses to any device on the home network without it, until a later stage of the Hub page.
 17. **Going back from v0.4.3 leaves the Hub page's job unit.** `filament-kit-setup-job@.service` stays on disk, unused,
-    after `sudo filament-kit update --rollback` from v0.4.3; the earlier Hub page does not call it. From v0.5.0 a
+    after `sudo spoolwarden update --rollback` from v0.4.3; the earlier Hub page does not call it. From v0.5.0 a
     rollback removes the unit files the version it leaves introduced.
 
 ## How this was first checked (v0.2.0)

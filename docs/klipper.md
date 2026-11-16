@@ -1,6 +1,6 @@
 # Klipper printers
 
-filament-kit works with Klipper printers that run Moonraker (Mainsail, Fluidd and most vendor screens use it), next to
+Spoolwarden works with Klipper printers that run Moonraker (Mainsail, Fluidd and most vendor screens use it), next to
 Bambu printers. The app, the web app, the Tag Reader and the Claude tools show both kinds the same way: each
 printer's slots, the spool in each, loading a spool into a slot, the camera, pause / resume / stop and a usage log.
 
@@ -9,7 +9,7 @@ the Features checklist lists it last, as "Klipper printers".
 
 What it needs:
 
-- the **Klipper printers** Feature (`sudo filament-kit features on klipper`; it needs the Hub service Feature);
+- the **Klipper printers** Feature (`sudo spoolwarden features on klipper`; it needs the Hub service Feature);
 - the printer's Moonraker reachable from the Hub (port 7125);
 - Moonraker's `[spoolman]` section pointing at the Hub's Spoolman, so filament usage is recorded (the Klipper add-on can
   set it, see below).
@@ -18,7 +18,7 @@ What it needs:
 
 On the Hub:
 
-    sudo filament-kit printer add --klipper --name "Workshop Printer" --address printer.home.arpa
+    sudo spoolwarden printer add --klipper --name "Workshop Printer" --address printer.home.arpa
 
 Moonraker's port is 7125; if yours differs, add `--port <number>`.
 
@@ -27,14 +27,14 @@ toolchanger, an AFC unit such as a Box Turtle, a Happy Hare MMU), and its slots.
 has one; an address works too. A name that doesn't resolve yet is still saved, with a note, and so is an address outside
 your home network (the note says how to allow it).
 
-- **Not sure of the address?** `sudo filament-kit printer scan` looks for Moonraker on the Hub's own network (at
+- **Not sure of the address?** `sudo spoolwarden printer scan` looks for Moonraker on the Hub's own network (at
   most 256 addresses, only when you run it); `--subnet <network>` scans another range, up to 256 addresses. A scan asked for through the Hub's API keeps to the private networks the Hub may reach (10.x, 172.16-31.x, 192.168.x), one at a time with 30 seconds between them. Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
   themselves; the Hub keeps at most 32 it has not been told to add, oldest out. A printer can only be added once, in the terminal, the API or the Hub page: a name or address that resolves to one already added on that port is refused, and the message says which.
-- **Moonraker asks for an API key?** `sudo filament-kit printer api-key <printer>` asks for it; it is never shown again. Leaving it empty keeps the saved key unchanged; `--clear` removes it.
-- **Changed the printer or its firmware?** `sudo filament-kit printer detect <printer>` reads the model and filament system
+- **Moonraker asks for an API key?** `sudo spoolwarden printer api-key <printer>` asks for it; it is never shown again. Leaving it empty keeps the saved key unchanged; `--clear` removes it.
+- **Changed the printer or its firmware?** `sudo spoolwarden printer detect <printer>` reads the model and filament system
   again.
 - The Hub keeps its printer list in `printers.xml`. It also writes the old-format `printers.json` beside it on every
-  change, so that `sudo filament-kit update --rollback` to an earlier release keeps your Bambu printers. Keep both files.
+  change, so that `sudo spoolwarden update --rollback` to an earlier release keeps your Bambu printers. Keep both files.
 - The Hub page's **Printers** section lists your Klipper printers whenever the Klipper printers Feature is on, and from v0.4.3 adds
   them too: **Add a printer** with type Klipper takes the Moonraker address (an IP address or a name such as
   `voron.local`, kept as you type it), the port and an optional API key; **Find Klipper printers** scans your network
@@ -86,7 +86,7 @@ this themselves.
 For each load the Hub names the OrcaSlicer preset it built for that filament, printer and nozzle (when the Slicer presets
 Feature made one). The **Spool Sync** OrcaSlicer plugin (`integrations/orca-spool-sync/`) selects those Slicer presets in
 Orca's filament slots: for a multi-tool printer it reads Moonraker's `lane_data`, which the Hub publishes for
-toolchangers (`sudo filament-kit printer lane-data <printer> auto|on|off`; never on AFC printers, AFC writes it
+toolchangers (`sudo spoolwarden printer lane-data <printer> auto|on|off`; never on AFC printers, AFC writes it
 itself). OrcaSlicer's own "Sync filaments" reads `lane_data` too.
 
 To install the plugin, copy `spool_sync.py` into `%APPDATA%\OrcaSlicer\orca_plugins\spool_sync\` (Windows) and enable it in
@@ -111,14 +111,14 @@ The Hub talks to Moonraker without installing anything on the printer. The Klipp
   Spoolman's URL as the printer reaches it, or takes it with `--spoolman`; don't use `127.0.0.1` here unless Spoolman
   runs on the printer.
 
-`sudo filament-kit klipper add-on` prints the commands to run on the printer (as its normal user, not root). They
+`sudo spoolwarden klipper add-on` prints the commands to run on the printer (as its normal user, not root). They
 fetch the add-on of the same version as your Hub, and check it before anything runs:
 
     curl -fsSLo fk-printer-pack.tar.gz https://github.com/thompsonfabco/filament-kit/releases/download/v<version>/fk-printer-pack.tar.gz
     echo "<sha256>  fk-printer-pack.tar.gz" | sha256sum -c - && tar xzf fk-printer-pack.tar.gz && sh fk-printer-pack/fk-printer-pack.sh install
 
 The checksum comes from the release's signed checksum list, which the Hub verifies first. That's the same check
-the installer and `filament-kit update` use. If `sha256sum` says `FAILED`, nothing is unpacked or run. Don't copy the
+the installer and `spoolwarden update` use. If `sha256sum` says `FAILED`, nothing is unpacked or run. Don't copy the
 commands from this page: run `klipper add-on` to get them with your version's checksum.
 
 If the Hub can't check the release, it prints no commands and says why. That happens when it's offline and doesn't
@@ -136,10 +136,10 @@ is checked against the pack's version but never changed. If Klipper is not in `~
 
 ## Printer models
 
-What filament-kit knows about Klipper printer models (how to recognise them, their slots, their OrcaSlicer printer names,
+What Spoolwarden knows about Klipper printer models (how to recognise them, their slots, their OrcaSlicer printer names,
 their light macros) lives in `klipper_hardware.xml`, not in the program. To add or correct a model,
 put an override in `/etc/filament-kit/klipper_hardware.xml` with a higher `version` than the Hub's own file; the
-Hub rereads it, and the updater can deliver newer data. If the file is refused, `filament-kit status` says why and
+Hub rereads it, and the updater can deliver newer data. If the file is refused, `spoolwarden status` says why and
 the Hub keeps using the last good data. A printer no entry matches works as a generic Klipper
 printer (its state says `unknown_model`).
 
