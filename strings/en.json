@@ -1,6 +1,6 @@
 {
   "app_name": "Spoolwarden",
-  "command_name": "filament-kit",
+  "command_name": "spoolwarden",
 
   "common_back": "Back",
   "common_cancel": "Cancel",
