@@ -533,7 +533,10 @@ private fun SlotRow(slot: AmsSlot, onClick: () -> Unit) {
     val empty = PrinterHelp.slotEmpty(slot)
     val spool = slot.spool
     val material = slot.type.ifBlank { spool?.material.orEmpty() }
-    val headline = if (empty) {
+    val waiting = PrinterHelp.slotWaiting(slot)
+    val headline = if (waiting) {
+        stringResource(R.string.slot_waiting)
+    } else if (empty) {
         stringResource(R.string.common_empty)
     } else {
         listOfNotNull(material.ifBlank { null }, spool?.name?.ifBlank { null }).joinToString(SEPARATOR)
@@ -576,6 +579,7 @@ private fun SlotSheet(
     val space = SpoolwardenTheme.space
     val spool = slot.spool
     val empty = PrinterHelp.slotEmpty(slot)
+    val waiting = PrinterHelp.slotWaiting(slot)
     SwSheet(onDismiss = onDismiss, gesturesEnabled = state.slotBusy == null) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4),
@@ -608,7 +612,8 @@ private fun SlotSheet(
                 }
                 else -> {
                     Text(
-                        if (empty) stringResource(R.string.printer_slot_empty)
+                        if (waiting) stringResource(R.string.printer_slot_waiting)
+                        else if (empty) stringResource(R.string.printer_slot_empty)
                         else stringResource(R.string.printer_slot_unlinked, slot.type),
                         style = MaterialTheme.typography.bodyMedium,
                     )

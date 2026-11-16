@@ -563,6 +563,7 @@
     <!-- 1=name -->
     <string name="slot_list_label">AMS slots of %1$s</string>
     <string name="slot_load_disabled">Available when the printer is connected.</string>
+    <string name="slot_waiting">Waiting for the spool to load</string>
     <string name="slot_none_offline">No slot data: the printer is offline.</string>
     <string name="slot_none_yet">No slots read yet. Test the connection, then map the slots.</string>
     <!-- 1=grams -->
@@ -2858,6 +2859,7 @@
     <string name="printer_set_row_api_key">API key</string>
     <string name="printer_settings_title">Printer settings</string>
     <string name="printer_slot_empty">This slot is empty.</string>
+    <string name="printer_slot_waiting">A spool is assigned to this slot and is applied when the slot loads.</string>
     <string name="printer_slot_load">Load a spool</string>
     <string name="printer_slot_open_spool">Open spool</string>
     <!-- 1=slot -->

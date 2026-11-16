@@ -80,6 +80,9 @@ object PrinterHelp {
     /** The printer says nothing is there, or it holds no setting and the inventory places no spool there. */
     fun slotEmpty(slot: AmsSlot): Boolean = slot.present == false || (slot.type.isBlank() && slot.spool == null)
 
+    /** An empty slot with a spool assigned that waits to load: not an ordinary empty slot. */
+    fun slotWaiting(slot: AmsSlot): Boolean = slot.pending != null && slotEmpty(slot)
+
     fun stateLabel(state: String): String = when (state) {
         "connected" -> "Connected"
         "offline" -> "Offline"
