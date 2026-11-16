@@ -1562,7 +1562,7 @@ def cmd_config_theme(raw: str | None) -> int:
                      "choose console, workbench, palette or panes. Light and dark are chosen on each device, in Settings > Appearance.")
         return output.USAGE
     if not _no_systemd() and not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit config theme " + shlex.join([value])))
+        return output.need_sudo(_sudo_command("sudo spoolwarden config theme " + shlex.join([value])))
     session = _ConfigMenu(config.load(), None)
     if value == config.look(session.cfg):
         output.emit({"ok": True, "key": "appearance.theme", "changed": False})
@@ -5932,7 +5932,7 @@ def cmd_local_intake_corrections_list() -> int:
         output.out("No corrections waiting.")
     else:
         output.out(f"Corrections waiting: {got['count']} - {got['bytes'] / 1048576:.1f} MB. Nothing is sent until you "
-                   "run: sudo filament-kit label-reader corrections send")
+                   "run: sudo spoolwarden label-reader corrections send")
         for e in got["entries"]:
             what = ", ".join(f"{k}: {v}" for k, v in (e.get("corrected") or {}).items()) if isinstance(
                 e.get("corrected"), dict) else ""
