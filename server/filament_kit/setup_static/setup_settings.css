@@ -53,9 +53,14 @@
   /* the Save stays at the bottom, above the bottom bar, while the group has unsaved changes */
   .settings .group[data-state="dirty"] > .group__foot { position: sticky; bottom: calc(var(--tab) + env(safe-area-inset-bottom)); z-index: 4; border-top: var(--hairline) solid var(--border-strong); }
 }
-:root[data-look="panes"] .settings { grid-template-columns: calc(var(--s7) * 4 + var(--s1) * 2) minmax(0, 1fr); }
+:root[data-look="panes"] .settings { grid-template-columns: calc(var(--s7) * 6 + var(--s1) * 2) minmax(0, 1fr); }
 :root[data-look="panes"] .settings .subnav { display: none; }
 :root[data-look="panes"] .settings__list { display: grid; gap: var(--s2); }
+:root[data-look="panes"] .settings__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s3); row-gap: var(--s1); }
+:root[data-look="panes"] .settings__name { grid-column: 1; min-width: 0; overflow-wrap: anywhere; }
+:root[data-look="panes"] .settings__state { grid-column: 1; text-align: left; }
+:root[data-look="panes"] .settings__state:empty { display: none; }
+:root[data-look="panes"] .settings__row .icon { grid-area: 1 / 2 / span 2; }
 :root[data-look="panes"] .settings__group:not([data-shown]) { display: none; }
 :root[data-look="panes"] .settings:not([data-open]) .settings__group:first-child { display: block; }
 @media (max-width: 1024px) {
