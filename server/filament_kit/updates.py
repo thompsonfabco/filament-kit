@@ -252,7 +252,7 @@ def _install(cfg: dict, version: str, run: Callable[[list[str]], int]) -> bool:
     try:
         with _sigterm_exits():
             root = release.extract(tarball, version, work)
-            print(f"stopping {', '.join(timers + services) or 'nothing'}; installing filament-kit {version}")
+            print(f"stopping {', '.join(timers + services) or 'nothing'}; installing Spoolwarden {version}")
             stopped = (services, timers)
             _systemctl(run, "stop", timers)
             _systemctl(run, "stop", services)
@@ -298,14 +298,14 @@ def _remove_units_left_behind(before: set[str], version: str, run: Callable[[lis
             (Path(UNIT_DIR) / unit).unlink(missing_ok=True)
             removed.append(unit)
         except OSError as e:
-            print(f"warning: could not remove {UNIT_DIR}/{unit}, which filament-kit {version} does not use: {e}",
+            print(f"warning: could not remove {UNIT_DIR}/{unit}, which Spoolwarden {version} does not use: {e}",
                   file=sys.stderr)
     if removed:
         try:
             run(["systemctl", "daemon-reload"])
         except OSError as e:
             output.err(f"warning: systemctl daemon-reload: {e}")
-        print(f"Removed {', '.join(removed)}: filament-kit {version} does not have them.")
+        print(f"Removed {', '.join(removed)}: Spoolwarden {version} does not have them.")
 
 
 def _install_older(cfg: dict, version: str, run: Callable[[list[str]], int]) -> bool:
@@ -504,7 +504,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
     if not _require_root():
         return output.NEEDS_SUDO
     if not _installed():
-        print("error: filament-kit is not installed here (no config.json); install it with get.sh",
+        print("error: Spoolwarden is not installed here (no config.json); install it with get.sh",
               file=sys.stderr)
         return 1
     try:
@@ -765,7 +765,7 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
         output.err(f"error: no kept copy of {cur} to go back to; reinstall it by hand: "
                    + f"curl -fsSL <get.sh url> | sudo bash -s -- --version {cur}")
         return 1
-    print(f"reinstalling filament-kit {cur}", file=sys.stderr)
+    print(f"reinstalling Spoolwarden {cur}", file=sys.stderr)
     try:
         restored = _install_older(cfg, cur, run)
     except ReleaseError as e:
@@ -773,7 +773,7 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
         restored = False
     if restored:
         _write_state(previous=old_previous)
-        print(f"filament-kit {cur} is back in place; the update failed", file=sys.stderr)
+        print(f"Spoolwarden {cur} is back in place; the update failed", file=sys.stderr)
     else:
         output.err(f"error: reinstalling {cur} failed too; try again with: "
                    + "sudo spoolwarden update --rollback")
@@ -798,7 +798,7 @@ def _modules_unfit(target: str) -> list[str]:
 
 
 def _unfit_text(target: str, on: list[str]) -> str:
-    return (f"filament-kit {target} has no {', '.join(on)} module; run "
+    return (f"Spoolwarden {target} has no {', '.join(on)} module; run "
             + " and ".join(f"`sudo spoolwarden modules disable {n}`" for n in on) + " first")
 
 
@@ -819,7 +819,7 @@ def _modules_fit(target: str) -> bool:
         for n in unknown:
             del mods[n]
         config.save(raw)
-        print(f"Removed {', '.join(unknown)} (off) from config.json's modules: filament-kit {target} does not know it.")
+        print(f"Removed {', '.join(unknown)} (off) from config.json's modules: Spoolwarden {target} does not know it.")
     return True
 
 

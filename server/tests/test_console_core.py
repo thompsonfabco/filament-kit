@@ -322,7 +322,7 @@ def test_rollback_refused_with_nothing_kept_and_with_a_module_the_target_lacks(a
     config.save(cfg)
     r = post(client(app), "job", {"name": "rollback"})
     assert r.status_code == 409
-    assert r.json()["error"] == ("filament-kit 0.3.0 has no klipper module; run "
+    assert r.json()["error"] == ("Spoolwarden 0.3.0 has no klipper module; run "
                                  "`sudo spoolwarden modules disable klipper` first")
 
 

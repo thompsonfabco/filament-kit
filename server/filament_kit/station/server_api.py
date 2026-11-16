@@ -143,7 +143,7 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
         os.chown(tok, pw.pw_uid, pw.pw_gid)
 
 
-PAIR_STEPS = ("on the kit server: sudo spoolwarden pair --station, "
+PAIR_STEPS = ("on the Hub: sudo spoolwarden pair --station, "
               "then on the station PC: sudo spoolwarden station pair")
 
 
@@ -170,11 +170,11 @@ def pairing_lines(state: str | None = None) -> list[str]:
     if state == "unchecked":
         return ["--   station pairing not checked: run it with sudo"]
     if state == "unpaired":
-        return ['--   station button flow not paired with the kit server: a tag tap shows "Not paired"',
+        return ['--   station button flow not paired with the Hub: a tag tap shows "Not paired"',
                 f"     fix: {PAIR_STEPS}"]
     m = re.fullmatch(r"paired (\S+)", state)
     if m:
-        return [f"OK   station paired with the kit server ({m.group(1)})"]
+        return [f"OK   station paired with the Hub ({m.group(1)})"]
     return ["--   station pairing could not be checked; see: sudo spoolwarden station pairing-state"]
 
 

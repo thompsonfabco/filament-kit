@@ -60,13 +60,13 @@ case "$1" in
     pair_ok "$T/fullchain.pem" "$T/privkey.pem" && exit 0
     HOST=$(cat "$R/etc/mcp-router/host" 2>/dev/null)
     if [ -n "$HOST" ] && take_pair "$R/etc/letsencrypt/live/$HOST"; then
-      echo "filament-kit: the saved certificate and key did not belong together, so a fresh copy was taken from the certificate store."
+      echo "Spoolwarden: the saved certificate and key did not belong together, so a fresh copy was taken from the certificate store."
     elif take_pair "$T/previous"; then
-      echo "filament-kit: the saved certificate and key did not belong together, so the previous working pair was put back."
+      echo "Spoolwarden: the saved certificate and key did not belong together, so the previous working pair was put back."
     elif take_pair "$T/previous" expired-ok; then
-      echo "filament-kit: the saved certificate and key did not belong together and the only working pair has run out, so it is served anyway to keep the web server up; renew it with 'sudo certbot renew' (or 'sudo spoolwarden modules apply' for the kit's own certificate)."
+      echo "Spoolwarden: the saved certificate and key did not belong together and the only working pair has run out, so it is served anyway to keep the web server up; renew it with 'sudo certbot renew' (or 'sudo spoolwarden modules apply' for the kit's own certificate)."
     else
-      echo "filament-kit: the saved certificate and key do not belong together and no good copy was found; run 'spoolwarden apply' to make them again."
+      echo "Spoolwarden: the saved certificate and key do not belong together and no good copy was found; run 'spoolwarden apply' to make them again."
     fi
     exit 0 ;;
   *) echo "usage: $0 pre|post|deploy|check"; exit 2 ;;

@@ -112,6 +112,8 @@ accept the second set of names a later release will use (update download, backup
 job), and the Hub announces itself on the network under both service types. Everything the kit makes is named as before.
 - **The command is now `spoolwarden`.** Install and update put `spoolwarden` where `filament-kit` was; `spoolwarden --version` prints `Spoolwarden <version>`, and the help, messages and Fix lines name it. `filament-kit` still works for a time: it runs `spoolwarden` with the same arguments, input, output and exit code, and prints one line on standard error saying the name changed.
 
+- **The product is called Spoolwarden.** The Hub page, the installer and the update messages now say Spoolwarden; commands, folders and links stay as they are.
+
 ## Still to come
 
 Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the
