@@ -716,10 +716,12 @@ internal fun FilamentKitApp(
         }
     }
 
+    var sectionSummaries by remember(api) { mutableStateOf<Map<Tab, String>>(emptyMap()) }
     SwNav(
         selected = tab,
         visible = navVisible,
         onSelect = tabTapped,
+        summaries = sectionSummaries,
         settingsUpdate = update.available != null,
     ) {
         val addStep: @Composable (String, AddStep) -> Unit = { id, step ->
@@ -925,6 +927,12 @@ internal fun FilamentKitApp(
                             initializer { HomePrintersViewModel(load = { currentApi().printers() }) }
                         })
                         val homePrinters by printersVm.state.collectAsStateWithLifecycle()
+                        LaunchedEffect(presets) {
+                            presets?.let { sectionSummaries = sectionSummaries + (Tab.Home to com.thompsonfabco.filamentkit.ui.components.presetsSummary(it, context.resources)) }
+                        }
+                        LaunchedEffect(homePrinters) {
+                            homePrinters.printers?.let { sectionSummaries = sectionSummaries + (Tab.Printers to com.thompsonfabco.filamentkit.ui.components.printersSummary(it, context.resources)) }
+                        }
                         val showPrinters = info?.printersOn != false
                         // read again with each connection check, while Home is on screen
                         LaunchedEffect(lifecycle, online, showPrinters) {
@@ -1019,6 +1027,7 @@ internal fun FilamentKitApp(
                                     )
                                 }
                             },
+                            onSummary = { sectionSummaries = sectionSummaries + (Tab.Home to it) },
                         )
                     }
 
@@ -1121,7 +1130,8 @@ internal fun FilamentKitApp(
                                     onOpenSpool = { sp -> sp.id?.let { nav.navigate(SpoolRoute(it)) } },
                                     embedded = embedded,
                                 )
-                            })
+                            },
+                            onSummary = { sectionSummaries = sectionSummaries + (Tab.Printers to it) })
                     }
 
                     composable<PrinterRoute> { e ->
@@ -1213,6 +1223,7 @@ internal fun FilamentKitApp(
                                     embedded = embedded,
                                 )
                             },
+                            onSummary = { sectionSummaries = sectionSummaries + (Tab.Recent to it) },
                         )
                     }
 

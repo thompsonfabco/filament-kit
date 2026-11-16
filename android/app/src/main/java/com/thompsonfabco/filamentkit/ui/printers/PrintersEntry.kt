@@ -36,9 +36,10 @@ fun PrintersListEntry(
     onReplaceCode: (String) -> Unit,
     onPairAgain: () -> Unit,
     printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+    onSummary: (String) -> Unit = {},
 ) {
     val vm = viewModel { PrintersViewModel(ApiPrinterBackend(currentApi)) }
-    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain, onReplaceCode = onReplaceCode, printerDetail = printerDetail)
+    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain, onReplaceCode = onReplaceCode, printerDetail = printerDetail, onSummary = onSummary)
 }
 
 /** One printer's screen. [api] gives the camera its client and stream addresses. */

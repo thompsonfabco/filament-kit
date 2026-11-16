@@ -63,6 +63,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
+import com.thompsonfabco.filamentkit.ui.components.presetsSummary
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.home.PresetMark
@@ -94,8 +95,13 @@ fun PresetsScreen(
     nowMillis: Long? = null,
     pairing: Any? = null,
     updates: PresetUpdatesViewModel? = null,
+    onSummary: (String) -> Unit = {},
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val resources = LocalContext.current.resources
+    LaunchedEffect(s.status) {
+        s.status?.let { onSummary(presetsSummary(it, resources)) }
+    }
     val space = SpoolwardenTheme.space
     val context = LocalContext.current
     val toast = LocalToast.current

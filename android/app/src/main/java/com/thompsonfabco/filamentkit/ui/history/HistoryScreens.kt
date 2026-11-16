@@ -56,6 +56,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.recentSummary
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.delay
@@ -69,9 +70,10 @@ fun HistoryListEntry(
     onOpen: (String) -> Unit,
     onPairAgain: () -> Unit,
     recordDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+    onSummary: (String) -> Unit = {},
 ) {
     val list = viewModel { HistoryListViewModel(HistoryBackend.of(current)) }
-    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain, recordDetail = recordDetail)
+    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain, recordDetail = recordDetail, onSummary = onSummary)
 }
 
 /**
@@ -109,8 +111,13 @@ internal fun HistoryListScreen(
     onOpen: (String) -> Unit,
     onPairAgain: () -> Unit,
     recordDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+    onSummary: (String) -> Unit = {},
 ) {
     val s by vm.state.collectAsState()
+    val resources = androidx.compose.ui.platform.LocalContext.current.resources
+    LaunchedEffect(s.history) {
+        s.history?.let { onSummary(recentSummary(it, resources)) }
+    }
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && recordDetail != null
     val useSheetDetail = presentation == DetailPresentation.Sheet && recordDetail != null

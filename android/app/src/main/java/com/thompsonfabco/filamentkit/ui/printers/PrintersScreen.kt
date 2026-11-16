@@ -75,6 +75,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.printersSummary
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
@@ -106,8 +107,13 @@ fun PrintersScreen(
     /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
     onReplaceCode: (id: String) -> Unit = onOpen,
     printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+    onSummary: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val resources = androidx.compose.ui.platform.LocalContext.current.resources
+    LaunchedEffect(state.loaded, state.printers) {
+        if (state.loaded) onSummary(printersSummary(state.printers, resources))
+    }
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && printerDetail != null
     val useSheetDetail = presentation == DetailPresentation.Sheet && printerDetail != null
