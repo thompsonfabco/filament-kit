@@ -151,7 +151,7 @@ def test_release_notes_are_written_for_the_current_version():
     assert 'release-notes/v$version.md' in text and "body_path: release-notes/v${{ needs.version.outputs.version }}.md" in text
     version = _version("server/filament_kit/__init__.py")
     notes = _read(f"release-notes/v{version}.md")
-    assert notes.startswith(f"# filament-kit {version}") and len(notes) > 200
+    assert re.match(rf"# (filament-kit|Spoolwarden) {re.escape(version)}$", notes.split(chr(10))[0]) and len(notes) > 200
 
 
 def test_task_runs_every_ten_minutes():
