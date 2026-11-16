@@ -26,9 +26,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -42,6 +46,7 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ProfileLine
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.UncoveredFilament
+import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
@@ -50,11 +55,17 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconSize
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
+import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
+import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
+import com.thompsonfabco.filamentkit.ui.components.presetsSummary
+import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.home.PresetMark
 import com.thompsonfabco.filamentkit.ui.home.PresetRow
 import com.thompsonfabco.filamentkit.ui.home.PresetUpdatesDialog
@@ -84,8 +95,13 @@ fun PresetsScreen(
     nowMillis: Long? = null,
     pairing: Any? = null,
     updates: PresetUpdatesViewModel? = null,
+    onSummary: (String) -> Unit = {},
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val resources = LocalContext.current.resources
+    LaunchedEffect(s.status) {
+        s.status?.let { onSummary(presetsSummary(it, resources)) }
+    }
     val space = SpoolwardenTheme.space
     val context = LocalContext.current
     val toast = LocalToast.current
@@ -99,27 +115,79 @@ fun PresetsScreen(
     }
     LaunchedEffect(pairing) { vm.pairedWith(pairing) }
     val now = remember(nowMillis) { nowMillis ?: System.currentTimeMillis() }
-    Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    val presentation = rememberDetailPresentation()
+    val useCardDetail = presentation == DetailPresentation.Card
+    val useSheetDetail = presentation == DetailPresentation.Sheet
+    val usePaneDetail = presentation == DetailPresentation.Pane
+    val lineFocus = remember { mutableMapOf<String, FocusRequester>() }
+    var returnFocusLineId by remember { mutableStateOf<String?>(null) }
+    val view = LocalView.current
+    LaunchedEffect(returnFocusLineId) {
+        val id = returnFocusLineId ?: return@LaunchedEffect
+        repeat(2) { withFrameNanos { } }
+        lineFocus[id]?.let { requestDetailFocus(it, view) }
+        returnFocusLineId = null
+    }
+    val listBody: @Composable (Modifier) -> Unit = { listModifier ->
         Column(
-            Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(space.s3),
+            listModifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            StatusPanel(s, vm, now, onPairAgain)
-            NoticeCard(NoticeKind.Info, stringResource(R.string.presets_info))
-            SettingsPanel {
-                SectionTitle(stringResource(R.string.presets_missing_title))
-                Text(stringResource(R.string.presets_missing_text), style = MaterialTheme.typography.bodyMedium)
-                SwButton(stringResource(R.string.catalog_add_line), onAddCatalogLine, Modifier.fillMaxWidth())
+            Column(
+                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(space.s3),
+            ) {
+                StatusPanel(s, vm, now, onPairAgain)
+                NoticeCard(NoticeKind.Info, stringResource(R.string.presets_info))
+                SettingsPanel {
+                    SectionTitle(stringResource(R.string.presets_missing_title))
+                    Text(stringResource(R.string.presets_missing_text), style = MaterialTheme.typography.bodyMedium)
+                    SwButton(stringResource(R.string.catalog_add_line), onAddCatalogLine, Modifier.fillMaxWidth())
+                }
+                UncoveredPanel(s, vm, onPairAgain)
+                LinesPanel(
+                    s, vm, onPairAgain,
+                    useCardDetail = useCardDetail,
+                    lineFocus = lineFocus,
+                    onCloseCard = { lineId ->
+                        vm.closeParent()
+                        returnFocusLineId = lineId
+                    },
+                )
+                if (updates != null) UpdatesPanel(s.status, updates, onChanged = vm::reload)
             }
-            UncoveredPanel(s, vm, onPairAgain)
-            LinesPanel(s, vm, onPairAgain)
-            if (updates != null) UpdatesPanel(s.status, updates, onChanged = vm::reload)
         }
     }
-    s.edit?.let { ParentSheet(it, vm, onPairAgain) }
+    if (usePaneDetail) {
+        val edit = s.edit
+        val close = {
+            edit?.let { returnFocusLineId = it.lineId }
+            vm.closeParent()
+        }
+        SwPaneLayout(
+            hasSelection = edit != null,
+            emptyText = stringResource(R.string.detail_pane_empty_line),
+            onClose = close,
+            modifier = modifier,
+            canClose = edit?.saving != true,
+            list = { listBody(Modifier) },
+            detail = { edit?.let { ParentEditorBody(it, vm, onPairAgain, onClose = close) } },
+        )
+    } else {
+        listBody(modifier)
+        when {
+            useSheetDetail -> s.edit?.let { edit ->
+                val close = {
+                    returnFocusLineId = edit.lineId
+                    vm.closeParent()
+                }
+                SwSheetDetail(onClose = close, gesturesEnabled = !edit.saving) {
+                    ParentEditorBody(edit, vm, onPairAgain, onClose = close)
+                }
+            }
+            !useCardDetail -> s.edit?.let { ParentSheet(it, vm, onPairAgain) }
+        }
+    }
 }
 
 @Composable
@@ -347,7 +415,14 @@ private fun PickField(
 // ---- product lines ----------------------------------------------------------------------------------------------
 
 @Composable
-private fun LinesPanel(s: PresetsUiState, vm: PresetsViewModel, onPairAgain: () -> Unit) {
+private fun LinesPanel(
+    s: PresetsUiState,
+    vm: PresetsViewModel,
+    onPairAgain: () -> Unit,
+    useCardDetail: Boolean = false,
+    lineFocus: MutableMap<String, FocusRequester> = mutableMapOf(),
+    onCloseCard: (String) -> Unit = {},
+) {
     val lines = s.lines
     SettingsPanel {
         SectionTitle(stringResource(R.string.presets_lines_title))
@@ -361,7 +436,22 @@ private fun LinesPanel(s: PresetsUiState, vm: PresetsViewModel, onPairAgain: () 
         }
         lines.take(s.shown).forEachIndexed { i, line ->
             if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-            LineRow(line, saved = s.savedFor == line.lineId, onChange = { vm.editParent(line) })
+            val requester = lineFocus.getOrPut(line.lineId) { FocusRequester() }
+            val editing = useCardDetail && s.edit?.lineId == line.lineId
+            LineRow(
+                line, saved = s.savedFor == line.lineId,
+                buttonModifier = Modifier.focusRequester(requester),
+                onChange = {
+                    if (editing) onCloseCard(line.lineId) else vm.editParent(line)
+                },
+            )
+            if (editing) {
+                val edit = s.edit
+                HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+                SwCardDetail(onClose = { onCloseCard(line.lineId) }, canClose = !edit.saving) {
+                    ParentEditorBody(edit, vm, onPairAgain, onClose = { onCloseCard(line.lineId) })
+                }
+            }
         }
         if (lines.size > s.shown) SwButton(stringResource(R.string.presets_lines_more), vm::showMore, kind = SwButtonKind.Quiet)
     }
@@ -369,7 +459,12 @@ private fun LinesPanel(s: PresetsUiState, vm: PresetsViewModel, onPairAgain: () 
 
 /** One product line: "<brand> <line>", "<material> · <n> presets", its Bambu Studio parent (a triangle when none), Change parent. */
 @Composable
-private fun LineRow(line: ProfileLine, saved: Boolean, onChange: () -> Unit) {
+private fun LineRow(
+    line: ProfileLine,
+    saved: Boolean,
+    buttonModifier: Modifier = Modifier,
+    onChange: () -> Unit,
+) {
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     val name = stringResource(R.string.presets_line_title, line.vendor, line.product)
@@ -402,7 +497,7 @@ private fun LineRow(line: ProfileLine, saved: Boolean, onChange: () -> Unit) {
         }
         SwButton(
             stringResource(R.string.presets_change_parent), onChange,
-            Modifier.semantics { contentDescription = changeFor }, kind = SwButtonKind.Quiet,
+            buttonModifier.semantics { contentDescription = changeFor }, kind = SwButtonKind.Quiet,
         )
     }
 }
@@ -410,55 +505,65 @@ private fun LineRow(line: ProfileLine, saved: Boolean, onChange: () -> Unit) {
 /** The sheet "Bambu Studio parent of <line>" (05-android-app 11.2): find a parent, pick one, Save or Cancel. */
 @Composable
 private fun ParentSheet(edit: ParentEdit, vm: PresetsViewModel, onPairAgain: () -> Unit) {
-    val space = SpoolwardenTheme.space
     SwSheet(onDismiss = vm::closeParent, gesturesEnabled = !edit.saving) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4),
-            verticalArrangement = Arrangement.spacedBy(space.s3),
-        ) {
-            SectionTitle(stringResource(R.string.presets_parent_sheet_title, edit.line))
-            val parents = edit.parents
-            val fail = edit.fail
-            when {
-                parents == null && fail != null -> {
-                    FailureNotice(fail, onPairAgain)
-                    SwButton(stringResource(R.string.common_close), vm::closeParent, Modifier.fillMaxWidth())
-                }
-                parents == null -> Text(stringResource(R.string.presets_parent_loading), style = MaterialTheme.typography.bodyMedium)
-                !parents.synced -> {
-                    Text(stringResource(R.string.presets_parent_unreported), style = MaterialTheme.typography.bodyMedium)
-                    SwButton(stringResource(R.string.common_close), vm::closeParent, Modifier.fillMaxWidth())
-                }
-                else -> {
-                    FormField(edit.query, vm::findParent, stringResource(R.string.presets_parent), enabled = !edit.saving)
-                    val matches = edit.matches
-                    Column(Modifier.heightIn(max = SpoolwardenTheme.sizes.qr).verticalScroll(rememberScrollState())) {
-                        if (matches.isEmpty()) {
-                            Text(stringResource(R.string.presets_parent_no_match), style = MaterialTheme.typography.bodyMedium)
-                        }
-                        matches.take(MATCH_CAP).forEach { p ->
-                            val picked = p == edit.picked
-                            Row(
-                                Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
-                                    .selectable(picked, enabled = !edit.saving, role = Role.RadioButton) { vm.pickParent(p) },
-                                horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(picked, onClick = null)
-                                Text(p, style = MaterialTheme.typography.bodyMedium)
-                            }
+        ParentEditorBody(edit, vm, onPairAgain, onClose = vm::closeParent)
+    }
+}
+
+@Composable
+private fun ParentEditorBody(
+    edit: ParentEdit,
+    vm: PresetsViewModel,
+    onPairAgain: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val space = SpoolwardenTheme.space
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4),
+        verticalArrangement = Arrangement.spacedBy(space.s3),
+    ) {
+        SectionTitle(stringResource(R.string.presets_parent_sheet_title, edit.line))
+        val parents = edit.parents
+        val fail = edit.fail
+        when {
+            parents == null && fail != null -> {
+                FailureNotice(fail, onPairAgain)
+                SwButton(stringResource(R.string.common_close), onClose, Modifier.fillMaxWidth())
+            }
+            parents == null -> Text(stringResource(R.string.presets_parent_loading), style = MaterialTheme.typography.bodyMedium)
+            !parents.synced -> {
+                Text(stringResource(R.string.presets_parent_unreported), style = MaterialTheme.typography.bodyMedium)
+                SwButton(stringResource(R.string.common_close), onClose, Modifier.fillMaxWidth())
+            }
+            else -> {
+                FormField(edit.query, vm::findParent, stringResource(R.string.presets_parent), enabled = !edit.saving)
+                val matches = edit.matches
+                Column(Modifier.heightIn(max = SpoolwardenTheme.sizes.qr).verticalScroll(rememberScrollState())) {
+                    if (matches.isEmpty()) {
+                        Text(stringResource(R.string.presets_parent_no_match), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    matches.take(MATCH_CAP).forEach { p ->
+                        val picked = p == edit.picked
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
+                                .selectable(picked, enabled = !edit.saving, role = Role.RadioButton) { vm.pickParent(p) },
+                            horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(picked, onClick = null)
+                            Text(p, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
-                    fail?.let { FailureNotice(it, onPairAgain) }
-                    SwButton(
-                        stringResource(R.string.presets_sheet_save), vm::saveParent, Modifier.fillMaxWidth(),
-                        kind = SwButtonKind.Main, enabled = edit.picked != null && edit.picked != edit.current,
-                        busy = edit.saving,
-                    )
-                    SwButton(
-                        stringResource(R.string.common_cancel), vm::closeParent, Modifier.fillMaxWidth(),
-                        kind = SwButtonKind.Quiet, enabled = !edit.saving,
-                    )
                 }
+                fail?.let { FailureNotice(it, onPairAgain) }
+                SwButton(
+                    stringResource(R.string.presets_sheet_save), vm::saveParent, Modifier.fillMaxWidth(),
+                    kind = SwButtonKind.Main, enabled = edit.picked != null && edit.picked != edit.current,
+                    busy = edit.saving,
+                )
+                SwButton(
+                    stringResource(R.string.common_cancel), onClose, Modifier.fillMaxWidth(),
+                    kind = SwButtonKind.Quiet, enabled = !edit.saving,
+                )
             }
         }
     }

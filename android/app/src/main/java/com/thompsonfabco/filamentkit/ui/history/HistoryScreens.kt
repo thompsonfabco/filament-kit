@@ -19,10 +19,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -36,23 +43,37 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.HistorySummary
+import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwAction
+import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwLazyCollection
+import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
+import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwTile
+import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.recentSummary
+import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 
 /** Recently added (05-android-app 10.1): the list of intake records. */
 @Composable
-fun HistoryListEntry(current: () -> Api, client: Any?, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+fun HistoryListEntry(
+    current: () -> Api,
+    client: Any?,
+    onOpen: (String) -> Unit,
+    onPairAgain: () -> Unit,
+    recordDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+    onSummary: (String) -> Unit = {},
+) {
     val list = viewModel { HistoryListViewModel(HistoryBackend.of(current)) }
-    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain)
+    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain, recordDetail = recordDetail, onSummary = onSummary)
 }
 
 /**
@@ -72,19 +93,56 @@ fun HistoryRecordEntry(
     onOpenPhoto: (Int) -> Unit,
     onOpenSpool: (JsonObject) -> Unit,
     onPairAgain: () -> Unit,
+    embedded: Boolean = false,
 ) {
     val list = viewModel(viewModelStoreOwner = listOwner) { HistoryListViewModel(HistoryBackend.of(current)) }
     val vm = viewModel(key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
     RecordScreen(
         vm, list, client, online = online, onBack = { list.refresh(); onBack() }, onOpenRecord = onOpenRecord, onEdit = onEdit,
-        onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain,
+        onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain, embedded = embedded,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (String) -> Unit, onPairAgain: () -> Unit) {
+internal fun HistoryListScreen(
+    vm: HistoryListViewModel,
+    client: Any?,
+    onOpen: (String) -> Unit,
+    onPairAgain: () -> Unit,
+    recordDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
+    onSummary: (String) -> Unit = {},
+) {
     val s by vm.state.collectAsState()
+    val resources = androidx.compose.ui.platform.LocalContext.current.resources
+    LaunchedEffect(s.history) {
+        s.history?.let { onSummary(recentSummary(it, resources)) }
+    }
+    val presentation = rememberDetailPresentation()
+    val useCardDetail = presentation == DetailPresentation.Card && recordDetail != null
+    val useSheetDetail = presentation == DetailPresentation.Sheet && recordDetail != null
+    val usePaneDetail = presentation == DetailPresentation.Pane && recordDetail != null
+    var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var sheetRecordId by rememberSaveable { mutableStateOf<String?>(null) }
+    val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
+    var returnFocusId by remember { mutableStateOf<String?>(null) }
+    val view = LocalView.current
+    LaunchedEffect(returnFocusId) {
+        val id = returnFocusId ?: return@LaunchedEffect
+        repeat(2) { withFrameNanos { } }
+        rowFocus[id]?.let { requestDetailFocus(it, view) }
+        returnFocusId = null
+    }
+    LaunchedEffect(presentation) {
+        if (presentation == DetailPresentation.Screen && recordDetail != null) {
+            val activeId = sheetRecordId ?: expandedIds.lastOrNull()
+            if (activeId != null) {
+                sheetRecordId = null
+                expandedIds = emptyList()
+                onOpen(activeId)
+            }
+        }
+    }
     LifecycleStartEffect(vm) {
         vm.refresh()
         onStopOrDispose { }
@@ -100,46 +158,101 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (
             vm.refresh()
         }
     }
-    PullToRefreshBox(isRefreshing = s.loading && h != null, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
-            when {
-                s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
-                s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
-            }
-            val offline = failure == RecentFailure.Offline
-            val ago = remember(s.loadedAt, s.error) { s.loadedAt?.let { (System.currentTimeMillis() - it) / MS_PER_S } ?: 0L }
-            ScreenState(
-                loaded = h != null,
-                loading = s.loading,
-                modifier = Modifier.weight(1f),
-                error = if (failure != null && !offline) failureText(failure) else null,
-                onTryAgain = vm::refresh,
-                offline = offline,
-                loadedSecondsAgo = ago,
-            ) {
-                if (h != null) {
-                    if (h.keep > 0) {
-                        Text(
-                            pluralStringResource(R.plurals.recent_facts, h.keep, h.keep, RecentValues.megabytes(h.photoBytes ?: 0L)),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    if (!h.ai) ReaderOffLine()
-                    if (h.records.isEmpty()) {
-                        SwEmptyState(
-                            icon = R.drawable.sw_ic_clock,
-                            title = stringResource(R.string.recent_empty_title),
-                            text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
-                        )
-                    } else {
-                        SwLazyCollection(
-                            h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
-                            visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
-                            tile = { r -> RecordTile(r, vm) { onOpen(r.id) } },
-                        ) { r ->
-                            RecordRow(r, vm) { onOpen(r.id) }
+    val listBody: @Composable () -> Unit = {
+        PullToRefreshBox(isRefreshing = s.loading && h != null, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
+                when {
+                    s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+                    s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+                }
+                val offline = failure == RecentFailure.Offline
+                val ago = remember(s.loadedAt, s.error) { s.loadedAt?.let { (System.currentTimeMillis() - it) / MS_PER_S } ?: 0L }
+                ScreenState(
+                    loaded = h != null,
+                    loading = s.loading,
+                    modifier = Modifier.weight(1f),
+                    error = if (failure != null && !offline) failureText(failure) else null,
+                    onTryAgain = vm::refresh,
+                    offline = offline,
+                    loadedSecondsAgo = ago,
+                ) {
+                    if (h != null) {
+                        if (h.keep > 0) {
+                            Text(
+                                pluralStringResource(R.plurals.recent_facts, h.keep, h.keep, RecentValues.megabytes(h.photoBytes ?: 0L)),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        if (!h.ai) ReaderOffLine()
+                        if (h.records.isEmpty()) {
+                            SwEmptyState(
+                                icon = R.drawable.sw_ic_clock,
+                                title = stringResource(R.string.recent_empty_title),
+                                text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
+                            )
+                        } else {
+                            val openOrToggle: (HistorySummary) -> Unit = { r ->
+                                when {
+                                    useCardDetail -> expandedIds = if (r.id in expandedIds) expandedIds - r.id else expandedIds + r.id
+                                    useSheetDetail || usePaneDetail -> sheetRecordId = r.id
+                                    else -> onOpen(r.id)
+                                }
+                            }
+                            SwLazyCollection(
+                                h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
+                                visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
+                                tile = { r ->
+                                    val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
+                                    RecordTile(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                                },
+                                isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
+                                detail = if (useCardDetail) {
+                                    { r ->
+                                        val close = {
+                                            expandedIds = expandedIds - r.id
+                                            returnFocusId = r.id
+                                        }
+                                        SwCardDetail(onClose = close) {
+                                            recordDetail(r.id, true, close)
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
+                            ) { r ->
+                                val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
+                                RecordRow(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                            }
                         }
                     }
+                }
+            }
+        }
+    }
+    if (usePaneDetail && recordDetail != null) {
+        val openId = sheetRecordId
+        val close = {
+            returnFocusId = openId
+            sheetRecordId = null
+        }
+        SwPaneLayout(
+            hasSelection = openId != null,
+            emptyText = stringResource(R.string.detail_pane_empty_record),
+            onClose = close,
+            list = listBody,
+            detail = { openId?.let { recordDetail(it, true, close) } },
+        )
+    } else {
+        listBody()
+        if (useSheetDetail) {
+            val openId = sheetRecordId
+            if (openId != null && recordDetail != null) {
+                val close = {
+                    returnFocusId = openId
+                    sheetRecordId = null
+                }
+                SwSheetDetail(onClose = close) {
+                    recordDetail(openId, true, close)
                 }
             }
         }
@@ -159,7 +272,7 @@ internal fun ReaderOffLine(modifier: Modifier = Modifier) {
 
 /** One record (10.1): thumbnail with its photo count, the filaments, when and which spools, the state and the source. */
 @Composable
-private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, onClick: () -> Unit) {
+private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     val ids = RecentValues.spoolIds(r.spools)
@@ -169,7 +282,7 @@ private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, onClick: () -
         pluralStringResource(R.plurals.recent_spool_label, ids.size, RecentValues.idList(ids))
     }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(role = Role.Button, onClick = onClick)
+        modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(role = Role.Button, onClick = onClick)
             .padding(space.s3),
         horizontalArrangement = Arrangement.spacedBy(space.s3),
         verticalAlignment = Alignment.CenterVertically,
@@ -201,7 +314,7 @@ private fun RecordRow(r: HistorySummary, vm: HistoryListViewModel, onClick: () -
  * time and spools under them and the state beside, the source as its field, and "Open" the full width at the foot.
  */
 @Composable
-private fun RecordTile(r: HistorySummary, vm: HistoryListViewModel, onClick: () -> Unit) {
+private fun RecordTile(r: HistorySummary, vm: HistoryListViewModel, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val ids = RecentValues.spoolIds(r.spools)
     val spools = if (ids.isEmpty()) {
         stringResource(R.string.recent_no_spools)
@@ -217,6 +330,7 @@ private fun RecordTile(r: HistorySummary, vm: HistoryListViewModel, onClick: () 
         description = listOf(title, meta, state, source).joinToString(", "),
         actionLabel = stringResource(R.string.a11y_action_open),
         onAction = onClick,
+        modifier = modifier,
         subtitle = meta,
         status = { IntakeStateLabel(r.state) },
         visual = { Thumb(vm, r, SpoolwardenTheme.space.s7 * 2) },
