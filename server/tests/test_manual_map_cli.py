@@ -1,4 +1,4 @@
-"""`filament-kit printer map --manual`: Map by loading filament in a terminal, on the running server's session."""
+"""`spoolwarden printer map --manual`: Map by loading filament in a terminal, on the running server's session."""
 from __future__ import annotations
 
 import copy

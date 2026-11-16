@@ -444,7 +444,7 @@ def test_profiles_build_waiting_exits_0_with_message(capsys, spoolman_url):
     assert cli.main(["profiles", "build"]) == 0
     out = capsys.readouterr()
     assert "install and pair the PC sync" in " ".join(out.out.split())
-    assert "Fix: sudo filament-kit pair --slicer-sync" in out.out
+    assert "Fix: sudo spoolwarden pair --slicer-sync" in out.out
     assert "FAIL" not in out.out and "failed" not in out.out and out.err == ""
 
 
@@ -528,7 +528,7 @@ def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_li
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    assert "--   Filament Catalog not downloaded (filament-kit library update), 0 local additions" in out
+    assert "--   Filament Catalog not downloaded (spoolwarden library update), 0 local additions" in out
     assert "--   Slicer presets: no build yet (waiting for Slicer Sync)" in out
     assert "--   Slicer Sync: not set up (see README: Pair your PC)" in out
 
@@ -717,7 +717,7 @@ def test_unreadable_config_says_run_with_sudo(argv, monkeypatch, capsys):
     monkeypatch.setattr(config, "load", denied)
     assert cli.main(argv) == 3
     err = capsys.readouterr().err
-    assert "/etc/filament-kit/config.json" in err and f"sudo filament-kit {argv[0]}" in err
+    assert "/etc/filament-kit/config.json" in err and f"sudo spoolwarden {argv[0]}" in err
     assert "Traceback" not in err
 
 

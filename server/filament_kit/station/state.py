@@ -1,6 +1,6 @@
 """Settings and the shared state of the station's threads (reader, scale, panel, intake flow, HTTP).
 
-Settings come from the environment (the systemd drop-in written by `filament-kit modules apply`); the station never
+Settings come from the environment (the systemd drop-in written by `spoolwarden modules apply`); the station never
 reads /etc/filament-kit. The other station modules import this one and use these objects; nothing else holds state.
 """
 from __future__ import annotations

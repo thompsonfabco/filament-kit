@@ -863,7 +863,7 @@ def _build_orca_line(line: Line, fs: list[dict], ids: list[int], *, t: OrcaTarge
             if lib_row is None:
                 why = (f"Orca parent {parent!r} is not in the uploaded Orca Slicer system presets" if parent
                        else "no Orca parent")
-                problems.append(f"{name}: {why}; skipped (set one: filament-kit profiles set-parent "
+                problems.append(f"{name}: {why}; skipped (set one: spoolwarden profiles set-parent "
                                 f"{line.line_id} <parent> --orca)")
                 continue
             template, base_id = {}, lib_row.get("setting_id")

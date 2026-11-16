@@ -263,7 +263,7 @@ def test_catalog_status_says_when_it_is_not_downloaded_with_the_fix(capsys, monk
                                                     "last_check": None, "skipped": None})
     rc, out, _ = run(capsys, ["catalog", "status"])
     assert rc == 0 and out.splitlines()[:2] == ["The Filament Catalog is not downloaded yet.",
-                                                "Fix: sudo filament-kit catalog update"]
+                                                "Fix: sudo spoolwarden catalog update"]
     assert "Last check: never." in out and "Source: https://x.example/l" in out
 
 
@@ -330,7 +330,7 @@ def test_backup_list_names_the_kinds_in_the_hub_pages_words_and_the_folder(capsy
 def test_backup_list_with_none_says_how_to_make_one(capsys, monkeypatch):
     monkeypatch.setattr(backup, "listing", lambda folder=None: [])
     rc, out, _ = run(capsys, ["backup", "list"])
-    assert rc == 0 and words(out) == f"No backups in {backup.backups_dir()} yet. Back up now: sudo filament-kit backup create"
+    assert rc == 0 and words(out) == f"No backups in {backup.backups_dir()} yet. Back up now: sudo spoolwarden backup create"
 
 
 def test_backup_keep_saves_the_days_as_the_hub_page_does(capsys):
@@ -380,7 +380,7 @@ def test_remote_firewall_starts_with_the_sentence_that_nothing_is_changed(capsys
     monkeypatch.setattr(remote, "settings", lambda cfg: {})
     monkeypatch.setattr(remote, "firewall_text", lambda s, r: "RULES")
     rc, out, _ = run(capsys, ["remote", "firewall"])
-    assert rc == 0 and out.startswith("filament-kit never changes your firewall or router. These are the rules to add:\n")
+    assert rc == 0 and out.startswith("Spoolwarden never changes your firewall or router. These are the rules to add:\n")
     assert out.rstrip().endswith("RULES")
 
 
@@ -573,7 +573,7 @@ def test_no_command_prints_the_grouped_help_that_help_and_dash_h_print(capsys):
     assert rc == 0
     assert run(capsys, ["help"])[:2] == (0, bare) and run(capsys, ["-h"])[:2] == (0, bare)
     lines = bare.splitlines()
-    assert lines[0].startswith("filament-kit on this Hub.") and "Usage: filament-kit <command> [options]" in lines[1]
+    assert lines[0].startswith("Spoolwarden on this Hub.") and "Usage: spoolwarden <command> [options]" in lines[1]
     heads = [i for i, line in enumerate(lines) if line in ("Everyday", "System")]
     assert [lines[i] for i in heads] == ["Everyday", "System"]
     assert "  catalog          Filament Catalog: status, update, roll back, add" in lines
@@ -584,7 +584,7 @@ def test_no_command_prints_the_grouped_help_that_help_and_dash_h_print(capsys):
 
 def test_help_for_a_command_is_its_own_usage(capsys):
     rc, out, _ = run(capsys, ["help", "catalog"])
-    assert rc == 0 and out.startswith("usage: filament-kit catalog") and "token" in out
+    assert rc == 0 and out.startswith("usage: spoolwarden catalog") and "token" in out
     rc, out, err = run(capsys, ["help", "nosuch"])
     assert rc == 2 and 'there is no command called "nosuch"' in err
 
@@ -616,10 +616,7 @@ def _design_commands() -> list[str]:
 _RENAME_STEPS = {
     r"| `pair [--slicer-sync \| --weigh-station] [--text]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |":
     r"| `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |",
-    "| `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |":
-    "| `spoolman fields` | Make the kit's extra fields in Spoolman | Overview, Make the fields |",
-    "| `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |":
-    "| `uninstall [--purge]` | Remove filament-kit (asks) | Updates, footer line |"}
+}
 
 
 def _design_rows() -> list[str]:
@@ -834,7 +831,7 @@ def test_help_under_json_is_ok_and_the_help_text(capsys):
         got = json.loads(out)
         assert rc == 0 and set(got) == {"ok", "help"} and got["ok"] is True, argv
     assert json.loads(run(capsys, ["help", "--json"])[1])["help"] == plain
-    assert json.loads(run(capsys, ["help", "catalog", "--json"])[1])["help"].startswith("usage: filament-kit catalog")
+    assert json.loads(run(capsys, ["help", "catalog", "--json"])[1])["help"].startswith("usage: spoolwarden catalog")
 
 
 def test_config_set_the_weigh_station_address_with_the_feature_off_is_refused(capsys, monkeypatch):

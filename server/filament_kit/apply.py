@@ -108,7 +108,7 @@ def _voice_path(name: str | None) -> str:
 
 
 def paired_server_ips() -> list[str]:
-    """The kit server's addresses from the station's pairing file (`filament-kit station pair`), or [] (not paired,
+    """The kit server's addresses from the station's pairing file (`spoolwarden station pair`), or [] (not paired,
     unreadable). Only literal IP addresses: they go into the unit's IPAddressAllow."""
     from .station import server_api
     try:
@@ -316,11 +316,11 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
 
 # ---------- executor ----------
 
-WRAPPER = "/usr/local/bin/filament-kit"
+WRAPPER = "/usr/local/bin/spoolwarden"
 AVAHI_FILE = "/etc/avahi/services/filament-kit.service"
 SLEEP_TARGETS = ["sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"]
 ALSA_CONTROLS = ("Master", "Headphone", "Speaker", "PCM")
-_AGAIN = "run `sudo filament-kit modules apply` again"
+_AGAIN = "run `sudo spoolwarden modules apply` again"
 # Wait for the dpkg lock instead of failing at once: on a fresh Ubuntu, unattended-upgrades often holds it.
 APT = ["apt-get", "-o", "DPkg::Lock::Timeout=300"]
 
@@ -347,7 +347,7 @@ _HINTS = {
     "remote_unpin": "remove it by hand: sudo rm /etc/systemd/system/certbot.timer.d/acme-window.conf",
     "remote_off": ("remove the kit's files by hand: sudo /usr/local/sbin/mcp-route rm <arg>; sudo rm "
                    "/etc/nginx/conf.d/filament-kit-router.conf /etc/letsencrypt/renewal-hooks/deploy/filament-kit"),
-    "ensure_fields": "check Spoolman answers, then: sudo filament-kit ensure-fields",
+    "ensure_fields": "check Spoolman answers, then: sudo spoolwarden ensure-fields",
 }
 
 
@@ -545,7 +545,7 @@ def _server_setup(ex: _Exec, arg: str) -> None:
             cli.write_key(key)
             print("Key saved.")
         else:
-            print("No key entered. Add it later with: sudo filament-kit config  (Label Reader)")
+            print("No key entered. Add it later with: sudo spoolwarden config  (Label Reader)")
         del key
     for f in (etc / "config.json", key_file):
         if f.exists():
@@ -600,7 +600,7 @@ def _web_state(ex: _Exec) -> None:
         web_access.pair(web.pw_uid, web.pw_gid)
     except Exception as e:  # noqa: BLE001 - the web unit says how to pair later; the rest of the apply goes on
         print(f"the web unit could not be paired with the kit server now ({type(e).__name__}); "
-              "the next `sudo filament-kit modules apply` tries again")
+              "the next `sudo spoolwarden modules apply` tries again")
     web_access.grant(web.pw_uid, kit.st_uid)
 
 
@@ -794,7 +794,7 @@ def _station_voice(ex: _Exec, name: str) -> None:
     vdir = f"{config.paths().opt.as_posix()}/resources/voice"
     if not ex.ok([sys.executable, "-I", "-m", "filament_kit.station.voice", vdir, name]):
         print(f"warning: the Piper voice {name} was not installed (see above: it did not match its pinned hash); "
-              "the panel speaks with espeak-ng. Try again later: sudo filament-kit modules apply")
+              "the panel speaks with espeak-ng. Try again later: sudo spoolwarden modules apply")
     ex.ok(["chmod", "-R", "a+rX,go-w", vdir])   # the station's user reads it whatever root's umask was
 
 
@@ -825,7 +825,7 @@ def _step(ex: _Exec, a: Action) -> None:
             print("\nSpoolman now answers only this machine and these networks: "
                   f"{arg.split('IPAddressAllow=localhost')[1].strip() or 'none'}. A client elsewhere (Tailscale, Docker, "
                   "another subnet) needs its network in spoolman.allow in /etc/filament-kit/config.json, then: "
-                  "sudo filament-kit modules apply")
+                  "sudo spoolwarden modules apply")
     elif k == "install_unit":
         ex.write(f"/etc/systemd/system/{arg}", (ex.resources / "systemd" / arg).read_bytes(), 0o644)
     elif k == "install_file":
@@ -886,7 +886,7 @@ def _step(ex: _Exec, a: Action) -> None:
         print("\n==> Downloading the filament library")
         if not ex.ok([WRAPPER, "library", "update"]):
             print("warning: the library could not be downloaded now; it is tried again every day "
-                  "(or run: sudo filament-kit library update)")
+                  "(or run: sudo spoolwarden library update)")
     elif k == "station_pairing_owner":
         _station_pairing_owner(ex)
     elif k == "station_voice":
@@ -984,7 +984,7 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
 
 def refresh_station(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, root: Path = Path("/"),
                     resolve: Callable[[str], list[str]] = default_resolve) -> str:
-    """After `filament-kit station pair`: rewrite the station drop-in (its IPAddressAllow now names the paired
+    """After `spoolwarden station pair`: rewrite the station drop-in (its IPAddressAllow now names the paired
     server) and restart the station, so the unit lets it reach the server. With the drop-in already right it does
     neither: a restart costs the reader about 6 s and resets the panel, and the running flow picks up new pairing
     files by itself (flow.api); a stopped station is started. Returns what it did: "restarted", "started" or
@@ -1073,13 +1073,13 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         if pairing:
             tty = _can_ask()
             if not _show_app(cfg, tty):
-                print("\nPairing skipped: pair a phone later with: sudo filament-kit pair")
+                print("\nPairing skipped: pair a phone later with: sudo spoolwarden pair")
             elif tty:
                 print("\n==> Pair a phone: open the filament-kit app and scan this code")
                 ex.ok([WRAPPER, "pair", "--no-wait"])
             else:
                 # no terminal (the updater, a provisioning script): the output goes to a log, so no pairing token
-                print("\nPair a phone at a terminal: sudo filament-kit pair  (pairing links are not written to logs)")
+                print("\nPair a phone at a terminal: sudo spoolwarden pair  (pairing links are not written to logs)")
     if "station" in on:
         from .station import server_api
         lines = server_api.pairing_lines()
@@ -1090,7 +1090,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
     if "spoolman" in on:
         parts.append(f"Spoolman: http://{host}.local:7912")
     if "server" in on:
-        parts.append("Pair another phone: sudo filament-kit pair")
+        parts.append("Pair another phone: sudo spoolwarden pair")
     if "station" in on:
         st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
         parts.append(f"Station: http://{host}.local:{int(st['port'])}/state")
@@ -1136,4 +1136,4 @@ def _setup_line(cfg: dict) -> None:
     if code:
         print(f"\nOpen {url}  (setup code: {setup_code.shown(code)})")
     else:
-        print(f"\nSetup page: {url}  (its setup code, at a terminal: sudo filament-kit setup-code)")
+        print(f"\nSetup page: {url}  (its setup code, at a terminal: sudo spoolwarden setup-code)")

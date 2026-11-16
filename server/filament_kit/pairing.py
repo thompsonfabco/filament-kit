@@ -83,7 +83,7 @@ def fingerprint(cert_pem: bytes) -> str:
 
 
 def give_to_state_owner(path) -> None:
-    """Run as root (`sudo filament-kit config`), a new state file would belong to root and the service user
+    """Run as root (`sudo spoolwarden config`), a new state file would belong to root and the service user
     could not read it: hand it to the owner of the state directory instead. A no-op for everyone else."""
     if getattr(os, "geteuid", lambda: -1)() != 0:
         return
@@ -129,7 +129,7 @@ def open_lock(path: Path):
             fh = os.fdopen(os.open(path, os.O_RDONLY | nofollow), "r")
         except FileNotFoundError:
             raise LockUnavailable(e.errno, f"the lock {path} is missing and this process may not create it; "
-                                  "run `sudo filament-kit modules apply` to make the shared locks", str(path)) from e
+                                  "run `sudo spoolwarden modules apply` to make the shared locks", str(path)) from e
     try:
         give_to_state_owner(path)
     except BaseException:

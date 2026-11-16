@@ -1,6 +1,6 @@
 """The station's calls to the kit server for the button flow (server side: filament_kit/station_flow.py).
 
-Pairing: `sudo filament-kit pair --station` on the server prints an fkit://pair link; `sudo filament-kit station pair`
+Pairing: `sudo spoolwarden pair --station` on the server prints an fkit://pair link; `sudo spoolwarden station pair`
 on the station PC takes it, shows the server's certificate fingerprint for the owner to compare, and writes
 /etc/filament-kit-station/station_server.json (address, port, fingerprint) and .../station_token (0600, the
 station user's). Calls go to https://<ip>:<port> by IP (the unit allows only the server's address: no DNS, no
@@ -43,7 +43,7 @@ class Link:
 
 
 def parse_link(text: str) -> Link:
-    """`fkit://pair?h=<host>&p=<port>&t=<token>&fp=<sha256>&ip=<ip>...` (as `filament-kit pair --station` prints)."""
+    """`fkit://pair?h=<host>&p=<port>&t=<token>&fp=<sha256>&ip=<ip>...` (as `spoolwarden pair --station` prints)."""
     u = urllib.parse.urlsplit((text or "").strip())
     if u.scheme.lower() not in ("fkit", "spoolwarden") or u.netloc.lower() != "pair":
         raise ValueError("not a filament-kit pairing link")
@@ -143,15 +143,15 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
         os.chown(tok, pw.pw_uid, pw.pw_gid)
 
 
-PAIR_STEPS = ("on the kit server: sudo filament-kit pair --station, "
-              "then on the station PC: sudo filament-kit station pair")
+PAIR_STEPS = ("on the kit server: sudo spoolwarden pair --station, "
+              "then on the station PC: sudo spoolwarden station pair")
 
 
 def pairing_state() -> str:
     """Is the button flow paired, as one line with no secret in it: `paired <address>:<port>`, `unpaired`, or
     `unchecked` (this user can't read the pairing). The token is the station user's and its folder is closed to the
     service user `filament-kit`, so the answer has to come from root: `station pairing-state`, which the wrapper
-    runs for `sudo filament-kit status`; the console's Overview gets it from the setup helper the same way."""
+    runs for `sudo spoolwarden status`; the console's Overview gets it from the setup helper the same way."""
     try:
         token_file().read_bytes()
     except PermissionError:
@@ -163,7 +163,7 @@ def pairing_state() -> str:
 
 
 def pairing_lines(state: str | None = None) -> list[str]:
-    """`filament-kit status` and the install's finish, on a machine with the station on: is the button flow paired
+    """`spoolwarden status` and the install's finish, on a machine with the station on: is the button flow paired
     with the kit server? (An upgrade from v0.2.0 leaves it unpaired: that station never called the server.)
     `state`: what pairing_state() answered for root; with none, this process looks for itself."""
     state = pairing_state() if state is None else state
@@ -175,7 +175,7 @@ def pairing_lines(state: str | None = None) -> list[str]:
     m = re.fullmatch(r"paired (\S+)", state)
     if m:
         return [f"OK   station paired with the kit server ({m.group(1)})"]
-    return ["--   station pairing could not be checked; see: sudo filament-kit station pairing-state"]
+    return ["--   station pairing could not be checked; see: sudo spoolwarden station pairing-state"]
 
 
 @dataclass
@@ -218,7 +218,7 @@ def pair_with_link(link: Link, confirm=None, step=None) -> PairResult:
     # before anything is saved, so a failed re-pair leaves the station's working pairing as it was
     status, body = ServerApi.from_link(link, first=first, timeout=15).hello()
     if status != 200:
-        again = "run `sudo filament-kit pair --station` on the server again, then `sudo filament-kit station pair`"
+        again = "run `sudo spoolwarden pair --station` on the server again, then `sudo spoolwarden station pair`"
         if status == 401:
             why = f"the link has expired (it works for {pairing.TOKEN_TTL // 60} minutes) or was used already"
         elif status == 0:
@@ -230,20 +230,20 @@ def pair_with_link(link: Link, confirm=None, step=None) -> PairResult:
     save_pairing(link, first=first)
     if "station" not in on:
         return PairResult("paired", "Paired. Switch the station module on to use it: "
-                                    "sudo filament-kit modules enable station")
+                                    "sudo spoolwarden modules enable station")
     step("Restarting the Weigh Station service")
     try:  # the station's unit lets only listed addresses through: add the server's, then restart it
         done = apply.refresh_station(cfg)
     except (apply.ApplyError, modules.ModuleError) as e:
         return PairResult("paired_not_restarted",
-                          f"Paired, but the station could not be updated ({e}). Run: sudo filament-kit modules apply")
+                          f"Paired, but the station could not be updated ({e}). Run: sudo spoolwarden modules apply")
     return PairResult("paired", {"restarted": "Paired. The station was restarted and uses the server now.",
                                  "started": "Paired. The station was started and uses the server now.",
                                  }.get(done, "Paired. The station uses the server now; no restart was needed."))
 
 
 class ServerApi:
-    """The flow's three calls (and hello, for pairing). Built from the pairing files; `paired` is False until `filament-kit station pair`."""
+    """The flow's three calls (and hello, for pairing). Built from the pairing files; `paired` is False until `spoolwarden station pair`."""
 
     def __init__(self, timeout: float = TIMEOUT):
         self.timeout = timeout
@@ -268,7 +268,7 @@ class ServerApi:
 
     def _call(self, method: str, path: str, body: bytes | None = None, ctype: str | None = None) -> tuple[int, dict]:
         if not self.paired:
-            return 0, {"error": "not_paired", "display": ["Not paired", "sudo filament-kit station pair"]}
+            return 0, {"error": "not_paired", "display": ["Not paired", "sudo spoolwarden station pair"]}
         headers = {"Authorization": f"Bearer {self.token}", "Accept": "application/json"}
         if ctype:
             headers["Content-Type"] = ctype

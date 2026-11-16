@@ -223,7 +223,7 @@ def test_install_sh_keeps_the_voice_and_leaves_the_fetch_to_modules_apply():
     text = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
     assert 'rm -rf "$OPT/resources"' not in text and "! -name voice" in text  # an upgrade keeps the voice
     assert "filament_kit.station.voice" not in text and '"${WHEEL}[station-tts]"' not in text  # apply's step
-    assert "exec /usr/local/bin/filament-kit modules apply" in text
+    assert "exec /usr/local/bin/spoolwarden modules apply" in text
     assert 'station-tts = ["piper-tts==1.8.0"]' in (ROOT / "server" / "pyproject.toml").read_text(encoding="utf-8")
 
 

@@ -168,7 +168,7 @@ def old_rows(out: str) -> list[str]:
             else:
                 rows[-1] += " " + text
         elif line in status.GROUPS or re.fullmatch(r"\d+ (?:needs? a look|OK|notes?)(?: - \d+ (?:needs? a look|OK|notes?))*", line) or (
-                n == 0 and re.match(r"filament-kit \S+ - ", line)):
+                n == 0 and re.match(r"Spoolwarden \S+ - ", line)):
             continue
         else:
             raise AssertionError(f"a status line that is no row, heading, header or summary: {line!r}")

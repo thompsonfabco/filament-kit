@@ -6,7 +6,7 @@ secret, a pairing or a module does.
   - `/etc/filament-kit/setup_code`: "salt_hex digest_hex", salted scrypt like the web passphrase, root only
     (600): only the root helper (setup_helper.py, op `check`) ever checks a code, so a process running as the
     service user cannot take the hash away and guess offline.
-  - `/etc/filament-kit/setup_code.plain`: the code itself, root only (600), so `sudo filament-kit setup-code` can
+  - `/etc/filament-kit/setup_code.plain`: the code itself, root only (600), so `sudo spoolwarden setup-code` can
     show it again; `--new` replaces both and clears the lockout.
   - `Lockout` (`/etc/filament-kit/setup_lockout.xml`, root only, under a flock on setup_lockout.lock, rewritten by
     a temp file and a rename): at most LOCK_MAX wrong codes per LOCK_WINDOW seconds per client address, counted

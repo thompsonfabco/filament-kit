@@ -64,7 +64,7 @@ fi
 
 rm -f /etc/avahi/services/filament-kit.service
 systemctl reload avahi-daemon 2>/dev/null || true
-rm -f /usr/local/bin/filament-kit
+rm -f /usr/local/bin/spoolwarden /usr/local/bin/filament-kit
 # remote: the kit's own nginx and certbot files, as `modules disable remote` removes them: its routes (only files
 # mcp-route wrote), its router conf and its deploy hook. nginx, certbot, the certificate (/etc/mcp-router/tls),
 # mcp-route, its hook and other routes stay. While /etc/nginx/mcp.d holds routes the kit did not add (the owner's

@@ -304,7 +304,7 @@ def read_saved(serial: str, name: str) -> bytes:
 
 
 def save(serial: str, data: bytes, model) -> Path:
-    """Keep it beside the printer's other files, the last KEEP. It can run as root (`sudo filament-kit printer report`) in the
+    """Keep it beside the printer's other files, the last KEEP. It can run as root (`sudo spoolwarden printer report`) in the
     service user's folder: never through a name planted there, and what it makes stays the service user's."""
     d = _folder(serial)
     make_state_dir(d)

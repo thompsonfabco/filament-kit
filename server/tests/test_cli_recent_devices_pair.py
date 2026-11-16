@@ -112,7 +112,7 @@ def test_a_history_that_keeps_nothing_says_where_to_change_it(sm, capsys, monkey
     reading_on(monkeypatch)
     config.save({"placement": {"box_count": 2}, "intake": {"history_keep": 0}})
     out = run(capsys, "recent")[1]
-    assert out.startswith("Recently added keeps no records.") and "filament-kit config (Records kept)" in " ".join(out.split())
+    assert out.startswith("Recently added keeps no records.") and "spoolwarden config (Records kept)" in " ".join(out.split())
     assert "No spool has been added" not in out
 
 
@@ -134,7 +134,7 @@ def test_a_record_with_low_confidence_gets_the_footer_with_the_command(sm, capsy
     rate(hid, {"vendor": "high", "name": "low", "color_hex": "medium"})
     lines = run(capsys, "recent")[1].splitlines()
     assert lines[-3] == "" and lines[-2] == f"! {hid} has fields read with low confidence:"
-    assert lines[-1] == f"     filament-kit recent show {hid}"          # the command does not fit: its own line, five in
+    assert lines[-1] == f"     spoolwarden recent show {hid}"          # the command does not fit: its own line, five in
 
 
 def test_recent_json_is_the_hubs_history_reply(sm, capsys, monkeypatch):
@@ -243,7 +243,7 @@ def test_a_record_that_is_not_kept_is_exit_2_and_names_the_command_that_lists_th
         rc, out, err = run(capsys, "recent", *argv)
         assert rc == 2 and out == "" and " ".join(err.split()).startswith(
             'Error: "nosuchrecord" is not a record in Recently added; only the newest 20 are kept.')
-        assert "Fix: use an ID from filament-kit recent." in err
+        assert "Fix: use an ID from spoolwarden recent." in err
 
 
 # ---------------------------------------------------------------- recent edit and undo
@@ -456,7 +456,7 @@ def test_piped_without_yes_is_refused_before_the_reader_is_asked(sm, capsys, mon
     rc, out, err = run(capsys, "recent", "revise", hid, "--note", "x")
     assert rc == 2 and out == "" and fake.calls == []
     assert err.splitlines()[0] == "Error: applying the revision needs a yes, and there is no terminal to ask."
-    assert err.splitlines()[-1].strip() == f"sudo filament-kit recent revise {hid} --note x --yes"
+    assert err.splitlines()[-1].strip() == f"sudo spoolwarden recent revise {hid} --note x --yes"
 
 
 def test_a_reader_that_changes_nothing_says_so_and_asks_nothing(sm, capsys, monkeypatch, asked):
@@ -486,7 +486,7 @@ def test_revise_with_the_reader_off_says_edit_by_hand_with_the_command(sm, capsy
     lines = err.splitlines()
     assert rc == 1 and out == "" and fake.calls == [] and asked == []
     assert lines[0] == "Error: the Label Reader is off on this Hub, so only edits by hand work."
-    assert lines[1] == 'Fix: sudo filament-kit recent edit ' + hid + ' name="..."' and len(lines) == 2
+    assert lines[1] == 'Fix: sudo spoolwarden recent edit ' + hid + ' name="..."' and len(lines) == 2
 
 
 def test_revise_takes_the_item_as_numbered_and_needs_a_note(sm, capsys, monkeypatch, asked):
@@ -536,7 +536,7 @@ def test_devices_lists_name_paired_last_seen_and_id_and_marks_the_built_in_ones(
 
 def test_nothing_paired_says_how_to_pair_a_phone(capsys):
     rc, out, _ = run(capsys, "devices")
-    assert (rc, out) == (0, "Nothing paired yet.\nPair a phone: sudo filament-kit pair\n")
+    assert (rc, out) == (0, "Nothing paired yet.\nPair a phone: sudo spoolwarden pair\n")
 
 
 def test_devices_json_is_the_hubs_list_with_iso_times(capsys):
@@ -577,7 +577,7 @@ def test_forget_piped_without_yes_is_exit_2_and_names_the_command_with_yes(capsy
     rc, out, err = run(capsys, "devices", "forget", shop["id"])
     assert rc == 2 and out == "" and len(pairing.devices()) == 1
     assert err.splitlines()[0] == "Error: unpairing Shop phone needs a yes, and there is no terminal to ask."
-    assert err.splitlines()[-1].strip() == f"sudo filament-kit devices forget {shop['id']} --yes"
+    assert err.splitlines()[-1].strip() == f"sudo spoolwarden devices forget {shop['id']} --yes"
     assert run(capsys, "devices", "forget", shop["id"], "--yes")[1:] == ("Unpaired Shop phone.\n", "") and pairing.devices() == []
 
 
@@ -596,10 +596,10 @@ def test_more_than_one_or_no_match_is_exit_2_with_the_close_matches(capsys):
     lines = err.splitlines()
     assert rc == 2 and out == "" and len(pairing.devices()) == 2
     assert lines[0] == 'Error: "shop" does not name one device.'
-    assert lines[1] == "Fix: use a name or id from filament-kit devices. Close matches:"
+    assert lines[1] == "Fix: use a name or id from spoolwarden devices. Close matches:"
     assert [ln.split() for ln in lines[2:]] == [["Shop", "phone", a["id"]], ["Shop", "tablet", b["id"]]]
     rc, _, err = run(capsys, "devices", "forget", "nobody", "--yes")
-    assert rc == 2 and err.splitlines() == ['Error: "nobody" does not name one device.', "Fix: use a name or id from filament-kit devices."]
+    assert rc == 2 and err.splitlines() == ['Error: "nobody" does not name one device.', "Fix: use a name or id from spoolwarden devices."]
     rc, _, err = run(capsys, "devices", "forget", "tablet", "--yes")           # a name's middle is a close match, not a name
     assert rc == 2 and "Shop tablet" in err
 
@@ -672,7 +672,7 @@ def test_pair_prints_the_qr_the_instruction_the_code_the_fingerprint_and_the_exp
     qr_rows = [i for i, ln in enumerate(lines) if ln.startswith(ESC + "[30;47m")]
     assert rc == 0 and qr_rows and qr_rows == list(range(qr_rows[0], qr_rows[-1] + 1))
     tail = [ln for ln in lines[qr_rows[-1] + 1:] if ln]
-    assert tail[0] == "Open the filament-kit app and scan this code, or type the pairing code."
+    assert tail[0] == "Open the Spoolwarden app and scan this code, or type the pairing code."
     assert re.fullmatch(r"Pairing code: \d{3} \d{3}", tail[1])
     assert tail[2] == "Certificate fingerprint (the phone asks for two groups of it):"
     g = fingerprint_groups()
@@ -696,7 +696,7 @@ def test_pair_text_has_no_qr_and_the_link_alone_on_its_line(capsys, monkeypatch,
     rc, out, _ = run(capsys, "pair", "--text")
     lines = out.splitlines()
     assert rc == 0 and ESC not in out
-    assert lines[0] == "Open the filament-kit app and type the pairing code, or give it this link:"
+    assert lines[0] == "Open the Spoolwarden app and type the pairing code, or give it this link:"
     assert lines[1].startswith("fkit://pair?") and " " not in lines[1]
     assert lines[2].startswith("Pairing code: ") and lines[-1] == "Paired: phone."
 
@@ -712,7 +712,7 @@ def test_slicer_sync_and_weigh_station_print_the_instruction_and_the_link_never_
     assert lines[-1] == "Paired: pc." and [d["name"] for d in pairing.devices()] == ["pc"]
     rc, out, _ = run(capsys, "pair", "--weigh-station")
     lines = out.splitlines()
-    assert rc == 0 and lines[0] == "On the Weigh Station run: sudo filament-kit station pair, then paste this link:"
+    assert rc == 0 and lines[0] == "On the Weigh Station run: sudo spoolwarden station pair, then paste this link:"
     assert lines[1].startswith("fkit://pair?") and "check it matches the one the Weigh Station shows" in lines[3]
     assert pairing._read("devices.json")[-1]["scope"] == "station"
 
@@ -728,7 +728,7 @@ def test_plain_is_text_without_a_qr(capsys, monkeypatch, waiting):
     monkeypatch.setattr(cli, "_qr_text", lambda payload: pytest.fail("no QR code with --plain"))
     waiting["steps"] = [lambda: pairing.redeem_code(pending_code())]
     rc, out, _ = run(capsys, "--plain", "pair")
-    assert rc == 0 and out.splitlines()[0].startswith("Open the filament-kit app and type the pairing code")
+    assert rc == 0 and out.splitlines()[0].startswith("Open the Spoolwarden app and type the pairing code")
     assert ESC not in out and "\r" not in out and out.isascii()
 
 
@@ -799,8 +799,8 @@ def test_a_code_that_runs_out_is_an_error_with_the_command_to_make_a_new_one(cap
     rc, out, err = run(capsys, "pair", "--text")
     assert rc == 1 and "Paired" not in out
     assert err.splitlines()[0] == "Error: the pairing code expired before a device paired."
-    assert err.splitlines()[1].startswith("Fix: make a new one with:") or "sudo filament-kit pair" in err
-    assert err.strip().splitlines()[-1].strip() == "sudo filament-kit pair"
+    assert err.splitlines()[1].startswith("Fix: make a new one with:") or "sudo spoolwarden pair" in err
+    assert err.strip().splitlines()[-1].strip() == "sudo spoolwarden pair"
 
 
 def test_json_does_not_wait_and_prints_the_link_code_fingerprint_and_expiry(capsys, monkeypatch):

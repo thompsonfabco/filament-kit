@@ -25,7 +25,7 @@ OLD = [r"the server", r"this server(?:'s)?", r"the kit(?:'s)?", r"this kit", r"p
 OLD_RX = re.compile(r"(?<![A-Za-z0-9_/.-])(?:%s)(?![A-Za-z0-9_])" % "|".join(OLD), re.I)
 # The command a text names (its name and old subcommand spellings wait for S5.9) is not an old name; the words after it
 # in the same string still are checked.
-COMMAND = re.compile(r"filament-kit(?:-[a-z]+)?(?: (?:modules|library|profiles|station|cert|ensure-fields|config|web|"
+COMMAND = re.compile(r"(?:filament-kit|spoolwarden)(?:-[a-z]+)?(?: (?:modules|library|profiles|station|cert|ensure-fields|config|web|"
                      r"restore|setup-code|update|reader|status|printer)\b(?: (?:--?[a-z][a-z-]*|(?:apply|enable|disable|set|list|menu|units|update|rollback|status|passphrase|build|hub|weigh-station|hub-with-weigh-station|server|station|all-in-one|web|spoolman|remote)|<[^>]*>"
                      r"|[A-Z]{2,})(?=[ .,;:)]|$)){0,3})?")
 # Stored values and texts of other steps that are not the Hub's message texts of S7.1 (file: the whole text, exactly).
@@ -102,7 +102,7 @@ PLANTED = [                      # old texts, each in a different shape (one per
 def test_the_lint_finds_all_planted_texts():
     missed = [src for src in PLANTED if not findings("status.py", src)]
     assert not missed, missed
-    for ok in ('x = "Weigh Station answers"', 'x = "run sudo filament-kit modules apply"',
+    for ok in ('x = "Weigh Station answers"', 'x = "run sudo filament-kit modules apply"', 'x = "run sudo spoolwarden modules apply"',
                'x = "sudo systemctl status filament-kit-station  (url u)"', 'x = "Slicer presets: none"', 'x = "Weigh Station"', 'x = "Hub with Weigh Station"'):
         assert not findings("status.py", ok), ok
 

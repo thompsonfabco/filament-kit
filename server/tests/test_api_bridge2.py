@@ -323,7 +323,7 @@ def test_load_and_unload_refused_during_mapping(client, mgr, sm, stubs, monkeypa
 
 
 def test_load_and_unload_refused_while_another_process_maps(client, mapper, sm, monkeypatch):
-    """`filament-kit printer map` in another process: the lock file says so (Mapper.in_progress)."""
+    """`spoolwarden printer map` in another process: the lock file says so (Mapper.in_progress)."""
     preset(monkeypatch)
     monkeypatch.setattr(mapping._ProcessLock, "held_elsewhere", staticmethod(lambda serial: serial == SERIAL))
     assert mapper.in_progress(SERIAL) is True
@@ -586,7 +586,7 @@ def test_manual_map_needs_the_pairing(mgr, sm, mapper):
 
 
 def test_map_stop_needs_a_token_and_stops_the_job(mgr, sm, mapper, monkeypatch):
-    """`filament-kit printer map` stops the server's job on Ctrl-C through this route."""
+    """`spoolwarden printer map` stops the server's job on Ctrl-C through this route."""
     stopped = []
     monkeypatch.setattr(mapper, "abort", lambda serial, pending=True: stopped.append((serial, pending)))
     c = TestClient(create_app(sm, printers=mgr, mapper=mapper))

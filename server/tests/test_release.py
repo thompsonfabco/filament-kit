@@ -610,7 +610,7 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     assert root == tmp_path / "x" / f"filament-kit-{version}"
     assert len(list(root.glob(f"filament_kit-{version}-*.whl"))) == 1
     assert (root / "LICENSE").is_file() and (root / "THIRD-PARTY.md").is_file()
-    for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/filament-kit-cli.sh",
+    for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/spoolwarden-cli.sh", "install/filament-kit-wrapper.sh",
                 "install/spoolman.sh", "install/avahi/filament-kit.service",
                 "install/remote/route.template", "install/remote/mcp-proxy.conf", "install/panel/VERSION",
                 "install/panel/intake-panel.bin", "install/reader/VERSION", "install/reader/printer-station.bin"):

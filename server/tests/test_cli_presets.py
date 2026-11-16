@@ -69,7 +69,7 @@ def test_status_before_any_build_says_what_is_missing_and_how_to_fix_it(capsys):
     lines = out.splitlines()
     assert rc == 0 and lines[:3] == ["Lines: 0.", "No build yet.", "Installed on the PC: nothing yet."]
     assert lines[3] == "  ▲ needs a look  Slicer Sync: not set up."
-    assert lines[4].strip() == "Fix: sudo filament-kit pair --slicer-sync"
+    assert lines[4].strip() == "Fix: sudo spoolwarden pair --slicer-sync"
     assert " ".join(" ".join(lines[5:]).split()) == ("Updates: none. Presets already in your slicers are never replaced "
                                                     "unless you accept them.")
 
@@ -85,7 +85,7 @@ def test_status_after_a_build_follows_the_hub_pages_order_and_counts_updates(env
     text = " ".join(out.split())
     n = builds.status()["updates"]["count"]
     assert n and f"Updates: {n} on 1 line. Presets already in your slicers are never replaced unless you accept them." in text
-    assert "See them: sudo filament-kit presets updates" in text and "presets status" not in text.split("See them")[1]
+    assert "See them: sudo spoolwarden presets updates" in text and "presets status" not in text.split("See them")[1]
 
 
 def test_status_json_is_what_the_hub_page_reads(env, capsys):
@@ -114,7 +114,7 @@ def test_status_while_the_feature_is_off_says_so_and_json_gives_on_false(capsys)
     config.save(cfg)
     rc, out, err = run(capsys, "presets", "status")
     assert rc == 1 and out == "" and err.startswith('Error: the "Slicer presets" Feature is off.')
-    assert "sudo filament-kit features on presets" in err
+    assert "sudo spoolwarden features on presets" in err
     rc, out, _ = run(capsys, "presets", "status", "--json")                 # the same exit code and an error document
     got = json.loads(out)
     assert rc == 1 and got["ok"] is False and "Slicer presets" in got["error"]
@@ -151,7 +151,7 @@ def test_a_build_still_waiting_for_the_first_sync_is_a_note_not_a_failure(capsys
     monkeypatch.setattr(builds, "run_build", lambda sm: {"waiting": True, "error": builds.NO_SYSTEM})
     rc, out, err = run(capsys, "presets", "build")
     assert rc == 0 and out.startswith("  ◆ note          ") and builds.NO_SYSTEM in " ".join(out.split())
-    assert "Fix: sudo filament-kit pair --slicer-sync" in out
+    assert "Fix: sudo spoolwarden pair --slicer-sync" in out
 
 
 def test_build_json_and_the_old_spelling_the_build_unit_runs(env, capsys):

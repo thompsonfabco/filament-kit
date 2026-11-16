@@ -439,7 +439,7 @@ def test_cli_corrections_need_root_exit_3_with_the_sudo_fix(hub, capsys, monkeyp
     for args in (["list"], ["remove", "fb-1"], ["package", "x.zip"], ["send"]):
         assert cli.main(["label-reader", "corrections", *args]) == output.NEEDS_SUDO == 3
         err = capsys.readouterr().err
-        assert "Error: this needs administrator rights." in err and "sudo filament-kit label-reader corrections" in err
+        assert "Error: this needs administrator rights." in err and "sudo spoolwarden label-reader corrections" in err
     assert len(data["queue"]) == 1 and data["submits"] == []
 
 
@@ -537,4 +537,4 @@ def test_cli_retry_needs_root(hub, capsys, monkeypatch):
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
     assert cli.main(["label-reader", "corrections", "retry", "abc"]) == output.NEEDS_SUDO
-    assert "sudo filament-kit label-reader corrections retry abc" in capsys.readouterr().err
+    assert "sudo spoolwarden label-reader corrections retry abc" in capsys.readouterr().err

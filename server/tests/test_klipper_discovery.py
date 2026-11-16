@@ -1,4 +1,4 @@
-"""Klipper discovery (mDNS + on-demand scan) and the Klipper halves of the `filament-kit printer` commands (the old
+"""Klipper discovery (mDNS + on-demand scan) and the Klipper halves of the `spoolwarden printer` commands (the old
 `klipper add|scan|detect|set|api-key` spellings are aliases of them, 06 4)."""
 import ipaddress
 import json
@@ -172,7 +172,7 @@ def test_cli_scan_shows_a_printer_added_by_name_as_that_printer(capsys, monkeypa
     out = capsys.readouterr().out
     found = next(p.serial for p in registry.load().values() if p.host == "192.0.2.21")
     assert "Found on 10.1.2.0/24: 192.0.2.20:7125 (added as Voron)\n" in out
-    assert f"Found on 10.1.2.0/24: 192.0.2.21:7125 (add it: sudo filament-kit printer use {found})" in " ".join(out.split())
+    assert f"Found on 10.1.2.0/24: 192.0.2.21:7125 (add it: sudo spoolwarden printer use {found})" in " ".join(out.split())
     assert "`" not in out
     assert {p.host for p in registry.load().values()} == {mine.host, "192.0.2.21"}
 
@@ -247,7 +247,7 @@ def test_cli_detect_output_is_06_9_2(moonraker, capsys):
     moonraker.api_key = "k"
     rc, out, err = _detect_cli(moonraker, capsys, "printer", "detect", "sv08-max")
     assert (rc, out) == (1, "")
-    assert " ".join(err.split()) == ("Error: 127.0.0.1:PORT wants a Moonraker API key: run `filament-kit klipper "
+    assert " ".join(err.split()) == ("Error: 127.0.0.1:PORT wants a Moonraker API key: run `spoolwarden klipper "
                                      "api-key sv08-max`")
 
 

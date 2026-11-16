@@ -23,6 +23,7 @@ import time
 import urllib.request
 from pathlib import Path
 
+from . import __version__
 from . import hostaddr, apply, config, inventory, klipper_cli, library, menu_ui, modules, output, pairing, qr, secret_input, steps
 from . import status as status_rows
 from .bridge import registry
@@ -171,7 +172,7 @@ def _wait_for_device(device_id: str | None, expires: float, who: str, cmd: str) 
 def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool = False, wait: bool = True) -> int:
     """`pair` (06 9.4): what the Hub page's pairing dialog shows, in its order (the QR code for a phone, the instruction,
     the pairing code, the certificate fingerprint, the expiry), then waits for the device. `--json` ends after the document."""
-    cmd = "sudo filament-kit pair" + (" --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else "")
+    cmd = "sudo spoolwarden pair" + (" --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else "")
     cfg = config.load()                 # unreadable: main() says to run it with sudo
     if "server" not in modules.enabled(cfg):
         # a Weigh Station (or another machine without the Hub): no certificate here, and none is needed
@@ -195,15 +196,15 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool 
     if slicer_sync or weigh_station:
         # no QR scanner there: the link is pasted (printed by design, never logged)
         output.out("Paste this link into the Slicer Sync when it asks:" if slicer_sync else
-                   "On the Weigh Station run: sudo filament-kit station pair, then paste this link:")
+                   "On the Weigh Station run: sudo spoolwarden station pair, then paste this link:")
         output.out(pr.qr)
     elif text:
         # no terminal (an install log): the link as text, for a phone that gets it some other way
-        output.out("Open the filament-kit app and type the pairing code, or give it this link:")
+        output.out("Open the Spoolwarden app and type the pairing code, or give it this link:")
         output.out(pr.qr)
     else:
         print(_qr_text(pr.qr), flush=True)
-        output.out("Open the filament-kit app and scan this code, or type the pairing code.")
+        output.out("Open the Spoolwarden app and scan this code, or type the pairing code.")
     output.out(f"Pairing code: {pr.code[:3]} {pr.code[3:]}")
     output.out("Certificate fingerprint (" + ("the phone asks for two groups of it" if not (slicer_sync or weigh_station)
                else f"check it matches the one the {'Slicer Sync' if slicer_sync else 'Weigh Station'} shows") + "):")
@@ -227,20 +228,20 @@ def _paired_with_hub(link, result) -> None:
 
 
 def cmd_station_pair(ask=input) -> int:
-    """On the Weigh Station's computer: take the link from `filament-kit pair --weigh-station`, check the Hub's
+    """On the Weigh Station's computer: take the link from `spoolwarden pair --weigh-station`, check the Hub's
     fingerprint with the owner, save the pairing for the button flow (station/server_api.py). Nothing answers the
     comparison but a person: no `--yes`."""
     from .station import server_api
     if hasattr(os, "geteuid") and os.geteuid() != 0:
-        return output.need_sudo(_sudo_command("sudo filament-kit weigh-station pair"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden weigh-station pair"))
     if ask is input and not output.terminal():
         output.error("pairing asks for the link and for you to compare the fingerprint, and there is no terminal to ask.",
-                     "run it at a terminal:", cmd=_sudo_command("sudo filament-kit weigh-station pair"))
+                     "run it at a terminal:", cmd=_sudo_command("sudo spoolwarden weigh-station pair"))
         return output.USAGE
-    no_terminal = ("sudo filament-kit weigh-station pair needs a terminal: it asks for the link and for you to "
+    no_terminal = ("sudo spoolwarden weigh-station pair needs a terminal: it asks for the link and for you to "
                    "compare the fingerprint. Nothing was saved.")
     try:
-        text = ask("Paste the link from the Hub (sudo filament-kit pair --weigh-station): ")
+        text = ask("Paste the link from the Hub (sudo spoolwarden pair --weigh-station): ")
     except (EOFError, RuntimeError, OSError):  # `< /dev/null`; `<&-` is no stdin (RuntimeError) or a dead one (OSError)
         _err_line(no_terminal)
         return 1
@@ -296,10 +297,10 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
     the same as a blank panel, so each candidate port is flashed only after the owner says yes to that port."""
     from .station import panel
     if not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit weigh-station flash-display"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden weigh-station flash-display"))
     if not yes and ask is input and not output.terminal():     # nobody to ask which board: nothing is stopped or written
         return output.no_terminal("writing the firmware",
-                                  _sudo_command("sudo filament-kit weigh-station flash-display") + " --yes")
+                                  _sudo_command("sudo spoolwarden weigh-station flash-display") + " --yes")
     service = "filament-kit-station.service"
     was_active = run(["systemctl", "is-active", service], check=False).returncode == 0  # only restart what was running
     try:
@@ -377,10 +378,10 @@ def cmd_station_pair_local() -> int:
     on loopback against it. Prints no token: the output goes to the page's job log."""
     from .station import server_api
     if hasattr(os, "geteuid") and os.geteuid() != 0:
-        return output.need_sudo(_sudo_command("sudo filament-kit weigh-station pair --local"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden weigh-station pair --local"))
     if "server" not in modules.enabled(config.load()):
         _err_line("--local pairs a Weigh Station with the Hub on the same machine, and the Hub service is off "
-                  "here.\nfix: run sudo filament-kit pair --weigh-station on the Hub, then sudo filament-kit "
+                  "here.\nfix: run sudo spoolwarden pair --weigh-station on the Hub, then sudo spoolwarden "
                   "weigh-station pair here")
         return 1
     try:
@@ -404,7 +405,7 @@ def cmd_backup(action: str, out: str | None, days: int | None = None) -> int:
     """`backup create`, `list` and `keep <days>` (06 9.10); the same helper functions the Hub page's routes use."""
     from . import backup, setup_helper
     if not _is_root():
-        return output.need_sudo(_sudo_command(f"sudo filament-kit backup {action}" + (f" {days}" if days else "")))
+        return output.need_sudo(_sudo_command(f"sudo spoolwarden backup {action}" + (f" {days}" if days else "")))
     if action == "keep":
         try:
             r = setup_helper._backup_keep({"days": days})
@@ -423,7 +424,7 @@ def cmd_backup(action: str, out: str | None, days: int | None = None) -> int:
                      "keep_days": keep, "folder": str(backup.backups_dir())})
         if not rows:
             output.out(f"No backups in {backup.backups_dir()} yet.")
-            output.out("Back up now: sudo filament-kit backup create")
+            output.out("Back up now: sudo spoolwarden backup create")
             return 0
         output.out(f"Nightly backups are kept {keep} days.")
         output.out()
@@ -460,9 +461,9 @@ def _restore_out(text: str) -> None:
 def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = False) -> int:
     from . import backup
     if not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit restore <backup.zip>"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden restore <backup.zip>"))
     if not yes and not output.terminal():           # the typed word cannot be asked: nothing is read or changed
-        return output.no_terminal("restoring a backup", _sudo_command("sudo filament-kit restore <backup.zip>") + " --yes")
+        return output.no_terminal("restoring a backup", _sudo_command("sudo spoolwarden restore <backup.zip>") + " --yes")
     if uploaded:
         try:
             path = backup.take_upload()
@@ -501,7 +502,7 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
 def cmd_station_pairing_state(old_spelling: bool = False) -> int:
     """`weigh-station pairing-state` (06 9.7): `paired with 192.0.2.10:8710`, `not paired` or `not checked yet`; its `--json`
     `state` keeps `paired`, `unpaired`, `unchecked`. The old spelling `station pairing-state` still prints the one line
-    the root wrapper passes on to `status` (install/filament-kit-cli.sh reads that text until it reads the `--json`)."""
+    the root wrapper passes on to `status` (install/spoolwarden-cli.sh reads that text until it reads the `--json`)."""
     from .station import server_api
     state = server_api.pairing_state()
     word, _, address = state.partition(" ")
@@ -531,7 +532,7 @@ def _iso(t) -> str | None:
 def _confirm(question: str, doing: str, *, yes: bool, word: str | None = None, ask=None) -> int | None:
     """06 7: None to go on, else the exit code (5 after no, 2 with no terminal and no --yes, which names the command
     again with --yes)."""
-    return output.confirm(question, yes=yes, doing=doing, rerun=_sudo_command("sudo filament-kit <command>") + " --yes",
+    return output.confirm(question, yes=yes, doing=doing, rerun=_sudo_command("sudo spoolwarden <command>") + " --yes",
                           word=word, ask=ask)
 
 
@@ -546,7 +547,7 @@ def cmd_devices(yes: bool = False, forget: str | None = None) -> int:
                   "built_in": built_in(d)} for d in devs])
     if not devs:
         output.out("Nothing paired yet.")
-        output.out("Pair a phone: sudo filament-kit pair")
+        output.out("Pair a phone: sudo spoolwarden pair")
         return 0
     output.out_lines(output.table(
         ["Name", "Paired", "Last seen", "ID"],
@@ -565,7 +566,7 @@ def _device_named(arg: str, rows: list[dict], unclaimed: list[dict]) -> dict | N
     if len(hit) == 1:
         return hit[0]
     close = [r for r in rows if a and (a in r["name"].lower() or a in r["id"].lower())][:5]
-    output.error(f'"{arg}" does not name one device.', "use a name or id from filament-kit devices." + (
+    output.error(f'"{arg}" does not name one device.', "use a name or id from spoolwarden devices." + (
         " Close matches:\n" + "\n".join(f"{r['name']}  {r['id']}" for r in close) if close else ""))
     return None
 
@@ -590,7 +591,7 @@ def _devices_forget(arg: str, yes: bool) -> int:
         output.emit({"ok": True, "id": dev["id"], "name": name})
         output.result(f"Unpaired {name}.")
         return 0
-    output.error(f'"{arg}" does not name one device.', "use a name or id from filament-kit devices.")
+    output.error(f'"{arg}" does not name one device.', "use a name or id from spoolwarden devices.")
     return output.USAGE
 
 
@@ -1100,11 +1101,11 @@ class _ConfigMenu:
                 if iid == "token":
                     actions.append(("x", "remove the token"))
         if gid == "backups":
-            after = ["Back up now: sudo filament-kit backup create", "Restore: sudo filament-kit restore <zip>"]
+            after = ["Back up now: sudo spoolwarden backup create", "Restore: sudo spoolwarden restore <zip>"]
         elif gid == "catalog":
-            after = ["Update now: sudo filament-kit catalog update"]
+            after = ["Update now: sudo spoolwarden catalog update"]
         elif gid == "network":
-            after = ["Firewall rules: filament-kit remote firewall"]
+            after = ["Firewall rules: spoolwarden remote firewall"]
         sc = menu_ui.Screen(f"group-{gid}", f"Settings > {title}", rows, actions=tuple(actions),
                             save="" if self.embedded else "save", leave="back", changes=len(self.staged),
                             after=tuple(after))
@@ -1370,7 +1371,7 @@ def cmd_config() -> int:
                      "run it again with --numbered, giving the answers on standard input.")
         return output.USAGE
     if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
-        return output.need_sudo(_sudo_command("sudo filament-kit config"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden config"))
     session = None
     try:
         with menu_ui.open_ui(_ask, secret_input.ask) as ui:
@@ -1486,17 +1487,17 @@ def cmd_config_set(key: str, raw: str) -> int:
     item = next((it for it in _ITEMS.values() if it.key == key), None)
     keys = ", ".join(k for k in ("backups.keep_days" if k == "backup.keep_days" else k for k in _set_keys()))
     if item is not None and item.kind == "secret":
-        output.error(f"the {_lower_first(item.label)} is a secret.", f"sudo filament-kit config, {_SECRET_WHERE[item.id]}.")
+        output.error(f"the {_lower_first(item.label)} is a secret.", f"sudo spoolwarden config, {_SECRET_WHERE[item.id]}.")
         return output.USAGE
     if item is not None and item.id == "spoolman" or key == "spoolman_url":
         output.error("the Spoolman address is not set this way.", "check and save it with:",
-                     cmd="sudo filament-kit spoolman address <url>")
+                     cmd="sudo spoolwarden spoolman address <url>")
         return output.USAGE
     if item is None:
         output.error(f'there is no setting called "{key}".', f"the keys are {keys}.")
         return output.USAGE
     if not _no_systemd() and not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit config set " + shlex.join([key, raw])))
+        return output.need_sudo(_sudo_command("sudo spoolwarden config set " + shlex.join([key, raw])))
     try:
         value = _config_set_value(item, raw)
     except _Sentence as e:
@@ -1506,7 +1507,7 @@ def cmd_config_set(key: str, raw: str) -> int:
         output.error(str(e))
         return output.USAGE
     if item.id == "station" and "station" not in modules.enabled(config.load()):
-        output.error('the "Weigh Station" Feature is off.', "turn it on first:", cmd="sudo filament-kit features on weigh-station")
+        output.error('the "Weigh Station" Feature is off.', "turn it on first:", cmd="sudo spoolwarden features on weigh-station")
         return output.FAILED
     session = _ConfigMenu(config.load(), None)
     shown = session.show(item, value).split(' (')[0] if item.kind == 'choice' else session.show(item, value)
@@ -1561,7 +1562,7 @@ def cmd_config_theme(raw: str | None) -> int:
                      "choose console, workbench, palette or panes. Light and dark are chosen on each device, in Settings > Appearance.")
         return output.USAGE
     if not _no_systemd() and not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit config theme " + shlex.join([value])))
+        return output.need_sudo(_sudo_command("sudo spoolwarden config theme " + shlex.join([value])))
     session = _ConfigMenu(config.load(), None)
     if value == config.look(session.cfg):
         output.emit({"ok": True, "key": "appearance.theme", "changed": False})
@@ -1592,7 +1593,7 @@ def cmd_logs(service: str | None, lines: int = 100) -> int:
     it (setup_helper's journal op), whole: addresses and serials are not hidden here."""
     from . import setup_helper
     if not _no_systemd() and not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit logs" + (f" {service}" if service else "")))
+        return output.need_sudo(_sudo_command("sudo spoolwarden logs" + (f" {service}" if service else "")))
     units = setup_helper.journal_units(config.load())
     unit = None
     if service is None:
@@ -1906,7 +1907,7 @@ def _printer_do(p, letter: str) -> bool:
         else:
             output.out("Unchanged.")
     elif letter == "x":
-        stop = _confirm(f"Clear the Moonraker API key of {name}? filament-kit then connects without a key. If Moonraker "
+        stop = _confirm(f"Clear the Moonraker API key of {name}? Spoolwarden then connects without a key. If Moonraker "
                         "asks for one, the printer's test says so until a key is set.",
                         f"clearing the API key of {name}", yes=False, ask=_ask)
         if stop is None:
@@ -1920,7 +1921,7 @@ def _printer_do(p, letter: str) -> bool:
         else:
             what = ("its Moonraker API key, if one is saved." if p.family == "klipper" else
                     "its Access Code. To use it again, add it again.")
-            stop = _confirm(f"Forget {name}? filament-kit stops connecting to it and deletes {what}",
+            stop = _confirm(f"Forget {name}? Spoolwarden stops connecting to it and deletes {what}",
                             f"forgetting {name}", yes=False, ask=_ask)
             word = "Forgot"
         if stop is None:
@@ -2342,7 +2343,7 @@ def _history_error(e, rid: str | None = None) -> int:
     from . import intake_history
     if rid is not None and e.code == "not_found" and str(e) == "no such intake record":
         output.error(f'"{rid}" is not a record in Recently added; only the newest {intake_history.keep()} are kept.',
-                     "use an ID from filament-kit recent.")
+                     "use an ID from spoolwarden recent.")
         return output.USAGE
     output.error(str(e))
     return output.USAGE if e.status in (400, 404) else output.FAILED
@@ -2356,7 +2357,7 @@ def cmd_recent(show_from: bool = False) -> int:
     output.emit(d)
     n = d["count"]
     if not d["keep"]:
-        output.out("Recently added keeps no records. Set how many to keep with filament-kit config (Records kept).")
+        output.out("Recently added keeps no records. Set how many to keep with spoolwarden config (Records kept).")
     else:
         output.out(f"Recently added: {n} record{'s' if n != 1 else ''}, keeping {d['keep']}, "
                    f"{d['photo_bytes'] / 1048576:.1f} MB of photos.")
@@ -2379,8 +2380,8 @@ def cmd_recent(show_from: bool = False) -> int:
         glyph = output.paint(output.glyph("look"), "warn", sys.stdout)
         output.out()
         output.out((glyph + " " if glyph else "") + (
-            f"{low[0]} has fields read with low confidence: filament-kit recent show {low[0]}" if len(low) == 1 else
-            f"{len(low)} records have fields read with low confidence, the newest: filament-kit recent show {low[0]}"))
+            f"{low[0]} has fields read with low confidence: spoolwarden recent show {low[0]}" if len(low) == 1 else
+            f"{len(low)} records have fields read with low confidence, the newest: spoolwarden recent show {low[0]}"))
     return 0
 
 
@@ -2534,7 +2535,7 @@ def _rec_item_arg(item: int | None) -> int | None | bool:
     if item is None:
         return None
     if item < 1:
-        output.error("item numbers start at 1.", "use --item 1 for the first item, as filament-kit recent show numbers them.")
+        output.error("item numbers start at 1.", "use --item 1 for the first item, as spoolwarden recent show numbers them.")
         return False
     return item - 1
 
@@ -2566,10 +2567,10 @@ def cmd_recent_revise(rid: str, note: str, item: int | None = None, yes: bool = 
         intake_history.get(rid)
         if not intake.reading_on(config.load()):
             output.error("the Label Reader is off on this Hub, so only edits by hand work.",
-                         cmd=f'sudo filament-kit recent edit {rid} name="{output.sym("ellipsis")}"')
+                         cmd=f'sudo spoolwarden recent edit {rid} name="{output.sym("ellipsis")}"')
             return output.FAILED
         if not yes and not output.terminal():           # before the read is spent: nobody can accept it
-            return output.no_terminal("applying the revision", _sudo_command("sudo filament-kit <command>") + " --yes")
+            return output.no_terminal("applying the revision", _sudo_command("sudo spoolwarden <command>") + " --yes")
         sm = Spoolman(config.load()["spoolman_url"])
         with output.wait("Asking the Label Reader… (up to a minute)"):
             p = intake_history.revise(sm, rid, note, index, charge=_history_charge())
@@ -2595,7 +2596,7 @@ def cmd_recent_revise(rid: str, note: str, item: int | None = None, yes: bool = 
     except intake_history.HistoryError as e:
         return _history_error(e, rid)
     except intake.CapReached as e:
-        output.error(str(e), "wait until a read is 24 hours old, or raise Reads per day in filament-kit config.")
+        output.error(str(e), "wait until a read is 24 hours old, or raise Reads per day in spoolwarden config.")
         return output.FAILED
     except intake.ReadError as e:
         output.error(str(e))
@@ -2727,10 +2728,10 @@ def cmd_spoolman_address(url: str | None) -> int:
     on = modules.enabled(cfg)
     if "server" not in on or "spoolman" in on:
         output.error("this machine runs its own Spoolman, so its address is not set.",
-                     "turn the Spoolman Feature off first:", cmd="sudo filament-kit features off spoolman")
+                     "turn the Spoolman Feature off first:", cmd="sudo spoolwarden features off spoolman")
         return output.FAILED
     if not _no_systemd() and not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit spoolman address " + shlex.quote(url)))
+        return output.need_sudo(_sudo_command("sudo spoolwarden spoolman address " + shlex.quote(url)))
     menu = _ConfigMenu(copy.deepcopy(cfg), None)
     try:
         value = menu.check(_ITEMS["spoolman"], url)
@@ -2841,7 +2842,7 @@ def _print_map_view(serial: str, v: dict, stopped: list) -> int:
         print(f"  note: {note}")
     if v.get("report_wanted"):
         output.out(f"  {v.get('report_why') or 'A printer report would help.'} To collect one: "
-                   + f"sudo filament-kit printer report {serial}")
+                   + f"sudo spoolwarden printer report {serial}")
     if stopped:
         print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "
               "mapping run restores it first.")
@@ -2892,10 +2893,10 @@ def _map_via_server(api, serial: str) -> int:
         _restore_signals(old)
     return _print_map_view(serial, v, stopped)
 NOT_CONNECTED = {
-    "wrong_code": "the printer refused its Access Code; enter it again (sudo filament-kit config"
+    "wrong_code": "the printer refused its Access Code; enter it again (sudo spoolwarden config"
                   + ", Printers)",
     "cert_changed": "the printer's certificate changed; add it again with its Access Code ("
-                    + "sudo filament-kit config, Printers)",
+                    + "sudo spoolwarden config, Printers)",
 }
 
 
@@ -3140,7 +3141,7 @@ def cmd_printer_map(serial: str, manager_factory, manual: bool = False, yes: boo
     from .bridge.slottest import PrinterBusy
     p = registry.load().get(serial)
     if p is None or not p.configured:
-        _err_line(f"no printer {serial} is set up (see: sudo filament-kit config, Printers)")
+        _err_line(f"no printer {serial} is set up (see: sudo spoolwarden config, Printers)")
         return output.USAGE
     if manual:
         api = _server_api()
@@ -3150,7 +3151,7 @@ def cmd_printer_map(serial: str, manager_factory, manual: bool = False, yes: boo
         return _manual_map_via_server(api, serial)
     if p.family != "bambu":
         _err_line(f"{registry.display_name(p)} is a Klipper printer; Klipper printers are mapped by loading filament: "
-                  f"filament-kit printer map --manual {serial}")
+                  f"spoolwarden printer map --manual {serial}")
         return 1
     name = registry.display_name(p)
     stop = _confirm(f"Map the slots of {name}? The printer changes its slot colours briefly and runs a short job with "
@@ -3389,7 +3390,7 @@ class _Hub:
     def refused(e) -> int:
         """Print the Hub's refusal as an error (a module that is off gets the command that turns it on); its exit code."""
         module = re.fullmatch(r"the (\w+) module is off on this server", e.message)
-        output.error(e.message, cmd=f"sudo filament-kit modules enable {module.group(1)}" if module else None)
+        output.error(e.message, cmd=f"sudo spoolwarden modules enable {module.group(1)}" if module else None)
         return output.USAGE if e.status in (400, 404) else output.FAILED
 
 
@@ -3441,13 +3442,13 @@ def _printer_named(arg: str, *, found: bool = False, found_verb: str = "use") ->
     if row is None:
         a = arg.strip().lower()
         close = [r for r in rows if a and (a in r["name"].lower() or a in r["serial"].lower())][:5]
-        fix = "use a name, serial or id from filament-kit printer list." + (
+        fix = "use a name, serial or id from spoolwarden printer list." + (
             " Close matches:\n" + "\n".join(f"{r['name']}  {r['serial']}" for r in close) if close else "")
         output.error(f'"{arg}" does not name one printer.', fix)
         return None
     if not row["configured"] and not found:
-        fix = (f"sudo filament-kit printer add --address {row['ip']}" if row["family"] == "bambu" and found_verb == "use"
-               else f"sudo filament-kit printer {found_verb} {_quoted(row['name'])}")      # `use` refuses a Bambu printer
+        fix = (f"sudo spoolwarden printer add --address {row['ip']}" if row["family"] == "bambu" and found_verb == "use"
+               else f"sudo spoolwarden printer {found_verb} {_quoted(row['name'])}")      # `use` refuses a Bambu printer
         output.error(f"{row['name']} is found on the network but not added yet.", cmd=fix)
         return None
     return row
@@ -3508,7 +3509,7 @@ def cmd_printer_list() -> int:
         output.note("the Hub is not running, so connection states are unknown.")
     if not rows:
         output.out("No printer yet. Printers on the network appear here once they announce themselves.")
-        output.out("Add one: sudo filament-kit printer add")
+        output.out("Add one: sudo spoolwarden printer add")
         return 0
     lines = output.table(["Name", "Type", "Id", "Address", "State"],
                          [[r["name"], "Klipper" if r["family"] == "klipper" else "Bambu", r["serial"], _address_of(r),
@@ -3532,11 +3533,11 @@ def cmd_printer_list() -> int:
     mark = "" if output.plain() else output.paint("▲" if output.unicode_glyphs() else "!", "warn", sys.stdout) + " "
     for r in mine if hub.up else []:
         if _state_word(r) != "connected":
-            output.out(f"{mark}{r['name']} needs a look: filament-kit printer show {_quoted(r['name'])}")
+            output.out(f"{mark}{r['name']} needs a look: spoolwarden printer show {_quoted(r['name'])}")
     for r in found:
         how = f"use {_quoted(r['name'])}" if r["family"] == "klipper" else f"add --address {r['ip']}"
-        output.out(f"Add the found one: sudo filament-kit printer {how}" if len(found) == 1 else
-                   f"Add {r['name']}: sudo filament-kit printer {how}")
+        output.out(f"Add the found one: sudo spoolwarden printer {how}" if len(found) == 1 else
+                   f"Add {r['name']}: sudo spoolwarden printer {how}")
     return 0
 
 
@@ -3662,7 +3663,7 @@ def cmd_printer_use(arg: str, api_key: str | None = None) -> int:
         return 1
     if row["family"] == "bambu":
         output.error(f"{row['name']} is a Bambu Lab printer; it needs its Access Code.",
-                     cmd=f"sudo filament-kit printer add --address {row['ip']}")
+                     cmd=f"sudo spoolwarden printer add --address {row['ip']}")
         return output.USAGE
     key = _secret_answer(api_key, "", "--api-key", "printer use") if api_key == "-" else ""
     if key is None or not _api_key_ok(key):
@@ -3682,7 +3683,7 @@ def cmd_printer_dismiss(arg: str, yes: bool = False) -> int:
         return output.USAGE
     if row["configured"]:
         output.error(f"{row['name']} is added, so it cannot be dismissed.",
-                     cmd=f"sudo filament-kit printer forget {_quoted(row['name'])}")
+                     cmd=f"sudo spoolwarden printer forget {_quoted(row['name'])}")
         return output.USAGE
     stop = _confirm(f"Dismiss {row['name']}? It leaves this list. A new scan may find it again.",
                     f"dismissing {row['name']}", yes=yes)
@@ -3702,10 +3703,10 @@ def cmd_printer_forget(arg: str, yes: bool = False) -> int:
     if row is None:
         return output.USAGE
     if row["family"] == "klipper":
-        question = (f"Forget {row['name']}? filament-kit stops connecting to it and deletes its Moonraker API key, if one "
+        question = (f"Forget {row['name']}? Spoolwarden stops connecting to it and deletes its Moonraker API key, if one "
                     "is saved.")
     else:
-        question = (f"Forget {row['name']}? filament-kit stops connecting to it and deletes its Access Code. To use it "
+        question = (f"Forget {row['name']}? Spoolwarden stops connecting to it and deletes its Access Code. To use it "
                     "again, add it again.")
     stop = _confirm(question, f"forgetting {row['name']}", yes=yes)
     if stop is not None:
@@ -3768,7 +3769,7 @@ def cmd_printer_address(arg: str, address: str, port: int | None = None, access_
 
 def cmd_printer_access_code(arg: str, access_code: str | None = None) -> int:
     row = _printer_named(arg)
-    if row is None or _family_refusal(row, "bambu", "Access Code", f"sudo filament-kit printer api-key {_quoted(row['name'])}"):
+    if row is None or _family_refusal(row, "bambu", "Access Code", f"sudo spoolwarden printer api-key {_quoted(row['name'])}"):
         return output.USAGE
     code = _secret_answer(access_code, f"New Access Code for {row['name']} (on the printer: Settings > Network/LAN): ",
                           "--access-code", "printer access-code")
@@ -3790,13 +3791,13 @@ def cmd_printer_access_code(arg: str, access_code: str | None = None) -> int:
 def cmd_printer_api_key(arg: str, api_key: str | None = None, clear: bool = False, yes: bool = False) -> int:
     row = _printer_named(arg)
     if row is None or _family_refusal(row, "klipper", "Moonraker API key",
-                                      f"sudo filament-kit printer access-code {_quoted(row['name'])}"):
+                                      f"sudo spoolwarden printer access-code {_quoted(row['name'])}"):
         return output.USAGE
     if clear and api_key is not None:
         output.error("--clear and --api-key do not go together.", "use one of them.")
         return output.USAGE
     if clear:
-        stop = _confirm(f"Clear the Moonraker API key of {row['name']}? filament-kit then connects without a key. If "
+        stop = _confirm(f"Clear the Moonraker API key of {row['name']}? Spoolwarden then connects without a key. If "
                         "Moonraker asks for one, the printer's test says so until a key is set.",
                         f"clearing the API key of {row['name']}", yes=yes)
         if stop is not None:
@@ -3879,7 +3880,7 @@ def _scan(subnet: str | None) -> int:
         listed.append({**f, "id": p.serial, "name": registry.display_name(p)})
         where = f"{f['host']}:{f['port']}"
         lines.append(f"Found on {net}: {where} (added as {registry.display_name(p)})" if f["configured"] else
-                     f"Found on {net}: {where} (add it: sudo filament-kit printer use {p.serial})")
+                     f"Found on {net}: {where} (add it: sudo spoolwarden printer use {p.serial})")
     output.emit({"ok": True, "subnet": net, "found": listed})
     if not lines:
         output.out(f"No Moonraker found on {net}.")
@@ -4015,7 +4016,7 @@ def cmd_library_status() -> int:
     additions = f"{n} local addition{'' if n == 1 else 's'}"
     if st["source"] == "none":
         output.out("The Filament Catalog is not downloaded yet.")
-        output.out("Fix: sudo filament-kit catalog update")
+        output.out("Fix: sudo spoolwarden catalog update")
     else:
         output.out(f"Filament Catalog version {st['version']} ({_CATALOG_SOURCE.get(st['source'], st['source'])}), "
                    f"{additions}.")
@@ -4064,7 +4065,7 @@ def cmd_library_update(scheduled: bool) -> int:
     if r.held_from is not None:
         output.out(f"Version {r.version} stays: version {r.held_from} was rolled back and is the newest published. "
                    "Scheduled updates wait for a newer one; to install it anyway run: "
-                   "sudo filament-kit catalog update")
+                   "sudo spoolwarden catalog update")
         return 0
     if not r.changed:
         output.out(f"Up to date: {r.version}.")
@@ -4107,7 +4108,7 @@ def cmd_library_rollback(yes: bool = False) -> int:
     left = library.rolled_back_from()
     if left is not None:
         output.note(f"scheduled updates skip version {left} until a newer one is published; "
-                    "sudo filament-kit catalog update installs it anyway.")
+                    "sudo spoolwarden catalog update installs it anyway.")
     job.next("Asking for a preset build")
     _request_rebuild(f"library rolled back to version {v}")
     return 0
@@ -4145,7 +4146,7 @@ def cmd_library_add(source: str) -> int:
 def cmd_library_token(remove: bool, yes: bool = False) -> int:
     """`catalog token [--remove]` (06 9.11, 8.7): set, replace or remove the token the Filament Catalog downloads with."""
     if not _no_systemd() and not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit catalog token" + (" --remove" if remove else "")))
+        return output.need_sudo(_sudo_command("sudo spoolwarden catalog token" + (" --remove" if remove else "")))
     if remove:
         stop = _confirm("Remove the Catalog token? The Filament Catalog can then download only from public sources.",
                         "removing the Catalog token", yes=yes)
@@ -4231,7 +4232,7 @@ def _presets_on() -> bool:
     if "presets" in modules.enabled(config.load()):
         return True
     output.error('the "Slicer presets" Feature is off.', "turn it on first:",
-                 cmd="sudo filament-kit features on presets")
+                 cmd="sudo spoolwarden features on presets")
     return False
 
 
@@ -4265,7 +4266,7 @@ def cmd_profiles_build(sm_factory) -> int:
         text = r.get("error") or builds.NO_SYSTEM
         output.emit({"ok": True, "waiting": True, "text": text})
         output.out_lines(output.status_row("note", text.rstrip(".") + ".",
-                                           "sudo filament-kit pair --slicer-sync"
+                                           "sudo spoolwarden pair --slicer-sync"
                                            if text == builds.NO_SYSTEM else ""))
         return 0
     if not r.get("ok"):
@@ -4320,13 +4321,13 @@ def cmd_profiles_status() -> int:
                    else "Slicer Sync: set up, nothing reported yet.")
     else:
         output.out_lines(output.status_row("needs a look", "Slicer Sync: not set up.",
-                                           "sudo filament-kit pair --slicer-sync"))
+                                           "sudo spoolwarden pair --slicer-sync"))
     up = v["updates"]
     accepted = f" {_plural(up['accepted'], 'update')} accepted; the Slicer Sync writes them next." if up["accepted"] else ""
     output.out((f"Updates: {up['count']} on {_plural(up['lines'], 'line')}." if up["count"] else "Updates: none.")
                + " Presets already in your slicers are never replaced unless you accept them." + accepted)
     if up["count"] > up["accepted"]:
-        output.out("See them: " + "sudo filament-kit presets updates")
+        output.out("See them: " + "sudo spoolwarden presets updates")
     if up["yours"]:
         output.out(f"{_plural(up['yours'], 'generated preset')} differ from your own preset of the same name in Bambu "
                    "Studio's filament folder; yours stay (rename or delete yours to get ours).")
@@ -4418,7 +4419,7 @@ def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> in
         output.error(str(e))
         return 1
     except KeyError:
-        output.error(f"there is no line {line_id}.", "use an ID from:", cmd="sudo filament-kit presets lines")
+        output.error(f"there is no line {line_id}.", "use an ID from:", cmd="sudo spoolwarden presets lines")
         return output.USAGE
     except lines_mod.LineStoreError as e:
         output.error(e.message)
@@ -4454,7 +4455,7 @@ def cmd_profiles_updates(line_id: str | None, accept: bool = False, yes: bool = 
     asks, and accepts exactly what it listed: the next Slicer Sync writes them over the presets in the slicers (after
     its backup); nothing else ever writes over an existing preset."""
     if line_id is not None and not line_id.strip():
-        output.error("--line needs a line ID.", "see the IDs:", cmd="sudo filament-kit presets lines")
+        output.error("--line needs a line ID.", "see the IDs:", cmd="sudo spoolwarden presets lines")
         return 2
     if not _presets_on():
         return 1
@@ -4467,13 +4468,13 @@ def cmd_profiles_updates(line_id: str | None, accept: bool = False, yes: bool = 
     if r["stamp"] is None or not chosen:
         if line_id and r["stamp"] is not None:
             output.error(f"there are no updates for line {line_id}.", "see them with:",
-                         cmd="sudo filament-kit presets updates")
+                         cmd="sudo spoolwarden presets updates")
             return 1
         output.emit({"ok": True, "dry_run": not accept, "stamp": r["stamp"], "chosen": [], "count": 0, "updates": []})
         output.out("No updates to accept." if r["stamp"] is not None else "No build yet, so there are no updates to accept.")
         return 0
     if accept and not yes and not output.terminal():     # nothing is listed or accepted when nobody can answer
-        return output.no_terminal("accepting the updates", _sudo_command("sudo filament-kit presets accept-updates") + " --yes")
+        return output.no_terminal("accepting the updates", _sudo_command("sudo spoolwarden presets accept-updates") + " --yes")
     with output.shown() if not accept or not yes else contextlib.nullcontext():    # asked-for data, or what the question is about
         for text in _update_lines(chosen):
             output.out(text)
@@ -4529,7 +4530,7 @@ def _require_root() -> bool:
     """False (with the error and its Fix line) when not root; checked before anything is saved. The caller returns
     `output.NEEDS_SUDO`."""
     if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
-        output.need_sudo(_sudo_command("sudo filament-kit modules <command>"))
+        output.need_sudo(_sudo_command("sudo spoolwarden modules <command>"))
         return False
     return True
 
@@ -4689,7 +4690,7 @@ def _feature_named(arg: str) -> str | None:
     for name, mod in modules.MODULES.items():
         if a in (name, _KEY_OF[name], mod.title.lower()):
             return name
-    output.error(f'"{arg}" is not a Feature.', "use a key from the KEY column of:", cmd="sudo filament-kit features")
+    output.error(f'"{arg}" is not a Feature.', "use a key from the KEY column of:", cmd="sudo spoolwarden features")
     return None
 
 
@@ -4782,7 +4783,7 @@ def cmd_modules_set(mode: str, server: str | None = None) -> int:
         if mode == "station" and not server and _server_addr_missing(before_cfg) and (
                 output.json_mode() or not apply._tty()):     # before any output or change: nobody can be asked
             output.error("the Weigh Station only setup needs the Hub's address, and there is no terminal to ask.",
-                         "give it with --hub:", cmd=_sudo_command("sudo filament-kit features setup weigh-station")
+                         "give it with --hub:", cmd=_sudo_command("sudo spoolwarden features setup weigh-station")
                          + " --hub <address>")
             return output.USAGE
         output.out(f"Setup: {_SETUP_SENTENCE[mode]}.")
@@ -4874,15 +4875,15 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None, yes:
         key = unset[0]
         if key == "station.allow":
             output.error("Weigh Station needs the Hub's address, and there is no terminal to ask.",
-                         "give it with --hub:", cmd=_sudo_command(f"sudo filament-kit features on {_KEY_OF[name]}")
+                         "give it with --hub:", cmd=_sudo_command(f"sudo spoolwarden features on {_KEY_OF[name]}")
                          + " --hub <address>")
         elif key in _set_keys():
             output.error(f"{modules.MODULES[name].title} needs {key}, and there is no terminal to ask.",
-                         "set it first, then run this again:", cmd=f"sudo filament-kit config set {key} <value>")
+                         "set it first, then run this again:", cmd=f"sudo spoolwarden config set {key} <value>")
         else:
             output.error(f"{modules.MODULES[name].title} needs {key}, and there is no terminal to ask.",
                          "run it again at a terminal without --json to answer it:",
-                         cmd=_sudo_command(f"sudo filament-kit features {'on' if want_on else 'off'} {_KEY_OF[name]}")
+                         cmd=_sudo_command(f"sudo spoolwarden features {'on' if want_on else 'off'} {_KEY_OF[name]}")
                          .replace(" --json", ""))
         return output.USAGE
     if err:
@@ -4979,7 +4980,7 @@ def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
         target = updates._read_state().get("previous")
         if not isinstance(target, str) or not updates._kept(target):
             return None
-        return _confirm(f"Roll back to {target}? filament-kit stops while it installs and starts again by itself. "
+        return _confirm(f"Roll back to {target}? Spoolwarden stops while it installs and starts again by itself. "
                         "Settings and data stay.", "rolling back", yes=False)
     try:
         info = updates.check_info(cfg)
@@ -4987,7 +4988,7 @@ def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
         return None
     if not info["newer"]:
         return None
-    return _confirm(f"Update to {info['latest']}? filament-kit stops while it installs and starts again by itself. "
+    return _confirm(f"Update to {info['latest']}? Spoolwarden stops while it installs and starts again by itself. "
                     "Settings and data stay. The version before is kept, so you can roll back.", "updating", yes=False)
 
 
@@ -5017,7 +5018,7 @@ def cmd_uninstall(purge: bool, run=None, yes: bool = False) -> int:
     uninstall.sh asks its own for `./uninstall.sh --purge` too, which this answers with the word it was just given."""
     from . import release, updates
     if not _no_systemd() and not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit uninstall"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden uninstall"))
     kept = _kept_release()
     if kept is None:
         ver = updates.current_version()
@@ -5026,10 +5027,10 @@ def cmd_uninstall(purge: bool, run=None, yes: bool = False) -> int:
                      cmd="sudo ./uninstall.sh" + (" --purge" if purge else ""))
         return 1
     if purge:
-        stop = _confirm("This also deletes everything filament-kit keeps on this machine. Type purge to go on: ",
-                        "removing filament-kit and deleting everything it keeps", yes=yes, word="purge")
+        stop = _confirm("This also deletes everything Spoolwarden keeps on this machine. Type purge to go on: ",
+                        "removing Spoolwarden and deleting everything it keeps", yes=yes, word="purge")
     else:
-        stop = _confirm("Remove filament-kit from this machine? Its data stays unless you add --purge.",
+        stop = _confirm("Remove Spoolwarden from this machine? Its data stays unless you add --purge.",
                         "removing filament-kit", yes=yes)
     if stop is not None:
         return stop
@@ -5197,7 +5198,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     from . import reader_setup as rs
     from . import reader_tokens
     if not a.token_file and not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit reader setup"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden reader setup"))
     answers = None
     if getattr(a, "pending", False):        # the setup page's job: the answers it was given, nothing asked
         answers = rf.take_pending()
@@ -5280,7 +5281,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         return 1
     if not getattr(a, "pending", False):     # the setup page's job was asked there: it has no terminal
         if not yes and ask is input and not output.terminal():      # nobody to ask: nothing is written
-            return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit reader setup") + " --yes")
+            return output.no_terminal("writing the firmware", _sudo_command("sudo spoolwarden reader setup") + " --yes")
         try:
             stop = _confirm(f"Write the reader firmware to {port}? What is on the board now is replaced.",
                             "writing the firmware", yes=yes, ask=None if ask is input else ask)
@@ -5316,7 +5317,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     print(result.message)
     if tid:
         output.out(f"Reader token {tid} ({a.name or 'printer-station'}). Remove it later with: "
-                   + f"sudo filament-kit reader revoke {tid}")
+                   + f"sudo spoolwarden reader revoke {tid}")
     print(f"Buzzer: {buzzer}-triggered. Unplug it from the server and power it where it lives; it keeps its settings.")
     if not real_key:
         print("Note: without --ota-pubkey it refuses updates over Wi-Fi; running this again with the board plugged in "
@@ -5376,7 +5377,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         shown = next((r for r in found if r.port == port), None)
         yes = bool(getattr(a, "yes", False))        # --port names the board; it never answers the question
         if not yes and ask is input and not output.terminal():      # nobody to ask: nothing is written
-            return output.no_terminal("writing the firmware", _sudo_command("sudo filament-kit reader setup") + " --yes")
+            return output.no_terminal("writing the firmware", _sudo_command("sudo spoolwarden reader setup") + " --yes")
         if not explicit and shown:
             print(f"Found a USB board: {shown.by_id or port} ({shown.product})")
         try:
@@ -5416,7 +5417,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     if token is None and not _is_root():
         output.error("this needs administrator rights to make the reader's token.",
                      "run it with sudo, or pass --token-file with a token made by:",
-                     cmd="sudo filament-kit reader token")
+                     cmd="sudo spoolwarden reader token")
         return output.NEEDS_SUDO
     ssid = a.ssid or ask("Wi-Fi name the reader joins: ").strip()
     password = _wifi_password(a, ask_secret)
@@ -5456,7 +5457,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         if not flashing:
             output.out("Build and flash with it as reader/README.md says (copy it to reader/src/secrets.h, then "
                        + "pio run -e esp32-c3-supermini -t upload), or here with: "
-                       + f"filament-kit reader setup --secrets {out} --source <checkout>/reader")
+                       + f"spoolwarden reader setup --secrets {out} --source <checkout>/reader")
     if flashing:
         busy = None
         try:
@@ -5480,7 +5481,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
                  "buzzer module needs --buzzer low."))
     if tid:
         output.out(f"Reader token {tid} ({a.name or 'reader'}). Remove it later with: "
-                   + f"sudo filament-kit reader revoke {tid}")
+                   + f"sudo spoolwarden reader revoke {tid}")
     if not real_key:
         print("Note: without --ota-pubkey this reader refuses every update over Wi-Fi until it is flashed again with "
               "the key (py tools/ota_publish.py --init-key prints it).")
@@ -5534,7 +5535,7 @@ def cmd_web_passphrase() -> int:
     sign-in). Typed twice, hidden; stored by `write_passphrase`."""
     from .web import auth  # needs the [web] extra
     if not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit web passphrase"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden web passphrase"))
     try:
         first = secret_input.ask(f"New passphrase, at least {auth.MIN_PASSPHRASE} characters: ")
         second = secret_input.ask("New passphrase again: ")
@@ -5564,7 +5565,7 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -
     choice, said so here); --revoke-trusted forgets them, with or without a new code."""
     from . import setup_code, trusted
     if not _is_root():
-        return output.need_sudo(_sudo_command("sudo filament-kit setup-code"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden setup-code"))
     for asked, question, doing in ((new, "Make a new setup code? The old one stops working.", "making a new setup code"),
                                    (revoke_trusted, "Revoke every trusted computer? Each one needs the setup code "
                                     "again.", "revoking every trusted computer")):
@@ -5603,7 +5604,7 @@ def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -
         n = len(trusted.listing())
         if n:
             output.out(f"Trusted computers stay trusted ({n}): revoke them in Devices on the setup page, or with "
-                       + "sudo filament-kit setup-code --revoke-trusted.")
+                       + "sudo spoolwarden setup-code --revoke-trusted.")
     return 0
 
 
@@ -5620,7 +5621,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes
         return 1
     store = reader.TokenStore()
     if action in ("token", "revoke") and not _is_root():
-        return output.need_sudo(_sudo_command(f"sudo filament-kit tag-reader {'new-token' if action == 'token' else action}"))
+        return output.need_sudo(_sudo_command(f"sudo spoolwarden tag-reader {'new-token' if action == 'token' else action}"))
     try:
         if action == "token":
             tid, tok = store.issue(name)
@@ -5635,7 +5636,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes
             output.emit(rows)
             if not rows:
                 output.out("No Tag Reader tokens.")
-                output.out("Make one: sudo filament-kit tag-reader new-token --name bench")
+                output.out("Make one: sudo spoolwarden tag-reader new-token --name bench")
                 return 0
             output.out_lines(output.table(["ID", "Name", "Made"], [[t["id"], t["name"], t["created"]] for t in rows],
                                           long=1, whole=True))   # `tag-reader revoke` takes the id or the name
@@ -5645,7 +5646,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes
         if len(hit) == 1:                       # one that is there
             tid = hit[0]["id"]
             stop = _confirm(f"Revoke the token {tid}? A Tag Reader using it is refused from now on. Set it up again "
-                            "with sudo filament-kit tag-reader flash to give it a new token.", f"revoking the token {tid}",
+                            "with sudo spoolwarden tag-reader flash to give it a new token.", f"revoking the token {tid}",
                             yes=yes)
             if stop is not None:
                 return stop
@@ -5655,7 +5656,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes
                 output.result(f"Revoked the token {tid}.")
                 return 0
         output.error(f'"{ref}" does not name one Tag Reader token.', "use an ID or a name from:",
-                     cmd="sudo filament-kit tag-reader list")
+                     cmd="sudo spoolwarden tag-reader list")
         return output.USAGE
     except reader.TokenFileError as e:
         _err_line(f"{e}; nothing was changed")
@@ -5701,7 +5702,7 @@ def cmd_local_intake_status() -> int:
     order = intake.reader_order(cfg)
     if not order:
         output.error("the Label Reader is off, so no engine reads labels.", "turn an engine on first:",
-                     cmd="sudo filament-kit features on label-reader")
+                     cmd="sudo spoolwarden features on label-reader")
         return output.FAILED
     on = modules.enabled(cfg)
     rows: list = []
@@ -5776,7 +5777,7 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
         return 1
     if not yes and output.json_mode():          # --json never asks
         return output.no_terminal("installing the local label reader",
-                                  _sudo_command("sudo filament-kit local-intake install") + " --yes")
+                                  _sudo_command("sudo spoolwarden local-intake install") + " --yes")
     if not yes:
         a = _ask("Go ahead? [y/N] ")
         if not a or a.strip().lower() not in ("y", "yes"):
@@ -5801,7 +5802,7 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
     h = lii.wait_healthy(config.load())
     if not h["ok"]:
         _err_line(f"installed, but the reader does not answer yet: {h['error']}. Check: "
-                  + "filament-kit local-intake status")
+                  + "spoolwarden local-intake status")
         return 1
     print(f"The reader answers: version {h['version'] or '?'}, API {h['api_version']}.")
     return 0
@@ -5892,7 +5893,7 @@ def cmd_local_intake_token(remove: bool) -> int:
     """Set (hidden prompt) or remove the local reader's bearer token, <etc>/local_intake_token (root). Never printed."""
     from . import local_reader
     if not _is_root() and not _no_systemd():
-        return output.need_sudo(_sudo_command("sudo filament-kit local-intake token"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden local-intake token"))
     if remove:
         print("Reader token removed." if local_reader.remove_token() else "No reader token was set.")
         return 0
@@ -5931,7 +5932,7 @@ def cmd_local_intake_corrections_list() -> int:
         output.out("No corrections waiting.")
     else:
         output.out(f"Corrections waiting: {got['count']} - {got['bytes'] / 1048576:.1f} MB. Nothing is sent until you "
-                   "run: sudo filament-kit label-reader corrections send")
+                   "run: sudo spoolwarden label-reader corrections send")
         for e in got["entries"]:
             what = ", ".join(f"{k}: {v}" for k, v in (e.get("corrected") or {}).items()) if isinstance(
                 e.get("corrected"), dict) else ""
@@ -6071,11 +6072,11 @@ def cmd_local_intake_test(photos: list[str], engine: str | None = None, yes: boo
     want = {"cloud": "ai_intake", "local": "local_intake"}.get(engine or "")
     if engine and want not in modules.enabled(cfg):
         output.error(f"{_ENGINE_NAMES[engine]} is not installed.", "turn it on first:",
-                     cmd="sudo filament-kit features on " + _KEY_OF[want])
+                     cmd="sudo spoolwarden features on " + _KEY_OF[want])
         return output.FAILED
     if not order:
         output.error("the Label Reader is off, so no engine reads labels.", "turn an engine on first:",
-                     cmd="sudo filament-kit features on label-reader")
+                     cmd="sudo spoolwarden features on label-reader")
         return output.FAILED
     readers = [engine] if engine else order
     try:
@@ -6149,9 +6150,9 @@ _HELP_GROUPS = [('Everyday',
    ('remote', 'Remote access: certificate and firewall rules'),
    ('setup-code', "The Hub page's address and setup code"),
    ('certificate', "The Hub's certificate and its fingerprint"),
-   ('spoolman', "Spoolman: its address and the kit's extra fields"),
-   ('update', 'Check, install or roll back filament-kit'),
-   ('uninstall', 'Remove filament-kit from this machine'),
+   ('spoolman', "Spoolman: its address and Spoolwarden's extra fields"),
+   ('update', 'Check, install or roll back Spoolwarden'),
+   ('uninstall', 'Remove Spoolwarden from this machine'),
    ('logs', "The end of a service's log")])]
 
 _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check', '{nav_overview}'),
@@ -6240,12 +6241,12 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`remote get-certificate`', 'Get the public certificate now', '{settings_network_certificate}'),
  ('`setup-code [--new] [--revoke-trusted]`', 'Hub page address and setup code', '{unlock_field_label}, {devices_trusted_title}'),
  ('`certificate`', "Make the Hub's certificate if missing; print its fingerprint", '(none)'),
- ('`spoolman fields`', "Make the kit's extra fields in Spoolman", '{nav_overview}, {overview_make_fields}'),
+ ('`spoolman fields`', "Make Spoolwarden's extra fields in Spoolman", '{nav_overview}, {overview_make_fields}'),
  ('`spoolman address [<url>]`',
   'Show or change the Spoolman in use (checked before saving)',
   '{nav_settings} > {settings_group_general}, {settings_general_spoolman}'),
  ('`update [--check \\| --rollback] [--scheduled]`', 'Updates', '{nav_updates}'),
- ('`uninstall [--purge]`', 'Remove filament-kit (asks)', '{nav_updates}, footer line'),
+ ('`uninstall [--purge]`', 'Remove Spoolwarden (asks)', '{nav_updates}, footer line'),
  ('`logs [<service>] [--lines 50\\|100\\|200]`', "The end of a service's log", '{nav_logs}'),
  ('`add`', 'Prints where spools are added', '(none)'),
  ('`spool`', 'Prints where spools are opened, tagged and moved', '(none)'),
@@ -6292,8 +6293,8 @@ _ALIASES = [('pair --pc', 'pair --slicer-sync'),
 
 def _top_help() -> str:
     """06 3.1: the groups in the Hub page's order, what each command is for, and the switches every command takes."""
-    lines = ["filament-kit on this Hub. Commands marked (sudo) in their own help need sudo.",
-             "Usage: filament-kit <command> [options]    More: filament-kit <command> -h", ""]
+    lines = ["Spoolwarden on this Hub. Commands marked (sudo) in their own help need sudo.",
+             "Usage: spoolwarden <command> [options]    More: spoolwarden <command> -h", ""]
     for group, items in _HELP_GROUPS:
         lines.append(group)
         lines += [f"  {name:<16} {text}" for name, text in items]
@@ -6339,7 +6340,7 @@ def _help(args, ap, sub) -> int:
             output.out_lines(output.wrap(f"{old} {output.sym('arrow')} {new}", indent=4))
         return 0
     if args.topic not in sub.choices:
-        output.error(f'there is no command called "{args.topic}".', "see the commands with: filament-kit help")
+        output.error(f'there is no command called "{args.topic}".', "see the commands with: spoolwarden help")
         return output.USAGE
     return _print_help(sub.choices[args.topic].format_help())
 
@@ -6376,7 +6377,7 @@ _invoked: list[str] = []      # the arguments of this run, for the Fix line of a
 def _sudo_command(fallback: str) -> str:
     """The command that was run with `sudo` in front, so the Fix line holds it whole; `fallback` when `main` did not
     record it."""
-    return "sudo filament-kit " + shlex.join(_invoked) if _invoked else fallback
+    return "sudo spoolwarden " + shlex.join(_invoked) if _invoked else fallback
 
 
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
@@ -6397,7 +6398,7 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
             return _main(args, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
         except PermissionError as e:
             where = f"{e.filename}: " if e.filename else ""
-            output.error(f"{where}permission denied.", "run it with sudo:", cmd=_sudo_command("sudo filament-kit"))
+            output.error(f"{where}permission denied.", "run it with sudo:", cmd=_sudo_command("sudo spoolwarden"))
             return output.NEEDS_SUDO
         except KeyboardInterrupt:
             output.out("Stopped.")
@@ -6579,8 +6580,9 @@ def _dispatch_recent(args) -> int:
 
 
 def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
-    ap = _Parser(prog="filament-kit")
+    ap = _Parser(prog="spoolwarden")
     ap.grouped_help = True
+    ap.add_argument("--version", action="version", version=f"Spoolwarden {__version__}", help=argparse.SUPPRESS)
     ap.add_argument("--color", choices=("auto", "always", "never"), default="auto",
                     help="colour on the terminal: always, never, or auto (default; NO_COLOR and TERM=dumb turn it off)")
     ap.add_argument("--plain", action="store_true",
@@ -6631,9 +6633,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
     _add_recent(sub, "intake", "the old spelling of recent", alias=True)
     sub.add_parser("ensure-fields", help="the old spelling of spoolman fields")
-    sm = sub.add_parser("spoolman", help="Spoolman: its address and the kit's extra fields")
+    sm = sub.add_parser("spoolman", help="Spoolman: its address and Spoolwarden's extra fields")
     smsub = sm.add_subparsers(dest="spoolman_cmd", required=True)
-    smsub.add_parser("fields", help="make the kit's extra fields in Spoolman")
+    smsub.add_parser("fields", help="make Spoolwarden's extra fields in Spoolman")
     sma = smsub.add_parser("address", help="show the Spoolman in use, or check an address and use it (root)")
     sma.add_argument("url", nargs="?", help="the new address, e.g. http://spoolman.example:7912")
     lg = sub.add_parser("logs", help="the end of a service's log (root)")
@@ -6868,13 +6870,13 @@ def _json_refusal(a) -> int | None:
     code (2) when this is one of them, after its Error and Fix."""
     c, sub = a.cmd, _sub_of(a)
     if c == "config" and sub is None:
-        output.error("config is a menu.", "use filament-kit config show --json")
+        output.error("config is a menu.", "use spoolwarden config show --json")
         return output.USAGE
     if c == "features" and sub == "menu":
-        output.error("features menu is a menu.", "use filament-kit features --json")
+        output.error("features menu is a menu.", "use spoolwarden features --json")
         return output.USAGE
     if c == "printer" and sub == "menu":
-        output.error("printer menu is a menu.", "use filament-kit printer list --json")
+        output.error("printer menu is a menu.", "use spoolwarden printer list --json")
         return output.USAGE
     asks = ((c == "weigh-station" and sub == "pair" and not a.local, "weigh-station pair"),
             (c == "tag-reader" and sub == "flash" and not a.pending, "tag-reader flash"),
@@ -7031,7 +7033,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return remote.firewall(cfg)
         if "remote" in modules.enabled(cfg) and (_no_systemd() or _is_root()):     # else `issue` says what is wrong
             stop = _confirm("Get the certificate now? Port 80 on your router must reach this Hub while it runs. "
-                            "filament-kit never changes your firewall or router.", "getting the certificate",
+                            "Spoolwarden never changes your firewall or router.", "getting the certificate",
                             yes=args.yes)
             if stop is not None:
                 return stop

@@ -201,13 +201,13 @@ def test_first_build_never_fatal(tmp_path):
     run = Recorder(fail=("profiles build",))
     apply.execute([Action("first_build"), Action("daemon_reload")],
                   run=run, resources=_res(tmp_path), root=tmp_path)
-    assert run.texts() == ["/usr/local/bin/filament-kit profiles build", "systemctl daemon-reload"]
+    assert run.texts() == ["/usr/local/bin/spoolwarden profiles build", "systemctl daemon-reload"]
 
 
 def test_ensure_fields_through_wrapper(tmp_path):
     run = Recorder()
     apply.execute([Action("ensure_fields")], run=run, resources=_res(tmp_path), root=tmp_path)
-    assert run.texts() == ["/usr/local/bin/filament-kit ensure-fields"]
+    assert run.texts() == ["/usr/local/bin/spoolwarden ensure-fields"]
 
 
 def test_server_setup_no_tty_writes_avahi_and_cert(tmp_path, monkeypatch):

@@ -175,7 +175,7 @@ def kit_python(code: str, env_extra: dict | None = None) -> subprocess.Completed
 
 
 def root_python(code: str) -> subprocess.CompletedProcess:
-    """Python in the kit's venv as root: what the root helper and `sudo filament-kit` do."""
+    """Python in the kit's venv as root: what the root helper and `sudo spoolwarden` do."""
     return subprocess.run([str(VENV_PY), "-I", "-c", code], capture_output=True, text=True, timeout=120,
                           stdin=subprocess.DEVNULL, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"})
 
@@ -340,7 +340,7 @@ class Releases:
 # ---------------------------------------------------------------- scenarios
 
 def nothing_installed() -> list[str]:
-    return [str(p) for p in (OPT, ETC, STATE, Path("/usr/local/bin/filament-kit")) if p.exists()]
+    return [str(p) for p in (OPT, ETC, STATE, Path("/usr/local/bin/spoolwarden"), Path("/usr/local/bin/filament-kit")) if p.exists()]
 
 
 def uninstall(run: Run, rel: Releases, name: str) -> None:
@@ -439,8 +439,8 @@ class E2E:
         code, plist = jhttp("GET", f"{KIT}/intake/api/printers")
         run.check(sc, "its Printers tab reaches this server's API over the loopback with its own pairing",
                   code == 200, str(plist)[:300])
-        st = run.sh(["/usr/local/bin/filament-kit", "status"], name="status-after-install")
-        run.check(sc, "filament-kit status exits 0", st.returncode == 0, st.stdout[-1500:])
+        st = run.sh(["/usr/local/bin/spoolwarden", "status"], name="status-after-install")
+        run.check(sc, "spoolwarden status exits 0", st.returncode == 0, st.stdout[-1500:])
         kept = OPT / "releases" / self.v1
         run.check(sc, "verified release kept for rollback",
                   sorted(os.listdir(kept)) == ["SHA256SUMS", "SHA256SUMS.sig", f"filament-kit-{self.v1}.tar.gz"]
@@ -583,17 +583,17 @@ class E2E:
         import fake_printer
         code = secrets.token_hex(4)                  # a throwaway Access Code for the fake printer only
         self.printer = fake_printer.Broker(SERIAL, code, self.run.work / "printer-certs")
-        # what `filament-kit config` -> Printers -> add printer does (registry.upsert of a fresh, configured entry)
+        # what `spoolwarden config` -> Printers -> add printer does (registry.upsert of a fresh, configured entry)
         r = kit_python("import os\nfrom filament_kit.bridge import registry\n"
                        f"registry.upsert(registry.Printer({SERIAL!r}, 'E2E H2D', 'O1D', '127.0.0.1', "
                        "os.environ['FK_E2E_CODE'], True))", env_extra={"FK_E2E_CODE": code})
         if r.returncode:
             raise Fail(f"cannot add the printer: {r.stderr[-400:]}")
-        # the reader token, made as the docs say: sudo filament-kit reader token
+        # the reader token, made as the docs say: sudo spoolwarden reader token
         r = run.sh(["/usr/local/bin/filament-kit", "reader", "token", "--name", "e2e"], name="reader-token",
                    log=False)
         token = parse_reader_token(r.stdout)
-        run.check(sc, "sudo filament-kit reader token makes a token", r.returncode == 0 and token is not None,
+        run.check(sc, "sudo spoolwarden reader token makes a token", r.returncode == 0 and token is not None,
                   r.stderr[-400:])
         if not token:
             raise Fail("no reader token")
@@ -645,7 +645,7 @@ class E2E:
                   str((sp or {}).get("location")))
         # the CLI asks the running server, which holds the printer (a live bug: its own second connection got nothing)
         r = run.sh(["/usr/local/bin/filament-kit", "printer", "report", SERIAL], name="printer-report-cli")
-        run.check(sc, "filament-kit printer report goes through the running server", r.returncode == 0
+        run.check(sc, "spoolwarden printer report goes through the running server", r.returncode == 0
                   and "Printer report saved:" in r.stdout and "could not be reached" not in r.stdout,
                   r.stdout[-800:] + r.stderr[-400:])
 
@@ -904,7 +904,7 @@ class E2E:
         out_dir.mkdir(exist_ok=True)
         r = run.sh([fk, "backup", "create", "--out", str(out_dir)], name="backup-create")
         zips = sorted(out_dir.glob("filament-kit-backup-*.zip"))
-        run.check(sc, "sudo filament-kit backup create writes one standard zip",
+        run.check(sc, "sudo spoolwarden backup create writes one standard zip",
                   r.returncode == 0 and len(zips) == 1 and zipfile.is_zipfile(zips[0]), r.stdout + r.stderr[-600:])
         if not zips:
             raise Fail("no backup zip")
@@ -925,7 +925,7 @@ class E2E:
         fresh = self._kit_state(auth)
         run.check(sc, "the fresh install does not know the phone", fresh["paired"] == 401, json.dumps(fresh))
         r = run.sh([fk, "restore", "--yes", str(zips[0])], name="restore", timeout=3600)
-        run.check(sc, "sudo filament-kit restore --yes <zip> succeeds", r.returncode == 0 and "Restored." in r.stdout,
+        run.check(sc, "sudo spoolwarden restore --yes <zip> succeeds", r.returncode == 0 and "Restored." in r.stdout,
                   r.stdout[-2500:] + r.stderr[-1500:])
         act = wait_for(lambda: (lambda a: a if set(a.values()) == {"active"} else None)(
             units_active("spoolman.service", "filament-kit.service", "filament-kit-web.service")), 120, 2)
@@ -944,7 +944,7 @@ class E2E:
         run.check(sc, "after the restore: the same setup code, and the trusted computer is still trusted",
                   r.stdout.split() == ["True", "True"], r.stdout + r.stderr[-400:])
         st = run.sh([fk, "status"], name="status-after-restore")
-        run.check(sc, "filament-kit status exits 0", st.returncode == 0, st.stdout[-1500:])
+        run.check(sc, "spoolwarden status exits 0", st.returncode == 0, st.stdout[-1500:])
         kept = sorted(Path("/var/backups/filament-kit").glob("pre-restore-*.zip"))
         run.check(sc, "what the fresh install had is kept as a pre-restore zip", len(kept) == 1, str(kept))
         if self.printer is not None:

@@ -323,7 +323,7 @@ def test_rollback_refused_with_nothing_kept_and_with_a_module_the_target_lacks(a
     r = post(client(app), "job", {"name": "rollback"})
     assert r.status_code == 409
     assert r.json()["error"] == ("filament-kit 0.3.0 has no klipper module; run "
-                                 "`sudo filament-kit modules disable klipper` first")
+                                 "`sudo spoolwarden modules disable klipper` first")
 
 
 def test_job_view_before_any_job(app):

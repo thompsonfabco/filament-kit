@@ -247,7 +247,7 @@ def plan_text(p: dict) -> list[str]:
         lines.append(f"This release has no {p['asked_tier']} tier: its {p['tier']} tier is used.")
     if p.get("downgrade"):
         lines.append(f"That is older than the installed {p['installed']}: it is installed only when that version is "
-                     "asked for by name (filament-kit local-intake install --version " + p["version"]
+                     "asked for by name (spoolwarden local-intake install --version " + p["version"]
                      + ").")
     if t["fetched_at_install"]:
         lines.append(f"The installer also fetches: {t['fetched_at_install']}.")
@@ -412,7 +412,7 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     # terminal (`--version`) may go back
     if have and not allow_downgrade and release.parse_version(ver) < release.parse_version(have["version"]):
         raise InstallError(f"release {ver} is older than the installed {have['version']}: nothing was installed "
-                           f"(to go back, name it: filament-kit local-intake install --version {ver})")
+                           f"(to go back, name it: spoolwarden local-intake install --version {ver})")
     m = _manifest(_get_listed(fetcher, rel, table, MANIFEST, LIMIT_MANIFEST), ver)
     tier = resolve_tier(m["tiers"], tier)
     entry = m["tiers"][tier]

@@ -110,6 +110,7 @@ minutes without any output (or 4 hours in all) the kit stops it, says so in the 
 The updater, the backup reader, the pairing link readers, the Klipper lane check and the Bambu calibration check now also
 accept the second set of names a later release will use (update download, backup, link, lane source and calibration
 job), and the Hub announces itself on the network under both service types. Everything the kit makes is named as before.
+- **The command is now `spoolwarden`.** Install and update put `spoolwarden` where `filament-kit` was; `spoolwarden --version` prints `Spoolwarden <version>`, and the help, messages and Fix lines name it. `filament-kit` still works for a time: it runs `spoolwarden` with the same arguments, input, output and exit code, and prints one line on standard error saying the name changed.
 
 ## Still to come
 

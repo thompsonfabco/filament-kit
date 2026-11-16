@@ -202,7 +202,7 @@ def test_cli_reader_token_list_revoke(env, monkeypatch, capsys):
     assert "does not name one Tag Reader token" in capsys.readouterr().err
     assert cli.main(["tag-reader", "list"]) == 0
     assert capsys.readouterr().out.splitlines() == ["No Tag Reader tokens.",
-                                                    "Make one: sudo filament-kit tag-reader new-token --name bench"]
+                                                    "Make one: sudo spoolwarden tag-reader new-token --name bench"]
 
 
 # ---------- routes: auth, healthz, fw ----------
