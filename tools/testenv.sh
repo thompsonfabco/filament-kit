@@ -118,6 +118,14 @@ run() {
     LAST_COUNTS=$counts
     SUMMARY+=("$(printf '%-5s %-10s %5ss  %s' "$([ "$rc" -eq 0 ] && echo ok || echo FAIL)" "$name" "$((SECONDS - start))" "$counts")")
 }
+# has_selector: PYTEST-ARGS narrow what runs (-k, -m, or a test path), so a group left with nothing is the person's doing, not a fault
+has_selector() {
+    local arg
+    for arg in "${EXTRA[@]}"; do
+        case "$arg" in -k|-k?*|-m|-m?*|--keyword*|*::*|*.py|tests|tests/*) return 0 ;; esac
+    done
+    return 1
+}
 PYTEST=("$VENV/bin/python" -m pytest -q -rfEs -p no:cacheprovider)
 FLAKY=()
 
@@ -163,6 +171,11 @@ if wanted server; then
         saved=$WORKERS
         WORKERS=2
         parallel server-audit "$ROOT/server" -m browser_audit "${EXTRA[@]}"
+        if [ "${LAST_RC:-0}" -eq 5 ] && has_selector; then       # exit 5 = nothing selected: the person's own -k or path asked for that
+            FAILED=$FAILED_BEFORE
+            unset 'SUMMARY[-1]'
+            SUMMARY+=("$(printf '%-5s %-10s %5ss  %s' ok server-audit "$((SECONDS - SUITE_START))" "no audit test matched your selector")")
+        fi
         WORKERS=$saved
     fi
 fi
