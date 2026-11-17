@@ -155,6 +155,32 @@ def test_add_puts_the_new_location_last_and_says_so(capsys, sm):
     assert (rack.type, rack.limit, rack.fill, rack.materials) == ("bulk", 20, MATERIALS, ["PLA", "PETG"])
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX owners and modes")
+def test_a_root_add_leaves_the_file_with_the_hubs_owner_and_mode_and_a_running_hub_rereads_it(
+        capsys, sm, monkeypatch, env):
+    """The command runs as root and writes storage.xml itself. The two users are faked: root is `os.geteuid() == 0`,
+    and the chown calls are recorded, to be the state folder's owner (the Hub's user); the real two-user check is the
+    e2e scenario h. The running Hub is a process whose cache holds the file as it was."""
+    import os
+    import stat
+    monkeypatch.setattr(os, "geteuid", lambda: 0, raising=False)
+    chowned = []
+    monkeypatch.setattr(os, "fchown", lambda fd, uid, gid: chowned.append((uid, gid)))
+    monkeypatch.setattr(os, "chown", lambda path, uid, gid, **k: chowned.append((uid, gid)))
+    state = env / "state"
+    hub_user = (state.stat().st_uid, state.stat().st_gid)
+    assert "Rack 9" not in names()                                    # the Hub has read the file: it is cached
+    before = storage._cache
+    assert before is not None
+    rc, out, err = run(capsys, sm, "locations", "add", "Rack 9")
+    assert rc == 0, err
+    assert chowned and set(chowned) == {hub_user}                     # the file (and the lock) go to the Hub's user
+    assert stat.S_IMODE((state / "storage.xml").stat().st_mode) == 0o644
+    assert not (env / "etc" / "storage.xml").exists()
+    storage._cache = before                                           # the Hub's own cache: the file as it was
+    assert "Rack 9" in names()                                        # reread without a restart
+
+
 def test_add_without_options_is_bulk_with_no_limit_that_takes_nothing(capsys, sm):
     assert run(capsys, sm, "locations", "add", "Drawer")[0] == 0
     drawer = storage.current().by_name("Drawer")
@@ -527,7 +553,7 @@ def test_a_save_of_the_menu_refused_by_the_save_path_keeps_the_changes(capsys, s
 # ================================================================ the installer's question
 
 def test_the_installers_storage_question_opens_the_new_list_and_writes_the_list_on_q(capsys, monkeypatch):
-    (config.paths().etc / "storage.xml").unlink()
+    (config.paths().state / "storage.xml").unlink()
     cfg = config.load()
     monkeypatch.setattr(sys, "stdin", io.StringIO("2\n3\n30\nq\n"))
     cli._storage_menu(cfg)
