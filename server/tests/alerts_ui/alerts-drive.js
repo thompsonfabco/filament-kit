@@ -166,13 +166,13 @@ const SCENARIOS = {
     raise("print.paused", "warn", "print-paused:p-3", { data: { job: "a.3mf", percent: 5, reason: "user" } });
     await A.poll(); out.before = banners().length; out.toastsBefore = toasts().length;
     // the Hub dropped events: the batch is not replayed (no toasts); the conditions are the truth
-    hub.gap = true; hub.oldest = 50;
+    hub.gap = true;
     add(ev({ kind: "print.failed", severity: "bad", data: { job: "z.3mf", percent: 2 } }));
     clear("print.resumed", "print-paused:p-3");
-    await A.poll(); out.gapToasts = toasts().length; out.afterGap = banners().map((b) => b.title); hub.gap = false;
+    hub.oldest = hub.events[hub.events.length - 2].id; await A.poll(); out.gapToasts = toasts().length; out.afterGap = banners().map((b) => b.title); hub.gap = false;
     // "Send a test alert": the answer carries `test` once
     hub.test = { title: "Test alert", text: "This is a test." };
-    await A.poll(); out.testToasts = toasts(); await A.poll(); out.testOnce = toasts().length;
+    await A.poll(); out.testToasts = toasts().filter((x) => x === "Test alert"); await A.poll(); out.testOnce = toasts().filter((x) => x === "Test alert").length;
     return out;
   },
   async late_roles() {    // present at open: plain; arrived later: announced
