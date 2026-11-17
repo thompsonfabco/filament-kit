@@ -526,3 +526,24 @@ def test_nozzle_from_klipper_config(printer, sm, fil):
 def test_nozzle_assumed_from_xml(printer):
     fam, pid, fake = printer
     assert fam._nozzle(pid) == (0.4, True)
+
+
+def test_a_klipper_load_writes_spool_loaded_and_unloaded_in_one_batch(printer, sm, fil, tmp_path):
+    from filament_kit import event_sink
+    from filament_kit.events import EventStore
+    store = EventStore(tmp_path / "state" / "events")
+    event_sink.set_sink(event_sink.StoreSink(store))
+    try:
+        fam, pid, fake = printer
+        old = spool(sm, fil, LOC, prev="Shelf 1")
+        new = spool(sm, fil, "Shelf 2")
+        fam.load(sm, pid, "T0", new["id"], False, sealed_location="Sealed stock")
+        es = store.read()["events"]
+        assert [(e["kind"], e["subject"]["id"]) for e in es] == [("spool.unloaded", str(old["id"])),
+                                                                  ("spool.loaded", str(new["id"]))]
+        assert es[1]["data"]["after_location"] == LOC and es[1]["data"]["after_slot"] == "T0"
+        assert es[0]["data"]["batch"] == es[1]["data"]["batch"]
+        fam.load(sm, pid, "T0", new["id"], True, sealed_location="Sealed stock")      # a preview
+        assert len(store.read()["events"]) == 2
+    finally:
+        event_sink.set_sink(None)

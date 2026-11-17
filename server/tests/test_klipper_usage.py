@@ -473,3 +473,24 @@ def test_connecting_to_a_finished_printer_records_nothing(moonraker, spoolman_ur
         assert fam.usage(pid, 36500) == []
     finally:
         fam.stop()
+
+
+def test_a_new_entry_with_a_weight_writes_usage_recorded_once(tmp_path):
+    from filament_kit import event_sink
+    from filament_kit.events import EventStore
+    registry.upsert(registry.Printer("sv08-max", "SV08 MAX", family="klipper", configured=True))
+    store = EventStore(tmp_path / "state" / "events")
+    event_sink.set_sink(event_sink.StoreSink(store))
+    try:
+        event_sink.runs.begin("sv08-max", "part.gcode")
+        job = history_job(filename="part.gcode")
+        kusage.record("sv08-max", job, 10)
+        kusage.record("sv08-max", job, 10)                          # the same job again: no second event
+        (e,) = store.read()["events"]
+        assert e["kind"] == "usage.recorded" and e["subject"]["id"] == "sv08-max"
+        assert e["data"]["grams"] == "12.97" and e["data"]["spool"] == "7" and e["data"]["job"] == "part.gcode"
+        assert e["data"]["printer_job"] == str(job["job_id"]) and e["data"]["run"].startswith("r-")
+        kusage.record("sv08-max", history_job(job_id="9", metadata={}), 10)     # no weight known: no event
+        assert len(store.read()["events"]) == 1
+    finally:
+        event_sink.set_sink(None)

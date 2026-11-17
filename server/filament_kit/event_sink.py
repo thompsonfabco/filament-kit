@@ -146,8 +146,13 @@ def current_batch() -> str:
 
 
 def emit(kind: str, subject, data: dict | None = None, *, actor=None, **kw):
-    """Report an event to the sink in force; returns the event or None. `actor` defaults to the one `acting` set."""
-    return _sink.write(kind, subject, actor or current_actor(), data, **kw)
+    """Report an event to the sink in force; returns the event or None. `actor` defaults to the one `acting` set.
+    Never raises: whatever the sink does, the change that reported goes on."""
+    try:
+        return _sink.write(kind, subject, actor or current_actor(), data, **kw)
+    except Exception:  # noqa: BLE001
+        log.exception("event %s not written", kind)
+        return None
 
 
 def spool_subject(spool: dict | None, spool_id=None) -> dict:

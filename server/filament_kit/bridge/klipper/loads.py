@@ -21,7 +21,7 @@ import queue
 import threading
 import time
 
-from ... import inventory, profiles
+from ... import event_sink, inventory, profiles
 from ...spoolman import SpoolmanError
 from .. import loading, registry, status as bstatus
 from ..connection import PrinterOffline
@@ -207,7 +207,7 @@ class LoadsMixin:
     def _move(self, pid: str, label: str, spool_id, dry: bool, sealed: str = loading.SEALED):
         """Spoolman: spool `spool_id` (or nothing) is now in that slot. Returns (moved_back, final spool | None)."""
         sm, loc = self.sm, self._location(pid, label)
-        with inventory._LOCK:
+        with inventory._LOCK, event_sink.batch_scope():
             moved = loading.send_back(sm, loading.occupants(sm, loc, spool_id), sealed, dry)
             final = None
             if spool_id is not None:
@@ -215,6 +215,7 @@ class LoadsMixin:
                 patch = _patch(fresh, loc)
                 if patch and not dry:
                     sm.patch(f"spool/{spool_id}", patch)
+                    loading.report_loaded(fresh, patch, label)
                 final = {**fresh, **patch} if dry else sm.get(f"spool/{spool_id}")
         self.forget_spools()
         return moved, final
