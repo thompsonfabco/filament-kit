@@ -1788,7 +1788,7 @@
     </plurals>
     <string name="settings_storage_boxes">Number of storage boxes</string>
     <string name="settings_storage_boxes_error">Enter a whole number, e.g. 2.</string>
-    <string name="settings_storage_desc">Where spools are put away. Used when a spool is added.</string>
+    <string name="settings_storage_desc">Where spools are put away, and in which order the places fill up.</string>
     <string name="settings_storage_locations">Locations</string>
     <string name="settings_storage_locations_hint">Separate them with commas, e.g. Shelf A, Shelf B, Dry box 1.</string>
     <string name="settings_storage_overflow">Overflow location</string>
@@ -3950,4 +3950,111 @@
     <string name="unit_g_cm3">g/cm³</string>
     <string name="unit_mm3_s">mm³/s</string>
     <string name="unit_days">days</string>
+    <string name="storage_type_bulk">Bulk storage</string>
+    <string name="storage_type_containers">Individual containers</string>
+    <string name="storage_type_bulk_hint">A shelf, rack or drawer that holds many spools.</string>
+    <string name="storage_type_containers_hint">Boxes or bags that hold one spool each. Spoolwarden numbers them.</string>
+    <string name="storage_field_name">Name</string>
+    <string name="storage_field_type">Type</string>
+    <string name="storage_field_limit">Spool limit</string>
+    <string name="storage_field_limit_hint">Leave empty for no limit.</string>
+    <string name="storage_field_count">Number of containers</string>
+    <string name="storage_field_fill">Filled automatically with</string>
+    <string name="storage_fill_none">Nothing, only when you choose it</string>
+    <string name="storage_fill_any">Any material</string>
+    <string name="storage_fill_materials">These materials</string>
+    <string name="storage_field_materials">Materials</string>
+    <string name="storage_field_materials_hint">Separate them with commas, e.g. PLA, PETG. A material also takes its variants: PLA takes PLA+ and PLA-CF.</string>
+    <string name="storage_field_overflow">Use as overflow</string>
+    <string name="storage_field_overflow_hint">Takes spools when their own places are full.</string>
+    <string name="storage_fill_any_overflow_hint">An overflow place already takes any material when the other places are full.</string>
+    <!-- 1=used 2=limit -->
+    <string name="storage_used_limit">%1$s of %2$s spools</string>
+    <!-- 1=count -->
+    <plurals name="storage_used_plain">
+        <item quantity="one">%1$d spool</item>
+        <item quantity="other">%1$d spools</item>
+    </plurals>
+    <!-- 1=used 2=count -->
+    <string name="storage_used_containers">%1$s of %2$d containers used</string>
+    <!-- 1=free -->
+    <string name="storage_free">%1$s free</string>
+    <string name="storage_full">Full</string>
+    <string name="storage_takes_none">Only when chosen</string>
+    <string name="storage_badge_overflow">Overflow</string>
+    <string name="storage_badge_default_overflow">Default overflow</string>
+    <string name="storage_badge_sealed">Sealed spools</string>
+    <!-- 1=name 2=used 3=limit -->
+    <string name="storage_option_limit">%1$s · %2$s of %3$s</string>
+    <!-- 1=name 2=count -->
+    <plurals name="storage_option_plain">
+        <item quantity="one">%1$s · %2$d spool</item>
+        <item quantity="other">%1$s · %2$d spools</item>
+    </plurals>
+    <!-- 1=name 2=free -->
+    <string name="storage_option_containers_free">%1$s · %2$s free</string>
+    <!-- 1=name -->
+    <string name="storage_option_full">%1$s · Full</string>
+    <string name="storage_automatic">Automatic</string>
+    <!-- 1=place 2=why -->
+    <string name="storage_automatic_line">%1$s (%2$s)</string>
+    <string name="storage_add_location">Add a location</string>
+    <string name="storage_add_submit">Add location</string>
+    <string name="storage_save_location">Save location</string>
+    <!-- 1=name -->
+    <string name="storage_move_up">Move %1$s up</string>
+    <!-- 1=name -->
+    <string name="storage_move_down">Move %1$s down</string>
+    <string name="storage_make_default_overflow">Make default overflow</string>
+    <string name="storage_sealed_here">Sealed spools go here</string>
+    <string name="storage_panel_title">Where a new spool goes</string>
+    <!-- 1=material 2=places -->
+    <string name="storage_panel_line">%1$s: %2$s</string>
+    <string name="storage_panel_join">", then "</string>
+    <string name="storage_panel_everything_else">Everything else</string>
+    <string name="storage_error_name">Enter a name for the location.</string>
+    <!-- 1=name -->
+    <string name="storage_error_name_taken">There is already a location called %1$s.</string>
+    <string name="storage_error_whole">Enter a whole number, 1 or more.</string>
+    <string name="storage_error_materials">Enter at least one material, e.g. PLA.</string>
+    <!-- 1=names 2=least -->
+    <string name="storage_error_containers_in_use">%1$s hold spools. Move them first, or keep at least %2$s.</string>
+    <!-- 1=name 2=least -->
+    <string name="storage_error_container_in_use">%1$s holds spools. Move it first, or keep at least %2$s.</string>
+    <string name="storage_error_type_fixed">Move the spools out to change the type.</string>
+    <!-- 1=name 2=set -->
+    <string name="storage_error_container_name">%1$s is the name of a container in %2$s. Choose another name.</string>
+    <string name="storage_error_overflow_any">An overflow location cannot take any material automatically.</string>
+    <string name="storage_error_remove_default_overflow">Make another location the default overflow first.</string>
+    <string name="storage_error_remove_sealed">Choose another location for sealed spools first.</string>
+    <!-- 1=name -->
+    <string name="storage_remove_title">Remove %1$s?</string>
+    <!-- 1=count -->
+    <plurals name="storage_remove_body">
+        <item quantity="one">%1$d spool is recorded there. It keeps that location until you move it; it is no longer offered for new spools.</item>
+        <item quantity="other">%1$d spools are recorded there. They keep that location until you move them; it is no longer offered for new spools.</item>
+    </plurals>
+    <string name="storage_remove_body_none">No spools are recorded there.</string>
+    <string name="storage_notice_converted">Storage locations were converted. Check them.</string>
+    <string name="storage_notice_default_overflow_no_limit">The default overflow has no limit, so the other overflow places are never used. Give it a spool limit to let them fill.</string>
+    <!-- 1=from 2=to 3=count -->
+    <plurals name="storage_renamed">
+        <item quantity="one">Renamed %1$s to %2$s. %3$d spool updated.</item>
+        <item quantity="other">Renamed %1$s to %2$s. %3$d spools updated.</item>
+    </plurals>
+    <string name="storage_reason_sealed">where sealed spools go</string>
+    <!-- 1=material -->
+    <string name="storage_reason_material">the first place for %1$s with room</string>
+    <string name="storage_reason_any">the first place with room</string>
+    <!-- 1=material -->
+    <string name="storage_reason_overflow">every place for %1$s is full</string>
+    <!-- 1=material -->
+    <string name="storage_reason_overflow_none">no place takes %1$s automatically</string>
+    <!-- 1=location 2=why -->
+    <string name="storage_reason_frame">%1$s (%2$s, since no location was given)</string>
+    <!-- 1=count 2=limit -->
+    <plurals name="cli_storage_summary">
+        <item quantity="one">%1$d location · %2$s with a limit</item>
+        <item quantity="other">%1$d locations · %2$s with a limit</item>
+    </plurals>
 </resources>

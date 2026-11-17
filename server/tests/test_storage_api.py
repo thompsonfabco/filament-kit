@@ -215,6 +215,15 @@ def test_save_the_list_unchanged_answers_the_saved_list(hub):
     assert [x.id for x in storage.current().locations] == ["loc-1", "loc-2", "loc-3", "loc-4", "loc-5"]
 
 
+def test_saving_the_list_spends_the_converted_notice(hub):
+    st = storage.current()
+    st.converted = True
+    storage.save(st)
+    assert hub.get("/setup/api/settings/storage").json()["notices"] == [{"code": "converted", "text": storage.NOTICE}]
+    out = post(hub, "settings/storage", current_body(hub)).json()
+    assert out["notices"] == [] and storage.current().converted is False
+
+
 def test_add_gives_a_new_row_an_id_and_goes_where_the_list_puts_it(hub):
     def add(rows):
         rows.insert(2, {"name": "Rack 1b", "type": "bulk", "limit": 5, "fill": "materials", "materials": ["PETG"]})
@@ -334,7 +343,7 @@ def test_fewer_containers_than_the_highest_in_use_is_refused_at_the_field(hub, s
     assert errs[0]["error"] == "Storage box 02 and Storage box 03 hold spools. Move them first, or keep at least 3."
     assert post(hub, "settings/storage", current_body(hub, lambda rows: rows[3].update(count=3))).status_code == 200
     one = errors_of(post(hub, "settings/storage", current_body(hub, lambda rows: rows[3].update(count=2))))
-    assert one[0]["error"] == "Storage box 03 holds spools. Move them first, or keep at least 3."
+    assert one[0]["error"] == "Storage box 03 holds spools. Move it first, or keep at least 3."
 
 
 def test_the_type_is_fixed_while_spools_are_in_the_location(hub, spoolman_url):

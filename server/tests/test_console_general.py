@@ -48,11 +48,6 @@ def _set(app, key, value):
     ("server_name", "  Workshop ", lambda c: c["server_name"] == "Workshop"),
     ("model", "claude-sonnet-5-5", lambda c: c["model"] == "claude-sonnet-5-5"),
     ("reads_per_day", 25, lambda c: c["reads_per_day"] == 25),
-    ("locations", ["Rack 1", " Shelf "], lambda c: c["locations"] == ["Rack 1", "Shelf"]),
-    ("placement.pla_location", "Rack 2", lambda c: c["placement"]["pla_location"] == "Rack 2"),
-    ("placement.box_prefix", "Box ", lambda c: c["placement"]["box_prefix"] == "Box "),
-    ("placement.box_count", 0, lambda c: c["placement"]["box_count"] == 0),
-    ("placement.overflow", "Floor", lambda c: c["placement"]["overflow"] == "Floor"),
     ("station.tts", "espeak", lambda c: c["station"]["tts"] == "espeak"),
     ("intake.reader", "cloud-then-local", lambda c: c["intake"]["reader"] == "cloud-then-local"),
     ("local_intake.url", "http://gpu-box.example:7915/", lambda c: c["local_intake"]["url"] == "http://gpu-box.example:7915"),
@@ -63,7 +58,6 @@ def _set(app, key, value):
     ("setup.hosts", [], lambda c: c["setup"]["hosts"] == []),
     ("server_name", "x" * 100, lambda c: c["server_name"] == "x" * 100),             # the accepted maximums
     ("reads_per_day", 100000, lambda c: c["reads_per_day"] == 100000),
-    ("placement.box_count", 999, lambda c: c["placement"]["box_count"] == 999),
 ])
 def test_each_key_saves(app, restarts, applies, key, value, read):
     r = _set(app, key, value)
@@ -75,8 +69,6 @@ def test_each_key_saves(app, restarts, applies, key, value, read):
     ("server_name", ""), ("server_name", "x" * 101), ("server_name", "a\nb"), ("server_name", 5),
     ("model", ""), ("model", "has space"), ("model", "x/../y"),
     ("reads_per_day", 0), ("reads_per_day", -1), ("reads_per_day", "25"), ("reads_per_day", True), ("reads_per_day", 1.5),
-    ("locations", []), ("locations", "Rack"), ("locations", [""]), ("locations", [5]), ("locations", ["x"] * 51),
-    ("placement.box_count", -1), ("placement.box_count", 1000), ("placement.box_prefix", ""),
     ("station.tts", "other"),
     ("intake.reader", "fastest"), ("intake.reader", None),
     ("local_intake.url", "gpu-box:7915"), ("local_intake.url", "http://h:7915/v1/read"), ("local_intake.url", "file:///x"),
@@ -93,7 +85,9 @@ def test_a_bad_value_is_refused_and_nothing_saved(app, restarts, applies, key, v
 
 
 @pytest.mark.parametrize("key", ["port", "spoolman_url", "station.allow", "orders.file", "modules", "web.lan", "web.public_url",
-                                 "placement", "__class__", None, 5])
+                                 "placement", "__class__", None, 5,
+                                 "locations", "placement.pla_location", "placement.box_prefix", "placement.box_count",
+                                 "placement.overflow"])    # the five old storage keys: the list is settings/storage now
 def test_nothing_outside_the_table_is_written(app, key):
     before = config.load()
     assert _set(app, key, "x").status_code == 400
@@ -219,27 +213,27 @@ def _group(app, values, **kw):
 
 def test_a_mixed_group_names_each_bad_key_and_changes_nothing(app, restarts, applies):
     before = config.load()
-    r = _group(app, {"server_name": "Shop", "reads_per_day": 0, "placement.box_count": 1000, "port": 1,
-                     "placement.overflow": "Floor"})
+    r = _group(app, {"server_name": "Shop", "reads_per_day": 0, "model": "x y", "port": 1,
+                     "placement.overflow": "Floor"})      # an old storage key is "not a setting" now
     assert r.status_code == 400
-    assert set(r.json()["errors"]) == {"reads_per_day", "placement.box_count", "port"}
+    assert set(r.json()["errors"]) == {"reads_per_day", "model", "port", "placement.overflow"}
     assert "nothing was changed" in r.json()["error"]
     assert config.load() == before and not restarts and not applies
 
 
 def test_a_good_group_saves_every_key_with_one_answer(app, restarts, applies):
-    r = _group(app, {"server_name": "Shop", "placement.overflow": "Floor", "reads_per_day": 25, "model": "m1"})
+    r = _group(app, {"server_name": "Shop", "intake.history_keep": 7, "reads_per_day": 25, "model": "m1"})
     assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True, "keys": ["server_name", "placement.overflow", "reads_per_day", "model"],
+    assert r.json() == {"ok": True, "keys": ["server_name", "intake.history_keep", "reads_per_day", "model"],
                         "restarts": True, "applies": False}
     c = config.load()
-    assert c["server_name"] == "Shop" and c["placement"]["overflow"] == "Floor"
+    assert c["server_name"] == "Shop" and c["intake"]["history_keep"] == 7
     assert c["reads_per_day"] == 25 and c["model"] == "m1"
     assert len(restarts) == 1 and not applies
 
 
 def test_a_group_with_nothing_to_restart_says_so(app, restarts, applies):
-    r = _group(app, {"server_name": "Shop", "placement.box_count": 3}).json()
+    r = _group(app, {"server_name": "Shop", "intake.history_keep": 3}).json()
     assert r["restarts"] is False and r["applies"] is False and not restarts and not applies
 
 

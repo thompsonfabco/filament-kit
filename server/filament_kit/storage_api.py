@@ -176,10 +176,11 @@ def check_change(before: Storage, after: Storage, taken) -> list[Problem]:
         elif o.type == CONTAINERS and x.type == CONTAINERS and isinstance(x.count, int):
             over = _above(o, x.count, counts)
             if over:
-                out.append(Problem(i, "count", f"{_and([t for _, t in over])} hold{'s' if len(over) == 1 else ''} "
-                                               f"spools. Move them first, or keep at least {over[-1][0]}.",
-                                   f"Move the spools out of the containers above {x.count}, or enter "
-                                   f"{over[-1][0]} or more."))
+                least = over[-1][0]
+                text = (f"{over[0][1]} holds spools. Move it first, or keep at least {least}." if len(over) == 1 else
+                        f"{_and([t for _, t in over])} hold spools. Move them first, or keep at least {least}.")
+                out.append(Problem(i, "count", text, f"Move the spools out of the containers above {x.count}, or "
+                                                     f"enter {least} or more."))
     for o in before.locations:
         if o.id in kept:
             continue
