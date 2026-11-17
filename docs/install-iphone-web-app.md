@@ -130,9 +130,10 @@ keeps working with an accepted self-signed certificate has not been tried on a r
 1. In **Add spools**, under **Add by hand**, search for a filament you already have (brand, colour, material) and
    tap it, or tap **New filament (type it in)**.
 2. Fill in the card: at least **Vendor**, **Material** and **Name (with the colour)**, then **Spools** (how
-   many), **Net g** and the **Location** (**Auto** picks one for you). Tick **Still sealed** for a spool still
-   in its bag.
-3. Tap **Check**. It shows what would be added and changes nothing (a preview).
+   many), **Net g** and the **Location** (**Automatic** picks one for you; the list shows how full each place is).
+   Tick **Still sealed** for a spool still in its bag.
+3. Tap **Check**. It shows what would be added and changes nothing (a preview). Under **Location** it says where a
+   spool on **Automatic** would go, and why.
 4. If it looks right, tap **Add 1 spool** (or **Add 3 spools**, and so on). Any change after the check needs a new
    check.
 

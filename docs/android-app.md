@@ -194,7 +194,7 @@ number, address, name or account id. Read it before you attach it to an issue. M
    | **Nozzle °C**, **Bed °C** | Optional. |
    | **Still sealed** | Tick for a spool still in its bag or box. |
    | **Weight with spool (g)** | For an opened spool: its weight on a scale; blank means full. |
-   | **Location** | Where it lives; blank means the Hub picks. |
+   | **Location** | Where it lives; blank (**Automatic**) means the Hub picks. The list shows how full each place is. After **Preview**, the line under the field says where the spools would go and why. |
 
 4. Tap **Preview**. Nothing is saved yet: the app shows what would be added. If a field is still missing it says
    `Spool 1 still needs: ...`.
@@ -263,7 +263,7 @@ With the app open, tap a spool's NFC tag on the back of the phone.
 
 - **A tag already linked** opens the spool's card: type **Weight with spool (g)** (the spool on a scale) and tap
   **Update weight**; the app shows `Remaining would change from … g to … g`, and **Confirm** saves it. **Move** changes
-  its location, **Mark empty** records it as used up, **Load into printer** is described above.
+  its location (**Move to** lists the places in the Hub's fill order, with how full each is), **Mark empty** records it as used up, **Load into printer** is described above.
 - **A tag not linked yet** offers **Link to a sealed spool** (search for the spool by brand, name or colour, add a
   weight if you like, and **Confirm link**) or **Add as new**, which opens the add screen with this tag attached: label photos if your Hub reads labels,
   otherwise the **Add spools** form.
