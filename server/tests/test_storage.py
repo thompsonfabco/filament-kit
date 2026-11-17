@@ -27,12 +27,6 @@ def where(out):
     return [(i["location"], i.get("count", 1)) for i in out]
 
 
-@pytest.fixture(autouse=True)
-def state(tmp_path, monkeypatch):
-    monkeypatch.setenv("FK_STATE", str(tmp_path / "state"))      # the recorded rename plan lives here
-    return tmp_path / "state"
-
-
 @pytest.fixture
 def etc(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_ETC", str(tmp_path / "etc"))
@@ -661,9 +655,10 @@ def test_swap_retried_after_a_failure_finishes_the_recorded_plan(etc):
     r = inventory.rename_locations(sm, items)
     assert at(sm) == ["Rack B", "Rack B", "Rack A"] and r["updated"] == 3
     assert inventory.pending_rename() is None and not storage.load().rename_pending
+    assert "<rename" not in (etc / "storage.xml").read_text(encoding="utf-8")
 
 
-def test_chained_rename_retried_does_not_move_a_spool_twice():
+def test_chained_rename_retried_does_not_move_a_spool_twice(etc):
     sm = FlakySm([{"id": 1, "location": "A"}, {"id": 2, "location": "B"}], fail_on=2)
     items = [storage.Rename("A", "B"), storage.Rename("B", "C")]
     with pytest.raises(Boom):
@@ -672,14 +667,14 @@ def test_chained_rename_retried_does_not_move_a_spool_twice():
     assert at(sm) == ["B", "C"]
 
 
-def test_resume_without_items_finishes_the_job():
+def test_resume_without_items_finishes_the_job(etc):
     sm = FlakySm([{"id": 1, "location": "A"}, {"id": 2, "location": "A"}], fail_on=2)
     with pytest.raises(Boom):
         inventory.rename_locations(sm, [storage.Rename("A", "B")])
     assert inventory.rename_locations(sm, [])["updated"] == 2 and at(sm) == ["B", "B"]
 
 
-def test_a_second_rename_job_while_one_is_unfinished_is_refused_and_moves_nothing():
+def test_a_second_rename_job_while_one_is_unfinished_is_refused_and_moves_nothing(etc):
     sm = FlakySm([{"id": 1, "location": "A"}, {"id": 2, "location": "A"}, {"id": 3, "location": "B"}], fail_on=2)
     with pytest.raises(Boom):
         inventory.rename_locations(sm, [storage.Rename("A", "B")])
@@ -693,7 +688,7 @@ def test_a_second_rename_job_while_one_is_unfinished_is_refused_and_moves_nothin
     assert at(sm) == ["C", "C", "C"]
 
 
-def test_a_spool_moved_by_hand_after_the_failure_is_left_alone():
+def test_a_spool_moved_by_hand_after_the_failure_is_left_alone(etc):
     sm = FlakySm([{"id": 1, "location": "A"}, {"id": 2, "location": "A"}], fail_on=2)
     with pytest.raises(Boom):
         inventory.rename_locations(sm, [storage.Rename("A", "B")])
@@ -702,7 +697,7 @@ def test_a_spool_moved_by_hand_after_the_failure_is_left_alone():
     assert at(sm) == ["B", "Shelf"] and r["updated"] == 1
 
 
-def test_the_plan_is_written_before_the_first_spool_changes():
+def test_the_plan_is_written_before_the_first_spool_changes(etc):
     seen = []
 
     class Watch(FakeSm):
@@ -798,3 +793,20 @@ def test_the_migration_with_a_clash_saves_through_current(etc):
     config.save({"placement": {"box_count": 2, "sealed_location": "Storage box 01"}})
     st = storage.current()
     assert st.sealed_location().name == "Storage box 01" and (etc / "storage.xml").exists()
+
+
+def test_the_plan_is_xml_inside_storage_xml_and_a_list_saved_meanwhile_keeps_it(etc):
+    storage.save(full_list())
+    sm = FlakySm([{"id": 1, "location": "Rack 1"}, {"id": 2, "location": "Rack 1"}], fail_on=2)
+    with pytest.raises(Boom):
+        inventory.rename_locations(sm, [storage.Rename("Rack 1", "PLA rack")])
+    text = (etc / "storage.xml").read_text(encoding="utf-8")
+    assert "<rename>" in text and '<spool id="2" old="Rack 1" new="PLA rack" />' in text and "{" not in text
+    st = storage.load()
+    st.rename_plan = None                                   # a list built from rows has no plan
+    st.locations[1].limit = 7
+    storage.save(st)
+    assert storage.load().rename_plan is not None and storage.load().locations[1].limit == 7
+    inventory.rename_locations(sm, [])
+    assert at(sm) == ["PLA rack", "PLA rack"] and storage.load().rename_plan is None
+    assert [p.name for p in etc.iterdir()] == ["storage.xml"]

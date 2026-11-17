@@ -7,6 +7,7 @@ a renamed location is `inventory.rename_locations`.
 """
 from __future__ import annotations
 
+import copy
 import logging
 import os
 import re
@@ -72,7 +73,11 @@ class Storage:
     locations: list[Location] = field(default_factory=list)
     next_id: int = 1                       # the high-water mark: an id once given is never given again
     converted: bool = False                # the migration kept two roles apart: the group shows NOTICE
-    rename_pending: bool = False           # a rename job (inventory.rename_locations) is not finished
+    rename_plan: dict | None = None        # the recorded plan of an unfinished rename job (see rename_plan())
+
+    @property
+    def rename_pending(self) -> bool:
+        return self.rename_plan is not None
 
     # ---- lookups
     def by_name(self, name: str) -> Location | None:
@@ -242,8 +247,6 @@ def to_xml(st: Storage) -> str:
     root = ET.Element("storage", {"version": VERSION})
     if st.converted:
         root.set("converted", "yes")
-    if st.rename_pending:
-        root.set("rename-pending", "yes")
     root.set("next-id", str(max(st.next_id, 1)))
     for x in st.locations:
         a = {"id": x.id or "", "name": x.name, "type": x.type}
@@ -260,6 +263,12 @@ def to_xml(st: Storage) -> str:
         if x.fill == MATERIALS:
             for m in x.materials:
                 ET.SubElement(el, "material").text = m
+    if st.rename_plan is not None:
+        plan = ET.SubElement(root, "rename")
+        for old, new, containers in st.rename_plan["renames"]:
+            ET.SubElement(plan, "item", {"old": old, "new": new, **({"containers": "yes"} if containers else {})})
+        for sid, old, new in st.rename_plan["spools"]:
+            ET.SubElement(plan, "spool", {"id": str(sid), "old": old, "new": new})
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="unicode") + "\n"
 
@@ -276,7 +285,17 @@ def from_xml(text: str) -> Storage:
     if root.tag != "storage" or root.get("version") != VERSION:
         raise unreadable("it is not a storage file of this version")
     locs: list[Location] = []
+    plan = None
     for el in root:
+        if el.tag == "rename":
+            try:
+                plan = {"renames": [[i.get("old", ""), i.get("new", ""), i.get("containers") == "yes"]
+                                    for i in el.findall("item")],
+                        "spools": [[int(i.get("id")), i.get("old", ""), i.get("new", "")]
+                                   for i in el.findall("spool")]}
+            except (TypeError, ValueError):
+                raise unreadable("the rename plan is not valid") from None
+            continue
         if el.tag != "location":
             raise unreadable(f"unexpected element {el.tag}")
         try:
@@ -297,7 +316,7 @@ def from_xml(text: str) -> Storage:
     problems = validate(locs, check_clashes=False)
     if problems:
         raise StorageError(problems)
-    st = Storage(locs, nxt, root.get("converted") == "yes", root.get("rename-pending") == "yes")
+    st = Storage(locs, nxt, root.get("converted") == "yes", plan)
     st.next_id = max(st.next_id, max((int(_ID.match(x.id).group(1)) for x in locs if x.id), default=0) + 1)
     return st
 
@@ -325,6 +344,16 @@ def save(st: Storage, before: Storage | None = None) -> None:
         except StorageError:
             before = None
     check(st.locations, before.locations if before else None)
+    try:
+        disk = load()
+    except StorageError:
+        disk = None
+    if disk is not None:
+        st.rename_plan = disk.rename_plan       # a list saved from rows never drops an unfinished rename's plan
+    _write(st)
+
+
+def _write(st: Storage) -> None:
     for x in st.locations:
         if x.id is None:
             x.id = st.new_id()
@@ -374,12 +403,18 @@ def current() -> Storage:
     return st
 
 
-def mark_rename_pending(flag: bool) -> None:
-    """Set or clear `rename-pending` in storage.xml (no file: nothing to mark)."""
+def rename_plan() -> dict | None:
+    """The recorded plan of an unfinished rename job, {"renames": [[old, new, containers]], "spools":
+    [[id, old, new]]}, kept in storage.xml (`<rename>`), else None."""
     st = load()
-    if st is not None and st.rename_pending != flag:
-        st.rename_pending = flag
-        save(st)
+    return st.rename_plan if st is not None else None
+
+
+def set_rename_plan(plan: dict | None) -> None:
+    """Record (or clear, None) the plan of a rename job in storage.xml, the same atomic write as the list."""
+    st = load() or current()
+    st.rename_plan = plan
+    _write(st)
 
 
 def migrate_at_start() -> None:
@@ -521,4 +556,4 @@ def rename_text(items: list[Rename], updated: int) -> str:
 
 
 def copy_of(st: Storage) -> Storage:
-    return Storage([replace(x, materials=list(x.materials)) for x in st.locations], st.next_id, st.converted, st.rename_pending)
+    return Storage([replace(x, materials=list(x.materials)) for x in st.locations], st.next_id, st.converted, copy.deepcopy(st.rename_plan))

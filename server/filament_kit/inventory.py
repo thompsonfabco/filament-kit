@@ -19,9 +19,7 @@ import datetime
 import json
 import logging
 import math
-import os
 import re
-import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -776,33 +774,11 @@ class RenamePending(ValueError):
                          "Fix: run it again with the same locations to finish it.")
 
 
-def _plan_file():
-    return config.paths().state / "storage-rename.json"
-
-
 def pending_rename() -> dict | None:
     """The recorded plan of an unfinished rename job: {"renames": [[old, new, containers]], "spools":
-    [[id, old, new]]}, else None. The plan is written before the first spool changes and removed when done."""
-    try:
-        return json.loads(_plan_file().read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-
-
-def _write_plan(plan: dict) -> None:
-    f = _plan_file()
-    f.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=f.parent, prefix=f.name + ".", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(plan, fh)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, f)
-    except BaseException:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
+    [[id, old, new]]}, else None. The plan is written (into storage.xml) before the first spool changes and
+    removed when done."""
+    return storage.rename_plan()
 
 
 def _keys(items: list) -> list:
@@ -824,7 +800,7 @@ def rename_steps(sm: Spoolman, items: list) -> int:
 def rename_locations(sm: Spoolman, items: list, *, step=None) -> dict:
     """Move the spools stored under renamed locations (`storage.renames`) to the new names, under `_LOCK` so no add
     places a spool meanwhile. The plan (which spool goes from which text to which) is worked out ONCE and recorded
-    before the first spool changes (`storage-rename.json` in the state dir; storage.xml carries `rename-pending`);
+    before the first spool changes (in storage.xml, `<rename>`: `storage.rename_pending` tells);
     a job that failed half-way is finished by calling this again with the same items (or none): only the spools
     still at their recorded old text move, so a swap or a chain of renames never moves a spool twice. Another
     rename while one is unfinished raises RenamePending. More than RENAME_BATCH spools: `step(text)` is called
@@ -837,8 +813,7 @@ def rename_locations(sm: Spoolman, items: list, *, step=None) -> dict:
             plan = {"renames": _keys(items),
                     "spools": [[sp["id"], sp.get("location"), new] for sp in sm.get("spool")
                                if (new := _renamed(sp.get("location") or "", items)) is not None]}
-            _write_plan(plan)
-            storage.mark_rename_pending(True)
+            storage.set_rename_plan(plan)
         elif items and _keys(items) != plan["renames"]:
             raise RenamePending()
         return _run_plan(sm, plan, step)
@@ -855,6 +830,5 @@ def _run_plan(sm: Spoolman, plan: dict, step) -> dict:
         for sid, new in todo[start:start + RENAME_BATCH]:
             sm.patch(f"spool/{sid}", {"location": new})
     items = [storage.Rename(o, n, c) for o, n, c in plan["renames"]]
-    _plan_file().unlink(missing_ok=True)
-    storage.mark_rename_pending(False)
+    storage.set_rename_plan(None)
     return {"updated": updated, "text": storage.rename_text(items, updated)}
