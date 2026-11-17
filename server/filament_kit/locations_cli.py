@@ -866,7 +866,8 @@ class StorageEditor:
             raise SpoolmanError(self.offline or "no answer", 0)
         out = storage_api.save(sm, {"locations": rows})
         if not out.get("saved"):
-            state = _wait_for_job(sm, out["job"]["steps"])
+            with self.owner.ui.suspended():          # only the rename job shows progress on the terminal; a plain save stays in the menu
+                state = _wait_for_job(sm, out["job"]["steps"])
             if state["state"] != "done":
                 raise ValueError(state.get("error") or "the rename did not finish.")
             out = {"saved": True, "text": state.get("text", "")}

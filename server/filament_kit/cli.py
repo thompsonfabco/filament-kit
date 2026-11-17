@@ -1271,8 +1271,7 @@ class _ConfigMenu:
         renamed = ""
         if "storage" in self.staged:        # first: it is the part that can need Spoolman and take a while
             try:
-                with ui.suspended():
-                    renamed = self.storage_editor().save_rows(self.staged["storage"]).get("text", "")
+                renamed = self.storage_editor().save_rows(self.staged["storage"]).get("text", "")
             except (storage_api.StorageRefused, storage.StorageError, ValueError, SpoolmanError, OSError) as e:
                 ui.error(f"nothing was saved: {locations_cli.reason(e).rstrip('.')}. Your changes are still here.")
                 return
