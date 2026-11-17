@@ -10,6 +10,7 @@ import json
 import re
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from starlette.applications import Starlette
@@ -399,7 +400,7 @@ def test_after_a_restart_the_next_save_finishes_the_recorded_rename(hub, monkeyp
     post(hub, "settings/storage", current_body(hub, lambda rows: rows[1].update(name="PLA rack 1")))
     monkeypatch.setattr(storage_api, "_job", None)                    # the Hub restarted: only the plan is left
     state = hub.get("/setup/api/settings/storage/job").json()
-    assert state["state"] == "failed" and state["error"].startswith("Error:") and "save" in state["error"]
+    assert state["state"] == "failed" and state["error"].startswith("Error:") and "Save" in state["error"]
     out = post(hub, "settings/storage", current_body(hub)).json()
     assert out["saved"] is True and out["text"] == "Renamed Rack 1 to PLA rack 1. 2 spools updated."
     assert hub.get("/setup/api/settings/storage/job").json()["state"] == "none"
@@ -682,3 +683,19 @@ def test_a_hub_without_storage_xml_still_reads_from_the_old_keys_in_memory(fk_en
     assert [x.name for x in st.locations] == ["Sealed stock", "Rack 1", "Storage box", "Overflow"]
     assert st.by_name("Storage box").type == CONTAINERS
     assert not (config.paths().etc / "storage.xml").exists()          # the web unit never writes it
+
+
+def test_the_storage_messages_are_the_catalogue_texts():
+    """Case rule: the catalogue text is exactly what the server sends, first letter included. Every error, fix and
+    notice of storage_api (`MESSAGES`, the only place its texts are written) and the two notices of storage.py equal
+    their key in strings/en.json, so the two copies cannot drift: change one and this fails."""
+    import inspect
+    catalogue = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    sent = {**storage_api.MESSAGES, "storage_notice_converted": storage.NOTICE,
+            "storage_notice_default_overflow_no_limit": storage.DEFAULT_OVERFLOW_NOTE}
+    drift = {k: (v, catalogue.get(k)) for k, v in sent.items() if catalogue.get(k) != v}
+    assert not drift, f"server text and catalogue differ for: {drift}"
+    assert len(storage_api.MESSAGES) >= 30
+    source = inspect.getsource(storage_api) + inspect.getsource(storage_api.StorageRefused)
+    unused = [k for k in storage_api.MESSAGES if f'say("{k}"' not in source and f"say('{k}'" not in source]
+    assert not unused, f"messages nobody sends: {unused}"

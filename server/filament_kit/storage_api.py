@@ -33,6 +33,50 @@ class StorageRefused(ValueError):
         self.errors, self.status = errors, status
 
 
+# ---------------------------------------------------------------- the messages the server sends
+
+# Every error, fix and notice text of the storage list API, under its key in strings/en.json. The catalogue holds
+# exactly the same text, first letter included (test_the_storage_messages_are_the_catalogue_texts keeps them equal), so
+# a client that wants the text in another language finds it by the key. {name} holes are filled by `say`.
+MESSAGES = {
+    "storage_error_list_shape": "Send the whole list as locations.",
+    "storage_fix_list_shape": "Send {locations: [...]}, every location in fill order.",
+    "storage_error_row_object": "Each location must be an object.",
+    "storage_fix_row_object": "Send name, type, fill and the other fields.",
+    "storage_error_id_type": "The id must be text or null.",
+    "storage_error_id_unknown": "That location is not in the saved list.",
+    "storage_fix_id_new": "Leave the id empty for a new location.",
+    "storage_error_whole": "Enter a whole number, 1 or more.",
+    "storage_fix_whole": "Use digits only, or leave it empty.",
+    "storage_error_materials_list": "Materials must be a list of names.",
+    "storage_fix_materials_list": "Send the names as a list, e.g. [\"PLA\"].",
+    "storage_error_flag": "{field} must be true or false.",
+    "storage_fix_flag": "Send true or false.",
+    "storage_error_type_fixed": "Move the spools out to change the type.",
+    "storage_fix_type_fixed": "Move the spools in {name} to another location first.",
+    "storage_error_container_in_use": "{name} holds spools. Move it first, or keep at least {least}.",
+    "storage_error_containers_in_use": "{names} hold spools. Move them first, or keep at least {least}.",
+    "storage_fix_containers_in_use": "Move the spools out of the containers above {count}, or enter {least} or more.",
+    "storage_error_remove_default_overflow": "Make another location the default overflow first.",
+    "storage_fix_remove_default_overflow": "Mark another overflow location as the default, then remove {name}.",
+    "storage_error_remove_sealed": "Choose another location for sealed spools first.",
+    "storage_fix_remove_sealed": "Mark another Bulk storage location for sealed spools, then remove {name}.",
+    "storage_error_rename_unfinished": "A rename of storage locations is not finished.",
+    "storage_fix_rename_unfinished": "Save the storage locations again; the Hub finishes the rename first.",
+    "storage_error_resume_failed": "The unfinished rename of storage locations could not be finished ({reason}).",
+    "storage_fix_resume_failed": "Check that Spoolman is running, then save again. Nothing else was saved.",
+    "storage_error_busy": "Another change to the storage locations is still running. Try again when it is done.",
+    "storage_nothing_saved": "Nothing was saved.",
+    "storage_nothing_more_saved": "Nothing more was saved.",
+    "storage_error_spoolman_unreachable": "Spoolman is not reachable",
+}
+
+
+def say(key: str, **fill) -> str:
+    text = MESSAGES[key]
+    return text.format(**fill) if fill else text
+
+
 # ---------------------------------------------------------------- the data every interface shows
 
 def notices(st: Storage) -> list[dict]:
@@ -117,30 +161,30 @@ def parse(body, before: Storage) -> tuple[Storage, list[Problem]]:
     problems: list[Problem] = []
     rows = body.get("locations") if isinstance(body, dict) else None
     if not isinstance(rows, list):
-        return Storage([], before.next_id), [Problem(None, "locations", "Send the whole list as locations.",
-                                                     "Send {locations: [...]}, every location in fill order.")]
+        return Storage([], before.next_id), [Problem(None, "locations", say("storage_error_list_shape"),
+                                                     say("storage_fix_list_shape"))]
     old = {x.id: x for x in before.locations if x.id}
     out: list[Location] = []
     for i, r in enumerate(rows):
         def bad(fld, error, fix):
             problems.append(Problem(i, fld, error, fix))
         if not isinstance(r, dict):
-            bad("row", "Each location must be an object.", "Send name, type, fill and the other fields.")
+            bad("row", say("storage_error_row_object"), say("storage_fix_row_object"))
             out.append(Location(""))
             continue
         loc = Location(name=r["name"] if isinstance(r.get("name"), str) else "",
                        type=r["type"] if isinstance(r.get("type"), str) else BULK if r.get("type") is None else "?")
         ident = r.get("id")
         if ident is not None and not isinstance(ident, str):
-            bad("id", "The id must be text or null.", "Leave the id empty for a new location.")
+            bad("id", say("storage_error_id_type"), say("storage_fix_id_new"))
         elif ident is not None and ident not in old:
-            bad("id", "That location is not in the saved list.", "Leave the id empty for a new location.")
+            bad("id", say("storage_error_id_unknown"), say("storage_fix_id_new"))
         else:
             loc.id = ident
         for key, fld in (("limit", "limit"), ("count", "count")):
             ok, n = _whole(r.get(key))
             if not ok:
-                bad(fld, "Enter a whole number, 1 or more.", "Use digits only, or leave it empty.")
+                bad(fld, say("storage_error_whole"), say("storage_fix_whole"))
             elif key == "limit" and loc.type == BULK:
                 loc.limit = n
             elif key == "count" and loc.type == CONTAINERS:
@@ -150,14 +194,14 @@ def parse(body, before: Storage) -> tuple[Storage, list[Problem]]:
         if isinstance(mats, str):
             mats = mats.split(",")
         if not isinstance(mats, list) or not all(isinstance(m, str) for m in mats):
-            bad("materials", "Materials must be a list of names.", "Send the names as a list, e.g. [\"PLA\"].")
+            bad("materials", say("storage_error_materials_list"), say("storage_fix_materials_list"))
             mats = []
         if loc.fill == MATERIALS:
             loc.materials = [m.strip() for m in mats if m.strip()]
         for key in ("overflow", "default_overflow", "sealed"):
             v = r.get(key, False)
             if not isinstance(v, bool):
-                bad(key, f"{key} must be true or false.", "Send true or false.")
+                bad(key, say("storage_error_flag", field=key), say("storage_fix_flag"))
             else:
                 setattr(loc, key, v)
         if loc.id in old and old[loc.id].type == CONTAINERS and loc.type == CONTAINERS:
@@ -200,25 +244,24 @@ def check_change(before: Storage, after: Storage, taken) -> list[Problem]:
             holds = (counts.get(o.name, 0) > 0 if o.type == BULK
                      else any(storage.is_container_name(o, t) and n > 0 for t, n in counts.items()))
             if holds:
-                out.append(Problem(i, "type", "Move the spools out to change the type.",
-                                   f"Move the spools in {o.name} to another location first."))
+                out.append(Problem(i, "type", say("storage_error_type_fixed"),
+                                   say("storage_fix_type_fixed", name=o.name)))
         elif o.type == CONTAINERS and x.type == CONTAINERS and isinstance(x.count, int):
             over = _above(o, x.count, counts)
             if over:
                 least = over[-1][0]
-                text = (f"{over[0][1]} holds spools. Move it first, or keep at least {least}." if len(over) == 1 else
-                        f"{_and([t for _, t in over])} hold spools. Move them first, or keep at least {least}.")
-                out.append(Problem(i, "count", text, f"Move the spools out of the containers above {x.count}, or "
-                                                     f"enter {least} or more."))
+                text = (say("storage_error_container_in_use", name=over[0][1], least=least) if len(over) == 1 else
+                        say("storage_error_containers_in_use", names=_and([t for _, t in over]), least=least))
+                out.append(Problem(i, "count", text, say("storage_fix_containers_in_use", count=x.count, least=least)))
     for o in before.locations:
         if o.id in kept:
             continue
         if o.default_overflow and not any(x.default_overflow for x in after.locations):
-            out.append(Problem(None, "default_overflow", "Make another location the default overflow first.",
-                               f"Mark another overflow location as the default, then remove {o.name}."))
+            out.append(Problem(None, "default_overflow", say("storage_error_remove_default_overflow"),
+                               say("storage_fix_remove_default_overflow", name=o.name)))
         if o.sealed and not any(x.sealed for x in after.locations):
-            out.append(Problem(None, "sealed", "Choose another location for sealed spools first.",
-                               f"Mark another Bulk storage location for sealed spools, then remove {o.name}."))
+            out.append(Problem(None, "sealed", say("storage_error_remove_sealed"),
+                               say("storage_fix_remove_sealed", name=o.name)))
     return out
 
 
@@ -247,7 +290,7 @@ def errors_of(problems: list[Problem], after: Storage) -> list[dict]:
 # ---------------------------------------------------------------- preview and save
 
 def _refusal(problems: list[Problem], after: Storage) -> StorageRefused:
-    return StorageRefused(f"{problems[0].error} Nothing was saved.", errors_of(problems, after))
+    return StorageRefused(f"{problems[0].error} {say('storage_nothing_saved')}", errors_of(problems, after))
 
 
 def preview(sm, body) -> dict:
@@ -262,8 +305,7 @@ def preview(sm, body) -> dict:
             "renames": [{"from": r.label[0], "to": r.label[1]} for r in renames]}
 
 
-UNFINISHED = ("Error: a rename of storage locations is not finished.\n"
-              "Fix: save the storage locations again; the Hub finishes the rename first.")
+UNFINISHED = f"Error: {say('storage_error_rename_unfinished')}\nFix: {say('storage_fix_rename_unfinished')}"
 
 _lock = threading.Lock()          # one save at a time; a running rename job keeps it
 _job: dict | None = None
@@ -293,10 +335,9 @@ def _finish_recorded(sm, step) -> dict:
     try:
         done = inventory.rename_locations(sm, [], step=step)
     except SpoolmanError as e:
-        raise StorageRefused("Error: the unfinished rename of storage locations could not be finished "
-                             f"({e if e.status is not None else 'Spoolman is not reachable'}).\n"
-                             "Fix: check that Spoolman is running, then save again. Nothing else was saved.",
-                             [], 502) from None
+        why = str(e) if e.status is not None else say("storage_error_spoolman_unreachable")
+        raise StorageRefused(f"Error: {say('storage_error_resume_failed', reason=why)}\n"
+                             f"Fix: {say('storage_fix_resume_failed')}", [], 502) from None
     made = _apply_plan(storage.current(), plan)
     storage.save(made, before=made)
     log.info("storage locations: unfinished rename finished; %s", done["text"])
@@ -329,7 +370,7 @@ def _save_all(sm, body, step=None, resumed: bool = False) -> dict:
     if problems:
         refusal = _refusal(problems, after)
         if resumed:
-            refusal.args = (refusal.args[0].replace("Nothing was saved.", "Nothing more was saved."),)
+            refusal.args = (refusal.args[0].replace(say("storage_nothing_saved"), say("storage_nothing_more_saved")),)
         raise refusal
     done = _write(sm, before, after, storage.renames(before, after), step)
     if done["text"]:
@@ -346,8 +387,7 @@ def save(sm, body) -> dict:
     row and field."""
     global _job
     if not _lock.acquire(blocking=False):
-        raise StorageRefused("Another change to the storage locations is still running. Try again when it is done.",
-                             [], 409)
+        raise StorageRefused(say("storage_error_busy"), [], 409)
     release = True
     try:
         plan = inventory.pending_rename()

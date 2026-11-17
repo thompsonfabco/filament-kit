@@ -35,7 +35,7 @@ def routes(page) -> list[tuple]:
         except storage.StorageError as e:
             raise Refused(500, str(e).replace("\n", " ")) from None
         except SpoolmanError as e:
-            raise Refused(502, "Spoolman is not reachable" if e.status is None else str(e)) from None
+            raise Refused(502, storage_api.say("storage_error_spoolman_unreachable") if e.status is None else str(e)) from None
 
     def read() -> dict:
         return storage_api.current_view(sm())

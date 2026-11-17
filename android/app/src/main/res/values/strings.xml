@@ -4059,6 +4059,29 @@
     <string name="storage_fix_resume_failed">Check that Spoolman is running, then save again. Nothing else was saved.</string>
     <string name="storage_error_busy">Another change to the storage locations is still running. Try again when it is done.</string>
     <string name="storage_nothing_more_saved">Nothing more was saved.</string>
+    <string name="storage_error_list_shape">Send the whole list as locations.</string>
+    <string name="storage_fix_list_shape">Send {locations: [...]}, every location in fill order.</string>
+    <string name="storage_error_row_object">Each location must be an object.</string>
+    <string name="storage_fix_row_object">Send name, type, fill and the other fields.</string>
+    <string name="storage_error_id_type">The id must be text or null.</string>
+    <string name="storage_error_id_unknown">That location is not in the saved list.</string>
+    <string name="storage_fix_id_new">Leave the id empty for a new location.</string>
+    <string name="storage_fix_whole">Use digits only, or leave it empty.</string>
+    <string name="storage_error_materials_list">Materials must be a list of names.</string>
+    <string name="storage_fix_materials_list">Send the names as a list, e.g. [\"PLA\"].</string>
+    <!-- 1=field -->
+    <string name="storage_error_flag">%1$s must be true or false.</string>
+    <string name="storage_fix_flag">Send true or false.</string>
+    <!-- 1=name -->
+    <string name="storage_fix_type_fixed">Move the spools in %1$s to another location first.</string>
+    <!-- 1=count 2=least -->
+    <string name="storage_fix_containers_in_use">Move the spools out of the containers above %1$d, or enter %2$s or more.</string>
+    <!-- 1=name -->
+    <string name="storage_fix_remove_default_overflow">Mark another overflow location as the default, then remove %1$s.</string>
+    <!-- 1=name -->
+    <string name="storage_fix_remove_sealed">Mark another Bulk storage location for sealed spools, then remove %1$s.</string>
+    <string name="storage_nothing_saved">Nothing was saved.</string>
+    <string name="storage_error_spoolman_unreachable">Spoolman is not reachable</string>
     <!-- 1=count 2=limit -->
     <plurals name="cli_storage_summary">
         <item quantity="one">%1$d location · %2$s with a limit</item>
