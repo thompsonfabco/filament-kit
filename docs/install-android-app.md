@@ -88,8 +88,9 @@ browser, for what the app doesn't do: Features, keys, devices, backups; it asks 
 ## Updates
 
 The app updates itself from your Hub. When the Hub has a newer app (after `sudo spoolwarden update`),
-the home screen shows **Update available**. Tap **Tap to install**. The first time, Android asks to let
-Spoolwarden install apps: allow it, go back and tap **Tap to install** again.
+the home screen shows **Update ready: Spoolwarden <version>.** Tap **Install update**. The first time,
+Android asks to let Spoolwarden install apps: allow it, go back and tap **Install update** again. If Android's
+install window was closed after the download, the app shows **Tap to install** to open it again.
 
 ### Update refused
 
