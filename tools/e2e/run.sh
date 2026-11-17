@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # End-to-end run of filament-kit on a disposable Ubuntu 24.04+ host, made for WSL Ubuntu (docs/testing-e2e.md):
 #
-#   wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh [--only a,d,c,b,e,f,g] [--results FILE]
+#   wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh [--only a,d,c,b,e,f,g,h] [--results FILE]
 #                                                                 [--keep-work] [--previous vX.Y.Z]
+#                                                                 [--storage-previous vX.Y.Z[,vX.Y.Z]]
 #
 # It builds two signed releases of this checkout with a throwaway ed25519 key, serves them from a fake GitHub
 # releases API on 127.0.0.1 and runs the scenarios in tools/e2e/e2e.py against the real get.sh, install.sh,
 # updater, Spoolman, kit server, web unit and a fake 16-unit Bambu printer (MQTT over TLS on 127.0.0.1:8883).
 # --previous adds scenario f: that tag, built from its own files, updated to this checkout and rolled back to.
+# --storage-previous adds scenario h, once per tag: that tag with its old storage settings set, updated to this
+# checkout; the same fixed spool list must go to the same places (FK_E2E_GIT_DIR names the .git to read tags from
+# when this checkout is a git worktree).
 # Needs: root, internet (apt, PyPI, the Spoolman release on GitHub), python3 with python3-cryptography, a host
 # with no filament-kit on it (it refuses otherwise) and ports 7912, 8101, 8710, 8883 free.
 #
@@ -23,13 +27,15 @@ ONLY=a,d,c,b,e
 KEEP_WORK=0
 RESULTS=""
 PREVIOUS=()
+STORAGE_PREVIOUS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         --only) ONLY="$2"; shift 2 ;;
         --results) RESULTS="$2"; shift 2 ;;
         --keep-work) KEEP_WORK=1; shift ;;
         --previous) PREVIOUS=(--previous "$2"); shift 2 ;;
-        *) echo "usage: sudo bash tools/e2e/run.sh [--only a,d,c,b,e,f,g] [--results FILE] [--keep-work] [--previous vX.Y.Z]" >&2; exit 2 ;;
+        --storage-previous) STORAGE_PREVIOUS=(--storage-previous "$2"); shift 2 ;;
+        *) echo "usage: sudo bash tools/e2e/run.sh [--only a,d,c,b,e,f,g,h] [--results FILE] [--keep-work] [--previous vX.Y.Z] [--storage-previous vX.Y.Z,...]" >&2; exit 2 ;;
     esac
 done
 
@@ -155,4 +161,4 @@ cleanup() {
 trap cleanup EXIT
 
 echo "==> filament-kit end-to-end run in $WORK (source: $SRC)"
-python3 -I "$HERE/e2e.py" --work "$WORK" --only "$ONLY" "${PREVIOUS[@]}"
+python3 -I "$HERE/e2e.py" --work "$WORK" --only "$ONLY" "${PREVIOUS[@]}" "${STORAGE_PREVIOUS[@]}"
