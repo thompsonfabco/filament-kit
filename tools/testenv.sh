@@ -162,7 +162,7 @@ if wanted server; then
     if grep -rqs --include='*.py' browser_audit "$ROOT/server/tests"; then      # a tree without any has nothing to run as a group
         saved=$WORKERS
         WORKERS=2
-        parallel server-audit "$ROOT/server" -m browser_audit
+        parallel server-audit "$ROOT/server" -m browser_audit "${EXTRA[@]}"
         WORKERS=$saved
     fi
 fi
