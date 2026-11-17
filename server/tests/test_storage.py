@@ -27,6 +27,12 @@ def where(out):
     return [(i["location"], i.get("count", 1)) for i in out]
 
 
+@pytest.fixture(autouse=True)
+def state(tmp_path, monkeypatch):
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "state"))      # the recorded rename plan lives here
+    return tmp_path / "state"
+
+
 @pytest.fixture
 def etc(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_ETC", str(tmp_path / "etc"))
@@ -617,3 +623,178 @@ def test_containers_helper_lists_the_set_with_taken_and_the_prefix():
     assert st.containers(boxes, {"Storage box 02": 1}) == [
         {"name": "Storage box 01", "number": 1, "taken": False}, {"name": "Storage box 02", "number": 2, "taken": True},
         {"name": "Storage box 03", "number": 3, "taken": False}]
+
+
+# ---- R460: the rename job runs from a recorded plan
+
+class Boom(RuntimeError):
+    pass
+
+
+class FlakySm(FakeSm):
+    """Fails on the n-th patch (1-based) once."""
+
+    def __init__(self, spools, fail_on=None):
+        super().__init__(spools)
+        self.fail_on, self.patched = fail_on, 0
+
+    def patch(self, path, body):
+        self.patched += 1
+        if self.patched == self.fail_on:
+            raise Boom("spoolman went away")
+        super().patch(path, body)
+
+
+def at(sm):
+    return [s["location"] for s in sm.spools]
+
+
+def test_swap_retried_after_a_failure_finishes_the_recorded_plan(etc):
+    storage.save(full_list())
+    sm = FlakySm([{"id": 1, "location": "Rack A"}, {"id": 2, "location": "Rack A"},
+                  {"id": 3, "location": "Rack B"}], fail_on=2)
+    items = [storage.Rename("Rack A", "Rack B"), storage.Rename("Rack B", "Rack A")]
+    with pytest.raises(Boom):
+        inventory.rename_locations(sm, items)
+    assert at(sm) == ["Rack B", "Rack A", "Rack B"] and storage.load().rename_pending    # detectable
+    assert inventory.pending_rename() is not None
+    r = inventory.rename_locations(sm, items)
+    assert at(sm) == ["Rack B", "Rack B", "Rack A"] and r["updated"] == 3
+    assert inventory.pending_rename() is None and not storage.load().rename_pending
+
+
+def test_chained_rename_retried_does_not_move_a_spool_twice():
+    sm = FlakySm([{"id": 1, "location": "A"}, {"id": 2, "location": "B"}], fail_on=2)
+    items = [storage.Rename("A", "B"), storage.Rename("B", "C")]
+    with pytest.raises(Boom):
+        inventory.rename_locations(sm, items)
+    inventory.rename_locations(sm, items)
+    assert at(sm) == ["B", "C"]
+
+
+def test_resume_without_items_finishes_the_job():
+    sm = FlakySm([{"id": 1, "location": "A"}, {"id": 2, "location": "A"}], fail_on=2)
+    with pytest.raises(Boom):
+        inventory.rename_locations(sm, [storage.Rename("A", "B")])
+    assert inventory.rename_locations(sm, [])["updated"] == 2 and at(sm) == ["B", "B"]
+
+
+def test_a_second_rename_job_while_one_is_unfinished_is_refused_and_moves_nothing():
+    sm = FlakySm([{"id": 1, "location": "A"}, {"id": 2, "location": "A"}, {"id": 3, "location": "B"}], fail_on=2)
+    with pytest.raises(Boom):
+        inventory.rename_locations(sm, [storage.Rename("A", "B")])
+    before = at(sm)
+    with pytest.raises(inventory.RenamePending) as e:
+        inventory.rename_locations(sm, [storage.Rename("B", "C")])
+    assert str(e.value).startswith("Error: ") and "\nFix: " in str(e.value) and at(sm) == before
+    inventory.rename_locations(sm, [storage.Rename("A", "B")])
+    assert at(sm) == ["B", "B", "B"]
+    inventory.rename_locations(sm, [storage.Rename("B", "C")])
+    assert at(sm) == ["C", "C", "C"]
+
+
+def test_a_spool_moved_by_hand_after_the_failure_is_left_alone():
+    sm = FlakySm([{"id": 1, "location": "A"}, {"id": 2, "location": "A"}], fail_on=2)
+    with pytest.raises(Boom):
+        inventory.rename_locations(sm, [storage.Rename("A", "B")])
+    sm.spools[1]["location"] = "Shelf"
+    r = inventory.rename_locations(sm, [storage.Rename("A", "B")])
+    assert at(sm) == ["B", "Shelf"] and r["updated"] == 1
+
+
+def test_the_plan_is_written_before_the_first_spool_changes():
+    seen = []
+
+    class Watch(FakeSm):
+        def patch(self, path, body):
+            seen.append(inventory.pending_rename())
+            super().patch(path, body)
+    inventory.rename_locations(Watch([{"id": 1, "location": "A"}]), [storage.Rename("A", "B")])
+    assert seen[0]["spools"] == [[1, "A", "B"]] and inventory.pending_rename() is None
+
+
+# ---- R460: the first migration from the web unit
+
+def test_a_reader_that_cannot_write_uses_the_migrated_list_and_says_so_once(etc, monkeypatch, caplog):
+    config.save({"placement": {"box_count": 2}, "locations": ["Sealed stock", "Rack 1", "Overflow"]})
+    real = storage.save
+
+    def refuse(st, before=None):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(storage, "save", refuse)
+    monkeypatch.setattr(storage, "_warned", False)
+    with caplog.at_level("WARNING", logger="filament_kit.storage"):
+        a, b = storage.current(), storage.current()
+    assert [x.name for x in a.locations] == [x.name for x in b.locations] and not (etc / "storage.xml").exists()
+    assert a.by_name("Storage box").count == 2
+    assert sum("could not be written" in r.message for r in caplog.records) == 1
+    monkeypatch.setattr(storage, "save", real)                     # the Hub service starts: it writes the file
+    written = storage.current()
+    assert [(x.id, x.name) for x in written.locations] == [(x.id, x.name) for x in a.locations]
+    assert (etc / "storage.xml").exists()
+
+
+def test_the_file_is_written_with_the_config_mode_and_the_web_read_grant(etc, monkeypatch):
+    seen = []
+    monkeypatch.setattr(config, "grant_web_read", lambda path: seen.append(path.name))
+    storage.current()
+    assert seen and seen[0].startswith("storage.xml.") and stat.S_IMODE((etc / "storage.xml").stat().st_mode) == 0o640
+
+
+def test_migrate_at_start_writes_the_file_and_an_unreadable_one_is_logged_not_raised(etc, caplog):
+    storage.migrate_at_start()
+    assert (etc / "storage.xml").exists()
+    (etc / "storage.xml").write_text("<storage", encoding="utf-8")
+    with caplog.at_level("ERROR", logger="filament_kit.storage"):
+        storage.migrate_at_start()
+    assert any("Fix:" in r.message for r in caplog.records)
+
+
+def test_a_non_permission_failure_is_not_hidden(etc, monkeypatch):
+    def broken(st, before=None):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(storage, "save", broken)
+    with pytest.raises(OSError):
+        storage.current()
+
+
+# ---- R460 ruling 22:30: a role name that is a container name
+
+@pytest.mark.parametrize("role", ["pla_location", "overflow", "sealed_location"])
+def test_a_role_place_named_like_a_container_stays_one_bulk_place_beside_the_set(role):
+    rules = {**RULES, "box_count": 2, role: "Storage box 01"}
+    st = migrated(rules, ["Sealed stock", "Rack 1", "Storage box", "Overflow"])
+    bulk = st.by_name("Storage box 01")
+    assert bulk.type == BULK and st.converted
+    assert st.by_name("Storage box").type == CONTAINERS and st.by_name("Storage box").count == 2
+    assert {"pla_location": bulk.materials == ["PLA"], "overflow": bulk.default_overflow,
+            "sealed_location": bulk.sealed}[role]
+    # another material gets 02 while a spool is at 01 (the text is one place: the set skips it)
+    assert where(place([{"material": "ABS", "sealed": False}], {"Storage box 01": 1}, st)) == [("Storage box 02", 1)]
+    assert st.used(bulk, {"Storage box 01": 3}) == 3 and st.used(st.by_name("Storage box"), {"Storage box 01": 3}) == 1
+
+
+def test_pla_to_the_literal_text_with_no_limit_when_pla_location_is_a_container_name():
+    st = migrated({**RULES, "box_count": 2, "pla_location": "Storage box 01"})
+    assert where(place([{"material": "PLA", "sealed": False, "count": 30}], {}, st)) == [("Storage box 01", 30)]
+
+
+def test_a_storage_file_with_the_clash_loads_an_unrelated_edit_saves_and_a_new_clash_is_refused(etc):
+    st = migrated({**RULES, "box_count": 2, "overflow": "Storage box 01"})
+    storage.save(st, before=st)                                           # as `current()` writes the migration
+    back = storage.load()                                                 # loads: no refusal on read
+    assert back.by_name("Storage box 01").default_overflow
+    back.by_name("Rack 1").limit = 5                                      # an unrelated edit
+    storage.save(back)
+    assert storage.load().by_name("Rack 1").limit == 5
+    back.locations.insert(1, Location("Storage box 02"))                  # a NEW clash
+    with pytest.raises(StorageError) as e:
+        storage.save(back)
+    assert "Storage box 02 is the name of a container in Storage box" in str(e.value)
+    assert storage.load().by_name("Storage box 02") is None
+
+
+def test_the_migration_with_a_clash_saves_through_current(etc):
+    config.save({"placement": {"box_count": 2, "sealed_location": "Storage box 01"}})
+    st = storage.current()
+    assert st.sealed_location().name == "Storage box 01" and (etc / "storage.xml").exists()

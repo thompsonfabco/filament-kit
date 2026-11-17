@@ -931,6 +931,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                setup: dict | None = None) -> Starlette:
     """The phone app's API, plus the setup page (/setup, setup_page.py; `setup` = its test hooks)."""
     cfg = config.load()
+    storage.migrate_at_start()                  # the first start of this version writes storage.xml (the Hub unit)
     on = enabled_modules if enabled_modules is not None else modules.enabled(cfg)
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
     if "printers" in on:

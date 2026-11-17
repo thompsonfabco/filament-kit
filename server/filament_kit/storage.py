@@ -72,6 +72,7 @@ class Storage:
     locations: list[Location] = field(default_factory=list)
     next_id: int = 1                       # the high-water mark: an id once given is never given again
     converted: bool = False                # the migration kept two roles apart: the group shows NOTICE
+    rename_pending: bool = False           # a rename job (inventory.rename_locations) is not finished
 
     # ---- lookups
     def by_name(self, name: str) -> Location | None:
@@ -148,7 +149,19 @@ def _line(v) -> bool:
     return isinstance(v, str) and v.isprintable()          # one line: no newline or other control character
 
 
-def validate(locations: list[Location]) -> list[Problem]:
+def clashes(locations: list[Location]) -> set[tuple[str, str]]:
+    """The (name, prefix) pairs where a location's name is a container name of a set (R79 22:06 and 22:30)."""
+    return {(x.name.casefold(), st_.container_prefix()) for i, x in enumerate(locations)
+            for j, st_ in enumerate(locations)
+            if i != j and st_.type == CONTAINERS and isinstance(x.name, str) and is_container_name(st_, x.name)}
+
+
+def validate(locations: list[Location], before: list[Location] | None = None, *,
+             check_clashes: bool = True) -> list[Problem]:
+    """What is wrong in the list. A name that is a container name of a set is refused only when it is NEW: a clash
+    already in `before` (the saved list) survives edits of other fields; `check_clashes=False` (reading the file,
+    the migration) never refuses one, so an upgraded Hub can always place spools (R79 22:30)."""
+    known = clashes(before) if before else set()
     out: list[Problem] = []
     seen: dict[str, int] = {}
     ids: set[str] = set()
@@ -195,7 +208,9 @@ def validate(locations: list[Location]) -> list[Problem]:
             bad("overflow", "The default overflow must be an overflow location.", "Switch overflow on.")
     for i, x in enumerate(locations):          # a name that is a container's name, refused both ways (R79, 22:06)
         for j, st_ in enumerate(locations):
-            if i != j and st_.type == CONTAINERS and isinstance(x.name, str) and is_container_name(st_, x.name):
+            if (check_clashes and i != j and st_.type == CONTAINERS and isinstance(x.name, str)
+                    and is_container_name(st_, x.name)
+                    and (x.name.casefold(), st_.container_prefix()) not in known):
                 text = f"{x.name} is the name of a container in {st_.name}. Choose another name."
                 fix = "Use a name that is not the set's prefix followed by a number."
                 out.append(Problem(i, "name", text, fix))
@@ -211,8 +226,8 @@ def validate(locations: list[Location]) -> list[Problem]:
     return out
 
 
-def check(locations: list[Location]) -> None:
-    problems = validate(locations)
+def check(locations: list[Location], before: list[Location] | None = None) -> None:
+    problems = validate(locations, before)
     if problems:
         raise StorageError(problems)
 
@@ -227,6 +242,8 @@ def to_xml(st: Storage) -> str:
     root = ET.Element("storage", {"version": VERSION})
     if st.converted:
         root.set("converted", "yes")
+    if st.rename_pending:
+        root.set("rename-pending", "yes")
     root.set("next-id", str(max(st.next_id, 1)))
     for x in st.locations:
         a = {"id": x.id or "", "name": x.name, "type": x.type}
@@ -277,10 +294,10 @@ def from_xml(text: str) -> Storage:
         nxt = int(root.get("next-id", "1"))
     except ValueError:
         raise unreadable("next-id is not a number") from None
-    problems = validate(locs)
+    problems = validate(locs, check_clashes=False)
     if problems:
         raise StorageError(problems)
-    st = Storage(locs, nxt, root.get("converted") == "yes")
+    st = Storage(locs, nxt, root.get("converted") == "yes", root.get("rename-pending") == "yes")
     st.next_id = max(st.next_id, max((int(_ID.match(x.id).group(1)) for x in locs if x.id), default=0) + 1)
     return st
 
@@ -299,9 +316,15 @@ def load() -> Storage | None:
     return from_xml(text)
 
 
-def save(st: Storage) -> None:
-    """Validate, give every row without an id one, and write storage.xml atomically (mode and owner as config.json)."""
-    check(st.locations)
+def save(st: Storage, before: Storage | None = None) -> None:
+    """Validate, give every row without an id one, and write storage.xml atomically (mode and owner as config.json).
+    A clash of names that the saved file (or `before`) already has is not refused again, a new one is."""
+    if before is None:
+        try:
+            before = load()
+        except StorageError:
+            before = None
+    check(st.locations, before.locations if before else None)
     for x in st.locations:
         if x.id is None:
             x.id = st.new_id()
@@ -323,16 +346,49 @@ def save(st: Storage) -> None:
         raise
 
 
+_warned = False
+
+
 def current() -> Storage:
     """The list in force: storage.xml; when there is none (first start of this version, or a fresh install) it is
-    built from the config file's old keys and written. A file that cannot be read raises, never defaults."""
+    built from the config file's old keys and written. A file that cannot be read raises, never defaults.
+
+    The first start can be either unit: the Hub service (which can write the root-owned etc dir; the file gets the
+    owner, mode 0640 and the web unit's read ACL of config.json) or the web unit (which cannot). A reader that cannot
+    write uses the list migrated from the config file in memory (ids and names are the same the file will get, the
+    migration is deterministic) and says so once in the log; it never writes a file the other unit could not read."""
+    global _warned
     st = load()
     if st is None:
         st = migrate(config.load())
-        save(st)
+        try:
+            save(st, before=st)                  # the migration never fails on a clash it carries over
+        except PermissionError as e:
+            if not _warned:
+                _warned = True
+                log.warning("storage.xml could not be written (%s); using the list migrated from config.json "
+                            "until the Hub service writes it", e)
+            return st
         if st.converted:
             log.warning(NOTICE)
     return st
+
+
+def mark_rename_pending(flag: bool) -> None:
+    """Set or clear `rename-pending` in storage.xml (no file: nothing to mark)."""
+    st = load()
+    if st is not None and st.rename_pending != flag:
+        st.rename_pending = flag
+        save(st)
+
+
+def migrate_at_start() -> None:
+    """Called when the Hub service starts: write storage.xml on the first start of this version. A file that cannot
+    be read is logged (every use then raises the Error/Fix lines); it does not stop the service."""
+    try:
+        current()
+    except StorageError as e:
+        log.error("%s", e)
 
 
 # ---------------------------------------------------------------- migration (R79 section 6)
@@ -387,7 +443,10 @@ def migrate(cfg: dict) -> Storage:
             out.insert(where, box)
         converted = box.name == "Container" or box.name.endswith(" (containers)")
         # a list entry that is a container name of this set is that container, not a location of its own
+        # one that is the PLA, overflow or sealed place stays a Bulk storage location beside the set (the text is one
+        # place, as today); the Hub says so with the notice
         out[:] = [x for x in out if x is box or x.name.casefold() in roles or not is_container_name(box, x.name)]
+        converted = converted or any(is_container_name(box, n) for n in (pla, overflow_name, sealed_name) if n)
     x = find(overflow_name)                                                                 # 4
     if not x:
         x = Location(overflow_name)
@@ -462,4 +521,4 @@ def rename_text(items: list[Rename], updated: int) -> str:
 
 
 def copy_of(st: Storage) -> Storage:
-    return Storage([replace(x, materials=list(x.materials)) for x in st.locations], st.next_id, st.converted)
+    return Storage([replace(x, materials=list(x.materials)) for x in st.locations], st.next_id, st.converted, st.rename_pending)

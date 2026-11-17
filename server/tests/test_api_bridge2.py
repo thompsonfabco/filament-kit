@@ -378,9 +378,11 @@ def test_unload(client, sm, caplog):
 
 
 def test_unload_dry_run_and_sealed_location_from_config(client, sm):
-    cfg = config.load()
-    cfg["placement"]["sealed_location"] = "Sealed shelf"
-    config.save(cfg)
+    from filament_kit import storage          # the old key is no longer read: the list says where sealed spools go
+    st = storage.current()
+    st.sealed_location().sealed = False
+    st.locations.insert(0, storage.Location("Sealed shelf", sealed=True))
+    storage.save(st)
     r = client.post(f"/api/printers/{SERIAL}/slots/A1/unload", json={"dry_run": True})
     assert r.status_code == 200 and r.json()["location"] == "Sealed shelf"
     assert sm.spools[2]["location"] == LOC_A1          # dry run: nothing changed
