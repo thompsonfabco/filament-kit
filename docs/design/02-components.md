@@ -1208,8 +1208,8 @@ KeyboardType.Number or Decimal)`.
 a slicer parent, a storage location, the theme for new devices). Up to four options use a segmented choice (5.7).
 
 **Anatomy.** As 5.1, with a native `select` drawn without the browser's arrow (`appearance: none`) and a chevron icon
-at its end. When the Hub offers an automatic choice, it is the first option and says what it will do: "Automatic
-(Rack 1, the first place for PLA with room)".
+at its end. When the Hub offers an automatic choice, it is the first option, "Automatic"; what it will do can show
+in a supporting line under the field: "Rack 1 (the first place for PLA with room)".
 
 **Sizes and tokens.** As 5.1; right padding `calc(var(--s3) + var(--s4) + var(--s2))` for the chevron; chevron
 `icon--s` `--muted`, not clickable (`pointer-events: none`).
