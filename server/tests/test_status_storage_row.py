@@ -9,7 +9,7 @@ import pytest
 from test_console_core import app, helper, owned  # noqa: F401
 from test_setup_page import client, env  # noqa: F401
 
-from filament_kit import cli, config, status, storage
+from filament_kit import cli, config, redact, status, storage
 from filament_kit.storage import ANY, CONTAINERS, MATERIALS, Location, Storage
 
 SAVE = "Storage locations could not be saved"
@@ -36,6 +36,14 @@ def overview_rows(app) -> list[dict]:
     r = client(app).get("/setup/api/overview")
     assert r.status_code == 200
     return [x for x in r.json()["rows"] if x["text"].startswith("Storage locations")]
+
+
+def redacted(row: dict) -> dict:
+    """What the Overview's GET (no setup code) shows of a row: the same redaction it applies. It hides addresses, serials
+    and a user folder in a path ("/home/user/.cache" becomes "/home/user/<hidden>"), so a state folder under such a path
+    reads differently there; `status` and the whole POST answer show the path as it is."""
+    known = redact.known_values()
+    return {**row, "text": redact.text(row["text"], known), "fix": redact.text(row["fix"], known)}
 
 
 def status_json(capsys) -> dict:
@@ -68,7 +76,8 @@ def test_a_failed_save_shows_the_row_in_the_overview_and_in_status_and_recovers_
         ", then restart the Hub.")
     doc = status_json(capsys)
     mine = [r for r in doc["rows"] if r["text"].startswith("Storage locations")]
-    assert mine == rows and doc["summary"]["needs_a_look"] >= 1
+    assert [redacted(r) for r in mine] == rows and doc["summary"]["needs_a_look"] >= 1
+    assert str(config.paths().state) in mine[0]["fix"]          # status shows the folder as it is
     cli.main(["status"])
     out = capsys.readouterr().out
     assert f"{SAVE} (Read-only file system)." in out and "needs a look" in out and "Fix: Check that the Hub's user" in out
@@ -87,8 +96,9 @@ def test_an_unreadable_file_shows_the_row_everywhere_and_a_save_clears_it(app, o
     assert len(rows) == 1 and rows[0]["text"].startswith(READ + " (") and rows[0]["state"] == "fail"
     assert rows[0]["group"] == "Hub" and rows[0]["fix"].startswith("Restore ")
     mine = [r for r in status_json(capsys)["rows"] if r["text"].startswith("Storage locations")]
-    assert len(mine) == 1 and mine[0]["text"].startswith(READ + " (")        # (the Overview's GET hides words like "token")
-    assert {k: mine[0][k] for k in ("state", "fix", "action", "group")} == {k: rows[0][k] for k in ("state", "fix", "action", "group")}
+    assert len(mine) == 1 and mine[0]["text"].startswith(READ + " (")
+    assert redacted(mine[0]) == rows[0]                         # the GET is the redacted form of the status row
+    assert str(state / "storage.xml") in mine[0]["fix"]         # status shows the file's path as it is
     storage.save(listing())                                     # keeps the old file as storage.xml.unreadable
     assert overview_rows(app) == [] and (state / "storage.xml.unreadable").exists()
 
