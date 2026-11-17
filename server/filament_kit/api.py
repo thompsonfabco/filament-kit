@@ -22,7 +22,7 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from . import (API_VERSION, __version__, config, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, reader_corrections, setup_page,
-               station_flow, station_requests, tags)
+               station_flow, station_requests, storage, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, family, hardware, loading, mapping, pending, registry, usage
 from .bridge.klipper import discovery
@@ -712,7 +712,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
             raise mapping.AlreadyRunning(serial)
 
     def sealed() -> str:
-        return config.load()["placement"].get("sealed_location") or loading.SEALED
+        return storage.current().sealed_location().name
 
     def audit(what: str, device, result: str, **fields) -> None:
         extra = " ".join(f"{k}={_safe(v)}" for k, v in fields.items())
@@ -951,7 +951,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return station[1]
 
     def rules() -> dict:  # sync: call it from inside the threadpool
-        return config.load()["placement"]
+        return storage.current()
 
     def info_body() -> dict:
         return {"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,

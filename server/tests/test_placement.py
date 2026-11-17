@@ -27,7 +27,7 @@ def test_opened_petg_count_3_fills_free_boxes_then_overflow():
 def test_box_count_zero_goes_to_overflow():
     out = place([{"material": "ABS", "sealed": False}], set(), {**RULES, "box_count": 0})
     assert [i["location"] for i in out] == ["Overflow"]
-    assert out[0]["placed_by"] == "no_boxes"            # not "every box is taken": there are none (R75 review)
+    assert out[0]["placed_by"] == "overflow"            # R79: the reasons are material, any, overflow, sealed
 
 
 def test_sealed_gets_sealed_location():
@@ -44,7 +44,7 @@ def test_each_chosen_location_says_which_rule_chose_it():
     out = place([{"material": "PETG", "sealed": True}, {"material": "PLA", "sealed": False},
                  {"material": "ABS", "sealed": False, "count": 2}], set(), {**RULES, "box_count": 1})
     assert [(i["location"], i["placed_by"]) for i in out] == [
-        ("Sealed stock", "sealed"), ("Rack 1", "pla"), ("Storage box 01", "box"), ("Overflow", "overflow")]
+        ("Sealed stock", "sealed"), ("Rack 1", "material"), ("Storage box 01", "any"), ("Overflow", "overflow")]
 
 
 def test_inputs_not_mutated():

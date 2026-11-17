@@ -20,9 +20,10 @@ import json
 import logging
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 
-from . import config, library, locks, placement, tags
+from . import config, library, locks, placement, storage, tags
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
@@ -215,8 +216,9 @@ def _check_parents(items: list[dict]) -> None:
             raise
 
 
-def _used_locations(sm: Spoolman) -> set[str]:
-    return {s["location"] for s in sm.get("spool") if s.get("location")}
+def _used_locations(sm: Spoolman) -> Counter:
+    """Spools per location text: every spool whose location is set, as today's "taken" set but counted."""
+    return Counter(s["location"] for s in sm.get("spool") if s.get("location"))
 
 
 def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, parents_checked: bool = False) -> AddResult:
@@ -246,9 +248,8 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, paren
 
 
 # why the placement rules chose a spool's location (placement.place's `placed_by`), for the result line
-PLACED_BY = {"sealed": "where sealed spools go", "pla": "where opened PLA goes",
-             "box": "the first free storage box", "overflow": "every storage box is taken",
-             "no_boxes": "no storage boxes are set up, so opened spools go here"}
+PLACED_BY = {"sealed": "where sealed spools go", "material": "the first place for {material} with room",
+             "any": "the first place with room", "overflow": "every place for {material} is full"}
 
 
 def _write_items(sm, placed, vendors, fils, result, dry) -> None:
@@ -307,7 +308,7 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
             id_note = f", spool id {ids[0]},"
         else:
             id_note = f", spool ids {', '.join(str(i) for i in ids)},"
-        why = PLACED_BY.get(it.get("placed_by") or "")
+        why = PLACED_BY.get(it.get("placed_by") or "", "").format(material=it.get("material") or "this material")
         where = f"{it['location']} ({why}, since no location was given)" if why else it["location"]
         result.lines.append(
             f"{'Would add' if dry else 'Added'} {n} spool{'' if n == 1 else 's'} of {vn} {it['name']} ({which}){id_note} "
@@ -537,8 +538,8 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
             patch["remaining_weight"] = remaining
         _cap_remaining(spool, patch)
         link = link_tag(sm, spool_id, uid, force=force, dry=dry)  # raises TagConflict before any other write
-        if location is None and spool.get("location") in (None, "", rules["sealed_location"]):
-            used = {s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id}
+        if location is None and spool.get("location") in (None, "", placement.sealed_name(rules)):
+            used = Counter(s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id)
             material = (spool.get("filament") or {}).get("material") or ""
             location = placement.place([{"material": material, "sealed": False, "count": 1}], used, rules)[0][
                 "location"]
@@ -750,3 +751,38 @@ def vendors(sm: Spoolman) -> list[dict]:
     """Spoolman's vendors (name and empty spool weight as `tare`), for a manual add's vendor choice."""
     return sorted(({"id": v["id"], "name": v.get("name") or "", "tare": v.get("empty_spool_weight")}
                    for v in sm.get("vendor")), key=lambda v: v["name"].lower())
+
+
+RENAME_BATCH = 20          # a rename of more spools than this is a job with steps, one step per batch
+
+
+def _renamed(location: str, items: list) -> str | None:
+    for r in items:
+        if not r.containers and location == r.old:
+            return r.new
+        if r.containers and location.startswith(r.old) and len(location) - len(r.old) >= 2                 and location[len(r.old):].isdigit():
+            return r.new + location[len(r.old):]
+    return None
+
+
+def rename_steps(sm: Spoolman, items: list) -> int:
+    """How many steps `rename_locations` will report: 0 for up to RENAME_BATCH spools, else one per batch."""
+    n = sum(1 for sp in sm.get("spool") if _renamed(sp.get("location") or "", items) is not None)
+    return 0 if n <= RENAME_BATCH else math.ceil(n / RENAME_BATCH)
+
+
+def rename_locations(sm: Spoolman, items: list, *, step=None) -> dict:
+    """Move the spools stored under renamed locations (`storage.renames`) to the new names, under `_LOCK` so no add
+    places a spool meanwhile. More than RENAME_BATCH spools: `step(text)` is called once per batch (the job's
+    step lines, the sentence holds no name). Returns {"updated": n, "text": "Renamed A to B. 18 spools updated."}."""
+    if not items:
+        return {"updated": 0, "text": ""}
+    with _LOCK:
+        todo = [(sp["id"], new) for sp in sm.get("spool")
+                if (new := _renamed(sp.get("location") or "", items)) is not None]
+        for start in range(0, len(todo), RENAME_BATCH):
+            if step is not None and len(todo) > RENAME_BATCH:
+                step(f"Updating spools {start + 1} to {min(start + RENAME_BATCH, len(todo))} of {len(todo)}")
+            for sid, new in todo[start:start + RENAME_BATCH]:
+                sm.patch(f"spool/{sid}", {"location": new})
+    return {"updated": len(todo), "text": storage.rename_text(items, len(todo))}

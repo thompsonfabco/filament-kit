@@ -19,7 +19,7 @@ from typing import Annotated, Callable
 import anyio
 from pydantic import BaseModel, Field
 
-from .. import config, inventory, modules, tags, tagsources
+from .. import config, inventory, modules, storage, tags, tagsources
 from ..inventory import AddFailed, TagConflict
 from ..profiles.errors import ProfileError
 from ..spoolman import Spoolman, SpoolmanError
@@ -87,8 +87,10 @@ class Tools:
     def cfg(self) -> dict:
         return self._load()
 
-    def _rules(self) -> dict:
-        return self.cfg()["placement"]
+    def _rules(self):
+        if self._load is config.load:
+            return storage.current()
+        return storage.migrate(self.cfg())              # a config handed in (tests, a dev copy): its old keys
 
     def _need(self, module: str) -> None:
         if module not in modules.enabled(self.cfg()):
