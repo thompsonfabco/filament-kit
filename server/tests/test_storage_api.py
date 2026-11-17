@@ -458,7 +458,7 @@ def errors_of(r):
 
 
 def test_a_refusal_lists_errors_per_row_and_field_and_saves_nothing(hub):
-    before = (config.paths().etc / "storage.xml").read_text(encoding="utf-8")
+    before = (config.paths().state / "storage.xml").read_text(encoding="utf-8")
 
     def bad(rows):
         rows[1]["name"] = ""
@@ -471,7 +471,7 @@ def test_a_refusal_lists_errors_per_row_and_field_and_saves_nothing(hub):
     assert got[(2, "limit")] == "Enter a whole number, 1 or more."
     assert got[(3, "name")] == "There is already a location called RACK 2."
     assert [e for e in errs if e["row"] == 1][0]["id"] == "loc-2"
-    assert (config.paths().etc / "storage.xml").read_text(encoding="utf-8") == before
+    assert (config.paths().state / "storage.xml").read_text(encoding="utf-8") == before
 
 
 def test_fewer_containers_than_the_highest_in_use_is_refused_at_the_field(hub, spoolman_url):
@@ -544,7 +544,7 @@ def test_a_row_that_is_not_ready_is_an_error_and_a_bad_shape_too(hub):
 
 
 def test_the_preview_answers_the_unsaved_list_and_writes_nothing(hub):
-    before = (config.paths().etc / "storage.xml").read_text(encoding="utf-8")
+    before = (config.paths().state / "storage.xml").read_text(encoding="utf-8")
 
     def edit(rows):
         rows[1]["name"] = "PLA shelf"
@@ -556,7 +556,7 @@ def test_the_preview_answers_the_unsaved_list_and_writes_nothing(hub):
     assert out["order_by_material"][0] == {"material": "PLA", "locations": ["PLA shelf", "Rack 2", "Overflow", "Attic"]}
     assert out["order_by_material"][1] == {"material": "PETG", "locations": ["Rack 2", "Overflow", "Attic"]}
     assert out["renames"] == [{"from": "Rack 1", "to": "PLA shelf"}]
-    assert (config.paths().etc / "storage.xml").read_text(encoding="utf-8") == before
+    assert (config.paths().state / "storage.xml").read_text(encoding="utf-8") == before
 
 
 def test_the_preview_of_a_list_with_errors_still_answers_the_data_and_the_errors(hub):
@@ -677,12 +677,12 @@ def test_a_hub_without_storage_xml_still_reads_from_the_old_keys_in_memory(fk_en
     cfg = config.load()
     cfg["placement"]["box_count"] = 4
     config.save(cfg)
-    assert not (config.paths().etc / "storage.xml").exists()
+    assert not (config.paths().state / "storage.xml").exists()
     tools = mcp_tools.Tools(FakeSm([]))
     st = tools.storage_list()
     assert [x.name for x in st.locations] == ["Sealed stock", "Rack 1", "Storage box", "Overflow"]
     assert st.by_name("Storage box").type == CONTAINERS
-    assert not (config.paths().etc / "storage.xml").exists()          # the web unit never writes it
+    assert not (config.paths().state / "storage.xml").exists()          # the web unit never writes it
 
 
 def test_the_storage_messages_are_the_catalogue_texts():
@@ -692,7 +692,9 @@ def test_the_storage_messages_are_the_catalogue_texts():
     import inspect
     catalogue = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
     sent = {**storage_api.MESSAGES, "storage_notice_converted": storage.NOTICE,
-            "storage_notice_default_overflow_no_limit": storage.DEFAULT_OVERFLOW_NOTE}
+            "storage_notice_default_overflow_no_limit": storage.DEFAULT_OVERFLOW_NOTE,
+            "storage_check_not_saved": storage.SAVE_FAILED, "storage_check_not_read": storage.READ_FAILED,
+            "storage_save_refused": storage.NOT_SAVED}
     drift = {k: (v, catalogue.get(k)) for k, v in sent.items() if catalogue.get(k) != v}
     assert not drift, f"server text and catalogue differ for: {drift}"
     assert len(storage_api.MESSAGES) >= 30

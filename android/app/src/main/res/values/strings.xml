@@ -4036,6 +4036,12 @@
     </plurals>
     <string name="storage_remove_body_none">No spools are recorded there.</string>
     <string name="storage_notice_converted">Storage locations were converted. Check them.</string>
+    <!-- 1=reason -->
+    <string name="storage_check_not_saved">Storage locations could not be saved (%1$s).</string>
+    <!-- 1=reason -->
+    <string name="storage_check_not_read">Storage locations could not be read (%1$s).</string>
+    <!-- 1=reason -->
+    <string name="storage_save_refused">Storage locations were not saved: %1$s.</string>
     <string name="storage_notice_default_overflow_no_limit">The default overflow has no limit, so the other overflow places are never used. Give it a spool limit to let them fill.</string>
     <!-- 1=from 2=to 3=count -->
     <plurals name="storage_renamed">
