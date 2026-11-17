@@ -548,7 +548,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `config show`, `config theme` | the `values` of `GET /setup/api/settings/general`, plus `theme` |
 | `locations` | the answer of `GET api/storage`: `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}` |
 | `spools low` | the answer of `GET api/spools/low`: `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}` |
-| `events` | the answer of `GET api/events`: `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert, title, text, action: {place, id}}], next, conditions: [...]}`; with `--follow`, one event object per line (9.16) |
+| `events` | the answer of `GET api/events`: `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert, title, text, action: {place, id}}], next, oldest, gap, test, conditions: [...]}`; with `--follow`, one event object per line (9.16) |
 | `alerts` | the answer of `GET api/alerts`: `{types: [{key, title, on}], last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` |
 | `catalog status` | `GET /setup/api/library` |
 | `backup list` | `{backups: [{name, at, kind, size}], keep_days, folder}` |
@@ -1836,7 +1836,7 @@ Note: Rack 01: Same name as a container in Rack.
 
 `spoolwarden events` prints the events of the Hub's event store, oldest first, as the Alerts list of the Hub page reads
 them (`02-components.md` 8.9, with every kind, not only the alert types that are on). Reading needs no sudo. Options:
-`--since <id or time>` (an event number, "everything after 1412", or a time such as `2026-11-17 04:00`), `--kind <prefix>` (the dotted names of the catalogue, so `--kind print` shows `print.started`, `print.runout`
+`--since <id or time>` (an event number, "everything after 1412", read with `since`, or a time such as `2026-11-17 04:00`, read with `since_at`), `--kind <prefix>` (the dotted names of the catalogue, so `--kind print` shows `print.started`, `print.runout`
 and the rest), `--follow` and `--json`. Without `--since` it prints the newest 50.
 
 ```
@@ -1851,7 +1851,8 @@ ID    TIME              KIND          SUBJECT        WHAT
 
 - `WHAT` is the title the Hub built for the event in its language (the table of `02-components.md` 8.8 for the alert
   kinds).
-- The last line counts the events printed and names the conditions that are raised now.
+- The last line counts the events printed and names the conditions that are raised now. When `gap` is true (events
+  after the given number were deleted by age) a note line says so: `Note: some events were deleted by age.`
 - `--follow` prints the same rows as they come (it waits at the Hub, `GET api/events?since=<id>&wait=55`), starts with
   `Following events after 1413. Ctrl-C ends.` on standard error and ends with Ctrl-C (exit code 0). With `--json` each
   event is one object on its own line.
@@ -1876,6 +1877,8 @@ shown in the first column):
 | `running_low` | Spool running low | `spool.low` |
 | `device_down` | Device stopped answering | `device.down`, `printer.offline` |
 
+The description of `device_down` is "A Weigh Station or a printer stopped answering."
+
 ```
 $ spoolwarden alerts
 Alerts · 6 of 8 on
@@ -1899,7 +1902,7 @@ Change them: sudo spoolwarden alerts set -h
 | `alerts set <type> on\|off` | Switches one alert type; `<type>` is exactly one of the eight keys above. Every event is written whatever the switches say; a switch only decides what is shown and sent as an alert |
 | `alerts set running-low <grams>` | Running low under: a whole number, 10 to 2000 |
 | `alerts set storage-warning <percent>` | Storage warning at: a whole number, % used |
-| `alerts test` | Asks the Hub to send one test alert (`POST api/alerts/test`) and prints the Hub's answer |
+| `alerts test` | Asks the Hub to send one test alert (`POST api/alerts/test`) and prints the Hub's answer. The test goes to every client that asks within 60 seconds and to every push subscription |
 
 ```
 $ sudo spoolwarden alerts set finished on

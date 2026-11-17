@@ -3035,22 +3035,25 @@ Android app; no screen draws its own.
 - Placement: global (top of `main`, every section or screen of that interface). At most two are shown, the most serious
   first, then the newest; a third and more become one line "<n> more alerts" that opens the Alerts list (8.9).
 - A condition's banner (a paused print, a full disk, a low spool, a silent device) stays while the condition is raised
-  and leaves by itself when it clears. Dismiss hides it on that device only; it comes back if it gets worse (warn to
-  bad) or is raised again later.
-- A moment's banner (print failed, printer error) stays until it is dismissed on that device, at most 24 hours.
+  and leaves by itself when it clears: the Hub clears a condition that is no longer true, also when its printer,
+  device or spool is removed. When the Hub raises the same condition again with another severity, the banner changes
+  to it (a disk that falls from full back to almost full shows "Storage on the Hub is almost full"). Dismiss hides it
+  on that device only; it comes back if it gets worse (warn to bad) or is raised again later.
+- A moment's banner (print failed, printer error) stays until it is dismissed on that device, at most 24 hours. The
+  banners read the events of the last 24 hours with `alert=1`.
 - Titles and sentences, the one table every interface uses (`<...>` is filled from the values of the event):
 
   | Event | Title | Sentence | Action |
   |---|---|---|---|
   | `print.runout` | "Filament ran out on <printer>" | "<job> is paused at <percent> %. Load filament and resume at the printer." | Open the printer |
   | `print.paused` | "<printer> is paused" | "<job> is paused at <percent> %." plus the printer's reason when it gives one | Open the printer |
-  | `print.failed` | "Print stopped on <printer>" | "<job> stopped at <percent> %." plus the error text, or "It was cancelled." | Open the printer |
+  | `print.failed` | "Print stopped on <printer>" | "<job> stopped at <percent> %." plus the error text (reason `error`) or "It was cancelled." (reason `cancelled`); with reason `unknown` nothing is added | Open the printer |
   | `printer.error` | "<printer> reports a problem" | the printer's text | Open the printer |
   | `print.finished` | "Print finished on <printer>" | "<job> is done." | Open the printer |
   | `storage.low` (warn) | "Storage on the Hub is almost full" | "<free> free of <total> (<percent> % used)." | Show storage use |
   | `storage.low` (bad) | "Storage on the Hub is full" | "<free> free of <total>. Backups and new photos may fail." | Show storage use |
   | `spool.low` | "Running low: <filament>" | "Spool <id> has <grams> g left." plus "<n> more in stock." or "It is the last one." | Show running low |
-  | `device.down` | "<device> stopped answering" | "Last answer <time>." | Open Devices |
+  | `device.down` (a Weigh Station) | "<device> stopped answering" | "Last answer <time>." | Open Devices |
   | `printer.offline` | "<printer> is offline" | "Last seen <time>." | Open the printer |
 
 - Android: the same `NoticeCard` (kind `warn` or `bad`, the title as its first line, the time as its last, up to two
@@ -3091,7 +3094,7 @@ kind's colour. The dialog is as wide as a detail dialog; the sheet and the scree
 - Error: the error state of 10.2 with **Try again**; the banners already shown stay.
 
 **Behaviour and keyboard.** The list is the first reader of the Hub's event store (`GET api/events`); it reads the
-conditions raised now and the events of the last 7 days that an alert type switched on covers. A raised condition
+conditions raised now and the events of the last 7 days (`since_at` and `alert=1`) that an alert type switched on covers. A raised condition
 that clears leaves the top of the list and stays below as the event that raised it. Choosing an action closes the
 list and goes to the place. Escape or Close returns focus to what opened it. Dismissing a banner does not remove its
 row.

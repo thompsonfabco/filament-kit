@@ -393,7 +393,8 @@ draws its own.
   a `LazyColumn` with the raised conditions first, then the alert events of the last 7 days, newest first, each row an
   icon, the title, the sentence, the time and its action as a trailing `TextButton`. Empty: "No alerts in the last 7
   days." Opened from "<n> more alerts" and from Settings > Alerts > "Recent alerts" (12.7). Requests: `GET api/events`.
-- **Where the events come from.** While the app is open, `GET api/events?since=<next>&wait=<seconds>`: the request
+- **Where the events come from.** At start `GET api/events?since_at=<24 hours ago>&alert=1` (the Alerts list reads 7
+  days); while the app is open, `GET api/events?since=<next>&wait=<seconds>`: the request
   waits at the Hub (at most 55 s) and answers at once when something new exists; with the app closed and "Alerts on
   this phone" on, the watching service of 12.7 does the same.
 
@@ -1716,8 +1717,8 @@ phone.
 
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
-| Alerts on this phone | Switch row with the supporting text "Android shows a small permanent notification while Spoolwarden watches the Hub." Switching on asks for Android's notification permission (and `GET api/alerts/device` / `POST api/alerts/device` `{notifications: true}` records the choice at the Hub); switching off stops the service and posts `{notifications: false}`. When Android will not ask again: "Allow notifications for Spoolwarden in the app's settings." and "Open app settings". | `ListItem` + `Switch` |
-| Send a test alert | Other button; `POST api/alerts/test` sends one test notification to this phone only. Result line "Sent." or the Hub's text. | `OutlinedButton` |
+| Alerts on this phone | Switch row with the supporting text "Android shows a small permanent notification while Spoolwarden watches the Hub." Switching on asks for Android's notification permission and starts the service; the choice is kept in the app, not on the Hub; switching off stops the service. When Android will not ask again: "Allow notifications for Spoolwarden in the app's settings." and "Open app settings". | `ListItem` + `Switch` |
+| Send a test alert | Other button; `POST api/alerts/test` sends one test notification to this phone only: it arrives as `test` in the next `GET api/events` answer of this phone's token and is shown as a notification. Result line "Sent." or the Hub's text. | `OutlinedButton` |
 | Recent alerts | Row with a chevron; opens `alerts` (3.6). | `ListItem` |
 
 - **The watching service.** When the switch is on, the app keeps one waiting connection to the Hub
@@ -1862,8 +1863,8 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | Phone-callable Slicer presets actions: list filaments without a preset line, add them to a line, create a line, build presets now (today these exist only under `api/profiles/web/`, which phones may not call). | 11.2 | 11.2 points to the Hub page and the web app. |
 | The Hub's default theme ("Theme for new devices", F6.2) in `GET api/info` as the field `look` (for example `"look": "console"`). | 12.2 first start | The app starts on Console. |
 | `GET api/storage` on the paired API: the locations in fill order `{id, name, type, limit, count, used, free, prefix, containers: [{name, number, taken}], fill, materials, overflow, default_overflow, sealed, position}` (`prefix` and `containers` are `null` for bulk; `used` and `free` equal the counts of `taken`), with `order_by_material` and `everything_else`; `GET api/locations` keeps its answer (a list of names). | 6.3 Location field, 6.5 rows, 7.4 Move | The Location field and the "Move to" sheet list the names from `GET api/locations` without how full, and "Automatic" shows no reason. |
-| `GET api/events?since=&wait=&kinds=&limit=` on the paired API: `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert: true or false, title, text, action: {place, id}}], next, conditions: [the raised ones, same shape]}`; `wait` up to 55 s | 3.6 alert banners, toast and Alerts list; 12.7 the watching service | No alert banners, no Alerts list, no alert notifications; Settings > Alerts is absent. |
-| `GET api/alerts/device` and `POST api/alerts/device` `{notifications: true or false}` for the calling phone; `POST api/alerts/test` | 12.7 | The switch and the test button are absent. |
+| `GET api/events?since=&since_at=&alert=&wait=&kinds=&limit=` on the paired API: `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert: true or false, title, text, action: {place, id}}], next, oldest, gap, test: {title, text} or null, conditions: [the raised ones, same shape]}`; `since` is an id and `since_at` a time (UTC), one of them; `alert=1` returns only events of alert types that are on; `wait` up to 55 s | 3.6 alert banners, toast and Alerts list; 12.7 the watching service | No alert banners, no Alerts list, no alert notifications; Settings > Alerts is absent. |
+| `POST api/alerts/test` for the calling phone (the test comes back as `test` in the events answer) | 12.7 | The test button is absent. |
 | `GET api/spools/low`: `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`, least filament first | 5 the running low line; 7.1 the Running low chip | No line and no chip. |
 | A per-item structure in the dry-run answer of `POST api/intake/add` (what is created, what is reused, where each spool goes). | 6.5 rows | The app shows the Hub's lines one per row. |
 

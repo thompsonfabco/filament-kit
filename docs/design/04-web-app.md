@@ -276,8 +276,9 @@ that replaces a browser dialog.
 - **Alerts list.** A sheet (02-components 8.9; 12.3), opened from "<n> more alerts" and from Settings > "Recent
   alerts" (9.2): the raised conditions first, then the alert events of the last 7 days, newest first. Empty: "No
   alerts in the last 7 days."
-- **Where the events come from.** GET `events` (the web twin of `GET api/events`, `since` set to the last `next`),
-  once at start and then every 10 s with `wait=0` while the page is visible, the rhythm of every other poll of this
+- **Where the events come from.** GET `events` (the web twin of `GET api/events`: the Hub's route passed on), once at
+  start with `since_at` set to 24 hours ago and `alert=1` (the Alerts list reads 7 days) and then every 10 s with
+  `wait=0` and `since` set to the last `next` while the page is visible, the rhythm of every other poll of this
   app. While the Hub cannot be reached (10.3) the poll waits for the retry.
 
 ---
@@ -1373,7 +1374,7 @@ A sheet on phones with the address `#settings` (2.4), opened over the last place
 | for new devices.                         |
 |------------------------------------------|
 | Alerts on this phone                     |
-| (o) On: this phone gets print alerts.    |
+| (o) On: this phone gets alerts.          |
 | Notify this phone                  [on]  |
 | [ Send a test alert ]                    |
 | Recent alerts                            |
@@ -1391,7 +1392,7 @@ The segmented control takes the full content width; each theme tile is a radio t
 |---|---|
 | Appearance | The wide segmented control "Light / Dark / System" with sun, moon and half-circle icons (F5). Applies at once; line "Saved on this device: <choice>." |
 | Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this device: <choice>." Helper: "New phones start with the Hub's theme for new devices." |
-| Alerts on this phone (only when alerts can be sent to the phone, `data-push`) | The same switch, test button and texts for its limits as before; the alerts now cover every alert type the Hub has switched on (filament ran out, print paused, print failed or stopped, printer error, print finished, storage almost full, spool running low, device stopped answering), not only print states. Status: "Off" (hollow circle), "On: this phone gets print alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive print alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). Link "Recent alerts" opens the Alerts list (3.8). The alert types and thresholds are edited on the Hub page or the command line, like every setting. |
+| Alerts on this phone (only when alerts can be sent to the phone, `data-push`) | The same switch, test button and texts for its limits as before; the alerts now cover every alert type the Hub has switched on (filament ran out, print paused, print failed or stopped, printer error, print finished, storage almost full, spool running low, device stopped answering), not only print states. Status: "Off" (hollow circle), "On: this phone gets alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). Link "Recent alerts" opens the Alerts list (3.8). The switch is the push subscription itself: the phone is on while it has one, and the Hub stores no switch for it; the subscriptions are kept by the web unit in `push.xml` in its own folder. The test button keeps today's push test; an alert sent from the command line (`spoolwarden alerts test`) reaches every subscription. The alert types and thresholds are edited on the Hub page or the command line, like every setting. |
 | This Hub | Hub name; the address this page is using (`--mono`); on the home address "Open the Hub page". |
 
 The alert itself (from the service worker) has the Hub's title (default "Printer"), body and tag: for every alert type
@@ -1407,7 +1408,7 @@ the place of the alert's action.
 
 - **iPhone (Safari).** "Add to Home Screen" (More, and the alerts group) opens the sheet "Add Spoolwarden to
   the Home Screen" with three numbered steps: "1. Tap Share in Safari's toolbar (the square with an arrow)." "2.
-  Choose Add to Home Screen." "3. Tap Add." and the line "Print alerts on iPhone work only from the Home Screen."
+  Choose Add to Home Screen." "3. Tap Add." and the line "Alerts on iPhone work only from the Home Screen."
   Button "Done".
 
 ```
@@ -1655,7 +1656,7 @@ right column is left out or falls back as described there.
 | New wording in the Hub's own texts: the refusal page (11.1); the `no_preset` refusal ("Slicer presets" instead of "the Presets tab"); the busy-stream text; "internal error (see the server log)"; the sign-in page's title and the command it names | 6.4, 11 | Today's wording appears in those places |
 | The sign-in page served with the web app's stylesheet instead of styles inside the page | 11.2 | Today's look on that page |
 | Optional: the printers list with job progress and slots, so the list needs one request | 6.1 | One state request per printer every 10 s |
-| Web twins, under the web app's own base, of the routes of events and alerts: `GET events?since=&wait=&kinds=&limit=` (the events, `next` and the raised `conditions`, each with `alert`, built `title` and `text`, and `action: {place, id}`), `GET spools/low` (`{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`), `GET alerts/device` and `POST alerts/device` `{notifications}` for the calling phone, `POST alerts/test`, and for completeness `GET alerts` and `GET storage-use`, which the web app does not use | 3.8, 5.5, 9.2 | No alert banners, toast or Alerts list; no Running low chip; the Alerts panel keeps today's push switch and test button |
+| Web twins, under the web app's own base, that pass the Hub's routes of events and alerts on (the web unit reads them through its token; it opens no file of the Hub): `GET events?since=&since_at=&alert=&wait=&kinds=&limit=` (the events, `next`, `oldest`, `gap` and the raised `conditions`, each with `alert`, built `title` and `text`, and `action: {place, id}`), `GET spools/low` (`{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`), and for completeness `GET alerts`, `GET storage-use` and `POST alerts/test`, which the web app does not use (its test button keeps today's push test); the web unit's own hand-over of spool events to the Hub (`POST api/events/web`) is not a route of the web app | 3.8, 5.5, 9.2 | No alert banners, toast or Alerts list; no Running low chip; the Alerts panel keeps today's push switch and test button |
 
 ---
 

@@ -1375,7 +1375,7 @@ Stage 9   SL1 > SL2 > SL3      SL2 > SL4 / SL5 / SL6      SL3 + SL4 + SL5 + SL6 
           (SL4, SL5 and SL6 may start beside SL1 against the contract in 03 section 15; they merge after SL2; SL3
           edits cli.py: one at a time)
 
-Stage 10  EA1 > EA2 > EA3, EA4      EA5 from the start      EA3 + EA5 > EA6      EA4 + EA5 > EA7      EA8 beside EA6 and EA7
+Stage 10  EA1 > EA2 > EA3 > EA4      EA5 from the start      EA3 + EA5 > EA6      EA4 + EA5 > EA7      EA8 beside EA6 and EA7
           EA3 to EA8 > EA9
           (Stage 10 starts after Stage 9 is merged: EA2 and EA6 open files that SL steps change; EA5 and EA8 may start
           at once against the contract in 03 section 15; EA8 merges after EA3)
@@ -1856,7 +1856,7 @@ The Hub writes every thing that happens and that a person, a history or an integ
 4.2 and 10.13, 04 3.8, 5.5 and 9.2, 05 3.6, 5, 7.1 and 12.7, 06 8.3 and 9.16 to 9.18) all read this one store. No
 feature keeps a second history of its own from now on (the two usage logs and the intake history stay as they are;
 they are not events). The contract the interface steps build against is the rows "An event store", `GET api/alerts`,
-`GET api/alerts/device`, `POST api/alerts/test`, `GET api/spools/low` and `GET api/storage-use` in 03 section 15.
+`POST api/alerts/test`, `GET api/spools/low` and `GET api/storage-use` in 03 section 15.
 
 ### The event store
 
@@ -1865,12 +1865,12 @@ An event has:
 | Field | Content |
 |---|---|
 | `id` | whole number, rising by one, never reused; the cursor clients use ("everything after 1412") |
-| `at` | time, UTC, to the second |
+| `at` | time, UTC, to the second; a writer may give it (the web unit's late hand-over), otherwise the store sets it |
 | `kind` | a dotted name from the catalogue below, e.g. `print.paused` |
 | `severity` | `info`, `ok`, `warn` or `bad` (the banner kinds) |
 | `subject` | what it is about: type and id, plus the name at that time: `printer`, `spool`, `device`, `location`, `hub` |
-| `actor` | who caused it: `hub` (the Hub noticed it), `device` with the paired device's id and name, `page` (Hub page), `cli`, `connector` |
-| `data` | named values of the kind (job name, grams, slot, spool id, material, before and after values) |
+| `actor` | who caused it: `hub` (the Hub noticed it), `device` with the paired device's id and name (the phone web app's pairing is a device), `page` (Hub page), `cli`, `connector` |
+| `data` | named values of the kind (job name, grams, slot, spool id, material, before and after values; `run` and `batch` below) |
 | `condition` | only for lasting states: a key such as `print-paused:<printer id>` and `raised` or `cleared` |
 | `undo` | reserved for the undo of the activity log: empty now. User-action events carry the before and after values in `data`, so undo can be built later without opening the emitting code again |
 
@@ -1881,6 +1881,32 @@ An event has:
   event with `<v name="...">` children for `data`; appended without rewriting the file, and a reader tolerates a torn
   last element after a crash. A small `events/conditions.xml` holds the conditions that are raised now, and
   `events/next-id` the counter. Owner and mode as the other state files.
+- **Who writes the store.** Only processes that can write the Hub's state folder: the Hub service, the command line as
+  root and the Hub's own timers (the store's lock keeps them apart). The web unit, which runs as its own user and can
+  write only its own folder, never writes the store and never reads its files. It hands its events to the Hub over the
+  channel it already has (its token, the Hub's local address) by the web-only route `POST api/events/web`,
+  `{events: [{kind, at, subject, actor, data}]}`. The Hub accepts only the `spool.*` kinds from it, gives the id, keeps
+  the `at` the web unit sent and sets the actor: `device` (the web app's pairing) for the phone web app, `connector`
+  for the connector's tools. When the Hub does not answer, the spool change still succeeds and the event waits in the
+  web unit's own folder, in `events-outbox.xml` (at most 500, the oldest dropped), and is sent with the next
+  hand-over. The code that changes spools (`inventory.py`) does not call the store itself: it reports to an **event
+  sink** it is given (in the Hub the sink is the store, in the web unit the hand-over, in the command line the store).
+  The web unit reads events, alert settings, the running-low list and storage use through Hub routes with its token
+  (they are among the routes a web token may call); no file grant for `events/` is needed or used.
+- **Ids are never reused.** When the store works out its counter it takes the highest of: the counter file, the highest
+  id found in the month files, the recorded high-water mark and the ids in the conditions file. A restore reads the
+  present store's last id before the state folder is replaced and, after the replacement, tells the store to carry
+  that number as its high-water mark; so ids continue above every id ever given. Events newer than the backup are gone
+  with the rest of the state, as the restore dialog says.
+- **Reading.** `GET api/events` takes `since` (an id) or `since_at` (a time, UTC) and `alert=1` (only events of alert
+  types that are on). The answer gains `oldest` (the lowest id still kept), `gap` (true when `since` is lower than
+  `oldest` minus one: events between were deleted by age) and `test` (the test alert, below).
+- **Two values that tie events together.** Every `print.*` event of one print run and its `usage.recorded` carry the
+  same `run`, made by the Hub when it first writes an event for that run (`r-<id of that first event>`); Klipper events
+  also carry `printer_job` (Moonraker's job id) when known. Bambu gives no usable run id of its own (its task id is "0"
+  for prints started on the network or at the printer), which is why the Hub makes one. All `spool.*` events caused by
+  one request carry the same `batch`: the Recently added record's id when the request made one, otherwise an id the
+  Hub (or the web unit) makes for the request.
 
 ```
 <events version="1" month="2026-11">
@@ -1893,7 +1919,7 @@ An event has:
 ```
 
 - **Retention.** Kept 400 days (setting `events.keep_days`, 30 to 3650), so a year of months can be compared; whole
-  month files older than that are deleted once a day. Nothing else prunes.
+  month files older than that are deleted once a day by the 5-minute loop. Nothing else prunes.
 - **A published contract.** The catalogue of kinds and the names of their `data` values are a published contract from
   the first release that has them: kinds and values are added, never renamed or removed. The Home Assistant integration
   and `--json` readers rely on this.
@@ -1906,27 +1932,39 @@ action emits it.
 
 | Kind | When | Severity | Condition | Values | Written |
 |---|---|---|---|---|---|
-| `print.started` | a job starts | info | - | job, printer | now |
-| `print.paused` | a job pauses for any reason but runout | warn | raises `print-paused:<printer>` | job, percent, reason (`user`, `error`, `unknown`), stage text | now |
-| `print.runout` | a job pauses because filament ran out | warn | raises `print-paused:<printer>` | job, percent, slot if known | now |
-| `print.resumed` | a paused job runs again | ok | clears `print-paused` | job | now |
-| `print.finished` | a job ends well | ok | clears `print-paused` | job, minutes | now |
-| `print.failed` | a job ends cancelled or with an error | bad | clears `print-paused` | job, percent, reason (`cancelled`, `error`), error text | now |
+| `print.started` | a job starts | info | - | job, printer, run, printer_job (Klipper) | now |
+| `print.paused` | a job pauses for any reason but runout | warn | raises `print-paused:<printer>` | job, percent, reason (`user`, `error`, `unknown`), stage text, run, printer_job (Klipper) | now |
+| `print.runout` | a job pauses because filament ran out | warn | raises `print-paused:<printer>` | job, percent, slot if known, run, printer_job (Klipper) | now |
+| `print.resumed` | a paused job runs again | ok | clears `print-paused` | job, run, printer_job (Klipper) | now |
+| `print.finished` | a job ends well | ok | clears `print-paused` | job, minutes, run, printer_job (Klipper) | now |
+| `print.failed` | a job ends cancelled or with an error | bad | clears `print-paused` | job, percent, reason (`cancelled`, `error`, `unknown`), error text, run, printer_job (Klipper) | now |
 | `printer.error` | a new printer error code appears (Bambu HMS, print error) | bad | - | code, text | now |
 | `printer.offline` / `printer.online` | the Hub loses or regains a printer | warn / ok | `printer-offline:<printer>` | - | now |
-| `usage.recorded` | filament use of a job is settled | info | - | printer, job, spool, material, grams | now |
-| `spool.low` | an opened spool falls to or under the running-low threshold | warn | raises `spool-low:<spool>` | spool, filament, material, grams left, others in stock | now |
-| `spool.ok` | that spool is above the threshold again, emptied, or removed | ok | clears `spool-low` | spool | now |
-| `spool.added`, `spool.opened`, `spool.weighed`, `spool.moved`, `spool.emptied`, `spool.loaded`, `spool.unloaded` | a person or the Hub changes a spool | info | - | spool, before and after (location, grams, slot) | now |
-| `storage.low` | the Hub's disk passes the warn or the bad limit (one event per limit passed) | warn / bad | raises `storage-low` | free, total, percent used | now |
+| `usage.recorded` | filament use of a job is settled | info | - | printer, job, spool, material, grams, run, printer_job (Klipper) | now |
+| `spool.low` | an opened spool falls to or under the running-low threshold | warn | raises `spool-low:<spool>` | spool, filament, material, grams left, others in stock, batch | now |
+| `spool.ok` | that spool is above the threshold again, emptied, or removed | ok | clears `spool-low` | spool, batch | now |
+| `spool.added`, `spool.opened`, `spool.weighed`, `spool.moved`, `spool.emptied`, `spool.loaded`, `spool.unloaded` | a person or the Hub changes a spool | info | - | spool, before and after (location, grams, slot), batch | now |
+| `location.renamed` | a storage location is renamed (one event, not one `spool.moved` per spool) | info | - | from, to, spools | now |
+| `storage.low` | the Hub's disk passes the warn or the bad limit (one event per limit passed) | warn / bad | raises `storage-low` | free, total, percent used, direction (`down` when the disk fell back from a worse limit) | now |
 | `storage.ok` | the disk is under the warn limit again | ok | clears `storage-low` | free, total | now |
-| `device.down` / `device.up` | a Weigh Station or Tag Reader stops or starts answering | warn / ok | `device-down:<device>` | - | now |
+| `device.down` / `device.up` | a Weigh Station stops or starts answering (Tag Readers are not covered, below) | warn / ok | `device-down:<device>` | - | now |
 | `check.failed` / `check.ok` | a row of the Hub's checks changes between OK and Needs a look | warn / ok | `check:<row key>` | row text | now (written; shown later as the health history) |
+| `condition.cleared` | a raised condition is no longer true (see Conditions and alerts) | info | clears the key it names | key, reason (`reconciled`, `subject_removed`, `feature_off`) | now |
 | `hub.started`, `hub.updated`, `backup.finished`, `backup.failed`, `device.paired`, `device.removed`, `settings.changed` | - | - | - | - | later (the activity log) |
 
 - **How runout is told from another pause.** Bambu: the printer's stage "Paused: filament runout". Klipper: a filament
   sensor or filament-system object reporting no filament at the moment of the pause (the assumption of EA2). Where
   the Hub cannot tell, the event is `print.paused` with reason `unknown`: the person is still alerted.
+- **Why a job stopped.** `print.failed` has three reasons. Klipper: from Moonraker's job history (`cancelled`; `error`
+  and a shutdown are `error`). Bambu: `error` when the printer reports a print error at the stop, otherwise `unknown`,
+  because nothing in the code or its test data tells a person's cancel from another stop. The sentence for `unknown`
+  is "<job> stopped at <percent> %." with nothing added (02 8.8). Until a recorded report shows that a Bambu printer
+  tells a cancel in a way the Hub can read (prove-first item 4 of EA2), a Bambu printer never says "It was
+  cancelled."
+- **Which devices are watched.** `device.down` and `device.up` are written only for a Weigh Station, and only when the
+  Hub can ask it: its address is set on the Hub and exactly one station is paired (the known limit of 0.6.2). Tag
+  Readers are not covered: the Hub records nothing about when a reader last called, so the kinds stay reserved for
+  them.
 - First sight of a printer after the Hub starts writes no event (as today's push logic), and slot-mapping jobs write
   none.
 
@@ -1935,6 +1973,16 @@ action emits it.
 - A **condition** is a state that lasts until something ends it (a paused print, a full disk, a low spool, a silent
   device). It is raised by one event and cleared by another. What is raised now is what the alert banners show. A
   **moment** is an event with no condition (print failed, printer error).
+- **Conditions are reconciled.** A raised condition is checked against the present state at Hub start, at each
+  printer's first sight and in the 5-minute loop; one that is no longer true is cleared by a `condition.cleared`
+  event: `reconciled` (the state is no longer so: a paused print that is not paused any more, a printer that
+  answers), `subject_removed` (the printer, device or spool was removed) or `feature_off` (the check row no longer
+  exists). It clears the key it names and is never an alert. Removing a printer, a device or a spool clears its
+  conditions at once.
+- **The newest raise wins.** A later raise of the same condition replaces the stored one, whatever its severity. So when
+  the disk falls from "full" back under 95 % but stays over the warn limit, `storage.low` is written again with
+  severity warn and the value `direction` = `down`, and the banner changes to "almost full". A `storage.low` with
+  `direction` = `down` is never sent as an alert.
 - An **alert** is an event of an alert type that is switched on. The alert types are Hub-wide, one switch each, in
   Settings > Alerts (03 10.13):
 
@@ -1947,65 +1995,90 @@ action emits it.
   | Print finished | `print.finished` | off |
   | Storage almost full | `storage.low` | on |
   | Spool running low | `spool.low` | on |
-  | Device stopped answering | `device.down`, `printer.offline` | off |
+  | Device stopped answering (description: "A Weigh Station or a printer stopped answering.") | `device.down`, `printer.offline` | off |
 
 - Every event is written whatever the switches say; the switches only decide what is shown and sent as an alert.
-- Each device decides for itself whether it gets notifications (one switch on that device). Banners inside an open
-  interface need no switch.
+- Each device decides for itself whether it gets notifications (one switch on that device), and keeps the switch on
+  the device, not on the Hub: the Hub page keeps "Notifications in this browser" in the browser, the Android app in
+  the app, and the phone web app is on while it has a push subscription. Banners inside an open interface need no
+  switch.
+- **The test alert.** `POST api/alerts/test` stores nothing. The Hub keeps one test for the caller for 60 seconds and
+  gives it once, as `test: {title, text}`, in that caller's next `GET api/events` answer; the client shows it as a
+  notification. The caller is the paired device of the token or, for the Hub page, the browser id it sends as `client`.
+  From the command line (`spoolwarden alerts test`) the test goes to every client that asks within 60 seconds, and the
+  web unit sends it to every push subscription. The phone web app's own test button keeps today's push test route.
+- **The browser id.** The Hub page makes a random id on first use, keeps it in the browser (`localStorage`,
+  `spoolwarden.browser`) and sends it as `client` on its events requests. Nothing about a browser is stored on the Hub.
 - Rules and thresholds are stored as XML in the Hub's state folder (with the `events/` folder), `alerts.xml`: the eight
-  switches, the running-low threshold, the two storage limits, and per device (by paired-device id or browser id)
-  "notifications on". The phone web app's push subscriptions move from `push.json` into `push.xml`, also in the state
-  folder (same content; read once from the old file, which is then left alone).
-  Backup includes `alerts.xml`, `push.xml` and the `events/` folder; uninstall removes them with the state folder.
+  switches, the running-low threshold and the two storage limits; it holds no per-device entries. It is written in the
+  Hub process (`P settings/alerts`) and by the command line as root, with the Hub's owner and mode, as `storage.xml`.
+  The phone web app's push subscriptions move from `push.json` into `push.xml`, in the web unit's own folder where
+  `push.json` is, written by the web unit (same content; read once from the old file, which is then left alone).
+  Backup includes `alerts.xml` and the `events/` folder; uninstall removes them with the state folder; `push.xml` is
+  kept and removed as `push.json` is today.
 
 ### EA1 Hub: the event store
 Server builder · Depends on: none · Beside: EA5
 - **Files today:** new `server/filament_kit/events.py`, new `server/filament_kit/event_kinds.py`, new tests.
-- **Change:** the event store of this section: write, read with a cursor and a wait (`since`, `wait` up to 55 s),
-  month files, conditions, retention, the catalogue of kinds.
+- **Change:** the event store of this section: write, read with a cursor, a time and a wait (`since`, `since_at`,
+  `wait` up to 55 s), the lowest id it still keeps (for `oldest` and `gap`), month files, conditions (a later raise
+  replaces the stored one, whatever its severity), retention, the counter (the highest of the file, the month files,
+  the high-water mark and the conditions) with a function for the restore to carry a number as the high-water mark,
+  and the catalogue of kinds (`condition.cleared`, `location.renamed`, the values `run`, `printer_job`, `batch` and
+  `direction`, the reason `unknown` on `print.failed`). A caller may give the event's time.
 - **Keep:** the two usage logs and the intake history.
 - **Other interfaces:** none see this step alone.
-- **Check:** the store's tests: ids rise by one and are never reused; a torn last element after a crash is tolerated;
-  conditions are raised and cleared; month files older than `events.keep_days` are deleted whole; the catalogue's kinds
-  and value names are pinned.
+- **Check:** the store's tests: ids rise by one and are never reused, also when the counter file is lost or a high-water
+  mark is carried over; a torn last element after a crash is tolerated; conditions are raised and cleared and the
+  newest raise wins; a read by time and the lowest kept id are right; month files older than `events.keep_days` are
+  deleted whole; the catalogue's kinds and value names are pinned.
 
 ### EA2 Hub: everything that writes events
 Server builder · Depends on: EA1 · Beside: EA5
 - **Files today:** new `server/filament_kit/watch.py`, new `server/filament_kit/alerts.py`,
   `server/filament_kit/__main__.py`, `server/filament_kit/inventory.py`, `server/filament_kit/bridge/loading.py`,
   `server/filament_kit/bridge/usage.py`, `server/filament_kit/bridge/klipper/usage.py`,
-  `server/filament_kit/bridge/klipper/manager.py` (runout objects), `server/filament_kit/config.py`, new tests.
-- **Change:** a watcher on both printer families' listeners; the 5-minute loop (disk, low spools, devices, check
-  rows); spool and usage events; the rules, thresholds and `alerts.xml`; the disk measurement (the filesystem that
+  `server/filament_kit/bridge/klipper/manager.py` (runout objects), `server/filament_kit/config.py`, new
+  `server/filament_kit/event_sink.py`, `server/filament_kit/storage.py` (the rename event),
+  `server/filament_kit/backup.py` (the one call at restore; the later kinds `backup.finished` and `backup.failed` will
+  open it again for another reason), new tests.
+- **Change:** a watcher on both printer families' listeners, subscribed through their existing hooks without changing
+  those files (if the Bambu side must change, `bridge/connection.py` belongs to this step); the 5-minute loop (disk,
+  low spools, devices, check rows, the reconciling of conditions and the daily deletion of old month files); spool and
+  usage events through the event sink (`inventory.py` reports to it); the rename event; the rules, thresholds and `alerts.xml`; the disk measurement (the filesystem that
   holds the Hub's state, the backups folder's filesystem when it is another one, and what Spoolwarden itself keeps:
   backups, photos of recently added spools, the Label Reader on this Hub, events and logs) and the running-low list
   (an opened spool, not sealed and not empty, at or under the threshold; default 150 g, 10 to 2000; checked every 5
   minutes and right after the Hub changes a spool's weight).
-  `alerts.xml` is in the Hub's state folder; a start never fails because it cannot be written: the defaults apply from
+  `alerts.xml` is in the Hub's state folder and holds no per-device entries; a start never fails because it cannot be written: the defaults apply from
   memory and the Checks show one row in group Hub, Needs a look, "Alerts settings could not be saved ({reason})." Backup
-  includes `alerts.xml`, `push.xml` and the `events/` folder; uninstall removes them with the state folder. The eight
+  includes `alerts.xml` and the `events/` folder; uninstall removes them with the state folder. The eight
   alert type keys are fixed: `runout`, `paused`, `failed`, `printer_error`, `finished`, `storage`, `running_low`,
   `device_down`.
 - **Keep:** the printer listeners' behaviour for everything else; the config file.
 - **Other interfaces:** EA3 reads this step's rules and numbers.
 - **Check:** prove first (assumption 3): Moonraker exposes a filament sensor or filament-system state that the Hub can
   read at the pause. If a printer has none, its runout arrives as "Print paused" (`print.paused`, reason `unknown`).
-  Then the tests: each kind of the catalogue marked "now" is written by its cause; first sight of a printer writes no
-  event; every event is written whatever the switches say.
+  Prove first (assumption 4): whether a Bambu printer reports a cancel in a way the Hub can read; until that is shown
+  with a recorded report, Bambu never says "It was cancelled." Then the tests: each kind of the catalogue marked "now" is written by its cause; first sight of a printer writes no
+  event; every event is written whatever the switches say; a condition that is no longer true is cleared by its event;
+  `run` and `batch` are shared as the store rules say.
 
 ### EA3 Hub: routes, command line, status rows and the texts
-Server builder · Depends on: EA2 · Beside: EA4 (one `cli.py` step at a time)
+Server builder · Depends on: EA2 · Beside: EA5
 - **Files today:** `server/filament_kit/api.py`, `server/filament_kit/cli.py`, `server/filament_kit/status.py`,
   `strings/en.json` and its generated copies (`strings/strings.js`, `server/filament_kit/shared_static/strings.js`,
   Android `strings.xml`), new tests.
-- **Change:** the routes of 03 section 15 (`GET api/events`, `GET api/alerts` with `P settings/alerts`,
-  `GET api/alerts/device` and `POST api/alerts/device`, `POST api/alerts/test`, `GET api/spools/low`,
-  `GET api/storage-use`; the names may be adjusted by the builder, the fields may not); the command line of 06 3.1,
+- **Change:** the routes of 03 section 15 (`GET api/events` with `since`, `since_at`, `alert`, `oldest`, `gap` and
+  `test`, `GET api/alerts` with `P settings/alerts` served in the Hub process, `POST api/alerts/test`,
+  `GET api/spools/low`, `GET api/storage-use`; no `api/alerts/device`; the names may be adjusted by the builder, the
+  fields may not); the web-only route `POST api/events/web` and the read routes (events, alerts, running low, storage
+  use) in the list a web token may call; the command line of 06 3.1,
   3.2, 6.8, 8.3, 9.1 and 9.16 to 9.18 (`events`, `alerts`, `spools low`, the Storage row and the Running low note of
   `status`, the Alerts group of `config`); and all the texts of this stage in the catalogue (the table of 02 8.8 and
   the strings of 03 2.8, 4.2, 10.13, 04 3.8, 5.5, 9.2 and 05 3.6, 12.7), among them "Alerts settings could not be saved
   ({reason})."; `GET api/alerts` answers exactly the eight fixed keys `runout`, `paused`, `failed`, `printer_error`,
-  `finished`, `storage`, `running_low`, `device_down`, and `alerts set <type> on|off` takes exactly these.
+  `finished`, `storage`, `running_low`, `device_down`, and `alerts set <type> on|off` takes exactly these (the command line writes `alerts.xml` directly as root).
 - **Keep:** the other routes and commands.
 - **Other interfaces:** EA4 to EA8 read these routes and keys. Only this step opens the catalogue: the client steps
   name the keys they need to this step before it is filed and add none themselves.
@@ -2013,12 +2086,16 @@ Server builder · Depends on: EA2 · Beside: EA4 (one `cli.py` step at a time)
   (08 test 7).
 
 ### EA4 Hub: Web Push from the store
-Server builder · Depends on: EA2 · Beside: EA3
+Server builder · Depends on: EA3 · Beside: EA5
 - **Files today:** `server/filament_kit/web/push.py`, `server/filament_kit/web/printers_app.py`,
-  `server/filament_kit/web/intake_app.py`.
-- **Change:** Web Push fed from the event store with all alert types, not only print states; the subscriptions move
-  from `push.json` to `push.xml`, in the Hub's state folder; a start never fails because `push.xml` cannot be written;
-  backup includes it and uninstall removes it with the state folder; the web twins of the routes of EA3.
+  `server/filament_kit/web/intake_app.py`, `server/filament_kit/web/app.py` (gives the sink), new
+  `server/filament_kit/web/event_outbox.py`.
+- **Change:** Web Push fed from the event store with all alert types, not only print states: the push sender no longer
+  polls the printers, it waits on `GET api/events?alert=1&wait=55` through the web unit's channel and sends each alert
+  to the subscriptions; the web unit hands its spool events to the Hub (`POST api/events/web`, the outbox
+  `events-outbox.xml` of at most 500 in its own folder); the subscriptions move from `push.json` to `push.xml`, in the
+  web unit's own folder; a start never fails because `push.xml` cannot be written; the web twins pass the Hub's
+  routes of EA3 on.
 - **Keep:** the limits of today's push: the optional push package, internet from the Hub to the phone maker's push
   service, and the web app opened at an address the phone trusts.
 - **Other interfaces:** EA7 reads the web twins.
@@ -2029,8 +2106,9 @@ Server builder · Depends on: EA2 · Beside: EA3
 Bug-bash 1 · Depends on: the contract in 03 section 15 · Beside: EA1 to EA4 (can start at once)
 - **Files today:** `server/filament_kit/shared_static/components.js`, `server/filament_kit/shared_static/components.css`,
   new `server/filament_kit/shared_static/alerts.js`, its browser tests.
-- **Change:** the alert banner (02 8.8), the Alerts list (02 8.9), the events poller (`since`, `wait=0` every 10 s)
-  and the browser-notification helper, in all four themes.
+- **Change:** the alert banner (02 8.8), the Alerts list (02 8.9), the events poller (`since` or `since_at`, `alert=1`,
+  `wait=0` every 10 s; the browser id of the Hub page, kept in `localStorage` `spoolwarden.browser` and sent as
+  `client`) and the browser-notification helper, in all four themes.
 - **Keep:** the existing banner and toast behaviour.
 - **Other interfaces:** EA6 and EA7 mount them.
 - **Check:** prove first (assumption 1): a browser shows notifications for a page served with the Hub's self-signed
@@ -2047,7 +2125,8 @@ Bug-bash 1 · Depends on: EA3, EA5 · Beside: EA7, EA8
   established: see the map's check below).
 - **Change:** 03 2.8 (banners mounted on every section, the toast, `G events` every 10 s), 4.2 (the Storage row with its
   "Storage use" panel, the Running low card with its full-list dialog), 10.1 and 10.13 (the group Alerts, fourth in
-  the order), the addresses of 03 1.2 and the page routes.
+  the order; "Notifications in this browser" kept in the browser, the test alert shown from `test` in the events
+  answer, the hint about a background tab), the addresses of 03 1.2 and the page routes.
 - **Keep:** the groups' places and each group's Save.
 - **Other interfaces:** EA7 and EA8 mount the same banner.
 - **Check:** AUT-5 on Overview with a full disk and with spools running low, and on the Alerts group; the unsaved-changes
@@ -2057,8 +2136,9 @@ Bug-bash 1 · Depends on: EA3, EA5 · Beside: EA7, EA8
 Klipper builder · Depends on: EA4, EA5 · Beside: EA6, EA8
 - **Files today:** `server/filament_kit/web/static/app.js`, `web/static/printers.js`, `web/static/sw.js`, its CSS.
 - **Change:** 04 3.8 (banners, toast, the Alerts list as a sheet), 5.5 (the Running low filter and its rows), 9.2 (the
-  panel "Alerts on this phone" with "Recent alerts"), and the service worker's notification for every alert type.
-- **Keep:** the push switch, the test button and their limits as they are.
+  panel "Alerts on this phone" with "Recent alerts"; the switch is the push subscription; the three texts that said
+  "print alerts" say "alerts"), and the service worker's notification for every alert type.
+- **Keep:** the push switch, the test button (it keeps today's push test) and their limits as they are.
 - **Other interfaces:** none.
 - **Check:** AUT-5 on the shell with alerts, the Spools chip and the Settings sheet.
 
@@ -2070,7 +2150,8 @@ App builder · Depends on: the contract in 03 section 15; merges after EA3 · Be
 - **Change:** 05 3.6 (the alert banner as `NoticeCard`, the toast, the Alerts list), 5 (the banners and the line
   "<n> spools running low"), 7.1 (the Running low chip), 12.7 (the switch "Alerts on this phone", the notification
   permission, the permanent notification "Watching the Hub for alerts", the test alert, "Recent alerts"), the alert
-  notifications and the routes `alerts` and `settings/alerts`.
+  notifications (the switch kept in the app, the test alert shown from `test` in the events answer) and the routes
+  `alerts` and `settings/alerts`.
 - **Keep:** the pairing, the Hub notices and the deep links.
 - **Other interfaces:** none.
 - **Check:** prove first (assumption 2): a foreground service with a permanent notification may hold the waiting
@@ -2088,8 +2169,11 @@ Design + docs · Depends on: EA3 to EA8 merged · Beside: none
 - **Other interfaces:** none.
 - **Check:** the documents tests; the words lint.
 
-**Order.** EA1 > EA2 > (EA3 beside EA4); EA5 from the start; EA6 and EA7 after EA5; EA8 beside them. Stage 10 starts
-after Stage 9 (SL1 to SL7) is merged: EA2 and EA6 open files that SL steps change.
+**Order.** EA1 > EA2 > EA3 > EA4; EA5 from the start; EA6 and EA7 after EA5 (EA7 also after EA4); EA8 beside them,
+merging after EA3. Stage 10 starts after Stage 9 (SL1 to SL7) is merged: EA2 and EA6 open files that SL steps change.
+No file is opened by two EA steps. `backup.py` is opened in EA2 for the restore call only; the later kinds
+`backup.finished` and `backup.failed` will open it again for another reason, which is said here so that it is not a
+surprise.
 
 **How far the file map is checked.** It is built from one reading of the code, not from opening every file. Each
 builder confirms its list before starting and, if it needs a file of another step, stops and says so instead of

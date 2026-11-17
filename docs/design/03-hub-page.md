@@ -220,11 +220,16 @@ storage use) and `#overview/running-low` (Show running low). "<n> more alerts" a
 open the Alerts list of 02 section 8.9 as a dialog.
 
 - **Where the events come from.** The Hub writes every event once into its event store (`events/<yyyy-mm>.xml`,
-  `09-implementation-order.md` Stage 10). The page reads it with `G events` (`GET api/events?since=<id>&wait=<seconds>`):
-  on page load for the raised `conditions` and the cursor `next`, then every 10 s with `wait=0` (section 2.7) with
-  `since` set to the last `next`. The banners are built from `conditions` (a condition's banner leaves when it
-  clears) and from the events of the last 24 hours that an alert type switched on covers (`alert: true`, a moment's
+  `09-implementation-order.md` Stage 10). The page reads it with `G events` (`GET api/events`): on page load with
+  `since_at` set to 24 hours ago and `alert=1`, for the raised `conditions` and the cursor `next`, then every 10 s
+  with `wait=0` (section 2.7) with `since` set to the last `next`. The banners are built from `conditions` (a
+  condition's banner leaves when it clears, and changes when the Hub raises the same condition again with another
+  severity) and from the events of the last 24 hours that an alert type switched on covers (`alert: true`, a moment's
   banner). A new event with `alert: true` shows its toast once.
+- **The browser id.** The page makes a random id on its first use, keeps it in the browser (`localStorage`,
+  `spoolwarden.browser`) and sends it as `client` on its events requests. Nothing about a browser is stored on the
+  Hub. A test alert (10.13) arrives as `test: {title, text}` in the next events answer of that browser and is shown as
+  a notification.
 - **Dismiss** hides a banner on this browser only and remembers it as 02 section 8.8 says; it comes back when the
   alert gets worse (warn to bad) or is raised again. Dismissing never removes the row from the Alerts list.
 - **Notifications outside the page.** With Settings > Alerts > "Notifications in this browser" on, the page also shows
@@ -1277,7 +1282,7 @@ one group `#settings/<group>`.
 
 **Data.** `G settings/general` (view) → `{values, station_on, remote_on, web_on, spoolman_external, intake_history,
 spoolman_url}`; `G state` (`anthropic`, `passphrase`, `library_token`, `web`, `station`); `G library`; when
-Unlocked or Trusted, `P backups/list`; `G alerts` and `G alerts/device` for Alerts. Each group reads only its own
+Unlocked or Trusted, `P backups/list`; `G alerts` for Alerts. Each group reads only its own
 data again after its own save.
 
 ### 10.1 Layout and sub-navigation
@@ -1721,7 +1726,7 @@ heading and applies at once.
 | Print finished | Switch | same | `print.finished`. Default off |
 | Storage almost full | Switch | same | `storage.low`. Default on |
 | Spool running low | Switch | same | `spool.low`. Default on |
-| Device stopped answering | Switch | same | `device.down` and `printer.offline`. Default off |
+| Device stopped answering | Switch | same | `device.down` and `printer.offline`. Default off. Description "A Weigh Station or a printer stopped answering." |
 | Only when it is the last spool of that filament | Switch, beside "Spool running low" | `last_spool_only` | Default off. It limits the alert, not the Running low list of 4.2 |
 | Running low under | Number with unit "g" | `running_low_g` | Default 150, 10 to 2000. Hint "Opened spools at or under this are listed as running low." |
 | Storage warning at | Number with unit "% used" | `storage_warn_percent` | Default 85. The Hub treats 95 % used (`storage_bad_percent`), and always less than 1 GB free, as bad |
@@ -1730,8 +1735,8 @@ Every event is written whatever the switches say; the switches only decide what 
 
 | On this device | Type | Does | Endpoint |
 |---|---|---|---|
-| Notifications in this browser | Switch, off until switched on (the browser then asks for permission); hint "Shown while a Spoolwarden tab is open in this browser." | Applies at once; needs no setup code | `G alerts/device`, `P alerts/device` `{notifications}` |
-| Send a test alert | Default button | One test notification to this browser only | `P alerts/test` |
+| Notifications in this browser | Switch, off until switched on (the browser then asks for permission); hint "Shown while a Spoolwarden tab is open in this browser. With the tab in the background they can arrive up to a minute late." | Applies at once; needs no setup code; kept in the browser, not on the Hub | none (the browser's `localStorage`) |
+| Send a test alert | Default button | One test notification to this browser only | `P alerts/test` with the browser id (`client`); it arrives as `test` in the next `G events` answer |
 | Recent alerts | Link | Opens the Alerts list (`02-components.md` 8.9) | `G events` |
 
 - States of the browser switch: "Blocked in this browser's settings" with how to allow it (the browser's own site
@@ -1739,9 +1744,10 @@ Every event is written whatever the switches say; the switches only decide what 
   with a certificate the browser does not trust may be refused; the way out is the public address with a real
   certificate, said in that text).
 - Save: **Save alerts**. Result "Saved: <field names>."
-- Where it is kept: the switches and limits are in `alerts.xml` and the browsers' push subscriptions in `push.xml`, both
-  in the Hub's state folder. The Hub always starts: when `alerts.xml` cannot be written, the defaults apply from memory
-  and the Checks on Overview show one row in group Hub, Needs a look: "Alerts settings could not be saved ({reason})."
+- Where it is kept: the switches and limits are in `alerts.xml` in the Hub's state folder, written in the Hub process
+  by `P settings/alerts` (the command line writes it directly as root); it holds no per-device entries. The phone web
+  app's push subscriptions are in `push.xml` in the web unit's own folder, not in the Hub's state folder. The Hub
+  always starts: when `alerts.xml` cannot be written, the defaults apply from memory and the Checks on Overview show one row in group Hub, Needs a look: "Alerts settings could not be saved ({reason})."
 
 
 ---
@@ -2250,10 +2256,10 @@ column says.
 | Feature titles in the plain names of section 9.1 | Features collection | The page maps code names to the names of section 9.1 |
 | Cloud reads used today and the daily limit as numbers in `G state` | Overview Label Reader tile (4.2) | The numbers are taken from the Overview check row that reports them; when that row is missing the tile shows "Reads per day: <limit>" |
 | Share corrections: what the reader can do and its state (it offers sharing, sharing on or off, how many wait), the setting `label_reader.share_corrections` with the job that sets the reader, the corrections waiting (list, thumbnails, remove, remove all, try again, package, send), and each correction handed to the reader when it is saved | Settings > Label Reader (10.5.1, 10.5.2), Recently added (6.2, 6.4), Overview tile (4.2), Features preview (9.4) | The block SHARE CORRECTIONS shows only its paragraph and the line "Not available on this Hub yet."; nothing else of the feature is shown |
-| An event store with `GET api/events?since=&wait=&kinds=&limit=` answering `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert: true or false, title, text, action: {place, id}}], next, conditions: [the raised ones, same shape]}` (`wait` up to 55 s; `alert` says whether an alert type that is on covers the event; `title` and `text` are built in the Hub's language) | Alert banners, toasts and the Alerts list on every section (2.8), Settings > Alerts > Recent alerts (10.13) | No banner, toast or Alerts list; the "Recent alerts" link is hidden |
+| An event store with `GET api/events?since=&since_at=&alert=&wait=&kinds=&limit=&client=` answering `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert: true or false, title, text, action: {place, id}}], next, oldest, gap, test: {title, text} or null, conditions: [the raised ones, same shape]}` (`since` is an id and `since_at` a time, UTC, one of them; `alert=1` returns only events of alert types that are on; `wait` up to 55 s; `alert` in an event says whether an alert type that is on covers it; `oldest` is the lowest id still kept and `gap` is true when `since` is lower than `oldest` minus one, because events between were deleted by age; `test` is the test alert of `POST api/alerts/test` for the caller, given once; `client` is the browser id of the Hub page, kept in `localStorage` `spoolwarden.browser`, and a paired device is known by its token; `title` and `text` are built in the Hub's language) | Alert banners, toasts and the Alerts list on every section (2.8), Settings > Alerts > Recent alerts (10.13) | No banner, toast or Alerts list; the "Recent alerts" link is hidden |
 | `GET api/alerts` answering `{types: [{key, title, on}] (exactly the eight fixed keys `runout`, `paused`, `failed`, `printer_error`, `finished`, `storage`, `running_low`, `device_down`), last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` and `P settings/alerts` (code) with the same fields (the names may be adjusted by the Hub; the fields may not) | Settings > Alerts (10.13) | The group is hidden |
-| `GET api/alerts/device` and `POST api/alerts/device` `{notifications: true or false}` for the calling device (a browser id on the Hub page) | "Notifications in this browser" (10.13) | The switch is hidden |
-| `POST api/alerts/test`, one test notification to the calling device only | **Send a test alert** (10.13) | The button is hidden |
+| `POST api/alerts/test`: stores nothing; the Hub keeps one test for the caller (the paired device of the token, or the browser id sent as `client`) for 60 seconds and gives it once as `test: {title, text}` in that caller's next `GET api/events` answer | **Send a test alert** (10.13) | The button is hidden |
+| `POST api/events/web` `{events: [{kind, at, subject, actor, data}]}`, a web-only route for the web unit's own events: the Hub accepts only the `spool.*` kinds, gives the id, keeps the `at` and sets the actor (`device` for the phone web app, `connector` for the connector's tools); only the web unit calls it, with its token | The web unit's spool events (09 Stage 10) | The events of spool changes made through the web unit wait in the web unit's outbox (at most 500) |
 | `GET api/spools/low` answering `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`, least filament first | Overview, Running low card and its dialog (4.2) | No Running low card |
 | `GET api/storage-use` answering `{filesystems: [{path_label, total, free, percent_used, state}], items: [{key, title, bytes}]}` (not `api/storage`, which is the storage locations route) | Overview, Storage row and Storage use panel (4.2) | No Storage row |
 | A stored list of storage locations (`storage.xml` in the Hub's state folder, written by the Hub and read by the web unit) with `GET api/storage` and `P settings/storage` (code): the read answers `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}`; on an Individual containers location `containers` is the whole set in number order (as many as `count`): `name` is the exact location text of a spool in that container ("Storage box 03"), `number` the whole number, `taken` true while a spool's location is that name, and `prefix` is the exact text before the number, for information; both are `null` on Bulk storage, and `used` and `free` equal the counts of `taken`; a client never builds a container name, not from `name` and not from `prefix`: it matches a spool's location text with each location's `name` (taken first) and each `containers[].name`, and to place or move a spool it sends the set's `name` (the Hub takes the lowest free container) or one `containers[].name`; a text that matches nothing (a removed location, a text typed by hand) is shown as it is, under no location; the write takes the whole list `{locations: [...]}` (ids kept for existing rows, none for new ones) and answers the saved list, or `errors` per row and field | Settings > Storage locations (10.4) | The group shows "Could not read the settings. <Hub's text>" with **Try again**, and the list cannot be edited |
