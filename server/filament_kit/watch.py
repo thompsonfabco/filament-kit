@@ -172,9 +172,11 @@ class Watcher:
         if event not in ("status", "job_ended") or self._klipper is None:
             return
         try:
-            v = self._klipper.live(pid)
+            v = self._klipper.live(pid, slot=False)
             if v is None:
                 return
+            if v["print"] == "paused":                  # the filament system is read only for a pause
+                v = self._klipper.live(pid) or v
             if event == "job_ended":
                 self._ended_without_state(pid)
             elif v["state"] in KLIPPER_ONLINE:
@@ -379,6 +381,7 @@ class Watcher:
 
 EVERY = 300.0               # seconds between rounds (R80 section 6)
 PRUNE_EVERY = 86400.0       # old month files are deleted once a day
+FIRST_AFTER = 30.0          # seconds after the Hub starts until the first round (services are still starting)
 
 
 def _raised(sink, base: str) -> dict:
@@ -504,10 +507,10 @@ class Loop:
     others still run. `rows()` gives the Checks rows (status.collect in the Hub), `devices()` the paired devices."""
 
     def __init__(self, sink=None, *, spoolman=None, watcher: Watcher | None = None, rows=None, devices=None,
-                 every: float = EVERY, clock=time.monotonic):
+                 every: float = EVERY, first: float = FIRST_AFTER, clock=time.monotonic):
         self._sink = sink
         self.sm, self.watcher, self._rows, self._devices = spoolman, watcher, rows, devices
-        self.every, self._clock = every, clock
+        self.every, self.first, self._clock = every, first, clock
         self._last_prune: float | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -520,6 +523,8 @@ class Loop:
         self._stop.clear()
 
         def run():
+            if self._stop.wait(self.first):          # let the services start before the first look at the Checks
+                return
             self.tick()
             while not self._stop.wait(self.every):
                 self.tick()

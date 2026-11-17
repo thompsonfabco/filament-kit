@@ -525,11 +525,12 @@ class KlipperFamily(LoadsMixin):
                 else "UNKNOWN",
                 "percent": _percent(st), "remaining_min": _remaining(st), "job": ps.get("filename") or None}
 
-    def live(self, pid: str) -> dict | None:
+    def live(self, pid: str, slot: bool = True) -> dict | None:
         """What the event watcher reads (None for a printer with no connection): `state` (the connection's), `print`
         (print_stats.state), `job`, `percent`, `message` (print_stats.message, Klipper's own error text), `sensors`
         ({object: filament_detected} for the runout sensors that are switched on) and `slot` ({label, present} of the
-        filament system's active slot, None when it has none or does not say)."""
+        filament system's active slot, None when it has none or does not say; left out when `slot` is False, which
+        saves reading the filament system on every temperature update)."""
         c = self._conn(pid)
         if c is None:
             return None
@@ -539,18 +540,18 @@ class KlipperFamily(LoadsMixin):
         sensors = {k: v["filament_detected"] for k, v in st.items()
                    if k.startswith(SENSORS) and isinstance(v, dict) and isinstance(v.get("filament_detected"), bool)
                    and v.get("enabled", True) is not False}
-        slot = None
+        active = None
         try:
-            units = self.slots(pid)
+            units = self.slots(pid) if slot else []
         except Exception:  # noqa: BLE001 - an odd status must not stop the watcher
             units = []
         for u in units:
             for sl in u.slots:
                 if sl.active and sl.present is not None:
-                    slot = {"label": sl.label, "present": sl.present}
+                    active = {"label": sl.label, "present": sl.present}
         return {"state": c.effective_state(), "print": ps.get("state"), "job": ps.get("filename") or "",
                 "percent": _percent(st), "message": clean_text(ps.get("message") or ""), "sensors": sensors,
-                "slot": slot}
+                "slot": active}
 
     def status(self, pid: str) -> dict | None:
         c = self._conn(pid)

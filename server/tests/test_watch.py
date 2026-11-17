@@ -444,3 +444,17 @@ def test_klipper_offline_event_after_the_connection_drops(moonraker, sink, store
     finally:
         wt.stop()
         fam.stop()
+
+
+def test_the_filament_system_is_read_only_for_a_pause(klipper, monkeypatch):
+    fake, fam, wt, pid = klipper
+    calls = []
+    real = fam.live
+    monkeypatch.setattr(fam, "live", lambda p, slot=True: calls.append(slot) or real(p, slot))
+    fake.push({"extruder": {"temperature": 201.0}})             # a temperature update while idle or printing
+    assert wait_for(lambda: calls)
+    time.sleep(0.2)
+    assert set(calls) == {False}
+    printing(fake)
+    fake.push({"print_stats": {"state": "paused"}})
+    assert wait_for(lambda: True in calls)                      # a pause reads the filament system too

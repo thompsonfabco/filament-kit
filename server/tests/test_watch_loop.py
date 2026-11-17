@@ -308,10 +308,26 @@ def test_old_month_files_are_deleted_once_a_day_with_the_setting(sink, store, en
 
 def test_the_loop_thread_runs_a_round_at_start_and_stops(sink, store, monkeypatch):
     disk(monkeypatch, 4)
-    loop = watch.Loop(sink, devices=lambda: [], every=0.05)
+    loop = watch.Loop(sink, devices=lambda: [], every=0.05, first=0)
     loop.start()
     try:
         import time
+        end = time.monotonic() + 5
+        while "storage.low" not in kinds(store) and time.monotonic() < end:
+            time.sleep(0.02)
+    finally:
+        loop.stop()
+    assert kinds(store) == ["storage.low"]
+
+
+def test_the_first_round_waits_for_the_services_to_start(sink, store, monkeypatch):
+    disk(monkeypatch, 4)
+    loop = watch.Loop(sink, devices=lambda: [], every=0.05, first=0.4)
+    loop.start()
+    try:
+        import time
+        time.sleep(0.2)
+        assert kinds(store) == []                                    # still waiting
         end = time.monotonic() + 5
         while "storage.low" not in kinds(store) and time.monotonic() < end:
             time.sleep(0.02)
