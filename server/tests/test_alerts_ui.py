@@ -215,9 +215,10 @@ def _audit(site: str, look: str, page: str, ready: str, widths=WIDTHS):
 
 
 # the page is set up and what the audit looks at is checked to be there (a throw fails the run): the banners and the "more" line, or the open list
-READY_BANNERS = ("window.__ready.then(() => new Promise((r) => setTimeout(r, 150))).then(() => { const n = document.querySelectorAll('.alert-host .banner').length, "
+READY_WAIT = "(async () => { for (let i = 0; i < 200 && !window.__ready; i++) await new Promise((r) => setTimeout(r, 50)); return window.__ready; })()"
+READY_BANNERS = (READY_WAIT + ".then(() => new Promise((r) => setTimeout(r, 150))).then(() => { const n = document.querySelectorAll('.alert-host .banner').length, "
                  "m = document.querySelector('.alert-more'); if (n !== 2 || !m || m.textContent.trim() !== '3 more alerts') throw new Error('banners: ' + n); })")
-READY_LIST = ("window.__ready.then(() => { document.querySelector('.alert-more button').click(); return new Promise((r) => setTimeout(r, 300)); })"
+READY_LIST = (READY_WAIT + ".then(() => { document.querySelector('.alert-more button').click(); return new Promise((r) => setTimeout(r, 300)); })"
               ".then(() => { const n = document.querySelectorAll('dialog[open] .alert-row').length; if (n !== 5) throw new Error('list rows: ' + n); })")
 
 
