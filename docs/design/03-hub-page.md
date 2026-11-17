@@ -1714,7 +1714,7 @@ heading and applies at once.
 
 | Field | Type | Key / endpoint | Notes |
 |---|---|---|---|
-| Filament ran out | Switch | `types[].key` → `P settings/alerts` (code) | Events `print.runout`. Default on |
+| Filament ran out | Switch | `types[].key` (`runout`) → `P settings/alerts` (code) | Events `print.runout`. Default on |
 | Print paused | Switch | same | `print.paused`. Default on |
 | Print failed or stopped | Switch | same | `print.failed`. Default on |
 | Printer error | Switch | same | `printer.error`. Default on |
@@ -1739,6 +1739,9 @@ Every event is written whatever the switches say; the switches only decide what 
   with a certificate the browser does not trust may be refused; the way out is the public address with a real
   certificate, said in that text).
 - Save: **Save alerts**. Result "Saved: <field names>."
+- Where it is kept: the switches and limits are in `alerts.xml` and the browsers' push subscriptions in `push.xml`, both
+  in the Hub's state folder. The Hub always starts: when `alerts.xml` cannot be written, the defaults apply from memory
+  and the Checks on Overview show one row in group Hub, Needs a look: "Alerts settings could not be saved ({reason})."
 
 
 ---
@@ -2248,7 +2251,7 @@ column says.
 | Cloud reads used today and the daily limit as numbers in `G state` | Overview Label Reader tile (4.2) | The numbers are taken from the Overview check row that reports them; when that row is missing the tile shows "Reads per day: <limit>" |
 | Share corrections: what the reader can do and its state (it offers sharing, sharing on or off, how many wait), the setting `label_reader.share_corrections` with the job that sets the reader, the corrections waiting (list, thumbnails, remove, remove all, try again, package, send), and each correction handed to the reader when it is saved | Settings > Label Reader (10.5.1, 10.5.2), Recently added (6.2, 6.4), Overview tile (4.2), Features preview (9.4) | The block SHARE CORRECTIONS shows only its paragraph and the line "Not available on this Hub yet."; nothing else of the feature is shown |
 | An event store with `GET api/events?since=&wait=&kinds=&limit=` answering `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert: true or false, title, text, action: {place, id}}], next, conditions: [the raised ones, same shape]}` (`wait` up to 55 s; `alert` says whether an alert type that is on covers the event; `title` and `text` are built in the Hub's language) | Alert banners, toasts and the Alerts list on every section (2.8), Settings > Alerts > Recent alerts (10.13) | No banner, toast or Alerts list; the "Recent alerts" link is hidden |
-| `GET api/alerts` answering `{types: [{key, title, on}], last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` and `P settings/alerts` (code) with the same fields (the names may be adjusted by the Hub; the fields may not) | Settings > Alerts (10.13) | The group is hidden |
+| `GET api/alerts` answering `{types: [{key, title, on}] (exactly the eight fixed keys `runout`, `paused`, `failed`, `printer_error`, `finished`, `storage`, `running_low`, `device_down`), last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` and `P settings/alerts` (code) with the same fields (the names may be adjusted by the Hub; the fields may not) | Settings > Alerts (10.13) | The group is hidden |
 | `GET api/alerts/device` and `POST api/alerts/device` `{notifications: true or false}` for the calling device (a browser id on the Hub page) | "Notifications in this browser" (10.13) | The switch is hidden |
 | `POST api/alerts/test`, one test notification to the calling device only | **Send a test alert** (10.13) | The button is hidden |
 | `GET api/spools/low` answering `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`, least filament first | Overview, Running low card and its dialog (4.2) | No Running low card |

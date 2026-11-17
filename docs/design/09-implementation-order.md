@@ -1952,10 +1952,11 @@ action emits it.
 - Every event is written whatever the switches say; the switches only decide what is shown and sent as an alert.
 - Each device decides for itself whether it gets notifications (one switch on that device). Banners inside an open
   interface need no switch.
-- Rules and thresholds are stored as XML beside the config file, `alerts.xml`: the eight switches, the running-low
-  threshold, the two storage limits, and per device (by paired-device id or browser id) "notifications on". The phone
-  web app's push subscriptions move from `push.json` into `push.xml` (same content; read once from the old file, which
-  is then left alone).
+- Rules and thresholds are stored as XML in the Hub's state folder (with the `events/` folder), `alerts.xml`: the eight
+  switches, the running-low threshold, the two storage limits, and per device (by paired-device id or browser id)
+  "notifications on". The phone web app's push subscriptions move from `push.json` into `push.xml`, also in the state
+  folder (same content; read once from the old file, which is then left alone).
+  Backup includes `alerts.xml`, `push.xml` and the `events/` folder; uninstall removes them with the state folder.
 
 ### EA1 Hub: the event store
 Server builder · Depends on: none · Beside: EA5
@@ -1980,6 +1981,11 @@ Server builder · Depends on: EA1 · Beside: EA5
   backups, photos of recently added spools, the Label Reader on this Hub, events and logs) and the running-low list
   (an opened spool, not sealed and not empty, at or under the threshold; default 150 g, 10 to 2000; checked every 5
   minutes and right after the Hub changes a spool's weight).
+  `alerts.xml` is in the Hub's state folder; a start never fails because it cannot be written: the defaults apply from
+  memory and the Checks show one row in group Hub, Needs a look, "Alerts settings could not be saved ({reason})." Backup
+  includes `alerts.xml`, `push.xml` and the `events/` folder; uninstall removes them with the state folder. The eight
+  alert type keys are fixed: `runout`, `paused`, `failed`, `printer_error`, `finished`, `storage`, `running_low`,
+  `device_down`.
 - **Keep:** the printer listeners' behaviour for everything else; the config file.
 - **Other interfaces:** EA3 reads this step's rules and numbers.
 - **Check:** prove first (assumption 3): Moonraker exposes a filament sensor or filament-system state that the Hub can
@@ -1997,7 +2003,9 @@ Server builder · Depends on: EA2 · Beside: EA4 (one `cli.py` step at a time)
   `GET api/storage-use`; the names may be adjusted by the builder, the fields may not); the command line of 06 3.1,
   3.2, 6.8, 8.3, 9.1 and 9.16 to 9.18 (`events`, `alerts`, `spools low`, the Storage row and the Running low note of
   `status`, the Alerts group of `config`); and all the texts of this stage in the catalogue (the table of 02 8.8 and
-  the strings of 03 2.8, 4.2, 10.13, 04 3.8, 5.5, 9.2 and 05 3.6, 12.7).
+  the strings of 03 2.8, 4.2, 10.13, 04 3.8, 5.5, 9.2 and 05 3.6, 12.7), among them "Alerts settings could not be saved
+  ({reason})."; `GET api/alerts` answers exactly the eight fixed keys `runout`, `paused`, `failed`, `printer_error`,
+  `finished`, `storage`, `running_low`, `device_down`, and `alerts set <type> on|off` takes exactly these.
 - **Keep:** the other routes and commands.
 - **Other interfaces:** EA4 to EA8 read these routes and keys. Only this step opens the catalogue: the client steps
   name the keys they need to this step before it is filed and add none themselves.
@@ -2009,7 +2017,8 @@ Server builder · Depends on: EA2 · Beside: EA3
 - **Files today:** `server/filament_kit/web/push.py`, `server/filament_kit/web/printers_app.py`,
   `server/filament_kit/web/intake_app.py`.
 - **Change:** Web Push fed from the event store with all alert types, not only print states; the subscriptions move
-  from `push.json` to `push.xml`; the web twins of the routes of EA3.
+  from `push.json` to `push.xml`, in the Hub's state folder; a start never fails because `push.xml` cannot be written;
+  backup includes it and uninstall removes it with the state folder; the web twins of the routes of EA3.
 - **Keep:** the limits of today's push: the optional push package, internet from the Hub to the phone maker's push
   service, and the web app opened at an address the phone trusts.
 - **Other interfaces:** EA7 reads the web twins.

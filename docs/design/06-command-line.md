@@ -1862,8 +1862,19 @@ ID    TIME              KIND          SUBJECT        WHAT
 ### 9.17 `alerts`
 
 `spoolwarden alerts` shows which alert types are on and the thresholds, as Settings > Alerts does. Reading needs no
-sudo; every change needs sudo, as `config set` does. `<type>` is the `key` the Hub gives each alert type
-(`GET api/alerts`, shown in the first column).
+sudo; every change needs sudo, as `config set` does. `<type>` is one of the eight fixed type keys (the `key` of each entry of `GET api/alerts`,
+shown in the first column):
+
+| Key | Alert | Events |
+|---|---|---|
+| `runout` | Filament ran out | `print.runout` |
+| `paused` | Print paused | `print.paused` |
+| `failed` | Print failed or stopped | `print.failed` |
+| `printer_error` | Printer error | `printer.error` |
+| `finished` | Print finished | `print.finished` |
+| `storage` | Storage almost full | `storage.low` |
+| `running_low` | Spool running low | `spool.low` |
+| `device_down` | Device stopped answering | `device.down`, `printer.offline` |
 
 ```
 $ spoolwarden alerts
@@ -1872,11 +1883,11 @@ KEY            ALERT                          EVENTS                       STATE
 runout         Filament ran out               print.runout                 on
 paused         Print paused                   print.paused                 on
 failed         Print failed or stopped        print.failed                 on
-printer-error  Printer error                  printer.error                on
+printer_error  Printer error                  printer.error                on
 finished       Print finished                 print.finished               off
 storage        Storage almost full            storage.low                  on
-running-low    Spool running low              spool.low                    on
-device         Device stopped answering       device.down, printer.offline off
+running_low    Spool running low              spool.low                    on
+device_down    Device stopped answering       device.down, printer.offline off
 
 Spool running low only when it is the last spool of that filament: off
 Running low under 150 g · Storage warning at 85 % used (bad at 95 %, or under 1 GB free)
@@ -1885,7 +1896,7 @@ Change them: sudo spoolwarden alerts set -h
 
 | Command | What it does |
 |---|---|
-| `alerts set <type> on\|off` | Switches one alert type. Every event is written whatever the switches say; a switch only decides what is shown and sent as an alert |
+| `alerts set <type> on\|off` | Switches one alert type; `<type>` is exactly one of the eight keys above. Every event is written whatever the switches say; a switch only decides what is shown and sent as an alert |
 | `alerts set running-low <grams>` | Running low under: a whole number, 10 to 2000 |
 | `alerts set storage-warning <percent>` | Storage warning at: a whole number, % used |
 | `alerts test` | Asks the Hub to send one test alert (`POST api/alerts/test`) and prints the Hub's answer |
