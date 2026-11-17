@@ -1284,17 +1284,90 @@ Save: **Save general**.
 
 ### 10.4 Storage locations
 
-Description: "Where spools are put away. Used when a spool is added."
+Description: "Where spools are put away, and in which order the places fill up."
 
-| Field | Type | Key | Notes |
+**What a location is.** Storage is one list of locations. The order of the list is the order in which the places
+fill: the first place with room takes the next spool.
+
+- A location has a **name** (one line, 1 to 100 characters, not the same as another location's name, capitals
+  ignored) and a **type**. "Bulk storage" is a shelf, rack or drawer that holds many spools under one name; it may
+  have a spool limit (1 to 9999) or none. "Individual containers" are boxes or bags that hold one spool each; one
+  location stands for the whole numbered set (1 to 999 containers). A container is named with the location's name,
+  a space and its number with at least two digits: "Storage box 01" to "Storage box 12", then "Storage box 100". The
+  Hub gives the number: a spool gets the lowest free one. A container is taken while a spool's location is exactly
+  its name.
+- **Filled automatically with** says what the place takes when nobody chooses: "Nothing, only when you choose it",
+  "Any material", or "These materials" with a list of material names. A material name also takes its variants: the
+  spool's material, capitals ignored, starts with the name ("PLA" takes PLA+ and PLA-CF). When names of different
+  length match a spool, only the locations with the longest matching name count.
+- **Overflow** places take spools when their own places are full. Exactly one overflow location is the default
+  overflow; there is always one, so the last overflow location cannot be removed or switched off. The default
+  overflow is Bulk storage and its limit is not applied.
+- Exactly one location is where **sealed spools** go. It is Bulk storage and its limit is not applied to them.
+- "How full" is the number of spools in Spoolman whose location is the location's name (bulk) or one of its
+  containers' names.
+- Changing a setting here moves no spool. A location over its limit (the limit was lowered, or spools were put there
+  by hand) shows "22 of 20" and takes no more automatically.
+
+**The placement rule.** When a spool is added or opened with no location given, the Hub chooses in this order:
+
+1. A location the person gave is kept, whatever limits or materials say.
+2. A sealed spool goes to the sealed-spools location.
+3. The non-overflow locations that take the spool's material by name (the longest matching name). If there are any,
+   only these are tried, in list order; the first one under its limit (or with a free container) takes the spool.
+4. If no location names the material: the non-overflow "Any material" locations, in list order, the first with room.
+5. If 3 or 4 found no room, or there was no candidate: the overflow locations, the default overflow first, then the
+   others in list order, the first under its limit. When all are at their limit, the default overflow takes the
+   spool.
+6. Several spools added together are placed one by one; a count may be split over locations, and the result lists
+   each part.
+
+Nobody is asked: the rule always answers, and the answer says why. Unloading a spool from a printer is unchanged
+(its previous place, otherwise the sealed-spools location).
+
+**The screen.** A collection "Locations", one row per location in fill order:
+
+| Part | Content |
+|---|---|
+| Position | The number in the list |
+| Name and type | "Rack 1", "Bulk storage" or "Individual containers" |
+| How full | "18 of 20 spools", "7 spools" (no limit), "9 of 12 containers used" |
+| Takes | "PLA", "Any material", "Only when chosen" |
+| Badges | "Overflow", "Default overflow", "Sealed spools" |
+| Row actions | **Edit** (default button); icon buttons "Move <name> up" and "Move <name> down" (keyboard and touch; no dragging needed); the overflow menu: "Make default overflow" (overflow rows), "Sealed spools go here" (Bulk storage rows), "Remove" |
+
+- Header action: **Add a location** (primary). The list is never empty: the default overflow and the
+  sealed-spools location always exist, and they may be one location.
+- Add and Edit open the theme's detail region (as a printer does, 5.6). Cancel (default) closes it; with typed
+  values it asks "Leave without saving?" (section 2.6).
+
+| Field | Type | Key / endpoint | Notes |
 |---|---|---|---|
-| Locations | Text, hint "Separate them with commas, e.g. Shelf A, Shelf B, Dry box 1." | `locations` (sent as a list) | |
-| PLA rack | Text | `placement.pla_location` | Hint "Where PLA goes." |
-| Box location prefix | Text | `placement.box_prefix` | Hint "Boxes are named with this and a number, e.g. Dry box 1." |
-| Number of storage boxes | Number, `--mono` | `placement.box_count` | Field error "Enter a whole number, e.g. 2." |
-| Overflow location | Text | `placement.overflow` | Hint "Where spools go when the boxes are full." |
+| Name | Text | `name` of the row → `P settings/storage` (code) | Required: "Enter a name for the location." Refusal: "There is already a location called <name>." |
+| Type | Segmented choice "Bulk storage" / "Individual containers"; hints "A shelf, rack or drawer that holds many spools." and "Boxes or bags that hold one spool each. Spoolwarden numbers them." | `type` | Fixed while spools are in the location: "Move the spools out to change the type." |
+| Spool limit | Number, `--mono`; Bulk storage only; hint "Leave empty for no limit." | `limit` | Whole number 1 to 9999. Field error "Enter a whole number, 1 or more." |
+| Number of containers | Number, `--mono`; Individual containers only | `count` | Whole number 1 to 999; same field error. Fewer than the highest number in use is refused at the field: "Storage box 11 and Storage box 12 hold spools. Move them first, or keep at least 12." |
+| Filled automatically with | Three radios: "Nothing, only when you choose it", "Any material", "These materials" | `fill` | |
+| Materials | Text; shown for "These materials"; hint "Separate them with commas, e.g. PLA, PETG. A material also takes its variants: PLA takes PLA+ and PLA-CF." | `materials` (a list) | Field error "Enter at least one material, e.g. PLA." |
+| Use as overflow | Checkbox; hint "Takes spools when their own places are full." | `overflow` | The last overflow location cannot be switched off |
 
-All → `P settings/general` (code), one key each (section 2.2). Save: **Save storage locations**.
+Buttons of the detail region: **Add location** (a new row) or **Save location** (an edited row), and Cancel. They
+change the unsaved list only.
+
+- **Where a new spool goes.** Under the list, a read-only panel: one line per material named in the list, then
+  "Everything else", each as "PLA: Rack 1, then Rack 2, then Overflow" (the places joined by ", then "). It is built
+  from the unsaved list, so the effect shows before saving.
+- **Save.** One Save for the group, **Save storage locations**, with the dirty mark as in every group. Order
+  changes, additions, edits and removals are all part of the unsaved state. The Save sends the whole list in one
+  request, `P settings/storage` (code) `{locations: [...]}`, with the ids kept for existing rows and none for new
+  ones; the Hub answers the saved list, or errors per row and field.
+- **Rename.** On Save the Hub also changes the location of the spools stored there: a job with steps when more
+  than 20 spools are affected; the result reads "Renamed Rack 1 to PLA rack 1. 18 spools updated."
+- **Remove.** The row's "Remove" opens the dialog of section 10.11. It is refused for the default overflow ("Make
+  another location the default overflow first.") and for the sealed-spools location ("Choose another location for
+  sealed spools first.").
+
+The group's one-line state in the Settings list is "<n> locations".
 
 ### 10.5 Label Reader
 
@@ -1513,6 +1586,7 @@ No Save button.
 | Catalog go back | "Go back to the previous Filament Catalog?" | "The version before the last update comes back. Your own entries are kept." | Cancel · **Go back** (danger) |
 | Get the certificate | "Get the certificate now?" | "Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router." | Cancel · **Get the certificate** (primary) |
 | Restore (typed word) | "Restore this backup?" | The check summary in short ("Backup of <host> made <created>"), then "This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first. The Hub restarts, and afterwards the setup code is the one from the backup." Field "Type restore to go on" (`--mono`, placeholder `restore`) | Cancel · **Restore** (danger, enabled only when the field reads `restore`) → `P job` (code) `{name: "restore", confirm: "restore", sha256: <the checked copy's SHA-256>}` |
+| Remove a storage location | "Remove <name>?" | "<n> spools are recorded there. They keep that location until you move them; it is no longer offered for new spools." ("No spools are recorded there." when n is 0) | Cancel · **Remove** (danger) |
 | Unsaved changes | Section 2.6 | | |
 
 The typed word is compared after removing spaces at either end; it must then read `restore` in lower case. The Hub receives it with the restore job and checks it again.
@@ -1949,8 +2023,8 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 |---|---|---|
 | Eight cards, about thirteen Save buttons | Merged into | Nine groups, one Save each at most (10) |
 | General: "Display name" + Save | Kept | General (10.3) |
-| General: "Locations, comma separated" + Save | Moved to | Storage locations (10.4) |
-| General: "PLA rack", "Box location prefix", "Number of storage boxes", "Overflow location" (each + Save) | Moved to | Storage locations, one Save (10.4) |
+| General: "Locations, comma separated" + Save | Moved to | Storage locations, the list of locations (10.4) |
+| General: "PLA rack", "Box location prefix", "Number of storage boxes", "Overflow location" (each + Save) | Moved to | Storage locations, one Save: PLA rack became a location that takes PLA, the boxes one Individual containers location, the overflow location the default overflow (10.4) |
 | General: "Names for this page, space separated" + Save + DNS explanation | Moved to | Network and addresses (10.7) |
 | General: "Allow printer changes from the public address" + explanation | Moved to | Network and addresses, saved with the group (10.7) |
 | General: "Claude model" + Save | Moved to | Label Reader (10.5) |
@@ -2038,3 +2112,4 @@ column says.
 | Feature titles in the plain names of section 9.1 | Features collection | The page maps code names to the names of section 9.1 |
 | Cloud reads used today and the daily limit as numbers in `G state` | Overview Label Reader tile (4.2) | The numbers are taken from the Overview check row that reports them; when that row is missing the tile shows "Reads per day: <limit>" |
 | Share corrections: what the reader can do and its state (it offers sharing, sharing on or off, how many wait), the setting `label_reader.share_corrections` with the job that sets the reader, the corrections waiting (list, thumbnails, remove, remove all, try again, package, send), and each correction handed to the reader when it is saved | Settings > Label Reader (10.5.1, 10.5.2), Recently added (6.2, 6.4), Overview tile (4.2), Features preview (9.4) | The block SHARE CORRECTIONS shows only its paragraph and the line "Not available on this Hub yet."; nothing else of the feature is shown |
+| A stored list of storage locations (`storage.xml` beside the Hub's config file) with `GET api/storage` and `P settings/storage` (code): the read answers `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}`; the write takes the whole list `{locations: [...]}` (ids kept for existing rows, none for new ones) and answers the saved list, or `errors` per row and field | Settings > Storage locations (10.4) | The group shows "Could not read the settings. <Hub's text>" with **Try again**, and the list cannot be edited |
