@@ -18,7 +18,7 @@ from test_setup_page import CODE, H, Helper, client, env, make, post  # noqa: F4
 
 from filament_kit import config, inventory, pairing, placement, setup_helper, storage, storage_api
 from filament_kit.api import create_app
-from filament_kit.spoolman import Spoolman
+from filament_kit.spoolman import Spoolman, SpoolmanError
 from filament_kit.storage import ANY, BULK, CONTAINERS, MATERIALS, NONE, Location, Storage
 from filament_kit.web import mcp_tools
 from filament_kit.web.intake_app import IntakeApp
@@ -309,6 +309,70 @@ def test_a_rename_of_more_than_20_spools_is_a_job_with_steps(hub, monkeypatch):
     assert storage.current().by_name("PLA rack 1") and all(s["location"] == "PLA rack 1" for s in sm.spools)
 
 
+def _failing_once(sm, monkeypatch, after=1):
+    """Patching the spool number `after`+1 fails once with a Spoolman error; later calls work."""
+    real, calls = sm.patch, [0]
+
+    def flaky(path, body):
+        calls[0] += 1
+        if calls[0] == after + 1:
+            raise SpoolmanError("down", 500)
+        real(path, body)
+    sm.patch = flaky
+
+
+def test_a_failed_rename_sent_again_resumes_the_recorded_plan(hub, monkeypatch):
+    sm = FakeSm(spools("Rack 1", "Rack 1", "Rack 1"))
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
+    _failing_once(sm, monkeypatch, after=1)
+    body = current_body(hub, lambda rows: rows[1].update(name="PLA rack 1"))
+    r = post(hub, "settings/storage", body)
+    assert r.status_code == 502
+    assert [s["location"] for s in sm.spools] == ["PLA rack 1", "Rack 1", "Rack 1"]
+    assert storage.current().by_name("Rack 1")                       # the list is not written until the spools are
+    assert hub.get("/setup/api/settings/storage/job").json()["state"] == "failed"
+    out = post(hub, "settings/storage", body).json()                 # the same save again
+    assert out["saved"] is True and out["updated"] == 3
+    assert [s["location"] for s in sm.spools] == ["PLA rack 1"] * 3
+    assert storage.current().by_name("PLA rack 1") and inventory.pending_rename() is None
+    assert hub.get("/setup/api/settings/storage/job").json()["state"] == "none"
+
+
+def test_a_different_rename_while_one_is_half_done_is_refused_with_error_and_fix(hub, monkeypatch):
+    sm = FakeSm(spools("Rack 1", "Rack 1"))
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
+    _failing_once(sm, monkeypatch, after=1)
+    assert post(hub, "settings/storage", current_body(hub, lambda rows: rows[1].update(name="PLA rack 1"))).status_code == 502
+    for mutate in (lambda rows: rows[1].update(name="Rack 9"), lambda rows: None):    # another rename; no rename
+        r = post(hub, "settings/storage", current_body(hub, mutate))
+        assert r.status_code == 409 and r.json()["error"].startswith("Error:") and "Fix:" in r.json()["error"]
+    assert [s["location"] for s in sm.spools] == ["PLA rack 1", "Rack 1"]      # nothing moved by the refusals
+
+
+def test_a_swap_of_two_names_through_the_route_moves_each_spool_once(hub, monkeypatch):
+    sm = FakeSm(spools("Rack 1", "Rack 2", "Rack 2"))
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
+    _failing_once(sm, monkeypatch, after=2)
+
+    def swap(rows):
+        rows[1]["name"], rows[2]["name"] = "Rack 2", "Rack 1"
+    body = current_body(hub, swap)
+    assert post(hub, "settings/storage", body).status_code == 502
+    out = post(hub, "settings/storage", body).json()
+    assert out["saved"] is True
+    assert [s["location"] for s in sm.spools] == ["Rack 2", "Rack 1", "Rack 1"]
+
+
+def test_the_job_state_after_a_restart_says_the_rename_is_unfinished(hub, monkeypatch):
+    sm = FakeSm(spools("Rack 1", "Rack 1"))
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
+    _failing_once(sm, monkeypatch, after=1)
+    post(hub, "settings/storage", current_body(hub, lambda rows: rows[1].update(name="PLA rack 1")))
+    monkeypatch.setattr(storage_api, "_job", None)                    # the Hub restarted: only the plan is left
+    state = hub.get("/setup/api/settings/storage/job").json()
+    assert state["state"] == "failed" and "Fix:" in state["error"]
+
+
 def errors_of(r):
     assert r.status_code == 400, r.text
     out = r.json()
@@ -440,6 +504,18 @@ def test_the_five_old_keys_are_no_longer_a_hub_setting(hub):
 
 
 # ================================================================ a set's name as a spool's location, and the reasons
+
+def test_a_location_text_matches_a_set_name_before_a_container_name(fk_env):
+    """The client note of GET api/storage: a spool's location text is matched against `name` of the locations first,
+    and only when none has that name is it a container's own name (`containers[].name`) or any other text. Only a
+    clash a list already had can make the two meet (a new one is refused both ways)."""
+    st = Storage([Location("Box 02", CONTAINERS, count=2, prefix="Box 02 ", fill=ANY),
+                  Location("Box", CONTAINERS, count=3, prefix="Box ", fill=ANY),
+                  Location("Overflow", overflow=True, default_overflow=True)])
+    assert [c["name"] for c in storage_api.view(st, {})["locations"][1]["containers"]] == ["Box 01", "Box 02", "Box 03"]
+    assert placement.resolve(st, "Box 02", storage.counts_of({})) == "Box 02 01"       # the set named "Box 02"
+    assert placement.resolve(st, "Box 03", storage.counts_of({})) == "Box 03"          # no set has this name: as given
+
 
 def test_a_containers_location_name_as_the_location_means_the_lowest_free_container(fk_env, spoolman_url):
     sm = Spoolman(spoolman_url)

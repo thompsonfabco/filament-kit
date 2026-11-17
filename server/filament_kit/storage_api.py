@@ -240,12 +240,18 @@ _job: dict | None = None
 def job_state() -> dict:
     """The rename job of the last save that needed one: {state: none | running | done | failed, step, progress,
     text, error}. `step` is {index, count, text} of the newest batch; `progress` runs 0 to 1."""
-    return dict(_job) if _job else {"state": "none", "step": None, "progress": None, "text": "", "error": None}
+    if _job:
+        return dict(_job)
+    if inventory.pending_rename() is not None:      # a rename left half-done (failed, or the Hub restarted)
+        return {"state": "failed", "step": None, "progress": None, "text": "",
+                "error": str(inventory.RenamePending())}
+    return {"state": "none", "step": None, "progress": None, "text": "", "error": None}
 
 
 def _write(sm, before: Storage, after: Storage, items, step=None) -> dict:
     """Rename the spools of the renamed locations, then write the list. A rename that fails part-way leaves the list
-    as it was, so the same save can be sent again (spools already renamed are not touched twice)."""
+    as it was and the plan stays recorded (`inventory.pending_rename`), so the same save sent again resumes it (spools
+    already renamed are not touched twice)."""
     done = inventory.rename_locations(sm, items, step=step)
     after.converted = False            # the person has seen the list and saved it: the converted notice is spent
     storage.save(after)
@@ -271,7 +277,11 @@ def save(sm, body) -> dict:
         if problems:
             raise _refusal(problems, after)
         items = storage.renames(before, after)
-        steps = inventory.rename_steps(sm, items) if items else 0
+        plan = inventory.pending_rename()
+        if plan is not None and inventory._keys(items) != plan["renames"]:
+            # a half-done rename is finished by the same save, never re-derived from today's names or replaced
+            raise StorageRefused(str(inventory.RenamePending()), [], 409)
+        steps = inventory.rename_steps(sm, items) if (items or plan is not None) else 0
         if steps:
             _job = {"state": "running", "step": None, "progress": 0.0, "text": "", "error": None, "steps": steps}
 
@@ -293,8 +303,8 @@ def save(sm, body) -> dict:
             threading.Thread(target=run, name="storage-rename", daemon=True).start()
             release = False
             return {"ok": True, "saved": False, "job": {"steps": steps}}
+        _job = None                    # an older job's end is not this save's state
         done = _write(sm, before, after, items)
-        _job = None
         return {"ok": True, "saved": True, "text": done["text"], "updated": done["updated"],
                 **current_view(sm, storage.current())}
     finally:
