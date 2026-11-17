@@ -73,25 +73,25 @@ async function refreshStorage() {
   catch { STORAGE = null; }
   for (const f of storageWatchers.slice()) f();
 }
-// "18 of 20", "7 spools", "3 free", and "Full" after it when the place takes no more by itself (the choice stays open)
-function placeDetail(l) {
-  const sets = l.type === "containers", used = Number(l.used) || 0;
-  const limit = sets || l.sealed ? null : l.limit;                           // the sealed place takes sealed spools whatever its limit says
-  const full = sets ? l.free === 0 : limit != null && used >= limit;
-  const how = sets ? SW.t("storage_detail_free", { count: l.free ?? 0 }) : limit != null ? SW.t("storage_detail_limit", { used, limit }) : SW.t("storage_detail_used", { count: used });
-  return [how, full ? SW.t("storage_detail_full") : null].filter(Boolean).join(" \u00b7 ");
+// The text of one place in a select: "Rack 1 \u00b7 18 of 20", "Rack 1 \u00b7 7 spools", "Storage box \u00b7 3 free", "Rack 1 \u00b7 Full" (the choice stays open)
+function placeLabel(l) {
+  const sets = l.type === "containers", used = Number(l.used) || 0, name = l.name;
+  const limit = sets ? null : l.limit;
+  if (sets ? l.free === 0 : limit != null && used >= limit) return SW.t("storage_option_full", { name });
+  if (sets) return SW.t("storage_option_containers_free", { name, free: l.free ?? 0 });
+  return limit != null ? SW.t("storage_option_limit", { name, used, limit }) : SW.t("storage_option_plain", { name, count: used });
 }
 // "<place> (<why>)" for an item that named no place: the places the Hub chose, and the rule that chose the first (R79 5)
 function whereAndWhy(r, it) {
   const ps = r.placements && r.placements.length ? r.placements : [{ location: r.location }];
   const place = ps.map((p) => (ps.length > 1 ? SW.t("add_preview_placement", { spools: p.spools, location: p.location }) : p.location)).join(", ");
-  const key = { material: "storage_why_material", any: "storage_why_any", overflow: "storage_why_overflow", sealed: "storage_why_sealed" }[ps[0].placed_by];
-  return key ? SW.t("storage_auto_line", { place, why: SW.t(key, { material: String(it.material || "").trim() }) }) : place;
+  const key = { material: "storage_reason_material", any: "storage_reason_any", overflow: "storage_reason_overflow", overflow_none: "storage_reason_overflow_none", sealed: "storage_reason_sealed" }[ps[0].placed_by];
+  return key ? SW.t("storage_automatic_line", { place, why: SW.t(key, { material: String(it.material || "").trim() }) }) : place;
 }
 // the places a spool can be put in, as {value, label, here(location)}; a container set is ONE entry, which means its lowest free container
 function placeEntries() {
   if (!STORAGE) return LOCATIONS.map((l) => ({ value: l, label: l, here: (at) => at === l }));
-  return STORAGE.map((l) => ({ value: l.name, label: `${l.name} \u00b7 ${placeDetail(l)}`, detail: placeDetail(l),
+  return STORAGE.map((l) => ({ value: l.name, label: placeLabel(l), detail: placeLabel(l).replace(l.name + " \u00b7 ", ""),
     here: (at) => at === l.name || (Array.isArray(l.containers) && l.containers.some((c) => c.name === at)) }));   // the Hub names the containers; no name is built here
 }
 
@@ -1622,7 +1622,7 @@ function addTab() {
       const hex = addHexFull(it.color_hex);
       sum.textContent = [it.material, hex || SW.t("common_no_colour"), it.net != null ? SW.t("common_grams", { grams: it.net }) : "",
         it.sealed ? SW.t("common_sealed") : it.gross != null ? SW.t("add_card_opened", { grams: it.gross }) : SW.t("add_preview_opened"),
-        it.location || SW.t("common_option_automatic")].filter(Boolean).join(" · ");
+        it.location || SW.t("storage_automatic")].filter(Boolean).join(" · ");
       const miss = missing(it), kids = [];
       if (miss.length) kids.push(line("bad", SW.t("add_review_needs", { fields: miss.map((k) => SW.t(ADD_LABEL[k])).join(", ") })));
       const conf = addSummaryLine(addSummary([it._levels]));
@@ -1659,9 +1659,9 @@ function addTab() {
       if (!STORAGE && SEALED && !list.some((e) => e.value === SEALED)) list.push({ value: SEALED, label: SEALED });
       const at = location._control.value;
       if (at && !list.some((e) => e.value === at)) list.push({ value: at, label: at });         // a place no longer listed stays what it was
-      return [{ value: "", label: SW.t("common_option_automatic") }, ...list];
+      return [{ value: "", label: SW.t("storage_automatic") }, ...list];
     };
-    const location = mk("location", { type: "select", value: it.location || "", hint: "", options: [{ value: "", label: SW.t("common_option_automatic") }] });
+    const location = mk("location", { type: "select", value: it.location || "", hint: "", options: [{ value: "", label: SW.t("storage_automatic") }] });
     const placeNote = location.querySelector(".field__hint");     // after a preview: "<place> (<why>)" for a blank Location
     location._control.addEventListener("change", () => { placeNote.textContent = ""; });
     {
@@ -2158,7 +2158,7 @@ function openTab() {
           const text = SW.t("spool_result_moved", { location: r.view && r.view.location || l });
           if (back || !undoFrom) { undoFrom = null; return text; }
           setTimeout(() => { if (stamp === undoStamp && actAns.querySelector(".btn")) SW.result(actAns, "ok", text); }, 5000);   // Undo goes after 5 s
-          return { text: SW.t("spool_result_moved_undo", { location: l, was: undoFrom }), action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
+          return { text: SW.t("spool_result_moved_undo", { location: r.view && r.view.location || l, was: undoFrom }), action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
         });
       } finally { moving = false; }
     }
