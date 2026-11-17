@@ -5,8 +5,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt 
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | filament | wire identifier (item key, error code or Hub field name), never shown; the screen's texts are in the catalogue (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | filament_id | wire identifier (item key, error code or Hub field name), never shown; the screen's texts are in the catalogue (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | index | wire identifier (item key, error code or Hub field name), never shown; the screen's texts are in the catalogue (S4.7)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | location | wire identifier (item key, error code or Hub field name), never shown; the screen's texts are in the catalogue (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | name | wire identifier (item key, error code or Hub field name), never shown; the screen's texts are in the catalogue (S4.7)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | placements | wire identifier (item key, error code or Hub field name), never shown; the screen's texts are in the catalogue (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | spools | wire identifier (item key, error code or Hub field name), never shown; the screen's texts are in the catalogue (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | vendor | wire identifier (item key, error code or Hub field name), never shown; the screen's texts are in the catalogue (S4.7)

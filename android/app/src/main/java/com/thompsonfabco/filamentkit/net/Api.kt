@@ -217,6 +217,16 @@ class Api(
         call(request("api", "locations").get()).jsonObject["locations"]?.jsonArray.orEmpty()
             .map { it.jsonPrimitive.content }
 
+    /** `GET api/storage`: the locations with how full each is; null when the Hub has no such call (an older Hub, 404). */
+    suspend fun storage(): StorageAnswer? = try {
+        StorageWire.parse(call(request("api", "storage").get()))
+    } catch (e: ApiError) {
+        if (e.status == 404) null else throw e
+    }
+
+    /** The storage answer, or for an older Hub the names of `GET api/locations` alone. */
+    suspend fun locationList(): StorageAnswer = storage() ?: StorageAnswer.ofNames(locations())
+
     /**
      * Streams `/app.apk` into [to]; [to] is only replaced when the whole file arrived. [onProgress] gets (bytes so
      * far, total or -1 when the server sends no length) as the file is written.

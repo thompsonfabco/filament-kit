@@ -10,6 +10,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
@@ -25,6 +26,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
+import com.thompsonfabco.filamentkit.ui.storage.placesOf
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.serialization.json.JsonObject
 
@@ -143,9 +145,8 @@ private fun PreviewRow(item: JsonObject, hub: JsonObject?) {
                 }
             }
             // where each spool goes: the Hub's placements, else the location the item names
-            val places = (hub?.get("placements") as? kotlinx.serialization.json.JsonArray).orEmpty()
-                .mapNotNull { (it as? JsonObject)?.str("location") }.distinct()
-            val where = places.joinToString(", ").ifBlank { null } ?: hub?.str("location") ?: item.str("location")
+            val context = LocalContext.current
+            val where = placesOf(hub, item).joinToString(", ") { it.resolve(context) }.ifBlank { null }
             Text(
                 listOfNotNull(
                     where,

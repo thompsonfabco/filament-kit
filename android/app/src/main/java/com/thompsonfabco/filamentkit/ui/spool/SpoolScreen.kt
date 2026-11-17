@@ -1,5 +1,9 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import androidx.compose.ui.platform.LocalContext
+import com.thompsonfabco.filamentkit.ui.storage.LocationRow
+import com.thompsonfabco.filamentkit.ui.storage.holder
+import com.thompsonfabco.filamentkit.ui.storage.rows
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -389,11 +393,14 @@ private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAga
                 locations == null -> if (m.failure == null) SwSkeletonRows(SKELETON_ROWS)
                 locations.isEmpty() -> Text(stringResource(R.string.spool_move_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
                 else -> Column(Modifier.verticalScroll(rememberScrollState())) {
-                    locations.forEach { name ->
-                        val here = name == current
+                    val rows = m.storage?.rows() ?: locations.map { LocationRow(it, null, false) }
+                    val holder = rows.holder(current)
+                    rows.forEach { row ->
+                        val name = row.name
+                        val here = row === holder
                         Row(
                             Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
-                                .selectable(selected = here, enabled = m.movingTo == null, role = Role.RadioButton) { vm.move(name) },
+                                .selectable(selected = here, enabled = m.movingTo == null, role = Role.RadioButton) { vm.move(if (here && current != null) current else name) },
                             horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(
@@ -402,9 +409,10 @@ private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAga
                             )
                             Column(Modifier.weight(1f).padding(vertical = space.s2)) {
                                 Text(name, style = MaterialTheme.typography.bodyLarge)
-                                when {
-                                    m.movingTo == name -> Text(stringResource(R.string.spool_move_moving), style = MaterialTheme.typography.bodySmall, color = colors.muted)
-                                    here -> Text(stringResource(R.string.spool_move_here), style = MaterialTheme.typography.bodySmall, color = colors.muted)
+                                val lines = row.moveLines(here, moving = m.movingTo == name)
+                                if (lines.isNotEmpty()) {
+                                    val context = LocalContext.current
+                                    Text(lines.joinToString(" · ") { it.resolve(context) }, style = MaterialTheme.typography.bodySmall, color = colors.muted)
                                 }
                             }
                         }
