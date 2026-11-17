@@ -44,7 +44,8 @@ The Hub writes the page's configuration into `data-*` attributes on `<body>` (as
 | `data-printers` | Whether the Printers Feature is on. Off: **Printers** is dimmed (6.10). |
 | `data-push` | Whether print alerts can be offered (9.2, "Print alerts on this phone"). |
 | `data-history` | Whether Recently added is served here (home address). Off: 7.4. |
-| `data-locations`, `data-sealed`, `data-auto`, `data-picks` | Location lists, the sealed-stock location and the placement rule text used in Add spools and Spools. |
+| `data-locations`, `data-sealed`, `data-picks` | Location names and the sealed-stock location used in Add spools and Spools, until the page has the list below. |
+| (the storage list) | The page reads the list of locations (in fill order, with how full each is, the container sets and the reason texts) from the web twin of `GET api/storage`, under the web app's own base, when Add spools or a spool sheet opens (4.5, 5.4). It is not an attribute because how full a place is changes while the page is open. |
 | `data-base` | Prefix for every request. |
 
 Further attributes the design needs (Hub name, Hub page address, Slicer presets on/off, spool editing) are listed in
@@ -429,13 +430,30 @@ required unless its label ends in "(optional)"; there is no "required" word and 
 | | **Weight with spool (optional)** | decimal, unit "g" | Shown only when not sealed. Helper: "Leave empty for a full spool." With Spools above 1: aria-disabled, "Only used for one opened spool." | `gross` |
 | Print settings | **Nozzle (optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `nozzle` |
 | | **Bed (optional)** (pair) | whole number, unit "°C" | "Enter degrees above 0." | `bed` |
-| Storage | **Location** | select: "Automatic (<placement rule>)", then every configured location; always has a value | | `location` |
+| Storage | **Location** | select (the entries below); always has a value | | `location` |
 | Other | **Lot (optional)** | text, `--mono` | | `lot` |
 | | **Price per kg (optional)** | decimal | Helper, when the label showed a price: "From the label: <price line>". | `price_per_kg`, `price_line` |
 | | **Note (optional)** | text | Saved on the spool. | `note` |
 
 The card's footer holds "Remove" (ghost, trash icon) on the left. Removing a card that has edits raises a toast with
 "Undo" for 10 s; nothing asks first.
+
+**The Location select.** Its entries, in this order:
+
+- "Automatic" first. Where the rule puts the spool, and why, is not in the entry: it shows after the preview (the dry
+  run the page already makes for an add and for opening a spool) as a supporting line under the select,
+  "<place> (<why>)", for example "Rack 1 (the first place for PLA with room)" (reasons below). The page needs no rule
+  text from the Hub for this.
+- Then every location in fill order with how full it is: "Rack 1 · 18 of 20", "Overflow · 7 spools". An Individual
+  containers location is one entry, "Storage box · 3 free", and choosing it sends the set's `name`, and the Hub
+  gives the lowest free container. A location at its limit stays choosable and shows "Full".
+- The page never builds a container name. To find the entry a spool is in, it compares the spool's location text with
+  each location's `name` first and then with each `containers[].name` of `GET api/storage`; a text that matches
+  nothing (a removed location, a text typed by hand) is shown as it is, under no location. The same entries are
+  offered as the person's pick of one container: a `containers[].name` is sent as it is.
+- The supporting line and the preview and result lines name the place and the reason, in brackets after the place:
+  "(the first place for <material> with room)", "(the first place with room)", "(every place for <material> is
+  full)", "(no place takes <material> automatically)" and, for a sealed spool, the sealed-stock text as today. A place the person chose gets no reason.
 
 Values the card keeps but does not show (sent with the item as today): the chosen filament's number and match text,
 the photo indexes, the estimate list, the price line, the sealed reason, nozzle and bed from the chosen filament,
@@ -637,8 +655,7 @@ same content expands in place under the spool's row in the results (2.3).
 | [ 1212                           ] g     |
 | Filled in from the Weigh Station scale   |
 | Location (optional)                      |
-| [                                  ]     |
-| Leave empty to choose automatically.     |
+| [ Automatic                        v ]   |
 | Box humidity (optional)                  |
 | [ From the box hygrometer        ] %     |
 | (i) Preview first: nothing changes until |
@@ -658,7 +675,7 @@ same content expands in place under the spool's row in the results (2.3).
 |---|---|---|
 | Tag line | "Tag: <id>, tapped <age> on <reader>" (<reader> is "the Tag Reader" or "the Weigh Station"), or "No tag read yet: tap the spool's tag on a reader." | Live from 5.2. |
 | Weight | "Weight with spool (optional)", unit "g", decimal | "Enter grams above 0, or leave this empty." |
-| Location | "Location (optional)", text with suggestions (pick locations, then all locations), hint "Leave empty to choose automatically." | |
+| Location | "Location (optional)", select with the entries of 4.5 ("Automatic" first, then every location with how full it is); after "Preview" a supporting line under it, "<place> (<why>)" | The choice is sent as `location`; Automatic sends none. |
 | Box humidity | "Box humidity (optional)", unit "%", decimal, placeholder "From the box hygrometer" | "Enter a percentage from 0 to 100." |
 | "Preview" | default button | POST `open` with `{spool, gross, location, humidity, dry_run: true}`; inline result under the buttons with the Hub's text (it names the tag, old taps, tags one byte apart and "dry run: nothing changed"). |
 | "Link tag and open" | filled | aria-disabled until a preview succeeded with no change since. Reasons: "Preview first: nothing changes until you link." · "You changed the weight. Preview again." · "The Hub found a problem. Fix it and preview again." POST `open` with `dry_run: false`. |
@@ -675,7 +692,7 @@ Hub has today. When none of the four is available the group is absent and the sh
 | Action | How it works |
 |---|---|
 | "Update weight" | Opens a small form in place: "Weight with spool"; "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight". |
-| "Move" | A menu of locations; choosing one moves it at once; inline result "Moved to Dry box 1." with "Undo" for 5 s. |
+| "Move" | A menu with the same entries as the Location select of 4.5, in fill order, each with how full it is (a full one stays choosable and shows "Full"; an Individual containers location is one entry; it sends the set's `name` and gives the lowest free container, and a container the person picks sends its `containers[].name`; the spool's current place is found by matching its location text as in 4.5, and a text that matches nothing is shown as it is, under no location); choosing one moves it at once; inline result "Moved to Dry box 1." with "Undo" for 5 s. |
 | "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." |
 | "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (one row per slot with its current spool), then the automatic preview and "Load", exactly as the load sheet of 6.5. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`. |
 
@@ -1593,6 +1610,7 @@ right column is left out or falls back as described there.
 | Add preview with per-item results: existing or new filament, spools to create, location, and problems tied to a field | 4.6 | The Hub's text in a code block |
 | Recently added: read confidence and engine per record | 7.1, 7.2 | No "To check" filter, no confidence lines |
 | Share corrections for the web app: whether it is on and how many wait (in `history`), the corrections waiting with thumbnails, and remove | 7.1, 7.2, 4.4, 7.5 | No Share corrections lines and no `#recent/corrections` page |
+| `GET api/storage` for the web app (a twin of the app's route under the web app's own base): the locations in fill order `{id, name, type, limit, count, used, free, prefix, containers: [{name, number, taken}], fill, materials, overflow, default_overflow, sealed, position}` (`prefix` and `containers` are `null` for bulk; `used` and `free` equal the counts of `taken`), `order_by_material` and `everything_else` | 4.5, 5.4 | The select lists the names from `data-locations` without how full, and "Automatic" shows no place or reason; the Move menu lists the same names |
 | Spool editing for the web app: preview and save a new weight, move to a location, mark empty (the app has this through its own API) | 5.4 | "Update weight", "Move" and "Mark empty" left out; "Load into a printer" stays |
 | Filament colour in spool search results (`find`) | 5.3, 6.5 | Rows without a swatch |
 | The spool an entry of Filament used was taken from | 12.1 | The "Put it back" sheet names job, slot and time only |
@@ -1663,7 +1681,7 @@ this design.
 | "Price $/kg" | "Price per kg" (4.5) |
 | "Note" | "Note" (4.5) |
 | "Still sealed (in its bag or box)" + sealed reason | Toggle with "Label Reader: <reason>" (4.5) |
-| "Location" select "Auto: <rule>" | "Location" select "Automatic (<rule>)" (4.5) |
+| "Location" select "Auto: <rule>" | "Location" select "Automatic", with "<place> (<why>)" under it after the preview (4.5) |
 | Density from the material table, empty-spool weight from the vendor list | Same, with "Typical for <material>" / "Filled in from the brand list" hints (4.5) |
 | "Remove" | "Remove" with undo toast (4.5) |
 | "Check (dry run)" | "Preview" in the action bar (4.6) |
@@ -1687,7 +1705,7 @@ this design.
 | "No spools match." | "No spools match." / sealed variant (5.3) |
 | Form card "Selected spool" | Spool sheet (5.4) |
 | "Gross weight (with spool)" | "Weight with spool" (5.4) |
-| "Location" with suggestions | "Location" with suggestions (5.4) |
+| "Location" with suggestions | "Location" select (5.4) |
 | "Humidity" | "Box humidity" (5.4) |
 | "Check" | "Preview" (5.4) |
 | "Link tag and open" (disabled without explanation) | "Link tag and open" with its reasons (5.4) |

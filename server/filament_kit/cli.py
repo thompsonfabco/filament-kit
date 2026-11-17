@@ -24,7 +24,8 @@ import urllib.request
 from pathlib import Path
 
 from . import __version__
-from . import hostaddr, apply, config, inventory, klipper_cli, library, menu_ui, modules, output, pairing, qr, secret_input, steps
+from . import storage, storage_api
+from . import hostaddr, apply, config, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -690,15 +691,20 @@ def write_key(key: str) -> Path:
 
 
 def _storage_menu(cfg: dict) -> None:
-    """The Storage locations group on its own, for the installer's first-run question: the changes go into `cfg` (in
-    place) when `s` or `q` leaves the screen."""
+    """The Storage locations screen on its own, for the installer's first-run question: the list is written to
+    storage.xml when `q` leaves the screen with changes staged (nothing is stored in Spoolman yet, so nothing is renamed)."""
     session = _ConfigMenu(copy.deepcopy(cfg), menu_ui.NumberedUi(_ask, secret_input.ask))
     session.embedded = True
     try:
         session.group("storage")
     except _Ended:
-        pass
-    session.stage_into(cfg)
+        pass                                  # the input ended: what was staged is still kept
+    if "storage" in session.staged:
+        try:
+            session.storage_editor().save_rows(session.staged["storage"])
+        except (storage_api.StorageRefused, storage.StorageError, ValueError, SpoolmanError, OSError) as e:
+            output.error(f"the storage locations were not saved: {locations_cli.reason(e).rstrip('.')}.",
+                         "change them later with: sudo spoolwarden locations")
 
 
 # ---------- config: the settings menu (06 8.3) ----------
@@ -744,11 +750,7 @@ _ITEMS = {i.id: i for i in (
     _Item("theme", "Theme for new devices", "choice", "appearance.theme", choices=_THEMES),
     _Item("name", "Display name", "text", "server_name"),
     _Item("spoolman", "Spoolman address", "text", "spoolman_url"),
-    _Item("locations", "Locations", "list", "locations", sep=","),
-    _Item("pla", "PLA rack", "text", "placement.pla_location"),
-    _Item("prefix", "Box location prefix", "text", "placement.box_prefix", keep_spaces=True),
-    _Item("boxes", "Number of storage boxes", "int", "placement.box_count", low=0, high=999, words="0 or more"),
-    _Item("overflow", "Overflow location", "text", "placement.overflow"),
+    _Item("storage", "Storage locations", "storage", None),
     _Item("engine", "Engine order", "choice", "intake.reader", choices=_ENGINES),
     _Item("apikey", "Anthropic API key", "secret", "anthropic_key"),
     _Item("model", "Claude model", "text", "model", restarts=True),
@@ -771,7 +773,7 @@ _GROUPS = (("appearance", "Appearance"), ("general", "General"), ("storage", "St
            ("reader", "Label Reader"), ("backups", "Backups and restore"), ("network", "Network and addresses"),
            ("passphrase", "Web passphrase"), ("catalog", "Filament Catalog"), ("voice", "Weigh Station voice"))
 _GROUP_ITEMS = {"appearance": ("theme",), "general": ("name", "spoolman"),
-                "storage": ("locations", "pla", "prefix", "boxes", "overflow"),
+                "storage": ("storage",),
                 "reader": ("engine", "apikey", "model", "reads", "address", "tier", "keep"),
                 "backups": ("days",), "network": ("public", "station", "hosts", "changes"),
                 "passphrase": ("passphrase",), "catalog": ("token",), "voice": ("voice",)}
@@ -815,10 +817,22 @@ class _ConfigMenu:
         self.rc = 0
         self.embedded = False                 # the Storage group alone, for the installer: no `s`, nothing is written
         self.final: list[str] = []            # said after the screen is gone
+        self.sm_factory = None                # Spoolman for how full the storage locations are and for renames
+        self._storage = None                  # the Storage locations screens (locations_cli.StorageEditor), made when opened
 
     # ----- values
     def stored(self, it: _Item, cfg: dict | None = None):
+        if it.kind == "storage":
+            return self.storage_editor().base
         return _general_value(self.cfg if cfg is None else cfg, it.key)
+
+    def storage_editor(self) -> "locations_cli.StorageEditor":
+        if self._storage is None:
+            self._storage = locations_cli.StorageEditor(self, self.sm_factory)
+        return self._storage
+
+    def ended(self) -> Exception:
+        return _Ended()
 
     def value(self, it: _Item):
         return self.staged[it.id] if it.id in self.staged else self.stored(it)
@@ -1004,9 +1018,7 @@ class _ConfigMenu:
         if gid == "general":
             return str(self.value(it["name"])), False
         if gid == "storage":
-            pl, boxes = self.value(it["pla"]), self.value(it["boxes"])
-            n = len(self.value(it["locations"]) or [])
-            return f"{n} location{'' if n == 1 else 's'}{sep}PLA rack {pl}{sep}{boxes} box{'' if boxes == 1 else 'es'}", False
+            return locations_cli.summary(self.storage_editor().rows), False
         if gid == "reader":
             from . import intake
             order = intake.reader_order(cfg)
@@ -1160,6 +1172,8 @@ class _ConfigMenu:
                    f"({FEATURES_ROW}).")
         if gid == "catalog" and "library" not in on:
             ui.say(f"The Filament Catalog is switched off. Switch it on in Features ({FEATURES_ROW}).")
+        if gid == "storage":
+            return self.storage_editor().run()
         show = True
         while True:
             on = self.features_on()
@@ -1221,12 +1235,6 @@ class _ConfigMenu:
         if state == "discarded":
             self.ui.say("Nothing applied.")
 
-    def stage_into(self, cfg: dict) -> None:
-        """The staged settings written into `cfg` (in place), checked: the installer's storage question."""
-        for iid, value in self.staged.items():
-            if _ITEMS[iid].kind != "secret":
-                _set_path(cfg, _ITEMS[iid].key, value)
-
     # ----- saving
     def save(self) -> None:
         """Every staged change at once, all or nothing (06 8.3). The Hub's rules: each value checked first, the
@@ -1238,7 +1246,7 @@ class _ConfigMenu:
         now = config.load()
         for iid in list(self.staged):
             it = _ITEMS[iid]
-            if it.kind == "secret":
+            if it.kind in ("secret", "storage"):
                 continue
             mine, theirs = self.stored(it), self.stored(it, now)
             if theirs != mine and theirs != self.staged[iid]:
@@ -1260,6 +1268,14 @@ class _ConfigMenu:
         saved = [_lower_first(_ITEMS[i].label) for i in self.staged]
         restarts = any(_ITEMS[i].restarts for i in self.staged)
         applies = any(_ITEMS[i].key in _APPLY_KEYS for i in self.staged)
+        renamed = ""
+        if "storage" in self.staged:        # first: it is the part that can need Spoolman and take a while
+            try:
+                renamed = self.storage_editor().save_rows(self.staged["storage"]).get("text", "")
+            except (storage_api.StorageRefused, storage.StorageError, ValueError, SpoolmanError, OSError) as e:
+                ui.error(f"nothing was saved: {locations_cli.reason(e).rstrip('.')}. Your changes are still here.")
+                return
+            del self.staged["storage"]
         try:
             config.save(new)
         except (GroupMissing, ValueError, library.LibraryError, OSError) as e:
@@ -1276,6 +1292,8 @@ class _ConfigMenu:
             return
         self.cfg, self.staged = new, {}
         ui.say(f"Saved {_changes_word(len(saved))}: {', '.join(saved)}.")
+        if renamed:
+            ui.say(renamed)
         if applies or restarts:
             with ui.suspended():
                 if applies:
@@ -1289,7 +1307,7 @@ class _ConfigMenu:
         """Put the staged settings into `new`; the sentence saying what is wrong, or None."""
         for iid, value in self.staged.items():
             it = _ITEMS[iid]
-            if it.kind == "secret":
+            if it.kind in ("secret", "storage"):
                 continue
             if it.key == "backup.keep_days":
                 new.setdefault("backup", {})["keep_days"] = value
@@ -1368,7 +1386,7 @@ def _history_use() -> dict:
         return {"count": 0, "photo_bytes": 0}
 
 
-def cmd_config() -> int:
+def cmd_config(sm_factory=None) -> int:
     """`config`: the settings menu (06 8.3). A menu needs a terminal, or `--numbered` with its answers on standard input."""
     if not output.numbered() and not menu_ui._stdin_tty():
         output.error("config is a menu, and there is no terminal to ask on.",
@@ -1380,6 +1398,7 @@ def cmd_config() -> int:
     try:
         with menu_ui.open_ui(_ask, secret_input.ask) as ui:
             session = _ConfigMenu(config.load(), ui)
+            session.sm_factory = sm_factory
             try:
                 rc = session.run()
             except _Ended:
@@ -1427,7 +1446,7 @@ def _menu_items(cfg: dict) -> list[tuple[str, list[_Item]]]:
     return out
 
 
-def cmd_config_show() -> int:
+def cmd_config_show(sm_factory=None) -> int:
     """`config show`: every setting in the menu's order, a heading per group, secrets as set / not set."""
     cfg = config.load()
     menu = _ConfigMenu(cfg, None)
@@ -1441,6 +1460,9 @@ def cmd_config_show() -> int:
         lines.append(output.paint(title, "bold", sys.stdout))
         rows = []
         for it in items:
+            if it.kind == "storage":
+                lines += _storage_show_lines(rows, sm_factory)
+                continue
             if it.kind == "secret":
                 is_set = menu.is_set(it)
                 doc["secrets"][it.key] = {"set": is_set}
@@ -1461,8 +1483,26 @@ def cmd_config_show() -> int:
     return 0
 
 
+def _storage_show_lines(rows: list, sm_factory) -> list[str]:
+    """`config show` for Storage locations: the list as the menu shows it (numbered, in fill order); its document
+    holds the locations of `GET api/storage`."""
+    try:
+        view = storage_api.current_view((sm_factory or locations_cli.default_spoolman)())
+    except (SpoolmanError, OSError, KeyError):          # without Spoolman the list is still shown, with nothing used
+        view = storage_api.view(storage.current(), {})
+    rows.append({"label": "Locations", "key": None, "value": view["locations"]})
+    width = max(len(r["name"]) for r in view["locations"])
+    return [f"  {r['position']:>2}  {r['name']:<{width}}  {locations_cli.row_line(r, view['locations'])}"
+            for r in view["locations"]]
+
+
+# the keys of the five storage settings (and the list of locations) before the list: `config set` refuses them (06 8.3)
+_OLD_STORAGE_KEYS = ("locations", "placement.pla_location", "placement.box_prefix", "placement.box_count",
+                     "placement.overflow", "placement.sealed_location")
+
+
 def _set_keys() -> list[str]:
-    return [it.key for it in _ITEMS.values() if it.kind != "secret" and it.id != "spoolman"]
+    return [it.key for it in _ITEMS.values() if it.kind not in ("secret", "storage") and it.id != "spoolman"]
 
 
 def _config_set_value(it: _Item, raw: str):
@@ -1488,6 +1528,9 @@ def _config_set_value(it: _Item, raw: str):
 def cmd_config_set(key: str, raw: str) -> int:
     """`config set <key> <value>`: one setting, checked as the menu checks it and saved the way `s` saves."""
     key = _KEY_ALIASES.get(key, key)
+    if key in _OLD_STORAGE_KEYS:
+        output.error("storage locations are a list now.", "spoolwarden locations")
+        return output.USAGE
     item = next((it for it in _ITEMS.values() if it.key == key), None)
     keys = ", ".join(k for k in ("backups.keep_days" if k == "backup.keep_days" else k for k in _set_keys()))
     if item is not None and item.kind == "secret":
@@ -6146,6 +6189,7 @@ _HELP_GROUPS = [('Everyday',
  ('System',
   [('features', 'Switch features on and off; choose the setup'),
    ('config', 'Settings menu; also config show and set'),
+   ('locations', 'Storage locations: the list, add, edit, move, remove'),
    ('label-reader', 'Label Reader: status and test'),
    ('catalog', 'Filament Catalog: status, update, roll back, add'),
    ('backup', 'Make or list backups'),
@@ -6227,6 +6271,17 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`config show`', 'All settings, in menu order', '{nav_settings}'),
  ('`config set <key> <value>`', 'Change one setting', '{nav_settings}, one field'),
  ('`config theme [<theme>]`', 'Show or set the theme for new devices', '{nav_settings} > {settings_group_appearance} > {appearance_theme_default_title}'),
+ ('`locations` (same as `locations list`)', 'The storage locations in fill order', '{nav_settings} > {settings_group_storage}'),
+ ('`locations add <name> [--type bulk\\|containers] [--limit N] [--count N] [--takes any\\|none\\|MATERIALS] [--overflow]`',
+  'Add a location', '{storage_add_location}'),
+ ('`locations edit <name> [--name NEW] [same options as add] [--no-overflow]`',
+  'Change a location; a new name also renames it on its spools; `--no-overflow` switches overflow off', '{common_edit}'),
+ ('`locations move <name> (--first \\| --last \\| --before <other>)`', 'Change the fill order', 'Move up, Move down'),
+ ('`locations remove <name>`', 'Remove a location (asks)', '{common_remove}'),
+ ('`locations default-overflow <name>`',
+  'Make it the default overflow (a Bulk storage location that is not overflow becomes overflow as well)',
+  '{storage_make_default_overflow}'),
+ ('`locations sealed <name>`', 'Sealed spools go here', '{storage_sealed_here}'),
  ('`label-reader status`', 'Label Reader engines and their health', '{nav_settings} > {settings_group_label_reader}'),
  ('`label-reader test <photo>... [--engine cloud\\|local]`', 'Read label photos without adding anything', '{settings_reader_test}'),
  ('`catalog status`', 'Filament Catalog version and last check', '{nav_settings} > {settings_group_catalog}'),
@@ -6409,6 +6464,46 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
             return output.INTERRUPTED
     with output.children_to_stderr():       # --json, --quiet: what a child prints on standard output goes to standard error
         return output.run_json(run) if output.json_mode() else run()
+
+
+def _add_locations(sub) -> None:
+    """`locations` (06 9.15): the storage list and its changes."""
+    lc = sub.add_parser("locations", help="the storage locations in fill order; add, edit, move, remove (root)")
+    lcs = lc.add_subparsers(dest="loc_cmd")
+    lcs.add_parser("list", help="the storage locations in fill order (also what locations alone shows)")
+
+    def options(p) -> None:
+        p.add_argument("--type", choices=("bulk", "containers"), help="bulk: a shelf, rack or drawer; containers: "
+                       "boxes or bags, one spool each")
+        p.add_argument("--limit", metavar="N", help="Bulk storage: the most spools it takes (1 to 9999; none: no limit)")
+        p.add_argument("--count", metavar="N", help="Containers: how many (1 to 999)")
+        p.add_argument("--takes", metavar="any|none|MATERIALS", help="what fills it automatically: any material, "
+                       "none (only when you choose it) or a comma list of materials, e.g. PLA,PETG")
+
+    la = lcs.add_parser("add", help="add a location at the end of the list (root)")
+    la.add_argument("name", help="the new location's name")
+    options(la)
+    la.add_argument("--overflow", action="store_true", help="it takes spools when their own places are full")
+    le = lcs.add_parser("edit", help="change a location; a new name also renames it on its spools (root)")
+    le.add_argument("name", help="the location's name, capitals ignored")
+    le.add_argument("--name", dest="new_name", metavar="NEW", help="rename it (its spools get the new name)")
+    options(le)
+    over = le.add_mutually_exclusive_group()
+    over.add_argument("--overflow", action="store_true", help="it takes spools when their own places are full")
+    over.add_argument("--no-overflow", action="store_true", help="it is no longer an overflow location")
+    lm = lcs.add_parser("move", help="change the fill order (root)")
+    lm.add_argument("name", help="the location to move")
+    where = lm.add_mutually_exclusive_group(required=True)
+    where.add_argument("--first", action="store_true", help="put it first")
+    where.add_argument("--last", action="store_true", help="put it last")
+    where.add_argument("--before", metavar="OTHER", help="put it just before this location")
+    lr_ = lcs.add_parser("remove", help="remove a location, after asking; its spools keep their location text (root)")
+    lr_.add_argument("name", help="the location to remove")
+    _add_yes(lr_)
+    ld = lcs.add_parser("default-overflow", help="make it the default overflow (root)")
+    ld.add_argument("name", help="a Bulk storage location")
+    lz = lcs.add_parser("sealed", help="sealed spools go to this Bulk storage location (root)")
+    lz.add_argument("name", help="a Bulk storage location")
 
 
 def _add_yes(parser, help: str = "answer yes to the question this command asks (a script has no terminal to ask on)") -> None:
@@ -6630,8 +6725,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     cft = cfsub.add_parser("theme", help="show or set the theme for new devices (setting it needs root)")
     cft.add_argument("theme", nargs="?", help="console, workbench, palette or panes, in any case")
     cfs = cfsub.add_parser("set", help="change one setting, checked as the menu checks it (root)")
-    cfs.add_argument("key", help="the setting's key, e.g. placement.pla_location")
+    cfs.add_argument("key", help="the setting's key, e.g. server_name")
     cfs.add_argument("value", help="its new value")
+    _add_locations(sub)
     sub.add_parser("certificate", help="make the Hub's certificate if missing; print its fingerprint")
     sub.add_parser("cert", help="the old spelling of certificate")
     _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
@@ -6863,7 +6959,7 @@ def _sub_of(a) -> str | None:
     """The word after the command: `backup create` is `create`."""
     for name in ("station_cmd", "recent_cmd", "devices_cmd", "printer_cmd", "library_cmd", "presets_cmd", "features_cmd",
                  "web_cmd", "li_cmd", "lr_cmd", "tag_reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd",
-                 "config_cmd", "spoolman_cmd"):
+                 "config_cmd", "spoolman_cmd", "loc_cmd"):
         if hasattr(a, name):
             return getattr(a, name)
     return None
@@ -6899,7 +6995,8 @@ def _json_refusal(a) -> int | None:
 
 # `--quiet`: the commands whose standard output is only results (06 6.8 drops them). Every other command prints what it
 # exists to print there (a list, a detail, an answer, a link or token) or is a screen, and stays as it is.
-_RESULTS_ONLY = {("weigh-station", "flash-display"), ("backup", "create"), ("backup", "keep"), ("restore", None),
+_RESULTS_ONLY = {("locations", "add"), ("locations", "edit"), ("locations", "move"), ("locations", "remove"),
+                 ("locations", "default-overflow"), ("locations", "sealed"), ("weigh-station", "flash-display"), ("backup", "create"), ("backup", "keep"), ("restore", None),
                  ("recent", "edit"), ("recent", "undo"), ("devices", "forget"), ("spoolman", "fields"),
                  ("spoolman", "address"), ("config", "set"), ("printer", "report"), ("printer", "unpin"),
                  ("catalog", "update"), ("catalog", "rollback"), ("catalog", "adopt"), ("catalog", "add"),
@@ -6949,10 +7046,12 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_devices(yes=getattr(args, "yes", False), forget=args.device if args.devices_cmd == "forget" else None)
     if args.cmd == "config":
         if args.config_cmd == "show":
-            return cmd_config_show()
+            return cmd_config_show(sm_factory)
         if args.config_cmd == "theme":
             return cmd_config_theme(args.theme)
-        return cmd_config_set(args.key, args.value) if args.config_cmd == "set" else cmd_config()
+        return cmd_config_set(args.key, args.value) if args.config_cmd == "set" else cmd_config(sm_factory)
+    if args.cmd == "locations":
+        return locations_cli.run(args, sm_factory or _default_spoolman)
     if args.cmd == "recent":
         return _dispatch_recent(args)
     if args.cmd == "certificate":

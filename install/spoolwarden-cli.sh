@@ -84,6 +84,13 @@ if [ "${1:-}" = local-intake ] && { [ "${2:-}" = install ] || [ "${2:-}" = remov
         || [ "${2:-}" = plan ] || [ "${2:-}" = share-corrections ]; }; then
     run_as_root "$@"
 fi
+# `locations add`, `edit`, `move`, `remove`, `default-overflow` and `sealed` write the list (storage.xml in the
+# root-owned folder) and rename spools; `locations` and `locations list` only read and run as the user below.
+if [ "${1:-}" = locations ]; then
+    case "${2:-}" in
+        add | edit | move | remove | default-overflow | sealed) run_as_root "$@" ;;
+    esac
+fi
 # `label-reader corrections` (list, remove, retry, package, send) uses the reader's root-owned token; `status` and
 # `test` read as the user below.
 if [ "${1:-}" = label-reader ] && [ "${2:-}" = corrections ]; then

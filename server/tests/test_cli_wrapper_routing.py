@@ -26,11 +26,14 @@ ROOT_COMMANDS = [
     ["certificate"], ["logs"], ["logs", "filament-kit-web", "--lines", "50"], ["features", "on", "web"],
     ["weigh-station", "pair"], ["spoolman", "address", "http://spoolman.example:7912"], ["catalog", "token"],
     ["catalog", "token", "--remove"], ["backup", "keep", "21"], ["remote", "get-certificate"], ["config", "set", "model", "x"],
+    ["locations", "add", "x"], ["locations", "edit", "x", "--limit", "3"], ["locations", "move", "x", "--first"],
+    ["locations", "remove", "x"], ["locations", "default-overflow", "x"], ["locations", "sealed", "x"],
 ]
 USER_COMMANDS = [
     ["local-intake", "status"], ["local-intake", "test", "a.jpg"], ["web", "status"], ["reader", "tokens"],
     ["printer", "list"], ["recent"], ["label-reader", "status"], ["label-reader", "test", "a.jpg"], ["catalog", "status"],
     ["catalog", "update"], ["spoolman", "fields"], ["spoolman", "address"], ["add"], ["spool"], ["help", "aliases"],
+    ["locations"], ["locations", "list"], ["locations", "--json"],
 ]
 
 

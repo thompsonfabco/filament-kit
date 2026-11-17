@@ -1073,7 +1073,7 @@ marked in the label text "(optional)"; error summary as a `Card` with `errorCont
 
 **Behaviour and keyboard.** Addresses and serials have `autocapitalize="none"`, `spellcheck="false"` and
 `autocomplete="off"`; serials `autocapitalize="characters"`. Leading and trailing spaces are dropped on save. A list
-of known values (vendors, storage locations) is offered with a `datalist`; the person may still type a new value. A
+of known values (vendors) is offered with a `datalist`; the person may still type a new value. A
 search field searches 300 ms after typing stops (at least two characters), shows its result count, and has no
 separate Search button; Enter searches at once; Escape clears it.
 
@@ -1208,8 +1208,8 @@ KeyboardType.Number or Decimal)`.
 a slicer parent, a storage location, the theme for new devices). Up to four options use a segmented choice (5.7).
 
 **Anatomy.** As 5.1, with a native `select` drawn without the browser's arrow (`appearance: none`) and a chevron icon
-at its end. When the Hub offers an automatic choice, it is the first option and says what it will do: "Automatic:
-Shelf A (PLA rack)".
+at its end. When the Hub offers an automatic choice, it is the first option, "Automatic"; what it will do can show
+in a supporting line under the field: "Rack 1 (the first place for PLA with room)".
 
 **Sizes and tokens.** As 5.1; right padding `calc(var(--s3) + var(--s4) + var(--s2))` for the chevron; chevron
 `icon--s` `--muted`, not clickable (`pointer-events: none`).
@@ -1567,11 +1567,11 @@ dirty state in the `ViewModel`; the guard as `BackHandler` plus `AlertDialog`; d
   <div class="group__head">
     <svg class="icon icon--s" aria-hidden="true"><use href="#i-spool"/></svg>
     <div><h2 class="group__title" id="set-storage-title" tabindex="-1">Storage locations</h2>
-      <p class="group__desc">Where spools are put away.</p></div>
+      <p class="group__desc">Where spools are put away, and in which order the places fill up.</p></div>
   </div>
   <div class="group__body">
-    <div class="field field--row">…Locations…</div>
-    <div class="field field--row field--number">…Number of storage boxes…</div>
+    <div>…Locations: one row per location, "Add a location"…</div>
+    <div>…Where a new spool goes…</div>
   </div>
   <div class="group__foot">
     <p class="result" role="status"><span class="status status--warn">…</span>Unsaved changes</p>

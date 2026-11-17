@@ -349,7 +349,7 @@ def test_quiet_shows_the_storage_menu_with_its_question(capsys, monkeypatch):
     finally:
         output.configure(quiet=False)
     out = capsys.readouterr().out
-    assert "dropped" not in out and "Storage locations" in out and "1  Locations" in out and "Number: " in out
+    assert "dropped" not in out and "Storage locations" in out and "1  Sealed stock" in out and "Number: " in out
 
 
 def test_a_restore_has_no_word_to_type_under_json(capsys, tmp_path):

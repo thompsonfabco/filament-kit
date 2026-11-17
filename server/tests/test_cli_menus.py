@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from filament_kit import cli, config, menu_ui, modules, output, secret_input
+from filament_kit import cli, config, menu_ui, modules, output, secret_input, storage
 from filament_kit.bridge import registry
 
 BOTH = {n: True for n in ("spoolman", "server", "ai_intake", "local_intake", "backup", "web", "library", "station")}
@@ -71,47 +71,47 @@ def test_a_group_screen_is_headed_by_its_place_and_ends_with_the_actions_that_ar
 
 
 def test_a_staged_change_is_saved_with_s_and_the_group_shows_what_is_stored(capsys, monkeypatch):
-    # 3 Storage locations, 2 PLA rack, 5 Overflow location; q back; s saves both; q leaves
-    assert run(monkeypatch, "3\n2\nShelf Z\n5\nSpill\nq\ns\nq\n") == 0
+    # 2 General, 1 display name; q back; 5 Backups and restore, 1 keep nightly backups for; q back; s saves both; q leaves
+    assert run(monkeypatch, "2\n1\nShelf Z\nq\n5\n1\n30\nq\ns\nq\n") == 0
     cfg = stored()
-    assert cfg["placement"]["pla_location"] == "Shelf Z" and cfg["placement"]["overflow"] == "Spill"
+    assert cfg["server_name"] == "Shelf Z" and cfg["backup"]["keep_days"] == 30
     out = capsys.readouterr().out
-    assert "PLA rack [Rack 1]: Changed, not saved yet." in out
+    assert "Display name [workshop]: Changed, not saved yet." in out
     assert "Settings - workshop - 2 changes not saved" in out
-    assert "Saved 2 changes: PLA rack, overflow location." in out
+    assert "Saved 2 changes: display name, keep nightly backups for." in out
 
 
 def test_s_saves_from_a_group_level_too_and_with_nothing_staged_says_so(capsys, monkeypatch):
-    assert run(monkeypatch, "3\ns\n2\nShelf Z\ns\nq\nq\n") == 0
+    assert run(monkeypatch, "2\ns\n1\nShelf Z\ns\nq\nq\n") == 0
     out = capsys.readouterr().out
-    assert "Nothing to save." in out and "Saved 1 change: PLA rack." in out
-    assert stored()["placement"]["pla_location"] == "Shelf Z"
+    assert "Nothing to save." in out and "Saved 1 change: display name." in out
+    assert stored()["server_name"] == "Shelf Z"
 
 
 def test_nothing_is_saved_by_leaving_q_with_changes_asks_and_a_no_stays(capsys, monkeypatch):
-    before = stored()["placement"]["pla_location"]
-    assert run(monkeypatch, "3\n2\nShelf Z\nq\nq\nn\nq\ny\n") == 5
+    before = stored()["server_name"]
+    assert run(monkeypatch, "2\n1\nShelf Z\nq\nq\nn\nq\ny\n") == 5
     out = capsys.readouterr().out
-    assert out.count("Leave without saving 1 change (PLA rack)? [y/N] ") == 2
-    assert out.rstrip().endswith("Nothing saved.") and stored()["placement"]["pla_location"] == before
+    assert out.count("Leave without saving 1 change (Display name)? [y/N] ") == 2
+    assert out.rstrip().endswith("Nothing saved.") and stored()["server_name"] == before
 
 
 def test_q_with_nothing_staged_just_leaves_and_an_empty_answer_to_the_question_is_a_no(capsys, monkeypatch):
     assert run(monkeypatch, "q\n") == 0
     assert "Leave without" not in capsys.readouterr().out
-    assert run(monkeypatch, "3\n2\nX\nq\nq\n\nq\nyes\n") == 5          # an empty answer: no; "yes" in any case: yes
+    assert run(monkeypatch, "2\n1\nX\nq\nq\n\nq\nyes\n") == 5          # an empty answer: no; "yes" in any case: yes
 
 
 def test_the_end_of_input_ends_with_5_and_says_how_many_changes_were_lost(capsys, monkeypatch):
-    assert run(monkeypatch, "3\n2\nShelf Z\n") == 5
+    assert run(monkeypatch, "2\n1\nShelf Z\n") == 5
     assert capsys.readouterr().out.rstrip().endswith("Input ended: 1 change not saved.")
-    assert run(monkeypatch, "3\n2\nA\n5\nB\n") == 5
+    assert run(monkeypatch, "2\n1\nA\nq\n5\n1\n30\n") == 5
     assert "Input ended: 2 changes not saved." in capsys.readouterr().out
     assert run(monkeypatch, "") == 0 and "Input ended" not in capsys.readouterr().out      # nothing staged
 
 
 def test_ctrl_c_leaves_at_once_without_asking_with_130(capsys, monkeypatch):
-    answers = iter(["3", "2", "Shelf Z", "q"])
+    answers = iter(["2", "1", "Shelf Z", "q"])
 
     def ask(prompt):
         try:
@@ -122,7 +122,7 @@ def test_ctrl_c_leaves_at_once_without_asking_with_130(capsys, monkeypatch):
     monkeypatch.setattr(sys, "stdin", io.StringIO(""))
     assert cli.main(["config", "--numbered"]) == 130
     assert capsys.readouterr().out.rstrip().endswith("Left without saving 1 change.")
-    assert stored()["placement"]["pla_location"] != "Shelf Z"
+    assert stored()["server_name"] != "Shelf Z"
     answers = iter([])
     assert cli.main(["config", "--numbered"]) == 130
     assert "Left without" not in capsys.readouterr().out
@@ -145,24 +145,18 @@ def test_question_mark_lists_every_key_and_a_checklist_adds_its_setup_letters(ca
 
 
 def test_a_wrong_value_prints_the_error_and_asks_again_and_earlier_changes_stay(capsys, monkeypatch):
-    assert run(monkeypatch, "3\n2\nShelf Z\n4\ntwo\n-1\n\nq\nq\nn\ns\nq\n") == 0
+    assert run(monkeypatch, "2\n1\nShelf Z\nq\n5\n1\ntwo\n-1\n\nq\nq\nn\ns\nq\n") == 0
     cap = capsys.readouterr()
-    assert cap.err.count("Error: the number of storage boxes is a whole number, 0 or more.") == 2
-    assert "Number of storage boxes [0]: Number of storage boxes [0]: Number of storage boxes [0]: Unchanged." in cap.out
-    assert "Leave without saving 1 change (PLA rack)?" in cap.out and stored()["placement"]["pla_location"] == "Shelf Z"
+    assert cap.err.count("Error: the keep nightly backups for is a whole number, 1 to 365.") == 2
+    assert "Keep nightly backups for [14]: Keep nightly backups for [14]: Keep nightly backups for [14]: Unchanged." in cap.out
+    assert "Leave without saving 1 change (Display name)?" in cap.out and stored()["server_name"] == "Shelf Z"
 
 
 def test_the_same_value_is_unchanged_and_staging_the_stored_value_again_drops_the_change(capsys, monkeypatch):
-    assert run(monkeypatch, "3\n2\nRack 1\nq\nq\n") == 0                      # equal to the current one
+    assert run(monkeypatch, "2\n1\nworkshop\nq\nq\n") == 0                      # equal to the current one
     assert capsys.readouterr().out.count("Unchanged.") == 1
-    assert run(monkeypatch, "3\n2\nShelf Z\n2\nRack 1\nq\nq\n") == 0         # back to the stored value: nothing to lose
+    assert run(monkeypatch, "2\n1\nShelf Z\n1\nworkshop\nq\nq\n") == 0         # back to the stored value: nothing to lose
     assert "Leave without" not in capsys.readouterr().out
-
-
-def test_a_box_prefix_with_a_trailing_space_is_shown_in_quotes_and_kept(capsys, monkeypatch):
-    assert run(monkeypatch, "3\n3\nDry box \nq\ns\nq\n") == 0
-    out = capsys.readouterr().out
-    assert 'Box location prefix "Storage box "' in say(out) and stored()["placement"]["box_prefix"] == "Dry box "
 
 
 def test_choices_are_numbered_with_the_current_one_marked_and_an_empty_answer_keeps_it(capsys, monkeypatch):
@@ -451,7 +445,7 @@ def test_piped_input_without_numbered_is_refused_with_exit_2_and_a_fix(capsys, m
 def test_plain_implies_numbered_and_its_output_has_no_escape_or_carriage_return(capsys, monkeypatch):
     all_features()
     monkeypatch.setenv("TERM", "xterm")
-    monkeypatch.setattr(sys, "stdin", io.StringIO("3\n2\nShelf Z\nq\n10\nq\n11\n?\nq\nq\nq\ny\n"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("2\n1\nShelf Z\nq\n10\nq\n11\n?\nq\nq\nq\ny\n"))
     assert cli.main(["config", "--plain"]) == 5
     cap = capsys.readouterr()
     assert "\x1b" not in cap.out + cap.err and "\r" not in cap.out + cap.err
@@ -482,9 +476,10 @@ def test_config_without_root_says_to_use_sudo_before_anything_is_asked(monkeypat
 # ---------- every old setting is still reachable ----------
 
 def test_every_setting_the_old_menu_had_is_reachable_and_saved(capsys, monkeypatch, secrets):
-    """Old -> new: 1 display name -> 2 General; 2 storage (5 values) -> 3 Storage locations; 3 model and reads per day
-    and 4 the Anthropic key -> 4 Label Reader; 5 Printers -> 10 Printers; 6 Modules -> 11 Features; 7 Station voice ->
-    9 Weigh Station voice; 8 intake records kept and 9 label reader (order, address, tier) -> 4 Label Reader."""
+    """Old -> new: 1 display name -> 2 General; 2 storage (5 values) -> 3 Storage locations, now a list (the old keys went
+    to `locations`; test_cli_locations.py); 3 model and reads per day and 4 the Anthropic key -> 4 Label Reader; 5 Printers
+    -> 10 Printers; 6 Modules -> 11 Features; 7 Station voice -> 9 Weigh Station voice; 8 intake records kept and 9 label
+    reader (order, address, tier) -> 4 Label Reader."""
     all_features(local_intake=True)
     asked, given = secrets
     given += ["sk-ant-TOPSECRET"]
@@ -492,16 +487,14 @@ def test_every_setting_the_old_menu_had_is_reachable_and_saved(capsys, monkeypat
     monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: 0)
     script = "\n".join([
         "2", "1", "my-kit", "q",                                                   # display name
-        "3", "1", "A, B ,C", "2", "Shelf", "3", "Box ", "4", "7", "5", "Spill", "q",   # the five storage values
+        "3", "q",                                                                  # the storage list opens and closes
         "4", "1", "2", "2", "3", "claude-x", "4", "30", "5", "http://gpu-box.example:7915", "6", "3", "7", "99", "q",
         "9", "1", "2", "q",                                                        # station voice: espeak-ng
         "10", "q", "11", "q",                                                      # Printers and Features open
         "s", "q", ""])
     assert run(monkeypatch, script) == 0
     cfg = stored()
-    assert cfg["server_name"] == "my-kit" and cfg["locations"] == ["A", "B", "C"]
-    assert cfg["placement"] == {**cfg["placement"], "pla_location": "Shelf", "box_prefix": "Box ", "box_count": 7,
-                                "overflow": "Spill"}
+    assert cfg["server_name"] == "my-kit"
     assert cfg["model"] == "claude-x" and cfg["reads_per_day"] == 30 and cfg["intake"]["history_keep"] == 99
     assert cfg["intake"]["reader"] == "local-then-cloud"
     assert cfg["local_intake"] == {"url": "http://gpu-box.example:7915", "tier": "gpu"}
@@ -509,16 +502,15 @@ def test_every_setting_the_old_menu_had_is_reachable_and_saved(capsys, monkeypat
     assert (config.paths().etc / "anthropic_key").read_text().strip() == "sk-ant-TOPSECRET"
     out = capsys.readouterr().out
     assert "Printers - 0 set up - 0 found" in out and "Features - Custom" in out
-    assert "Saved 14 changes: display name, locations, PLA rack, box location prefix, number of storage boxes, " in say(out)
+    assert "Saved 9 changes: display name, " in say(out)
 
 
-def test_the_installers_storage_question_edits_the_config_in_place_with_q(monkeypatch):
+def test_the_installers_storage_question_writes_the_new_list_with_q(monkeypatch):
     cfg = config.load()
-    monkeypatch.setattr(sys, "stdin", io.StringIO("2\nShelf Z\n4\n3\nq\n"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("2\n3\n30\nq\nq\n"))        # row 2, its spool limit, back, back
     output.configure(numbered=True)
     cli._storage_menu(cfg)
-    assert cfg["placement"]["pla_location"] == "Shelf Z" and cfg["placement"]["box_count"] == 3
-    assert config.load()["placement"]["pla_location"] != "Shelf Z"        # the caller saves
+    assert storage.current().locations[1].limit == 30
 
 
 # ---------- the Printers screen (8.4) ----------
@@ -910,7 +902,7 @@ def test_an_empty_serial_with_a_certificate_without_one_is_an_error_with_a_fix(s
 def test_the_end_of_input_at_a_secret_prompt_of_the_add_ends_the_session_with_5(secrets, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
     monkeypatch.setattr(secret_input, "ask", lambda prompt: (_ for _ in ()).throw(EOFError()))
-    assert run(monkeypatch, "3\n2\nShelf Z\n10\na\n\n192.0.2.57\n") == 5
+    assert run(monkeypatch, "2\n1\nShelf Z\nq\n10\na\n\n192.0.2.57\n") == 5
     out = capsys.readouterr().out
     assert out.rstrip().endswith("Input ended: 1 change not saved.") and registry.load() == {}
 
@@ -919,7 +911,7 @@ def test_a_settings_file_that_cannot_be_written_is_an_error_and_the_changes_stay
     def refuse(cfg):
         raise PermissionError("config.json: access denied")
     monkeypatch.setattr(config, "save", refuse)
-    assert run(monkeypatch, "3\n2\nShelf Z\ns\nq\nq\nyes\n") == 5
+    assert run(monkeypatch, "2\n1\nShelf Z\ns\nq\nq\nyes\n") == 5
     assert "nothing was saved: config.json: access denied. Your changes are still here." in say(capsys.readouterr().err)
 
 

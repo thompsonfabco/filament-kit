@@ -694,7 +694,8 @@ def test_the_storage_messages_are_the_catalogue_texts():
     sent = {**storage_api.MESSAGES, "storage_notice_converted": storage.NOTICE,
             "storage_notice_default_overflow_no_limit": storage.DEFAULT_OVERFLOW_NOTE,
             "storage_check_not_saved": storage.SAVE_FAILED, "storage_check_not_read": storage.READ_FAILED,
-            "storage_save_refused": storage.NOT_SAVED}
+            "storage_save_refused": storage.NOT_SAVED, "storage_check_fix_not_saved": storage.FIX_NOT_SAVED,
+            "storage_check_fix_not_read": storage.FIX_NOT_READ}
     drift = {k: (v, catalogue.get(k)) for k, v in sent.items() if catalogue.get(k) != v}
     assert not drift, f"server text and catalogue differ for: {drift}"
     assert len(storage_api.MESSAGES) >= 30

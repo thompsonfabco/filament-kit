@@ -15,7 +15,7 @@ import types
 
 import pytest
 
-from filament_kit import cli, config, menu_ui, modules, output
+from filament_kit import cli, config, locations_cli, menu_ui, modules, output, storage
 from filament_kit.menu_ui import (ESC, KEY_DOWN, KEY_END, KEY_ENTER, KEY_HOME, KEY_NPAGE, KEY_PPAGE, KEY_UP, Keys, Row,
                                   Screen)
 
@@ -345,7 +345,7 @@ def test_ctrl_d_in_the_full_screen_variant_is_the_end_of_input():
 
 
 def test_config_full_screen_ctrl_d_ends_the_input_with_5_when_changes_are_staged(fullscreen, capsys):
-    code, _ = fullscreen(["3", "2"] + typed("Shelf Z") + ["\n", "\x04"])
+    code, _ = fullscreen(["3", "1", "3"] + typed("25") + ["\n", "\x04"])
     assert code == 5 and capsys.readouterr().out.strip() == "Input ended: 1 change not saved."
     code, _ = fullscreen(["\x04"])
     assert code == 0 and capsys.readouterr().out == ""
@@ -490,12 +490,12 @@ def fullscreen(monkeypatch):
     return run
 
 
-def test_config_full_screen_changes_a_value_by_number_saves_with_s_and_leaves_with_q(fullscreen):
-    # 3 Storage locations; 2 PLA rack: the prompt is on the footer; Enter; s saves; q back; q leave
-    code, scr = fullscreen(["3", "2"] + typed("Shelf Z") + ["\n", "s", "q", "q"])
-    assert code == 0 and config.load()["placement"]["pla_location"] == "Shelf Z"
+def test_config_full_screen_changes_a_value_by_number_saves_with_s_and_leaves_with_q(fullscreen, monkeypatch):
+    # 3 Storage locations; 1 the first location; 3 its spool limit: the prompt is on the footer; Enter; s saves; q back to the list; q back; q leave
+    code, scr = fullscreen(["3", "1", "3"] + typed("25") + ["\n", "s", "q", "q", "q"])
+    assert code == 0 and storage.current().locations[0].limit == 25
     shown = "\n".join(scr.text(i) for i in range(len(scr.frames)))
-    assert "PLA rack [Rack 1]: Shelf Z" in shown and "Saved 1 change: PLA rack." in shown
+    assert "Spool limit [none]: 25" in shown and "Saved 1 change: storage locations." in shown
     assert "Settings > Storage locations" in shown and "1 change not saved" in shown
 
 
@@ -505,15 +505,15 @@ def test_config_full_screen_opens_a_row_with_enter_after_moving_the_cursor(fulls
 
 
 def test_config_full_screen_q_with_changes_asks_and_yes_ends_with_5_and_nothing_saved(fullscreen, capsys):
-    before = config.load()["placement"]["pla_location"]
-    code, scr = fullscreen(["3", "2"] + typed("Shelf Z") + ["\n", "q", "q"] + typed("y") + ["\n"])
-    assert code == 5 and config.load()["placement"]["pla_location"] == before
-    assert "Leave without saving 1 change (PLA rack)? [y/N] y" in scr.text(-1)
+    before = storage.current().locations[0].limit
+    code, scr = fullscreen(["3", "1", "3"] + typed("25") + ["\n", "q", "q", "q"] + typed("y") + ["\n"])
+    assert code == 5 and storage.current().locations[0].limit == before
+    assert "Leave without saving 1 change (Storage locations)? [y/N] y" in scr.text(-1)
     assert capsys.readouterr().out.strip() == "Nothing saved."
 
 
 def test_config_full_screen_ctrl_c_leaves_at_once_saying_what_was_not_saved(fullscreen, capsys):
-    code, scr = fullscreen(["3", "2"] + typed("Shelf Z") + ["\n"], ctrl_c=True)          # then the window raises Ctrl-C
+    code, scr = fullscreen(["3", "1", "3"] + typed("25") + ["\n"], ctrl_c=True)          # then the window raises Ctrl-C
     assert code == 130 and capsys.readouterr().out.strip() == "Left without saving 1 change."
     code, _ = fullscreen([], ctrl_c=True)
     assert code == 130 and capsys.readouterr().out == ""                    # nothing staged: it just ends

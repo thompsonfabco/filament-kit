@@ -17,7 +17,7 @@ from filament_kit import cli, output
 ROOT = Path(cli.__file__).parent
 # the modules whose texts the command line prints (an error, a note, a row, a result); not the setup page's, not the
 # installer's script texts, which no `wrap` lays out
-MODULES = ("cli.py", "klipper_cli.py", "status.py", "updates.py", "remote.py", "local_intake_install.py",
+MODULES = ("cli.py", "klipper_cli.py", "locations_cli.py", "status.py", "updates.py", "remote.py", "local_intake_install.py",
            "backup.py", "release.py", "station/server_api.py")
 # a command is a word that is typed: the programs a text names, and the kit's own commands by their first word. This
 # list is written apart from `output`'s, so a program one of them misses is found here
@@ -27,7 +27,7 @@ COMMAND = re.compile(
     r"\bjournalctl -|\bapt(?:-get)? (?:install|remove)\b|\bpip install|\bpython3? -m\b|\btar xzf|\bcurl -|\busermod\b|"
     r"\bgroupadd\b|\bpio run\b|\./\S+\.sh|\bcertbot (?:certonly|renew)\b|"
     r"\b(?:spoolwarden|filament-kit) (?:apply|backup|catalog|cert|certificate|config|devices|ensure-fields|help|intake|klipper|label-reader|"
-    r"library|local-intake|logs|modules|pair|printer|profiles|reader|recent|remote|restore|setup-code|spoolman|station|"
+    r"library|local-intake|locations|logs|modules|pair|printer|profiles|reader|recent|remote|restore|setup-code|spoolman|station|"
     r"status|uninstall|unpair|update|web)\b")
 # a quoted argument, spaces and commas inside it: from a quote to the same quote
 QUOTED = re.compile(r"""(["'])(?:(?!\1).)*\1""")
