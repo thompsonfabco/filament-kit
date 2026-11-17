@@ -69,6 +69,12 @@
   :root[data-look="panes"] .settings[data-open] .settings__list { display: none; }
   :root[data-look="panes"] .settings[data-open] .settings__back { display: inline-flex; justify-self: start; }
 }
+/* Panes with a form open (the pane takes 22rem on the right): below a wide desktop the group takes the whole middle, its list of groups gives way to Back */
+@media (min-width: 1025px) and (max-width: 1599px) {
+  :root[data-look="panes"] .settings:has(.coll__row--detail:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+  :root[data-look="panes"] .settings:has(.coll__row--detail:not([hidden])) .settings__list { display: none; }
+  :root[data-look="panes"] .settings[data-open]:has(.coll__row--detail:not([hidden])) .settings__back { display: inline-flex; justify-self: start; }
+}
 /* devices (S2.9) */
 /* the section is two columns from a wide tablet up: Paired devices across, then the cards in pairs (03 7.1) */
 @media (min-width: 1025px) {

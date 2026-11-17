@@ -1,1 +1,1 @@
-server/filament_kit/setup_static/setup_storage.js | input | 3 | the hidden payload field, the "Filled automatically with" radios and an input listener; the group is one list form, not a field of the field component
+server/filament_kit/setup_static/setup_storage.js | input | 3 | the "Filled automatically with" radios are a real field (the hidden payload input is not; the third count is an addEventListener("input") match); the group is one list form, not a field of the field component

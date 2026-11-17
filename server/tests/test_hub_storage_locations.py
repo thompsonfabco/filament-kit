@@ -2,8 +2,8 @@
 locations in fill order with Add, Edit, Move up and down, Make default overflow, Sealed spools go here and Remove, the
 "Where a new spool goes" panel built from the unsaved list, one Save with the dirty mark, the field and dialog texts of R79
 section 5, and the list readable in all four looks at 1280, 1776, 1024, 768 and 390 px (no summary squeezed to a sliver or
-wrapped past two lines, no sideways scrolling: the lesson of the Panes summary-width finding). The page runs against the
-stub of setup_storage.js (R79 section 4 shapes), so these tests need no server work. The same skip rules as the page audit:
+wrapped past two lines, no sideways scrolling: the lesson of the Panes summary-width finding). The page runs against the Hub's
+real routes and storage.xml (R79 section 4 shapes) with spools in the fake Spoolman. The same skip rules as the page audit:
 no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
 
@@ -538,3 +538,35 @@ def test_the_list_and_its_form_are_readable_in_all_four_looks(hub, tmp_path, wid
             continue
         assert entry["inView"] and entry["foot"] and entry["page"]["sw"] <= entry["page"]["cw"], (width, entry)
         assert entry["nameW"] >= 140, (width, entry, "the Name field is squeezed")
+
+
+OPEN_WIDTH = r"""
+const widths = [];
+for (const look of ["console", "workbench", "palette", "panes"]) {
+  document.documentElement.setAttribute("data-look", look);
+  await sleep(300);
+  for (const what of ["add", "edit"]) {
+    if (what === "add") await openAdd(); else await openEdit("Rack 1");
+    await sleep(400);
+    const group = $("#set-storage").getBoundingClientRect(), coll = $("#set-storage .coll--storage").getBoundingClientRect();
+    const edit = $(".btn:not(.btn--icon)", rowOf("Rack 2")).getBoundingClientRect();
+    widths.push({ look, what, group: Math.round(group.width), coll: Math.round(coll.width), editH: Math.round(edit.height), visible: group.width > 0 });
+    $(".btn--ghost:not(.detail__close):not(.detail__back)", form()).click();
+    await until(() => !form() && !$("dialog[open]"), "the form to close");
+    await sleep(200);
+  }
+}
+out.widths = widths;
+"""
+
+
+@pytest.mark.parametrize("width", [1280, 1776])
+def test_the_list_keeps_a_readable_width_with_the_add_or_edit_form_open(hub, tmp_path, width):
+    """Review R462: in Panes the open editor sat beside Settings' own list and left the group 185 px (rows stacked as cards,
+    buttons wrapped). With the form open every look keeps the group and its list wide, and the Edit button on one line."""
+    seen = _drive_storage(hub, tmp_path, OPEN_WIDTH, width=width)["widths"]
+    assert {(w["look"], w["what"]) for w in seen} == {(l, k) for l in ("console", "workbench", "palette", "panes") for k in ("add", "edit")}
+    for w in seen:
+        floor = (480, 300) if w["look"] == "panes" else (700, 600)
+        assert w["group"] >= floor[0] and w["coll"] >= floor[1], (width, w, "the group is squeezed beside the open form")
+        assert w["editH"] <= 48, (width, w, "the Edit button wrapped")
