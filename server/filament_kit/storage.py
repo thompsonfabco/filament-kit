@@ -31,7 +31,9 @@ NONE, ANY, MATERIALS = "none", "any", "materials"
 NOTICE = "Storage locations were converted. Check them."
 SAVE_FAILED = "Storage locations could not be saved ({reason})."      # the Checks row (Hub, Needs a look)
 READ_FAILED = "Storage locations could not be read ({reason})."
-NOT_SAVED = "Storage locations were not saved: {reason}."            # a refused save (Hub page, `Error:` line)
+NOT_SAVED = "Storage locations were not saved: {reason}."
+FIX_NOT_SAVED = "Check that the Hub's user can write {folder}, then restart the Hub."
+FIX_NOT_READ = "Restore {file} from a backup, or move it away and restart the Hub."            # a refused save (Hub page, `Error:` line)
 MODE = 0o644
 VERSION = "1"
 NAME_MAX = 100
@@ -532,16 +534,22 @@ def current() -> Storage:
     return st if st is not None else migrate(config.load())
 
 
-def checks_row() -> dict | None:
-    """The one Checks row storage may add (group Hub, state "Needs a look"), or None. The Hub page and `status` show
-    it (wired in a later step): {"group", "state", "text"}."""
+def checks_row(hub_running: bool = False) -> dict | None:
+    """The one Checks row storage may add, or None when all is well: {"group": "Hub", "state": "Needs a look", "text",
+    "fix"}. `spoolwarden status` and the Hub's Overview answer show it (status.storage_rows). The reason of a failed
+    write is known only to the Hub process; another process (`status`) that finds no file while the Hub runs says so
+    with `hub_running`."""
+    f = _file()
     try:
         if load() is not None:
             return None
     except Unreadable as e:
-        return {"group": "Hub", "state": "Needs a look", "text": READ_FAILED.format(reason=e.reason)}
-    if _save_failed:
-        return {"group": "Hub", "state": "Needs a look", "text": SAVE_FAILED.format(reason=_save_failed)}
+        return {"group": "Hub", "state": "Needs a look", "text": READ_FAILED.format(reason=e.reason),
+                "fix": FIX_NOT_READ.format(file=f)}
+    reason = _save_failed or (f"{f.name} is not in {f.parent}" if hub_running else None)
+    if reason:
+        return {"group": "Hub", "state": "Needs a look", "text": SAVE_FAILED.format(reason=reason),
+                "fix": FIX_NOT_SAVED.format(folder=f.parent)}
     return None
 
 

@@ -50,6 +50,7 @@ def routes(page) -> list[tuple]:
         if body.get("dry_run") is True:
             return await anyio.to_thread.run_sync(run, lambda b: storage_api.preview(sm(), b), body)
         r = await anyio.to_thread.run_sync(run, lambda b: storage_api.save(sm(), b), body)
+        page.overview_cache.clear()                    # a good save drops the Checks row of a failed one at once
         page.audit(request, "storage locations saved" if r["saved"] else "storage locations saving (rename job)")
         return r
 

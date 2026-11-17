@@ -2895,6 +2895,8 @@
   "storage_check_not_saved": "Storage locations could not be saved ({reason}).",
   "storage_check_not_read": "Storage locations could not be read ({reason}).",
   "storage_save_refused": "Storage locations were not saved: {reason}.",
+  "storage_check_fix_not_saved": "Check that the Hub's user can write {folder}, then restart the Hub.",
+  "storage_check_fix_not_read": "Restore {file} from a backup, or move it away and restart the Hub.",
   "storage_notice_default_overflow_no_limit": "The default overflow has no limit, so the other overflow places are never used. Give it a spool limit to let them fill.",
   "storage_renamed": { "one": "Renamed {from} to {to}. {count} spool updated.", "other": "Renamed {from} to {to}. {count} spools updated." },
   "storage_reason_sealed": "where sealed spools go",

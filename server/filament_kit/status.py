@@ -317,6 +317,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
     p = config.paths()
     on = modules.enabled(cfg)
 
+    api_up = False
     if cli._no_systemd():
         yield Row(INFO, "service checks skipped (FK_NO_SYSTEMD=1)", group="Hub")
     else:
@@ -330,6 +331,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
                       group="Hub")
         if "server" in on:
             ok, url = cli._api_answers(cfg["port"])
+            api_up = ok
             yield Row(OK if ok else FAIL, f"Spoolwarden API {'answering' if ok else 'not answering'} at {url}",
                       "sudo journalctl -u filament-kit -n 50", group="Hub")
 
@@ -356,6 +358,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
         else:
             yield Row(FAIL, f"certificate missing ({cert})", "run: sudo spoolwarden cert",
                       group="Hub")
+        yield from storage_rows(api_up)
 
     station_url = (cfg.get("station") or {}).get("url")
     if station_url:
@@ -373,6 +376,15 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
         yield from profile_rows()
     elif "library" in on:
         yield from _library_safe()
+
+
+def storage_rows(hub_running: bool = False) -> Iterator[Row]:
+    """The storage locations' one row, when the list could not be saved or read (storage.checks_row): the same row for
+    `spoolwarden status` and the Overview's answer, filed under Hub. Nothing when all is well."""
+    from . import storage
+    row = storage.checks_row(hub_running)
+    if row:
+        yield Row(FAIL, row["text"], row["fix"], group=row["group"])
 
 
 def local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:

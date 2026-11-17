@@ -791,7 +791,8 @@ def test_a_start_never_fails_when_the_file_cannot_be_written(etc, state, monkeyp
     assert storage.current().by_name("Storage box").count == 2                       # places from memory
     row = storage.checks_row()
     assert row == {"group": "Hub", "state": "Needs a look",
-                   "text": f"Storage locations could not be saved ({err.strerror})."}
+                   "text": f"Storage locations could not be saved ({err.strerror}).",
+                   "fix": f"Check that the Hub's user can write {state}, then restart the Hub."}
     monkeypatch.setattr(storage, "_write", real_write)
     storage.migrate_at_start()                                                       # the next start writes it
     assert (state / "storage.xml").exists() and storage.checks_row() is None
