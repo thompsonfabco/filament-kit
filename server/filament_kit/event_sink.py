@@ -89,6 +89,24 @@ def sink():
     return _sink
 
 
+_weight_hook = None
+
+
+def set_weight_hook(fn) -> None:
+    """The Hub gives a function that checks spools for running low; `weight_changed` calls it with Spoolman."""
+    global _weight_hook
+    _weight_hook = fn
+
+
+def weight_changed(sm) -> None:
+    """A spool's weight was changed by the Hub: check running low right away (R80 section 7). Never raises."""
+    if _weight_hook is not None:
+        try:
+            _weight_hook(sm)
+        except Exception:  # noqa: BLE001 - a spool change must not fail because the check did
+            log.exception("running-low check after a weight change failed")
+
+
 def current_actor() -> dict:
     return _actor.get() or HUB
 

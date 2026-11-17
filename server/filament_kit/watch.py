@@ -373,3 +373,188 @@ class Watcher:
                 p = self._p.get(pid)
                 if base == "print-paused" and p is not None and p.state not in (None, "PAUSE") and not p.pending:
                     self._clear(pid, ev["condition"]["key"])
+
+
+# ---------------------------------------------------------------- the 5-minute loop
+
+EVERY = 300.0               # seconds between rounds (R80 section 6)
+PRUNE_EVERY = 86400.0       # old month files are deleted once a day
+
+
+def _raised(sink, base: str) -> dict:
+    """{suffix: the event that raised it} of the raised conditions whose key starts with `base:`."""
+    out = {}
+    for ev in sink.conditions():
+        b, _, rest = ev["condition"]["key"].partition(":")
+        if b == base:
+            out[rest] = ev
+    return out
+
+
+def check_disk(sink, settings: dict | None = None) -> None:
+    """storage.low / storage.ok from the disk in the worst state (R80 section 6): one event per limit passed; the
+    disk falling from bad back to warn writes storage.low again, severity warn, `direction` down (never an alert)."""
+    s = settings or alerts.load()
+    fs = alerts.worst(alerts.filesystems(s))
+    if fs is None:
+        return
+    raised = next((e for e in sink.conditions() if e["condition"]["key"] == "storage-low"), None)
+    data = {"free": fs["free"], "total": fs["total"], "percent": fs["percent_used"]}
+    subject = {"type": "hub"}
+    if fs["state"] == "ok":
+        if raised is not None:
+            sink.write("storage.ok", subject, HUB, {"free": fs["free"], "total": fs["total"]})
+    elif raised is None or (raised["severity"] == "warn" and fs["state"] == "bad"):
+        sink.write("storage.low", subject, HUB, data, severity=fs["state"])
+    elif raised["severity"] == "bad" and fs["state"] == "warn":
+        sink.write("storage.low", subject, HUB, {**data, "direction": "down"}, severity="warn")
+
+
+def check_low(sm, sink=None, settings: dict | None = None) -> None:
+    """spool.low for each opened spool that is at or under the threshold and not raised yet; spool.ok (or
+    condition.cleared when the spool is gone) for each raised one that is not low any more. Nothing when Spoolman
+    cannot be read."""
+    from .spoolman import SpoolmanError
+    sink = sink if sink is not None else event_sink.sink()
+    s = settings or alerts.load()
+    try:
+        spools = sm.get("spool") or []
+    except SpoolmanError as e:
+        log.info("spools are not checked for running low: %s", e)
+        return
+    low = {r["id"]: r for r in alerts.running_low(spools, s)["spools"]}
+    raised = _raised(sink, "spool-low")
+    by_id = {sp.get("id"): sp for sp in spools}
+    for sid, r in low.items():
+        if str(sid) not in raised:
+            sink.write("spool.low", event_sink.spool_subject(by_id[sid]), HUB,
+                       {"spool": sid, "filament": r["filament"], "material": r["material"], "grams": r["remaining_g"],
+                        "in_stock": r["in_stock"]})
+    for key, ev in raised.items():
+        if key.isdigit() and int(key) in low:
+            continue
+        subject = ev["subject"]
+        if key.isdigit() and int(key) in by_id:               # above the threshold again, sealed or emptied
+            sink.write("spool.ok", subject, HUB, {"spool": key})
+            continue
+        try:
+            sm.get(f"spool/{key}")
+        except SpoolmanError as e:
+            if e.status == 404:
+                sink.write("condition.cleared", subject, HUB, {"key": f"spool-low:{key}", "reason": "subject_removed"})
+            continue
+        sink.write("spool.ok", subject, HUB, {"spool": key})  # archived: emptied
+
+
+def check_devices(sink, station_url: str | None, devices: list[dict]) -> None:
+    """device.down / device.up for the Weigh Station, when the Hub can ask it (its address is set and exactly one
+    station is paired: the known limit of 0.6.2). Tag Readers are not covered (R80 E3)."""
+    from .station_client import station_reach
+    reach = station_reach(devices, station_url)
+    by_id = {d["id"]: d for d in devices}
+    for key, ev in _raised(sink, "device-down").items():
+        if key not in by_id:
+            sink.write("condition.cleared", ev["subject"], HUB, {"key": f"device-down:{key}",
+                                                                 "reason": "subject_removed"})
+        elif key not in reach:                               # the address is gone or two stations are paired
+            sink.write("condition.cleared", ev["subject"], HUB, {"key": f"device-down:{key}", "reason": "reconciled"})
+    for did, up in reach.items():
+        d = by_id[did]
+        subject = {"type": "device", "id": did, "name": d.get("name") or ""}
+        down = f"device-down:{did}"
+        if not up and not sink.is_raised(down):
+            sink.write("device.down", subject, HUB)
+        elif up and sink.is_raised(down):
+            sink.write("device.up", subject, HUB)
+
+
+def row_key(row) -> str:
+    """The key of a Checks row: its own `key` when it has one (EA3 may give Row one), else the group and the
+    first two words of its text without digits (the text of a row changes with its numbers, its key must not)."""
+    k = getattr(row, "key", "")
+    if k:
+        return k
+    words = "".join(c if c.isalpha() or c in " -" else " " for c in str(row.text)).lower().split()[:2]
+    return f"{(getattr(row, 'group', '') or 'hub').lower()}.{'-'.join(words)}"
+
+
+def check_rows(sink, rows) -> None:
+    """check.failed when a Checks row needs a look and none is raised for it; check.ok when a raised one is fine
+    again; condition.cleared (feature_off) for a raised one whose row no longer exists. Rows that are notes or
+    detail lines are not checks."""
+    seen = {}
+    for r in rows:
+        if r.state in ("ok", "fail"):
+            seen[row_key(r)] = r
+    raised = _raised(sink, "check")
+    hub = {"type": "hub"}
+    for key, r in seen.items():
+        if r.state == "fail" and key not in raised:
+            sink.write("check.failed", hub, HUB, {"text": r.text}, key=key)
+        elif r.state == "ok" and key in raised:
+            sink.write("check.ok", hub, HUB, {"text": r.text}, key=key)
+    for key, ev in raised.items():
+        if key not in seen:
+            sink.write("condition.cleared", hub, HUB, {"key": f"check:{key}", "reason": "feature_off"})
+
+
+class Loop:
+    """Every 5 minutes: the disk, low spools, the Weigh Station, the Checks rows, the printers' raised conditions
+    against the present state, and once a day the deletion of old month files. A step that fails is logged and the
+    others still run. `rows()` gives the Checks rows (status.collect in the Hub), `devices()` the paired devices."""
+
+    def __init__(self, sink=None, *, spoolman=None, watcher: Watcher | None = None, rows=None, devices=None,
+                 every: float = EVERY, clock=time.monotonic):
+        self._sink = sink
+        self.sm, self.watcher, self._rows, self._devices = spoolman, watcher, rows, devices
+        self.every, self._clock = every, clock
+        self._last_prune: float | None = None
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    @property
+    def sink(self):
+        return self._sink if self._sink is not None else event_sink.sink()
+
+    def start(self) -> None:
+        self._stop.clear()
+
+        def run():
+            self.tick()
+            while not self._stop.wait(self.every):
+                self.tick()
+        self._thread = threading.Thread(target=run, name="event-loop", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(5)
+            self._thread = None
+
+    def tick(self) -> None:
+        steps = [("printers", lambda: self.watcher.reconcile() if self.watcher else None),
+                 ("disk", lambda: check_disk(self.sink)),
+                 ("spools", lambda: check_low(self.sm, self.sink) if self.sm is not None else None),
+                 ("devices", self._check_devices),
+                 ("checks", lambda: check_rows(self.sink, self._rows()) if self._rows else None),
+                 ("prune", self._prune)]
+        for name, step in steps:
+            try:
+                step()
+            except Exception:  # noqa: BLE001 - one step must not stop the rest
+                log.exception("the 5-minute round: %s failed", name)
+
+    def _check_devices(self) -> None:
+        from . import pairing
+        devs = self._devices() if self._devices else pairing.devices()
+        check_devices(self.sink, (config.load().get("station") or {}).get("url"), devs)
+
+    def _prune(self) -> None:
+        """Delete month files older than `events.keep_days` once a day (the only caller of the store's prune)."""
+        from . import events
+        now = self._clock()
+        if self._last_prune is not None and now - self._last_prune < PRUNE_EVERY:
+            return
+        self._last_prune = now
+        events.prune(config.keep_days(config.load()))

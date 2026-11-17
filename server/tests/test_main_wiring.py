@@ -378,3 +378,63 @@ def test_main_passes_one_mapper_to_app_and_lifespan(tmp_path, monkeypatch):
     monkeypatch.setattr(m, "serve", lambda app, hub, **kw: None)
     m.main()
     assert isinstance(seen["app"], mapping.Mapper) and seen["life"] is seen["app"]
+
+
+def test_lifespan_starts_the_event_watcher_and_loop_and_stops_them_first(tmp_path, monkeypatch):
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+    order = []
+
+    class Part:
+        def __init__(self, name):
+            self.name = name
+
+        def start(self):
+            order.append(f"start {self.name}")
+
+        def stop(self):
+            order.append(f"stop {self.name}")
+
+    class M(Mgr):
+        def stop(self):
+            order.append("stop manager")
+
+    async def run():
+        async with m.printer_lifespan(M(), listener_factory=lambda cb: types.SimpleNamespace(
+                start=lambda: None, stop=lambda: None), watcher=Part("watcher"), loop=Part("loop"))(None):
+            order.append("serving")
+    asyncio.run(run())
+    assert order == ["start watcher", "start loop", "serving", "stop loop", "stop watcher", "stop manager"]
+
+
+def test_main_gives_the_store_as_the_sink_and_hands_the_watcher_and_loop_to_the_lifespan(tmp_path, monkeypatch):
+    from filament_kit import event_sink, watch
+    for n in ("etc", "state", "opt"):
+        (tmp_path / n).mkdir()
+        monkeypatch.setenv(f"FK_{n.upper()}", str(tmp_path / n))
+    seen = {}
+    real_lifespan = m.printer_lifespan
+    monkeypatch.setattr(m, "printer_lifespan", lambda mgr, **kw: seen.update(mgr=mgr, kw=kw) or real_lifespan(mgr, **kw))
+    monkeypatch.setattr(m, "serve", lambda app, hub, **kw: None)
+    monkeypatch.setattr(event_sink, "_sink", event_sink.NullSink())
+    m.main()
+    assert isinstance(event_sink.sink(), event_sink.StoreSink)
+    w, loop = seen["kw"]["watcher"], seen["kw"]["loop"]
+    assert isinstance(w, watch.Watcher) and isinstance(loop, watch.Loop) and loop.watcher is w
+    assert w.on_report in seen["mgr"]._listeners                    # listens to the Bambu manager
+    event_sink.set_sink(None)
+
+
+def test_with_no_bridge_the_loop_still_runs(tmp_path, monkeypatch):
+    from filament_kit import event_sink, watch
+    for n in ("etc", "state", "opt"):
+        (tmp_path / n).mkdir()
+        monkeypatch.setenv(f"FK_{n.upper()}", str(tmp_path / n))
+    (tmp_path / "etc" / "config.json").write_text('{"modules": []}', encoding="utf-8")
+    seen = {}
+    real_lifespan = m.printer_lifespan
+    monkeypatch.setattr(m, "printer_lifespan", lambda mgr, **kw: seen.update(mgr=mgr, kw=kw) or real_lifespan(mgr, **kw))
+    monkeypatch.setattr(m, "serve", lambda app, hub, **kw: None)
+    monkeypatch.setattr(m.modules, "enabled", lambda cfg: set())
+    m.main()
+    assert seen["mgr"] is None and isinstance(seen["kw"]["loop"], watch.Loop)
+    event_sink.set_sink(None)
