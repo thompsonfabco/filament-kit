@@ -27,6 +27,8 @@ class Kind:
     base: str | None = None              # the condition key's base
     keyed: bool = True                   # the condition key ends in ":<subject id>"
     emitted: bool = True                 # False = "Later": the name is reserved, nothing may write it yet
+    key_from_data: bool = False          # a clearing kind that names the condition it clears in its value `key`
+    choices: tuple[tuple[str, tuple[str, ...]], ...] = ()    # (value name, the only values it may have)
 
     @property
     def severity(self) -> str:
@@ -35,32 +37,39 @@ class Kind:
 
 # What a person or the Hub changes about a spool: the spool, and the before and after of what changed.
 _SPOOL_CHANGE = ("spool", "before_location", "after_location", "before_grams", "after_grams",
-                 "before_slot", "after_slot")
+                 "before_slot", "after_slot", "batch")      # batch: all spool events of one request (R80 E5)
+# Every print.* event of one print run and its usage.recorded carry `run`; Klipper ones also `printer_job` (R80 E5).
+_RUN = ("run", "printer_job")
 
 
 def _kinds() -> dict[str, Kind]:
     out: dict[str, Kind] = {}
 
-    def add(name, severities, values=(), condition=None, base=None, keyed=True, emitted=True):
+    def add(name, severities, values=(), condition=None, base=None, keyed=True, emitted=True, key_from_data=False,
+            choices=()):
         out[name] = Kind(name, (severities,) if isinstance(severities, str) else tuple(severities), tuple(values),
-                         condition, base, keyed, emitted)
+                         condition, base, keyed, emitted, key_from_data, tuple(choices))
 
-    add("print.started", "info", ("job", "printer"))
-    add("print.paused", "warn", ("job", "percent", "reason", "stage"), RAISES, "print-paused")
-    add("print.runout", "warn", ("job", "percent", "slot"), RAISES, "print-paused")
-    add("print.resumed", "ok", ("job",), CLEARS, "print-paused")
-    add("print.finished", "ok", ("job", "minutes"), CLEARS, "print-paused")
-    add("print.failed", "bad", ("job", "percent", "reason", "error"), CLEARS, "print-paused")
+    add("print.started", "info", ("job", "printer") + _RUN)
+    add("print.paused", "warn", ("job", "percent", "reason", "stage") + _RUN, RAISES, "print-paused")
+    add("print.runout", "warn", ("job", "percent", "slot") + _RUN, RAISES, "print-paused")
+    add("print.resumed", "ok", ("job",) + _RUN, CLEARS, "print-paused")
+    add("print.finished", "ok", ("job", "minutes") + _RUN, CLEARS, "print-paused")
+    add("print.failed", "bad", ("job", "percent", "reason", "error") + _RUN, CLEARS, "print-paused")
     add("printer.error", "bad", ("code", "text"))
     add("printer.offline", "warn", (), RAISES, "printer-offline")
     add("printer.online", "ok", (), CLEARS, "printer-offline")
-    add("usage.recorded", "info", ("printer", "job", "spool", "material", "grams"))
+    add("usage.recorded", "info", ("printer", "job", "spool", "material", "grams") + _RUN)
     add("spool.low", "warn", ("spool", "filament", "material", "grams", "in_stock"), RAISES, "spool-low")
     add("spool.ok", "ok", ("spool",), CLEARS, "spool-low")
     for name in ("added", "opened", "weighed", "moved", "emptied", "loaded", "unloaded"):
         add(f"spool.{name}", "info", _SPOOL_CHANGE)
-    add("storage.low", ("warn", "bad"), ("free", "total", "percent"), RAISES, "storage-low", keyed=False)
+    add("storage.low", ("warn", "bad"), ("free", "total", "percent", "direction"), RAISES, "storage-low", keyed=False)
     add("storage.ok", "ok", ("free", "total"), CLEARS, "storage-low", keyed=False)
+    # a later raise replaces the stored condition (R80 E2); `direction` = down when the disk fell from bad to warn
+    add("condition.cleared", "info", ("key", "reason"), CLEARS, None, keyed=False, key_from_data=True,
+        choices=(("reason", ("reconciled", "subject_removed", "feature_off")),))
+    add("location.renamed", "info", ("from", "to", "spools"))
     add("device.down", "warn", (), RAISES, "device-down")
     add("device.up", "ok", (), CLEARS, "device-down")
     add("check.failed", "warn", ("text",), RAISES, "check")

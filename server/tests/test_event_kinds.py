@@ -59,7 +59,7 @@ def test_the_catalogue_has_the_expected_number_of_kinds():
 
 def test_every_condition_has_a_raising_and_a_clearing_kind():
     raises = {k.base for k in ek.KINDS.values() if k.condition == R}
-    clears = {k.base for k in ek.KINDS.values() if k.condition == C}
+    clears = {k.base for k in ek.KINDS.values() if k.condition == C and not k.key_from_data}
     assert raises == clears == {"print-paused", "printer-offline", "spool-low", "storage-low", "device-down", "check"}
 
 
@@ -78,3 +78,17 @@ def test_condition_keys():
     assert ek.condition_key(ek.get("storage.low"), "") == "storage-low"
     assert ek.condition_key(ek.get("check.failed"), "", "hub-disk") == "check:hub-disk"
     assert ek.condition_key(ek.get("print.started"), "p-3") is None
+
+
+def test_the_additions_of_r80_e2_and_e5():
+    cc = ek.get("condition.cleared")
+    assert (cc.severities, cc.condition, cc.key_from_data, set(cc.values)) == (("info",), C, True, {"key", "reason"})
+    assert dict(cc.choices)["reason"] == ("reconciled", "subject_removed", "feature_off")
+    lr = ek.get("location.renamed")
+    assert lr.severity == "info" and lr.condition is None and set(lr.values) == {"from", "to", "spools"}
+    for name in ("print.started", "print.paused", "print.runout", "print.resumed", "print.finished",
+                 "print.failed", "usage.recorded"):
+        assert {"run", "printer_job"} <= set(ek.get(name).values), name
+    for name in ("added", "opened", "weighed", "moved", "emptied", "loaded", "unloaded"):
+        assert "batch" in ek.get(f"spool.{name}").values
+    assert "direction" in ek.get("storage.low").values

@@ -153,11 +153,11 @@ def test_unknown_kind_and_bad_values_are_refused(store):
     assert store.read()["events"] == [] and store.last_id() == 0
 
 
-def test_a_condition_is_raised_once_and_the_clearing_event_clears_it(store):
+def test_a_condition_is_raised_again_by_the_newest_raise_and_the_clearing_event_clears_it(store):
     first = store.write("print.paused", PRINTER, HUB, {"job": "a"})
     assert [c["id"] for c in store.conditions()] == [first["id"]]
-    store.write("print.runout", PRINTER, HUB, {"job": "a"})        # same key: the event is written, one condition
-    assert [c["id"] for c in store.conditions()] == [first["id"]]
+    second = store.write("print.runout", PRINTER, HUB, {"job": "a"})   # same key: one condition, the newest raise
+    assert [c["id"] for c in store.conditions()] == [second["id"]] and first["id"] != second["id"]
     assert store.is_raised("print-paused:p-3") and len(store.read()["events"]) == 2
     cleared = store.write("print.resumed", PRINTER, HUB, {"job": "a"})
     assert cleared["condition"] == {"key": "print-paused:p-3", "state": "cleared"}
@@ -182,12 +182,15 @@ def test_a_moment_has_no_condition(store):
     assert ev["condition"] is None and store.conditions() == []
 
 
-def test_storage_low_has_one_condition_that_gets_worse_and_is_cleared_by_ok(store):
+def test_storage_low_has_one_condition_the_newest_raise_wins_and_ok_clears_it(store):
     store.write("storage.low", HUB, HUB, {"percent": 86}, severity="warn")
     store.write("storage.low", HUB, HUB, {"percent": 96}, severity="bad")
     store.write("storage.low", HUB, HUB, {"percent": 97}, severity="bad")
     (c,) = store.conditions()
-    assert c["condition"]["key"] == "storage-low" and c["severity"] == "bad" and c["data"]["percent"] == "96"
+    assert c["condition"]["key"] == "storage-low" and c["severity"] == "bad" and c["data"]["percent"] == "97"
+    store.write("storage.low", HUB, HUB, {"percent": 90, "direction": "down"}, severity="warn")   # falls back (E2)
+    (c,) = store.conditions()
+    assert c["severity"] == "warn" and c["data"] == {"percent": "90", "direction": "down"}
     store.write("storage.ok", HUB, HUB, {"free": "9 GB"})
     assert store.conditions() == []
 
@@ -208,7 +211,7 @@ def test_conditions_survive_a_restart(store, tmp_path):
 def test_wait_times_out_empty(store):
     t = time.monotonic()
     res = store.read(since=0, wait=0.6)
-    assert res == {"events": [], "next": 0} and 0.5 <= time.monotonic() - t < 3
+    assert res == {"events": [], "next": 0, "oldest": 0} and 0.5 <= time.monotonic() - t < 3
 
 
 def test_wait_returns_at_once_when_there_is_news(store):
@@ -564,3 +567,126 @@ def test_unchanged_months_are_not_parsed_again(store, monkeypatch):             
     store.read()
     store.read(since=1)
     assert seen == []
+
+
+# ---------------------------------------------------------------- R80 changes after R465 (E2, E4, E6) and the hard link
+
+def test_since_at_reads_by_time(store):                                                       # E4 / point 1
+    for d in (1, 5, 10, 20):
+        store.write("print.started", PRINTER, HUB, now=at(2026, 11, d))
+    store.write("print.started", PRINTER, HUB, now=at(2026, 9, 3))                           # an older month file
+    assert [e["id"] for e in store.read(since_at=at(2026, 11, 5))["events"]] == [2, 3, 4]
+    assert [e["id"] for e in store.read(since_at="2026-11-05T12:00:01Z")["events"]] == [3, 4]
+    assert [e["id"] for e in store.read(since_at="2026-11-05T12:00:00+00:00")["events"]] == [2, 3, 4]
+    assert [e["id"] for e in store.read(since=2, since_at=at(2026, 11, 5))["events"]] == [3, 4]   # both apply
+    assert store.read(since_at=at(2027, 1, 1))["events"] == []
+    with pytest.raises(EventError, match="not a time"):
+        store.read(since_at="yesterday")
+
+
+def test_since_at_wakes_a_wait_for_news(store):
+    threading.Timer(0.3, lambda: store.write("print.started", PRINTER, HUB)).start()
+    got = store.read(since_at=at(2020, 1, 1), wait=20)
+    assert [e["id"] for e in got["events"]] == [1]
+
+
+def test_oldest_is_the_lowest_id_still_kept(store):                                            # point 2
+    assert store.oldest() == 0 and store.read()["oldest"] == 0
+    for m in (1, 2, 11):
+        store.write("print.started", PRINTER, HUB, now=at(2026, m, 15))
+    assert store.oldest() == 1 and store.read()["oldest"] == 1
+    store.prune(60, at(2026, 11, 17))
+    assert store.oldest() == 3 and store.read(since=0)["oldest"] == 3
+    assert store.read(since=9)["oldest"] == 3                                                  # an empty answer too
+
+
+def test_one_id_one_event_the_first_is_kept(store):
+    store.write("print.started", PRINTER, HUB, {"job": "first"}, now=at(2026, 11, 1))
+    f = store.root / "2026-11.xml"
+    (store.root / "2026-10.xml").write_bytes(
+        f.read_bytes().replace(b'month="2026-11"', b'month="2026-10"')
+        .replace(b"2026-11-01T12:00:00Z", b"2026-11-02T12:00:00Z").replace(b">first<", b">second<"))
+    got = store.read()["events"]
+    assert [e["id"] for e in got] == [1] and got[0]["data"]["job"] == "first"
+
+
+def test_the_counter_is_the_highest_of_every_source(store):                                   # E6 / point 3
+    store.write("spool.low", {"type": "spool", "id": "7"}, HUB, now=at(2026, 1, 15))          # id 1, in conditions
+    store.write("print.started", PRINTER, HUB, now=at(2026, 1, 16))                           # id 2
+    (store.root / "next-id").write_text("1\n")                                                # the counter file lags
+    assert store.write("print.started", PRINTER, HUB, now=at(2026, 1, 17))["id"] == 3
+    (store.root / "high-water").write_text("50\n")                                            # the high-water mark leads
+    assert store.write("print.started", PRINTER, HUB, now=at(2026, 1, 18))["id"] == 51
+    (store.root / "high-water").unlink()
+    (store.root / "next-id").write_text("900\n")                                              # the counter file leads
+    assert store.write("print.started", PRINTER, HUB, now=at(2026, 1, 19))["id"] == 900
+
+
+def test_carry_continues_above_the_live_counter_after_a_restore(store, tmp_path):             # E6 / point 3
+    import shutil
+    for _ in range(5):
+        started(store)
+    held = store.last_id()                                                                      # read before the restore
+    shutil.rmtree(store.root)                          # the restore puts back an older state: 2 events, counter 3
+    old = EventStore(tmp_path / "events")
+    started(old, 2)
+    assert old.last_id() == 2
+    old.carry(held)
+    assert old.write("print.started", PRINTER, HUB)["id"] == held + 1
+    old.carry(3)                                                                                # a lower mark never lowers
+    assert old.write("print.started", PRINTER, HUB)["id"] == held + 2
+    assert callable(events.carry) and callable(events.oldest)
+
+
+def test_carry_works_on_a_store_that_does_not_exist_yet(store):
+    store.carry(40)
+    assert store.write("print.started", PRINTER, HUB)["id"] == 41
+
+
+def test_condition_cleared_clears_the_key_it_names(store):                                     # E2 / point 5
+    store.write("print.paused", PRINTER, HUB)
+    store.write("spool.low", {"type": "spool", "id": "7"}, HUB)
+    ev = store.write("condition.cleared", PRINTER, HUB, {"key": "print-paused:p-3", "reason": "reconciled"})
+    assert ev["severity"] == "info" and ev["condition"] == {"key": "print-paused:p-3", "state": "cleared"}
+    assert [c["condition"]["key"] for c in store.conditions()] == ["spool-low:7"]
+    with pytest.raises(EventError, match="must be one of"):
+        store.write("condition.cleared", PRINTER, HUB, {"key": "spool-low:7", "reason": "because"})
+    with pytest.raises(EventError, match="needs the value key"):
+        store.write("condition.cleared", PRINTER, HUB, {"reason": "reconciled"})
+    for reason in ("subject_removed", "feature_off"):
+        store.write("condition.cleared", HUB, HUB, {"key": "spool-low:7", "reason": reason})
+    assert store.conditions() == []
+
+
+def test_new_values_are_accepted(store):                                                       # point 5
+    store.write("print.finished", PRINTER, HUB, {"job": "j", "run": "r-1", "printer_job": "0001"})
+    store.write("usage.recorded", PRINTER, HUB, {"run": "r-1"})
+    store.write("spool.moved", {"type": "spool", "id": "7"}, HUB, {"batch": "b-1"})
+    store.write("storage.low", HUB, HUB, {"direction": "down"}, severity="warn")
+    store.write("location.renamed", {"type": "location", "id": "loc-1"}, {"type": "cli"},
+                {"from": "Shelf", "to": "Rack", "spools": 4})
+    store.write("print.failed", PRINTER, HUB, {"reason": "unknown"})
+    assert len(store.read()["events"]) == 6
+
+
+@POSIX
+def test_a_hard_link_at_the_lock_file_is_refused_and_its_target_is_left_alone(store, tmp_path):   # the LOW
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep")
+    os.chmod(victim, 0o600)
+    store.root.mkdir(parents=True)
+    os.link(victim, store.root / ".lock")
+    with pytest.raises(EventError, match="hard link"):
+        store.write("print.started", PRINTER, HUB)
+    assert victim.read_text() == "keep" and victim.stat().st_mode & 0o777 == 0o600
+    with pytest.raises(EventError, match="hard link"):
+        store.last_id()
+    assert not (store.root / "next-id").exists()
+
+
+@POSIX
+def test_a_hard_link_at_a_month_file_is_refused(store, tmp_path):
+    started(store, now=at(2026, 11, 17))
+    os.link(store.root / "2026-11.xml", tmp_path / "second-name")
+    with pytest.raises(EventError, match="hard link"):
+        store.write("print.started", PRINTER, HUB, now=at(2026, 11, 18))

@@ -141,6 +141,24 @@ def _replace(tmp: Path, f: Path) -> None:
 _cache: dict[str, tuple[tuple, list[dict]]] = {}       # month file -> (its size and time, its events)
 
 
+def _iso(t) -> str | None:
+    """A time as the stored text (UTC, to the second): from a datetime or an ISO text, None for none."""
+    if t is None or t == "":
+        return None
+    if isinstance(t, str):
+        try:
+            t = datetime.fromisoformat(t.strip().replace("Z", "+00:00"))
+        except ValueError:
+            raise EventError(f"{t!r} is not a time. Use the form 2026-11-17T04:12:09Z.") from None
+    return _utc(t).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _month_end(path: Path) -> datetime:
+    """The first moment after the month a month file is named for."""
+    y, m = (int(g) for g in _MONTH.match(path.name).groups())
+    return datetime(y + (m == 12), m % 12 + 1, 1, tzinfo=timezone.utc)
+
+
 def _utc(now: datetime | None) -> datetime:
     now = now or datetime.now(timezone.utc)
     return now.astimezone(timezone.utc) if now.tzinfo else now.replace(tzinfo=timezone.utc)
@@ -249,6 +267,11 @@ class _FileLock:
             if self.needed:                      # a reader that cannot open the lock file reads without it
                 raise
             return self
+        if os.fstat(self.fd).st_nlink > 1:       # a hard link planted at .lock: never chmod, chown or lock it
+            os.close(self.fd)
+            self.fd = None
+            raise EventError(f"{self.path.name} has another name (a hard link), so the Hub does not use it. "
+                             f"Remove the extra link.")
         if self.give:
             self.give(self.fd)
         if fcntl:
@@ -303,6 +326,9 @@ class EventStore:
     def _give(self, fd: int) -> None:
         """Mode 0644 and, as root, the state folder's owner (only when it differs), on a file this process opened."""
         st = os.fstat(fd)
+        if st.st_nlink > 1:
+            raise EventError("A file of the event store has another name (a hard link), so the Hub does not use it. "
+                             "Remove the extra link.")
         if hasattr(os, "fchmod") and stat.S_IMODE(st.st_mode) != FILE_MODE:
             os.fchmod(fd, FILE_MODE)
         if _is_root():
@@ -327,17 +353,15 @@ class EventStore:
                 os.lchown(self.root, uid, gid)
 
     def _counter(self) -> int:
-        """The id the next event gets. A missing or unreadable next-id is rebuilt from the newest events on disk."""
+        """The id the next event gets: one above the highest of every source (R80 E6): the counter file, the highest
+        id in the month files, the high-water mark (prune and restore record it) and the ids in conditions.xml."""
         try:
-            n = int(_read_bytes(self.root / "next-id").decode("ascii").strip())
-            if n >= 1:
-                return n
+            n = int(_read_bytes(self.root / "next-id").decode("ascii").strip()) - 1
         except (OSError, ValueError, EventError):
-            pass
-        top = 0
+            n = 0
+        top = max(n, self._high_water(), *(e["id"] for e in self._load_conditions().values()), 0)
         for p in self._months():                          # by id, not by name: the clock may have stepped back
             top = max([top] + [e["id"] for e in _read_file(p)])
-        top = max([top, self._high_water()] + [e["id"] for e in self._load_conditions().values()])
         return top + 1
 
     def _high_water(self) -> int:
@@ -444,8 +468,9 @@ class EventStore:
         """Write one event and return it (the dict `read` returns). `subject` and `actor` are {type, id, name} (id
         and name optional; a bare string is the type). `severity` is the kind's own unless the kind allows two
         (storage.low: warn or bad). `key` is the condition key's suffix when it is not the subject id (a check row's
-        key). A kind that raises a condition raises it (once: one already raised stays, unless this is worse); a
-        kind that clears one clears it, whether or not it was raised."""
+        key). A kind that raises a condition raises it (a later raise of the same key replaces the stored one: the
+        newest raise wins); a kind that clears one clears it, whether or not it was raised (`condition.cleared`
+        clears the key in its value `key`)."""
         k = event_kinds.get(kind)
         if k is None:
             raise EventError(f"Unknown event kind {kind!r}.")
@@ -462,7 +487,15 @@ class EventStore:
                 raise EventError(f"{kind} has no value called {name!r}. It has: {', '.join(k.values) or 'none'}.")
             if value is not None:
                 values[name] = _text(value)
-        ckey = event_kinds.condition_key(k, subject["id"], None if key is None else _text(key))
+        for name, allowed in k.choices:
+            if name in values and values[name] not in allowed:
+                raise EventError(f"{kind} value {name} must be one of {', '.join(allowed)}.")
+        if k.key_from_data:                                  # condition.cleared: the value `key` names what it clears
+            ckey = values.get("key") or None
+            if not ckey:
+                raise EventError(f"{kind} needs the value key: the condition it clears.")
+        else:
+            ckey = event_kinds.condition_key(k, subject["id"], None if key is None else _text(key))
         if ckey is not None and ckey.endswith(":"):
             raise EventError(f"{kind} needs a subject id (or a key) for its condition.")
         at = _utc(now)
@@ -494,10 +527,9 @@ class EventStore:
             return False
         if c["state"] == "raised":
             cur = conds.get(c["key"])
-            if cur is not None and (event_kinds.SEVERITIES.index(ev["severity"])
-                                    <= event_kinds.SEVERITIES.index(cur["severity"])):
-                return False                             # raised once: it stays as it was until it gets worse
-            conds[c["key"]] = ev
+            if cur is not None and cur["id"] > ev["id"]:
+                return False                             # an older event replayed never replaces a newer raise
+            conds[c["key"]] = ev                         # the newest raise wins, whatever its severity (R80 E2)
             return True
         return conds.pop(c["key"], None) is not None
 
@@ -548,20 +580,37 @@ class EventStore:
             except OSError:
                 return 0
 
-    def _events_after(self, since: int, kinds: tuple[str, ...]) -> list[dict]:
+    def _events_after(self, since: int, kinds: tuple[str, ...], since_at: str | None = None) -> list[dict]:
         out: list[dict] = []
         for path in self._months():                      # every month: by id, not by name (the clock can step back)
-            out += [e for e in _read_file(path) if e["id"] > since and (not kinds or e["kind"].startswith(kinds))]
-        out.sort(key=lambda e: e["id"])
-        return out
+            if since_at and _month_end(path) <= datetime.strptime(since_at, "%Y-%m-%dT%H:%M:%SZ").replace(
+                    tzinfo=timezone.utc):
+                continue                                 # the month ended before the time asked for
+            out += [e for e in _read_file(path)
+                    if e["id"] > since and (not since_at or e["at"] >= since_at)
+                    and (not kinds or e["kind"].startswith(kinds))]
+        out.sort(key=lambda e: (e["id"], e["at"]))
+        return [e for i, e in enumerate(out) if i == 0 or e["id"] != out[i - 1]["id"]]   # one id, one event: first
 
-    def read(self, since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0) -> dict:
-        """Events newer than `since`, oldest first, at most `limit` (1 to 1000), whose kind starts with one of
-        `kinds` (a list or a comma-separated string of prefixes; none = all). `wait` (0 to 55 s) blocks until such an
-        event exists; the answer is empty after the time. Returns {"events": [...], "next": id}: continue with
-        since=next."""
+    def oldest(self) -> int:
+        """The lowest id still kept in the month files (0 when there is none): the API's `oldest`; `gap` is true
+        when a client's `since` is lower than this minus one (events between were deleted by age)."""
+        tlock, _ = _shared_for(self.root)
+        with tlock:
+            self._guard()
+            ids = [e["id"] for p in self._months() for e in _read_file(p)]
+        return min(ids, default=0)
+
+    def read(self, since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0, *,
+             since_at: datetime | str | None = None) -> dict:
+        """Events newer than `since` (an id) and, when `since_at` (a time, UTC: a datetime or an ISO text) is given,
+        at or after it; oldest first, at most `limit` (1 to 1000), whose kind starts with one of `kinds` (a list or a
+        comma-separated string of prefixes; none = all). `wait` (0 to 55 s) blocks until such an event exists; the
+        answer is empty after the time. Returns {"events": [...], "next": id, "oldest": lowest id kept}: continue
+        with since=next."""
         since = max(int(since or 0), 0)
         limit = min(max(int(limit or LIMIT_DEFAULT), 1), LIMIT_MAX)
+        at_text = _iso(since_at)
         if isinstance(kinds, str):
             kinds = kinds.split(",")
         prefixes = tuple(p.strip() for p in (kinds or ()) if p and p.strip())
@@ -572,15 +621,27 @@ class EventStore:
             newest = self.last_id()
             if seen is None or newest > seen:
                 seen = newest
-                evs = copy.deepcopy(self._events_after(since, prefixes)[:limit])
+                evs = copy.deepcopy(self._events_after(since, prefixes, at_text)[:limit])
                 if evs:
-                    return {"events": evs, "next": evs[-1]["id"]}
+                    return {"events": evs, "next": evs[-1]["id"], "oldest": self.oldest()}
             left = deadline - time.monotonic()
             if left <= 0:
-                return {"events": [], "next": since}
+                return {"events": [], "next": since, "oldest": self.oldest()}
             with cond:
                 cond.wait(min(POLL, left))               # a writer in this process wakes it at once; another
                                                          # process is noticed by the next look at next-id
+
+    def carry(self, high: int) -> None:
+        """Carry `high` as the high-water mark, so ids continue above it (R80 E6). The restore of a backup calls it
+        after the state folder is replaced, with the last id the store held before (`last_id()`): the counter is
+        the highest of every source, so ids continue above the restored store's own highest and above `high`."""
+        high = int(high)
+        tlock, _ = _shared_for(self.root)
+        with tlock:
+            self._ensure_root()
+            with _FileLock(self.root / ".lock", needed=True, give=self._give):
+                if high > self._high_water():
+                    self._atomic(self.root / "high-water", f"{high}".encode("ascii") + b"\n")
 
     def conditions(self) -> list[dict]:
         """The conditions raised now: the event that raised each, oldest first."""
@@ -609,8 +670,7 @@ class EventStore:
         with tlock:
             old = []
             for path in self._months():
-                y, m = (int(g) for g in _MONTH.match(path.name).groups())
-                if 1 <= m <= 12 and datetime(y + (m == 12), m % 12 + 1, 1, tzinfo=timezone.utc) <= cutoff:
+                if 1 <= int(path.name[5:7]) <= 12 and _month_end(path) <= cutoff:
                     old.append(path)                     # the month ended before the cutoff
             if old:
                 self._guard()
@@ -634,8 +694,16 @@ def write(kind: str, subject, actor, data: dict | None = None, **kw) -> dict:
     return store().write(kind, subject, actor, data, **kw)
 
 
-def read(since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0) -> dict:
-    return store().read(since, limit, kinds, wait)
+def read(since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0, *, since_at=None) -> dict:
+    return store().read(since, limit, kinds, wait, since_at=since_at)
+
+
+def oldest() -> int:
+    return store().oldest()
+
+
+def carry(high: int) -> None:
+    store().carry(high)
 
 
 def conditions() -> list[dict]:
