@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import os
 
-from filament_kit import config, setup_helper
+from filament_kit import config, setup_helper, storage
 
 from test_hub_page_audit import _run, hub_app, hub_change  # noqa: F401
 from test_hub_presets_ui import _drive, T, hub  # noqa: F401
@@ -56,8 +56,8 @@ out.titles = [...document.querySelectorAll(".group__head .group__title")].map(te
 out.saves = [...document.querySelectorAll(".settings__group form .group__foot [type=submit]")].map(text);
 // Storage locations: the list is edited as a whole (R79); a move is a change, and one Save sends the list (setup_storage.js)
 const form = $("#set-storage");
-await until(() => $('[aria-label="Move Rack 1 up"]'), "the locations");
-$('[aria-label="Move Rack 1 up"]').click();
+await until(() => $('[aria-label^="Move Rack 1 "]'), "the locations");
+$('[aria-label^="Move Rack 1 "]:not([aria-disabled="true"])').click();
 await until(() => form.dataset.state === "dirty", "the dirty state");
 const link = $('.subnav__link[data-id="storage"] .subnav__dirty');
 out.dirty = { link: shown(link) && text(link), title: shown($("#set-storage .settings__dirty")), foot: text($("#set-storage .group__dirty")), other: shown($('.subnav__link[data-id="general"] .subnav__dirty')) };
@@ -175,7 +175,7 @@ out.back = { groups: shown($(".settings__main")) };
 return out;
 """, width=320)
     assert page["list"] == {"shown": True, "rows": NAMES, "groups": False, "nav": False}
-    assert page["states"]["storage"] == T("settings_state_storage", count=6)
+    assert page["states"]["storage"] == T("settings_state_storage", count=len(storage.peek().locations))
     assert page["states"]["general"] == "Workshop hub"
     assert page["group"] == {"hash": "#settings/storage", "list": False, "back": T("nav_settings"), "visible": ["storage"]}
     assert page["back"] == {"groups": False}

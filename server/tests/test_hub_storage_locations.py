@@ -7,8 +7,11 @@ stub of setup_storage.js (R79 section 4 shapes), so these tests need no server w
 no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
 
+import httpx
 import pytest
 
+from filament_kit import storage
+from filament_kit.storage import ANY, CONTAINERS, MATERIALS, Location, Storage
 from test_hub_page_audit import hub_app  # noqa: F401
 from test_hub_presets_ui import _drive, T, hub  # noqa: F401
 from test_hub_settings import PRELUDE
@@ -48,6 +51,7 @@ const menuLabels = async (name) => {
 };
 const moveBtn = (name, dir) => $(`[aria-label="Move ${name} ${dir}"]`);
 const dirty = () => ({ form: $("#set-storage").dataset.state || null, link: shown($('.subnav__link[data-id="storage"] .subnav__dirty')), foot: shown($("#set-storage .group__dirty")) });
+const settled = () => sleep(700);                         // the preview of the unsaved list answers after a short wait
 const ready = async () => {
   await loaded();
   location.hash = "#settings/storage";
@@ -55,6 +59,24 @@ const ready = async () => {
   await sleep(200);
 };
 """
+
+
+@pytest.fixture(autouse=True)
+def stock(hub_app, spoolman_url):  # noqa: F811
+    """The Hub's real storage list (storage.xml) and spools in the fake Spoolman: the page reads and saves through the real routes.
+    The set of containers is a PREFIXED one (its name is not its prefix) and the list is flagged as converted."""
+    storage.save(Storage([
+        Location("Sealed stock", sealed=True),
+        Location("Rack 1", limit=20, fill=MATERIALS, materials=["PLA"]),
+        Location("Rack 2", fill=MATERIALS, materials=["PETG", "ABS"]),
+        Location("Storage box (containers)", CONTAINERS, count=12, prefix="Storage box ", fill=ANY),
+        Location("Overflow", overflow=True, default_overflow=True),
+        Location("Dry shelf", limit=10, overflow=True)], converted=True))
+    places = ["Sealed stock"] * 4 + ["Rack 1"] * 17 + ["Rack 2"] * 7 + [f"Storage box {n:02d}" for n in (1, 2, 3, 4, 5, 6, 7, 11, 12)] + ["Overflow"] * 2
+    with httpx.Client() as c:
+        filament = c.get(spoolman_url + "/api/v1/filament").json()[0]["id"]        # the spool of the audit data is the 18th at Rack 1
+        for place in places:
+            c.post(spoolman_url + "/api/v1/spool", json={"filament_id": filament, "location": place, "remaining_weight": 500}).raise_for_status()
 
 
 def _drive_storage(hub, tmp_path, body, width=1280, look="console"):
@@ -77,35 +99,35 @@ out.up = rowEls().map((r) => $(".storage__move--up", r).getAttribute("aria-label
 out.down = rowEls().map((r) => $(".storage__move--down", r).getAttribute("aria-label"));
 out.disabled = rowEls().map((r) => [$(".storage__move--up", r).getAttribute("aria-disabled"), $(".storage__move--down", r).getAttribute("aria-disabled")]);
 out.panel = panel();
-out.notice = { shown: shown($("#set-storage .storage__notice")), text: text($("#set-storage .storage__notice")) };
+out.notice = { shown: shown($("#set-storage .banner[data-notice=\"default_overflow_no_limit\"]")), text: text($("#set-storage .banner[data-notice=\"default_overflow_no_limit\"]")) };
 out.converted = !!$("#set-storage .banner--info");
 out.panelTitle = text($("#set-storage .storage__panel .settings__heading"));
 out.save = text($("#set-storage [type=submit]"));
 out.dirty = dirty();
 """)
     assert page["names"] == START and page["summary"] == T("settings_state_storage", count=6)
-    assert page["desc"] == T("settings_storage_desc") and page["heading"] == T("settings_storage_locations") and page["add"] == T("settings_storage_add")
-    bulk, containers = T("settings_storage_type_bulk"), T("settings_storage_type_containers")
+    assert page["desc"] == T("settings_storage_desc") and page["heading"] == T("settings_storage_locations") and page["add"] == T("storage_add_location")
+    bulk, containers = T("storage_type_bulk"), T("storage_type_containers")
     assert page["cells"] == {
-        "Sealed stock": {"full": T("settings_storage_full_open", count=4), "takes": T("settings_storage_takes_none"), "type": bulk},
+        "Sealed stock": {"full": T("storage_used_plain", count=4), "takes": T("storage_takes_none"), "type": bulk},
         "Rack 1": {"full": "18 of 20 spools", "takes": "PLA", "type": bulk},
         "Rack 2": {"full": "7 spools", "takes": "PETG, ABS", "type": bulk},
-        "Storage box (containers)": {"full": "9 of 12 containers used", "takes": T("settings_storage_fill_any"), "type": containers},
-        "Overflow": {"full": "2 spools", "takes": T("settings_storage_takes_none"), "type": bulk},
-        "Dry shelf": {"full": "0 of 10 spools", "takes": T("settings_storage_takes_none"), "type": bulk},
+        "Storage box (containers)": {"full": "9 of 12 containers used", "takes": T("storage_fill_any"), "type": containers},
+        "Overflow": {"full": "2 spools", "takes": T("storage_takes_none"), "type": bulk},
+        "Dry shelf": {"full": "0 of 10 spools", "takes": T("storage_takes_none"), "type": bulk},
     }
-    over, default, sealed = T("settings_storage_badge_overflow"), T("settings_storage_badge_default"), T("settings_storage_badge_sealed")
+    over, default, sealed = T("storage_badge_overflow"), T("storage_badge_default_overflow"), T("storage_badge_sealed")
     assert page["badges"] == {"Sealed stock": [sealed], "Rack 1": [], "Rack 2": [], "Storage box (containers)": [], "Overflow": [over, default], "Dry shelf": [over]}
     assert page["position"] == ["1", "2", "3", "4", "5", "6"]
     assert page["edit"] == [T("settings_storage_edit_name", name=n) for n in START]
-    assert page["up"] == [T("settings_storage_move_up", name=n) for n in START] and page["down"] == [T("settings_storage_move_down", name=n) for n in START]
+    assert page["up"] == [T("storage_move_up", name=n) for n in START] and page["down"] == [T("storage_move_down", name=n) for n in START]
     assert page["disabled"] == [["true", "false"]] + [["false", "false"]] * 4 + [["false", "true"]]
     # the panel: one line per material named in the list, then everything else
-    assert page["panelTitle"] == T("settings_storage_panel")
+    assert page["panelTitle"] == T("storage_panel_title")
     assert page["panel"] == ["PLA: Rack 1, then Overflow, then Dry shelf", "PETG: Rack 2, then Overflow, then Dry shelf", "ABS: Rack 2, then Overflow, then Dry shelf",
                              "Everything else: Storage box (containers), then Overflow, then Dry shelf"]
     # R79 C1: two overflow places and no limit on the default: the notice says the other one is never reached
-    assert page["notice"] == {"shown": True, "text": T("settings_storage_overflow_unused")} and page["converted"] is True
+    assert page["notice"] == {"shown": True, "text": T("storage_notice_default_overflow_no_limit")} and page["converted"] is True
     assert page["save"] == T("settings_storage_save") and page["dirty"] == {"form": None, "link": False, "foot": False}
 
 
@@ -159,6 +181,7 @@ out.dryBox = { ...cells("Dry box"), badges: badges("Dry box"), takes: undefined 
 out.dryBoxTakes = cells("Dry box").takes;
 out.focus = document.activeElement.getAttribute("aria-label");
 out.dirtyAfterAdd = dirty();
+await settled();
 out.panelAfterAdd = panel();
 out.summary = text($('.settings__row[data-id="storage"] .settings__state'));
 
@@ -190,34 +213,35 @@ $("input[name=overflow]", f).click();
 setField(f, "limit", "30");
 await submit(f);
 await until(() => !form(), "the editor to close");
-out.noticeAfter = shown($("#set-storage .storage__notice"));
+await settled();
+out.noticeAfter = shown($("#set-storage .banner[data-notice=\"default_overflow_no_limit\"]"));
 """)
-    assert page["addTitle"] == T("settings_storage_add") and page["addButton"] == T("settings_storage_add_confirm") and page["typeStart"] == "bulk"
-    for word in ("settings_storage_name", "settings_storage_type", "settings_storage_limit", "settings_storage_fill"):
+    assert page["addTitle"] == T("storage_add_location") and page["addButton"] == T("storage_add_submit") and page["typeStart"] == "bulk"
+    for word in ("storage_field_name", "storage_field_type", "storage_field_limit", "storage_field_fill"):
         assert T(word) in page["legends"], (word, page["legends"])
-    assert T("settings_storage_type_bulk_hint") in page["hints"] and T("settings_storage_limit_hint") in page["hints"] and T("settings_storage_overflow_hint") in page["hints"]
+    assert T("storage_type_bulk_hint") in page["hints"] and T("storage_field_limit_hint") in page["hints"] and T("storage_field_overflow_hint") in page["hints"]
     assert page["limitHidden"] == [False, True, True]
-    assert page["errName"] == T("settings_storage_error_name") and page["errTaken"] == T("settings_storage_error_name_taken", name="rack 1")
-    assert page["errLimit"] == page["errLimit2"] == T("settings_storage_error_number") == "Enter a whole number, 1 or more."
-    assert page["materialsShown"] and page["errMaterials"] == T("settings_storage_error_materials") == "Enter at least one material, e.g. PLA."
-    assert page["containersShown"] == [True, True] and page["typeHint"] == T("settings_storage_type_containers_hint")
-    assert page["errCount"] == page["errCount2"] == T("settings_storage_error_number")
+    assert page["errName"] == T("storage_error_name") and page["errTaken"] == T("storage_error_name_taken", name="rack 1")
+    assert page["errLimit"] == page["errLimit2"] == T("storage_error_whole") == "Enter a whole number, 1 or more."
+    assert page["materialsShown"] and page["errMaterials"] == T("storage_error_materials") == "Enter at least one material, e.g. PLA."
+    assert page["containersShown"] == [True, True] and page["typeHint"] == T("storage_type_containers_hint").replace("{product}", "Spoolwarden")
+    assert page["errCount"] == page["errCount2"] == T("storage_error_whole")
     assert page["afterAdd"] == START + ["Dry box"] and page["dryBoxTakes"] == "PETG, pla+"
-    assert page["dryBox"]["full"] == "0 of 5 spools" and page["dryBox"]["badges"] == [T("settings_storage_badge_overflow")]
+    assert page["dryBox"]["full"] == "0 of 5 spools" and page["dryBox"]["badges"] == [T("storage_badge_overflow")]
     assert page["focus"] == T("settings_storage_edit_name", name="Dry box")
     assert page["dirtyAfterAdd"] == {"form": "dirty", "link": True, "foot": True} and page["summary"] == T("settings_state_storage", count=6)     # the summary is the saved list's
     assert page["panelAfterAdd"][-1] == "Everything else: Storage box (containers), then Overflow, then Dry shelf, then Dry box"
     assert "PETG: Rack 2, then Dry box, then Overflow, then Dry shelf" in page["panelAfterAdd"]     # an overflow place that names a material is an own place (R79 C2)
     assert "pla+: Dry box, then Overflow, then Dry shelf" in page["panelAfterAdd"] and any(line.startswith("pla+: ") for line in page["panelAfterAdd"])
-    assert page["editTitle"] == "Rack 2" and page["editButton"] == T("settings_storage_save_location")
-    assert page["typeFixed"] == [False, True] and page["typeFixedHint"] == [T("settings_storage_type_fixed")]
+    assert page["editTitle"] == "Rack 2" and page["editButton"] == T("storage_save_location")
+    assert page["typeFixed"] == [False, True] and page["typeFixedHint"] == [T("storage_error_type_fixed")]
     assert page["afterRename"] == ["Sealed stock", "Rack 1", "Rack two", "Storage box (containers)", "Overflow", "Dry shelf", "Dry box"]
     assert page["errInUse"] == "Storage box 11 and Storage box 12 hold spools. Move them first, or keep at least 12."
     assert page["boxFull"] == "9 of 13 containers used"
-    assert page["anyToNone"] == {"fill": "none", "disabled": True, "hint": T("settings_storage_fill_any_hint")}
+    assert page["anyToNone"] == {"fill": "none", "disabled": True, "hint": T("storage_fill_any_overflow_hint")}
     assert page["anyBack"] == {"disabled": False, "fill": "none", "hint": False}       # unticking does not put "Any material" back, but allows it again
     assert page["defaultLimitShown"] is True and page["noticeAfter"] is False
-    assert page["errDefault"] == T("settings_storage_default_first") == "Make another location the default overflow first."
+    assert page["errDefault"] == T("storage_error_remove_default_overflow") == "Make another location the default overflow first."
 
 
 def test_closing_the_form_with_typed_values_asks_and_cancel_with_nothing_typed_does_not(hub, tmp_path):
@@ -251,6 +275,7 @@ def test_move_default_overflow_sealed_and_remove_change_the_unsaved_list_with_ke
 // Move: the pressed button keeps its focus, the ends cannot move, the panel follows
 const up = moveBtn("Rack 2", "up");
 up.focus(); up.click(); await sleep(150);
+await settled();
 out.moved = { names: names(), focus: document.activeElement === up, panel: panel()[0], dirty: dirty() };
 up.click(); await sleep(150);
 out.movedTwice = names();
@@ -268,6 +293,7 @@ await menuItem("Dry shelf", "Make default overflow");
 out.afterDefault = { shelf: badges("Dry shelf"), overflow: badges("Overflow") };
 await menuItem("Rack 1", "Sealed spools go here");
 out.afterSealed = { rack: badges("Rack 1"), stock: badges("Sealed stock") };
+await settled();
 out.panelAfter = panel();
 // Remove: a dialog with the count; the focus goes to the row that took its place
 $('[aria-haspopup="menu"]', rowOf("Rack 2")).click();
@@ -302,6 +328,7 @@ $('[aria-haspopup="menu"]', rowOf("Overflow")).click();
 dlg = await until(() => $("dialog[open]"), "the remove question");
 $('[data-action="confirm"]', dlg).click();
 await until(() => !$("dialog[open]"), "the question to close"); await sleep(150);
+await settled();
 out.final = { names: names(), panel: panel(), dirty: dirty() };
 """)
     assert page["moved"]["names"] == ["Sealed stock", "Rack 2", "Rack 1", "Storage box (containers)", "Overflow", "Dry shelf"] and page["moved"]["focus"] is True
@@ -310,12 +337,12 @@ out.final = { names: names(), panel: panel(), dirty: dirty() };
     assert page["movedTwice"][0] == "Rack 2"
     assert page["atTop"] == {"names": ["Rack 2", "Sealed stock", "Rack 1", "Storage box (containers)", "Overflow", "Dry shelf"], "disabled": "true", "focus": True}
     assert page["atEnd"] == {"names": ["Rack 2", "Sealed stock", "Rack 1", "Storage box (containers)", "Overflow", "Dry shelf"], "disabled": "true"}
-    assert page["focusable"] == T("settings_storage_move_down", name="Rack 1")
-    make_default, make_sealed, remove = T("settings_storage_make_default"), T("settings_storage_make_sealed"), T("common_remove")
+    assert page["focusable"] == T("storage_move_down", name="Rack 1")
+    make_default, make_sealed, remove = T("storage_make_default_overflow"), T("storage_sealed_here"), T("common_remove")
     assert page["menus"] == {"rack": [make_sealed, remove], "box": [remove], "sealed": [remove], "over": [make_sealed, remove], "shelf": [make_default, make_sealed, remove]}
-    assert page["afterDefault"] == {"shelf": [T("settings_storage_badge_overflow"), T("settings_storage_badge_default")], "overflow": [T("settings_storage_badge_overflow")]}
-    assert page["afterSealed"] == {"rack": [T("settings_storage_badge_sealed")], "stock": []}
-    assert page["removeAsk"]["title"] == T("settings_storage_remove_title", name="Rack 2") == "Remove Rack 2?"
+    assert page["afterDefault"] == {"shelf": [T("storage_badge_overflow"), T("storage_badge_default_overflow")], "overflow": [T("storage_badge_overflow")]}
+    assert page["afterSealed"] == {"rack": [T("storage_badge_sealed")], "stock": []}
+    assert page["removeAsk"]["title"] == T("storage_remove_title", name="Rack 2") == "Remove Rack 2?"
     assert page["removeAsk"]["text"] == ("7 spools are recorded there. They keep that location until you move them; it is no longer offered for new spools.")
     assert page["removeAsk"]["buttons"][-2:] == [T("common_cancel"), T("common_remove")] and "btn--danger" in page["removeAsk"]["danger"]
     assert page["afterRemove"]["names"] == ["Sealed stock", "Rack 1", "Storage box (containers)", "Overflow", "Dry shelf"]
@@ -357,7 +384,7 @@ out.nothing = text($("#set-storage .group__foot .result__text"));
 """)
     assert page["beforeUndo"]["names"] == ["Sealed stock", "Rack 1", "Rack 2", "Storage box (containers)", "Overflow", "Dry shelf"][:0] + ["Rack 1", "Sealed stock", "Rack 2", "Storage box (containers)", "Overflow", "Dry shelf"]
     assert page["beforeUndo"]["dirty"]["form"] == "dirty"
-    assert page["afterUndo"] == {"names": START, "dirty": {"form": None, "link": False, "foot": False}, "badges": [T("settings_storage_badge_sealed")], "panel": 4}
+    assert page["afterUndo"] == {"names": START, "dirty": {"form": None, "link": False, "foot": False}, "badges": [T("storage_badge_sealed")], "panel": 4}
     assert page["beforeSave"]["names"] == ["Sealed stock", "PLA rack 1", "Rack 2", "Storage box (containers)", "Dry shelf", "Overflow", "Spare"]
     assert page["saved"] == "Storage locations saved. Renamed Rack 1 to PLA rack 1. 18 spools updated."
     assert page["after"]["dirty"] == {"form": None, "link": False, "foot": False}
@@ -381,7 +408,7 @@ await sleep(500);
 out.after = !!$("#set-storage .banner--info");
 out.names = names();
 """)
-    assert page["before"] == T("settings_storage_converted") == "Storage locations were converted. Check them."
+    assert page["before"] == T("storage_notice_converted") == "Storage locations were converted. Check them."
     assert page["after"] is False and page["names"][3] == "Boxes"
 
 
@@ -411,10 +438,10 @@ out.result = text($("#set-storage .group__foot .result__text"));
 out.state = $("#set-storage").dataset.state;
 """)
     set_name = "Storage box (containers)"
-    assert page["clash"] == T("settings_storage_error_container_name", name="storage box 05", set=set_name)
+    assert page["clash"] == T("storage_error_container_name", name="storage box 05", set=set_name)
     assert page["added"][-1] == "Storage box 13"
     want = "Storage box 13 is the name of a container in Storage box (containers). Choose another name."
-    assert page["refusal"] == want and page["title"] == set_name and page["state"] == "dirty"
+    assert page["refusal"] == want and page["title"] in (set_name, "Storage box 13") and page["state"] == "dirty"
     assert page["result"] and want in page["result"]
 
 
@@ -436,7 +463,7 @@ out.result = text($("#set-storage .group__foot .result__text"));
 out.rowErrors = rowEls().map((r) => text($(".storage__errors", r)));
 out.state = $("#set-storage").dataset.state;
 """)
-    assert page["result"] == T("settings_storage_row_error", name="Rack 1", text=T("settings_storage_error_name_taken", name="Rack 1"))
+    assert page["result"] == T("storage_error_name_taken", name="Rack 1") + " Nothing was saved."
     assert page["rowErrors"][2] and "There is already a location called" in page["rowErrors"][2] and not any(page["rowErrors"][i] for i in (0, 1, 3, 4, 5))
     assert page["state"] == "dirty"
 
