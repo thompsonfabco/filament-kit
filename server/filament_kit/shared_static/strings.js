@@ -2885,5 +2885,11 @@ window.SW_TEXT = Object.freeze({
   "storage_reason_overflow": "every place for {material} is full",
   "storage_reason_overflow_none": "no place takes {material} automatically",
   "storage_reason_frame": "{location} ({why}, since no location was given)",
+  "storage_error_rename_unfinished": "A rename of storage locations is not finished.",
+  "storage_fix_rename_unfinished": "Save the storage locations again; the Hub finishes the rename first.",
+  "storage_error_resume_failed": "The unfinished rename of storage locations could not be finished ({reason}).",
+  "storage_fix_resume_failed": "Check that Spoolman is running, then save again. Nothing else was saved.",
+  "storage_error_busy": "Another change to the storage locations is still running. Try again when it is done.",
+  "storage_nothing_more_saved": "Nothing more was saved.",
   "cli_storage_summary": { "one": "{count} location · {limit} with a limit", "other": "{count} locations · {limit} with a limit" },
 });

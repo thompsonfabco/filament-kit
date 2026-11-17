@@ -4052,6 +4052,13 @@
     <string name="storage_reason_overflow_none">no place takes %1$s automatically</string>
     <!-- 1=location 2=why -->
     <string name="storage_reason_frame">%1$s (%2$s, since no location was given)</string>
+    <string name="storage_error_rename_unfinished">A rename of storage locations is not finished.</string>
+    <string name="storage_fix_rename_unfinished">Save the storage locations again; the Hub finishes the rename first.</string>
+    <!-- 1=reason -->
+    <string name="storage_error_resume_failed">The unfinished rename of storage locations could not be finished (%1$s).</string>
+    <string name="storage_fix_resume_failed">Check that Spoolman is running, then save again. Nothing else was saved.</string>
+    <string name="storage_error_busy">Another change to the storage locations is still running. Try again when it is done.</string>
+    <string name="storage_nothing_more_saved">Nothing more was saved.</string>
     <!-- 1=count 2=limit -->
     <plurals name="cli_storage_summary">
         <item quantity="one">%1$d location · %2$s with a limit</item>
