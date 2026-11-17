@@ -1661,12 +1661,20 @@ against is the row "A stored list of storage locations" in 03 section 15.
 Hub · L · Depends on: none · Beside: SL4, SL5, SL6 (against the contract)
 - **Files today:** `config.py` (`locations` and the `placement.*` keys), `placement.py`, `inventory.py`,
   `server/tests/test_placement.py`.
-- **Change:** a stored list in `storage.xml` beside the Hub's config file, written atomically, with the owner and mode
-  of the config file: one `<location>` per place in fill order, with `id` (`loc-<n>`, given by the Hub, never
+- **Change:** a stored list in `storage.xml` in the Hub's state folder (`/var/lib/filament-kit`, where the event store
+  also goes; the config file stays root-owned in `/etc/filament-kit`), written atomically, owned by the Hub's user with
+  the mode of the other state files that the web unit reads (it reads the file through its existing read grant): one `<location>` per place in fill order, with `id` (`loc-<n>`, given by the Hub, never
   reused), `name`, `type` (`bulk` or `containers`), `limit` or `count`, `prefix` (the exact text before a container's
   number; a new location gets its name plus one space, and a rename sets it to the new name plus one space), `fill` (`none`, `any` or `materials` with `<material>`
-  children), `overflow`, `default-overflow` and `sealed`. A file that cannot be read is an error with a Fix line; the
-  Hub never falls back silently to defaults. Validation as 03 10.4 (name 1 to 100 characters and unique with capitals
+  children), `overflow`, `default-overflow` and `sealed`. A start never fails because of storage:
+  if the migration (or any later write at start) cannot write the file, the Hub logs it once, keeps the migrated list
+  in memory, places spools with it exactly as the file would, and tries the write again at the next change and at the
+  next start; while the list is only in memory the Checks show one row in group Hub, Needs a look, "Storage locations
+  could not be saved ({reason})." with the Fix the Hub can name. A `storage.xml` that exists but cannot be read (broken
+  XML, no permission) gives the same row with "Storage locations could not be read ({reason}).", and the Hub uses the
+  list migrated from the config file until it is fixed; it does not overwrite the unreadable file (a save writes the
+  new file and keeps the old one aside as `storage.xml.unreadable`). The old keys are read from the config file for the
+  migration and never written. Validation as 03 10.4 (name 1 to 100 characters and unique with capitals
   ignored; limit 1 to 9999; containers 1 to 999; exactly one default overflow, which is Bulk storage and may have a
   limit; fill `any` not allowed on an overflow location; exactly one sealed-spools location, Bulk storage; a location's
   name is not a container's name of any set, and a set's prefix and count give no container named like a location,
@@ -1684,7 +1692,8 @@ Hub · L · Depends on: none · Beside: SL4, SL5, SL6 (against the contract)
   ("every place for {material} is full") is used only when the own places or the "Any material" places had at least
   one candidate, `overflow_none` ("no place takes {material} automatically") when there was no candidate at all; the old
   values `pla`, `box` and `no_boxes` are no longer produced.
-  - **Migration**, on the first start of the new version, when `storage.xml` is absent, built from the config file in
+  - **Migration**, on the first start of the new version, only when `storage.xml` is absent (a file that exists is never
+    migrated over, also after a rollback and an update), built from the config file in
     this order and dropping nothing:
     1. Every entry of `locations`, in its order: Bulk storage, no limit, fill `none`.
     2. `placement.pla_location`: that entry (added at the end if missing) gets fill `materials` = PLA. When it is
@@ -1713,19 +1722,28 @@ Hub · L · Depends on: none · Beside: SL4, SL5, SL6 (against the contract)
     exists the text is one place, as today: a spool stored under it counts in the bulk location's "how full" and makes
     that container taken, so the set skips it; a request that names the text means the bulk location (the literal
     text is stored); an existing clash may stay, and only removing or renaming one side ends it. The
-    old keys stay in the config file, untouched and no longer read, so `update --rollback` finds its settings. A fresh
+    old keys stay in the config file, untouched, so `update --rollback` finds its settings; the new version reads them
+    only for the migration. A fresh
     install writes `storage.xml` with today's four default names in the same roles.
   - **One stated change of behaviour, not a loss:** when a plain `locations` entry became the container set, a request
     that names it ("Storage box") now means the lowest free container, where it used to store the literal text. This
     also holds for released apps, which get the name from `GET api/locations`. Spools already stored under the
     literal name keep it.
+  - **Backup, restore, rollback, uninstall.** Backup includes `storage.xml` (it is state); restore puts it back, and a
+    backup made before this version has none, so the first start after such a restore migrates from the restored config
+    file. `update --rollback` to a version without storage locations: that version ignores `storage.xml` and reads its
+    old keys, which were never changed; the file stays, and updating again uses it and does not migrate again.
+    Uninstall removes it with the state folder; an uninstall that keeps the data keeps it.
 - **Keep:** the location texts of spools already stored; unload from a printer (the previous place, else the
   sealed-spools location); the lock; the answers the released apps read.
 - **Other interfaces:** none see this step alone.
 - **Check:** the model, validation and migration tests; today's `test_placement` cases run through a migrated list
   and give the same places; and the cases pinned here: `pla_location` = `overflow`; `pla_location` = the container
   name; `overflow` = the container name; `sealed_location` = the container name; an empty and an only-spaces
-  `box_prefix`; `box_count` 0; a rename with more than 20 spools; an unreadable `storage.xml`; `pla_location` = "<prefix>01" with
+  `box_prefix`; `box_count` 0; a rename with more than 20 spools; an unreadable `storage.xml` (the Hub starts, the row is shown, a save keeps `storage.xml.unreadable`); the state folder
+  writable and `/etc` read-only (the first start migrates and writes); the state folder not writable (the Hub starts,
+  places spools from memory, shows the row, and writes at the next start once it is writable); backup and restore
+  carry the file; rollback and then update again does not migrate again; `pla_location` = "<prefix>01" with
   `box_count` 2 (PLA goes to the literal text without limit; the next other material goes to "<prefix>02" while a
   spool is at "<prefix>01"), the same for `overflow` and for `sealed_location`; a `storage.xml` with such a clash
   loads; saving an unrelated edit of it succeeds; adding a NEW clashing name is refused; the same refusal when a
@@ -1743,7 +1761,9 @@ Hub · M · Depends on: SL1 · Beside: SL4, SL5, SL6
   container, and when a bulk location has the same text as a container the text means the bulk location;
   `placements[]` keep `{location, spools, placed_by}`); the reasons in the add preview and result, with the new
   value `overflow_none`; the refusal "{name} is the name of a container in {set}. Choose another name."; the strings of 03 10.4 and the
-  reasons in the shared catalogue, key names given in the catalogue's style.
+  reasons in the shared catalogue, key names given in the catalogue's style, among them "Storage locations could not be
+  saved ({reason}).", "Storage locations could not be read ({reason})." and "Storage locations were not saved:
+  {reason}."; a save that cannot write answers that refusal and writes nothing.
 - **Keep:** `GET api/locations` answers a list of names, so released apps keep working.
 - **Other interfaces:** SL3 to SL6 read these.
 - **Check:** route tests per guard; the contract fields; the catalogue and wording tests (08 test 7).
@@ -1759,7 +1779,13 @@ command line · M · Depends on: SL2 · Beside: SL4, SL5, SL6 (one `cli.py` step
   in the `config` screen, Use as overflow set to yes sets "Any material" back to "Nothing, only when you choose it"; the Storage locations screen of `config` and its summary
   row "{n} locations · {m} with a limit"; `config set` with one of the six old keys refused with
   `Error: storage locations are a list now.` and `Fix: spoolwarden locations`; the installer's "Use the default
-  storage locations?" keeps its text and, on "n", opens the new list.
+  storage locations?" keeps its text and, on "n", opens the new list. `locations` and the `config` group write
+  `storage.xml` directly (run as root with sudo, and by the installer before the Hub runs) with the same storage code
+  as the Hub, under the Hub's lock that already keeps two processes apart, and with the Hub's owner and mode; the Hub
+  reads a changed file again without a restart. A rename that also renames spools runs in the command's own process
+  with the same code. A channel into the running Hub for changes, where the command line already has one, is an equal
+  choice: one lock, the Hub's owner and mode on the file, and no restart. A save that cannot write stops with `Error:`
+  "Storage locations were not saved: {reason}." and a `Fix:` line.
 - **Keep:** the other `config` items and keys.
 - **Other interfaces:** the same changes as SL4.
 - **Check:** the command tests; the menu tests (numbered and full-screen); AUT-9.

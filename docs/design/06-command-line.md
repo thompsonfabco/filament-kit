@@ -790,7 +790,9 @@ of the Hub page (`03-hub-page.md` section 10.4). Its keys:
   when there are none). The default overflow and the sealed-spools location are refused with the Hub page's
   sentences (9.15).
 - Every change is staged like any other item of the menu and saved by `s`, which sends the whole list. A rename also
-  renames the location on its spools when it is saved. The commands of 9.15 do the same at once, one change each.
+  renames the location on its spools when it is saved. A save that cannot write stops with `Error: Storage locations
+  were not saved: {reason}.` and a `Fix:` line the Hub can name. The group works before the Hub runs and without
+  restarting it: the menu writes `storage.xml` itself, as `locations` does (9.15). The commands of 9.15 do the same at once, one change each.
 
 **Groups and their items.** Group names, item labels, their order and the choice words are the Hub page's
 (`03-hub-page.md` section 10); the one difference is the engine name Cloud (Claude), which follows foundations
@@ -1793,6 +1795,10 @@ Fix: sudo spoolwarden locations default-overflow <name>
 ```
 Note: Rack 01: Same name as a container in Rack.
 ```
+- Every change is written to `storage.xml` in the Hub's state folder by the command itself, with the same storage code
+  as the Hub, under the Hub's lock, with the Hub's owner and mode. It works before the Hub runs (the installer uses
+  it) and the running Hub reads the changed file without a restart. A change that cannot be written stops with
+  `Error: Storage locations were not saved: {reason}.` and a `Fix:` line the Hub can name; nothing is half written.
 - Changing a location moves no spool. `locations` shows the result at once; `spoolwarden config` shows the same list
   as a numbered menu (8.3).
 
