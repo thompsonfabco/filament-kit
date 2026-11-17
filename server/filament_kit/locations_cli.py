@@ -168,16 +168,26 @@ class _Plan:
 
     def __init__(self, sm):
         self.sm = sm
-        self.before = storage.current()
+        self.saved = storage.current()
+        self.before = storage_api._base()              # the saved list with a half-done rename applied (what a save builds on)
         self.taken = inventory._used_locations(sm)
         self.rows = copy.deepcopy(self.before.describe(self.taken))
 
     def find(self, name: str) -> dict | None:
+        """The row called `name`; while a rename is half done also the row the saved list still calls `name`, so the
+        command that was interrupted can be run again as it was typed."""
         low = name.strip().casefold()
-        return next((r for r in self.rows if r["name"].casefold() == low), None)
+        hit = next((r for r in self.rows if r["name"].casefold() == low), None)
+        if hit is None:
+            old = next((x for x in self.saved.locations if x.name.casefold() == low), None)
+            hit = next((r for r in self.rows if old is not None and r["id"] == old.id), None)
+        return hit
 
     def differs(self) -> bool:
-        """Is the edited list another list than the saved one (numbers typed as text count as numbers)."""
+        """Is there anything to save: the edited list is another list than the saved one (numbers typed as text count
+        as numbers), or a rename is half done and the save finishes it."""
+        if inventory.pending_rename() is not None:
+            return True
         after, _ = storage_api.parse({"locations": self.rows}, self.before)
         return after.describe(self.taken) != self.before.describe(self.taken)
 
@@ -210,8 +220,10 @@ def _wait_for_job(sm, steps: int) -> dict:
             time.sleep(0.05)
 
 
-def _save(sm, rows: list[dict], result: str, *, json_extra: dict | None = None) -> int:
-    """Send the whole list; print the result line (a rename says its own sentence), the notes; the exit code."""
+def _save(sm, rows: list[dict], result: str, *, json_extra: dict | None = None, renames: bool = False) -> int:
+    """Send the whole list; print the rename sentence (every rename the save did, one that was left half-done first)
+    and the result line (not after the rename the command itself asked for: that sentence is its result), the notes;
+    the exit code."""
     try:
         out = storage_api.save(sm, {"locations": rows})
         if not out.get("saved"):
@@ -240,7 +252,10 @@ def _save(sm, rows: list[dict], result: str, *, json_extra: dict | None = None) 
     cli._hub_audit("storage locations changed")
     output.emit({"ok": True, **(json_extra or {}), **{k: out[k] for k in ("locations", "order_by_material",
                                                                           "everything_else", "notices") if k in out}})
-    output.result(out.get("text") or result)
+    if out.get("text"):
+        output.result(out["text"])
+    if not (renames and out.get("text")):
+        output.result(result)
     notes(out)
     return 0
 
@@ -313,7 +328,6 @@ def cmd_edit(a, sm_factory) -> int:
     row = plan.find(a.name)
     if row is None:
         return _no_such(a.name, plan)
-    old = row["name"]
     if a.new_name is not None:
         row["name"] = a.new_name.strip()
     stop = _apply_options(row, a, adding=False)
@@ -323,7 +337,8 @@ def cmd_edit(a, sm_factory) -> int:
         output.emit({"ok": True, "changed": False})
         output.result("Unchanged.")
         return 0
-    return _save(plan.sm, plan.rows, f"Changed {row['name']}.", json_extra={"changed": True})
+    return _save(plan.sm, plan.rows, f"Changed {row['name']}.", json_extra={"changed": True},
+                 renames=a.new_name is not None)
 
 
 def cmd_move(a, sm_factory) -> int:
@@ -472,7 +487,7 @@ class StorageEditor:
     def load(self) -> None:
         """The saved list. How full each place is comes from Spoolman, asked the first time a screen needs it (the main
         list of `config` shows only the number of locations)."""
-        self.before = storage.current()
+        self.before = storage_api._base()
         self._spools, self._taken = None, Counter()
         self.offline = None
         self.base = copy.deepcopy(self.before.describe(Counter()))

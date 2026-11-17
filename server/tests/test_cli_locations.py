@@ -241,12 +241,28 @@ def test_a_rename_of_more_than_20_spools_runs_as_a_job_and_resumes_after_a_failu
     assert all(s["location"] == "PLA rack 1" for s in big.spools) and "PLA rack 1" in names()
 
 
-def test_a_different_rename_while_one_is_half_done_is_refused_with_error_and_fix(capsys):
+def test_a_different_change_while_a_rename_is_half_done_finishes_the_first_rename_and_then_applies_it(capsys):
     big = FakeSm(["Rack 1"] * 45)
     big.fail_at = 30
     run(capsys, big, "locations", "edit", "Rack 1", "--name", "PLA rack 1")
-    rc, out, err = run(capsys, big, "locations", "edit", "Rack 1", "--name", "Other")
-    assert rc == 1 and err.startswith("Error: ") and "Fix: " in err and "not finished" in err
+    rc, out, err = run(capsys, big, "locations")                  # the list already shows the list the rename was making
+    assert rc == 0 and "PLA rack 1" in out and "Rack 1  " not in out.replace("PLA rack 1", "")
+    rc, out, err = run(capsys, big, "locations", "edit", "PLA rack 1", "--name", "Other")
+    assert (rc, err) == (0, "") and " ".join(out.split()) == ("Renamed Rack 1 to PLA rack 1. 45 spools updated. "
+                                                              "Renamed PLA rack 1 to Other. 45 spools updated.")
+    assert all(s["location"] == "Other" for s in big.spools) and "Other" in names()
+
+
+def test_a_half_done_rename_is_finished_by_any_next_change_and_a_spoolman_failure_again_says_how_to_go_on(capsys):
+    big = FakeSm(["Rack 1"] * 45)
+    big.fail_at = 30
+    run(capsys, big, "locations", "edit", "Rack 1", "--name", "PLA rack 1")
+    big.fail_at = 35
+    rc, out, err = run(capsys, big, "locations", "move", "Overflow", "--first")
+    assert rc == 1 and out == "" and err.startswith("Error: ") and "Fix: " in err
+    rc, out, err = run(capsys, big, "locations", "move", "Overflow", "--first")
+    assert (rc, err) == (0, "") and out.startswith("Renamed Rack 1 to PLA rack 1.")
+    assert names()[0] == "Overflow" and "PLA rack 1" in names()
 
 
 @pytest.mark.parametrize("argv, error", [
