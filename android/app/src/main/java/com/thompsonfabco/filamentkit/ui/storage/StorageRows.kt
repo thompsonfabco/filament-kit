@@ -15,10 +15,10 @@ import kotlinx.serialization.json.JsonPrimitive
  * [name], how full it is as supporting text ([howFull], null when the Hub did not say) and [full]. A full location
  * stays choosable.
  */
-data class LocationRow(val name: String, val howFull: AddText?, val full: Boolean, val containers: Boolean = false) {
-    /** The spool's [current] location is this row: its name, or for a containers location one of its numbered containers. */
-    fun holds(current: String?): Boolean =
-        current != null && (current == name || (containers && Regex(Regex.escape(name) + " [0-9]{2,}").matches(current)))
+data class LocationRow(val name: String, val howFull: AddText?, val full: Boolean, val containers: Boolean = false,
+    val containerNames: List<String> = emptyList()) {
+    /** The spool's [current] location is this row: its name, or for a containers location one of the container names the Hub lists (never built here). */
+    fun holds(current: String?): Boolean = current != null && (current == name || (containers && current in containerNames))
 
     /** The lines of the "Move to" row under its name: "Moving…" while saved, "Now here" for the current one, then how full. */
     fun moveLines(here: Boolean, moving: Boolean): List<AddText> = when {
@@ -46,7 +46,7 @@ fun StorageLocation.howFullText(): AddText? {
 /** The rows in fill order: one per location (a containers location is one row). */
 fun StorageAnswer.rows(): List<LocationRow> = locations.map {
     val text = it.howFullText()
-    LocationRow(it.name, text, full = text?.res == R.string.storage_how_full_full, containers = it.containers)
+    LocationRow(it.name, text, full = text?.res == R.string.storage_how_full_full, containers = it.containers, containerNames = it.containerNames)
 }
 
 /** A place a spool goes and, when the Hub placed it, why ([reason] is null for a place the person chose). */

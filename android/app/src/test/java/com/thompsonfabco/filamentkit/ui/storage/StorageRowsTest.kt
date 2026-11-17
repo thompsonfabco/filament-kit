@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.storage
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.StorageAnswer
 import com.thompsonfabco.filamentkit.net.StorageLocation
+import com.thompsonfabco.filamentkit.net.StorageWire
 import com.thompsonfabco.filamentkit.ui.add.AddText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -63,15 +64,25 @@ class StorageRowsTest {
         assertEquals(listOf(AddText.of(R.string.spool_move_here)), bare.moveLines(here = true, moving = false))
     }
 
-    @Test fun aContainersRowHoldsItsNumberedContainersOnly() {
-        val box = LocationRow("Storage box", null, false, containers = true)
+    @Test fun aContainersRowHoldsTheContainerNamesTheHubListsOnly() {
+        // a migrated set keeps its old prefix: the set is called differently from its containers
+        val names = listOf("Storage box 01", "Storage box 03", "Storage box 100")
+        val box = LocationRow("Storage box (containers)", null, false, containers = true, containerNames = names)
         assertTrue(box.holds("Storage box 03"))
         assertTrue(box.holds("Storage box 100"))
-        assertTrue(box.holds("Storage box"))
+        assertTrue(box.holds("Storage box (containers)"))
         assertFalse(box.holds("Storage box 3"))
-        assertFalse(box.holds("Storage boxes 03"))
+        assertFalse(box.holds("Storage box 02"))
         assertFalse(LocationRow("Rack 1", null, false).holds("Rack 1 02"))
         assertFalse(box.holds(null))
+    }
+
+    @Test fun containerNamesComeFromTheAnswerAndReachTheRow() {
+        val answer = StorageWire.parse(kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"locations":[{"name":"Box","type":"containers","count":2,"prefix":"Box-","containers":[{"name":"Box-01","number":1,"taken":false},{"name":"Box-02","number":2,"taken":true}]}]}"""))!!
+        val row = answer.rows().single()
+        assertTrue(row.holds("Box-02"))
+        assertFalse(row.holds("Box 02"))
     }
 
     @Test fun reasonsFollowTheCode() {

@@ -27,6 +27,8 @@ data class StorageLocation(
     val defaultOverflow: Boolean = false,
     val sealed: Boolean = false,
     val position: Int? = null,
+    /** The exact location text of each container of a containers set (`containers[].name`); never built by the app. */
+    val containerNames: List<String> = emptyList(),
 ) {
     val containers: Boolean get() = type == CONTAINERS
 
@@ -96,6 +98,7 @@ object StorageWire {
             fill = o.text("fill") ?: "none", materials = o.texts("materials"),
             overflow = o.flag("overflow"), defaultOverflow = o.flag("default_overflow"), sealed = o.flag("sealed"),
             position = o.num("position"),
+            containerNames = (o["containers"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.text("name") },
         )
     }
 
