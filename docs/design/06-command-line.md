@@ -77,6 +77,8 @@ Everyday
   printer          List, test, map and manage printers
   klipper          The Klipper add-on
   recent           Recently added spools: show, correct, undo
+  spools           Spools running low
+  events           What happened on the Hub: show, follow
   devices          Paired phones, PCs and Weigh Stations
   pair             Pair a phone, the Slicer Sync or a Weigh Station
   weigh-station    Weigh Station: pair it, flash its display
@@ -87,6 +89,7 @@ System
   features         Switch features on and off; choose the setup
   config           Settings menu; also config show, set and theme
   locations        Storage locations: the list, add, edit, move, remove
+  alerts           What Spoolwarden warns you about: switches, limits, test
   label-reader     Label Reader: status, test, corrections to share
   catalog          Filament Catalog: status, update, roll back, add
   backup           Make or list backups
@@ -138,6 +141,8 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `recent revise <record> --note TEXT [--item N]` | Ask the Label Reader to correct it | Ask the Label Reader to correct it |
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
+| `spools low` | The opened spools at or under the running-low threshold (9.18) | Overview, Running low |
+| `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones (9.16) | Settings > Alerts > Recent alerts (alerts only) |
 | `devices` (same as `devices list`) | Paired devices (9.4) | Devices |
 | `devices forget <device>` | Unpair a device | Revoke |
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |
@@ -172,6 +177,11 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `locations remove <name>` | Remove a location (asks) | Remove |
 | `locations default-overflow <name>` | Make it the default overflow (a Bulk storage location that is not overflow becomes overflow as well) | Make default overflow |
 | `locations sealed <name>` | Sealed spools go here | Sealed spools go here |
+| `alerts` (same as `alerts list`) | The alert switches and thresholds (9.17) | Settings > Alerts |
+| `alerts set <type> on\|off` | Switch one alert type | The type's switch |
+| `alerts set running-low <grams>` | Running low under | Running low under |
+| `alerts set storage-warning <percent>` | Storage warning at | Storage warning at |
+| `alerts test` | Send a test alert | Send a test alert |
 | `label-reader status` | Label Reader engines and their health (9.9) | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
 | `label-reader corrections` (same as `label-reader corrections list`) | The corrections waiting to be shared (9.9) | Settings > Label Reader, Corrections waiting |
@@ -524,7 +534,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 
 | Command | JSON shape |
 |---|---|
-| `status`, `web status`, `label-reader status` | `{"rows": [{"group", "state", "text", "fix", "action"}], "summary": {...}}`, the rows of `GET /setup/api/overview` plus `group` (section 13) |
+| `status`, `web status`, `label-reader status` | `{"rows": [{"group", "state", "text", "fix", "action"}], "summary": {...}}`, the rows of `GET /setup/api/overview` plus `group` (section 13); `status` adds `"storage": ` the answer of `GET api/storage-use` and `"running_low": <number of spools>` |
 | `printer list`, `printer show` | the printer objects of `GET /setup/api/state` (`printers.list`): `serial, name, model, ip, configured, state, pinned, family` and, for Klipper, `host, port, api_key, lane_data` |
 | `printer test` | `{reachable, state, text}`, the reply of `printers/<serial>/test` |
 | `printer map` | the map view of `GET /api/printers/<serial>/map` at its end |
@@ -537,6 +547,9 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `features list` | `state.modules` plus `{"setup": "<setup>"}` |
 | `config show`, `config theme` | the `values` of `GET /setup/api/settings/general`, plus `theme` |
 | `locations` | the answer of `GET api/storage`: `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}` |
+| `spools low` | the answer of `GET api/spools/low`: `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}` |
+| `events` | the answer of `GET api/events`: `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert, title, text, action: {place, id}}], next, conditions: [...]}`; with `--follow`, one event object per line (9.16) |
+| `alerts` | the answer of `GET api/alerts`: `{types: [{key, title, on}], last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` |
 | `catalog status` | `GET /setup/api/library` |
 | `backup list` | `{backups: [{name, at, kind, size}], keep_days, folder}` |
 | `update --check` | `GET /setup/api/updates` |
@@ -712,16 +725,17 @@ Settings · Workshop hub
    1  Appearance             Theme for new devices: Console
    2  General                Workshop hub
    3  Storage locations      4 locations · 2 with a limit
-   4  Label Reader           Cloud (Claude) · 40 reads a day · key set
-   5  Backups and restore    Nightly backups kept 14 days
-   6  Network and addresses  Public address not set
-   7  Web passphrase         not set
-   8  Filament Catalog       Catalog token not set
-   9  Weigh Station voice    Piper (natural)
+   4  Alerts                 6 of 8 on
+   5  Label Reader           Cloud (Claude) · 40 reads a day · key set
+   6  Backups and restore    Nightly backups kept 14 days
+   7  Network and addresses  Public address not set
+   8  Web passphrase         not set
+   9  Filament Catalog       Catalog token not set
+  10  Weigh Station voice    Piper (natural)
 
   These open their own screens; changes there apply at once:
-  10  Printers               3 set up · 1 found
-  11  Features               Hub with Weigh Station
+  11  Printers               3 set up · 1 found
+  12  Features               Hub with Weigh Station
 
   s save   q leave   ? help
 Number: 3
@@ -802,6 +816,10 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 | General | Display name | `server_name` | text |
 | General | Spoolman address | (none: `spoolman address`, 9.12) | text, an http address; only when Spoolman runs on another machine. On Save the Hub first checks that Spoolman answers there, as `spoolman address` does, and saves it after the other changes |
 | Storage locations | Locations | (none: `locations`, 9.15) | a numbered list of locations: a number edits, `a` adds, `m` moves, `r` removes |
+| Alerts | Filament ran out · Print paused · Print failed or stopped · Printer error · Print finished · Storage almost full · Spool running low · Device stopped answering | (none: `alerts set`, 9.17) | on / off, eight rows; the group's row reads `<n> of 8 on` |
+| Alerts | Only when it is the last spool of that filament | (none: `alerts`, 9.17) | on / off |
+| Alerts | Running low under | (none: `alerts set running-low`, 9.17) | whole number of grams, 10 to 2000 |
+| Alerts | Storage warning at | (none: `alerts set storage-warning`, 9.17) | whole number, % used |
 | Label Reader | Engine order | `intake.reader` | choice: Automatic: On this Hub first, Cloud (Claude) when it is unsure or fails · On this Hub, then Cloud (Claude) · Cloud (Claude), then On this Hub · Cloud (Claude) only · On this Hub only |
 | Label Reader | Anthropic API key | (secret) | secret; then `c` checks it, `x` removes it (asks) |
 | Label Reader | Claude model | `model` | text; empty for the default model |
@@ -819,7 +837,10 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 | Filament Catalog | Catalog token | (secret) | secret; `x` removes it (asks) |
 | Weigh Station voice | Voice | `station.tts` | choice: Piper (natural; a 60-80 MB download) · espeak-ng (robotic; no download) |
 
-Storage locations is a list, not a set of keys, so `config set` does not change it. `config set` with `locations`,
+The Alerts group is kept in the Hub's alert rules, not in the settings, so `config set` does not change it either
+(use `alerts set`, 9.17); the part "On this device" of the Hub page's group (notifications in a browser) has no
+counterpart here, since the command line gets no notifications. Storage locations is a list, not a set of keys, so
+`config set` does not change it. `config set` with `locations`,
 `placement.pla_location`, `placement.box_prefix`, `placement.box_count`, `placement.overflow` or
 `placement.sealed_location` is refused, with exit code 2:
 
@@ -835,11 +856,11 @@ screen shows the Hub page's sub-headings above its items, numbering straight thr
 Anthropic API key, `On this Hub` above Address, `Recently added` above Records kept, `Share corrections` above
 Share corrections. Engine order is a choice
 only while both Label Reader features are on; with one on, its row reads
-`Engine: Cloud (Claude). Switch on the other one in Features (11) to use both.` (or `Engine: On this Hub. …`)
+`Engine: Cloud (Claude). Switch on the other one in Features (12) to use both.` (or `Engine: On this Hub. …`)
 and cannot be opened. The Cloud (Claude) items show only while Label Reader: Cloud (Claude) is on, the On this
 Hub items only while Label Reader: On this Hub is on; Records kept always shows. Share corrections always shows;
 while it cannot be changed its row gives the reason and cannot be opened:
-`needs Label Reader: On this Hub. Switch it on in Features (11).`,
+`needs Label Reader: On this Hub. Switch it on in Features (12).`,
 `the reader on this Hub is too old to share corrections. Update it: sudo spoolwarden update`, or
 `the reader does not answer, so this cannot be changed now`.
 Each group's screen ends with the actions that are commands elsewhere, so they are one step away: Backups and
@@ -869,15 +890,15 @@ Filament Catalog with
   `not set`. A secret asked twice that does not match prints
   `Error: the two passphrases do not match. Type them again.`
 - **Switched-off features.** A group whose feature is off stays in the list, dim, with `off: switch it on in
-  Features (11)`. Opening it prints `Weigh Station is off on this Hub. Switch it on in Features (11) first.` and
+  Features (12)`. Opening it prints `Weigh Station is off on this Hub. Switch it on in Features (12) first.` and
   stays on the main list. This applies to Weigh Station voice (feature Weigh Station). Two groups keep one
   item open while their feature is off, as on the Hub page:
   - **Label Reader** counts as on while either Label Reader: Cloud (Claude) or Label Reader: On this Hub is on.
     With both off, its row reads `off: only Records kept`; opening it prints
-    `The Label Reader is switched off. Spools are then added by hand. Switch it on in Features (11).` and shows
+    `The Label Reader is switched off. Spools are then added by hand. Switch it on in Features (12).` and shows
     only Records kept.
   - **Filament Catalog** with its feature off: opening it prints
-    `The Filament Catalog is switched off. Switch it on in Features (11).` and shows only Catalog token.
+    `The Filament Catalog is switched off. Switch it on in Features (12).` and shows only Catalog token.
 
 **Saving.**
 
@@ -1067,6 +1088,8 @@ Hub
   ● OK            Services running: 6 of 6
   ● OK            Answering at https://192.0.2.10:8710
   ● OK            Certificate present, fingerprint 1111 2222 3333 4444 …
+  ● OK            Storage: 41 GB free of 117 GB (65 % used)
+  ◆ note          Running low: 3 spools
 Spoolman
   ● OK            Reachable at http://192.0.2.10:7912 (v0.22.1)
   ● OK            Spoolwarden's extra fields are in place
@@ -1092,7 +1115,7 @@ Slicer presets
 Filament Catalog
   ● OK            Version 2026.11.2 (signed release), 3 local additions
 
-2 need a look · 9 OK · 2 connected · 1 offline · 3 notes
+2 need a look · 10 OK · 2 connected · 1 offline · 4 notes
 ```
 
 | Group | Rows (OK form / needs-a-look form) | Fix when it needs a look |
@@ -1100,6 +1123,8 @@ Filament Catalog
 | Hub | `Services running: N of N` / `Service <name> is stopped` (one row per stopped service) | `sudo systemctl start <name>` |
 | Hub | `Answering at <address>` / `Not answering at <address>` | `see what it logged: sudo spoolwarden logs` |
 | Hub | `Certificate present, fingerprint …` / `Certificate missing` | `sudo spoolwarden certificate` |
+| Hub | `Storage: <free> free of <total> (<percent> % used)` / the same words, needs a look past a limit (warn at 85 % used, bad at 95 % used, always bad under 1 GB free; the limits are in the Alerts group of `config`) | `Show storage use (Hub page, Overview)` |
+| Hub | note `Running low: <n> spools` (`Running low: 1 spool`; no row when none is low) | `spoolwarden spools low` |
 | Hub | note `Display name: <name>` (only when not set: needs a look, `Display name not set`) | `sudo spoolwarden config` |
 | Spoolman | `Reachable at <url> (v<version>)` / `Not reachable at <url>` | for Spoolman on this machine `sudo systemctl start <its service>`, else `check that Spoolman is running at <url>` |
 | Spoolman | `Spoolwarden's extra fields are in place` / `Spoolwarden's extra fields are missing` | `sudo spoolwarden spoolman fields` |
@@ -1120,6 +1145,9 @@ Filament Catalog
 - `--quiet` prints only the rows that need a look (with their group heading and Fix). Exit code 1 when any row
   needs a look (section 6.7). `--json`: section 6.8.
 - `web status` and `label-reader status` print the rows of their own group in the same form.
+- `status --json` carries the numbers of the Storage row: `storage` is the answer of `GET api/storage-use`
+  (`{filesystems: [{path_label, total, free, percent_used, state}], items: [{key, title, bytes}]}`), and
+  `running_low` the number of spools running low.
 
 ### 9.2 `printer` and `klipper`
 
@@ -1492,6 +1520,8 @@ Storage locations
   2  Rack 1       18 of 20 spools · PLA
   3  Storage box  9 of 12 containers used · Any material
   4  Overflow     7 spools · Only when chosen · Default overflow
+Alerts
+  6 of 8 on · running low under 150 g · storage warning at 85 % used
   ...
 ```
 
@@ -1796,6 +1826,99 @@ Note: Rack 01: Same name as a container in Rack.
 - Changing a location moves no spool. `locations` shows the result at once; `spoolwarden config` shows the same list
   as a numbered menu (8.3).
 
+### 9.16 `events`
+
+`spoolwarden events` prints the events of the Hub's event store, oldest first, as the Alerts list of the Hub page reads
+them (`02-components.md` 8.9, with every kind, not only the alert types that are on). Reading needs no sudo. Options:
+`--since <id or time>` (an event number, "everything after 1412", or a time such as `2026-11-17 04:00`), `--kind <prefix>` (the dotted names of the catalogue, so `--kind print` shows `print.started`, `print.runout`
+and the rest), `--follow` and `--json`. Without `--since` it prints the newest 50.
+
+```
+$ spoolwarden events --since 1408
+ID    TIME              KIND          SUBJECT        WHAT
+1409  2026-11-17 03:58  spool.low     Spool 214      Running low: Prusament PLA Galaxy Black
+1412  2026-11-17 04:12  print.runout  Workshop X1    Filament ran out on Workshop X1
+1413  2026-11-17 04:40  storage.low   Hub            Storage on the Hub is almost full
+
+3 events. Raised now: spool-low:214 · print-paused:p-3 · storage-low
+```
+
+- `WHAT` is the title the Hub built for the event in its language (the table of `02-components.md` 8.8 for the alert
+  kinds).
+- The last line counts the events printed and names the conditions that are raised now.
+- `--follow` prints the same rows as they come (it waits at the Hub, `GET api/events?since=<id>&wait=55`), starts with
+  `Following events after 1413. Ctrl-C ends.` on standard error and ends with Ctrl-C (exit code 0). With `--json` each
+  event is one object on its own line.
+- `--json` prints the answer of `GET api/events` (6.8); `condition` is `null` for a moment.
+- Events are the Hub's record of what happened. They are not the usage logs or the Recently added history, which stay
+  as they are.
+
+### 9.17 `alerts`
+
+`spoolwarden alerts` shows which alert types are on and the thresholds, as Settings > Alerts does. Reading needs no
+sudo; every change needs sudo, as `config set` does. `<type>` is the `key` the Hub gives each alert type
+(`GET api/alerts`, shown in the first column).
+
+```
+$ spoolwarden alerts
+Alerts · 6 of 8 on
+KEY            ALERT                          EVENTS                       STATE
+runout         Filament ran out               print.runout                 on
+paused         Print paused                   print.paused                 on
+failed         Print failed or stopped        print.failed                 on
+printer-error  Printer error                  printer.error                on
+finished       Print finished                 print.finished               off
+storage        Storage almost full            storage.low                  on
+running-low    Spool running low              spool.low                    on
+device         Device stopped answering       device.down, printer.offline off
+
+Spool running low only when it is the last spool of that filament: off
+Running low under 150 g · Storage warning at 85 % used (bad at 95 %, or under 1 GB free)
+Change them: sudo spoolwarden alerts set -h
+```
+
+| Command | What it does |
+|---|---|
+| `alerts set <type> on\|off` | Switches one alert type. Every event is written whatever the switches say; a switch only decides what is shown and sent as an alert |
+| `alerts set running-low <grams>` | Running low under: a whole number, 10 to 2000 |
+| `alerts set storage-warning <percent>` | Storage warning at: a whole number, % used |
+| `alerts test` | Asks the Hub to send one test alert (`POST api/alerts/test`) and prints the Hub's answer |
+
+```
+$ sudo spoolwarden alerts set finished on
+Print finished alerts are on.
+
+$ sudo spoolwarden alerts set running-low 200
+Running low under 200 g.
+
+$ sudo spoolwarden alerts set running-low 5
+Error: Enter a whole number, 10 to 2000.
+```
+
+- `--json` prints the answer of `GET api/alerts` (6.8). The switch "Only when it is the last spool of that filament" is
+  changed in `config` (8.3), as is the whole group.
+- A name that is no alert type stops with exit code 2 and lists the keys. Each device decides for itself whether it gets
+  notifications; the command line gets none: `spoolwarden events --follow` prints the events as they come.
+
+### 9.18 `spools low`
+
+`spoolwarden spools low` prints the opened spools (not sealed, not empty) whose remaining weight is at or under the
+running-low threshold, least filament first, as the Running low card of the Hub page does. Reading needs no sudo.
+
+```
+$ spoolwarden spools low
+3 spools running low (at or under 150 g)
+SPOOL  FILAMENT                         LEFT   LOCATION       STOCK
+  214  Prusament PLA Galaxy Black       96 g   Rack 1         2 more in stock
+   77  Polymaker PETG Teal             140 g   Rack 2         Last one
+  209  Bambu Lab PLA Basic Black       112 g   Storage box 03 4 more in stock
+Change the limit: sudo spoolwarden alerts set running-low <grams>
+```
+
+- `STOCK` is `<n> more in stock` (other spools of the same filament line that are not empty, sealed ones included) or
+  `Last one`, marked with the warn glyph (6.2). When nothing is low: `No spools are running low (at or under 150 g).`
+- `--json` prints the answer of `GET api/spools/low` (6.8).
+
 ## 10. What the command line cannot do
 
 Some features need a camera, NFC or a screen for photos. Where a person might look for them on the command line,
@@ -1899,6 +2022,11 @@ this design.
 | Light / Dark / System | Y | Y | Y | - | - (follows the terminal) | not applicable |
 | Themes | new | new | new | - | `config theme` sets the theme for new devices | **closed** for the Hub's default |
 | Label Reader: status and test | N | new | P (shows the engine on a result) | N | Y (`label-reader status`, `test`) | **closed** |
+| Alerts: banners, toast, Alerts list, notifications | new | new | new | N | new (`events`, `events --follow`) | none for the command line |
+| Alerts: switches and thresholds | N | new | N | N | new (`alerts`, `alerts set`, `config`) | app, web app: remain on purpose (Hub settings are on the Hub page) |
+| Alerts: send a test alert | new | new | new | N | new (`alerts test`) | none |
+| Spools running low | new | new | new | N | new (`spools low`, `status`) | none |
+| Storage use of the Hub's disk | N | new | N | N | new (`status`, `status --json`) | app, web app: the banner and the Alerts list only |
 
 Gaps marked "remains" outside the command-line column are specified in the documents of those interfaces.
 
@@ -1932,3 +2060,8 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
    with the job that sets the reader, and the corrections waiting (list, remove, remove all, package, send) on
    the routes the Hub page uses (`03-hub-page.md` 10.5.2). Until they exist the `label-reader corrections`
    commands say `Error: this Hub cannot share corrections yet.` and the config item is not shown.
+8. **Events and alerts.** The routes `GET api/events`, `GET api/alerts` (and the write behind the Alerts group),
+   `POST api/alerts/test`, `GET api/spools/low` and `GET api/storage-use` (`03-hub-page.md` section 15). Until they
+   exist `events`, `alerts` and `spools low` say `Error: this Hub does not keep events yet.` with the Fix
+   `sudo spoolwarden update`, `status` has no Storage row and no Running low note, and the Alerts group is not shown
+   in `config`.

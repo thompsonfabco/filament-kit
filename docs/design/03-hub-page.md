@@ -44,14 +44,14 @@ every detail that can be opened has an address; reloading returns to it, Back an
 
 | Address | Opens |
 |---|---|
-| `#overview` (also empty or unknown) | Overview |
+| `#overview` (also empty or unknown) · `#overview/storage-use` · `#overview/running-low` | Overview; Overview with the Storage use panel open; Overview with the full Running low list open (the places that "Show storage use" and "Show running low" of an alert banner go to) |
 | `#printers` · `#printers/<id>` · `#printers/add` · `#printers/find` | Printers; one printer's row expanded and scrolled to; the Add a printer drawer; the Find Klipper printers card focused |
 | `#printers/<id>/load-map` · `#printers/<id>/reports` | The Map by loading filament drawer; the Saved reports drawer. `<id>` is the Hub's key for the printer (for a Bambu Lab printer it may equal the serial), so a Klipper printer has an address too |
 | `#recent` · `#recent/<id>` | Recently added; one record |
 | `#devices` · `#devices/pair` · `#devices/trusted` · `#devices/tag-readers` | Devices; the pairing dialog; the Trusted computers card; the Tag Readers card |
 | `#presets` · `#presets/updates` | Slicer presets; its Updates card |
 | `#features` · `#features/<feature>` · `#features/setup-<mode>` | Features; the preview drawer for turning that feature on or off; the preview drawer for changing the setup |
-| `#settings` · `#settings/<group>` | Settings; one group (`appearance`, `general`, `storage`, `label-reader`, `backups`, `network`, `passphrase`, `catalog`, `voice`) |
+| `#settings` · `#settings/<group>` | Settings; one group (`appearance`, `general`, `storage`, `alerts`, `label-reader`, `backups`, `network`, `passphrase`, `catalog`, `voice`) |
 | `#flash` · `#flash/tag-reader` · `#flash/display` | Flash a device; with the device chosen |
 | `#updates` · `#logs` · `#logs/<service>` | Updates; Logs; Logs with a service chosen and shown (when unlocked) |
 | `#job` | The current section with the job strip expanded |
@@ -203,8 +203,35 @@ buttons fill the width, the safe action on the left.
 | Section data | When the section opens; when its own change succeeds (only that region) | Overview: when it opens and on **Run the checks again**. Printers: printer states every 10 s while the section is visible (`G state`). Weigh Station requests: every 5 s while Devices is visible and the page is Unlocked or Trusted. |
 | `G job?from=N` | Page load; while a job runs | Every 1 s; while the Hub restarts, `G state` every 2 s instead (section 3.6) |
 | Polls of a running flow | Slot mapping every 2 s, Map by loading filament every 2 s, pairing every 3 s | Until the flow ends or its expiry passes |
+| `G events` (`GET api/events`) | Page load; then on every section, with `since` set to the last `next` | Every 10 s with `wait=0` (section 2.8) |
 
-All timers stop while the browser tab is hidden and resume, with an immediate read, when it is shown again.
+All timers stop while the browser tab is hidden and resume, with an immediate read, when it is shown again. The
+events poll of section 2.8 is the one exception: it keeps its rhythm in a hidden tab while Settings > Alerts >
+"Notifications in this browser" is on, so that the browser can notify.
+
+### 2.8 Alerts
+
+Every section of the page shows the alert banners of `02-components.md` section 8.8 and, when an alert arrives while
+the page is open, a toast (02 section 8.7) with the alert's title and the action **Show**. The banners are mounted
+once in the page frame, at the top of the main area above the page header, so no section draws its own; they sit
+below the "Cannot reach the Hub" banner of section 3.7. Titles, sentences and actions are the table of 02 section
+8.8; the actions go to `#printers/<id>` (Open the printer), `#devices` (Open Devices), `#overview/storage-use` (Show
+storage use) and `#overview/running-low` (Show running low). "<n> more alerts" and Settings > Alerts > "Recent alerts"
+open the Alerts list of 02 section 8.9 as a dialog.
+
+- **Where the events come from.** The Hub writes every event once into its event store (`events/<yyyy-mm>.xml`,
+  `09-implementation-order.md` Stage 10). The page reads it with `G events` (`GET api/events?since=<id>&wait=<seconds>`):
+  on page load for the raised `conditions` and the cursor `next`, then every 10 s with `wait=0` (section 2.7) with
+  `since` set to the last `next`. The banners are built from `conditions` (a condition's banner leaves when it
+  clears) and from the events of the last 24 hours that an alert type switched on covers (`alert: true`, a moment's
+  banner). A new event with `alert: true` shows its toast once.
+- **Dismiss** hides a banner on this browser only and remembers it as 02 section 8.8 says; it comes back when the
+  alert gets worse (warn to bad) or is raised again. Dismissing never removes the row from the Alerts list.
+- **Notifications outside the page.** With Settings > Alerts > "Notifications in this browser" on, the page also shows
+  a browser notification for each new alert while a Hub page tab is open in that browser (the tab may be in the
+  background). Nothing is sent when no tab is open. A notification has the title of the alert, one line of body and,
+  when chosen, opens the place of its action. One per event; a condition notifies when it is raised, not again while
+  it lasts; clearing sends nothing.
 
 ---
 
@@ -383,7 +410,8 @@ address. Reload the page and try again."
 page form of `spoolwarden status`. Address `#overview`.
 
 **Data.** `G state`, `G overview` (view); when Unlocked or Trusted, `P overview` (code) instead, which returns the
-same shape without hidden addresses. `G intake/history` for the Recently added tile.
+same shape without hidden addresses. `G intake/history` for the Recently added tile. `G storage-use` (`GET
+api/storage-use`) for the Storage row and its panel; `G spools/low` (`GET api/spools/low`) for the Running low card.
 
 ### 4.1 Layout
 
@@ -401,6 +429,11 @@ Desktop
 | | /!\ Set the Anthropic API key, so the Label Reader can use Cloud.  [Open settings]   |   |
 | +--------------------------------------------------------------------------------------+   |
 |                                                                                            |
+| +-- Running low (3) ------------------------------------------------ [Show all 3] ----+   |
+| | [swatch] Prusament PLA Galaxy Black   Spool 214   96 g left   Rack 1   2 more in stock |   |
+| | [swatch] Polymaker PETG Teal          Spool 77    140 g left  Rack 2   (!) Last one    |   |
+| +--------------------------------------------------------------------------------------+   |
+|                                                                                            |
 | +- Printers ---------+ +- Recently added ----+ +- Devices ----------+ +- Label Reader ---+ |
 | | 2 connected        | | Spool 214           | | 3 paired           | | 12 of 40 reads   | |
 | | 1 offline          | | 3 minutes ago       | | 1 Tag Reader       | | used today       | |
@@ -410,6 +443,7 @@ Desktop
 | | STATUS          CHECK                                       FIX                        |   |
 | | /!\ Needs a look  Spoolman is missing Spoolwarden's fields  [Make the fields]          |   |
 | | (i) Note        Slicer Sync: not set up                     Link it in Devices         |   |
+| | /!\ Needs a look  Storage: 4 GB free of 117 GB (97 % used)   [Show storage use]        |   |
 | | > Show 14 checks that are OK                                                           |   |
 | +---------------------------------------------------------------------------------------+   |
 |  Addresses and serial numbers are hidden while the page is locked.  [Unlock to show]       |
@@ -417,7 +451,8 @@ Desktop
 
 Tablet: tiles in a 2 x 2 grid; the Checks table keeps Status and Check, Fix moves under the check text.
 Phone:  one column; the tiles become one key-value list card; each check is a stacked card
-        (badge, text, fix, action).
+        (badge, text, fix, action). The Running low rows are stacked cards (swatch, name, "Spool 214", grams,
+        location, stock note).
 ```
 
 ### 4.2 Cards
@@ -441,6 +476,15 @@ warn triangle, one sentence, one default button.
 | No devices and no printers | "Moving from another computer? Restore its backup." | **Restore a backup** → `#settings/backups` |
 | Label Reader Cloud on, key not set | "Set the Anthropic API key, so the Label Reader can use Cloud." | **Open settings** → `#settings/label-reader` |
 | Web access on, passphrase not set | "Set the web passphrase, so Claude's connector can sign in." | **Open settings** → `#settings/passphrase` |
+
+**Running low** (between Still to do and the tiles; only when `G spools/low` lists at least one spool: no card when
+nothing is low). Card title "Running low" with the count in a badge. The body is up to five rows, the spools with the
+least filament first; each row has the swatch, the filament name, "Spool <id>", "<grams> g left", its location and
+"<n> more in stock" (other spools of the same filament line that are not empty, sealed ones included) or "Last one"
+(a warn badge). Under the rows, a ghost button **Show all <n>** (when more than five) opens the full list in a dialog
+"Running low" (`#overview/running-low`): the same rows, all of them, with Close. The threshold is the Hub's "Running low
+under" setting (10.13); the dialog's foot says "Spools at or under <n> g that are opened." with a link to
+`#settings/alerts`.
 
 **Summary tiles.** Four key-value tiles, each a link to its section; numbers in `--fs-2xl`.
 
@@ -468,6 +512,22 @@ When the feature behind a tile is off, the tile shows "Switched off" in `--muted
 - Order: Needs a look first, then Note, then OK; within each, the Hub's order. OK rows are folded under a disclosure
   "Show <n> checks that are OK" (open by default when nothing needs a look). The card title row carries two badges
   with the counts ("1 needs a look", "14 OK").
+- **Storage row** (group Hub): "Storage: <free> free of <total> (<percent> % used)", status OK, or Needs a look past a
+  limit (warn at 85 % used, bad at 95 % used, and always bad under 1 GB free; the limits are set in Settings > Alerts,
+  10.13), with the fix **Show storage use**. It is measured by the Hub every 5 minutes and when Overview is opened,
+  for the filesystem that holds the Hub's state and for the backups folder's filesystem when it is another one. The
+  fix opens a small panel "Storage use" (`#overview/storage-use`; a dialog, a sheet on a phone): the total bar and one
+  line per item with its size and where to reduce it.
+
+  | Line | Size of | Where to reduce it |
+  |---|---|---|
+  | Backups | the backups folder | **Open Backups** → `#settings/backups` |
+  | Photos | photos of recently added spools | "Recently added keeps the last <n>." (the Records kept field of Settings > Label Reader) |
+  | Label Reader | the Label Reader on this Hub | "Settings > Label Reader" → `#settings/label-reader` |
+  | Events and logs | the event store and the logs | none |
+
+  The same row is in `spoolwarden status`. A storage warning also shows as an alert banner on every section
+  (section 2.8).
 - Row action `ensure_fields`: primary button **Make the fields** (code) → `P fields`, the page's main action while
   its check needs a look (4.3); inline result "Made the fields: <made>." or, when `made` is 0, "The fields were
   already there." It is the only row action.
@@ -485,6 +545,8 @@ Trusted, the page reads `P overview` by itself and the line goes.
 | Error | Error state in the Checks card: "Could not check the Hub. <Hub's text>" and **Try again** |
 | Nothing to do, all OK | No Still to do card; the Checks card title badge reads "OK" and the first line of the card "Everything checked out." |
 | Job running | The meta line adds "<job title> is running" with a link that opens the job strip |
+| Storage use loading or unreadable | The Storage row is left out until `G storage-use` answers; the panel shows the loading skeleton, or the error state "Could not read the storage use. <Hub's text>" with **Try again** |
+| Nothing running low | No Running low card |
 
 **Main action:** none permanent. When a check needs a look and has an action, that action is the page's one primary
 button. **Run the checks again** is a ghost button.
@@ -1210,12 +1272,13 @@ Side drawer on desktop, full-height dialog on tablet, bottom sheet on phone. Add
 
 ## 10. Settings
 
-**Purpose.** Everything about how the Hub behaves, in nine groups, each with at most one Save. Address `#settings`;
+**Purpose.** Everything about how the Hub behaves, in ten groups, each with at most one Save. Address `#settings`;
 one group `#settings/<group>`.
 
 **Data.** `G settings/general` (view) → `{values, station_on, remote_on, web_on, spoolman_external, intake_history,
 spoolman_url}`; `G state` (`anthropic`, `passphrase`, `library_token`, `web`, `station`); `G library`; when
-Unlocked or Trusted, `P backups/list`. Each group reads only its own data again after its own save.
+Unlocked or Trusted, `P backups/list`; `G alerts` and `G alerts/device` for Alerts. Each group reads only its own
+data again after its own save.
 
 ### 10.1 Layout and sub-navigation
 
@@ -1228,9 +1291,10 @@ Desktop: one scrolling page, sticky sub-navigation on the left of the content
 | | Appearance               | | Display name        [Workshop hub                 ]               | |
 | | General      /!\ Unsaved | | Spoolman address    [http://spoolman.example:7912 ]               | |
 | | Storage locations        | |                       /!\ Unsaved changes   [Save general]       | |
-| | Label Reader             | +------------------------------------------------------------------+ |
-| | Backups and restore      | +-- Storage locations ---------------------------------------------+ |
-| | Network and addresses    | | ...                                                              | |
+| | Alerts                   | +------------------------------------------------------------------+ |
+| | Label Reader             | +-- Storage locations ---------------------------------------------+ |
+| | Backups and restore      | | ...                                                              | |
+| | Network and addresses    |                                                                       |
 | | Web passphrase           |                                                                       |
 | | Filament Catalog         |                                                                       |
 | | Weigh Station voice      |                                                                       |
@@ -1247,13 +1311,14 @@ Phone:  Settings opens on the list of groups (a collection of rows: group name, 
   group (by scroll position on desktop and tablet) has `aria-current="true"`; a group with unsaved edits shows the
   dirty mark of `02-components.md` (triangle, warn): "Unsaved" on its entry, "Unsaved changes" on its title row and
   in its foot.
-- Group order is fixed: Appearance, General, Storage locations, Label Reader, Backups and restore, Network and
-  addresses, Web passphrase, Filament Catalog, Weigh Station voice.
+- Group order is fixed: Appearance, General, Storage locations, Alerts, Label Reader, Backups and restore, Network
+  and addresses, Web passphrase, Filament Catalog, Weigh Station voice. (Alerts sits fourth, after Storage locations;
+  its section is 10.13 only so that the numbers of 10.5 to 10.12 stay as they are.)
 - Each group is a form group card: icon, title, one-line description, optional status badge at the right, the
   fields as label-and-control rows (label left 200 px on desktop, above the control on tablet and phone), a foot
   with the inline result at the left and the group's Save at the right.
 - Phone list of groups, one-line states: Appearance "<Light/Dark/System> · <theme>"; General "<display name>";
-  Storage locations "<n> locations"; Label Reader "<engine order in words>", followed by " · <n> corrections
+  Storage locations "<n> locations"; Alerts "<n> of 8 on"; Label Reader "<engine order in words>", followed by " · <n> corrections
   waiting" when there are any; Backups and restore "Last: <time>" or
   "Unlock to show"; Network and addresses "<public address>" or "No public address"; Web passphrase "Set" / "Not
   set"; Filament Catalog "<version>" or "Not downloaded"; Weigh Station voice "<Piper / espeak-ng>" or "Switched off".
@@ -1628,6 +1693,44 @@ The typed word is compared after removing spaces at either end; it must then rea
 
 **Main action:** each group's Save is that group's one primary button; Back up now is the primary of Backups and
 restore, so its Save button is a default button.
+
+### 10.13 Alerts
+
+Position: fourth in the order of 10.1, after Storage locations (`#settings/alerts`). Description: "What Spoolwarden
+warns you about, and where." Group summary (title-row badge and the phone list): "<n> of 8 on". What an alert is, the
+banners and the Alerts list are in section 2.8 and `02-components.md` sections 8.8 and 8.9.
+
+The first part is Hub-wide and is saved with the group's Save; the part "On this device" is set off under its own small
+heading and applies at once.
+
+| Field | Type | Key / endpoint | Notes |
+|---|---|---|---|
+| Filament ran out | Switch | `types[].key` → `P settings/alerts` (code) | Events `print.runout`. Default on |
+| Print paused | Switch | same | `print.paused`. Default on |
+| Print failed or stopped | Switch | same | `print.failed`. Default on |
+| Printer error | Switch | same | `printer.error`. Default on |
+| Print finished | Switch | same | `print.finished`. Default off |
+| Storage almost full | Switch | same | `storage.low`. Default on |
+| Spool running low | Switch | same | `spool.low`. Default on |
+| Device stopped answering | Switch | same | `device.down` and `printer.offline`. Default off |
+| Only when it is the last spool of that filament | Switch, beside "Spool running low" | `last_spool_only` | Default off. It limits the alert, not the Running low list of 4.2 |
+| Running low under | Number with unit "g" | `running_low_g` | Default 150, 10 to 2000. Hint "Opened spools at or under this are listed as running low." |
+| Storage warning at | Number with unit "% used" | `storage_warn_percent` | Default 85. The Hub treats 95 % used (`storage_bad_percent`), and always less than 1 GB free, as bad |
+
+Every event is written whatever the switches say; the switches only decide what is shown and sent as an alert.
+
+| On this device | Type | Does | Endpoint |
+|---|---|---|---|
+| Notifications in this browser | Switch, off until switched on (the browser then asks for permission); hint "Shown while a Spoolwarden tab is open in this browser." | Applies at once; needs no setup code | `G alerts/device`, `P alerts/device` `{notifications}` |
+| Send a test alert | Default button | One test notification to this browser only | `P alerts/test` |
+| Recent alerts | Link | Opens the Alerts list (`02-components.md` 8.9) | `G events` |
+
+- States of the browser switch: "Blocked in this browser's settings" with how to allow it (the browser's own site
+  settings), and "This browser cannot show notifications" where the browser refuses (a page on the Hub's own address
+  with a certificate the browser does not trust may be refused; the way out is the public address with a real
+  certificate, said in that text).
+- Save: **Save alerts**. Result "Saved: <field names>."
+
 
 ---
 
@@ -2043,7 +2146,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 
 | Today | Fate | New place and reason |
 |---|---|---|
-| Eight cards, about thirteen Save buttons | Merged into | Nine groups, one Save each at most (10) |
+| Eight cards, about thirteen Save buttons | Merged into | Ten groups, one Save each at most (10) |
 | General: "Display name" + Save | Kept | General (10.3) |
 | General: "Locations, comma separated" + Save | Moved to | Storage locations, the list of locations (10.4) |
 | General: "PLA rack", "Box location prefix", "Number of storage boxes", "Overflow location" (each + Save) | Moved to | Storage locations, one Save: PLA rack became a location that takes PLA, the boxes one Individual containers location, the overflow location the default overflow (10.4) |
@@ -2082,6 +2185,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | Card "Remote access": module-off text, firewall text, **Show the firewall rules**, **Get the certificate** + confirm | Moved to | Network and addresses, Remote access part (10.7, 10.11) |
 | (none) | Added | Appearance group: Light / Dark / System, Theme, Theme for new devices (10.2) |
 | (none) | Added | Label Reader engine order, On this Hub address, Test and tier (10.5) |
+| (none) | Added | Alerts group: alert switches, running-low and storage thresholds, notifications in this browser, test alert, recent alerts (10.13) |
 
 ### 14.9 Updates
 
@@ -2134,4 +2238,10 @@ column says.
 | Feature titles in the plain names of section 9.1 | Features collection | The page maps code names to the names of section 9.1 |
 | Cloud reads used today and the daily limit as numbers in `G state` | Overview Label Reader tile (4.2) | The numbers are taken from the Overview check row that reports them; when that row is missing the tile shows "Reads per day: <limit>" |
 | Share corrections: what the reader can do and its state (it offers sharing, sharing on or off, how many wait), the setting `label_reader.share_corrections` with the job that sets the reader, the corrections waiting (list, thumbnails, remove, remove all, try again, package, send), and each correction handed to the reader when it is saved | Settings > Label Reader (10.5.1, 10.5.2), Recently added (6.2, 6.4), Overview tile (4.2), Features preview (9.4) | The block SHARE CORRECTIONS shows only its paragraph and the line "Not available on this Hub yet."; nothing else of the feature is shown |
+| An event store with `GET api/events?since=&wait=&kinds=&limit=` answering `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert: true or false, title, text, action: {place, id}}], next, conditions: [the raised ones, same shape]}` (`wait` up to 55 s; `alert` says whether an alert type that is on covers the event; `title` and `text` are built in the Hub's language) | Alert banners, toasts and the Alerts list on every section (2.8), Settings > Alerts > Recent alerts (10.13) | No banner, toast or Alerts list; the "Recent alerts" link is hidden |
+| `GET api/alerts` answering `{types: [{key, title, on}], last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` and `P settings/alerts` (code) with the same fields (the names may be adjusted by the Hub; the fields may not) | Settings > Alerts (10.13) | The group is hidden |
+| `GET api/alerts/device` and `POST api/alerts/device` `{notifications: true or false}` for the calling device (a browser id on the Hub page) | "Notifications in this browser" (10.13) | The switch is hidden |
+| `POST api/alerts/test`, one test notification to the calling device only | **Send a test alert** (10.13) | The button is hidden |
+| `GET api/spools/low` answering `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`, least filament first | Overview, Running low card and its dialog (4.2) | No Running low card |
+| `GET api/storage-use` answering `{filesystems: [{path_label, total, free, percent_used, state}], items: [{key, title, bytes}]}` (not `api/storage`, which is the storage locations route) | Overview, Storage row and Storage use panel (4.2) | No Storage row |
 | A stored list of storage locations (`storage.xml` beside the Hub's config file) with `GET api/storage` and `P settings/storage` (code): the read answers `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}`; on an Individual containers location `containers` is the whole set in number order (as many as `count`): `name` is the exact location text of a spool in that container ("Storage box 03"), `number` the whole number, `taken` true while a spool's location is that name, and `prefix` is the exact text before the number, for information; both are `null` on Bulk storage, and `used` and `free` equal the counts of `taken`; a client never builds a container name, not from `name` and not from `prefix`: it matches a spool's location text with each location's `name` (taken first) and each `containers[].name`, and to place or move a spool it sends the set's `name` (the Hub takes the lowest free container) or one `containers[].name`; a text that matches nothing (a removed location, a text typed by hand) is shown as it is, under no location; the write takes the whole list `{locations: [...]}` (ids kept for existing rows, none for new ones) and answers the saved list, or `errors` per row and field | Settings > Storage locations (10.4) | The group shows "Could not read the settings. <Hub's text>" with **Try again**, and the list cannot be edited |

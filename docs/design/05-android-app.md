@@ -203,6 +203,7 @@ line, then:
 | `spools/{id}/load` | Load: pick a printer (7.6) | Spools | `spools/{id}` |
 | `spools/{id}/load/{printerId}` | Load: pick a slot (7.6) | Spools | `spools/{id}/load`, or `spools/{id}` when the printer step was skipped |
 | `spools/{id}/load/{printerId}/{slot}` | Load: preview and load (7.6) | Shared | the slot step, or 9.6 when opened from there; blocked while the load is being written |
+| `alerts` | Alerts list (3.6) | Shared | the screen that was open when it was opened |
 | `tag/{uid}` | Tag lookup and "Tag not linked" (7.7) | Shared | the screen that was open when the tag was tapped |
 | `tag/{uid}/link` | Link to a sealed spool: find (7.8) | Shared | `tag/{uid}` |
 | `tag/{uid}/link/{spoolId}` | Link to a sealed spool: preview, conflict (7.8) | Shared | `tag/{uid}/link` |
@@ -220,6 +221,7 @@ line, then:
 | `recent/corrections` | Corrections waiting (10.6) | Recent | `recent` |
 | `settings` | Settings (12.1) | Settings root | `home` tab |
 | `settings/appearance` | Appearance (12.2) | Settings | `settings` |
+| `settings/alerts` | Alerts (12.7) | Settings | `settings` |
 | `settings/hub` | Hub connection (12.3) | Settings | `settings` |
 | `settings/updates` | App updates (12.4, 13) | Settings | `settings` |
 | `settings/licences` | Licences (12.5) | Settings | `settings` |
@@ -246,9 +248,11 @@ Back rules, in this order:
 The top-bar back arrow follows the same rules. Sheets and dialogs close on Back, on a tap on the scrim, and on
 their Cancel button, under rule 1.
 
-Deep links (`spoolwarden://` scheme, opened from any link that uses it; the app itself posts no notifications):
+Deep links (`spoolwarden://` scheme, opened from any link that uses it; the only notifications the app posts are the
+alert notifications of 12.7):
 `spoolwarden://printers/{id}`, `spoolwarden://spools/{id}`, `spoolwarden://recent/{hid}`. Opening one builds the
-back stack of its tab (root first), so Back from it behaves as if the person had navigated there.
+back stack of its tab (root first), so Back from it behaves as if the person had navigated there. The tap on an alert
+notification (12.7) builds the back stack the same way for the place it opens.
 
 ### 2.6 NFC tag taps
 
@@ -308,6 +312,7 @@ the Console theme.
 | Status | `Row` of a status shape (`--s2`, triangle and octagon `--s2` + 2 dp) and a word | F10 shapes; colour from the state; never the shape alone |
 | Inline banner (02 8.8; Android `NoticeCard`; "notice line" in this document) | `Surface` with a `-soft` ground, `--r` corners, `--s3` padding, leading shape, text, optional trailing action | `ok`, `warn`, `bad`, `info` kinds; used for inline results and problems |
 | Hub notice | An inline banner of kind `bad` with fixed texts and one action (3.4) | One composable used by every screen |
+| Alert banner (02 8.8; Android `NoticeCard`) | The same `NoticeCard` of kind `warn` or `bad`, with a bold title, one sentence, the time, one action and Dismiss (3.6) | One composable used by every screen that shows alerts |
 | Dialog | Medium width and up: `AlertDialog` (`BasicAlertDialog` when it holds a form), `--r-l`, `--e2`, scrim `--scrim`. Compact width: the same content in a `ModalBottomSheet` (F7: dialogs become bottom sheets on phones). | Title `--fs-l` `--fw-title`; body `--fs-b`; buttons at the bottom right (in a sheet: full width, stacked, confirming button on top); confirming button last in reading order on wide screens. Every "dialog" in this document follows this rule. |
 | Sheet | `ModalBottomSheet`, `--r-l` top corners, drag handle | Used for short tasks on one thing (update weight, move, slot actions) |
 | Toast | `Snackbar` in the `Scaffold`'s `SnackbarHost`, `--surface` ground, `--border-strong` outline, `--e2` | One line, optional one action ("Undo"); held 5 s, 10 s when it has an action, by the host's own timer |
@@ -367,6 +372,30 @@ Hub and network failures use these texts everywhere (`strings.xml`, one key each
 | Spoolman unreachable | "The Hub can't reach Spoolman right now. Try again in a minute." |
 
 Ellipses are always the single character "…".
+
+### 3.6 Alert banners and the Alerts list
+
+The alerts of the Hub (`02-components.md` 8.8, 8.9) are shown by one composable, the `NoticeCard` of 3.1 with a title,
+the time, the action and Dismiss. Titles, sentences and actions are the table of `02-components.md` 8.8; no screen
+draws its own.
+
+- **Placement.** Global: the first panels of Home (5), below the local network notice and above the update notice, and
+  at the top of a printer's screen (9.4) for the alerts about that printer. At most two are shown, the most serious
+  first, then the newest; a third and more are one line "<n> more alerts" that opens `alerts`. A condition's card
+  stays while the condition is raised and leaves by itself when it clears; Dismiss hides it on this phone only, and it
+  comes back if it gets worse (warn to bad) or is raised again. A moment's card (print failed, printer error) stays
+  until it is dismissed, at most 24 hours.
+- **Actions.** "Open the printer" opens `printers/{id}`; "Show running low" opens Spools with the Running low filter on
+  (7.1); "Open Devices" and "Show storage use" have no screen in this app, so they open the Alerts list at that alert.
+- **Toast.** An alert that arrives while the app is open also shows a `Snackbar` with its title and the action "Show"
+  (which does what the card's action does).
+- **Alerts list (`alerts`).** A screen of the Alerts list of `02-components.md` 8.9: top bar title "Alerts", back arrow;
+  a `LazyColumn` with the raised conditions first, then the alert events of the last 7 days, newest first, each row an
+  icon, the title, the sentence, the time and its action as a trailing `TextButton`. Empty: "No alerts in the last 7
+  days." Opened from "<n> more alerts" and from Settings > Alerts > "Recent alerts" (12.7). Requests: `GET api/events`.
+- **Where the events come from.** While the app is open, `GET api/events?since=<next>&wait=<seconds>`: the request
+  waits at the Hub (at most 55 s) and answers at once when something new exists; with the app closed and "Alerts on
+  this phone" on, the watching service of 12.7 does the same.
 
 ---
 
@@ -507,6 +536,12 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 | Home               (o) Connected  ☼  |
 | Workshop hub                         |
 +--------------------------------------+
+| (!) Filament ran out on Workshop X1  |  <- alert banners, at most two
+|     bracket_v4.3mf is paused at 41 %.|
+|     Load filament and resume at the  |
+|     printer.  since 14:02            |
+|     [Open the printer]    [Dismiss]  |
+| 2 more alerts                      > |
 | (i) Update ready: Spoolwarden 0.5.3 >|  <- only when there is one
 |                                      |
 | Add spools                           |
@@ -524,6 +559,8 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 |  (o) Garage Voron  Idle           >  |
 |  ( ) Study A1 mini  Offline       >  |
 |                                      |
+| (!) 3 spools running low           > |
+|                                      |
 | Slicer presets                    >  |
 |  24 presets for 9 lines, built 3 h   |
 |  Installed on your PC 2 h ago        |
@@ -536,10 +573,12 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 |---|---|---|---|
 | Top bar | Title "Home", the Hub's name under it, connection chip, appearance icon (2.2). | `GET api/info` | `TopAppBar` |
 | Local network notice | 3.3, at the top, only in that state. | | Panel |
+| Alert banners | The alert banners of 3.6, at most two, then the line "<n> more alerts" (opens `alerts`). None when nothing is raised or unread. | `GET api/events` | `NoticeCard` |
 | Update notice | Only when an app update is offered or the Hub is newer than the app (13). Notice line of kind `info` "Update ready: Spoolwarden 0.5.3." or of kind `warn` "Update the app: the Hub is newer, so some things may not work." Trailing chevron; tapping opens `settings/updates`. | `GET api/info` | Notice line |
 | Add spools panel | Title "Add spools". Text "Photograph each label, check what was read, then add. Nothing is saved until you add." Main button "Add from label photos" (camera icon) starts a new draft at `add/{id}/photos`. Other button "Add by hand" starts a new draft at `add/{id}/review` with the filament picker (6.4). When the Label Reader is off on the Hub, "Add by hand" is the main button, the photo button is absent, and one line says "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." | `GET api/info` (`labelReading`) | Panel, `Button`, `OutlinedButton` |
 | Drafts panel | Only when drafts exist. Title "Drafts" with the count. One row per draft, newest first: headline the relative time ("3 minutes ago"; exact time on long-press), supporting line "2 photos · note: 3 of the grey ones · tag <tag ID>" (only the parts that exist), trailing chevron. Tapping resumes the draft where it stopped. The row's overflow offers "Discard": dialog "Discard this add?" / "Its photos and edits are removed from this phone." / "Keep" / "Discard" (danger); then the snackbar "Add discarded." | none (drafts live on the phone) | Panel, `ListItem`, `DropdownMenu` |
 | Printers panel | Title "Printers" with the count; header action "All printers" selects the Printers destination. One row per configured printer, at most 4, then "and 2 more": status shape and word, name, and the job when printing ("Printing · 42 % · 1 h 12 min left"). Tapping a row opens `printers/{id}` in the Printers destination. Empty: "No printers yet." with the text button "Add a printer" (selects Printers). Absent when the printers Feature is off. | `GET api/printers` (with each connection check) | Panel, `ListItem` |
+| Running low line | Only when at least one spool is running low: a row with the warn triangle and "<n> spools running low" ("1 spool running low"), chevron; tapping opens Spools with the Running low filter on (7.1). It sits under the Printers panel. | `GET api/spools/low` | `ListItem` |
 | Slicer presets panel | 11.1 | `GET api/profiles/status` | Panel |
 
 **One filled button on Home (F1 principle 2, `02-components.md` 4.1).** Adding spools is Home's main action, and
@@ -552,9 +591,9 @@ action, its order given where several could apply, as 9.7).
 States: loading shows the panels with skeleton rows. Offline keeps the last data with the notice of 3.2 and leaves
 the Add spools panel usable: photos are taken and kept on the phone; reading waits for the Hub.
 
-TalkBack order: top bar (title and Hub name as one node, connection chip, appearance), notices, Add spools (title,
-text, main button, other button), Drafts (each row one node with a "Discard" custom action), Printers,
-Slicer presets, bottom bar.
+TalkBack order: top bar (title and Hub name as one node, connection chip, appearance), notices and alert banners (each
+a live region, 14.4), Add spools (title, text, main button, other button), Drafts (each row one node with a "Discard"
+custom action), Printers, the running low line, Slicer presets, bottom bar.
 
 ---
 
@@ -808,7 +847,7 @@ Spools 212 and 213 were created." and the draft is kept with the spools that fai
 The spool card of today becomes a proper screen with sheets and sub-screens. A spool is reached from a search
 result, from a tag tap (2.6), from a printer slot (9.6) or from a deep link.
 
-Requests: `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags/{uid}`, `PATCH api/spools/{id}` with `gross`,
+Requests: `GET api/spools/low`, `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags/{uid}`, `PATCH api/spools/{id}` with `gross`,
 `remaining`, `location` or `empty` and `dry_run`, `GET api/locations`, `GET api/storage`, `POST api/spools/{id}/link` with
 `{tag, force, dry_run, gross, location}`, `GET api/printers`, `GET api/printers/{id}`,
 `POST api/printers/{id}/slots/{label}/load` with `dry_run`.
@@ -820,7 +859,7 @@ Requests: `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags/{uid}`, `PATCH api/sp
 | Spools              (o) Connected ☼  |
 +--------------------------------------+
 | [(search) Brand, material, colour  ] |
-| [Sealed only]                        |
+| [Sealed only] [Running low (3)]      |
 | (tag) Hold a spool's tag to the back |
 |       of the phone to open it.       |
 | +----------------------------------+ |
@@ -840,6 +879,7 @@ Requests: `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags/{uid}`, `PATCH api/sp
 |---|---|---|
 | Search field | Label "Brand, material, colour…", leading search icon, trailing clear `IconButton` ("Clear search") when not empty, `ImeAction.Search`. Searches 300 ms after typing stops once 2 or more characters are typed, and at once on the keyboard's search key. Clearing the field clears the results. No separate Search button. | `OutlinedTextField` |
 | Sealed only | Filter chip "Sealed only"; the whole chip toggles; re-runs the search. | `FilterChip` |
+| Running low | Filter chip "Running low (<n>)", `<n>` from `GET api/spools/low`; not shown when `<n>` is 0; the whole chip toggles. With it on, the results panel shows the Running low rows instead of the search results, least filament first: swatch, headline the filament name, supporting line "Spool 214 · 96 g left · Rack 1 · 2 more in stock" (or "Last one", with the warn triangle), chevron; tapping opens `spools/{id}`. Opened from Home's "<n> spools running low" line with the chip already on. | `FilterChip` |
 | Tag hint | Tag icon and "Hold a spool's tag to the back of the phone to open it." `--fs-m` `--muted`. Shown while no search is typed. When the phone has no NFC: "This phone can't read tags. Search instead." When NFC is off: "Turn on NFC to open spools by their tag." with the text button "NFC settings" (opens the system NFC settings). | `Row`, `TextButton` |
 | Results | Panel with a collection: swatch, headline "<brand> <name>", supporting "Spool 214 · PLA · Workshop X1 A1 · 620 g left" (the spool's location as the Hub gives it; numbers `--mono`; "sealed" and "tagged" added when true), chevron. Tapping opens `spools/{id}` (right pane on expanded width). | `LazyColumn`, `ListItem` |
 
@@ -847,7 +887,7 @@ States: idle shows only the field, the chip and the tag hint. Searching: indeter
 field (the results stay until new ones arrive). Empty: "No spools match "petg"." with the text button "Clear the
 Sealed only filter" when it is on. Error, offline, Hub notices: 3.2 to 3.4.
 
-TalkBack order: search field, Sealed only, tag hint, results ("Polymaker PolyTerra PLA Charcoal Black, spool 214,
+TalkBack order: search field, Sealed only, Running low, tag hint, results ("Polymaker PolyTerra PLA Charcoal Black, spool 214,
 PLA, Workshop X1 A1, 620 grams left"), bottom bar.
 
 ### 7.2 Spool (`spools/{id}`)
@@ -1143,6 +1183,9 @@ autoplays sound.
 
 Top bar: title the printer's name, back arrow, overflow "More actions": "Printer settings", "Collect a report",
 "Refresh".
+
+Alert banners (3.6) about this printer (filament ran out, paused, print stopped, printer error, print finished,
+offline) sit above the state line.
 
 **Status panel**
 
@@ -1618,6 +1661,7 @@ Hub connection.
 |---|---|---|
 | Appearance | "System · Console" | 12.2 |
 | Hub connection | "Workshop hub · Connected" (or the state word) | 12.3 |
+| Alerts | "On" / "Off" | 12.7 |
 | App updates | "App 0.5.2 · up to date" / "Update ready: 0.5.3" (with the dot of 2.3) | 12.4 |
 | Licences | "Free software under GPL-3.0-or-later" | 12.5 |
 | Developer | "Debug build tools" (debug builds only) | 12.6 |
@@ -1663,6 +1707,31 @@ offline. Both files are read and parsed off the main thread (1, Threads), with s
 ### 12.6 Developer (`settings/developer`, debug builds only)
 
 Field "Tag ID" (`--mono`) and button "Simulate a tag tap": behaves as a real tap (2.6). Absent from release builds.
+
+### 12.7 Alerts (`settings/alerts`)
+
+The row sits after Hub connection in 12.1 (its number only keeps the numbers of 12.2 to 12.6 as they are). The alert
+types and thresholds are edited on the Hub page or the command line, like every setting; this screen is about this
+phone.
+
+| Element | Text / behaviour | Material 3 |
+|---|---|---|
+| Alerts on this phone | Switch row with the supporting text "Android shows a small permanent notification while Spoolwarden watches the Hub." Switching on asks for Android's notification permission (and `GET api/alerts/device` / `POST api/alerts/device` `{notifications: true}` records the choice at the Hub); switching off stops the service and posts `{notifications: false}`. When Android will not ask again: "Allow notifications for Spoolwarden in the app's settings." and "Open app settings". | `ListItem` + `Switch` |
+| Send a test alert | Other button; `POST api/alerts/test` sends one test notification to this phone only. Result line "Sent." or the Hub's text. | `OutlinedButton` |
+| Recent alerts | Row with a chevron; opens `alerts` (3.6). | `ListItem` |
+
+- **The watching service.** When the switch is on, the app keeps one waiting connection to the Hub
+  (`GET api/events?since=<next>&wait=<seconds>`, 3.6) in a foreground service and shows an Android notification per
+  alert, also with the app closed. Android requires a permanent small notification while it runs; it reads "Watching
+  the Hub for alerts". It works wherever the phone reaches the Hub (home network, or the public address when one is
+  set); no Google push service is used.
+- **The alert notification.** Title: the alert's title with its subject (the table of `02-components.md` 8.8); body:
+  one line, the sentence; a tap opens the place that fixes it: `printers/{id}` for the printer alerts, Spools with the
+  Running low filter on for a low spool, and `alerts` for the others (this app has no storage or backups screen).
+  One notification per event; a condition notifies when it is raised, not again while it lasts; when it clears, its
+  notification is removed. Only alerts of a type that is on at the Hub are notified.
+- States: loading shows a skeleton row; the Hub not answering shows the notice of 3.2; the switch is disabled with the
+  reason "Needs the Hub." while offline.
 
 ---
 
@@ -1793,6 +1862,9 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | Phone-callable Slicer presets actions: list filaments without a preset line, add them to a line, create a line, build presets now (today these exist only under `api/profiles/web/`, which phones may not call). | 11.2 | 11.2 points to the Hub page and the web app. |
 | The Hub's default theme ("Theme for new devices", F6.2) in `GET api/info` as the field `look` (for example `"look": "console"`). | 12.2 first start | The app starts on Console. |
 | `GET api/storage` on the paired API: the locations in fill order `{id, name, type, limit, count, used, free, prefix, containers: [{name, number, taken}], fill, materials, overflow, default_overflow, sealed, position}` (`prefix` and `containers` are `null` for bulk; `used` and `free` equal the counts of `taken`), with `order_by_material` and `everything_else`; `GET api/locations` keeps its answer (a list of names). | 6.3 Location field, 6.5 rows, 7.4 Move | The Location field and the "Move to" sheet list the names from `GET api/locations` without how full, and "Automatic" shows no reason. |
+| `GET api/events?since=&wait=&kinds=&limit=` on the paired API: `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert: true or false, title, text, action: {place, id}}], next, conditions: [the raised ones, same shape]}`; `wait` up to 55 s | 3.6 alert banners, toast and Alerts list; 12.7 the watching service | No alert banners, no Alerts list, no alert notifications; Settings > Alerts is absent. |
+| `GET api/alerts/device` and `POST api/alerts/device` `{notifications: true or false}` for the calling phone; `POST api/alerts/test` | 12.7 | The switch and the test button are absent. |
+| `GET api/spools/low`: `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`, least filament first | 5 the running low line; 7.1 the Running low chip | No line and no chip. |
 | A per-item structure in the dry-run answer of `POST api/intake/add` (what is created, what is reused, where each spool goes). | 6.5 rows | The app shows the Hub's lines one per row. |
 
 Routes this design uses that today's app does not call, all already on the Hub's paired API (`server/filament_kit/api.py`,
@@ -1830,7 +1902,7 @@ Every route, screen, dialog and flow of today's app (`filament-kit` Android app)
 | Spool card `Dialog` over any route | Spool screen `spools/{id}` 7.2 with sheets and sub-screens |
 | NFC tap opens the spool card anywhere except pair and add | 2.6, opens `tag/{uid}` 7.7 |
 | Connection poll every 20 s | 2.4 |
-| (new) | Recently added `recent`, `recent/{hid}`, `recent/{hid}/edit/{item}`, `recent/{hid}/photos/{n}` 10; Slicer presets screen `presets` 11.2; Appearance 12.2; App updates 12.4; Developer 12.6; Printer settings `printers/{id}/settings` 9.9; slot pick 9.6; Add a Klipper printer and Find Klipper printers 9.3; top bar, bottom bar and rail 2.2, 2.3 |
+| (new) | Recently added `recent`, `recent/{hid}`, `recent/{hid}/edit/{item}`, `recent/{hid}/photos/{n}` 10; Slicer presets screen `presets` 11.2; Appearance 12.2; App updates 12.4; Developer 12.6; Printer settings `printers/{id}/settings` 9.9; Alerts list `alerts` 3.6; Alerts `settings/alerts` 12.7; slot pick 9.6; Add a Klipper printer and Find Klipper printers 9.3; top bar, bottom bar and rail 2.2, 2.3 |
 
 ### 17.2 Pairing controls
 
