@@ -1,29 +1,38 @@
 """Storage locations: the ordered list a new spool is put away by (ruling R79, docs/design 03 section 10.4).
 
-The list lives in `storage.xml` beside the Hub's config file (atomic write, owner and mode as the config file). A Hub
-that has none builds it once from the old config keys (`migrate`) and writes it; those keys then stay in config.json
-untouched and are no longer read. The placement rule itself is in placement.py; the rename of the spools stored under
-a renamed location is `inventory.rename_locations`.
+The list lives in `storage.xml` in the Hub's STATE folder (/var/lib/filament-kit: the one folder the Hub may write;
+owner of the folder, mode 0644, so the web unit reads it with its pass on the folder; atomic write under the Hub's
+cross-process lock, never through a link). A Hub that has none builds it once, at its start (`migrate_at_start`), from
+the old config keys (`migrate`) and writes it; those keys then stay in config.json untouched and are no longer read.
+Storage never stops a start: a list that cannot be written or read is placed from memory and `checks_row` says so
+(ruling 2026-11-17 01:12). The command line (root) writes the same file with `save`. The placement rule itself is in
+placement.py; the rename of the spools stored under a renamed location is `inventory.rename_locations`.
 """
 from __future__ import annotations
 
 import copy
+import errno
 import logging
 import os
 import re
-import tempfile
+import secrets
+import stat
 import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from . import config
+from . import config, locks
 
 log = logging.getLogger("filament_kit.storage")
 
 BULK, CONTAINERS = "bulk", "containers"
 NONE, ANY, MATERIALS = "none", "any", "materials"
 NOTICE = "Storage locations were converted. Check them."
+SAVE_FAILED = "Storage locations could not be saved ({reason})."      # the Checks row (Hub, Needs a look)
+READ_FAILED = "Storage locations could not be read ({reason})."
+NOT_SAVED = "Storage locations were not saved: {reason}."            # a refused save (Hub page, `Error:` line)
+MODE = 0o644
 VERSION = "1"
 NAME_MAX = 100
 _ID = re.compile(r"^loc-([1-9][0-9]*)$")
@@ -45,6 +54,14 @@ class StorageError(ValueError):
         self.problems = problems
         first = problems[0]
         super().__init__(f"Error: {first.error}\nFix: {first.fix}")
+
+
+class Unreadable(StorageError):
+    """storage.xml exists and cannot be used (not read, not XML, not valid). `reason` is the short cause."""
+
+    def __init__(self, problems: list[Problem], reason: str):
+        super().__init__(problems)
+        self.reason = reason
 
 
 @dataclass
@@ -240,7 +257,10 @@ def check(locations: list[Location], before: list[Location] | None = None) -> No
 # ---------------------------------------------------------------- XML
 
 def _file() -> Path:
-    return config.paths().etc / "storage.xml"
+    return config.paths().state / "storage.xml"
+
+
+_LOCK = locks.ProcessLock(lambda: config.paths().state / "storage.lock")
 
 
 def to_xml(st: Storage) -> str:
@@ -275,9 +295,9 @@ def to_xml(st: Storage) -> str:
 
 def from_xml(text: str) -> Storage:
     def unreadable(why: str) -> StorageError:
-        return StorageError([Problem(None, "file", f"The storage locations file cannot be read: {why}.",
-                                     f"Restore {_file()} from a backup, or move it away to build the list again "
-                                     f"from the old settings.")])
+        return Unreadable([Problem(None, "file", f"The storage locations file cannot be read: {why}.",
+                                   f"Restore {_file()} from a backup, or move it away to build the list again "
+                                   f"from the old settings.")], why)
     try:
         root = ET.fromstring(text)
     except ET.ParseError as e:
@@ -315,92 +335,195 @@ def from_xml(text: str) -> Storage:
         raise unreadable("next-id is not a number") from None
     problems = validate(locs, check_clashes=False)
     if problems:
-        raise StorageError(problems)
+        raise Unreadable(problems, problems[0].error.rstrip("."))
     st = Storage(locs, nxt, root.get("converted") == "yes", plan)
     st.next_id = max(st.next_id, max((int(_ID.match(x.id).group(1)) for x in locs if x.id), default=0) + 1)
     return st
 
 
+_cache: tuple | None = None            # (file identity, Storage): the file is read again only when it changed
+_save_failed: str | None = None        # why the first write of the migrated list failed (the Checks row)
+_logged: set[str] = set()
+
+
+def _log_once(level: int, text: str) -> None:
+    if text not in _logged:
+        _logged.add(text)
+        log.log(level, "%s", text)
+
+
+def _reason(e: BaseException) -> str:
+    if isinstance(e, Unreadable):
+        return e.reason
+    if isinstance(e, StorageError):
+        return e.problems[0].error.rstrip(".")
+    return (getattr(e, "strerror", None) or str(e)).rstrip(".")
+
+
+def _identity(st: os.stat_result) -> tuple:
+    return (st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _cannot_read(f: Path, why: str) -> Unreadable:
+    return Unreadable([Problem(None, "file", f"The storage locations file cannot be read: {why}.",
+                               f"Check the owner and mode of {f} (the Hub's user reads it), or restore it from a "
+                               f"backup.")], why)
+
+
 def load() -> Storage | None:
-    """The saved list, None when there is no storage.xml. A file that cannot be read raises StorageError."""
+    """The saved list, None when there is no storage.xml. A file that cannot be read raises Unreadable (a
+    StorageError). The file is opened without following a link and read again only when its inode, size or times
+    changed (the command line, as root, may have written it)."""
+    global _cache
     f = _file()
     try:
-        text = f.read_text(encoding="utf-8")
+        fd = os.open(f, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+                     | getattr(os, "O_BINARY", 0))
     except FileNotFoundError:
+        _cache = None
         return None
+    except OSError as e:
+        raise _cannot_read(f, "it is a symbolic link" if e.errno == errno.ELOOP else (e.strerror or str(e))) from None
+    try:
+        with os.fdopen(fd, "rb") as fh:
+            ident = _identity(os.fstat(fh.fileno()))
+            if _cache is not None and _cache[0] == ident:
+                return copy_of(_cache[1])
+            data = fh.read()
+        text = data.decode("utf-8")
     except (OSError, UnicodeDecodeError) as e:
-        raise StorageError([Problem(None, "file", f"The storage locations file cannot be read: {e}.",
-                                    f"Check the owner and mode of {f} (as config.json), or restore it from a "
-                                    f"backup.")]) from None
-    return from_xml(text)
+        raise _cannot_read(f, getattr(e, "strerror", None) or str(e)) from None
+    st = from_xml(text)
+    _cache = (ident, copy_of(st))
+    return st
+
+
+def _not_saved(e: BaseException) -> StorageError:
+    """A failed write as the refusal the person sees: Error and Fix, never the exception."""
+    global _save_failed
+    reason = _reason(e)
+    _save_failed = reason
+    state = config.paths().state
+    return StorageError([Problem(None, "file", NOT_SAVED.format(reason=reason),
+                                 f"Check that the Hub's user can write {state}, then save again.")])
+
+
+def _state_for_write() -> tuple[Storage | None, bool]:
+    """(the list on disk, whether the file is there but unreadable)."""
+    try:
+        return load(), False
+    except Unreadable:
+        return None, True
 
 
 def save(st: Storage, before: Storage | None = None) -> None:
-    """Validate, give every row without an id one, and write storage.xml atomically (mode and owner as config.json).
-    A clash of names that the saved file (or `before`) already has is not refused again, a new one is."""
-    if before is None:
-        try:
-            before = load()
-        except StorageError:
-            before = None
-    check(st.locations, before.locations if before else None)
+    """Validate, give every row without an id one, and write storage.xml atomically under the cross-process lock.
+    A clash of names that the saved file (or `before`) already has is not refused again, a new one is. A file that
+    cannot be read is kept as storage.xml.unreadable. A write that fails raises StorageError (Error and Fix), never
+    the OSError."""
+    global _save_failed
     try:
-        disk = load()
-    except StorageError:
-        disk = None
-    if disk is not None:
-        st.rename_plan = disk.rename_plan       # a list saved from rows never drops an unfinished rename's plan
-    _write(st)
+        with _LOCK:
+            disk, unreadable = _state_for_write()
+            if before is None:
+                before = disk
+            check(st.locations, before.locations if before else None)
+            if disk is not None:
+                st.rename_plan = disk.rename_plan       # a list saved from rows never drops an unfinished plan
+            _write(st, unreadable)
+    except OSError as e:
+        raise _not_saved(e) from None
+    _save_failed = None
 
 
-def _write(st: Storage) -> None:
+def _tmp_name(f: Path) -> Path:
+    return f.with_name(f"{f.name}.{secrets.token_hex(8)}.tmp")
+
+
+def _write(st: Storage, keep_unreadable: bool = False) -> None:
+    """Write the list to a new file that only this process made (O_EXCL | O_NOFOLLOW), owned like the state folder,
+    then rename it over storage.xml. A link at storage.xml is refused, never written through. As root (the command
+    line) the state folder's user could plant links: none is followed."""
+    global _cache
     for x in st.locations:
         if x.id is None:
             x.id = st.new_id()
     f = _file()
     f.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=f.parent, prefix=f.name + ".", suffix=".tmp")
-    tmp = Path(tmp)
+    try:
+        if stat.S_ISLNK(os.lstat(f).st_mode):
+            raise OSError(errno.ELOOP, f"{f.name} is a symbolic link")
+    except FileNotFoundError:
+        pass
+    flags = (os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_BINARY", 0))
+    for _ in range(20):
+        tmp = _tmp_name(f)
+        try:
+            fd = os.open(tmp, flags, MODE)
+            break
+        except FileExistsError:                           # a name already there (planted, or taken): another
+            continue
+    else:
+        raise OSError(errno.EEXIST, "no free name for the temporary file")
+    kept = f.with_name(f.name + ".unreadable")
+    moved = False
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(to_xml(st))
             fh.flush()
             os.fsync(fh.fileno())
-        os.chmod(tmp, 0o640)
-        config.grant_web_read(tmp)
+            mine = os.fstat(fh.fileno())
+            if hasattr(os, "fchmod"):
+                os.fchmod(fh.fileno(), MODE)
+            if getattr(os, "geteuid", lambda: -1)() == 0:        # as root: the state folder's owner, as its files
+                owner = os.stat(f.parent)
+                os.fchown(fh.fileno(), owner.st_uid, owner.st_gid)
+        seen = os.lstat(tmp)
+        if not stat.S_ISREG(seen.st_mode) or (seen.st_dev, seen.st_ino) != (mine.st_dev, mine.st_ino):
+            raise OSError(errno.EPERM, "the temporary file was replaced while it was written")
+        if keep_unreadable and os.path.lexists(f):
+            os.replace(f, kept)
+            moved = True
         os.replace(tmp, f)
     except BaseException:
-        if tmp.exists():
-            tmp.unlink()
+        if moved:
+            try:
+                os.replace(kept, f)
+            except OSError:
+                pass
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
         raise
-
-
-_warned = False
+    _cache = None
 
 
 def current() -> Storage:
-    """The list in force: storage.xml; when there is none (first start of this version, or a fresh install) it is
-    built from the config file's old keys and written. A file that cannot be read raises, never defaults.
+    """The list in force: storage.xml; when there is none (the Hub has not started on this version yet, or the web
+    unit runs first) or it cannot be read, the list migrated from the config file's old keys, in memory. It never
+    writes (`migrate_at_start` and `save` do) and never raises for the file: the fallback is said by `checks_row`.
+    The migration is deterministic, so ids and names are the same the file will get."""
+    try:
+        st = load()
+    except Unreadable as e:
+        _log_once(logging.ERROR, f"{READ_FAILED.format(reason=e.reason)} Using the list from the old settings.")
+        st = None
+    return st if st is not None else migrate(config.load())
 
-    The first start can be either unit: the Hub service (which can write the root-owned etc dir; the file gets the
-    owner, mode 0640 and the web unit's read ACL of config.json) or the web unit (which cannot). A reader that cannot
-    write uses the list migrated from the config file in memory (ids and names are the same the file will get, the
-    migration is deterministic) and says so once in the log; it never writes a file the other unit could not read."""
-    global _warned
-    st = load()
-    if st is None:
-        st = migrate(config.load())
-        try:
-            save(st, before=st)                  # the migration never fails on a clash it carries over
-        except PermissionError as e:
-            if not _warned:
-                _warned = True
-                log.warning("storage.xml could not be written (%s); using the list migrated from config.json "
-                            "until the Hub service writes it", e)
-            return st
-        if st.converted:
-            log.warning(NOTICE)
-    return st
+
+def checks_row() -> dict | None:
+    """The one Checks row storage may add (group Hub, state "Needs a look"), or None. The Hub page and `status` show
+    it (wired in a later step): {"group", "state", "text"}."""
+    try:
+        if load() is not None:
+            return None
+    except Unreadable as e:
+        return {"group": "Hub", "state": "Needs a look", "text": READ_FAILED.format(reason=e.reason)}
+    if _save_failed:
+        return {"group": "Hub", "state": "Needs a look", "text": SAVE_FAILED.format(reason=_save_failed)}
+    return None
 
 
 def rename_plan() -> dict | None:
@@ -411,19 +534,45 @@ def rename_plan() -> dict | None:
 
 
 def set_rename_plan(plan: dict | None) -> None:
-    """Record (or clear, None) the plan of a rename job in storage.xml, the same atomic write as the list."""
-    st = load() or current()
-    st.rename_plan = plan
-    _write(st)
+    """Record (or clear, None) the plan of a rename job in storage.xml, the same atomic write as the list (a failed
+    write raises StorageError)."""
+    try:
+        with _LOCK:
+            st, unreadable = _state_for_write()
+            if st is None:
+                st = migrate(config.load())
+            st.rename_plan = plan
+            _write(st, unreadable)
+    except OSError as e:
+        raise _not_saved(e) from None
 
 
 def migrate_at_start() -> None:
-    """Called when the Hub service starts: write storage.xml on the first start of this version. A file that cannot
-    be read is logged (every use then raises the Error/Fix lines); it does not stop the service."""
+    """Called when the Hub service starts, the only place the first migration is written: storage.xml on the first
+    start of this version. Storage never stops the service: a file that cannot be read, or a write that fails
+    (state folder not writable, disk full), is logged once and the Hub places spools with the list `current`
+    migrates in memory; the next start and the next save try again."""
+    global _save_failed
+    _save_failed = None
     try:
-        current()
-    except StorageError as e:
-        log.error("%s", e)
+        with _LOCK:
+            try:
+                st = load()
+            except Unreadable as e:
+                _log_once(logging.ERROR, f"{READ_FAILED.format(reason=e.reason)} The Hub places spools with the list "
+                                         "from the old settings and does not overwrite the file.")
+                return
+            if st is not None:
+                _save_failed = None
+                return
+            st = migrate(config.load())
+            save(st, before=st)                  # the migration never fails on a clash it carries over
+            if st.converted:
+                log.warning(NOTICE)
+    except (OSError, StorageError, ValueError) as e:
+        _save_failed = _save_failed or _reason(e)         # a refused save has set it already (the bare cause)
+        _log_once(logging.ERROR, f"{SAVE_FAILED.format(reason=_save_failed)} The Hub places spools with the list "
+                                 "from the old settings and tries again at the next change and the next start.")
 
 
 # ---------------------------------------------------------------- migration (R79 section 6)

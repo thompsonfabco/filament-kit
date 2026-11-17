@@ -14,7 +14,9 @@ its reach. It gets exactly what it uses, as POSIX ACLs (acl.py) on named files a
                   (config.save, cli.write_passphrase, cli.write_key)
   kit state       /var/lib/filament-kit: pass (x); web/ (reader_tokens, 644): read; profiles/, library/,
                   library-local/, reader-fw/: read, also what is made there later (default ACLs);
-                  the locks both units take (inventory.lock, profiles/*.lock): read; a lock is taken on a
+                  storage.xml (the storage locations, 644, written by the Hub or by root's `spoolwarden locations`): read through
+                  the pass on the folder alone, no ACL (a new file replaces it at every save)
+  the locks both units take (inventory.lock, profiles/*.lock): read; a lock is taken on a
                   read-only fd (pairing.open_lock), so the web user writes nothing of the kit's
   the kit API     everything it would otherwise write in the kit's state, so that no folder of the kit has to be
                   writable by it: preset lines and build requests (/api/profiles/web/*), the shared label-read cap

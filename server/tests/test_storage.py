@@ -31,7 +31,13 @@ def where(out):
 @pytest.fixture
 def etc(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_ETC", str(tmp_path / "etc"))
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "state"))
     return tmp_path / "etc"
+
+
+@pytest.fixture
+def state(etc):
+    return etc.parent / "state"
 
 
 # ---- the pinned old cases: an upgraded Hub places every spool as before
@@ -205,22 +211,24 @@ def test_the_default_overflow_without_a_limit_starves_others_only_with_two_overf
     assert "never used" in storage.DEFAULT_OVERFLOW_NOTE
 
 
-def test_migration_leaves_the_old_keys_in_config_untouched(etc):
+def test_migration_leaves_the_old_keys_in_config_untouched(etc, state):
     config.save({"locations": ["A", "Overflow", "Sealed stock"], "placement": {"box_count": 2}})
     before = (etc / "config.json").read_bytes()
+    storage.migrate_at_start()
     st = storage.current()
-    assert st.by_name("Storage box").count == 2 and (etc / "storage.xml").exists()
+    assert st.by_name("Storage box").count == 2 and (state / "storage.xml").exists()
     assert (etc / "config.json").read_bytes() == before
 
 
 def test_migration_runs_once_after_that_old_keys_are_not_read(etc):
     config.save({"placement": {"box_count": 2}})
-    storage.current()
+    storage.migrate_at_start()
     config.save({"placement": {"box_count": 9}, "locations": ["Other"]})
     assert [x.count for x in storage.current().locations if x.type == CONTAINERS] == [2]
 
 
 def test_fresh_install_writes_storage_xml_with_the_four_default_names(etc):
+    storage.migrate_at_start()
     st = storage.current()
     assert names(st) == ["Sealed stock", "Rack 1", "Storage box", "Overflow"]
     assert names(storage.load()) == names(st)
@@ -236,20 +244,23 @@ def full_list() -> Storage:
         Location("Overflow", overflow=True, default_overflow=True)])
 
 
-def test_xml_round_trip(etc):
+def test_xml_round_trip(etc, state):
     st = full_list()
     storage.save(st)
     back = storage.load()
     assert back.locations == st.locations and [x.id for x in back.locations] == ["loc-1", "loc-2", "loc-3", "loc-4"]
-    text = (etc / "storage.xml").read_text(encoding="utf-8")
+    text = (state / "storage.xml").read_text(encoding="utf-8")
     assert '<storage version="1"' in text and "<material>PLA</material>" in text and 'prefix="Storage box "' in text
 
 
-def test_the_file_has_the_mode_of_the_config_file_and_no_temp_left(etc):
+@pytest.mark.skipif(os.name == "nt", reason="POSIX modes")
+def test_the_file_is_in_the_state_folder_mode_644_and_no_temp_left(etc, state):
     config.save({})
     storage.save(full_list())
-    assert stat.S_IMODE((etc / "storage.xml").stat().st_mode) == stat.S_IMODE((etc / "config.json").stat().st_mode)
-    assert sorted(p.name for p in etc.iterdir()) == ["config.json", "storage.xml"]
+    assert stat.S_IMODE((state / "storage.xml").stat().st_mode) == 0o644
+    assert not (etc / "storage.xml").exists()                     # nothing of storage in the settings folder
+    assert [p.name for p in etc.iterdir()] == ["config.json"]
+    assert not [p for p in state.iterdir() if p.name.endswith(".tmp")]
 
 
 def test_ids_are_never_reused(etc):
@@ -266,20 +277,45 @@ def test_ids_are_never_reused(etc):
     assert storage.load().locations[-1].id == "loc-6"
 
 
-@pytest.mark.parametrize("text", ["", "<storage", "<other/>", '<storage version="2"/>',
-                                  '<storage version="1"><location id="loc-1" name="A" type="bulk" limit="x"/></storage>'])
-def test_a_file_that_cannot_be_read_is_an_error_with_a_fix_not_defaults(etc, text):
-    etc.mkdir(parents=True)
-    (etc / "storage.xml").write_text(text, encoding="utf-8")
+BAD_FILES = ["", "<storage", "<other/>", '<storage version="2"/>',
+             '<storage version="1"><location id="loc-1" name="A" type="bulk" limit="x"/></storage>']
+
+
+@pytest.mark.parametrize("text", BAD_FILES)
+def test_a_file_that_cannot_be_read_is_an_error_with_a_fix_on_load_and_current_places_from_the_old_keys(
+        etc, state, text):
+    state.mkdir(parents=True)
+    (state / "storage.xml").write_text(text, encoding="utf-8")
     with pytest.raises(StorageError) as e:
-        storage.current()
+        storage.load()
     assert str(e.value).startswith("Error: ") and "\nFix: " in str(e.value)
-    assert (etc / "storage.xml").read_text(encoding="utf-8") == text            # nothing was overwritten
+    assert names(storage.current()) == ["Sealed stock", "Rack 1", "Storage box", "Overflow"]    # from the old keys
+    assert (state / "storage.xml").read_text(encoding="utf-8") == text            # nothing was overwritten
 
 
-def test_a_file_that_is_not_text_is_an_error(etc):
-    etc.mkdir(parents=True)
-    (etc / "storage.xml").write_bytes(b"\xff\xfe\x00bad")
+@pytest.mark.parametrize("text", BAD_FILES)
+def test_an_unreadable_file_shows_the_row_and_the_start_does_not_overwrite_it(etc, state, text):
+    state.mkdir(parents=True)
+    (state / "storage.xml").write_text(text, encoding="utf-8")
+    storage.migrate_at_start()                                                   # does not raise
+    assert (state / "storage.xml").read_text(encoding="utf-8") == text
+    row = storage.checks_row()
+    assert row["group"] == "Hub" and row["state"] == "Needs a look"
+    assert row["text"].startswith("Storage locations could not be read (") and row["text"].endswith(").")
+
+
+def test_a_save_keeps_the_unreadable_file_as_storage_xml_unreadable_and_writes_the_new_one(etc, state):
+    state.mkdir(parents=True)
+    (state / "storage.xml").write_text("<storage", encoding="utf-8")
+    storage.save(full_list())
+    assert (state / "storage.xml.unreadable").read_text(encoding="utf-8") == "<storage"
+    assert names(storage.load()) == ["Sealed stock", "Rack 1", "Storage box", "Overflow"]
+    assert storage.checks_row() is None
+
+
+def test_a_file_that_is_not_text_is_an_error(etc, state):
+    state.mkdir(parents=True)
+    (state / "storage.xml").write_bytes(b"\xff\xfe\x00bad")
     with pytest.raises(StorageError):
         storage.load()
 
@@ -323,12 +359,12 @@ def test_validation_texts_are_the_catalogue_sentences():
     assert {"Enter a name for the location.", "There is already a location called rack 1."} <= texts
 
 
-def test_save_refuses_an_invalid_list_and_writes_nothing(etc):
+def test_save_refuses_an_invalid_list_and_writes_nothing(etc, state):
     st = full_list()
     st.locations[1].name = "sealed STOCK"
     with pytest.raises(StorageError):
         storage.save(st)
-    assert not (etc / "storage.xml").exists()
+    assert not (state / "storage.xml").exists()
 
 
 # ---- the placement rule, steps 1 to 4
@@ -644,7 +680,7 @@ def at(sm):
     return [s["location"] for s in sm.spools]
 
 
-def test_swap_retried_after_a_failure_finishes_the_recorded_plan(etc):
+def test_swap_retried_after_a_failure_finishes_the_recorded_plan(etc, state):
     storage.save(full_list())
     sm = FlakySm([{"id": 1, "location": "Rack A"}, {"id": 2, "location": "Rack A"},
                   {"id": 3, "location": "Rack B"}], fail_on=2)
@@ -656,7 +692,7 @@ def test_swap_retried_after_a_failure_finishes_the_recorded_plan(etc):
     r = inventory.rename_locations(sm, items)
     assert at(sm) == ["Rack B", "Rack B", "Rack A"] and r["updated"] == 3
     assert inventory.pending_rename() is None and not storage.load().rename_pending
-    assert "<rename" not in (etc / "storage.xml").read_text(encoding="utf-8")
+    assert "<rename" not in (state / "storage.xml").read_text(encoding="utf-8")
 
 
 def test_chained_rename_retried_does_not_move_a_spool_twice(etc):
@@ -711,48 +747,150 @@ def test_the_plan_is_written_before_the_first_spool_changes(etc):
 
 # ---- R460: the first migration from the web unit
 
-def test_a_reader_that_cannot_write_uses_the_migrated_list_and_says_so_once(etc, monkeypatch, caplog):
+def test_current_never_writes_it_places_from_the_migrated_list(etc, state):
     config.save({"placement": {"box_count": 2}, "locations": ["Sealed stock", "Rack 1", "Overflow"]})
-    real = storage.save
-
-    def refuse(st, before=None):
-        raise PermissionError(13, "Permission denied")
-    monkeypatch.setattr(storage, "save", refuse)
-    monkeypatch.setattr(storage, "_warned", False)
-    with caplog.at_level("WARNING", logger="filament_kit.storage"):
-        a, b = storage.current(), storage.current()
-    assert [x.name for x in a.locations] == [x.name for x in b.locations] and not (etc / "storage.xml").exists()
+    a, b = storage.current(), storage.current()
+    assert [x.name for x in a.locations] == [x.name for x in b.locations] and not (state / "storage.xml").exists()
     assert a.by_name("Storage box").count == 2
-    assert sum("could not be written" in r.message for r in caplog.records) == 1
-    monkeypatch.setattr(storage, "save", real)                     # the Hub service starts: it writes the file
+    storage.migrate_at_start()                                     # the Hub service starts: it writes the file
     written = storage.current()
     assert [(x.id, x.name) for x in written.locations] == [(x.id, x.name) for x in a.locations]
-    assert (etc / "storage.xml").exists()
+    assert (state / "storage.xml").exists()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX modes")
-def test_the_file_is_written_with_the_config_mode_and_the_web_read_grant(etc, monkeypatch):
-    seen = []
-    monkeypatch.setattr(config, "grant_web_read", lambda path: seen.append(path.name))
-    storage.current()
-    assert seen and seen[0].startswith("storage.xml.") and stat.S_IMODE((etc / "storage.xml").stat().st_mode) == 0o640
-
-
-def test_migrate_at_start_writes_the_file_and_an_unreadable_one_is_logged_not_raised(etc, caplog):
+def test_migrate_at_start_writes_the_file_and_an_unreadable_one_is_logged_not_raised(etc, state, caplog):
     storage.migrate_at_start()
-    assert (etc / "storage.xml").exists()
-    (etc / "storage.xml").write_text("<storage", encoding="utf-8")
+    assert (state / "storage.xml").exists()
+    (state / "storage.xml").write_text("<storage", encoding="utf-8")
     with caplog.at_level("ERROR", logger="filament_kit.storage"):
         storage.migrate_at_start()
-    assert any("Fix:" in r.message for r in caplog.records)
+    assert any("could not be read" in r.message for r in caplog.records)
 
 
-def test_a_non_permission_failure_is_not_hidden(etc, monkeypatch):
-    def broken(st, before=None):
+@pytest.fixture(autouse=True)
+def fresh_logs(monkeypatch):
+    monkeypatch.setattr(storage, "_logged", set())
+    monkeypatch.setattr(storage, "_save_failed", None)
+    monkeypatch.setattr(storage, "_cache", None)
+
+
+@pytest.mark.parametrize("err", [OSError(30, "Read-only file system"), PermissionError(13, "Permission denied"),
+                                 OSError(28, "No space left on device")])
+def test_a_start_never_fails_when_the_file_cannot_be_written(etc, state, monkeypatch, caplog, fresh_logs, err):
+    config.save({"placement": {"box_count": 2}, "locations": ["Sealed stock", "Rack 1", "Overflow"]})
+
+    def refuse(*a, **k):
+        raise err
+    real_write = storage._write
+    monkeypatch.setattr(storage, "_write", refuse)
+    with caplog.at_level("ERROR", logger="filament_kit.storage"):
+        storage.migrate_at_start()
+        storage.migrate_at_start()
+    assert sum("could not be saved" in r.message for r in caplog.records) == 1       # said once
+    assert not (state / "storage.xml").exists()
+    assert storage.current().by_name("Storage box").count == 2                       # places from memory
+    row = storage.checks_row()
+    assert row == {"group": "Hub", "state": "Needs a look",
+                   "text": f"Storage locations could not be saved ({err.strerror})."}
+    monkeypatch.setattr(storage, "_write", real_write)
+    storage.migrate_at_start()                                                       # the next start writes it
+    assert (state / "storage.xml").exists() and storage.checks_row() is None
+
+
+def test_a_state_folder_that_is_not_writable_and_a_read_only_etc(etc, state, monkeypatch, fresh_logs):
+    """The upgrade crash-loop: /etc is read-only to the Hub and storage never touches it."""
+    config.save({})
+    real_open = os.open
+
+    def no_etc(path, flags, *a, **k):
+        if str(etc) in str(path) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT):
+            raise OSError(30, "Read-only file system")
+        return real_open(path, flags, *a, **k)
+    monkeypatch.setattr(os, "open", no_etc)
+    storage.migrate_at_start()
+    assert (state / "storage.xml").exists() and storage.checks_row() is None
+
+
+def test_a_failed_save_is_a_refusal_with_error_and_fix_not_an_exception(etc, state, monkeypatch, fresh_logs):
+    storage.save(full_list())
+    before = (state / "storage.xml").read_text(encoding="utf-8")
+    real = os.replace
+
+    def refuse(src, dst, *a, **k):
         raise OSError(28, "No space left on device")
-    monkeypatch.setattr(storage, "save", broken)
-    with pytest.raises(OSError):
-        storage.current()
+    monkeypatch.setattr(os, "replace", refuse)
+    st = storage.load()
+    st.locations[1].limit = 3
+    with pytest.raises(StorageError) as e:
+        storage.save(st)
+    assert str(e.value).startswith("Error: Storage locations were not saved: No space left on device.\nFix: ")
+    monkeypatch.setattr(os, "replace", real)
+    assert (state / "storage.xml").read_text(encoding="utf-8") == before
+    assert not [p for p in state.iterdir() if p.name.endswith(".tmp")]
+    assert storage.load().locations[1].limit == 20
+
+
+def test_a_changed_file_is_read_again_without_a_restart(etc, state, fresh_logs):
+    storage.save(full_list())
+    assert storage.current().by_name("Rack 1").limit == 20
+    other = storage.load()
+    other.by_name("Rack 1").limit = 5
+    text = storage.to_xml(other)
+    (state / "storage.xml").write_text(text.replace('limit="5"', 'limit="7"'), encoding="utf-8")   # same size
+    assert storage.current().by_name("Rack 1").limit == 7
+    (state / "storage.xml").write_text(text.replace('limit="5"', 'limit="123"'), encoding="utf-8")  # a bigger one
+    assert storage.current().by_name("Rack 1").limit == 123
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symbolic links and modes")
+def test_a_link_planted_at_storage_xml_or_at_its_temp_name_is_not_followed(etc, state, monkeypatch, fresh_logs):
+    state.mkdir(parents=True)
+    victim = etc.parent / "victim.txt"
+    victim.write_text("keep", encoding="utf-8")
+    link = state / "storage.xml"
+    link.symlink_to(victim)
+    with pytest.raises(StorageError) as e:                                    # refused, the link not written through
+        storage.save(full_list())
+    assert "symbolic link" in str(e.value) and victim.read_text(encoding="utf-8") == "keep"
+    assert link.is_symlink()
+    assert storage.checks_row()["text"].startswith("Storage locations could not be read (")   # nor read through
+    link.unlink()
+    names_ = iter(["storage.xml.planted.tmp"])                                # a link at the temp name
+    real = storage._tmp_name
+
+    def planted(f):
+        n = next(names_, None)
+        return f.with_name(n) if n else real(f)
+    (state / "storage.xml.planted.tmp").symlink_to(victim)
+    monkeypatch.setattr(storage, "_tmp_name", planted)
+    storage.save(full_list())
+    assert victim.read_text(encoding="utf-8") == "keep" and (state / "storage.xml.planted.tmp").is_symlink()
+    assert not (state / "storage.xml").is_symlink() and storage.load().locations
+
+
+def test_two_savers_one_after_the_other_both_land_under_the_lock(etc, state):
+    with storage._LOCK:                                     # the lock is the state folder's own file, re-entrant
+        storage.save(full_list())
+    assert (state / "storage.lock").exists() or os.name == "nt"
+
+
+def test_rollback_then_update_does_not_migrate_again(etc, state):
+    """The old version ignores the file and keeps editing its own keys; the next update uses the file as it is."""
+    config.save({"placement": {"box_count": 2}})
+    storage.migrate_at_start()
+    config.save({"placement": {"box_count": 9}, "locations": ["Other"]})        # edited while rolled back
+    before = (state / "storage.xml").read_bytes()
+    storage.migrate_at_start()                                                  # the update starts the Hub again
+    assert (state / "storage.xml").read_bytes() == before
+    assert [x.count for x in storage.current().locations if x.type == CONTAINERS] == [2]
+
+
+def test_a_restore_without_the_file_migrates_from_the_restored_config(etc, state):
+    config.save({"placement": {"box_count": 4}})                                # the restored config, no storage.xml
+    assert not (state / "storage.xml").exists()
+    storage.migrate_at_start()
+    assert [x.count for x in storage.current().locations if x.type == CONTAINERS] == [4]
+    assert (state / "storage.xml").exists()
 
 
 # ---- R460 ruling 22:30: a role name that is a container name
@@ -778,7 +916,7 @@ def test_pla_to_the_literal_text_with_no_limit_when_pla_location_is_a_container_
 
 def test_a_storage_file_with_the_clash_loads_an_unrelated_edit_saves_and_a_new_clash_is_refused(etc):
     st = migrated({**RULES, "box_count": 2, "overflow": "Storage box 01"})
-    storage.save(st, before=st)                                           # as `current()` writes the migration
+    storage.save(st, before=st)                                           # as the start writes the migration
     back = storage.load()                                                 # loads: no refusal on read
     assert back.by_name("Storage box 01").default_overflow
     back.by_name("Rack 1").limit = 5                                      # an unrelated edit
@@ -791,18 +929,19 @@ def test_a_storage_file_with_the_clash_loads_an_unrelated_edit_saves_and_a_new_c
     assert storage.load().by_name("Storage box 02") is None
 
 
-def test_the_migration_with_a_clash_saves_through_current(etc):
+def test_the_migration_with_a_clash_saves_at_the_start(etc, state):
     config.save({"placement": {"box_count": 2, "sealed_location": "Storage box 01"}})
+    storage.migrate_at_start()
     st = storage.current()
-    assert st.sealed_location().name == "Storage box 01" and (etc / "storage.xml").exists()
+    assert st.sealed_location().name == "Storage box 01" and (state / "storage.xml").exists()
 
 
-def test_the_plan_is_xml_inside_storage_xml_and_a_list_saved_meanwhile_keeps_it(etc):
+def test_the_plan_is_xml_inside_storage_xml_and_a_list_saved_meanwhile_keeps_it(etc, state):
     storage.save(full_list())
     sm = FlakySm([{"id": 1, "location": "Rack 1"}, {"id": 2, "location": "Rack 1"}], fail_on=2)
     with pytest.raises(Boom):
         inventory.rename_locations(sm, [storage.Rename("Rack 1", "PLA rack")])
-    text = (etc / "storage.xml").read_text(encoding="utf-8")
+    text = (state / "storage.xml").read_text(encoding="utf-8")
     assert "<rename>" in text and '<spool id="2" old="Rack 1" new="PLA rack" />' in text and "{" not in text
     st = storage.load()
     st.rename_plan = None                                   # a list built from rows has no plan
@@ -811,4 +950,4 @@ def test_the_plan_is_xml_inside_storage_xml_and_a_list_saved_meanwhile_keeps_it(
     assert storage.load().rename_plan is not None and storage.load().locations[1].limit == 7
     inventory.rename_locations(sm, [])
     assert at(sm) == ["PLA rack", "PLA rack"] and storage.load().rename_plan is None
-    assert [p.name for p in etc.iterdir()] == ["storage.xml"]
+    assert not [p for p in state.iterdir() if p.name.endswith(".tmp")]
