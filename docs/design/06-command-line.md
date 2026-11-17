@@ -86,6 +86,7 @@ Everyday
 System
   features         Switch features on and off; choose the setup
   config           Settings menu; also config show, set and theme
+  locations        Storage locations: the list, add, edit, move, remove
   label-reader     Label Reader: status, test, corrections to share
   catalog          Filament Catalog: status, update, roll back, add
   backup           Make or list backups
@@ -164,6 +165,13 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `config show` | All settings, in menu order | Settings |
 | `config set <key> <value>` | Change one setting | Settings, one field |
 | `config theme [<theme>]` | Show or set the theme for new devices | Settings > Appearance > Theme for new devices |
+| `locations` (same as `locations list`) | The storage locations in fill order (9.15) | Settings > Storage locations |
+| `locations add <name> [--type bulk\|containers] [--limit N] [--count N] [--takes any\|none\|MATERIALS] [--overflow]` | Add a location | Add a location |
+| `locations edit <name> [--name NEW] [same options as add]` | Change a location; a new name also renames it on its spools | Edit |
+| `locations move <name> (--first \| --last \| --before <other>)` | Change the fill order | Move up, Move down |
+| `locations remove <name>` | Remove a location (asks) | Remove |
+| `locations default-overflow <name>` | Make it the default overflow | Make default overflow |
+| `locations sealed <name>` | Sealed spools go here | Sealed spools go here |
 | `label-reader status` | Label Reader engines and their health (9.9) | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
 | `label-reader corrections` (same as `label-reader corrections list`) | The corrections waiting to be shared (9.9) | Settings > Label Reader, Corrections waiting |
@@ -408,7 +416,7 @@ Plain output contains no escape sequences and no carriage returns.
 ### 6.5 Results, errors and Fix lines
 
 - **Results** go to standard output: one line, past tense, naming the thing. `Forgot Workshop X1.`,
-  `Saved 2 changes: display name, PLA rack.`, `Unchanged.`
+  `Saved 2 changes: display name, storage locations.`, `Unchanged.`
 - **Errors** go to standard error, always, also inside menus (the line appears right under the prompt that caused
   it). The first line is `Error: ` followed by what went wrong. When something can be done about it, the next
   line is `Fix: ` followed by what to do, with the exact command when one does it. A command too long for the
@@ -528,6 +536,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `presets status` | `GET /setup/api/presets` |
 | `features list` | `state.modules` plus `{"setup": "<setup>"}` |
 | `config show`, `config theme` | the `values` of `GET /setup/api/settings/general`, plus `theme` |
+| `locations` | the answer of `GET api/storage`: `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}` |
 | `catalog status` | `GET /setup/api/library` |
 | `backup list` | `{backups: [{name, at, kind, size}], keep_days, folder}` |
 | `update --check` | `GET /setup/api/updates` |
@@ -598,6 +607,7 @@ Every question, word for word (names are examples):
 | `printer forget-certificate` | `Forget the certificate of Workshop X1? The next connection trusts whatever certificate answers at 192.0.2.40 and remembers it. Do this only after the printer was reset or replaced.`, then after yes the Access Code prompt (8.7) | `Forgot the certificate of Workshop X1; the next connection pins the one it presents.` |
 | `printer map` | `Map the slots of Workshop X1? The printer changes its slot colours briefly and runs a short job with no motion. The colours are put back afterwards.` | the mapping runs (9.2) |
 | `printer api-key --clear` | `Clear the Moonraker API key of Garage Voron? Spoolwarden then connects without a key. If Moonraker asks for one, the printer's test says so until a key is set.` | `Cleared the API key of Garage Voron.` |
+| `locations remove` | `Remove Rack 2? 3 spools are recorded there. They keep that location until you move them; it is no longer offered for new spools.` (`No spools are recorded there.` when there are none) | `Removed Rack 2.` |
 | `devices forget` | `Unpair Shop phone? It can no longer reach the Hub until it is paired again.` | `Unpaired Shop phone.` |
 | `tag-reader revoke` | `Revoke the token tr3? A Tag Reader using it is refused from now on. Set it up again with sudo spoolwarden tag-reader flash to give it a new token.` | `Revoked the token tr3.` |
 | `catalog rollback` | `Go back to the previous Filament Catalog? The version before the last update comes back. Your own entries are kept.` | `Back to version 2026.11.1.` |
@@ -621,11 +631,11 @@ Every question, word for word (names are examples):
 | `restore` | the backup's summary (9.10), then `Type restore to go on: ` | the restore runs |
 | `uninstall` | `Remove Spoolwarden from this machine? Its data stays unless you add --purge.` | the removal runs |
 | `uninstall --purge` | `This also deletes everything Spoolwarden keeps on this machine. Type purge to go on: ` | the removal runs |
-| leaving `config` with changes | `Leave without saving 1 change (PLA rack)?` | `Nothing saved.` (exit 5) |
+| leaving `config` with changes | `Leave without saving 1 change (Storage locations)?` | `Nothing saved.` (exit 5) |
 | leaving the Features checklist with changes | `Leave without applying 2 changes (Label Reader: On this Hub on, Weigh Station off)?` | `Nothing applied.` (exit 5) |
 
 Commands that change something but do not ask, because nothing is lost: `printer rename`, `printer address`,
-`printer access-code`, `printer lane-data`, `printer use`, `recent edit`, `recent undo` (the revision is kept,
+`printer access-code`, `printer lane-data`, `printer use`, `recent edit`, `locations add`, `locations edit`, `locations move`, `locations default-overflow`, `locations sealed`, `recent undo` (the revision is kept,
 marked undone, and can be revised again), `backup create`, `presets build`, `catalog update`, `config set`,
 `config theme`.
 
@@ -669,7 +679,7 @@ actions.** A screen never uses numbers for two different lists.
   command). In a prompt, an empty answer leaves the prompt and keeps the current value, printing
   `Unchanged.`; at a yes/no question, an empty answer is no. That is the one way out of each kind of screen.
 - **Unsaved changes.** `q` at the top of `config` with changes not saved asks
-  `Leave without saving 2 changes (Display name, PLA rack)? [y/N]`; yes prints `Nothing saved.`. `q` in the
+  `Leave without saving 2 changes (Display name, Storage locations)? [y/N]`; yes prints `Nothing saved.`. `q` in the
   Features checklist with switched rows not applied asks
   `Leave without applying 2 changes (Label Reader: On this Hub on, Weigh Station off)? [y/N]`; yes prints
   `Nothing applied.`. Both then end with exit code 5; no stays.
@@ -701,7 +711,7 @@ Settings · Workshop hub
 
    1  Appearance             Theme for new devices: Console
    2  General                Workshop hub
-   3  Storage locations      4 locations · PLA rack Shelf A · 2 boxes
+   3  Storage locations      4 locations · 2 with a limit
    4  Label Reader           Cloud (Claude) · 40 reads a day · key set
    5  Backups and restore    Nightly backups kept 14 days
    6  Network and addresses  Public address not set
@@ -718,27 +728,39 @@ Number: 3
 
 Settings > Storage locations
 
-   1  Locations                Shelf A, Shelf B, Dry box 1, Dry box 2
-   2  PLA rack                 Shelf A
-   3  Box location prefix      Dry box
-   4  Number of storage boxes  2
-   5  Overflow location        Shelf B
+   1  Sealed       4 spools · Only when chosen · Sealed spools
+   2  Rack 1       18 of 20 spools · PLA
+   3  Storage box  9 of 12 containers used · Any material
+   4  Overflow     7 spools · Only when chosen · Default overflow
+
+  a add   m move   r remove   s save   q back   ? help
+Number: 2
+
+Rack 1
+   1  Name                       Rack 1
+   2  Type                       Bulk storage (fixed: 18 spools are here)
+   3  Spool limit                20
+   4  Filled automatically with  These materials
+   5  Materials                  PLA
+   6  Use as overflow            no
+   7  Sealed spools go here      no
 
   s save   q back   ? help
-Number: 2
-PLA rack [Shelf A]: Shelf B
-  Changed, not saved yet.
-Number: 4
-Number of storage boxes [2]: two
-Error: the number of storage boxes is a whole number, 0 or more.
-Number of storage boxes [2]:
+Number: 3
+Spool limit [20]: lots
+Error: Enter a whole number, 1 or more.
+Spool limit [20]:
   Unchanged.
+Number: 3
+Spool limit [20]: 25
+  Changed, not saved yet.
+Number: q
 Number: q
 
 Settings · Workshop hub · 1 change not saved
   (the main list again)
 Number: q
-Leave without saving 1 change (PLA rack)? [y/N] y
+Leave without saving 1 change (Storage locations)? [y/N] y
 Nothing saved.
 ```
 
@@ -746,8 +768,26 @@ Saving instead:
 
 ```
 Number: s
-Saved 1 change: PLA rack.
+Saved 1 change: storage locations.
 ```
+
+**The Storage locations screen** is the list of locations in fill order, numbered; the order of the list is the order
+in which the places fill. Each row is the location's name, how full it is, what it takes and its marks, in the words
+of the Hub page (`03-hub-page.md` section 10.4). Its keys:
+
+- A number opens that location's fields as a small screen (above), each edited as the prompts below do: Name, Type
+  (a choice, fixed while spools are in the location), Spool limit (Bulk storage; empty means none) or Number of
+  containers, Filled automatically with (a choice), Materials (for "These materials"; separated by commas), Use as
+  overflow, and, on the row that qualifies, Make default overflow (an overflow row) and Sealed spools go here (a Bulk
+  storage row).
+- `a` adds a location: it asks the same fields one after the other, and the new row goes at the end.
+- `m` moves one: `Move which location? Number:` and then `Put it at position [<now>]:`.
+- `r` removes one: it asks the Hub page's question, `Remove Rack 2? 3 spools are recorded there. They keep that
+  location until you move them; it is no longer offered for new spools. [y/N]` (`No spools are recorded there.`
+  when there are none). The default overflow and the sealed-spools location are refused with the Hub page's
+  sentences (9.15).
+- Every change is staged like any other item of the menu and saved by `s`, which sends the whole list. A rename also
+  renames the location on its spools when it is saved. The commands of 9.15 do the same at once, one change each.
 
 **Groups and their items.** Group names, item labels, their order and the choice words are the Hub page's
 (`03-hub-page.md` section 10); the one difference is the engine name Cloud (Claude), which follows foundations
@@ -758,11 +798,7 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 | Appearance | Theme for new devices | `appearance.theme` (section 13) | choice: Console (dense and technical) · Workbench (calm cards) · Palette (colourful and roomy) · Panes (simple lists) |
 | General | Display name | `server_name` | text |
 | General | Spoolman address | (none: `spoolman address`, 9.12) | text, an http address; only when Spoolman runs on another machine. On Save the Hub first checks that Spoolman answers there, as `spoolman address` does, and saves it after the other changes |
-| Storage locations | Locations | `locations` | text, separated by commas |
-| Storage locations | PLA rack | `placement.pla_location` | text |
-| Storage locations | Box location prefix | `placement.box_prefix` | text, shown in quotes when it starts or ends with a space |
-| Storage locations | Number of storage boxes | `placement.box_count` | whole number, 0 or more |
-| Storage locations | Overflow location | `placement.overflow` | text |
+| Storage locations | Locations | (none: `locations`, 9.15) | a numbered list of locations: a number edits, `a` adds, `m` moves, `r` removes |
 | Label Reader | Engine order | `intake.reader` | choice: Automatic: On this Hub first, Cloud (Claude) when it is unsure or fails · On this Hub, then Cloud (Claude) · Cloud (Claude), then On this Hub · Cloud (Claude) only · On this Hub only |
 | Label Reader | Anthropic API key | (secret) | secret; then `c` checks it, `x` removes it (asks) |
 | Label Reader | Claude model | `model` | text; empty for the default model |
@@ -779,6 +815,16 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 | Web passphrase | New passphrase | (secret) | secret, asked twice (`New passphrase again`) |
 | Filament Catalog | Catalog token | (secret) | secret; `x` removes it (asks) |
 | Weigh Station voice | Voice | `station.tts` | choice: Piper (natural; a 60-80 MB download) · espeak-ng (robotic; no download) |
+
+Storage locations is a list, not a set of keys, so `config set` does not change it. `config set` with `locations`,
+`placement.pla_location`, `placement.box_prefix`, `placement.box_count` or `placement.overflow` is refused, with exit
+code 2:
+
+```
+$ sudo spoolwarden config set placement.overflow "Shelf B"
+Error: storage locations are a list now.
+Fix: spoolwarden locations
+```
 
 The Engine order choices map to the stored values `auto`, `local-then-cloud`, `cloud-then-local`, `cloud`,
 `local`; the Tier choices to `auto`, `cpu`, `gpu`; Piper and espeak-ng to `auto` and `espeak`. The Label Reader
@@ -832,7 +878,7 @@ Filament Catalog with
 
 **Saving.**
 
-- `s` from any level saves every staged change at once and prints `Saved 2 changes: display name, PLA rack.`
+- `s` from any level saves every staged change at once and prints `Saved 2 changes: display name, storage locations.`
   With nothing staged it prints `Nothing to save.`
 - If a change needs the Hub to restart (Claude model, Reads per day), the item's row says
   `restarts the Hub` while staged, and saving shows `◐ The Hub is restarting…` then `The Hub is back.`
@@ -1439,13 +1485,15 @@ Appearance
 General
   Display name             Workshop hub
 Storage locations
-  Locations                Shelf A, Shelf B, Dry box 1, Dry box 2
-  PLA rack                 Shelf A
+  1  Sealed       4 spools · Only when chosen · Sealed spools
+  2  Rack 1       18 of 20 spools · PLA
+  3  Storage box  9 of 12 containers used · Any material
+  4  Overflow     7 spools · Only when chosen · Default overflow
   ...
 ```
 
 **`config set <key> <value>`** changes one setting with the keys of section 8.3, checked as the menu checks them.
-`Saved: PLA rack is Shelf B.` A setting that restarts the Hub shows the restart wait. A secret cannot be set
+`Saved: Reads per day is 60.` A setting that restarts the Hub shows the restart wait. A secret cannot be set
 this way (`Error: the Anthropic API key is a secret. Fix: sudo spoolwarden config, Label Reader.`). An unknown
 key stops with exit code 2 and lists the keys.
 
@@ -1654,6 +1702,63 @@ in `-h` and prints nothing of its own beyond the update's lines.
 them. The command needs sudo and shows the log in full (addresses and serials included); the Hub page hides
 them until the setup code is given. Empty: `Nothing logged.` Cut: `Only the last 100 lines are shown.` and
 `Fix: for more, run journalctl -u <service>`.
+
+### 9.15 `locations` (Storage locations)
+
+`spoolwarden locations` prints the list of storage locations in fill order, as Settings > Storage locations does.
+Reading needs no sudo; every change needs sudo, as `config set` does. A `<name>` is the location's name as written
+(capitals ignored; in quotes when it holds spaces).
+
+```
+$ spoolwarden locations
+4 locations · 2 with a limit
+POS  NAME         TYPE          HOW FULL  TAKES             MARKS
+  1  Sealed       Bulk storage  4 spools  Only when chosen  Sealed spools
+  2  Rack 1       Bulk storage  18 of 20  PLA
+  3  Storage box  Containers    9 of 12   Any material
+  4  Overflow     Bulk storage  7 spools  Only when chosen  Default overflow
+
+The places fill in this order. Change them: sudo spoolwarden locations -h
+```
+
+- `POS` is the position in the list; `TYPE` reads `Bulk storage` or `Containers` (Individual containers, whose
+  `HOW FULL` counts the containers in use); `TAKES` reads `PLA` (or `PLA, PETG`), `Any material` or
+  `Only when chosen`; `MARKS` lists `Overflow`, `Default overflow` and `Sealed spools`. A location over its limit
+  shows `22 of 20`. The long column is `NAME`.
+- `--json` prints the answer of `GET api/storage` (6.8): the `locations` with `id, name, type, limit, count, used,
+  free, fill, materials, overflow, default_overflow, sealed, position`, then `order_by_material` and
+  `everything_else`.
+
+| Command | What it does |
+|---|---|
+| `locations add <name> [--type bulk\|containers] [--limit N] [--count N] [--takes any\|none\|MATERIALS] [--overflow]` | Adds a location at the end of the list. `--type` is `bulk` (a shelf, rack or drawer) or `containers` (boxes or bags, one spool each); `--limit` (1 to 9999) is for bulk, `--count` (1 to 999) for containers; `--takes` is `any`, `none` or a comma list of materials (`PLA,PETG`); `--overflow` makes it an overflow location. Without options: bulk, no limit, takes nothing. |
+| `locations edit <name> [--name NEW] [same options as add]` | Changes what is given. A new name is a rename: the spools stored there get the new name, as on the Hub page (`Renamed Rack 1 to PLA rack 1. 18 spools updated.`) |
+| `locations move <name> (--first \| --last \| --before <other>)` | Puts the location first, last, or just before another |
+| `locations remove <name>` | Asks the question of section 7, then removes it; the spools keep their location text |
+| `locations default-overflow <name>` | Makes an overflow location the default overflow |
+| `locations sealed <name>` | Makes a Bulk storage location the place for sealed spools |
+
+```
+$ sudo spoolwarden locations add "Rack 2" --limit 20 --takes PLA
+Added Rack 2.
+
+$ sudo spoolwarden locations move "Rack 2" --before Overflow
+Moved Rack 2 before Overflow.
+
+$ sudo spoolwarden locations remove Overflow
+Error: Make another location the default overflow first.
+Fix: sudo spoolwarden locations default-overflow <name>
+```
+
+- Refusals, each with exit code 1: removing the default overflow (`Error: Make another location the default overflow
+  first.`) or the sealed-spools location (`Error: Choose another location for sealed spools first.`); a name that
+  exists (`Error: There is already a location called Rack 1.`); a number that is not whole or below 1
+  (`Error: Enter a whole number, 1 or more.`); materials left empty for `--takes` (`Error: Enter at least one
+  material, e.g. PLA.`); a type changed while spools are in the location (`Error: Move the spools out to change the
+  type.`); fewer containers than the highest number in use (`Error: Storage box 11 and Storage box 12 hold spools.
+  Move them first, or keep at least 12.`). A name that matches no location stops with exit code 2.
+- Changing a location moves no spool. `locations` shows the result at once; `spoolwarden config` shows the same list
+  as a numbered menu (8.3).
 
 ## 10. What the command line cannot do
 
