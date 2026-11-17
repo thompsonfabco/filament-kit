@@ -217,6 +217,22 @@ def test_edit_with_nothing_new_is_unchanged(capsys, sm):
     assert run(capsys, sm, "locations", "edit", "Rack 1", "--limit", "20")[:2] == (0, "Unchanged.\n")
 
 
+def test_edit_no_overflow_switches_overflow_off_on_a_place_that_is_not_the_last_one(capsys, sm):
+    assert run(capsys, sm, "locations", "add", "Garage", "--overflow", "--limit", "10")[0] == 0
+    assert storage.current().by_name("Garage").overflow
+    rc, out, err = run(capsys, sm, "locations", "edit", "Garage", "--no-overflow")
+    garage = storage.current().by_name("Garage")
+    assert (rc, out) == (0, "Changed Garage.\n") and not garage.overflow and "Note:" not in err
+    assert storage.current().by_name("Overflow").overflow           # the default overflow is untouched
+
+
+def test_edit_overflow_switches_overflow_on_and_takes_none_clears_the_materials(capsys, sm):
+    assert run(capsys, sm, "locations", "edit", "Rack 1", "--takes", "none", "--overflow", "--limit", "5")[:2] == (
+        0, "Changed Rack 1.\n")
+    rack = storage.current().by_name("Rack 1")
+    assert (rack.overflow, rack.fill, rack.limit) == (True, "none", 5)
+
+
 def test_edit_rename_renames_the_spools_stored_there(capsys, sm):
     rc, out, err = run(capsys, sm, "locations", "edit", "Rack 1", "--name", "PLA rack 1")
     assert (rc, err) == (0, "") and out == "Renamed Rack 1 to PLA rack 1. 18 spools updated.\n"
