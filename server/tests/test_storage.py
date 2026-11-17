@@ -1,6 +1,7 @@
 """Storage locations (R79): the storage.xml model, the migration from the old keys, the placement rule, how full,
 and the rename job. (amended by design review R457, changes C1 to C5)."""
 import copy
+import os
 import stat
 from collections import Counter
 
@@ -729,6 +730,7 @@ def test_a_reader_that_cannot_write_uses_the_migrated_list_and_says_so_once(etc,
     assert (etc / "storage.xml").exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX modes")
 def test_the_file_is_written_with_the_config_mode_and_the_web_read_grant(etc, monkeypatch):
     seen = []
     monkeypatch.setattr(config, "grant_web_read", lambda path: seen.append(path.name))
