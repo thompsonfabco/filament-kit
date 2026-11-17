@@ -19,7 +19,7 @@ def sealed_name(rules) -> str:
 
 def place(items: list[dict], used, rules) -> list[dict]:
     """Each item with a location: its own, else the rule's choice, with `placed_by` saying which step chose it
-    (sealed | material | any | overflow), so the result can tell the owner where a spool went and why.
+    (sealed | material | any | overflow | overflow_none), so the result can tell the owner where a spool went and why.
     `used`: spools per location text (a Counter) or the set of location texts that are taken, one spool each.
     A count is placed spool by spool: one item may come back as several parts."""
     st = as_storage(rules)
@@ -62,16 +62,22 @@ def _match(loc: Location, material: str) -> int:
 
 
 def _choose(st: Storage, material: str, counts: Counter) -> tuple[str, str]:
-    own = [(x, _match(x, material)) for x in st.locations if not x.overflow and x.fill == MATERIALS]
+    own = [(x, _match(x, material)) for x in st.locations if x.fill == MATERIALS]     # overflow places included
     best = max((n for _, n in own), default=0)
+    candidate = bool(best)                                                          # a place that could take it
     if best:                                                                        # 3: only the longest names count
         for x in (x for x, n in own if n == best):
             if (name := _room(st, x, counts)):
                 return name, "material"
-    else:                                                                           # 4
-        for x in (x for x in st.locations if not x.overflow and x.fill == ANY):
+    else:                                                                           # 4: no place names the material
+        anys = [x for x in st.locations if not x.overflow and x.fill == ANY]
+        candidate = bool(anys)
+        for x in anys:
             if (name := _room(st, x, counts)):
                 return name, "any"
-    # TODO(R457 hold): step 5 (R79 section 2) is being changed by the design review (the default overflow's limit
-    # starved the other overflow locations). Provisional until the amended rule: the default overflow takes it.
-    return st.default_overflow().name, "overflow"
+    default = st.default_overflow()                                                 # 5: the default's limit counts
+    why = "overflow" if candidate else "overflow_none"      # none: no place takes the material automatically
+    for x in [default, *(x for x in st.locations if x.overflow and x is not default)]:
+        if (name := _room(st, x, counts)):
+            return name, why
+    return default.name, why                    # all at their limit: the default takes the spool over it

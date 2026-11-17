@@ -110,13 +110,28 @@ class Storage:
         return next((loc.container_name(n) for n in range(1, (loc.count or 0) + 1)
                      if counts.get(loc.container_name(n), 0) == 0), None)
 
+    def containers(self, loc: Location, taken) -> list[dict] | None:
+        """The whole set in number order, [{name, number, taken}] (the `containers` field SL2 adds to the contract);
+        None for Bulk storage. The `prefix` field is `loc.container_prefix()`."""
+        if loc.type != CONTAINERS:
+            return None
+        counts = counts_of(taken)
+        return [{"name": loc.container_name(n), "number": n, "taken": counts.get(loc.container_name(n), 0) > 0}
+                for n in range(1, (loc.count or 0) + 1)]
+
     def describe(self, taken) -> list[dict]:
         """One dict per location in fill order, the fields of the `GET api/storage` rows (R79 section 4).
-        TODO(R457 hold): the contract gains a field for "Automatic (<where and why>)"; not added until it is ruled."""
+        (R457 C4: no field is added; the web app's "Automatic" line comes from the preview.)"""
         return [{"id": x.id, "name": x.name, "type": x.type, "limit": x.limit, "count": x.count,
                  "used": self.used(x, taken), "free": self.free(x, taken), "fill": x.fill,
                  "materials": list(x.materials), "overflow": x.overflow, "default_overflow": x.default_overflow,
                  "sealed": x.sealed, "position": i + 1} for i, x in enumerate(self.locations)]
+
+
+def is_container_name(loc: Location, text: str) -> bool:
+    """`text` is the set's prefix followed only by digits (a container's name, whatever the set's count)."""
+    pre = loc.container_prefix()
+    return loc.type == CONTAINERS and text.startswith(pre) and text[len(pre):].isdigit()
 
 
 def counts_of(taken) -> Counter:
@@ -173,8 +188,18 @@ def validate(locations: list[Location]) -> list[Problem]:
                 bad("materials", "Enter at least one material, e.g. PLA.", "Separate several with commas.")
             elif not all(_line(m) and m.strip() and len(m) <= NAME_MAX for m in x.materials):
                 bad("materials", "A material name must be one line of 1 to 100 characters.", "Check the names.")
+        if x.overflow and x.fill == ANY:
+            bad("fill", "An overflow location cannot take any material automatically.",
+                "Use Nothing, only when you choose it, or name the materials.")
         if x.default_overflow and not x.overflow:
             bad("overflow", "The default overflow must be an overflow location.", "Switch overflow on.")
+    for i, x in enumerate(locations):          # a name that is a container's name, refused both ways (R79, 22:06)
+        for j, st_ in enumerate(locations):
+            if i != j and st_.type == CONTAINERS and isinstance(x.name, str) and is_container_name(st_, x.name):
+                text = f"{x.name} is the name of a container in {st_.name}. Choose another name."
+                fix = "Use a name that is not the set's prefix followed by a number."
+                out.append(Problem(i, "name", text, fix))
+                out.append(Problem(j, "name", text, fix))
     defaults = [i for i, x in enumerate(locations) if x.default_overflow]
     if len(defaults) != 1:
         out.append(Problem(None, "default_overflow", "There must be exactly one default overflow location.",
@@ -318,10 +343,7 @@ def _clean(v) -> str:
 
 
 def migrate(cfg: dict) -> Storage:
-    """TODO(R457 hold): the mapping below (steps 1 to 5 of R79 section 6) is provisional until the amended R79
-    arrives; only this function (and `converted`) changes then.
-
-    The list the old keys `locations`, `placement.pla_location`, `.box_prefix`, `.box_count`, `.overflow` and
+    """The list the old keys `locations`, `placement.pla_location`, `.box_prefix`, `.box_count`, `.overflow` and
     `.sealed_location` stand for; it places every spool where the old rule did."""
     pl = cfg.get("placement") if isinstance(cfg.get("placement"), dict) else {}
     out: list[Location] = []
@@ -349,21 +371,23 @@ def migrate(cfg: dict) -> Storage:
     except (TypeError, ValueError):
         boxes = 0
     if boxes > 0:                                                                           # 3
-        prefix = pl.get("box_prefix") if isinstance(pl.get("box_prefix"), str) and pl.get("box_prefix").strip() \
-            else "Storage box "
-        name = _clean(prefix.rstrip()) or "Storage box"
+        prefix = pl.get("box_prefix") if isinstance(pl.get("box_prefix"), str) else "Storage box "
+        name = _clean(prefix.rstrip()) or "Container"
         box = Location(name, CONTAINERS, count=boxes, prefix=prefix, fill=ANY)
         roles = {pla.casefold(), overflow_name.casefold(), sealed_name.casefold()} - {""}
-        if name.casefold() in roles:      # one name, two roles that exclude each other (R79 step 6)
-            # TODO(R457 hold): design review is changing the mapping for pla_location = overflow or = the container
-            # name; step 6 as written needs two locations with one name. Not guessed: wait for the amended R79.
-            raise NotImplementedError("migration of a container prefix that is also the PLA, overflow or sealed "
-                                      "location is held (R457)")
-        elif (x := find(name)):
+        where = next((i for i, x in enumerate(out) if x.name.casefold() == overflow_name.casefold()), len(out))
+        if name.casefold() in roles:      # a place today's rule uses as one literal name: the bulk place keeps it
+            box.name = f"{name} (containers)"[:NAME_MAX]
+            while find(box.name):
+                box.name = box.name[:NAME_MAX - 1] + "+"
+            out.insert(where, box)
+        elif (x := find(name)):           # a plain entry of that name becomes the set, in its place
             out[out.index(x)] = box
         else:
-            where = next((i for i, x in enumerate(out) if x.name.casefold() == overflow_name.casefold()), len(out))
             out.insert(where, box)
+        converted = box.name == "Container" or box.name.endswith(" (containers)")
+        # a list entry that is a container name of this set is that container, not a location of its own
+        out[:] = [x for x in out if x is box or x.name.casefold() in roles or not is_container_name(box, x.name)]
     x = find(overflow_name)                                                                 # 4
     if not x:
         x = Location(overflow_name)
@@ -412,14 +436,24 @@ def renames(before: Storage, after: Storage) -> list[Rename]:
 
 
 def follow_names(before: Storage, after: Storage) -> None:
-    """A renamed Individual containers location whose prefix was its name plus one space gets the new name plus one
-    space; a migrated prefix that differs from the name (the roles kept apart) stays as it is."""
+    """A renamed Individual containers location gets the prefix of its new name plus one space (R79 C3), so its
+    containers are renamed with it."""
     old = {x.id: x for x in before.locations if x.id}
     for x in after.locations:
         o = old.get(x.id)
-        if o and x.type == CONTAINERS and o.type == CONTAINERS and x.name != o.name \
-                and x.prefix == o.prefix and o.container_prefix() == o.name + " ":
+        if o and x.type == CONTAINERS and o.type == CONTAINERS and x.name != o.name:
             x.prefix = x.name + " "
+
+
+DEFAULT_OVERFLOW_NOTE = ("The default overflow has no limit, so the other overflow places are never used. "
+                         "Give it a spool limit to let them fill.")
+
+
+def default_overflow_starves_others(st: Storage) -> bool:
+    """True when two or more overflow locations exist and the default overflow has no limit (R79 C1): the others
+    are never reached. The Hub page, `spoolwarden locations` and the config menu show DEFAULT_OVERFLOW_NOTE then."""
+    over = [x for x in st.locations if x.overflow]
+    return len(over) >= 2 and st.default_overflow().limit is None
 
 
 def rename_text(items: list[Rename], updated: int) -> str:

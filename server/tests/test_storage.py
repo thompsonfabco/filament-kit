@@ -1,5 +1,5 @@
 """Storage locations (R79): the storage.xml model, the migration from the old keys, the placement rule, how full,
-and the rename job. Tests marked skip wait for the amended R79 (design review R457)."""
+and the rename job. (amended by design review R457, changes C1 to C5)."""
 import copy
 import stat
 from collections import Counter
@@ -12,7 +12,6 @@ from filament_kit.storage import ANY, BULK, CONTAINERS, MATERIALS, Location, Sto
 
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 3, "overflow": "Overflow",
          "sealed_location": "Sealed stock"}
-HELD = "held: R79 is being amended after design review R457 (overflow rule, migration mapping, contract)"
 
 
 def migrated(rules=None, locations=None) -> Storage:
@@ -61,7 +60,7 @@ def test_old_rules_dict_goes_through_the_same_single_rule():
         ("Storage box 02", 1), ("Storage box 03", 1), ("Overflow", 1)]
 
 
-# ---- migration (the mapping is provisional until R457 is ruled)
+# ---- migration
 
 def test_migration_default_install_has_the_four_names_in_the_same_roles():
     st = storage.migrate(config.DEFAULTS)
@@ -115,15 +114,94 @@ def test_migration_step5_sealed_added_first_when_missing():
     assert names(st)[0] == "Safe" and st.sealed_location().name == "Safe"
 
 
-@pytest.mark.skip(reason=HELD)
-def test_migration_clash_overflow_equals_the_box_prefix_keeps_roles_apart_and_says_so():
-    st = migrated({**RULES, "overflow": "Storage box"}, ["Sealed stock", "Rack 1", "Storage box"])
-    assert st.converted and storage.NOTICE == "Storage locations were converted. Check them."
+def old_where(cfg_rules, locations, material="ABS", taken=(), count=1):
+    return where(place([{"material": material, "sealed": False, "count": count}], set(taken),
+                       migrated(cfg_rules, locations)))
 
 
-@pytest.mark.skip(reason=HELD)
-def test_migration_clash_pla_location_equals_the_box_prefix():
-    assert migrated({**RULES, "pla_location": "Storage box"}).converted
+def test_pinned_pla_location_is_the_overflow_one_location_carries_both():
+    rules = {**RULES, "pla_location": "Overflow"}
+    st = migrated(rules)
+    over = st.by_name("Overflow")
+    assert over.overflow and over.default_overflow and over.materials == ["PLA"] and not st.converted
+    assert old_where(rules, None, "PLA", count=2) == [("Overflow", 2)]
+    assert old_where(rules, None, "ABS", taken={"Storage box 01", "Storage box 02", "Storage box 03"}) == [
+        ("Overflow", 1)]
+
+
+def test_pinned_pla_location_is_the_container_name_bulk_keeps_the_name():
+    rules = {**RULES, "pla_location": "Storage box"}
+    st = migrated(rules)
+    assert st.by_name("Storage box").type == BULK and st.by_name("Storage box").materials == ["PLA"]
+    (boxes,) = [x for x in st.locations if x.type == CONTAINERS]
+    assert boxes.name == "Storage box (containers)" and boxes.prefix == "Storage box " and st.converted
+    assert names(st) == ["Sealed stock", "Rack 1", "Storage box", "Storage box (containers)", "Overflow"]
+    assert old_where(rules, None, "PLA") == [("Storage box", 1)]
+    assert old_where(rules, None, "ABS", taken={"Storage box 01"}) == [("Storage box 02", 1)]
+
+
+def test_pinned_overflow_is_the_container_name():
+    rules = {**RULES, "overflow": "Storage box"}
+    st = migrated(rules)
+    assert st.by_name("Storage box").default_overflow and st.by_name("Storage box").type == BULK and st.converted
+    assert [x.name for x in st.locations if x.type == CONTAINERS] == ["Storage box (containers)"]
+    assert old_where(rules, None, "ABS", count=4) == [("Storage box 01", 1), ("Storage box 02", 1),
+                                                      ("Storage box 03", 1), ("Storage box", 1)]
+
+
+def test_pinned_sealed_location_is_the_container_name():
+    rules = {**RULES, "sealed_location": "Storage box"}
+    st = migrated(rules)
+    assert st.sealed_location().name == "Storage box" and st.converted
+    out = place([{"material": "ABS", "sealed": True}], set(), st)
+    assert out[0]["location"] == "Storage box"
+    assert old_where(rules, None, "ABS") == [("Storage box 01", 1)]
+
+
+def test_pinned_empty_box_prefix_names_are_the_bare_numbers_and_the_set_is_Container():
+    rules = {**RULES, "box_prefix": ""}
+    st = migrated(rules)
+    (boxes,) = [x for x in st.locations if x.type == CONTAINERS]
+    assert boxes.name == "Container" and boxes.prefix == "" and st.converted
+    assert old_where(rules, None, "ABS", taken={"01"}) == [("02", 1)]
+
+
+def test_pinned_box_prefix_of_only_spaces_is_kept_verbatim():
+    rules = {**RULES, "box_prefix": "   "}
+    st = migrated(rules)
+    (boxes,) = [x for x in st.locations if x.type == CONTAINERS]
+    assert boxes.name == "Container" and boxes.prefix == "   " and st.converted
+    assert old_where(rules, None, "ABS", taken={"   01"}) == [("   02", 1)]
+
+
+def test_pinned_box_count_zero_has_no_set_and_other_materials_go_to_overflow():
+    rules = {**RULES, "box_count": 0}
+    st = migrated(rules)
+    assert all(x.type == BULK for x in st.locations) and not st.converted
+    assert old_where(rules, None, "ABS") == [("Overflow", 1)]
+
+
+def test_a_plain_entry_that_became_the_set_now_means_the_lowest_free_container():
+    st = migrated()
+    box = st.by_name("Storage box")
+    assert box.type == CONTAINERS and st.lowest_free(box, {"Storage box 01"}) == "Storage box 02"
+
+
+def test_the_name_is_the_prefix_without_trailing_spaces_and_no_note_for_an_ordinary_one():
+    st = migrated({**RULES, "box_prefix": "Dry box  "}, ["Rack 1", "Overflow", "Sealed stock"])
+    assert st.by_name("Dry box").type == CONTAINERS and not st.converted
+
+
+def test_the_default_overflow_without_a_limit_starves_others_only_with_two_overflow_places():
+    st = Storage([Location("Safe", sealed=True), Location("O1", overflow=True, default_overflow=True),
+                  Location("O2", overflow=True)])
+    assert storage.default_overflow_starves_others(st) is True
+    st.locations[1].limit = 5
+    assert storage.default_overflow_starves_others(st) is False
+    st.locations[2].overflow = False
+    st.locations[1].limit = None
+    assert storage.default_overflow_starves_others(st) is False
+    assert "never used" in storage.DEFAULT_OVERFLOW_NOTE
 
 
 def test_migration_leaves_the_old_keys_in_config_untouched(etc):
@@ -308,30 +386,48 @@ def test_rule4_any_material_places_in_list_order_with_room():
 
 
 def test_a_location_that_takes_nothing_is_never_chosen():
-    assert put(base(Location("Manual only")), "ABS") == [("Overflow", "overflow")]
+    assert put(base(Location("Manual only")), "ABS") == [("Overflow", "overflow_none")]
 
 
-@pytest.mark.skip(reason=HELD)
-def test_rule5_overflow_order_default_first_then_list_order():
+def test_rule5_the_default_fills_first_up_to_its_limit_then_the_others_in_list_order():
     st = Storage([Location("Sealed stock", sealed=True), Location("O1", limit=1, overflow=True),
                   Location("O2", overflow=True, default_overflow=True, limit=1), Location("O3", overflow=True)])
     out = place([{"material": "ABS", "sealed": False, "count": 4}], {}, st)
-    assert [i["location"] for i in out] == ["O2", "O1", "O3"] and out[-1]["count"] == 2
+    assert [(i["location"], i["count"]) for i in out] == [("O2", 1), ("O1", 1), ("O3", 2)]
 
 
-@pytest.mark.skip(reason=HELD)
-def test_rule5_the_default_overflow_never_refuses_when_all_are_at_their_limit():
+def test_rule5_only_when_all_are_full_the_default_takes_more_over_its_limit():
     st = Storage([Location("Sealed stock", sealed=True), Location("O1", limit=1, overflow=True),
                   Location("O2", overflow=True, default_overflow=True, limit=1)])
     out = place([{"material": "ABS", "sealed": False, "count": 3}], {"O1": 1, "O2": 1}, st)
     assert [(i["location"], i["count"]) for i in out] == [("O2", 3)]
 
 
-def test_an_overflow_location_is_not_an_own_place():
+def test_rule5_with_no_limit_on_the_default_the_others_are_never_reached():
+    st = Storage([Location("Sealed stock", sealed=True), Location("O1", overflow=True, default_overflow=True),
+                  Location("O2", overflow=True)])
+    assert [(i["location"], i["count"]) for i in place(
+        [{"material": "ABS", "sealed": False, "count": 50}], {}, st)] == [("O1", 50)]
+
+
+def test_fill_any_is_refused_on_an_overflow_location():
+    st = base()
+    st.locations[-1].fill = ANY
+    (p,) = storage.validate(st.locations)
+    assert (p.field, p.error) == ("fill", "An overflow location cannot take any material automatically.")
+
+
+def test_an_overflow_location_with_materials_is_an_own_place_for_them():
     st = Storage([Location("Sealed stock", sealed=True),
                   Location("Spill", overflow=True, default_overflow=True, fill=MATERIALS, materials=["PLA"]),
                   Location("Rack", fill=MATERIALS, materials=["PLA"], limit=1)])
-    assert put(st, "PLA", {"Rack": 1}) == [("Spill", "overflow")]
+    assert put(st, "PLA", {"Rack": 1}) == [("Spill", "material")]       # list order: Rack is full, Spill takes it
+    assert put(st, "PLA") == [("Spill", "material")]                    # Spill comes first in the list
+
+
+def test_when_a_place_names_the_material_any_material_places_are_not_tried():
+    st = base(Location("PLA rack", limit=1, fill=MATERIALS, materials=["PLA"]), Location("Anything", fill=ANY))
+    assert put(st, "PLA", {"PLA rack": 1}) == [("Overflow", "overflow")]
 
 
 def test_containers_take_the_lowest_free_number_two_digits_then_100():
@@ -387,11 +483,6 @@ def test_how_full_from_a_set_is_the_old_taken_set():
     st = full_list()
     assert st.used(st.by_name("Storage box"), {"Storage box 01", "Storage box 02"}) == 2
     assert st.lowest_free(st.by_name("Storage box"), {"Storage box 01"}) == "Storage box 02"
-
-
-@pytest.mark.skip(reason=HELD)
-def test_the_storage_row_has_the_field_for_automatic_where_and_why():
-    assert "reason" in full_list().describe({})[0]
 
 
 # ---- rename job
@@ -464,7 +555,7 @@ def test_renames_between_two_lists_are_matched_by_id_and_container_prefixes_foll
     assert storage.renames(before, before) == []
 
 
-def test_a_prefix_that_differs_from_the_name_does_not_follow_a_rename():
+def test_a_renamed_set_gets_the_prefix_of_its_new_name_even_if_it_had_another():
     before = Storage([Location("Sealed stock", sealed=True),
                       Location("Crates", CONTAINERS, count=2, prefix="Storage box ", fill=ANY),
                       Location("Overflow", overflow=True, default_overflow=True)])
@@ -473,4 +564,56 @@ def test_a_prefix_that_differs_from_the_name_does_not_follow_a_rename():
     after = storage.copy_of(before)
     after.locations[1].name = "Boxes"
     storage.follow_names(before, after)
-    assert after.locations[1].prefix == "Storage box " and storage.renames(before, after) == []
+    assert after.locations[1].prefix == "Boxes " and storage.renames(before, after) == [
+        storage.Rename("Storage box ", "Boxes ", True)]
+
+
+# ---- reasons overflow and overflow_none (R79, 22:06)
+
+def test_overflow_none_when_no_place_takes_the_material_and_overflow_when_the_candidates_are_full():
+    st = base(Location("PLA rack", limit=1, fill=MATERIALS, materials=["PLA"]))
+    assert put(st, "ABS") == [("Overflow", "overflow_none")]                  # nothing names ABS, no Any place
+    assert put(st, "PLA", {"PLA rack": 1}) == [("Overflow", "overflow")]      # a candidate, full
+    st = base(Location("Anything", limit=1, fill=ANY))
+    assert put(st, "ABS", {"Anything": 1}) == [("Overflow", "overflow")]      # an Any place, full
+    assert put(base(Location("Manual only")), "ABS") == [("Overflow", "overflow_none")]
+
+
+def test_the_reason_texts():
+    assert inventory.PLACED_BY["overflow_none"].format(material="ABS") == "no place takes ABS automatically"
+    assert inventory.PLACED_BY["overflow"].format(material="PLA") == "every place for PLA is full"
+
+
+# ---- a name that is a container's name
+
+def test_a_location_named_like_a_container_is_refused_and_so_is_the_other_way_round():
+    st = base(Location("Rack", CONTAINERS, count=3, prefix="Rack ", fill=ANY), Location("Rack 01"))
+    probs = storage.validate(st.locations)
+    assert {(p.row, p.field) for p in probs} == {(1, "name"), (2, "name")}
+    assert probs[0].error == "Rack 01 is the name of a container in Rack. Choose another name."
+    ok = base(Location("Rack", CONTAINERS, count=3, prefix="Rack ", fill=ANY), Location("Rack 1a"), Location("Rack"))
+    assert [p.row for p in storage.validate(ok.locations)] == [3]             # only the plain duplicate name
+    ok.locations.pop(3)
+    assert storage.validate(ok.locations) == []
+    # a set added or enlarged later: its prefix plus digits equals an existing name
+    other = base(Location("Shelf 02"), Location("Shelf", CONTAINERS, count=5, fill=ANY))
+    assert {p.row for p in storage.validate(other.locations)} == {1, 2}
+
+
+def test_migration_drops_a_list_entry_that_is_a_container_name_of_the_set():
+    st = migrated(RULES, ["Sealed stock", "Rack 1", "Storage box", "Storage box 02", "Overflow"])
+    assert names(st) == ["Sealed stock", "Rack 1", "Storage box", "Overflow"]
+    assert storage.validate(st.locations) == []
+    assert where(place([{"material": "ABS", "sealed": False, "count": 2}], {"Storage box 02"}, st)) == [
+        ("Storage box 01", 1), ("Storage box 03", 1)]                          # spools stored there count in the set
+
+
+# ---- the containers helper for SL2
+
+def test_containers_helper_lists_the_set_with_taken_and_the_prefix():
+    st = migrated({**RULES, "pla_location": "Storage box"})
+    boxes = st.by_name("Storage box (containers)")
+    assert st.containers(st.by_name("Rack 1"), {}) is None and boxes.container_prefix() == "Storage box "
+    assert st.containers(boxes, {"Storage box 02": 1}) == [
+        {"name": "Storage box 01", "number": 1, "taken": False}, {"name": "Storage box 02", "number": 2, "taken": True},
+        {"name": "Storage box 03", "number": 3, "taken": False}]

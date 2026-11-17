@@ -80,7 +80,7 @@ def test_a_location_the_rules_chose_says_why(sm, spoolman_fake_store):
     # the default install has no storage boxes (box_count 0): opened PETG has no place of its own, so overflow
     r = inventory.add_spools(sm, [item(sealed=False, material="PETG", name="petg red")], {**RULES, "box_count": 0},
                              dry=True)
-    assert "at Overflow (every place for PETG is full, since no location was given)" in r.lines[-1]
+    assert "at Overflow (no place takes PETG automatically, since no location was given)" in r.lines[-1]
     r = inventory.add_spools(sm, [item(location="Shelf")], RULES, dry=True)
     assert "at Shelf, " in r.lines[-1] and "no location was given" not in r.lines[-1]
 

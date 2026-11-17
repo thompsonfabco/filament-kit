@@ -27,7 +27,7 @@ def test_opened_petg_count_3_fills_free_boxes_then_overflow():
 def test_box_count_zero_goes_to_overflow():
     out = place([{"material": "ABS", "sealed": False}], set(), {**RULES, "box_count": 0})
     assert [i["location"] for i in out] == ["Overflow"]
-    assert out[0]["placed_by"] == "overflow"            # R79: the reasons are material, any, overflow, sealed
+    assert out[0]["placed_by"] == "overflow_none"       # R79: no place names or takes it at all
 
 
 def test_sealed_gets_sealed_location():

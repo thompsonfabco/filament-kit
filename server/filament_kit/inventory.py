@@ -249,7 +249,8 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, paren
 
 # why the placement rules chose a spool's location (placement.place's `placed_by`), for the result line
 PLACED_BY = {"sealed": "where sealed spools go", "material": "the first place for {material} with room",
-             "any": "the first place with room", "overflow": "every place for {material} is full"}
+             "any": "the first place with room", "overflow": "every place for {material} is full",
+             "overflow_none": "no place takes {material} automatically"}
 
 
 def _write_items(sm, placed, vendors, fils, result, dry) -> None:
