@@ -9,15 +9,22 @@ Layout under `<state>/events/`:
                    can lose an id but never reuse one
   .lock            the lock file two processes (the Hub service and the command line) take around a write
 
-Owner and mode as the other state files: 0640 and `config.grant_web_read`, like storage.xml. No JSON is stored.
+Owner and mode (R464): whoever writes first (the Hub, or root: the command line, the installer), every directory and
+file the store creates or touches belongs to the owner of the state folder, files 0644 and the events directory with
+the state folder's mode bits, so the Hub service can always write and the web unit can read. As root the store chowns
+(guarded: only when the owner differs); nothing is ever followed through a symbolic link (O_NOFOLLOW, new files with
+O_EXCL; a link at events/, a month file, conditions.xml or next-id is refused with an error). The same logic as
+storage.py's `_write`, kept local here so the two can be unified at the merge. No JSON is stored.
 Texts are not stored and not built here (EA3): an event is its kind, its subject and actor and named values (all
 text, as stored). The catalogue of kinds and value names is event_kinds.py.
 """
 from __future__ import annotations
 
+import errno
 import os
 import re
-import tempfile
+import secrets
+import stat
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -41,6 +48,16 @@ _MONTH = re.compile(r"^(\d{4})-(\d{2})\.xml$")
 _EVENT = re.compile(r"<event\b.*?</event>", re.S)
 _BAD_CHARS = re.compile("[^\u0009\u000a\u000d -퟿-�\U00010000-\U0010ffff]")
 _END = b"</event>\n"
+FILE_MODE = 0o644
+
+
+def _flag(name: str) -> int:
+    return getattr(os, name, 0)
+
+
+_READ = os.O_RDONLY | _flag("O_NOFOLLOW") | _flag("O_CLOEXEC") | _flag("O_BINARY")
+_OPEN = os.O_RDWR | _flag("O_NOFOLLOW") | _flag("O_CLOEXEC") | _flag("O_BINARY")
+_NEW = os.O_RDWR | os.O_CREAT | os.O_EXCL | _flag("O_NOFOLLOW") | _flag("O_CLOEXEC") | _flag("O_BINARY")
 
 
 class EventError(ValueError):
@@ -50,6 +67,43 @@ class EventError(ValueError):
 def _text(v) -> str:
     return _BAD_CHARS.sub(" ", str(v))               # XML 1.0 cannot hold a control character; one would make the
                                                       # month unreadable for good
+
+
+def _is_root() -> bool:
+    return getattr(os, "geteuid", lambda: -1)() == 0
+
+
+def _state_owner(root: Path) -> tuple[int, int]:
+    """The user and group of the state folder (the parent of events/): whose the store's files must be."""
+    st = os.stat(root.parent)
+    return st.st_uid, st.st_gid
+
+
+def _tmp_name(f: Path) -> Path:
+    return f.with_name(f"{f.name}.{secrets.token_hex(6)}.tmp")
+
+
+def _refuse_link(path: Path) -> None:
+    try:
+        if stat.S_ISLNK(os.lstat(path).st_mode):
+            raise EventError(f"{path.name} is a symbolic link, so the Hub does not use it. Remove the link.")
+    except FileNotFoundError:
+        pass
+
+
+def _open(path: Path, flags: int, mode: int = FILE_MODE) -> int:
+    try:
+        return os.open(path, flags, mode)
+    except OSError as e:
+        if e.errno == errno.ELOOP:
+            raise EventError(f"{path.name} is a symbolic link, so the Hub does not use it. Remove the link.") from None
+        raise
+
+
+def _read_bytes(path: Path) -> bytes:
+    """The file's bytes, never through a link (a link raises EventError); OSError as the file system says."""
+    with os.fdopen(_open(path, _READ), "rb") as fh:
+        return fh.read()
 
 
 def _utc(now: datetime | None) -> datetime:
@@ -124,8 +178,8 @@ def _parse(raw: bytes) -> list[dict]:
 
 def _read_file(path: Path) -> list[dict]:
     try:
-        return _parse(path.read_bytes())
-    except OSError:
+        return _parse(_read_bytes(path))
+    except (OSError, EventError):
         return []
 
 
@@ -134,16 +188,24 @@ def _read_file(path: Path) -> list[dict]:
 class _FileLock:
     """An exclusive lock on events/.lock: flock where there is one, msvcrt byte lock on Windows."""
 
-    def __init__(self, path: Path, needed: bool):
-        self.path, self.needed, self.fd = path, needed, None
+    def __init__(self, path: Path, needed: bool, give=None):
+        self.path, self.needed, self.give, self.fd = path, needed, give, None
 
     def __enter__(self):
         try:
-            self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o640)
+            try:
+                self.fd = _open(self.path, _OPEN)
+            except FileNotFoundError:
+                try:
+                    self.fd = _open(self.path, _NEW)
+                except FileExistsError:          # another process made it a moment ago
+                    self.fd = _open(self.path, _OPEN)
         except PermissionError:
             if self.needed:                      # a reader that cannot open the lock file reads without it
                 raise
             return self
+        if self.give:
+            self.give(self.fd)
         if fcntl:
             fcntl.flock(self.fd, fcntl.LOCK_EX)
         else:
@@ -193,17 +255,39 @@ class EventStore:
         except OSError:
             return []
 
-    def _secure(self, path: Path) -> None:
-        os.chmod(path, 0o640)
-        config.grant_web_read(path)
+    def _give(self, fd: int) -> None:
+        """Mode 0644 and, as root, the state folder's owner (only when it differs), on a file this process opened."""
+        st = os.fstat(fd)
+        if hasattr(os, "fchmod") and stat.S_IMODE(st.st_mode) != FILE_MODE:
+            os.fchmod(fd, FILE_MODE)
+        if _is_root():
+            uid, gid = _state_owner(self.root)
+            if (st.st_uid, st.st_gid) != (uid, gid):
+                os.fchown(fd, uid, gid)
+
+    def _guard(self) -> None:
+        _refuse_link(self.root)
+
+    def _ensure_root(self) -> None:
+        """events/ exists, is no link, has the state folder's mode bits and, as root, its owner."""
+        self._guard()
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._guard()
+        st, state = os.lstat(self.root), os.stat(self.root.parent)
+        if stat.S_IMODE(st.st_mode) != stat.S_IMODE(state.st_mode):
+            os.chmod(self.root, stat.S_IMODE(state.st_mode))
+        if _is_root():
+            uid, gid = _state_owner(self.root)
+            if (st.st_uid, st.st_gid) != (uid, gid):
+                os.lchown(self.root, uid, gid)
 
     def _counter(self) -> int:
         """The id the next event gets. A missing or unreadable next-id is rebuilt from the newest events on disk."""
         try:
-            n = int((self.root / "next-id").read_text(encoding="ascii").strip())
+            n = int(_read_bytes(self.root / "next-id").decode("ascii").strip())
             if n >= 1:
                 return n
-        except (OSError, ValueError):
+        except (OSError, ValueError, EventError):
             pass
         for p in reversed(self._months()):
             ids = [e["id"] for e in _read_file(p)]
@@ -215,29 +299,45 @@ class EventStore:
         self._atomic(self.root / "next-id", f"{n}\n".encode("ascii"))
 
     def _atomic(self, f: Path, data: bytes) -> None:
-        fd, tmp = tempfile.mkstemp(dir=f.parent, prefix=f.name + ".", suffix=".tmp")
-        tmp = Path(tmp)
+        """Write `f` through a new file only this process made (O_EXCL | O_NOFOLLOW), then rename it over `f`. A link
+        at `f` is refused; a name planted for the temporary file is skipped."""
+        _refuse_link(f)
+        for _ in range(20):
+            tmp = _tmp_name(f)
+            try:
+                fd = _open(tmp, _NEW)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise OSError(errno.EEXIST, "no free name for the temporary file")
         try:
             with os.fdopen(fd, "wb") as fh:
                 fh.write(data)
                 fh.flush()
                 os.fsync(fh.fileno())
-            self._secure(tmp)
+                self._give(fh.fileno())
             os.replace(tmp, f)
         except BaseException:
-            if tmp.exists():
-                tmp.unlink()
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
             raise
 
     def _append(self, path: Path, month: str, chunk: bytes) -> None:
         header = f'<events version="{VERSION}" month="{month}">\n'.encode("ascii")
-        existed = path.exists()
-        with open(path, "r+b" if existed else "wb") as fh:
+        try:
+            fd, existed = _open(path, _OPEN), True
+        except FileNotFoundError:
+            fd, existed = _open(path, _NEW), False
+        with os.fdopen(fd, "r+b") as fh:
+            self._give(fh.fileno())
             size = fh.seek(0, os.SEEK_END)
             if existed:
                 fh.seek(max(size - len(_END), 0))
                 tail = fh.read()
-                if not (tail == _END or (size == len(header) and self._head(path, size) == header)):
+                if not (tail == _END or (size == len(header) and self._head(fh, size) == header)):
                     self._cut_torn_tail(fh, header)       # a crash left half an element (or half a header)
             else:
                 fh.write(header)
@@ -245,13 +345,11 @@ class EventStore:
             fh.write(chunk + b"\n")
             fh.flush()
             os.fsync(fh.fileno())
-        if not existed:
-            self._secure(path)
 
     @staticmethod
-    def _head(path: Path, n: int) -> bytes:
-        with open(path, "rb") as fh:
-            return fh.read(n)
+    def _head(fh, n: int) -> bytes:
+        fh.seek(0)
+        return fh.read(n)
 
     @staticmethod
     def _cut_torn_tail(fh, header: bytes) -> None:
@@ -268,8 +366,8 @@ class EventStore:
     # ---- conditions
     def _load_conditions(self) -> dict[str, dict]:
         try:
-            root = ET.fromstring((self.root / "conditions.xml").read_bytes())
-        except (OSError, ET.ParseError):
+            root = ET.fromstring(_read_bytes(self.root / "conditions.xml"))
+        except (OSError, EventError, ET.ParseError):
             return {}
         out = {}
         for el in root.iter("event"):
@@ -319,12 +417,15 @@ class EventStore:
               if ckey else None}
         tlock, cond = _shared_for(self.root)
         with tlock:
-            self.root.mkdir(parents=True, exist_ok=True)
-            with _FileLock(self.root / ".lock", needed=True):
+            self._ensure_root()
+            month = self.root / f"{ev['at'][:7]}.xml"
+            for f in (month, self.root / "next-id", self.root / "conditions.xml"):
+                _refuse_link(f)                              # before anything is written
+            with _FileLock(self.root / ".lock", needed=True, give=self._give):
                 n = self._counter()
                 ev["id"] = n
                 self._put_counter(n + 1)
-                self._append(self.root / f"{ev['at'][:7]}.xml", ev["at"][:7], _dump(_element(ev)))
+                self._append(month, ev["at"][:7], _dump(_element(ev)))
                 if ckey:
                     self._update_conditions(k, ckey, ev)
         with cond:
@@ -348,6 +449,7 @@ class EventStore:
         """The id of the newest event (0 when there is none)."""
         tlock, _ = _shared_for(self.root)
         with tlock:
+            self._guard()
             try:
                 with _FileLock(self.root / ".lock", needed=False):
                     return self._counter() - 1

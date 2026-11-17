@@ -4,6 +4,7 @@ import os
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -297,11 +298,99 @@ def test_the_module_functions_use_the_state_folder(tmp_path, monkeypatch):
     assert events.conditions() == [] and events.prune() == []
 
 
-def test_files_get_the_config_mode_and_the_web_read_grant(store, monkeypatch):
-    seen = []
-    monkeypatch.setattr(config, "grant_web_read", lambda path: seen.append(path.name.split(".")[0]))
-    store.write("print.paused", PRINTER, HUB, now=at(2026, 11, 17))
-    assert {"2026-11", "next-id", "conditions"} <= set(seen)
-    if os.name != "nt":
-        for name in ("2026-11.xml", "next-id", "conditions.xml"):
-            assert (store.root / name).stat().st_mode & 0o777 == 0o640
+POSIX = pytest.mark.skipif(os.name == "nt", reason="modes, owners and symbolic links are POSIX")
+
+
+@POSIX
+def test_files_and_directory_get_the_ruled_mode(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir(mode=0o750)
+    os.chmod(state, 0o750)
+    s = EventStore(state / "events")
+    s.write("print.paused", PRINTER, HUB, now=at(2026, 11, 17))
+    assert (state / "events").stat().st_mode & 0o777 == 0o750               # the state folder's mode bits
+    for name in ("2026-11.xml", "next-id", "conditions.xml", ".lock"):
+        assert (state / "events" / name).stat().st_mode & 0o777 == 0o644, name
+
+
+@POSIX
+def test_a_first_write_as_root_leaves_the_hubs_owner_and_mode_and_the_hub_can_write_after(tmp_path, monkeypatch):
+    state = tmp_path / "state"
+    state.mkdir()
+    os.chmod(state, 0o750)
+    chowned = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)                          # root: the command line, the installer
+    monkeypatch.setattr(events, "_state_owner", lambda root: (4242, 4343))  # the Hub's user and group
+    monkeypatch.setattr(os, "fchown", lambda fd, uid, gid: chowned.append(("fd", os.fstat(fd).st_ino, uid, gid)))
+    monkeypatch.setattr(os, "lchown", lambda path, uid, gid: chowned.append(("dir", Path(path).name, uid, gid)))
+    s = EventStore(state / "events")
+    s.write("print.paused", PRINTER, {"type": "cli"}, now=at(2026, 11, 17))
+    assert ("dir", "events", 4242, 4343) in chowned
+    files = {n: (state / "events" / n).stat().st_ino for n in ("2026-11.xml", "next-id", "conditions.xml", ".lock")}
+    for name, ino in files.items():                                         # every created file handed over
+        assert ("fd", ino, 4242, 4343) in chowned, name
+        assert (state / "events" / name).stat().st_mode & 0o777 == 0o644
+    assert all(uid == 4242 and gid == 4343 for *_, uid, gid in chowned)
+    monkeypatch.undo()                                                      # now the Hub itself writes
+    assert s.write("print.resumed", PRINTER, HUB, now=at(2026, 12, 1))["id"] == 2
+    assert [e["id"] for e in s.read()["events"]] == [1, 2] and s.conditions() == []
+
+
+@POSIX
+def test_nothing_is_chowned_when_the_owner_already_matches(store, monkeypatch):
+    calls = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "fchown", lambda *a: calls.append(a))
+    monkeypatch.setattr(os, "lchown", lambda *a: calls.append(a))
+    store.write("print.paused", PRINTER, HUB)                               # the state folder is ours already
+    assert calls == []
+
+
+@POSIX
+def test_a_link_at_the_events_directory_is_refused(tmp_path):
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    (tmp_path / "events").symlink_to(victim)
+    s = EventStore(tmp_path / "events")
+    with pytest.raises(EventError, match="symbolic link"):
+        s.write("print.started", PRINTER, HUB)
+    with pytest.raises(EventError):
+        s.read()
+    assert list(victim.iterdir()) == []
+
+
+@POSIX
+@pytest.mark.parametrize("name", ["2026-11.xml", "next-id", "conditions.xml", ".lock"])
+def test_a_link_at_a_store_file_is_refused_and_nothing_is_written_through_it(store, tmp_path, name):
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep")
+    store.root.mkdir(parents=True)
+    (store.root / name).symlink_to(victim)
+    with pytest.raises(EventError, match="symbolic link"):
+        store.write("print.paused", PRINTER, HUB, now=at(2026, 11, 17))
+    assert victim.read_text() == "keep" and (store.root / name).is_symlink()
+    if name != ".lock":
+        assert not (store.root / "next-id").exists() or name == "next-id"      # nothing was counted or written
+
+
+@POSIX
+def test_a_name_planted_for_the_temporary_file_is_skipped(store, tmp_path, monkeypatch):
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep")
+    store.root.mkdir(parents=True)
+    names = iter(["planted", "fresh", "fresh2", "fresh3"])
+    monkeypatch.setattr(events, "_tmp_name", lambda f: f.with_name(f"{f.name}.{next(names)}.tmp"))
+    (store.root / "next-id.planted.tmp").symlink_to(victim)
+    assert store.write("print.started", PRINTER, HUB)["id"] == 1
+    assert victim.read_text() == "keep" and (store.root / "next-id.planted.tmp").is_symlink()
+    assert store.last_id() == 1
+
+
+@POSIX
+def test_a_link_at_a_month_file_is_not_read_through(store, tmp_path):
+    started(store, now=at(2026, 11, 17))
+    real = store.root / "2026-11.xml"
+    moved = tmp_path / "moved.xml"
+    real.rename(moved)
+    real.symlink_to(moved)
+    assert store.read()["events"] == []
