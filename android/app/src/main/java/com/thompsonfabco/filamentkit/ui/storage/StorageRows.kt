@@ -31,29 +31,36 @@ data class LocationRow(val name: String, val howFull: AddText?, val full: Boolea
 fun StorageLocation.howFullText(): AddText? {
     if (containers) {
         val left = free ?: if (count != null && used != null) count - used else return null
-        return if (left <= 0) AddText.of(R.string.storage_how_full_full) else AddText.of(R.string.storage_how_full_free, left)
+        return if (left <= 0) AddText.of(R.string.storage_full) else AddText.of(R.string.storage_free, left)
     }
     val n = used ?: return null
     // every bulk limit counts, the default overflow's and the sealed location's too (R79 C1)
     val cap = limit
     return when {
-        cap == null -> AddText.of(R.string.storage_how_full_spools, n)
-        n >= cap -> AddText.of(R.string.storage_how_full_full)
-        else -> AddText.of(R.string.storage_how_full_limit, n, cap)
+        cap == null -> AddText.plural(R.plurals.storage_used_plain, n, n)
+        n >= cap -> AddText.of(R.string.storage_full)
+        else -> AddText.of(R.string.storage_used_limit, n, cap)
     }
 }
+
+/**
+ * The row that holds a spool at [current]: a location whose name is that text first, and only then a containers set that
+ * lists it, so a bulk location named like a container is not shown as "Now here" together with the set.
+ */
+fun List<LocationRow>.holder(current: String?): LocationRow? =
+    if (current == null) null else firstOrNull { it.name == current } ?: firstOrNull { it.holds(current) }
 
 /** The rows in fill order: one per location (a containers location is one row). */
 fun StorageAnswer.rows(): List<LocationRow> = locations.map {
     val text = it.howFullText()
-    LocationRow(it.name, text, full = text?.res == R.string.storage_how_full_full, containers = it.containers, containerNames = it.containerNames)
+    LocationRow(it.name, text, full = text?.res == R.string.storage_full, containers = it.containers, containerNames = it.containerNames)
 }
 
 /** A place a spool goes and, when the Hub placed it, why ([reason] is null for a place the person chose). */
 data class Place(val location: String, val reason: AddText?) {
     /** "Rack 1 (the first place for PLA with room)", or the name alone. */
     fun resolve(context: Context): String =
-        if (reason == null) location else context.getString(R.string.storage_where_why, location, reason.resolve(context))
+        if (reason == null) location else context.getString(R.string.storage_automatic_line, location, reason.resolve(context))
 }
 
 /** The reason of a placement from its code (`placed_by`); an unknown code or a missing material gives none. */

@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.ui.spool
 
 import androidx.compose.ui.platform.LocalContext
 import com.thompsonfabco.filamentkit.ui.storage.LocationRow
+import com.thompsonfabco.filamentkit.ui.storage.holder
 import com.thompsonfabco.filamentkit.ui.storage.rows
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -393,9 +394,10 @@ private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAga
                 locations.isEmpty() -> Text(stringResource(R.string.spool_move_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
                 else -> Column(Modifier.verticalScroll(rememberScrollState())) {
                     val rows = m.storage?.rows() ?: locations.map { LocationRow(it, null, false) }
+                    val holder = rows.holder(current)
                     rows.forEach { row ->
                         val name = row.name
-                        val here = row.holds(current)
+                        val here = row === holder
                         Row(
                             Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
                                 .selectable(selected = here, enabled = m.movingTo == null, role = Role.RadioButton) { vm.move(if (here && current != null) current else name) },

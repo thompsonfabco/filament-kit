@@ -3115,23 +3115,6 @@
     <string name="spool_load_which_slot">Which slot on %1$s?</string>
     <string name="spool_load_previous_place">its previous place</string>
     <string name="spool_mark_empty">Mark empty</string>
-    <!-- 1=free -->
-    <string name="storage_how_full_free">%1$s free</string>
-    <string name="storage_how_full_full">Full</string>
-    <!-- 1=used 2=limit -->
-    <string name="storage_how_full_limit">%1$s of %2$s spools</string>
-    <!-- 1=used -->
-    <string name="storage_how_full_spools">%1$s spools</string>
-    <string name="storage_reason_any">the first place with room</string>
-    <!-- 1=material -->
-    <string name="storage_reason_material">the first place for %1$s with room</string>
-    <!-- 1=material -->
-    <string name="storage_reason_overflow">every place for %1$s is full</string>
-    <!-- 1=material -->
-    <string name="storage_reason_overflow_none">no place takes %1$s automatically</string>
-    <string name="storage_reason_sealed">where sealed spools go</string>
-    <!-- 1=place 2=reason -->
-    <string name="storage_where_why">%1$s (%2$s)</string>
     <string name="spool_move">Move</string>
     <string name="spool_move_here">Now here</string>
     <string name="spool_move_moving">Moving…</string>

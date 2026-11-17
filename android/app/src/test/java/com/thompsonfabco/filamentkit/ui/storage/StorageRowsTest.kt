@@ -18,14 +18,14 @@ class StorageRowsTest {
 
     @Test fun howFullForEveryCase() {
         val limited = StorageLocation("Rack 1", limit = 20, used = 18)
-        assertEquals(AddText.of(R.string.storage_how_full_limit, 18, 20), limited.howFullText())
-        assertEquals(AddText.of(R.string.storage_how_full_spools, 7), StorageLocation("Shelf", used = 7).howFullText())
-        assertEquals(AddText.of(R.string.storage_how_full_full), limited.copy(used = 20).howFullText())
-        assertEquals(AddText.of(R.string.storage_how_full_full), limited.copy(used = 22).howFullText())
+        assertEquals(AddText.of(R.string.storage_used_limit, 18, 20), limited.howFullText())
+        assertEquals(AddText.plural(R.plurals.storage_used_plain, 7, 7), StorageLocation("Shelf", used = 7).howFullText())
+        assertEquals(AddText.of(R.string.storage_full), limited.copy(used = 20).howFullText())
+        assertEquals(AddText.of(R.string.storage_full), limited.copy(used = 22).howFullText())
         val box = StorageLocation("Storage box", type = "containers", count = 12, used = 9, free = 3)
-        assertEquals(AddText.of(R.string.storage_how_full_free, 3), box.howFullText())
-        assertEquals(AddText.of(R.string.storage_how_full_free, 3), box.copy(free = null).howFullText())
-        assertEquals(AddText.of(R.string.storage_how_full_full), box.copy(used = 12, free = 0).howFullText())
+        assertEquals(AddText.of(R.string.storage_free, 3), box.howFullText())
+        assertEquals(AddText.of(R.string.storage_free, 3), box.copy(free = null).howFullText())
+        assertEquals(AddText.of(R.string.storage_full), box.copy(used = 12, free = 0).howFullText())
         assertNull(box.copy(used = null, free = null).howFullText())
         assertNull(StorageLocation("Shelf").howFullText())
         assertNull(limited.copy(used = null).howFullText())
@@ -33,11 +33,11 @@ class StorageRowsTest {
 
     @Test fun theDefaultOverflowAndSealedLocationsShowTheirLimitLikeAnyBulkLocation() {
         val over = StorageLocation("Overflow", limit = 20, used = 18, defaultOverflow = true)
-        assertEquals(AddText.of(R.string.storage_how_full_limit, 18, 20), over.howFullText())
-        assertEquals(AddText.of(R.string.storage_how_full_full), over.copy(used = 20).howFullText())
+        assertEquals(AddText.of(R.string.storage_used_limit, 18, 20), over.howFullText())
+        assertEquals(AddText.of(R.string.storage_full), over.copy(used = 20).howFullText())
         val sealed = over.copy(defaultOverflow = false, sealed = true)
-        assertEquals(AddText.of(R.string.storage_how_full_limit, 18, 20), sealed.howFullText())
-        assertEquals(AddText.of(R.string.storage_how_full_spools, 9), over.copy(limit = null, used = 9).howFullText())
+        assertEquals(AddText.of(R.string.storage_used_limit, 18, 20), sealed.howFullText())
+        assertEquals(AddText.plural(R.plurals.storage_used_plain, 9, 9), over.copy(limit = null, used = 9).howFullText())
     }
 
     @Test fun rowsKeepFillOrderMarkFullAndStayChoosable() {
@@ -55,7 +55,7 @@ class StorageRowsTest {
     }
 
     @Test fun moveRowsSayNowHereAndHowFull() {
-        val row = LocationRow("Rack 1", AddText.of(R.string.storage_how_full_limit, 18, 20), false)
+        val row = LocationRow("Rack 1", AddText.of(R.string.storage_used_limit, 18, 20), false)
         assertEquals(listOf(AddText.of(R.string.spool_move_here), row.howFull), row.moveLines(here = true, moving = false))
         assertEquals(listOf(row.howFull), row.moveLines(here = false, moving = false))
         assertEquals(listOf(AddText.of(R.string.spool_move_moving)), row.moveLines(here = false, moving = true))
@@ -131,5 +131,17 @@ class StorageRowsTest {
         assertEquals("Rack 1", m[0]!!.single().location)
         assertEquals(AddText.of(R.string.storage_reason_overflow, "PETG"), m[2]!!.single().reason)
         assertTrue(autoPlacesOf(items, emptyList()).isEmpty())
+    }
+
+    @Test fun aLocationNamedLikeAContainerIsHereAloneNotTheSet() {
+        // an existing clash: a bulk location called "Storage box 03" and a set that lists a container of that name
+        val bulk = LocationRow("Storage box 03", null, false)
+        val set = LocationRow("Storage box", null, false, containers = true, containerNames = listOf("Storage box 03", "Storage box 04"))
+        val rows = listOf(set, bulk)
+        assertTrue(set.holds("Storage box 03") && bulk.holds("Storage box 03"))
+        assertEquals(bulk, rows.holder("Storage box 03"))
+        assertEquals(set, rows.holder("Storage box 04"))
+        assertNull(rows.holder("Elsewhere"))
+        assertNull(rows.holder(null))
     }
 }
