@@ -151,7 +151,7 @@ async function main() {
       const url = new URL(args.url);
       url.searchParams.set("drive", String(Date.now()));
       await send("Page.navigate", { url: url.href + (args.hash || "") });
-      for (let i = 0; i < 100 && (await evaluate("document.readyState")) !== "complete"; i++) await sleep(50);
+      for (let i = 0; i < 600 && (await evaluate("document.readyState")) !== "complete"; i++) await sleep(50);
       if (args["font-dir"]) await evaluate("window.__fonts");
       await settled();
     } catch (e) { console.error(`the browser did not answer while the page opened (${e.message})`); return 4; }
