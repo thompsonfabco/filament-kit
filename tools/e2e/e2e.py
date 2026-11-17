@@ -1077,8 +1077,7 @@ class E2E:
         if r.returncode:
             j = subprocess.run(["journalctl", "-u", "filament-kit.service", "-n", "60", "--no-pager"],
                                capture_output=True, text=True).stdout
-            print(f"  (the Hub's journal after the failed update)
-{j[-6000:]}", flush=True)
+            print("  (the Hub's journal after the failed update)\n" + j[-6000:], flush=True)
             raise Fail("the update failed; see the log")
         act = wait_for(lambda: (lambda a: a if set(a.values()) == {"active"} else None)(
             units_active("spoolman.service", "filament-kit.service", "filament-kit-web.service")), 90, 2)
