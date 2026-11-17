@@ -1,7 +1,9 @@
 // Scenarios of server/tests/test_alerts_ui.py, run in the alerts page by tests/page_drive.mjs (one async function body; the
 // Python test replaces __SCENARIO__ with the name to run). Each returns plain data for the test to check.
-const A = window.SW_ALERTS, hub = window.__hub, ev = window.__ev, add = window.__add;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// the drive can start before /web-shared/alerts.js and the page script have run: wait for them (up to 10 s) before reading the globals
+for (let i = 0; i < 200 && !(window.SW_ALERTS && window.__hub && window.__ev && window.__add && window.__ready); i++) await sleep(50);
+const A = window.SW_ALERTS, hub = window.__hub, ev = window.__ev, add = window.__add;
 const q = (s) => document.querySelector(s), qa = (s) => [...document.querySelectorAll(s)];
 const MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const kindOf = (b) => [...b.classList].find((c) => c.startsWith("banner--")).slice(8);
