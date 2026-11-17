@@ -107,7 +107,7 @@ def test_flash_a_device_walk_in_a_browser_with_a_fake_board_and_a_fake_hub_job(m
     running = _serve(app, port)
     try:
         shots = [os.environ["S216_SHOTS"]] if os.environ.get("S216_SHOTS") else []
-        run = subprocess.run([node, str(WALK), running.url + "/setup", str(ctl), CODE, *shots], capture_output=True, text=True, timeout=900)
+        run = subprocess.run([node, str(WALK), running.url + "/setup", str(ctl), CODE, *shots], capture_output=True, encoding="utf-8", timeout=900)
     finally:
         running.stop()
     if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:

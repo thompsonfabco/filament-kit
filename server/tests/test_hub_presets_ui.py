@@ -64,7 +64,7 @@ def _drive(url: str, tmp_path: Path, script: str | None = None, width: int = 128
         _missing("the page driver needs Node 22 or later")
     file = tmp_path / "drive.js"
     file.write_text((script or SCRIPT.read_text(encoding="utf-8")).replace("__CODE__", CODE), encoding="utf-8")
-    run = subprocess.run([node, str(DRIVER), "--url", url, "--script", str(file), "--width", str(width)], capture_output=True, text=True, timeout=300)
+    run = subprocess.run([node, str(DRIVER), "--url", url, "--script", str(file), "--width", str(width)], capture_output=True, encoding="utf-8", timeout=300)
     if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
         _missing("the page driver needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
     if run.returncode == 3:

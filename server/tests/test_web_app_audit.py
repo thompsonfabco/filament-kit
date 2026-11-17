@@ -330,7 +330,7 @@ def _run(*args: str) -> subprocess.CompletedProcess:
     node = _node()
     if not node:
         _missing("AUT-5 needs Node 22 or later")
-    run = subprocess.run([node, str(RUNNER), *args], capture_output=True, text=True, timeout=600)
+    run = subprocess.run([node, str(RUNNER), *args], capture_output=True, encoding="utf-8", timeout=600)
     if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
         _missing("AUT-5 needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
     if run.returncode == 3:          # a browser was found but cannot run headless on this machine (its error is shown)
@@ -376,7 +376,7 @@ def _flow(url: str, flow: str, width: int) -> dict:
     node = _node()
     if not node:
         _missing("the flow needs Node 22 or later")
-    run = subprocess.run([node, str(FLOWS), "--url", url, "--flow", flow, "--width", str(width)], capture_output=True, text=True, timeout=300)
+    run = subprocess.run([node, str(FLOWS), "--url", url, "--flow", flow, "--width", str(width)], capture_output=True, encoding="utf-8", timeout=300)
     if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
         _missing("the flow needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
     if run.returncode == 3:
