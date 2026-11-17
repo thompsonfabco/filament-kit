@@ -9,7 +9,7 @@
 const SET_GROUPS = [
   ["appearance", "settings_group_appearance", "half-circle", groupAppearance, null],
   ["general", "settings_group_general", "settings", groupGeneral, "general"],
-  ["storage", "settings_group_storage", "spool", groupStorage, "general"],
+  ["storage", "settings_group_storage", "spool", (d) => storageGroup(d), "storage"],
   ["label-reader", "settings_group_label_reader", "camera", groupLabelReader, "general"],
   ["backups", "settings_group_backups", "download", (d) => backupsGroup(d), null],
   ["network", "settings_group_network", "plug", groupNetwork, "general"],
@@ -22,7 +22,7 @@ const SET_ICON = Object.fromEntries(SET_GROUPS.map((g) => [g[0], g[2]]));
 
 let setEl = null;                 // the section's region, kept while Settings stays open
 let setGeneral = null;            // the one read of settings/general
-const setSeen = { g: null, lib: null };
+const setSeen = { g: null, lib: null, st: null };
 let setHashMove = false;          // the address moved inside Settings: the groups are not read again
 let setScrollOn = false;
 const FRESH_MS = 5000;
@@ -182,7 +182,7 @@ function settingsTab() {
     return setEl;
   }
   setGeneral = null;
-  setSeen.g = setSeen.lib = null;
+  setSeen.g = setSeen.lib = setSeen.st = null;
   const link = ([id, key]) => h("li", {}, h("a", { class: "subnav__link", href: "#settings/" + id, "data-id": id, on: { click: jump } },
     SW.t(key), SW.status("needs_look", { small: true, cls: "subnav__dirty", text: SW.t("common_unsaved") })));
   const row = ([id, key]) => h("li", {}, h("a", { class: "settings__row", href: "#settings/" + id, "data-id": id },
@@ -217,6 +217,7 @@ function loadGroup(id, o = {}) {
       const data = {};
       if (def[4] === "general") data.g = setSeen.g = await readGeneral(o.fresh);
       if (def[4] === "library") data.lib = setSeen.lib = await api("library");
+      if (def[4] === "storage") data.st = setSeen.st = await loadStorage();       // setup_storage.js
       if (o.quiet && (dirtyIn(wrap) || wrap._hold || !wrap.isConnected)) { paintList(); return; }
       wrap._readAt = Date.now();
       const had = wrap.contains(document.activeElement), keep = o.quiet && !o.result ? capture(wrap) : null, el = def[3](data, o);
@@ -259,10 +260,10 @@ function listState(id) {
   if (id === "network") return S.web.public_set ? SW.t("status_set") : SW.t("settings_state_no_public");
   if (id === "backups") return S.backup && S.backup.last ? SW.t("settings_state_backups", { time: S.backup.last })
     : SW.lock.state === "locked" ? SW.t("common_unlock_to_show") : SW.t("common_none");
+  if (id === "storage") return setSeen.st ? SW.t("settings_state_storage", { count: setSeen.st.locations.length }) : "";
   if (id === "catalog") return lib ? (lib.source === "none" ? SW.t("settings_state_catalog_none") : String(lib.version)) : "";
   if (!g) return "";
   if (id === "general") return String(v.server_name || "");
-  if (id === "storage") return SW.t("settings_state_storage", { count: (v.locations || []).length });
   if (id === "label-reader") {
     if (g.ai_intake_on && g.local_intake_on) return SW.t("settings_reader_order_" + ({ auto: "auto", "local-then-cloud": "local_cloud", "cloud-then-local": "cloud_local",
       cloud: "cloud", local: "local" }[v["intake.reader"] || "auto"]));
@@ -373,27 +374,6 @@ function groupGeneral({ g }) {
   const o = { send: null };
   o.send = sender(() => el, () => o.group, own);
   wireGroup(el, "general", o);
-  return el;
-}
-
-// ----- Storage locations (03 10.4) -----
-function groupStorage({ g }) {
-  const v = g.values, text = (k) => (v[k] == null ? "" : String(v[k]));
-  const fields = [
-    plainField({ name: "locations", label: SW.t("settings_storage_locations"), value: (v.locations || []).join(", "), hint: SW.t("settings_storage_locations_hint") }),
-    requiredField({ name: "placement.pla_location", label: SW.t("settings_storage_pla"), value: text("placement.pla_location"), hint: SW.t("settings_storage_pla_hint") }),
-    requiredField({ name: "placement.box_prefix", label: SW.t("settings_storage_prefix"), value: text("placement.box_prefix"), hint: SW.t("settings_storage_prefix_hint") }),
-    requiredField({ name: "placement.box_count", type: "number", mono: true, label: SW.t("settings_storage_boxes"), value: text("placement.box_count"),
-      check: whole(0, 999, "settings_storage_boxes_error") }),
-    requiredField({ name: "placement.overflow", label: SW.t("settings_storage_overflow"), value: text("placement.overflow"), hint: SW.t("settings_storage_overflow_hint") }),
-  ];
-  const el = setGroup("storage", { desc: SW.t("settings_storage_desc"), save: SW.t("settings_storage_save"), body: fields });
-  const o = { send: null };
-  o.send = sender(() => el, () => o.group, {}, {
-    locations: (x) => x.split(",").map((s) => s.trim()).filter(Boolean),
-    "placement.box_count": (x) => Number(x),
-  });
-  wireGroup(el, "storage", o);
   return el;
 }
 

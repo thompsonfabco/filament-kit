@@ -106,3 +106,30 @@
 .pairing__print { overflow-wrap: anywhere; font-size: var(--fs-m); }
 .pairing__wait { display: flex; align-items: center; gap: var(--s2); }
 .pairing .code__text { max-height: calc(var(--s7) * 3); }
+/* Storage locations (R79; 03 10.4): the list of places in fill order, the Add and Edit form, and the panel of where a new spool goes */
+.coll--storage { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.6fr) max-content; }
+/* a tablet's table has no room for four columns of text and four buttons: the buttons go on a line of their own */
+@media (min-width: 601px) and (max-width: 1024px) {
+  .coll--storage { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.6fr); }
+  .coll--storage .coll__cell[data-col="actions"] { grid-column: 1 / -1; justify-content: flex-start; padding-top: 0; }
+  .coll--storage .coll__head .coll__cell[data-col="actions"] { display: none; }
+}
+.storage__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); }
+.storage__bar .settings__heading { margin: 0; padding: 0; border: 0; }
+.storage__head { display: flex; align-items: baseline; gap: var(--s2); min-width: 0; }
+.storage__pos { flex: none; color: var(--muted); font-size: var(--fs-s); }
+.storage__name { min-width: 0; overflow-wrap: anywhere; }
+.storage__badges, .storage__errors { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2); }
+.storage__badges:empty, .storage__errors:empty { display: none; }
+.storage__move--up .icon { transform: rotate(-90deg); }
+.storage__move--down .icon { transform: rotate(90deg); }
+.storage__move[aria-disabled="true"] { color: var(--muted); cursor: default; }
+.coll--storage .actions { flex-wrap: wrap; }
+.storage__panel { display: grid; gap: var(--s2); min-width: 0; }
+.storage__places { display: grid; gap: var(--s1); margin: 0; padding: 0; list-style: none; font-size: var(--fs-m); }
+.storage__places li { overflow-wrap: anywhere; }
+.storage__form { display: grid; gap: var(--s4); min-width: 0; }
+.storage__form .detail__head { padding: 0; }
+.storage__fill { display: grid; gap: var(--s1); min-width: 0; margin: 0; padding: 0; border: 0; }
+.storage__form .group__foot { padding-inline: 0; background: none; }
+:root[data-look="palette"] .coll--storage .coll__cell[data-col="actions"] > .actions { flex-wrap: wrap; }
