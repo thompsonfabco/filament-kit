@@ -167,10 +167,10 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `config theme [<theme>]` | Show or set the theme for new devices | Settings > Appearance > Theme for new devices |
 | `locations` (same as `locations list`) | The storage locations in fill order (9.15) | Settings > Storage locations |
 | `locations add <name> [--type bulk\|containers] [--limit N] [--count N] [--takes any\|none\|MATERIALS] [--overflow]` | Add a location | Add a location |
-| `locations edit <name> [--name NEW] [same options as add]` | Change a location; a new name also renames it on its spools | Edit |
+| `locations edit <name> [--name NEW] [same options as add] [--no-overflow]` | Change a location; a new name also renames it on its spools; `--no-overflow` switches overflow off | Edit |
 | `locations move <name> (--first \| --last \| --before <other>)` | Change the fill order | Move up, Move down |
 | `locations remove <name>` | Remove a location (asks) | Remove |
-| `locations default-overflow <name>` | Make it the default overflow | Make default overflow |
+| `locations default-overflow <name>` | Make it the default overflow (a Bulk storage location that is not overflow becomes overflow as well) | Make default overflow |
 | `locations sealed <name>` | Sealed spools go here | Sealed spools go here |
 | `label-reader status` | Label Reader engines and their health (9.9) | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
@@ -779,7 +779,8 @@ of the Hub page (`03-hub-page.md` section 10.4). Its keys:
   (a choice, fixed while spools are in the location), Spool limit (Bulk storage; empty means none) or Number of
   containers, Filled automatically with (a choice), Materials (for "These materials"; separated by commas), Use as
   overflow, and, on the row that qualifies, Make default overflow (an overflow row) and Sealed spools go here (a Bulk
-  storage row).
+  storage row). While Use as overflow is yes, the choice "Any material" is not offered for Filled automatically with
+  (an overflow place already takes any material when the other places are full).
 - `a` adds a location: it asks the same fields one after the other, and the new row goes at the end.
 - `m` moves one: `Move which location? Number:` and then `Put it at position [<now>]:`.
 - `r` removes one: it asks the Hub page's question, `Remove Rack 2? 3 spools are recorded there. They keep that
@@ -817,8 +818,8 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 | Weigh Station voice | Voice | `station.tts` | choice: Piper (natural; a 60-80 MB download) · espeak-ng (robotic; no download) |
 
 Storage locations is a list, not a set of keys, so `config set` does not change it. `config set` with `locations`,
-`placement.pla_location`, `placement.box_prefix`, `placement.box_count` or `placement.overflow` is refused, with exit
-code 2:
+`placement.pla_location`, `placement.box_prefix`, `placement.box_count`, `placement.overflow` or
+`placement.sealed_location` is refused, with exit code 2:
 
 ```
 $ sudo spoolwarden config set placement.overflow "Shelf B"
@@ -1728,14 +1729,31 @@ The places fill in this order. Change them: sudo spoolwarden locations -h
 - `--json` prints the answer of `GET api/storage` (6.8): the `locations` with `id, name, type, limit, count, used,
   free, fill, materials, overflow, default_overflow, sealed, position`, then `order_by_material` and
   `everything_else`.
+- When two or more locations are overflow and the default overflow has no limit, a `Note:` line follows the table
+  (and follows any change that causes it, such as `locations add` or `locations edit`; not with `--json`):
+
+```
+$ spoolwarden locations
+5 locations · 2 with a limit
+POS  NAME         TYPE          HOW FULL  TAKES             MARKS
+  1  Sealed       Bulk storage  4 spools  Only when chosen  Sealed spools
+  2  Rack 1       Bulk storage  18 of 20  PLA
+  3  Storage box  Containers    9 of 12   Any material
+  4  Overflow     Bulk storage  7 spools  Only when chosen  Overflow, Default overflow
+  5  Overflow 2   Bulk storage  0 spools  Only when chosen  Overflow
+
+Note: The default overflow has no limit, so the other overflow places are never used. Give it a spool limit to let
+      them fill.
+The places fill in this order. Change them: sudo spoolwarden locations -h
+```
 
 | Command | What it does |
 |---|---|
-| `locations add <name> [--type bulk\|containers] [--limit N] [--count N] [--takes any\|none\|MATERIALS] [--overflow]` | Adds a location at the end of the list. `--type` is `bulk` (a shelf, rack or drawer) or `containers` (boxes or bags, one spool each); `--limit` (1 to 9999) is for bulk, `--count` (1 to 999) for containers; `--takes` is `any`, `none` or a comma list of materials (`PLA,PETG`); `--overflow` makes it an overflow location. Without options: bulk, no limit, takes nothing. |
-| `locations edit <name> [--name NEW] [same options as add]` | Changes what is given. A new name is a rename: the spools stored there get the new name, as on the Hub page (`Renamed Rack 1 to PLA rack 1. 18 spools updated.`) |
+| `locations add <name> [--type bulk\|containers] [--limit N] [--count N] [--takes any\|none\|MATERIALS] [--overflow]` | Adds a location at the end of the list. `--type` is `bulk` (a shelf, rack or drawer) or `containers` (boxes or bags, one spool each); `--limit` (1 to 9999) is for bulk, `--count` (1 to 999) for containers; `--takes` is `any`, `none` or a comma list of materials (`PLA,PETG`); `--overflow` makes it an overflow location, which cannot take `--takes any` (a refusal below). Without options: bulk, no limit, takes nothing. |
+| `locations edit <name> [--name NEW] [same options as add] [--no-overflow]` | Changes what is given. `--no-overflow` switches overflow off (refused for the last overflow location, with the text of the Remove refusal below). A new name is a rename: the spools stored there get the new name, as on the Hub page (`Renamed Rack 1 to PLA rack 1. 18 spools updated.`); for Individual containers the prefix becomes the new name plus one space, so the containers are renamed with it |
 | `locations move <name> (--first \| --last \| --before <other>)` | Puts the location first, last, or just before another |
 | `locations remove <name>` | Asks the question of section 7, then removes it; the spools keep their location text |
-| `locations default-overflow <name>` | Makes an overflow location the default overflow |
+| `locations default-overflow <name>` | Makes an overflow location the default overflow. On a Bulk storage location that is not overflow it makes it overflow as well; on any other location it stops with `Error:` and the Fix "choose a Bulk storage location" |
 | `locations sealed <name>` | Makes a Bulk storage location the place for sealed spools |
 
 ```
@@ -1756,7 +1774,10 @@ Fix: sudo spoolwarden locations default-overflow <name>
   (`Error: Enter a whole number, 1 or more.`); materials left empty for `--takes` (`Error: Enter at least one
   material, e.g. PLA.`); a type changed while spools are in the location (`Error: Move the spools out to change the
   type.`); fewer containers than the highest number in use (`Error: Storage box 11 and Storage box 12 hold spools.
-  Move them first, or keep at least 12.`). A name that matches no location stops with exit code 2.
+  Move them first, or keep at least 12.`); `--takes any` with `--overflow`, or on an overflow location
+  (`Error: an overflow location cannot take any material automatically.` with `Fix: use --takes none or name the
+  materials`); `--no-overflow` on the last overflow location (the Remove refusal's text). A name that matches no
+  location stops with exit code 2.
 - Changing a location moves no spool. `locations` shows the result at once; `spoolwarden config` shows the same list
   as a numbered menu (8.3).
 

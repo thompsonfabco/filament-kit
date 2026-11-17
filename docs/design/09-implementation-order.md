@@ -1653,8 +1653,8 @@ all four · M · Depends on: V2.1 to V2.4, V3; the reader's next version · Besi
 ## 16. Stage 9: Storage locations
 
 Storage locations become one ordered list of general locations (03 10.4, 04 4.5 and 5.4, 05 6.3, 6.5 and 7.4, 06 8.3
-and 9.15). The five settings `locations`, `placement.pla_location`, `placement.box_prefix`, `placement.box_count` and
-`placement.overflow` (and the hidden `placement.sealed_location`) are replaced. The contract the interface steps build
+and 9.15). The six settings `locations`, `placement.pla_location`, `placement.box_prefix`, `placement.box_count`,
+`placement.overflow` and `placement.sealed_location` (the last one hidden) are replaced. The contract the interface steps build
 against is the row "A stored list of storage locations" in 03 section 15.
 
 ### SL1 Hub: the list, its file, the migration and the placement rule
@@ -1664,12 +1664,15 @@ Hub · L · Depends on: none · Beside: SL4, SL5, SL6 (against the contract)
 - **Change:** a stored list in `storage.xml` beside the Hub's config file, written atomically, with the owner and mode
   of the config file: one `<location>` per place in fill order, with `id` (`loc-<n>`, given by the Hub, never
   reused), `name`, `type` (`bulk` or `containers`), `limit` or `count`, `prefix` (the exact text before a container's
-  number; a new location gets its name plus one space), `fill` (`none`, `any` or `materials` with `<material>`
+  number; a new location gets its name plus one space, and a rename sets it to the new name plus one space), `fill` (`none`, `any` or `materials` with `<material>`
   children), `overflow`, `default-overflow` and `sealed`. A file that cannot be read is an error with a Fix line; the
   Hub never falls back silently to defaults. Validation as 03 10.4 (name 1 to 100 characters and unique with capitals
-  ignored; limit 1 to 9999; containers 1 to 999; exactly one default overflow, which is Bulk storage; exactly one
-  sealed-spools location, Bulk storage). The placement rule of 03 10.4 (six steps, the longest matching material
-  name, one spool at a time under the lock that keeps two adds from taking the same place), the how-full counts (the
+  ignored; limit 1 to 9999; containers 1 to 999; exactly one default overflow, which is Bulk storage and may have a
+  limit; fill `any` not allowed on an overflow location; exactly one sealed-spools location, Bulk storage). The
+  placement rule of 03 10.4 (six steps, the longest matching material name, overflow locations that name the material
+  among the own places, the default overflow's limit counted before the other overflow locations and ignored only
+  when all are full, one spool at a time under the lock that keeps two adds from taking the same place), the
+  how-full counts (the
   spools in Spoolman whose location is the name or one of the containers' names, counted the way today's "taken"
   set is), the lowest free container number (at least two digits), and the rename job (the spools stored there get
   the new name; a job with steps above 20 spools). The reasons: `material`, `any`, `overflow` and `sealed`; the old
@@ -1677,26 +1680,35 @@ Hub · L · Depends on: none · Beside: SL4, SL5, SL6 (against the contract)
   - **Migration**, on the first start of the new version, when `storage.xml` is absent, built from the config file in
     this order and dropping nothing:
     1. Every entry of `locations`, in its order: Bulk storage, no limit, fill `none`.
-    2. `placement.pla_location`: that entry (added at the end if missing) gets fill `materials` = PLA.
+    2. `placement.pla_location`: that entry (added at the end if missing) gets fill `materials` = PLA. When it is
+       also the overflow or the sealed place, the one location carries both roles (fill `materials` = PLA on an
+       overflow location is allowed), so PLA keeps going there with no limit.
     3. `placement.box_count` above 0: an Individual containers location with `prefix` = `placement.box_prefix`
-       verbatim, name = the prefix without trailing spaces, count = `box_count`, fill `any`. If step 1 made a bulk
-       entry of that name (the default "Storage box"), that entry becomes this location in its place; otherwise it
-       is put just before the overflow location. `box_count` = 0: no such location (other materials then go to
-       overflow, as today).
+       verbatim, count = `box_count`, fill `any`. Its name is the prefix without trailing spaces; if that is empty,
+       "Container". If that name is also `placement.pla_location`, `placement.overflow` or
+       `placement.sealed_location` (a place today's rule uses as one literal name), the bulk location keeps the name
+       and the set is named "<name> (containers)". Otherwise, if step 1 made a bulk entry of that name (the default
+       "Storage box"), that entry becomes the set in its place; otherwise the set is put just before the overflow
+       location. `box_count` = 0: no such location (other materials then go to overflow, as today).
     4. `placement.overflow`: that entry (added last if missing) becomes overflow and default overflow.
     5. `placement.sealed_location`: that entry (added first if missing) gets the sealed mark.
-    6. If one name would need two roles that exclude each other (for example overflow = the container prefix), the
-       Hub keeps the roles apart by adding a bulk location, and says so once in the journal and on the Storage
-       locations group: "Storage locations were converted. Check them."
+    6. The notice "Storage locations were converted. Check them." is shown once on the Storage locations group and
+       written once to the journal whenever a set was named "<name> (containers)" or "Container".
   - The migrated list places every spool exactly where today's rule does. Spools already stored keep their location
-    texts; container names are byte-identical. The old keys stay in the config file, untouched and no longer read,
-    so `update --rollback` finds its settings. A fresh install writes `storage.xml` with today's four default names
-    in the same roles.
+    texts; container names are byte-identical (a container's name is the set's `prefix` followed by its number). The
+    old keys stay in the config file, untouched and no longer read, so `update --rollback` finds its settings. A fresh
+    install writes `storage.xml` with today's four default names in the same roles.
+  - **One stated change of behaviour, not a loss:** when a plain `locations` entry became the container set, a request
+    that names it ("Storage box") now means the lowest free container, where it used to store the literal text. This
+    also holds for released apps, which get the name from `GET api/locations`. Spools already stored under the
+    literal name keep it.
 - **Keep:** the location texts of spools already stored; unload from a printer (the previous place, else the
   sealed-spools location); the lock; the answers the released apps read.
 - **Other interfaces:** none see this step alone.
 - **Check:** the model, validation and migration tests; today's `test_placement` cases run through a migrated list
-  and give the same places; a rename with more than 20 spools; an unreadable `storage.xml`.
+  and give the same places; and six more cases pinned: `pla_location` = `overflow`; `pla_location` = the container
+  name; `overflow` = the container name; `sealed_location` = the container name; an empty and an only-spaces
+  `box_prefix`; `box_count` 0; a rename with more than 20 spools; an unreadable `storage.xml`.
 
 ### SL2 Hub: the routes and the strings
 Hub · M · Depends on: SL1 · Beside: SL4, SL5, SL6
@@ -1715,8 +1727,10 @@ Hub · M · Depends on: SL1 · Beside: SL4, SL5, SL6
 command line · M · Depends on: SL2 · Beside: SL4, SL5, SL6 (one `cli.py` step at a time)
 - **Files today:** `cli.py`, `menu_ui.py`, the installer's storage question.
 - **Change:** 06 3.1, 3.2, 7, 8.3, 9.8, 9.15: `locations` with `add`, `edit`, `move`, `remove`,
-  `default-overflow` and `sealed`, the table and `--json`; the Storage locations screen of `config` and its summary
-  row "{n} locations · {m} with a limit"; `config set` with one of the five old keys refused with
+  `default-overflow` and `sealed` (`edit` also takes `--no-overflow`), the table and `--json`, the `Note:` line after
+  the table when the default overflow has no limit beside other overflow places, and the refusal of `--takes any`
+  with `--overflow`; the Storage locations screen of `config` and its summary
+  row "{n} locations · {m} with a limit"; `config set` with one of the six old keys refused with
   `Error: storage locations are a list now.` and `Fix: spoolwarden locations`; the installer's "Use the default
   storage locations?" keeps its text and, on "n", opens the new list.
 - **Keep:** the other `config` items and keys.
@@ -1727,7 +1741,9 @@ command line · M · Depends on: SL2 · Beside: SL4, SL5, SL6 (one `cli.py` step
 Hub page · M · Depends on: the contract in 03 section 15; real data from SL2 · Beside: SL1
 - **Files today:** `setup_static/setup_settings.js` (the Storage locations group).
 - **Change:** 03 10.4 and 10.11 in all four themes: the Locations collection with its row actions, the detail region
-  for Add and Edit, the panel "Where a new spool goes", the group's Save, the Remove dialog and the refusals.
+  for Add and Edit (with "Any material" disabled on an overflow location), the panel "Where a new spool goes", the
+  warn notice under the list when the default overflow has no limit beside other overflow places, the group's Save,
+  the Remove dialog and the refusals.
 - **Keep:** the group's place, order and "Save storage locations".
 - **Other interfaces:** SL3, SL5, SL6.
 - **Check:** AUT-5 on the group with one, several and over-limit locations; the unsaved-changes guard.
@@ -1735,7 +1751,8 @@ Hub page · M · Depends on: the contract in 03 section 15; real data from SL2 �
 ### SL5 Web app: the Location select and Move
 web app · S · Depends on: the contract in 03 section 15; merges after SL2 · Beside: SL1, SL4
 - **Files today:** `web/static/app.js` (Add spools, the spool sheet).
-- **Change:** 04 1.2, 4.5, 5.4 and 14: the Location select with "Automatic (<where and why>)" first, then every
+- **Change:** 04 1.2, 4.5, 5.4 and 14: the Location select with "Automatic" first and, after the preview, the
+  supporting line "<place> (<why>)" under it (no rule text from the Hub, so no `data-auto`), then every
   location in fill order with how full it is, one entry per Individual containers location, "Full"; the same
   entries in Move; the reasons in the preview and result.
 - **Keep:** editing the list stays on the Hub page and the command line.
@@ -1746,7 +1763,7 @@ web app · S · Depends on: the contract in 03 section 15; merges after SL2 · B
 app · S · Depends on: the contract in 03 section 15; merges after SL2 · Beside: SL1, SL4
 - **Files today:** the Add spools and spool screens, `strings.xml`.
 - **Change:** 05 6.3, 6.5, 7.4 and 16: the Location field with "Automatic" first and, once the preview ran, the
-  supporting line "<where and why>", then the locations with how full; preview rows with the reason; "Move to" rows
+  supporting line "<place> (<why>)", then the locations with how full; preview rows with the reason; "Move to" rows
   with how full as supporting text.
 - **Keep:** the empty-list sentence, which points to the Hub page.
 - **Other interfaces:** SL3, SL4, SL5.

@@ -1292,17 +1292,23 @@ fill: the first place with room takes the next spool.
 - A location has a **name** (one line, 1 to 100 characters, not the same as another location's name, capitals
   ignored) and a **type**. "Bulk storage" is a shelf, rack or drawer that holds many spools under one name; it may
   have a spool limit (1 to 9999) or none. "Individual containers" are boxes or bags that hold one spool each; one
-  location stands for the whole numbered set (1 to 999 containers). A container is named with the location's name,
-  a space and its number with at least two digits: "Storage box 01" to "Storage box 12", then "Storage box 100". The
-  Hub gives the number: a spool gets the lowest free one. A container is taken while a spool's location is exactly
-  its name.
+  location stands for the whole numbered set (1 to 999 containers). A container is named with the set's prefix, the
+  text before the number, and its number with at least two digits: "Storage box 01" to "Storage box 12", then
+  "Storage box 100". The prefix of a location added here is its name plus one space, and a rename sets it to the new
+  name plus one space (the spools in its containers are renamed with it). A set carried over from the old settings
+  keeps the old box prefix as it was, also when it is empty or only spaces. The Hub gives the number: a spool gets
+  the lowest free one. A container is taken while a spool's location is exactly its name.
 - **Filled automatically with** says what the place takes when nobody chooses: "Nothing, only when you choose it",
   "Any material", or "These materials" with a list of material names. A material name also takes its variants: the
   spool's material, capitals ignored, starts with the name ("PLA" takes PLA+ and PLA-CF). When names of different
-  length match a spool, only the locations with the longest matching name count.
-- **Overflow** places take spools when their own places are full. Exactly one overflow location is the default
-  overflow; there is always one, so the last overflow location cannot be removed or switched off. The default
-  overflow is Bulk storage and its limit is not applied.
+  length match a spool, only the locations with the longest matching name count. An overflow location takes "Nothing"
+  (overflow only) or "These materials" (it is then also an own place for those materials); "Any material" is not
+  allowed on it.
+- **Overflow** places take spools when their own places are full, and then they take every material, whatever
+  "Filled automatically with" says. Exactly one overflow location is the default overflow; there is always one, so
+  the last overflow location cannot be removed or switched off. The default overflow is Bulk storage and may have a
+  spool limit like any Bulk storage location. It fills first, up to its limit; then the other overflow locations fill
+  in list order; only when all of them are full does the default overflow take more, over its limit.
 - Exactly one location is where **sealed spools** go. It is Bulk storage and its limit is not applied to them.
 - "How full" is the number of spools in Spoolman whose location is the location's name (bulk) or one of its
   containers' names.
@@ -1313,12 +1319,13 @@ fill: the first place with room takes the next spool.
 
 1. A location the person gave is kept, whatever limits or materials say.
 2. A sealed spool goes to the sealed-spools location.
-3. The non-overflow locations that take the spool's material by name (the longest matching name). If there are any,
-   only these are tried, in list order; the first one under its limit (or with a free container) takes the spool.
+3. Own places: the locations that take the spool's material by name (the longest matching name), overflow
+   locations included. If there are any, only these are tried, in list order; the first one under its limit (or with
+   a free container) takes the spool. A location with no limit always has room.
 4. If no location names the material: the non-overflow "Any material" locations, in list order, the first with room.
 5. If 3 or 4 found no room, or there was no candidate: the overflow locations, the default overflow first, then the
-   others in list order, the first under its limit. When all are at their limit, the default overflow takes the
-   spool.
+   others in list order; the first one under its limit (or with a free container) takes the spool. When every
+   overflow location is at its limit, the default overflow takes the spool over its limit.
 6. Several spools added together are placed one by one; a count may be split over locations, and the result lists
    each part.
 
@@ -1340,6 +1347,9 @@ Nobody is asked: the rule always answers, and the answer says why. Unloading a s
   sealed-spools location always exist, and they may be one location.
 - Add and Edit open the theme's detail region (as a printer does, 5.6). Cancel (default) closes it; with typed
   values it asks "Leave without saving?" (section 2.6).
+- **Notice under the list** (warn): shown whenever two or more locations are overflow and the default overflow has no
+  limit: "The default overflow has no limit, so the other overflow places are never used. Give it a spool limit to let
+  them fill."
 
 | Field | Type | Key / endpoint | Notes |
 |---|---|---|---|
@@ -1347,9 +1357,9 @@ Nobody is asked: the rule always answers, and the answer says why. Unloading a s
 | Type | Segmented choice "Bulk storage" / "Individual containers"; hints "A shelf, rack or drawer that holds many spools." and "Boxes or bags that hold one spool each. Spoolwarden numbers them." | `type` | Fixed while spools are in the location: "Move the spools out to change the type." |
 | Spool limit | Number, `--mono`; Bulk storage only; hint "Leave empty for no limit." | `limit` | Whole number 1 to 9999. Field error "Enter a whole number, 1 or more." |
 | Number of containers | Number, `--mono`; Individual containers only | `count` | Whole number 1 to 999; same field error. Fewer than the highest number in use is refused at the field: "Storage box 11 and Storage box 12 hold spools. Move them first, or keep at least 12." |
-| Filled automatically with | Three radios: "Nothing, only when you choose it", "Any material", "These materials" | `fill` | |
+| Filled automatically with | Three radios: "Nothing, only when you choose it", "Any material", "These materials" | `fill` | "Any material" is disabled while "Use as overflow" is ticked, with the hint "An overflow place already takes any material when the other places are full." |
 | Materials | Text; shown for "These materials"; hint "Separate them with commas, e.g. PLA, PETG. A material also takes its variants: PLA takes PLA+ and PLA-CF." | `materials` (a list) | Field error "Enter at least one material, e.g. PLA." |
-| Use as overflow | Checkbox; hint "Takes spools when their own places are full." | `overflow` | The last overflow location cannot be switched off |
+| Use as overflow | Checkbox; hint "Takes spools when their own places are full." | `overflow` | The last overflow location cannot be switched off. While ticked, the "Any material" radio above is disabled |
 
 Buttons of the detail region: **Add location** (a new row) or **Save location** (an edited row), and Cancel. They
 change the unsaved list only.
