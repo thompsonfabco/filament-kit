@@ -3330,7 +3330,6 @@
     <string name="cli_done_tag_reader_revoke">Revoked the token %1$s.</string>
     <!-- 1=engine 2=number -->
     <string name="cli_engine_only">Engine: %1$s. Switch on the other one in Features (%2$s) to use both.</string>
-    <string name="cli_err_box_count">the number of storage boxes is a whole number, 0 or more.</string>
     <!-- 1=limit -->
     <string name="cli_err_catalog_too_large">entry not added: larger than %1$s KiB.</string>
     <string name="cli_err_config_secret">the Anthropic API key is a secret.</string>

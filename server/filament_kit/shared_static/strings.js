@@ -2408,7 +2408,6 @@ window.SW_TEXT = Object.freeze({
   "cli_done_setup_code_revoke_trusted_each": { "one": "{count} trusted computer revoked. It needs the setup code again.", "other": "{count} trusted computers revoked. Each needs the setup code again." },
   "cli_done_tag_reader_revoke": "Revoked the token {name}.",
   "cli_engine_only": "Engine: {engine}. Switch on the other one in Features ({number}) to use both.",
-  "cli_err_box_count": "the number of storage boxes is a whole number, 0 or more.",
   "cli_err_catalog_too_large": "entry not added: larger than {limit} KiB.",
   "cli_err_config_secret": "the Anthropic API key is a secret.",
   "cli_err_device_built_in": "{name} is built in: it is this Hub's own pairing.",

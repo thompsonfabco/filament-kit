@@ -126,11 +126,6 @@ def _menu(monkeypatch, script, *flags):
     return cli.main(["config", "--numbered", *flags])
 
 
-def test_config_menu_sets_box_count(monkeypatch):
-    assert _menu(monkeypatch, "3\n4\n12\nq\ns\nq\n") == 0      # 3 Storage locations, 4 boxes, back, save, leave
-    assert config.load()["placement"]["box_count"] == 12
-
-
 def test_config_menu_server_name_and_model(monkeypatch):
     # 2 General: 1 display name; 4 Label Reader (Cloud only: 1 engine note, 2 key, 3 model, 4 reads)
     assert _menu(monkeypatch, "2\n1\nmy-kit\nq\n4\n3\nclaude-x\n4\n30\nq\ns\nq\n") == 0
@@ -138,23 +133,6 @@ def test_config_menu_server_name_and_model(monkeypatch):
     assert cfg["server_name"] == "my-kit"
     assert cfg["model"] == "claude-x"
     assert cfg["reads_per_day"] == 30
-
-
-def test_config_menu_storage_text_fields(monkeypatch):
-    assert _menu(monkeypatch, "3\n1\nA, B ,C\n2\nShelf\n3\nBox \n5\nSpill\nq\ns\nq\n") == 0
-    cfg = config.load()
-    assert cfg["locations"] == ["A", "B", "C"]
-    assert cfg["placement"]["pla_location"] == "Shelf"
-    assert cfg["placement"]["box_prefix"] == "Box "
-    assert cfg["placement"]["overflow"] == "Spill"
-
-
-def test_config_invalid_box_count_is_rejected(monkeypatch, capsys):
-    assert _menu(monkeypatch, "3\n4\nabc\n\nq\nq\n") == 0           # the error, then an empty answer: Unchanged.
-    assert config.load()["placement"]["box_count"] == 0
-    cap = capsys.readouterr()
-    assert "Error: the number of storage boxes is a whole number, 0 or more." in cap.err
-    assert "Unchanged." in cap.out
 
 
 def test_key_never_printed(monkeypatch, capsys, secret_terminal):

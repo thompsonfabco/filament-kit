@@ -73,17 +73,17 @@ def test_config_show_json_has_the_values_by_key_and_the_secrets_as_set(capsys):
     modules_on("spoolman", "server", "ai_intake")
     rc, out, _ = run(capsys, ["config", "show", "--json"])
     got = json.loads(out)
-    assert rc == 0 and got["values"]["placement.pla_location"] == config.load()["placement"]["pla_location"]
+    assert rc == 0 and "placement.pla_location" not in got["values"] and "locations" not in got["values"]
     assert got["secrets"]["anthropic_key"] == {"set": False}
     assert [g["group"] for g in got["groups"]][:3] == ["Appearance", "General", "Storage locations"]
 
 
 def test_config_set_saves_one_setting_checked_as_the_menu_checks_it(capsys):
-    rc, out, err = run(capsys, ["config", "set", "placement.pla_location", "Shelf B"])
-    assert (rc, out, err) == (0, "Saved: PLA rack is Shelf B.\n", "")
-    assert config.load()["placement"]["pla_location"] == "Shelf B"
-    rc, out, _ = run(capsys, ["config", "set", "placement.pla_location", "Shelf B"])
-    assert rc == 0 and out.startswith("Unchanged: PLA rack is Shelf B.")
+    rc, out, err = run(capsys, ["config", "set", "server_name", "Shelf B"])
+    assert (rc, out, err) == (0, "Saved: Display name is Shelf B.\n", "")
+    assert config.load()["server_name"] == "Shelf B"
+    rc, out, _ = run(capsys, ["config", "set", "server_name", "Shelf B"])
+    assert rc == 0 and out.startswith("Unchanged: Display name is Shelf B.")
 
 
 def test_config_theme_shows_the_theme_for_new_devices_and_needs_no_rights(capsys, monkeypatch):
@@ -134,15 +134,15 @@ def test_config_set_takes_the_key_of_the_design_for_the_backup_days(capsys):
 
 def test_config_set_a_wrong_value_changes_nothing_and_exits_2(capsys):
     before = config.load()
-    rc, out, err = run(capsys, ["config", "set", "placement.box_count", "two"])
-    assert rc == 2 and out == "" and err.startswith("Error: the number of storage boxes is a whole number, 0 or more.")
+    rc, out, err = run(capsys, ["config", "set", "intake.history_keep", "two"])
+    assert rc == 2 and out == "" and err.startswith("Error: the records kept is a whole number, 0 to 500.")
     assert config.load() == before
 
 
 def test_config_set_an_unknown_key_exits_2_and_lists_the_keys(capsys):
     rc, out, err = run(capsys, ["config", "set", "nosuch", "x"])
     assert rc == 2 and out == "" and '"nosuch"' in err
-    assert "placement.pla_location" in words(err) and "backups.keep_days" in words(err)
+    assert "server_name" in words(err) and "backups.keep_days" in words(err) and "placement.pla_location" not in words(err)
 
 
 def test_config_set_refuses_a_secret_and_names_where_to_set_it(capsys):
@@ -752,9 +752,9 @@ def _heard(lines, what):
 
 
 def test_config_set_writes_the_hubs_audit_line_and_an_unchanged_value_none(capsys, audit):
-    run(capsys, ["config", "set", "placement.pla_location", "Shelf B"])
-    assert len(_heard(audit(), "setting placement.pla_location changed")) == 1
-    run(capsys, ["config", "set", "placement.pla_location", "Shelf B"])
+    run(capsys, ["config", "set", "server_name", "Shelf B"])
+    assert len(_heard(audit(), "setting server_name changed")) == 1
+    run(capsys, ["config", "set", "server_name", "Shelf B"])
     assert len(audit()) == 1
 
 

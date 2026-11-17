@@ -212,6 +212,17 @@ def fake_reader():
 
 
 @pytest.fixture(autouse=True)
+def _no_real_spoolman_for_the_storage_screens(monkeypatch):
+    """`config` and `config show` ask Spoolman how full the storage locations are; a test never reaches a real one."""
+    from filament_kit import locations_cli
+
+    class NoSpools:
+        def get(self, path):
+            return []
+    monkeypatch.setattr(locations_cli, "default_spoolman", lambda: NoSpools())
+
+
+@pytest.fixture(autouse=True)
 def _one_job_per_test(monkeypatch):
     """Each test is its own job for steps.py: no step owner in the environment and no Steps made yet (a real job is
     one process; the tests run many commands in one)."""
