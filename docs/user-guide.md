@@ -496,8 +496,9 @@ says so under the list.
 The location field of the add screens and **Move** on a spool offer the same list. **Automatic** (an empty location)
 lets the Hub choose as above; the preview shows where each spool would go and why, for example `Rack 1 (the first
 place for PLA with room)`. Choosing a place by hand works even when it is full: the limit only steers the automatic
-choice. The name of an Individual containers location means its lowest free container; you can also choose one
-container by its own name.
+choice. The name of an Individual containers location means its lowest free container; the lists offer the location
+as one entry, not each container. To put a spool in one particular container, type that container's name (for example
+`Dry box 04`) in the app's location field; the web app's list has no entry for a single container.
 
 ### What an upgrade does to the old settings
 
@@ -531,7 +532,7 @@ and follows your edits. Nothing is saved until you tap **Save storage locations*
 trusted computer.
 
 The page enforces some rules. You cannot change a location's type while spools are stored in it. You cannot lower the
-number of containers below the highest one that holds a spool. A name cannot be the name of one of a set's containers.
+number of containers below the highest one that holds a spool. A new name cannot be the name of one of a set's containers (a clash that an upgrade carried over may stay).
 Individual containers cannot be overflow or take the sealed spools, and an overflow location cannot take **Any
 material** (it already takes any material when the other places are full). **Remove** asks first: the spools recorded
 there keep that location until you move them, and the place is no longer offered for new spools. You cannot remove the
