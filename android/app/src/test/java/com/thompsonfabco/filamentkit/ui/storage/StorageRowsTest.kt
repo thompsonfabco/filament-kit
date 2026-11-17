@@ -89,6 +89,8 @@ class StorageRowsTest {
         assertEquals(AddText.of(R.string.storage_reason_material, "PLA"), reasonOf("material", "PLA"))
         assertEquals(AddText.of(R.string.storage_reason_any), reasonOf("any", null))
         assertEquals(AddText.of(R.string.storage_reason_overflow, "PETG"), reasonOf("overflow", "PETG"))
+        assertEquals(AddText.of(R.string.storage_reason_overflow_none, "PETG"), reasonOf("overflow_none", "PETG"))
+        assertNull(reasonOf("overflow_none", null))
         assertEquals(AddText.of(R.string.storage_reason_sealed), reasonOf("sealed", null))
         assertNull(reasonOf("material", null))
         assertNull(reasonOf("pla", "PLA")) // an old code is no reason

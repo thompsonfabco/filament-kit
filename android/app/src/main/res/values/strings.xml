@@ -3127,6 +3127,8 @@
     <string name="storage_reason_material">the first place for %1$s with room</string>
     <!-- 1=material -->
     <string name="storage_reason_overflow">every place for %1$s is full</string>
+    <!-- 1=material -->
+    <string name="storage_reason_overflow_none">no place takes %1$s automatically</string>
     <string name="storage_reason_sealed">where sealed spools go</string>
     <!-- 1=place 2=reason -->
     <string name="storage_where_why">%1$s (%2$s)</string>

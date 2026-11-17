@@ -61,6 +61,7 @@ fun reasonOf(code: String?, material: String?): AddText? = when (code) {
     StorageWire.REASON_MATERIAL -> material?.let { AddText.of(R.string.storage_reason_material, it) }
     StorageWire.REASON_ANY -> AddText.of(R.string.storage_reason_any)
     StorageWire.REASON_OVERFLOW -> material?.let { AddText.of(R.string.storage_reason_overflow, it) }
+    StorageWire.REASON_OVERFLOW_NONE -> material?.let { AddText.of(R.string.storage_reason_overflow_none, it) }
     StorageWire.REASON_SEALED -> AddText.of(R.string.storage_reason_sealed)
     else -> null
 }

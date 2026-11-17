@@ -71,6 +71,7 @@ object StorageWire {
     const val REASON_MATERIAL = "material"
     const val REASON_ANY = "any"
     const val REASON_OVERFLOW = "overflow"
+    const val REASON_OVERFLOW_NONE = "overflow_none"
     const val REASON_SEALED = "sealed"
 
     /** The answer of `GET api/storage`, or null when it has no `locations` list (not a storage answer). Lenient. */

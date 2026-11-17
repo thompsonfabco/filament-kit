@@ -2267,6 +2267,7 @@ window.SW_TEXT = Object.freeze({
   "storage_reason_any": "the first place with room",
   "storage_reason_material": "the first place for {material} with room",
   "storage_reason_overflow": "every place for {material} is full",
+  "storage_reason_overflow_none": "no place takes {material} automatically",
   "storage_reason_sealed": "where sealed spools go",
   "storage_where_why": "{place} ({reason})",
   "spool_move": "Move",
