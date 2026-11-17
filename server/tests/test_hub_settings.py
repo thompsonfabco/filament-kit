@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import os
 
-from filament_kit import config, setup_helper
+from filament_kit import config, setup_helper, storage
 
 from test_hub_page_audit import _run, hub_app, hub_change  # noqa: F401
 from test_hub_presets_ui import _drive, T, hub  # noqa: F401
@@ -54,17 +54,17 @@ out.groups = [...document.querySelectorAll(".settings__group")].map((g) => g.dat
 out.nav = [...document.querySelectorAll(".subnav__link")].map((a) => a.childNodes[0].textContent.trim());
 out.titles = [...document.querySelectorAll(".group__head .group__title")].map(text);
 out.saves = [...document.querySelectorAll(".settings__group form .group__foot [type=submit]")].map(text);
-// Storage locations: two fields changed, one Save
+// Storage locations: the list is edited as a whole (R79); a move is a change, and one Save sends the list (setup_storage.js)
 const form = $("#set-storage");
-type(form, "locations", "Shelf A, Shelf B");
-type(form, "placement.box_count", "3");
+await until(() => $('[aria-label^="Move Rack 1 "]'), "the locations");
+$('[aria-label^="Move Rack 1 "]:not([aria-disabled="true"])').click();
 await until(() => form.dataset.state === "dirty", "the dirty state");
 const link = $('.subnav__link[data-id="storage"] .subnav__dirty');
 out.dirty = { link: shown(link) && text(link), title: shown($("#set-storage .settings__dirty")), foot: text($("#set-storage .group__dirty")), other: shown($('.subnav__link[data-id="general"] .subnav__dirty')) };
 $("#set-storage [type=submit]").click();
 await until(() => $("#set-storage") !== form && text($("#set-storage .group__foot .result__text")), "the saved result");
 out.saved = text($("#set-storage .group__foot .result__text"));
-out.after = { dirty: $("#set-storage").dataset.state || null, link: shown($('.subnav__link[data-id="storage"] .subnav__dirty')), locations: $("#set-storage").elements.locations.value };
+out.after = { dirty: $("#set-storage").dataset.state || null, link: shown($('.subnav__link[data-id="storage"] .subnav__dirty')) };
 // Enter with nothing changed
 $("#set-storage [type=submit]").click();
 out.nothing = await until(() => { const r = text($("#set-storage .group__foot .result__text")); return r && r !== out.saved ? r : null; }, "Nothing changed");
@@ -93,11 +93,10 @@ return out;
     assert page["groups"] == GROUPS and page["nav"] == NAMES and page["titles"] == NAMES
     assert page["saves"][:2] == [T("settings_general_save"), T("settings_storage_save")] and T("settings_reader_save") in page["saves"]
     assert page["dirty"] == {"link": T("common_unsaved"), "title": True, "foot": T("common_unsaved_changes"), "other": False}
-    # one request for the two keys, in the page's order; nothing went one key at a time
-    assert seen == [("group", {"locations": ["Shelf A", "Shelf B"], "placement.box_count": 3})], seen
-    assert config.load()["locations"] == ["Shelf A", "Shelf B"] and config.load()["placement"]["box_count"] == 3
-    assert page["saved"] == T("form_saved_fields", fields=f"{T('settings_storage_locations')}, {T('settings_storage_boxes')}")
-    assert page["after"] == {"dirty": None, "link": False, "locations": "Shelf A, Shelf B"}
+    # the storage list does not go through settings/general any more: it is saved whole by setup_storage.js (a stub until SL2)
+    assert seen == [], seen
+    assert page["saved"] == T("settings_storage_saved")
+    assert page["after"] == {"dirty": None, "link": False}
     assert page["nothing"] == T("common_nothing_changed")
     assert page["leave"] == {"title": T("common_leave_title"), "stayed": True,
                              "body": T("form_leave_body", changes=T("form_leave_first", count=1, group=T("settings_group_general")))}
@@ -111,22 +110,20 @@ def test_a_refused_key_shows_its_reason_at_its_own_field_and_changes_nothing(hub
     seen: list = []
     real = setup_helper.OPS["general_group"]
     monkeypatch.setitem(setup_helper.OPS, "general_group", lambda req: (seen.append(dict(req["values"])), real(req))[1])
-    before = config.load()["placement"]
+    before = config.load()["server_name"]
     page = _drive(hub, tmp_path, PRELUDE + """
 await loaded();
 await unlock();
-const form = $("#set-storage");
-type(form, "placement.overflow", "x".repeat(150));
-type(form, "placement.pla_location", "Rack 9");
-$("#set-storage [type=submit]").click();
-const field = form.elements["placement.overflow"].closest(".field");
-await until(() => !field.hidden && text($(".field__error", field)) && text($("#set-storage .group__foot .result__text")), "the refusal");
-return { error: text($(".field__error", field)), result: text($("#set-storage .group__foot .result__text")), state: form.dataset.state,
-  other: text($(".field__error", form.elements["placement.pla_location"].closest(".field"))) || "" };
+const form = $("#set-general");
+type(form, "server_name", "x".repeat(150));
+$("#set-general [type=submit]").click();
+const field = form.elements["server_name"].closest(".field");
+await until(() => !field.hidden && text($(".field__error", field)) && text($("#set-general .group__foot .result__text")), "the refusal");
+return { error: text($(".field__error", field)), result: text($("#set-general .group__foot .result__text")), state: form.dataset.state };
 """)
-    assert len(seen) == 1 and set(seen[0]) == {"placement.pla_location", "placement.overflow"}
-    assert config.load()["placement"] == before                       # all or none
-    assert "at most 100 characters" in page["error"] and page["state"] == "dirty" and page["other"] == ""
+    assert len(seen) == 1 and set(seen[0]) == {"server_name"}
+    assert config.load()["server_name"] == before                       # nothing was saved
+    assert page["error"] and page["state"] == "dirty"
     assert page["result"] and page["result"] != T("common_nothing_changed")
 
 
@@ -178,7 +175,7 @@ out.back = { groups: shown($(".settings__main")) };
 return out;
 """, width=320)
     assert page["list"] == {"shown": True, "rows": NAMES, "groups": False, "nav": False}
-    assert page["states"]["storage"] == T("settings_state_storage", count=len(config.load()["locations"]))
+    assert page["states"]["storage"] == T("settings_state_storage", count=len(storage.peek().locations))
     assert page["states"]["general"] == "Workshop hub"
     assert page["group"] == {"hash": "#settings/storage", "list": False, "back": T("nav_settings"), "visible": ["storage"]}
     assert page["back"] == {"groups": False}
@@ -244,17 +241,16 @@ def test_a_second_submit_during_a_save_changes_nothing_and_the_save_reports_what
     page = _drive(hub, tmp_path, PRELUDE + """
 await loaded();
 await unlock();
-const form = $("#set-storage");
-type(form, "locations", "Shelf C");
-type(form, "placement.box_count", "4");
+const form = $("#set-general");
+type(form, "server_name", "Slow hub");
 form.requestSubmit();
 await sleep(500);
 form.requestSubmit();                                   // while the first is still on its way
-await until(() => $("#set-storage") !== form && text($("#set-storage .group__foot .result__text")), "the saved result");
-return { result: text($("#set-storage .group__foot .result__text")), state: $("#set-storage").dataset.state || null };
+await until(() => $("#set-general") !== form && text($("#set-general .group__foot .result__text")), "the saved result");
+return { result: text($("#set-general .group__foot .result__text")), state: $("#set-general").dataset.state || null };
 """)
     assert len(seen) == 1, seen
-    assert page["result"] == T("form_saved_fields", fields=f"{T('settings_storage_locations')}, {T('settings_storage_boxes')}") and page["state"] is None
+    assert page["result"] == T("form_saved_fields", fields=T("settings_general_name")) and page["state"] is None
 
 
 def test_label_reader_sends_the_key_after_records_kept_and_a_secret_does_not_stay_once_accepted(hub, monkeypatch, tmp_path):

@@ -299,7 +299,7 @@ class SetupPage:
         self.static = {n: (STATIC / n).read_bytes()
                        for n in ("setup.js", "setup_tabs.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
                                  "setup_settings.js", "setup_devices.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
-                                 "setup_backup.js",
+                                 "setup_backup.js", "setup_storage.js",
                                  "setup_logs.js", "setup_intake.js", "setup_flash.js",
                                  # esptool-js 0.7.0 as published (THIRD-PARTY.md): only the Flash a device tab
                                  # loads it, when the owner writes a board from the browser
@@ -342,6 +342,7 @@ class SetupPage:
                  Route("/setup/setup_trust.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_presets.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_backup.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_storage.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_logs.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_intake.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_flash.js", self.asset, methods=["GET"]),
@@ -523,7 +524,7 @@ class SetupPage:
             + "".join(f"<link rel=stylesheet href='/setup/{n}'>" for n in CSS_SECTIONS) +
             f"<body>{shared_files.sprite_inline(self.shared)}<div id=app></div><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_overview.js'></script><script src='/setup/setup_features.js'></script><script src='/setup/setup_updates.js'></script><script src='/setup/setup_settings.js'></script><script src='/setup/setup_devices.js'></script><script src='/setup/setup_printers.js'></script>"
-            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",
+            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_storage.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",
             headers=HEADERS)
 
     async def asset(self, request: Request):
