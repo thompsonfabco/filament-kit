@@ -258,6 +258,36 @@ def test_restore_brings_every_file_and_the_database_back(kit, capsys):
     assert len(kept) == 1 and backup.verify(kept[0])
 
 
+def test_the_backup_holds_storage_xml_and_a_restore_puts_it_back(kit):
+    from filament_kit import storage
+    storage.migrate_at_start()
+    assert (kit / "state" / "storage.xml").exists() and not (kit / "etc" / "storage.xml").exists()
+    saved = (kit / "state" / "storage.xml").read_bytes()
+    z = backup.create()
+    with zipfile.ZipFile(z) as zf:
+        assert "files/var/lib/filament-kit/storage.xml" in zf.namelist()
+    _wipe_and_change(kit)
+    assert backup.restore(z, yes=True, run=Runner()) == 0
+    assert (kit / "state" / "storage.xml").read_bytes() == saved
+
+
+def test_a_restore_of_a_backup_without_storage_xml_migrates_from_the_restored_config_at_the_first_start(kit):
+    from filament_kit import storage
+    cfg = config.load()
+    cfg["placement"] = {"box_count": 5}
+    config.save(cfg)
+    z = backup.create()                                    # an older kit's backup: no storage.xml in it
+    with zipfile.ZipFile(z) as zf:
+        assert "files/var/lib/filament-kit/storage.xml" not in zf.namelist()
+    storage.migrate_at_start()                             # a later state has the file ...
+    assert (kit / "state" / "storage.xml").exists()
+    assert backup.restore(z, yes=True, run=Runner()) == 0
+    assert not (kit / "state" / "storage.xml").exists()    # ... the restore puts back what the backup had
+    storage.migrate_at_start()
+    assert [x.count for x in storage.current().locations if x.type == "containers"] == [5]
+    assert (kit / "state" / "storage.xml").exists()
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
 def test_restore_puts_the_modes_back(kit):
     os.chmod(kit / "etc" / "key.pem", 0o640)

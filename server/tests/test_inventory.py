@@ -73,14 +73,14 @@ def test_the_result_lines_read_as_sentences(sm, spoolman_fake_store):
 def test_a_location_the_rules_chose_says_why(sm, spoolman_fake_store):
     """Finding 7, its second half: the location was left blank and the line said Sealed stock with no sign why."""
     r = inventory.add_spools(sm, [item(sealed=False, material="PETG", name="petg black", count=2)], RULES, dry=True)
-    assert "at Storage box 01 (the first free storage box, since no location was given), opened" in r.lines[-2]
-    assert "at Storage box 02 (the first free storage box, since no location was given)" in r.lines[-1]
+    assert "at Storage box 01 (the first place with room, since no location was given), opened" in r.lines[-2]
+    assert "at Storage box 02 (the first place with room, since no location was given)" in r.lines[-1]
     r = inventory.add_spools(sm, [item(sealed=False)], RULES, dry=True)
-    assert "at Rack 1 (where opened PLA goes, since no location was given)" in r.lines[-1]
-    # the default install has no storage boxes (box_count 0): the line must not say they are all taken
+    assert "at Rack 1 (the first place for PLA with room, since no location was given)" in r.lines[-1]
+    # the default install has no storage boxes (box_count 0): opened PETG has no place of its own, so overflow
     r = inventory.add_spools(sm, [item(sealed=False, material="PETG", name="petg red")], {**RULES, "box_count": 0},
                              dry=True)
-    assert "at Overflow (no storage boxes are set up, so opened spools go here, since no location was given)"         in r.lines[-1] and "taken" not in r.lines[-1]
+    assert "at Overflow (no place takes PETG automatically, since no location was given)" in r.lines[-1]
     r = inventory.add_spools(sm, [item(location="Shelf")], RULES, dry=True)
     assert "at Shelf, " in r.lines[-1] and "no location was given" not in r.lines[-1]
 
