@@ -205,6 +205,42 @@ class AddViewModelTest {
         assertFalse("location" in sentItem())
     }
 
+    @Test fun theLocationFieldGetsTheStorageAnswerAndTheNamesFromAnOlderHub() = runTest(dispatcher) {
+        api.storageAnswer = com.thompsonfabco.filamentkit.net.StorageWire.parse(
+            Json.parseToJsonElement("""{"locations":[{"name":"Rack 1","type":"bulk","limit":20,"used":18}]}"""),
+        )
+        val vm = vm()
+        advanceUntilIdle()
+        assertEquals(listOf("Rack 1"), vm.state.value.locations)
+        assertEquals(18, vm.state.value.storage.locations.single().used)
+        api.storageAnswer = null
+        val older = vm()
+        advanceUntilIdle()
+        assertEquals(listOf("Shelf A", "Shelf B"), older.state.value.locations)
+        assertFalse(older.state.value.storage.detailed)
+    }
+
+    @Test fun thePreviewKeepsWhereAutomaticPutTheSpoolAndWhy() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item())
+        api.addResults += AddResult(
+            emptyList(), emptyList(), true,
+            items = Json.parseToJsonElement(
+                """[{"index":0,"placements":[{"location":"Rack 1","spools":1,"placed_by":"material","material":"PLA"}]}]""",
+            ).jsonArray,
+        )
+        vm.preview()
+        advanceUntilIdle()
+        assertEquals(
+            listOf(com.thompsonfabco.filamentkit.ui.storage.Place("Rack 1", AddText.of(com.thompsonfabco.filamentkit.R.string.storage_reason_material, "PLA"))),
+            vm.state.value.autoPlaces[0],
+        )
+        vm.backToCheck()
+        assertEquals(1, vm.state.value.autoPlaces.size) // survives Back to the check
+        vm.setLocation(0, "Shelf A")
+        assertTrue(vm.state.value.autoPlaces.isEmpty()) // an edit makes it stale
+    }
+
     @Test fun aSaveAfterAReadNamesTheRead() = runTest(dispatcher) {
         val vm = vm()
         readOne(vm, item())
@@ -982,6 +1018,11 @@ internal class FakeIntakeApi : IntakeApi {
     }
 
     override suspend fun locations(): List<String> = listOf("Shelf A", "Shelf B")
+
+    /** What `api/storage` answers; null: an older Hub, the names alone. */
+    var storageAnswer: com.thompsonfabco.filamentkit.net.StorageAnswer? = null
+
+    override suspend fun storage() = storageAnswer ?: com.thompsonfabco.filamentkit.net.StorageAnswer.ofNames(locations())
 
     val proposeCalls = mutableListOf<Triple<String, String, String>>()
     val proposals = ArrayDeque<Proposal>()

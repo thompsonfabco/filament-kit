@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.ui.components
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -42,10 +43,18 @@ internal fun SwMenuItem(
     @DrawableRes icon: Int? = null,
     checked: Boolean = false,
     enabled: Boolean = true,
+    /** A second, smaller line under [text] (for example how full a storage location is). */
+    detail: String? = null,
 ) {
     val colors = SpoolwardenTheme.colors
     DropdownMenuItem(
-        text = { Text(text, style = MaterialTheme.typography.bodyMedium) },
+        text = {
+            if (detail == null) Text(text, style = MaterialTheme.typography.bodyMedium)
+            else Column {
+                Text(text, style = MaterialTheme.typography.bodyMedium)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            }
+        },
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.semantics { selected = checked },

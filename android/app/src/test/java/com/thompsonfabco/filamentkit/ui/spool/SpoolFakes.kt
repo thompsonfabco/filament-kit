@@ -93,6 +93,11 @@ internal class FakeSpoolBackend : SpoolBackend {
         return updateAnswer(gross, location, empty, dryRun)
     }
 
+    /** What `api/storage` answers; null: an older Hub, the names alone. */
+    var storageAnswer: com.thompsonfabco.filamentkit.net.StorageAnswer? = null
+
+    override suspend fun storage() = storageAnswer ?: com.thompsonfabco.filamentkit.net.StorageAnswer.ofNames(locations())
+
     override suspend fun locations(): List<String> {
         calls += "locations"
         check("locations")

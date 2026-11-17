@@ -23,6 +23,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.thompsonfabco.filamentkit.ui.storage.LocationRow
+import com.thompsonfabco.filamentkit.ui.storage.Place
+import com.thompsonfabco.filamentkit.ui.storage.rows
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -247,7 +251,8 @@ private fun PanelFields(ctx: PanelContext, state: AddUiState, vm: AddViewModel) 
     val errDensity = stringResource(R.string.add_review_error_density)
     val errDegrees = stringResource(R.string.add_review_error_degrees)
     val vendors = state.vendors
-    val locations = state.locations
+    val rows = remember(state.storage) { state.storage.rows() }
+    val autoPlaces = state.autoPlaces[i].orEmpty()
     val picked = item.bool(AddViewModel.PICKED) == true
     val parent = item.str("bambu_parent").orEmpty()
     val parentProblem = intakeTextProblem(parent)
@@ -348,7 +353,7 @@ private fun PanelFields(ctx: PanelContext, state: AddUiState, vm: AddViewModel) 
         )
     }
     Group(R.string.add_group_storage) {
-        LocationField(ctx, locations) { vm.setLocation(i, it) }
+        LocationField(ctx, rows, autoPlaces) { vm.setLocation(i, it) }
     }
     // complaints that name no field of this panel are bad lines at its bottom
     ctx.serverErrors.filterKeys { it !in SHOWN_KEYS }.values.forEach { NoticeCard(NoticeKind.Bad, it) }
@@ -563,14 +568,17 @@ private fun BrandField(ctx: PanelContext, vendors: List<VendorChoice>, onChange:
 /** The storage location: "Automatic" first, then the Hub's locations; a place that is typed in is kept as typed. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LocationField(ctx: PanelContext, locations: List<String>, onChange: (String) -> Unit) {
+private fun LocationField(ctx: PanelContext, rows: List<LocationRow>, autoPlaces: List<Place>, onChange: (String) -> Unit) {
     var text by remember { mutableStateOf(ctx.item.str("location").orEmpty()) }
     var open by remember { mutableStateOf(false) }
     val requester = focusOn(ctx, "location")
     val error = ctx.serverErrors["location"]
     val automatic = stringResource(R.string.common_option_automatic)
     val hint = stringResource(R.string.common_hint_leave_empty_auto)
-    if (locations.isEmpty()) {
+    val context = LocalContext.current
+    // once the preview ran, the line under "Automatic" says where the spools go and why
+    val autoLine = autoPlaces.takeIf { text.isEmpty() && it.isNotEmpty() }?.joinToString(", ") { it.resolve(context) }
+    if (rows.isEmpty()) {
         OutlinedTextField(
             value = text, onValueChange = { text = it; onChange(it) }, enabled = ctx.enabled, singleLine = true,
             isError = error != null, label = { Text(stringResource(R.string.common_field_location)) },
@@ -585,7 +593,7 @@ private fun LocationField(ctx: PanelContext, locations: List<String>, onChange: 
             value = text, onValueChange = { text = it; onChange(it) }, enabled = ctx.enabled, singleLine = true,
             isError = error != null, label = { Text(stringResource(R.string.common_field_location)) },
             placeholder = { Text(automatic) },
-            supportingText = { Text(error ?: hint) },
+            supportingText = { Text(error ?: autoLine ?: hint) },
             trailingIcon = { androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon(open) },
             textStyle = SpoolwardenTheme.type.input,
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable).focusRequester(requester),
@@ -595,7 +603,12 @@ private fun LocationField(ctx: PanelContext, locations: List<String>, onChange: 
             containerColor = SpoolwardenTheme.colors.surface, shape = SpoolwardenTheme.shapes.r,
         ) {
             SwMenuItem(automatic, { text = ""; onChange(""); open = false }, checked = text.isEmpty())
-            locations.forEach { loc -> SwMenuItem(loc, { text = loc; onChange(loc); open = false }, checked = text == loc) }
+            rows.forEach { row ->
+                SwMenuItem(
+                    row.name, { text = row.name; onChange(row.name); open = false }, checked = text == row.name,
+                    detail = row.howFull?.resolve(context),
+                )
+            }
         }
     }
 }
