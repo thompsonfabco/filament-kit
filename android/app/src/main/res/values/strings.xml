@@ -3117,6 +3117,24 @@
     <string name="spool_load_previous_place">its previous place</string>
     <string name="spool_mark_empty">Mark empty</string>
     <string name="spool_move">Move</string>
+    <!-- 1=used 2=limit -->
+    <string name="storage_detail_limit">%1$s of %2$s</string>
+    <!-- 1=count -->
+    <plurals name="storage_detail_used">
+        <item quantity="one">%1$d spool</item>
+        <item quantity="other">%1$d spools</item>
+    </plurals>
+    <!-- 1=count -->
+    <string name="storage_detail_free">%1$d free</string>
+    <string name="storage_detail_full">Full</string>
+    <!-- 1=place 2=why -->
+    <string name="storage_auto_line">%1$s (%2$s)</string>
+    <!-- 1=material -->
+    <string name="storage_why_material">the first place for %1$s with room</string>
+    <string name="storage_why_any">the first place with room</string>
+    <!-- 1=material -->
+    <string name="storage_why_overflow">every place for %1$s is full</string>
+    <string name="storage_why_sealed">where sealed spools go</string>
     <string name="spool_move_here">Now here</string>
     <string name="spool_move_moving">Moving…</string>
     <string name="spool_move_none">The Hub has no storage locations yet. Add them on the Hub page under Settings > Storage locations.</string>

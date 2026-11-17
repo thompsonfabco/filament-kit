@@ -6,7 +6,6 @@
 const BASE = document.body.dataset.base;
 const LOCATIONS = JSON.parse(document.body.dataset.locations);
 const SEALED = document.body.dataset.sealed;      // the sealed-stock location
-const AUTO = document.body.dataset.auto;          // what a blank location means (the placement rules)
 const PICKS = JSON.parse(document.body.dataset.picks); // extra places offered when opening a spool
 const AI = document.body.dataset.ai === "1";       // a label reader (ai_intake or local_intake) is on: photos can be read
 // typical densities (g/cm3), filled in for a spool added by hand while its density is still blank
@@ -62,6 +61,38 @@ async function api(path, opts = {}) {
   try { return await SW.api(path, { ...opts, signal: stop.signal }); }
   catch (e) { throw e && e.name === "AbortError" ? new SW.HubError({ unreachable: true }) : e; }
   finally { clearTimeout(timer); }
+}
+
+// ---------- the storage list (R79 4): the places in fill order, with how full each one is ----------
+// GET storage answers {locations: [{name, type, limit, count, used, free, default_overflow, sealed, ...}]}. A Hub without that route
+// (or one that does not answer) leaves STORAGE empty, and every list falls back to the plain names of data-locations.
+let STORAGE = null;
+const storageWatchers = [];
+async function refreshStorage() {
+  try { const r = await api("storage"); STORAGE = r && Array.isArray(r.locations) && r.locations.length ? r.locations : null; }
+  catch { STORAGE = null; }
+  for (const f of storageWatchers.slice()) f();
+}
+// "18 of 20", "7 spools", "3 free", and "Full" after it when the place takes no more by itself (the choice stays open)
+function placeDetail(l) {
+  const sets = l.type === "containers", used = Number(l.used) || 0;
+  const limit = sets || l.sealed ? null : l.limit;                           // the sealed place takes sealed spools whatever its limit says
+  const full = sets ? l.free === 0 : limit != null && used >= limit;
+  const how = sets ? SW.t("storage_detail_free", { count: l.free ?? 0 }) : limit != null ? SW.t("storage_detail_limit", { used, limit }) : SW.t("storage_detail_used", { count: used });
+  return [how, full ? SW.t("storage_detail_full") : null].filter(Boolean).join(" \u00b7 ");
+}
+// "<place> (<why>)" for an item that named no place: the places the Hub chose, and the rule that chose the first (R79 5)
+function whereAndWhy(r, it) {
+  const ps = r.placements && r.placements.length ? r.placements : [{ location: r.location }];
+  const place = ps.map((p) => (ps.length > 1 ? SW.t("add_preview_placement", { spools: p.spools, location: p.location }) : p.location)).join(", ");
+  const key = { material: "storage_why_material", any: "storage_why_any", overflow: "storage_why_overflow", sealed: "storage_why_sealed" }[ps[0].placed_by];
+  return key ? SW.t("storage_auto_line", { place, why: SW.t(key, { material: String(it.material || "").trim() }) }) : place;
+}
+// the places a spool can be put in, as {value, label, here(location)}; a container set is ONE entry, which means its lowest free container
+function placeEntries() {
+  if (!STORAGE) return LOCATIONS.map((l) => ({ value: l, label: l, here: (at) => at === l }));
+  return STORAGE.map((l) => ({ value: l.name, label: `${l.name} \u00b7 ${placeDetail(l)}`, detail: placeDetail(l),
+    here: (at) => at === l.name || (Array.isArray(l.containers) && l.containers.some((c) => c.name === at)) }));   // the Hub names the containers; no name is built here
 }
 
 const ago = (s) => s < 60 ? `${s} s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : `${Math.floor(s / 3600)} h ago`;
@@ -647,6 +678,7 @@ const HUB = document.body.dataset.hub || "";               // the Hub's name; em
 const HUB_PAGE = document.body.dataset.hubPage || "";      // the Hub page's address; absent on the public address
 const PRODUCT = SW.t("app_name");
 SW.configure({ lock: false, hub: HUB || PRODUCT, base: BASE + "/api/" });   // no lock in the web app: the home network is the gate (04 1.1)
+refreshStorage();
 
 // a destination whose Feature is off, or that this address does not serve, opens a page that says so (04 6.10, 7.4)
 const hubLink = () => HUB_PAGE ? h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")) : null;
@@ -1622,9 +1654,21 @@ function addTab() {
     colourField.classList.add("add__colour");
     const pair = (...kids) => h("div", { class: "add__pair" }, ...kids);
     const set = (name, ...kids) => h("fieldset", { class: "add__set" }, h("legend", { class: "add__legend", textContent: name }), ...kids);
-    const locations = [...LOCATIONS]; if (SEALED && !locations.includes(SEALED)) locations.push(SEALED);
-    const location = mk("location", { type: "select", value: it.location || "", options: [{ value: "", label: SW.t("add_card_location_automatic_rule", { rule: AUTO }) }, ...locations.map((l) => ({ value: l, label: l }))] });
-    location._control.value = it.location || "";
+    const locationOptions = () => {
+      const list = placeEntries().map((e) => ({ value: e.value, label: e.label }));
+      if (!STORAGE && SEALED && !list.some((e) => e.value === SEALED)) list.push({ value: SEALED, label: SEALED });
+      const at = location._control.value;
+      if (at && !list.some((e) => e.value === at)) list.push({ value: at, label: at });         // a place no longer listed stays what it was
+      return [{ value: "", label: SW.t("common_option_automatic") }, ...list];
+    };
+    const location = mk("location", { type: "select", value: it.location || "", hint: "", options: [{ value: "", label: SW.t("common_option_automatic") }] });
+    const placeNote = location.querySelector(".field__hint");     // after a preview: "<place> (<why>)" for a blank Location
+    location._control.addEventListener("change", () => { placeNote.textContent = ""; });
+    {
+      const paintOptions = () => { const at = location._control.value || it.location || ""; location._control.replaceChildren(...locationOptions().map((o) => h("option", { value: o.value, text: o.label }))); location._control.value = at; };
+      location._control.value = it.location || ""; paintOptions();
+      storageWatchers.push(() => { if (location._control.isConnected || !location._wasConnected) { if (location._control.isConnected) location._wasConnected = true; paintOptions(); } });
+    }
     location._control.setAttribute("aria-required", "false");
     const sealed = SW.toggle({ label: SW.t("common_still_sealed"), checked: !!it.sealed, hint: it.sealed_reason ? SW.t("add_review_reader_reason", { reason: it.sealed_reason }) : undefined });
     sealed._control.addEventListener("change", () => {
@@ -1652,7 +1696,7 @@ function addTab() {
       fill("tare", v, "brand"); paint();
       return true;
     }
-    return { el, open, problems, showErrors, paint, refill, control: (k) => (fields[k] ? fields[k]._control : null) };
+    return { el, open, problems, showErrors, paint, refill, place: (text) => { placeNote.textContent = text || ""; }, control: (k) => (fields[k] ? fields[k]._control : null) };
   }
 
   // ============ The action bar: Preview, then Add (04 4.6) ============
@@ -1732,15 +1776,16 @@ function addTab() {
         if (dry) {
           if (rev !== sent) { previewBox.replaceChildren(); memo = null; return null; }          // edited while it was checked: not previewed
           previewed = true; problemsShown = false;
-          for (const it of items) cards.get(it._id).problems([]);
+          for (const it of items) { const c = cards.get(it._id); c.problems([]); c.place(""); }
           drawResults(res.items || []);
+          for (const r of res.items || []) { const it = items[r.index]; if (it && !it.location) cards.get(it._id).place(whereAndWhy(r, it)); }
           return shown({ text: SW.t("add_summary_preview_ok"), code: res.output });
         }
         const ids = res.spool_ids || [], made = (res.items || []).filter((r) => r.filament === "new").length;
         previewBox.replaceChildren(); addedBox.replaceChildren(mine);
         mine.querySelector(".group__title").textContent = SW.t("add_done_title");
         mine.querySelector(".add__sub")?.remove();
-        everything(sentItems); SW.toast(SW.t("add_added_toast", { count: ids.length || n }));
+        everything(sentItems); refreshStorage(); SW.toast(SW.t("add_added_toast", { count: ids.length || n }));
         if (HISTORY && res.history_id) extras.append(SW.btn(SW.t("add_added_check_recent"), { run: () => { location.hash = "#recent/" + encodeURIComponent(res.history_id); } }));
         if (made || !res.items) extras.append(h("p", {}, made ? SW.t("add_added_new_filaments", { count: made }) : null),
           SW.btn(SW.t("add_added_set_up_presets"), { run: () => { location.hash = "#presets"; } }));
@@ -1792,6 +1837,7 @@ function addTab() {
   drawDraft(); drawPhotos(); drawList(); paintBar();
   setTimeout(paintBadge, 0);                                    // the bottom bar is built after this tab
   return { el, enter: () => {
+    refreshStorage();                                           // how full each place is, as of now
     if (memo && !ans.line.dataset.state) SW.result(ans.line, memo.kind || "ok", memo.text);       // the result lines are cleared when the person leaves the page
   } };
 }
@@ -2097,19 +2143,19 @@ function openTab() {
     }
     // Move: a menu of locations; choosing one moves the spool at once, with Undo for 5 s
     let moving = false;
-    SW.menu(moveBtn, () => LOCATIONS.map((l) => { const here = !!view && l === view.location;
-      return { label: l, disabled: here || moving, reason: moving ? SW.t("spool_move_moving") : here ? SW.t("spool_move_here") : null, run: () => moveTo(l, false) }; }), { label: SW.t("spool_move_title") });
+    SW.menu(moveBtn, () => placeEntries().map((e) => { const here = !!view && e.here(view.location);
+      return { label: e.value, disabled: here || moving, reason: moving ? SW.t("spool_move_moving") : here ? SW.t("spool_move_here") : e.detail || null, run: () => moveTo(e.value, false) }; }), { label: SW.t("spool_move_title") });
     let undoFrom = null, undoUntil = 0;                        // undoFrom: the place before the first move of the Undo window
     async function moveTo(l, back) {
-      if (moving || (!back && view && l === view.location)) return;   // one move at a time (the menu says so); not to where it is
+      if (moving || (!back && view && placeEntries().some((e) => e.value === l && e.here(view.location)))) return;   // one move at a time (the menu says so); not to where it is
       moving = true;
       const stamp = ++undoStamp;                               // any move or Undo ends the timer of an earlier Undo line
       try {
         await act(actAns, SW.t("spool_move_moving"), async () => {
           const r = await api(`spools/${id}`, { body: { location: l, dry_run: false } });
           if (!back) { if (undoFrom == null || Date.now() > undoUntil) undoFrom = r.before.location || null; undoUntil = Date.now() + 5000; }   // a second move in the window keeps the first place
-          changed = true; applyView(r.view);
-          const text = SW.t("spool_result_moved", { location: l });
+          changed = true; applyView(r.view); refreshStorage();
+          const text = SW.t("spool_result_moved", { location: r.view && r.view.location || l });
           if (back || !undoFrom) { undoFrom = null; return text; }
           setTimeout(() => { if (stamp === undoStamp && actAns.querySelector(".btn")) SW.result(actAns, "ok", text); }, 5000);   // Undo goes after 5 s
           return { text: SW.t("spool_result_moved_undo", { location: l, was: undoFrom }), action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
@@ -2216,15 +2262,22 @@ function openTab() {
     refresh();
   }
 
+  const locsList = h("datalist", { id: "spools-locs" });
+  const paintLocs = () => {
+    const entries = placeEntries(), names = new Set(entries.map((e) => e.value));
+    locsList.replaceChildren(...entries.map((e) => h("option", { value: e.value, label: e.detail || undefined })),
+      ...PICKS.filter((p) => p && !names.has(p)).map((p) => h("option", { value: p })));
+  };
+  paintLocs(); storageWatchers.push(paintLocs);
   const el = h("section", { class: "hidden" }, h("div", { class: "spools" },
     h("p", { class: "muted", textContent: SW.t("spools_intro") }),
     group(SW.t("spools_last_tag"), tagBody, tagLine),
     h("div", { class: "spools__find" }, searchField, sealedBox, findLine), resultsBox,
-    h("datalist", { id: "spools-locs" }, ...[...new Set([...PICKS, ...LOCATIONS])].map((l) => h("option", { value: l })))));
+    locsList));
   return {
     el,
     enter() {
-      shown = true;
+      shown = true; refreshStorage();
       if (!tagLoad && tagAt == null && !tagFirst.dataset.state) {   // the first time: a skeleton and the line, until the first answer
         tagLoad = SW.loading(tagBody, { thing: SW.t("spools_last_tag"), items: 1 });
         const run = resultLine(); SW.result(run, "run", SW.t("spools_last_tag_loading")); tagBody.append(run);

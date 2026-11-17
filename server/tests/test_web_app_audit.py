@@ -936,6 +936,41 @@ READY = {
   need('the banner says 1 spool, not 0', /: 1 spool\./.test(text('.add__draft')) && !text('.add__draft').includes('0 spool'));
   need('the Add destination shows the badge', $('.nav__item[href="#add"] .nav__badge').textContent === '1');
 """,
+    "storage_places": r"""
+  await waitPage();
+  const card = await newFilament('', '', '');
+  const sel = () => field('Location', card).querySelector('select'), labels = () => $$('option', sel()).map((o) => o.textContent);
+  need('a Hub with no storage list shows the plain names', labels().length > 1 && labels()[0].startsWith('Automatic') && !labels().some((l) => l.includes(' \u00b7 ')));
+  const STORE = { locations: [
+    { id: 'loc-1', name: 'Sealed stock', type: 'bulk', limit: null, count: null, used: 30, free: null, fill: 'none', materials: [], overflow: false, default_overflow: false, sealed: true, position: 1 },
+    { id: 'loc-2', name: 'Rack 1', type: 'bulk', limit: 20, count: null, used: 18, free: 2, fill: 'materials', materials: ['PLA'], overflow: false, default_overflow: false, sealed: false, position: 2 },
+    { id: 'loc-3', name: 'Rack 2', type: 'bulk', limit: 20, count: null, used: 20, free: 0, fill: 'materials', materials: ['PLA'], overflow: false, default_overflow: false, sealed: false, position: 3 },
+    { id: 'loc-4', name: 'Storage box', type: 'containers', limit: null, count: 12, used: 12, free: 0, fill: 'any', materials: [], overflow: false, default_overflow: false, sealed: false, position: 4 },
+    { id: 'loc-5', name: 'Dry box', type: 'containers', prefix: 'Dry bin ', containers: [{ name: 'Dry bin 1', number: 1, taken: true }, { name: 'Dry bin 2', number: 2, taken: false }, { name: 'Dry bin 3', number: 3, taken: false }, { name: 'Dry bin 4', number: 4, taken: false }], limit: null, count: 4, used: 1, free: 3, fill: 'none', materials: [], overflow: false, default_overflow: false, sealed: false, position: 5 },
+    { id: 'loc-6', name: 'Overflow', type: 'bulk', limit: 5, count: null, used: 9, free: 0, fill: 'none', materials: [], overflow: true, default_overflow: true, sealed: false, position: 6 }],
+    order_by_material: [{ material: 'PLA', locations: ['Rack 1', 'Rack 2', 'Overflow'] }], everything_else: ['Storage box', 'Overflow'] };
+  stub('storage', () => reply(STORE)); await refreshStorage();
+  need('every place in fill order, with how full it is', JSON.stringify(labels().slice(1)) === JSON.stringify(['Sealed stock \u00b7 30 spools', 'Rack 1 \u00b7 18 of 20', 'Rack 2 \u00b7 20 of 20 \u00b7 Full',
+    'Storage box \u00b7 0 free \u00b7 Full', 'Dry box \u00b7 3 free', 'Overflow \u00b7 9 of 5 · Full']) && labels()[0].startsWith('Automatic'));
+  typeIn(sel(), 'Dry box');
+  need('a container set is one entry and can be chosen', sel().value === 'Dry box' && $$('option', sel()).filter((o) => o.value.startsWith('Dry box')).length === 1);
+  need('a full place stays choosable', !$$('option', sel()).find((o) => o.value === 'Rack 2').disabled);
+  await refreshStorage(); need('a new answer keeps the choice', sel().value === 'Dry box');
+  const here = placeEntries().find((e) => e.value === 'Dry box').here;
+  need('a container of a prefixed set counts as the set, by the names the Hub lists and no name built here', here('Dry bin 1') && here('Dry bin 3') && here('Dry box') && !here('Dry box 1') && !here('Dry bin 5') && !here('Dry bin 01'));
+""",
+    "storage_auto_line": r"""
+  await waitPage();
+  stub('add', () => reply({ exit_code: 0, output: 'Would add 1 spool', dry: true, items: [{ index: 0, vendor: 'Elegoo', name: 'PLA Red', filament: 'new', filament_id: null, new_vendor: false, spools: 1, spool_ids: [], location: 'Rack 2',
+    placements: [{ location: 'Rack 2', spools: 1, placed_by: 'material' }], opened: true, remaining_g: 1000, problems: [] }] }));
+  const card = await newFilament('Elegoo', 'PLA Red', 'PLA', '160');
+  const sel = field('Location', card).querySelector('select'), note = () => field('Location', card).querySelector('.field__hint').textContent;
+  $('.toggle__input', card).click();
+  need('a blank Location is just Automatic', sel.value === '' && $$('option', sel)[0].textContent === 'Automatic' && note() === '');
+  $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
+  need('the preview says where it goes and why', note() === 'Rack 2 (the first place for PLA with room)');
+  typeIn(sel, 'Rack 1'); need('choosing a place takes the line away', note() === '');
+""",
     "card_fields": r"""
   await waitPage(); const card = await newFilament('', '', '');
   need('six groups', $$('.add__legend', card).map((l) => l.textContent).join('|') === 'Identity|Amount|State|Print settings|Storage|Other');
@@ -1370,6 +1405,30 @@ SP_READY = {
   pick.click();
   await until('moved', () => out('Moved to ' + to + '.'));
   need('Undo is offered, and says where it goes', $$('.spools__sheet .result .btn').some((b) => b.textContent.trim() === 'Undo') && text('.spools__sum-text').includes(to) && out('Undo returns it to'));
+""",
+    "sheet_move_storage": r"""
+  const d = await sheetReady();
+  const at = text('.spools__sum-text .muted').split(' \u00b7 ')[0];
+  const STORE = { locations: [
+    { id: 'loc-1', name: 'Sealed stock', type: 'bulk', limit: null, count: null, used: 30, free: null, fill: 'none', materials: [], overflow: false, default_overflow: false, sealed: true, position: 1 },
+    { id: 'loc-2', name: 'Rack 1', type: 'bulk', limit: 20, count: null, used: 18, free: 2, fill: 'materials', materials: ['PLA'], overflow: false, default_overflow: false, sealed: false, position: 2 },
+    { id: 'loc-3', name: 'Rack 2', type: 'bulk', limit: 20, count: null, used: 20, free: 0, fill: 'materials', materials: ['PLA'], overflow: false, default_overflow: false, sealed: false, position: 3 },
+    { id: 'loc-4', name: 'Storage box', type: 'containers', limit: null, count: 12, used: 12, free: 0, fill: 'any', materials: [], overflow: false, default_overflow: false, sealed: false, position: 4 },
+    { id: 'loc-5', name: 'Dry box', type: 'containers', prefix: 'Dry bin ', containers: [{ name: 'Dry bin 1', number: 1, taken: true }, { name: 'Dry bin 2', number: 2, taken: false }, { name: 'Dry bin 3', number: 3, taken: false }, { name: 'Dry bin 4', number: 4, taken: false }], limit: null, count: 4, used: 1, free: 3, fill: 'none', materials: [], overflow: false, default_overflow: false, sealed: false, position: 5 },
+    { id: 'loc-6', name: 'Overflow', type: 'bulk', limit: 5, count: null, used: 9, free: 0, fill: 'none', materials: [], overflow: true, default_overflow: true, sealed: false, position: 6 }],
+    order_by_material: [{ material: 'PLA', locations: ['Rack 1', 'Rack 2', 'Overflow'] }], everything_else: ['Storage box', 'Overflow'] };
+  const other = LOCATIONS.find((l) => l !== at); STORE.locations[0].name = 'Spare shelf'; STORE.locations[5].name = 'Spare overflow';
+  STORE.locations[1].name = at; STORE.locations[1].used = 7; STORE.locations[2].name = other;
+  stub(/^storage$/, () => reply(STORE)); await refreshStorage();
+  button('Move').click();
+  const menu = await until('the menu', () => $('dialog[open] .menu'));
+  const items = $$('.menu__item', menu), row = (n) => items.find((i) => i.querySelector('.menu__label').firstChild.textContent === n);
+  need('every place of the list, in order', items.map((i) => i.querySelector('.menu__label').firstChild.textContent).join('|') === ['Spare shelf', at, other, 'Storage box', 'Dry box', 'Spare overflow'].join('|'));
+  need('the current place says so and the others say how full they are', row(at).getAttribute('aria-disabled') === 'true' && row(at).textContent.includes('Now here')
+    && row(other).textContent.includes('20 of 20 \u00b7 Full') && row('Dry box').textContent.includes('3 free') && row('Spare overflow').textContent.includes('9 of 5'));
+  need('a full place can be chosen', row(other).getAttribute('aria-disabled') !== 'true');
+  row(other).click();
+  await until('moved', () => out('Moved to ' + other + '.'));
 """,
     "sheet_move_undo": r"""
   const d = await sheetReady(); button('Move').click();
