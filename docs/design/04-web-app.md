@@ -445,11 +445,15 @@ The card's footer holds "Remove" (ghost, trash icon) on the left. Removing a car
   "<place> (<why>)", for example "Rack 1 (the first place for PLA with room)" (reasons below). The page needs no rule
   text from the Hub for this.
 - Then every location in fill order with how full it is: "Rack 1 · 18 of 20", "Overflow · 7 spools". An Individual
-  containers location is one entry, "Storage box · 3 free", and choosing it gives the lowest free container. A
-  location at its limit stays choosable and shows "Full".
+  containers location is one entry, "Storage box · 3 free", and choosing it sends the set's `name`, and the Hub
+  gives the lowest free container. A location at its limit stays choosable and shows "Full".
+- The page never builds a container name. To find the entry a spool is in, it compares the spool's location text with
+  each location's `name` first and then with each `containers[].name` of `GET api/storage`; a text that matches
+  nothing (a removed location, a text typed by hand) is shown as it is, under no location. The same entries are
+  offered as the person's pick of one container: a `containers[].name` is sent as it is.
 - The supporting line and the preview and result lines name the place and the reason, in brackets after the place:
   "(the first place for <material> with room)", "(the first place with room)", "(every place for <material> is
-  full)" and, for a sealed spool, the sealed-stock text as today. A place the person chose gets no reason.
+  full)", "(no place takes <material> automatically)" and, for a sealed spool, the sealed-stock text as today. A place the person chose gets no reason.
 
 Values the card keeps but does not show (sent with the item as today): the chosen filament's number and match text,
 the photo indexes, the estimate list, the price line, the sealed reason, nozzle and bed from the chosen filament,
@@ -688,7 +692,7 @@ Hub has today. When none of the four is available the group is absent and the sh
 | Action | How it works |
 |---|---|
 | "Update weight" | Opens a small form in place: "Weight with spool"; "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight". |
-| "Move" | A menu with the same entries as the Location select of 4.5, in fill order, each with how full it is (a full one stays choosable and shows "Full"; an Individual containers location is one entry and gives the lowest free container); choosing one moves it at once; inline result "Moved to Dry box 1." with "Undo" for 5 s. |
+| "Move" | A menu with the same entries as the Location select of 4.5, in fill order, each with how full it is (a full one stays choosable and shows "Full"; an Individual containers location is one entry; it sends the set's `name` and gives the lowest free container, and a container the person picks sends its `containers[].name`; the spool's current place is found by matching its location text as in 4.5, and a text that matches nothing is shown as it is, under no location); choosing one moves it at once; inline result "Moved to Dry box 1." with "Undo" for 5 s. |
 | "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." |
 | "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (one row per slot with its current spool), then the automatic preview and "Load", exactly as the load sheet of 6.5. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`. |
 
@@ -1606,7 +1610,7 @@ right column is left out or falls back as described there.
 | Add preview with per-item results: existing or new filament, spools to create, location, and problems tied to a field | 4.6 | The Hub's text in a code block |
 | Recently added: read confidence and engine per record | 7.1, 7.2 | No "To check" filter, no confidence lines |
 | Share corrections for the web app: whether it is on and how many wait (in `history`), the corrections waiting with thumbnails, and remove | 7.1, 7.2, 4.4, 7.5 | No Share corrections lines and no `#recent/corrections` page |
-| `GET api/storage` for the web app (a twin of the app's route under the web app's own base): the locations in fill order `{id, name, type, limit, count, used, free, fill, materials, overflow, default_overflow, sealed, position}`, `order_by_material` and `everything_else` | 4.5, 5.4 | The select lists the names from `data-locations` without how full, and "Automatic" shows no place or reason; the Move menu lists the same names |
+| `GET api/storage` for the web app (a twin of the app's route under the web app's own base): the locations in fill order `{id, name, type, limit, count, used, free, prefix, containers: [{name, number, taken}], fill, materials, overflow, default_overflow, sealed, position}` (`prefix` and `containers` are `null` for bulk; `used` and `free` equal the counts of `taken`), `order_by_material` and `everything_else` | 4.5, 5.4 | The select lists the names from `data-locations` without how full, and "Automatic" shows no place or reason; the Move menu lists the same names |
 | Spool editing for the web app: preview and save a new weight, move to a location, mark empty (the app has this through its own API) | 5.4 | "Update weight", "Move" and "Mark empty" left out; "Load into a printer" stays |
 | Filament colour in spool search results (`find`) | 5.3, 6.5 | Rows without a swatch |
 | The spool an entry of Filament used was taken from | 12.1 | The "Put it back" sheet names job, slot and time only |

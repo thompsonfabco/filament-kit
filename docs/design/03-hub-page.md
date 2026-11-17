@@ -1298,6 +1298,16 @@ fill: the first place with room takes the next spool.
   name plus one space (the spools in its containers are renamed with it). A set carried over from the old settings
   keeps the old box prefix as it was, also when it is empty or only spaces. The Hub gives the number: a spool gets
   the lowest free one. A container is taken while a spool's location is exactly its name.
+- **A location's name may not be a container's name.** The name of a container is the set's prefix followed only by
+  digits ("Rack 01" beside a set with the prefix "Rack "). A new or changed name that is a container's name of any
+  Individual containers location is refused: "<name> is the name of a container in <set>. Choose another name." The
+  check also runs the other way: a set that is added, renamed or enlarged, or whose prefix changes, may not get a
+  container named like an existing location (the same sentence, with that location's name). Only a clash that is new
+  is refused. A clash that already exists, for example one carried over from the old settings, may stay: either
+  location can be edited in its other fields, and removing or renaming one of the two ends it. While it exists the
+  text is one place: a spool stored under that text counts in the bulk location's "how full" and also makes that
+  container taken, so the set skips it, and a request that names the text means the bulk location (the literal
+  text is stored). A client that matches a spool's location text takes a location's name before a container's name.
 - **Filled automatically with** says what the place takes when nobody chooses: "Nothing, only when you choose it",
   "Any material", or "These materials" with a list of material names. A material name also takes its variants: the
   spool's material, capitals ignored, starts with the name ("PLA" takes PLA+ and PLA-CF). When names of different
@@ -1350,16 +1360,18 @@ Nobody is asked: the rule always answers, and the answer says why. Unloading a s
 - **Notice under the list** (warn): shown whenever two or more locations are overflow and the default overflow has no
   limit: "The default overflow has no limit, so the other overflow places are never used. Give it a spool limit to let
   them fill."
+- **Warn line on a row.** A Bulk storage row whose name is also the name of a container in a set shows the line "Same
+  name as a container in <set>." under its name.
 
 | Field | Type | Key / endpoint | Notes |
 |---|---|---|---|
-| Name | Text | `name` of the row → `P settings/storage` (code) | Required: "Enter a name for the location." Refusal: "There is already a location called <name>." |
+| Name | Text | `name` of the row → `P settings/storage` (code) | Required: "Enter a name for the location." Refusal: "There is already a location called <name>." A name that is a container's name is refused with "<name> is the name of a container in <set>. Choose another name."; adding, renaming or enlarging a set so that a container would be named like an existing location is refused at its Name or Number of containers field with the same sentence and that location's name. An existing clash is not refused (see "A location's name may not be a container's name" above) |
 | Type | Segmented choice "Bulk storage" / "Individual containers"; hints "A shelf, rack or drawer that holds many spools." and "Boxes or bags that hold one spool each. Spoolwarden numbers them." | `type` | Fixed while spools are in the location: "Move the spools out to change the type." |
 | Spool limit | Number, `--mono`; Bulk storage only; hint "Leave empty for no limit." | `limit` | Whole number 1 to 9999. Field error "Enter a whole number, 1 or more." |
 | Number of containers | Number, `--mono`; Individual containers only | `count` | Whole number 1 to 999; same field error. Fewer than the highest number in use is refused at the field: "Storage box 11 and Storage box 12 hold spools. Move them first, or keep at least 12." |
-| Filled automatically with | Three radios: "Nothing, only when you choose it", "Any material", "These materials" | `fill` | "Any material" is disabled while "Use as overflow" is ticked, with the hint "An overflow place already takes any material when the other places are full." |
+| Filled automatically with | Three radios: "Nothing, only when you choose it", "Any material", "These materials" | `fill` | "Any material" is disabled while "Use as overflow" is ticked, with the hint "An overflow place already takes any material when the other places are full." Ticking "Use as overflow" while "Any material" is chosen sets this to "Nothing, only when you choose it" and shows the hint; unticking does not change it back |
 | Materials | Text; shown for "These materials"; hint "Separate them with commas, e.g. PLA, PETG. A material also takes its variants: PLA takes PLA+ and PLA-CF." | `materials` (a list) | Field error "Enter at least one material, e.g. PLA." |
-| Use as overflow | Checkbox; hint "Takes spools when their own places are full." | `overflow` | The last overflow location cannot be switched off. While ticked, the "Any material" radio above is disabled |
+| Use as overflow | Checkbox; hint "Takes spools when their own places are full." | `overflow` | The last overflow location cannot be switched off. While ticked, the "Any material" radio above is disabled; if it was chosen, it becomes "Nothing, only when you choose it" |
 
 Buttons of the detail region: **Add location** (a new row) or **Save location** (an edited row), and Cancel. They
 change the unsaved list only.
@@ -2122,4 +2134,4 @@ column says.
 | Feature titles in the plain names of section 9.1 | Features collection | The page maps code names to the names of section 9.1 |
 | Cloud reads used today and the daily limit as numbers in `G state` | Overview Label Reader tile (4.2) | The numbers are taken from the Overview check row that reports them; when that row is missing the tile shows "Reads per day: <limit>" |
 | Share corrections: what the reader can do and its state (it offers sharing, sharing on or off, how many wait), the setting `label_reader.share_corrections` with the job that sets the reader, the corrections waiting (list, thumbnails, remove, remove all, try again, package, send), and each correction handed to the reader when it is saved | Settings > Label Reader (10.5.1, 10.5.2), Recently added (6.2, 6.4), Overview tile (4.2), Features preview (9.4) | The block SHARE CORRECTIONS shows only its paragraph and the line "Not available on this Hub yet."; nothing else of the feature is shown |
-| A stored list of storage locations (`storage.xml` beside the Hub's config file) with `GET api/storage` and `P settings/storage` (code): the read answers `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}`; the write takes the whole list `{locations: [...]}` (ids kept for existing rows, none for new ones) and answers the saved list, or `errors` per row and field | Settings > Storage locations (10.4) | The group shows "Could not read the settings. <Hub's text>" with **Try again**, and the list cannot be edited |
+| A stored list of storage locations (`storage.xml` beside the Hub's config file) with `GET api/storage` and `P settings/storage` (code): the read answers `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}`; on an Individual containers location `containers` is the whole set in number order (as many as `count`): `name` is the exact location text of a spool in that container ("Storage box 03"), `number` the whole number, `taken` true while a spool's location is that name, and `prefix` is the exact text before the number, for information; both are `null` on Bulk storage, and `used` and `free` equal the counts of `taken`; a client never builds a container name, not from `name` and not from `prefix`: it matches a spool's location text with each location's `name` (taken first) and each `containers[].name`, and to place or move a spool it sends the set's `name` (the Hub takes the lowest free container) or one `containers[].name`; a text that matches nothing (a removed location, a text typed by hand) is shown as it is, under no location; the write takes the whole list `{locations: [...]}` (ids kept for existing rows, none for new ones) and answers the saved list, or `errors` per row and field | Settings > Storage locations (10.4) | The group shows "Could not read the settings. <Hub's text>" with **Try again**, and the list cannot be edited |

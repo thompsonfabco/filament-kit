@@ -720,7 +720,7 @@ up. Numeric fields use `KeyboardType.Decimal` or `Number` and `--mono`.
 | Print settings | Density | Always on the hand path; on the photo path only when the Hub asks for it. Supporting "Leave empty to choose automatically."; placeholder the usual value for the material ("1.24"). |
 | | Nozzle (optional), Bed (optional) | Hand path only. |
 | | Bambu Studio parent | `ExposedDropdownMenuBox` with "Automatic" first, then the Hub's parent presets when they are synced. Without synced presets it is a plain text field with the supporting text "Bambu Studio's presets are not synced to the Hub yet; type the name." Always under it: "Applies to every colour of this line." As a plain text field it adds the supporting text "Leave empty to choose automatically." |
-| Storage | Location | `ExposedDropdownMenuBox`: "Automatic" first, then the Hub's locations in fill order from `GET api/storage`, each with how full it is as its supporting text ("18 of 20 spools", "7 spools"; "Full" when at its limit, which stays choosable). An Individual containers location is one entry with "3 free" and gives the lowest free container. Once the preview (6.5) has run, the field's supporting line under "Automatic" reads "<place> (<why>)", for example "Rack 1 (the first place for PLA with room)". |
+| Storage | Location | `ExposedDropdownMenuBox`: "Automatic" first, then the Hub's locations in fill order from `GET api/storage`, each with how full it is as its supporting text ("18 of 20 spools", "7 spools"; "Full" when at its limit, which stays choosable). An Individual containers location is one entry with "3 free"; choosing it sends the set's `name` and the Hub gives the lowest free container. The app never builds a container name: it matches the spool's location text with each location's `name` first and then with each `containers[].name`, and a text that matches nothing is shown as it is, under no location. Once the preview (6.5) has run, the field's supporting line under "Automatic" reads "<place> (<why>)", for example "Rack 1 (the first place for PLA with room)". |
 
 **Per-field confidence.** A field whose value is not certain carries a confidence mark in its supporting text. The
 mark is a status (shape plus word, `--fs-s`) and TalkBack reads it with the field ("Colour, 2B2B2E, estimated, check
@@ -911,8 +911,11 @@ weight, Load into a printer, Move, More actions, Details rows.
 
 `ModalBottomSheet`, title "Move to". A list of the Hub's locations in fill order (`GET api/storage`) as radio rows
 (`ListItem` with `RadioButton`, whole row selectable), each with how full it is as its supporting text ("18 of 20
-spools", "7 spools", "3 free" for an Individual containers location, which is one row and gives the lowest free
-container; "Full" at its limit, still selectable); the current location is marked "Now here" and selected. Tapping another location saves at
+spools", "7 spools", "3 free" for an Individual containers location, which is one row; it sends the set's `name` and the Hub gives the lowest free
+container; "Full" at its limit, still selectable); the current location is found by matching the spool's location text
+with each location's `name` first and then with each `containers[].name` (the app never builds a container name), and
+is marked "Now here" and selected; a text that matches nothing is shown as it is, under no location, and nothing is
+selected. Tapping another location saves at
 once ("Moving…" in its row), closes the sheet, sets the result line "Moved to Shelf B." and shows the snackbar
 "Moved to Shelf B." with "Undo" (moves it back with the same request). Empty list: "The Hub has no storage locations
 yet. Add them on the Hub page under Settings > Storage locations." Error: notice line in the sheet.
@@ -1789,7 +1792,7 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | A single spool by number: `GET api/spools/{id}` with location, remaining and net weight, tag, sealed or opened, filament number, empty spool weight and lot. | 7.2 Details, deep links, restoring after the app was stopped | The spool screen shows the fields the search or tag answer carries; after a restart it shows the last summary and refreshes after the first change. |
 | Phone-callable Slicer presets actions: list filaments without a preset line, add them to a line, create a line, build presets now (today these exist only under `api/profiles/web/`, which phones may not call). | 11.2 | 11.2 points to the Hub page and the web app. |
 | The Hub's default theme ("Theme for new devices", F6.2) in `GET api/info` as the field `look` (for example `"look": "console"`). | 12.2 first start | The app starts on Console. |
-| `GET api/storage` on the paired API: the locations in fill order `{id, name, type, limit, count, used, free, fill, materials, overflow, default_overflow, sealed, position}`, with `order_by_material` and `everything_else`; `GET api/locations` keeps its answer (a list of names). | 6.3 Location field, 6.5 rows, 7.4 Move | The Location field and the "Move to" sheet list the names from `GET api/locations` without how full, and "Automatic" shows no reason. |
+| `GET api/storage` on the paired API: the locations in fill order `{id, name, type, limit, count, used, free, prefix, containers: [{name, number, taken}], fill, materials, overflow, default_overflow, sealed, position}` (`prefix` and `containers` are `null` for bulk; `used` and `free` equal the counts of `taken`), with `order_by_material` and `everything_else`; `GET api/locations` keeps its answer (a list of names). | 6.3 Location field, 6.5 rows, 7.4 Move | The Location field and the "Move to" sheet list the names from `GET api/locations` without how full, and "Automatic" shows no reason. |
 | A per-item structure in the dry-run answer of `POST api/intake/add` (what is created, what is reused, where each spool goes). | 6.5 rows | The app shows the Hub's lines one per row. |
 
 Routes this design uses that today's app does not call, all already on the Hub's paired API (`server/filament_kit/api.py`,
