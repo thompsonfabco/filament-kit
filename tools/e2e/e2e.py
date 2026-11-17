@@ -1075,6 +1075,10 @@ class E2E:
         run.check(sc, f"{tag}'s own updater installs {self.v2}", r.returncode == 0 and installed_version() == self.v2,
                   r.stdout[-1500:] + r.stderr[-800:])
         if r.returncode:
+            j = subprocess.run(["journalctl", "-u", "filament-kit.service", "-n", "60", "--no-pager"],
+                               capture_output=True, text=True).stdout
+            print(f"  (the Hub's journal after the failed update)
+{j[-6000:]}", flush=True)
             raise Fail("the update failed; see the log")
         act = wait_for(lambda: (lambda a: a if set(a.values()) == {"active"} else None)(
             units_active("spoolman.service", "filament-kit.service", "filament-kit-web.service")), 90, 2)
