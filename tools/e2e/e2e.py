@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The end-to-end scenarios of tools/e2e/run.sh (docs/testing-e2e.md). Run by run.sh as root; not on its own.
 
-  python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e,f,g] [--previous vX.Y.Z]
+  python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e,f,g,h] [--previous vX.Y.Z] [--storage-previous vX.Y.Z,...]
 
 Builds two signed releases of this checkout with a throwaway ed25519 key, serves them from a fake GitHub releases
 API (`python3 -m http.server` on 127.0.0.1) and drives the real install, the reader API, the manual add and the
@@ -39,6 +39,7 @@ sys.path.insert(0, str(SRC / "tools"))
 sys.path.insert(0, str(HERE))
 
 import sign_release  # noqa: E402
+import storage_e2e as se  # noqa: E402
 from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ed25519  # noqa: E402
 
@@ -180,6 +181,14 @@ def root_python(code: str) -> subprocess.CompletedProcess:
                           stdin=subprocess.DEVNULL, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"})
 
 
+def _user_name(uid: int) -> str | None:
+    import pwd
+    try:
+        return pwd.getpwuid(uid).pw_name
+    except KeyError:
+        return None
+
+
 def units_active(*units: str) -> dict[str, str]:
     out = {}
     for u in units:
@@ -208,6 +217,7 @@ class Releases:
         self.api = f"http://127.0.0.1:{self.port}"
         self.server = None
         self.built: dict[str, Path] = {}           # version -> dist folder
+        self.previous_built: dict[str, tuple[Path, str, Path]] = {}      # tag -> build_previous' answer
         self.tree: Path | None = None
 
     # -- the tree and the builds
@@ -270,12 +280,17 @@ class Releases:
     def build_previous(self, tag: str) -> tuple[Path, str, Path]:
         """(tree, version, dist) of `tag` as it was released, by its own make_release.sh, with the throwaway key. The tree
         isn't named tree-*: run.sh's clean-up takes the current uninstall.sh from one of those."""
+        if tag in self.previous_built:               # f and h may name the same tag
+            return self.previous_built[tag]
         tree = self.work / f"previous-{tag}"
         tree.mkdir()
-        r = self.run.sh(["bash", "-c", 'set -o pipefail; git -c safe.directory="*" -C "$1" archive --format=tar "refs/tags/$2" '
-                         '| tar -x -C "$3"', "archive", str(SRC), tag, str(tree)], name=f"archive-{tag}")
+        # FK_E2E_GIT_DIR: the repository's own .git when SRC is a worktree whose .git file names another OS's path
+        git = ["--git-dir", os.environ["FK_E2E_GIT_DIR"]] if os.environ.get("FK_E2E_GIT_DIR") else ["-C", str(SRC)]
+        r = self.run.sh(["bash", "-c", 'set -o pipefail; git -c safe.directory="*" "${@:4}" archive --format=tar '
+                         '"refs/tags/$1" | tar -x -C "$2"', "archive", tag, str(tree), "", *git], name=f"archive-{tag}")
         if r.returncode:
-            raise Fail(f"cannot read tag {tag} from {SRC} (a clone with its tags, not a worktree of another OS): {r.stderr[-400:]}")
+            raise Fail(f"cannot read tag {tag} from {SRC} (a clone with its tags, not a worktree of another OS; "
+                       f"FK_E2E_GIT_DIR names its .git): {r.stderr[-400:]}")
         sign_release.set_pubkey(tree, self.pub)
         m = re.search(r'^__version__ = "([^"]+)"', (tree / "server/filament_kit/__init__.py").read_text(encoding="utf-8"), re.M)
         dist = self.work / f"dist-{tag}"
@@ -283,7 +298,8 @@ class Releases:
         r = self.run.sh(["bash", str(tree / "tools" / "make_release.sh")], name=f"make-release-{tag}", env=env, cwd=tree)
         if r.returncode or not (dist / f"filament-kit-{m[1]}.tar.gz").is_file():
             raise Fail(f"make_release.sh of {tag} failed: {r.stderr[-800:]}")
-        return tree, m[1], dist
+        self.previous_built[tag] = (tree, m[1], dist)
+        return self.previous_built[tag]
 
     def publish(self, version: str, *, repo: str = OWNER_REPO, hardware: bytes | None = None,
                 tamper_tarball: bool = False, foreign_sig: bool = False, latest: bool = True,
@@ -381,9 +397,10 @@ def version_tuple(version: str) -> tuple[int, ...]:
 
 
 class E2E:
-    def __init__(self, run: Run, rel: Releases, previous: str | None = None):
+    def __init__(self, run: Run, rel: Releases, previous: str | None = None, storage_previous: list[str] | None = None):
         self.run, self.rel = run, rel
         self.previous = previous
+        self.storage_previous = storage_previous or []
         self.v1 = rel.base_version()
         major, minor, patch = (int(x) for x in self.v1.split("."))
         self.v2 = f"{major}.{minor}.{patch + 1}"
@@ -870,6 +887,251 @@ class E2E:
         run.check(sc, f"{old} still runs its own commands after the rollback", r.returncode == 0, r.stdout + r.stderr)
 
 
+    # ---- h) storage locations: the old release's five settings become storage.xml and place the same spools
+    def _save_cfg(self, cfg: dict) -> None:
+        """config.json as the kit's own config.save writes it (mode, owner and the web unit's read ACL stay as the
+        kit leaves them; write_cfg's plain replace drops that ACL)."""
+        r = root_python(f"import json\nfrom filament_kit import config\nconfig.save(json.loads({json.dumps(cfg)!r}))")
+        if r.returncode:
+            raise Fail(f"cannot save config.json through the kit: {r.stderr[-400:]}")
+
+    def _old_settings(self, sc: str, tag: str, variant: dict) -> None:
+        """A variant's settings on the old release: `config set` for the five it knows, then the six keys written
+        as they are (sealed_location has no `config set` key, and the old command line may trim a prefix of spaces)."""
+        run = self.run
+        refused = []
+        for key, value in se.cli_args(variant):
+            r = run.sh(["/usr/local/bin/filament-kit", "config", "set", key, value], name=f"old-config-set-{key}")
+            if r.returncode:
+                refused.append(f"{key}: {(r.stdout + r.stderr).strip()[-120:]}")
+        cli_only = se.old_keys_of(read_cfg())
+        want = se.old_keys_of(se.cfg_with(read_cfg(), variant))
+        self._save_cfg(se.cfg_with(read_cfg(), variant))
+        trimmed = sorted(k for k in want if cli_only.get(k) != want[k] and k != "sealed_location")
+        print(f"  (info: {tag} `config set` took {5 - len(refused)} of 5 settings; refused: {refused or 'none'}; "
+              f"not as given: {trimmed or 'none'}; the six keys were then written as given)", flush=True)
+        run.check(sc, f"{tag}: {variant['name']}: the six old keys are in config.json as set",
+                  se.old_keys_of(read_cfg()) == want, f"{se.old_keys_of(read_cfg())} != {want}")
+
+    def _add_fixed(self, auth: dict, items: list[dict]) -> tuple[list[tuple[str, int, str]], list[int]]:
+        """Add the fixed list one item at a time through the kit API; (placements read back from Spoolman, spool ids)."""
+        places, ids = [], []
+        for it in items:
+            code, added = jhttp("POST", f"{KIT}/api/intake/add", headers=auth, body={"items": [it], "dry_run": False})
+            if code != 200 or not isinstance(added, dict) or len(added.get("spool_ids") or []) != it["count"]:
+                raise Fail(f"adding {it['name']} failed: {code} {added}")
+            for n, sid in enumerate(added["spool_ids"], 1):
+                c, sp = jhttp("GET", f"{SPOOLMAN}/spool/{sid}")
+                if c != 200 or not isinstance(sp, dict):
+                    raise Fail(f"cannot read spool {sid} from Spoolman: {c}")
+                places.append((it["name"], n, sp.get("location") or ""))
+                ids.append(sid)
+        return places, ids
+
+    @staticmethod
+    def _delete_spools(ids: list[int]) -> None:
+        for sid in ids:
+            code, _ = http("DELETE", f"{SPOOLMAN}/spool/{sid}")
+            if code != 200:
+                raise Fail(f"cannot delete spool {sid} from Spoolman: {code}")
+
+    @staticmethod
+    def _owner_mode(path: Path) -> tuple[tuple[str, str, int], dict[str, str]]:
+        """(owner, group, mode) and the named-user ACL entries of a file."""
+        r = subprocess.run(["stat", "-c", "%U %G %a", str(path)], capture_output=True, text=True)
+        try:
+            acl = se.decode_acl(os.getxattr(path, "system.posix_acl_access"), _user_name)
+        except (OSError, ValueError):
+            acl = {}
+        return se.parse_stat(r.stdout), acl
+
+    def _storage_file_check(self, sc: str, when: str) -> None:
+        run = self.run
+        f = ETC / "storage.xml"
+        if not wait_for(lambda: f.is_file(), 60, 1, str(f)):
+            run.check(sc, f"{when}: storage.xml exists", False, str(f))
+            return
+        (cs, ca), (fs, fa) = self._owner_mode(ETC / "config.json"), self._owner_mode(f)
+        problems = se.owner_mode_problems(cs, fs, ca, fa, "filament-kit-web")
+        run.check(sc, f"{when}: storage.xml exists with config.json's owner, group, mode (640) and web read grant",
+                  not problems, f"{problems}; storage.xml {fs} {fa}; config.json {cs} {ca}")
+        if "filament-kit-web" not in ca:
+            print(f"  SKIP {when}: config.json itself has no read ACL for filament-kit-web here, so the grant on "
+                  f"storage.xml is not proved ({ca})", flush=True)
+
+    def _storage_view(self, auth: dict) -> tuple[int, object]:
+        return jhttp("GET", f"{KIT}/api/storage", headers=auth)
+
+    def _wait_kit(self) -> None:
+        wait_for(lambda: jhttp("GET", f"{KIT}/api/info")[0] == 200 or None, 90, 2, "the kit API")
+
+    def _migrated_checks(self, sc: str, what: str, variant: dict, auth: dict, old_places: list) -> list[int]:
+        """The list as the new release answers it for a variant: its structure, and the fixed list added again going to
+        the same places. Returns the spool ids it added (the caller removes them)."""
+        run = self.run
+        code, view = self._storage_view(auth)
+        rows = view.get("locations") if isinstance(view, dict) else None
+        run.check(sc, f"{what}: GET api/storage answers the list", code == 200 and isinstance(rows, list), f"{code} {view}")
+        if not isinstance(rows, list):
+            raise Fail("no storage list")
+        problems = se.structure_problems(rows, variant)
+        run.check(sc, f"{what}: the migrated list holds the roles, the PLA place and the containers", not problems,
+                  f"{problems} {json.dumps(rows)[:1500]}")
+        texts = se.location_texts(rows)
+        run.check(sc, f"{what}: every place the old release used is a location or a container of the list",
+                  all(loc in texts for _, _, loc in old_places), str(sorted({loc for _, _, loc in old_places} - texts)))
+        places, ids = self._add_fixed(auth, se.fixed_spools())
+        diffs = se.compare_placements(old_places, places)
+        run.check(sc, f"{what}: the fixed list ({len(places)} spools) goes to the same places and container names",
+                  not diffs, "; ".join(diffs))
+        return ids
+
+    def _web_unit_first(self, sc: str, what: str, auth: dict) -> None:
+        """The first migration when the web unit is the first to read the list: the Hub is stopped and storage.xml
+        removed (the state right after an update, before the Hub has started), the web unit restarted and asked. The
+        web unit may not write /etc: it answers from the old keys in memory, the same list; the Hub, started after it,
+        writes the file."""
+        run = self.run
+        f = ETC / "storage.xml"
+        code, before = self._storage_view(auth)
+        run.sh(["systemctl", "stop", "filament-kit.service"], name="stop-hub")
+        f.unlink(missing_ok=True)
+        run.sh(["systemctl", "restart", "filament-kit-web.service"], name="restart-web")
+        up = wait_for(lambda: http("GET", f"{WEB}/health")[0] == 200 or None, 60, 1, "the web unit's /health")
+        run.check(sc, f"{what}: web unit first: it is up while the Hub is stopped and storage.xml is gone",
+                  bool(up) and not f.exists())
+        wcode, wview = jhttp("GET", f"{WEB}/intake/api/storage")
+        run.check(sc, f"{what}: web unit first: GET intake/api/storage answers with no storage.xml (list in memory)",
+                  wcode == 200 and isinstance(wview, dict), f"{wcode} {str(wview)[:400]}")
+        run.check(sc, f"{what}: web unit first: it is the same list the Hub answered (names, roles, how full)",
+                  code == 200 and wview == before, f"web {json.dumps(wview)[:900]} hub {json.dumps(before)[:900]}")
+        run.check(sc, f"{what}: web unit first: it wrote no storage.xml (it cannot write /etc)", not f.exists(), str(f))
+        run.sh(["systemctl", "start", "filament-kit.service"], name="start-hub")
+        self._wait_kit()
+        self._storage_file_check(sc, f"{what}: web unit first, then the Hub starts")
+        code2, after = self._storage_view(auth)
+        run.check(sc, f"{what}: web unit first: the Hub's list from the file is the one the web unit answered",
+                  code2 == 200 and after == wview, f"hub {json.dumps(after)[:900]} web {json.dumps(wview)[:900]}")
+
+    def h_storage(self, sc="h") -> None:
+        if not self.storage_previous:
+            raise Skip("no --storage-previous tag given")
+        for tag in self.storage_previous:
+            self._storage_pair(sc, tag)
+
+    def _storage_pair(self, sc: str, tag: str) -> None:
+        run, rel = self.run, self.rel
+        fk, sw = "/usr/local/bin/filament-kit", "/usr/local/bin/spoolwarden"
+        print(f"\n  -- storage: {tag} -> this checkout ({self.v2})", flush=True)
+        if nothing_installed():
+            uninstall(run, rel, f"uninstall-before-storage-{tag}")
+        self.foreign_install = True                 # from here the host holds the old tag's build, then v2
+        left = nothing_installed()
+        run.check(sc, f"{tag}: starts from a host with no kit on it", not left, ", ".join(left))
+        tree, old, dist = rel.build_previous(tag)
+        if version_tuple(old) >= version_tuple(self.v2):
+            raise Fail(f"{tag} is {old}, not older than this checkout's {self.v2}")
+        repo = f"e2e/storage-{tag}"
+        rel.publish(old, repo=repo, dist=dist)
+        if rel.server is None:
+            rel.serve()
+        r = run.sh(["bash", str(tree / "get.sh"), "--api", rel.api, "--repo", repo, "--modules",
+                    "spoolman,server,printers,web", "--set", f"web.public_url={PUBLIC_URL}"],
+                   name=f"get-storage-{tag}", timeout=3600)
+        run.check(sc, f"{tag}'s own get.sh installs {old}", r.returncode == 0 and installed_version() == old,
+                  r.stdout[-1500:] + r.stderr[-800:])
+        if r.returncode:
+            raise Fail("install of the old release failed; see the log")
+        wait_for(lambda: jhttp("GET", f"{KIT}/api/info")[0] == 200 or None, 90, 2, "the kit API")
+        r = kit_python("from filament_kit import pairing; print(pairing.issue('e2e').code)")
+        code, body = jhttp("POST", f"{KIT}/api/pair", body={"code": r.stdout.strip()})
+        if code != 200 or not isinstance(body, dict) or not body.get("token"):
+            raise Fail(f"pairing on {old} refused: {code}")
+        auth = {"Authorization": f"Bearer {body['token']}"}
+        wait_for(lambda: http("GET", f"{SPOOLMAN}/info")[0] == 200 or None, 120, 2, "Spoolman")
+        run.check(sc, f"{tag}: the old release has no storage.xml", not (ETC / "storage.xml").exists())
+        # the old release places the fixed list under each variant's settings; the main variant's spools stay
+        items = se.fixed_spools()
+        old_places: dict[str, list] = {}
+        main_ids: list[int] = []
+        for v in se.variants_main_last():
+            self._old_settings(sc, tag, v)
+            places, ids = self._add_fixed(auth, items)
+            diffs = se.compare_placements(se.old_rule(items, v), places)
+            run.check(sc, f"{tag}: {v['name']}: the old release places the {len(places)} spools by its own rule "
+                      f"(the harness's oracle)", not diffs, f"{'; '.join(diffs)} {places}")
+            old_places[v["name"]] = places
+            if v["main"]:
+                main_ids = ids
+            else:
+                self._delete_spools(ids)
+        main = next(v for v in se.VARIANTS if v["main"])
+        keys_before = se.old_keys_of(read_cfg())
+        cfg = read_cfg()
+        cfg["updates"] = {"api": rel.api, "repo": repo}
+        self._save_cfg(cfg)
+        rel.publish(self.v2, repo=repo)
+        r = self._update(name=f"storage-update-{tag}", timeout=3600)
+        run.check(sc, f"{tag}'s own updater installs {self.v2}", r.returncode == 0 and installed_version() == self.v2,
+                  r.stdout[-1500:] + r.stderr[-800:])
+        if r.returncode:
+            raise Fail("the update failed; see the log")
+        act = wait_for(lambda: (lambda a: a if set(a.values()) == {"active"} else None)(
+            units_active("spoolman.service", "filament-kit.service", "filament-kit-web.service")), 90, 2)
+        run.check(sc, f"{tag} -> {self.v2}: services active after the update", bool(act))
+        self._wait_kit()
+        what = f"{tag} -> {self.v2}: {main['name']}"
+        # the upgrade itself: the Hub's first start of this version writes the file
+        self._storage_file_check(sc, what)
+        run.check(sc, f"{what}: the six old keys are still in config.json, untouched",
+                  se.old_keys_of(read_cfg()) == keys_before, f"{se.old_keys_of(read_cfg())} != {keys_before}")
+        code, view = self._storage_view(auth)
+        rows = view.get("locations") if isinstance(view, dict) else None
+        run.check(sc, f"{what}: GET api/storage answers the migrated list", code == 200 and isinstance(rows, list),
+                  f"{code} {view}")
+        if not isinstance(rows, list):
+            raise Fail("no storage list after the update")
+        problems = se.structure_problems(rows, main)
+        run.check(sc, f"{what}: the list holds the roles, the PLA place and the containers", not problems,
+                  f"{problems} {json.dumps(rows)[:1500]}")
+        want_used = se.expected_used(rows, old_places[main["name"]])
+        got_used = {row["name"]: row["used"] for row in rows}
+        run.check(sc, f"{what}: the spools the old release placed are counted in the right locations (how full)",
+                  want_used == got_used, f"expected {want_used}, answered {got_used}")
+        texts = se.location_texts(rows)
+        run.check(sc, f"{what}: every place the old release used is a location or a container of the list",
+                  all(loc in texts for _, _, loc in old_places[main["name"]]),
+                  str(sorted({loc for _, _, loc in old_places[main["name"]]} - texts)))
+        r = run.sh([sw, "locations", "--json"], name=f"locations-json-{tag}")
+        try:
+            cli_view = json.loads(r.stdout)
+        except ValueError:
+            cli_view = None
+        run.check(sc, f"{what}: `spoolwarden locations --json` lists the same as GET api/storage",
+                  r.returncode == 0 and cli_view == view, f"rc {r.returncode} {r.stdout[-600:]} {r.stderr[-300:]}")
+        for key, _ in se.cli_args(main):
+            r = run.sh([fk, "config", "set", key, "Changed"], name=f"old-key-set-{key}")
+            said = r.stdout + r.stderr
+            run.check(sc, f"{what}: `config set {key}` is refused",
+                      r.returncode != 0 and "storage locations are a list now" in said, f"rc {r.returncode} {said[-300:]}")
+        run.check(sc, f"{what}: the refused `config set` changed nothing in config.json",
+                  se.old_keys_of(read_cfg()) == keys_before)
+        # the spools came through the upgrade; now the list added again on empty shelves
+        self._delete_spools(main_ids)
+        ids = self._migrated_checks(sc, what, main, auth, old_places[main["name"]])
+        self._web_unit_first(sc, what, auth)
+        self._delete_spools(ids)
+        # the other variants: their old keys put back in config.json, no storage.xml, the Hub restarted (first start)
+        for v in (x for x in se.VARIANTS if not x["main"]):
+            self._save_cfg(se.cfg_with(read_cfg(), v))
+            (ETC / "storage.xml").unlink(missing_ok=True)
+            run.sh(["systemctl", "restart", "filament-kit.service"], name=f"restart-hub-{tag}")
+            self._wait_kit()
+            where = f"{tag} -> {self.v2}: {v['name']}"
+            self._storage_file_check(sc, where)
+            ids = self._migrated_checks(sc, where, v, auth, old_places[v["name"]])
+            self._delete_spools(ids)
+
     # ---- g) a backup zip brings the kit back on a wiped, freshly installed machine
     def _kit_state(self, auth: dict) -> dict:
         """What has to be the same after a restore, as the kit's own API, Spoolman and its files answer it."""
@@ -963,7 +1225,7 @@ SEED_ITEM = {"vendor": "E2E Test Co", "name": "E2E PLA Red", "material": "PLA", 
 # The state each scenario starts from (E2E.prepare): "clean" no kit; "release" v1 on the fake release server;
 # "server" this checkout's v1 installed by get.sh with spoolman,server,printers,web; "seeded" that plus the
 # e2e pairing and the spool with its tag (what d leaves); None: the scenario sets itself up (f).
-NEEDS = {"a": "clean", "d": "server", "c": "seeded", "b": "server", "e": "release", "f": None, "g": "seeded"}
+NEEDS = {"a": "clean", "d": "server", "c": "seeded", "b": "server", "e": "release", "f": None, "g": "seeded", "h": None}
 
 SCENARIOS = {
     "a": ("a) fake release server: get.sh install, tampered tarball, bad signature", "a_install"),
@@ -973,6 +1235,7 @@ SCENARIOS = {
     "e": ("e) station upgraded by the updater keeps its server address", "e_station"),
     "f": ("f) the last released tag: real update from it, real rollback to it", "f_cross_tag"),
     "g": ("g) backup zip, wipe, fresh install, restore: the same kit comes back", "g_backup_restore"),
+    "h": ("h) storage locations: the old release's settings, upgraded to this checkout", "h_storage"),
 }
 
 
@@ -981,15 +1244,21 @@ def main() -> int:
     ap.add_argument("--work", required=True)
     ap.add_argument("--only", default="a,d,c,b,e")
     ap.add_argument("--previous", help="a tag of this repo, vX.Y.Z: adds scenario f")
+    ap.add_argument("--storage-previous", help="tags of this repo, vX.Y.Z[,vX.Y.Z]: adds scenario h, one run per tag")
     args = ap.parse_args()
+    storage_tags = [t for t in (args.storage_previous or "").split(",") if t]
+    if any(not re.fullmatch(r"v\d+\.\d+\.\d+", t) for t in storage_tags):
+        ap.error("--storage-previous takes tags like v0.6.2,v0.6.1")
     if args.previous and not re.fullmatch(r"v\d+\.\d+\.\d+", args.previous):
         ap.error("--previous takes a tag like v0.4.0")
     run = Run(Path(args.work))
     rel = Releases(run)
-    e2e = E2E(run, rel, args.previous)
+    e2e = E2E(run, rel, args.previous, storage_tags)
     want = [s for s in args.only.split(",") if s]
     if args.previous and "f" not in want:
         want.append("f")
+    if storage_tags and "h" not in want:
+        want.append("h")
     status: dict[str, str] = {}
     try:
         print(f"==> building releases {e2e.v1} and {e2e.v2} (throwaway key)", flush=True)
@@ -998,7 +1267,7 @@ def main() -> int:
         for key in want:
             title, meth = SCENARIOS[key]
             print(f"\n==> {title}", flush=True)
-            if key not in ("a", "f") and "a" in want and not e2e.installed:     # f installs its own
+            if key not in ("a", "f", "h") and "a" in want and not e2e.installed:     # f and h install their own
                 status[key] = "skip: the install (a) failed"
                 print(f"  SKIP {status[key]}")
                 continue
