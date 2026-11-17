@@ -143,12 +143,25 @@ class Storage:
                 for n in range(1, (loc.count or 0) + 1)]
 
     def describe(self, taken) -> list[dict]:
-        """One dict per location in fill order, the fields of the `GET api/storage` rows (R79 section 4).
-        (R457 C4: no field is added; the web app's "Automatic" line comes from the preview.)"""
+        """One dict per location in fill order, the rows of `GET api/storage` (R79 section 4 and the 22:10 contract
+        change): `containers` ([{name, number, taken}]) and `prefix` are null for Bulk storage; a client never builds a
+        container name itself. (R457 C4: no other field; the web app's "Automatic" line comes from the preview.)"""
         return [{"id": x.id, "name": x.name, "type": x.type, "limit": x.limit, "count": x.count,
                  "used": self.used(x, taken), "free": self.free(x, taken), "fill": x.fill,
                  "materials": list(x.materials), "overflow": x.overflow, "default_overflow": x.default_overflow,
-                 "sealed": x.sealed, "position": i + 1} for i, x in enumerate(self.locations)]
+                 "sealed": x.sealed, "position": i + 1, "containers": self.containers(x, taken),
+                 "prefix": x.container_prefix() if x.type == CONTAINERS else None}
+                for i, x in enumerate(self.locations)]
+
+    def choosable(self) -> list[str]:
+        """Every text a spool's location may be set to by name: each location's name (a containers location's name
+        stands for its lowest free container), then that set's container names."""
+        out: list[str] = []
+        for x in self.locations:
+            out.append(x.name)
+            if x.type == CONTAINERS:
+                out.extend(x.container_name(n) for n in range(1, (x.count or 0) + 1))
+        return out
 
 
 def is_container_name(loc: Location, text: str) -> bool:
@@ -498,6 +511,12 @@ def _write(st: Storage, keep_unreadable: bool = False) -> None:
             pass
         raise
     _cache = None
+
+
+def peek() -> Storage:
+    """The list as `current` reads it, but never written: for a reader that may not write (the web unit), which
+    builds it from the old keys in memory while no storage.xml exists yet."""
+    return load() or migrate(config.load())
 
 
 def current() -> Storage:

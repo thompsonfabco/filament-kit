@@ -60,6 +60,7 @@ def transport_security(public: str) -> TransportSecuritySettings:
 def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=None, store: auth.Store | None = None,
               lockout: auth.Lockout | None = None, tools: mcp_tools.Tools | None = None, kit_api=None,
               reader_queue=None):
+    live = cfg is None
     cfg = cfg if cfg is not None else config.load()
     public = public_url(cfg)
     lan = (cfg.get("web") or {}).get("lan") or []
@@ -68,7 +69,7 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
     lockout = lockout if lockout is not None else auth.Lockout()
     tools = tools if tools is not None else mcp_tools.Tools(sm, kit_api=kit_api, kit_writes=True)
 
-    mcp = MCPServer("filament-kit", title="Filament inventory", instructions=mcp_tools.instructions(cfg),
+    mcp = MCPServer("filament-kit", title="Filament inventory", instructions=mcp_tools.instructions(cfg, tools.storage_list() if live else None),
                     version=__version__, auth_server_provider=auth.Provider(store, public),
                     auth=auth.auth_settings(public))
     mcp_tools.register(mcp, tools)

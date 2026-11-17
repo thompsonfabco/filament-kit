@@ -227,7 +227,10 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, paren
         _check_parents(items)                   # before _LOCK: it may wait on the build's live.lock
     result = AddResult(dry=dry)
     with _LOCK:
-        placed = placement.place([{**it, "_i": i} for i, it in enumerate(items)], _used_locations(sm), rules)
+        try:
+            placed = placement.place([{**it, "_i": i} for i, it in enumerate(items)], _used_locations(sm), rules)
+        except placement.NoFreeContainer as e:        # a set named as the location, every container taken
+            raise ItemsInvalid(str(e), [{"item": e.index, "field": "location", "message": str(e)}]) from None
         vendors = {v["name"].lower(): v for v in sm.get("vendor")}
         fils = {((f.get("vendor") or {}).get("name", "").lower(), f["name"].lower()): f for f in sm.get("filament")}
         # re-check gross against the tare that will really be used (an existing filament's, else the item's)
@@ -544,6 +547,9 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
             material = (spool.get("filament") or {}).get("material") or ""
             location = placement.place([{"material": material, "sealed": False, "count": 1}], used, rules)[0][
                 "location"]
+        if location is not None:                      # a containers location's name = its lowest free container
+            used = Counter(s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id)
+            location = placement.resolve(placement.as_storage(rules), location, used)
         if location is not None and location != spool.get("location"):
             patch["location"] = location
         moist = {} if humidity is None else {"box_humidity": json.dumps(humidity),
@@ -624,9 +630,10 @@ def spool_view(s: dict) -> dict:
 
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
                  location: str | None = None, empty: bool = False, dry: bool,
-                 locations: list[str] | None = None) -> dict:
+                 locations: list[str] | None = None, rules=None) -> dict:
     """Set a spool's weight (`gross` with the spool, or `remaining` filament), move it, or mark it empty. With
-    `locations` (the web app's list), a location outside it is refused; the app's route passes none and takes any."""
+    `locations` (the web app's list), a location outside it is refused; the app's route passes none and takes any.
+    With `rules` (the storage list), the name of an Individual containers location means its lowest free container."""
     spool = sm.get(f"spool/{spool_id}")
     if sum(x is not None for x in (gross, remaining)) + bool(empty) > 1:
         raise SpoolEditError("give only one of gross, remaining or empty", "empty" if empty else "remaining")
@@ -649,6 +656,12 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
     if location is not None:
         if locations is not None and location not in locations:
             raise SpoolEditError(f"{location!r} is not one of the Hub's storage locations", "location")
+        if rules is not None:
+            used = Counter(x["location"] for x in sm.get("spool") if x.get("location") and x["id"] != spool_id)
+            try:
+                location = placement.resolve(placement.as_storage(rules), location, used)
+            except placement.NoFreeContainer as e:
+                raise SpoolEditError(str(e), "location") from None
         patch["location"] = location
     if not patch:
         return spool

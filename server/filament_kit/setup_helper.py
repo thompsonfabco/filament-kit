@@ -517,14 +517,6 @@ def _model(value) -> str:
     return text
 
 
-def _locations(value) -> list[str]:
-    if not isinstance(value, list) or not 1 <= len(value) <= 50:
-        raise ValueError("must be a list of 1 to 50 places")
-    return [_one_line(v, 100) for v in value]
-
-
-
-
 def _hosts(value) -> list[str]:
     """setup.hosts: more names the setup page answers to (DNS names only, never an address: those always work)."""
     if isinstance(value, str):
@@ -590,11 +582,6 @@ GENERAL = {
     "model": (_model, "restart"),
     "reads_per_day": (lambda v: _whole(v, 1, 100000), "restart"),
     "intake.history_keep": (lambda v: _whole(v, 0, 500), None),     # read per record (intake_history.keep)
-    "locations": (_locations, None),
-    "placement.pla_location": (lambda v: _one_line(v, 100), None),
-    "placement.box_prefix": (lambda v: _one_line(v, 100, keep_spaces=True), None),
-    "placement.box_count": (lambda v: _whole(v, 0, 999), None),
-    "placement.overflow": (lambda v: _one_line(v, 100), None),
     "station.tts": (_tts, "apply"),
     "appearance.theme": (_look, None),      # read on every page and api/info: no restart
     "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
