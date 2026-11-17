@@ -100,7 +100,10 @@ async function main() {
     const waitFor = async (js, what = js, ms = 8000) => {
       api_last = `wait for ${what}`;
       for (let t = 0; t < ms; t += 50) { if (await evaluate(`!!(${js})`)) return; await sleep(50); }
-      throw new Error(`timed out waiting for ${what}`);
+      // what the page showed when it gave up: enough to tell a slow page from a refused one
+      const shown = await evaluate(`JSON.stringify({ hash: location.hash, results: [...document.querySelectorAll(".result__text")].map((e) => e.textContent.slice(0, 120)),
+        dialog: !!document.querySelector("dialog[open]"), busy: document.querySelectorAll('[aria-busy="true"]').length })`).catch(() => "unreadable");
+      throw new Error(`timed out waiting for ${what}; the page showed ${shown}`);
     };
     const centre = async (selector, text) => {
       let box = null;
