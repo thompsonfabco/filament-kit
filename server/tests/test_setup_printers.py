@@ -592,7 +592,7 @@ def test_the_live_view_link_resolves_beside_the_setup_page():
     expr = re.search(r"const liveUrl = \(\) => (location\.pathname\..*);$", text, re.M).group(1)
     probe = ["/setup", "/setup/", "/kit/setup", "/", "/kit/"]      # the Hub page is served at / as well as /setup
     js = f"console.log(JSON.stringify({json.dumps(probe)}.map((p) => {{ const location = {{ pathname: p }}; return {expr}; }})));"
-    out = subprocess.run([shutil.which("node"), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
+    out = subprocess.run([shutil.which("node"), "-e", js], capture_output=True, encoding="utf-8", timeout=30, check=True).stdout
     assert json.loads(out) == ["/intake#printers", "/intake#printers", "/kit/intake#printers", "/intake#printers", "/kit/intake#printers"]
 
 

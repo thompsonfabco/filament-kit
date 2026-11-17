@@ -273,7 +273,7 @@ def test_the_tab_script_parses_and_reads_the_readers_answer():
     fn = js.split("function parseHello(line) {")[1].split("\n}\n")[0]
     probe = ["FK-READER 1794501335 configured=1 wifi=ok server=unauth", "FK-READER x", "HELLO intake-panel 11"]
     code = f"function parseHello(line) {{{fn}\n}}\nconsole.log(JSON.stringify({json.dumps(probe)}.map(parseHello)));"
-    out = subprocess.run([shutil.which("node"), "-e", code], capture_output=True, text=True, timeout=30, check=True).stdout
+    out = subprocess.run([shutil.which("node"), "-e", code], capture_output=True, encoding="utf-8", timeout=30, check=True).stdout
     assert json.loads(out) == [{"build": 1794501335, "configured": True, "wifi": "ok", "server": "unauth"}, None, None]
 
 

@@ -785,7 +785,7 @@ def test_service_worker_shell_follows_its_scope_under_the_public_path(app):
               " addEventListener() {}, location: {origin: 'x'}}, URL, caches: {}});"
               " vm.runInContext(process.argv[1], ctx); console.log(vm.runInContext('JSON.stringify(SHELL)', ctx));")
     for scope, base in ((ORIGIN + BASE + "/", BASE), ("https://hub.test/intake/", "/intake")):
-        out = subprocess.run([node, "-e", script, sw, scope], capture_output=True, text=True, check=True).stdout
+        out = subprocess.run([node, "-e", script, sw, scope], capture_output=True, encoding="utf-8", check=True).stdout
         shell = json.loads(out)
         assert shell[0] == base and f"{base}/app.js" in shell and f"{base}/shared/tokens.css" in shell
         assert all(u == base or u.startswith(base + "/") for u in shell)
