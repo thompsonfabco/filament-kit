@@ -111,8 +111,11 @@ time. For a first install, pressing **Enter** at every question is fine.
    Use the default storage locations? [Y/n]:
    ```
 
-   Press Enter for yes. The defaults are **Sealed stock**, **Rack 1**, **Storage box** and **Overflow**. You can
-   rename them later in `sudo spoolwarden config` under **Storage locations**.
+   Press Enter for yes. The defaults are four places: **Sealed stock** (takes the sealed spools), **Rack 1** (takes PLA),
+   **Storage box** (only when you choose it) and **Overflow** (takes spools when their own places are full). Answer `n`
+   to edit the list now; `q` goes back. You can change it any time later: on the Hub page under **Settings**,
+   **Storage locations**, or with `sudo spoolwarden locations`.
+   How the list works: [Storage locations](user-guide.md#storage-locations).
 
 5. **Anthropic API key**: only if you answered `y` to question 2. Paste the key and press Enter. Each character
    shows as a `*`.
@@ -253,10 +256,11 @@ From v0.4.3 the page has sections: **Overview**, **Features**, **Printers**, **D
   would change** lists the pending updates, and **Accept these** accepts exactly that list: if a newer build has
   come since, it asks you to look again. Slicer Sync writes accepted updates at its next run, after its backup. Nothing
   else here replaces a preset in your slicers. Each of these needs the setup code.
-- **Settings** (v0.5.0). **General** changes the display name, storage locations, the Claude model, the reads per day and
+- **Settings** (v0.5.0). **General** changes the display name, the Claude model, the reads per day and
   the Weigh Station's voice, each with the setup code. Changing the model or the reads per day restarts the Hub. With an
   external Spoolman it changes that address too, once the new one has answered. **Remote access**, with the remote Feature
   on, shows the firewall rules and gets the certificate.
+  **Storage locations** edits the list of places spools are kept in (the setup code is asked when you save).
   **Filament Catalog** shows its version and last check, with **Update now**, a button to go back
   to the version before, and a box to add your own entry. Each takes the setup code, and the first two run as
   background jobs.
