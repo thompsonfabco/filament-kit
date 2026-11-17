@@ -244,3 +244,129 @@ def is_alert(event: dict, settings: dict | None = None) -> bool:
     if event["kind"] == "spool.low" and s["last_spool_only"] and str(data.get("in_stock", "0")) not in ("0", ""):
         return False
     return True
+
+
+# ---------------------------------------------------------------- the Hub's disk (R80 section 6)
+
+def _existing(path: Path) -> Path:
+    """`path`, or the nearest folder above it that exists (a backups folder not made yet lives on its parent's disk)."""
+    p = Path(path)
+    while not p.exists() and p.parent != p:
+        p = p.parent
+    return p
+
+
+def disk_state(total: int, free: int, settings: dict | None = None) -> str:
+    """`ok`, `warn` or `bad` for a disk: bad at the bad limit or with under 1 GB free, warn at the warn limit."""
+    s = settings or load()
+    used = 100.0 * (total - free) / total if total > 0 else 100.0
+    if free < FREE_BAD_BYTES or used >= s["storage_bad_percent"]:
+        return "bad"
+    return "warn" if used >= s["storage_warn_percent"] else "ok"
+
+
+def filesystems(settings: dict | None = None) -> list[dict]:
+    """The Hub's disks: the one that holds the state folder and, when it is another one,
+    the one that holds the backups folder. [{path_label: state|backups, path, total, free, percent_used, state}]
+    (bytes; percent_used to one decimal; state ok|warn|bad). A folder that cannot be measured is left out."""
+    s = settings or load()
+    paths = config.paths()
+    out, seen = [], []
+    for label, folder in (("state", paths.state), ("backups", paths.backups)):
+        where = _existing(folder)
+        try:
+            dev = os.stat(where).st_dev
+            use = shutil.disk_usage(where)
+        except OSError as e:
+            log.warning("cannot measure the disk of %s: %s", label, _reason(e))
+            continue
+        if dev in seen:
+            continue
+        seen.append(dev)
+        out.append({"path_label": label, "path": str(where), "total": use.total, "free": use.free,
+                    "percent_used": round(100.0 * (use.total - use.free) / use.total, 1) if use.total else 100.0,
+                    "state": disk_state(use.total, use.free, s)})
+    return out
+
+
+def worst(fs: list[dict]) -> dict | None:
+    """The disk to alert about: the one in the worst state, then the fullest."""
+    rank = {"ok": 0, "warn": 1, "bad": 2}
+    return max(fs, key=lambda f: (rank[f["state"]], f["percent_used"]), default=None)
+
+
+def tree_size(path: Path, limit: int = 500_000) -> int:
+    """Bytes of the files under `path` (links not followed, not counted); 0 when it is not there. Stops counting
+    after `limit` entries so a huge tree cannot hold up the Hub."""
+    total, todo, seen = 0, [Path(path)], 0
+    while todo and seen < limit:
+        d = todo.pop()
+        try:
+            with os.scandir(d) as it:
+                for e in it:
+                    seen += 1
+                    try:
+                        if e.is_symlink():
+                            continue
+                        if e.is_dir(follow_symlinks=False):
+                            todo.append(Path(e.path))
+                        else:
+                            total += e.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return total
+
+
+def items() -> list[dict]:
+    """What Spoolwarden itself keeps: [{key, bytes}] for backups, photos (the recently added spools'), reader (the
+    Label Reader on this Hub), events and logs (the Hub's own .log files; the journal is root's and not counted)."""
+    from . import intake_history
+    paths = config.paths()
+    try:
+        photos = intake_history._size()
+    except OSError:
+        photos = 0
+    logs = sum(tree_size(d) for d in (paths.state / "logs",)) + sum(
+        p.stat().st_size for p in paths.state.glob("*.log") if p.is_file() and not p.is_symlink())
+    return [{"key": "backups", "bytes": tree_size(paths.backups)}, {"key": "photos", "bytes": photos},
+            {"key": "reader", "bytes": tree_size(paths.opt / "local-intake")},
+            {"key": "events", "bytes": tree_size(paths.state / "events")}, {"key": "logs", "bytes": logs}]
+
+
+def storage_use(settings: dict | None = None) -> dict:
+    """`GET api/storage-use`'s numbers: {filesystems: [...], items: [{key, bytes}]} (titles are EA3's)."""
+    s = settings or load()
+    return {"filesystems": filesystems(s), "items": items()}
+
+
+# ---------------------------------------------------------------- running low (R80 section 7)
+
+def running_low(spools: list[dict], settings: dict | None = None) -> dict:
+    """`GET api/spools/low`'s content from Spoolman's spool list: {threshold_g, spools: [{id, filament, material,
+    color, remaining_g, location, in_stock, last_one}]}, least filament first. A spool is low when it is opened (not
+    sealed, not empty) and at or under the threshold. `in_stock`: the other spools of the same filament that are not
+    empty (sealed ones count); `last_one`: there are none."""
+    from . import inventory
+    s = settings or load()
+    limit = s["running_low_g"]
+    stock: dict = {}
+    for sp in spools:
+        fid = (sp.get("filament") or {}).get("id")
+        if inventory.state_of(sp) != "empty":
+            stock.setdefault(fid, []).append(sp.get("id"))
+    rows = []
+    for sp in spools:
+        left = sp.get("remaining_weight")
+        if inventory.state_of(sp) != "opened" or isinstance(left, bool) or not isinstance(left, (int, float)) \
+                or left > limit:
+            continue
+        f = sp.get("filament") or {}
+        others = len([i for i in stock.get(f.get("id"), []) if i != sp.get("id")])
+        name = " ".join(x for x in ((f.get("vendor") or {}).get("name"), f.get("name")) if x)
+        rows.append({"id": sp.get("id"), "filament": name, "material": f.get("material"),
+                     "color": f.get("color_hex"), "remaining_g": left, "location": sp.get("location"),
+                     "in_stock": others, "last_one": others == 0})
+    rows.sort(key=lambda r: (r["remaining_g"], r["id"] if isinstance(r["id"], int) else 0))
+    return {"threshold_g": limit, "spools": rows}
