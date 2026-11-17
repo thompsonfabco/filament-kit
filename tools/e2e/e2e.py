@@ -936,28 +936,120 @@ class E2E:
                 raise Fail(f"cannot delete spool {sid} from Spoolman: {code}")
 
     @staticmethod
-    def _owner_mode(path: Path) -> tuple[tuple[str, str, int], dict[str, str]]:
-        """(owner, group, mode) and the named-user ACL entries of a file."""
+    def _owner_mode(path: Path) -> tuple[str, str, int]:
+        """(owner, group, mode) of a file or folder."""
         r = subprocess.run(["stat", "-c", "%U %G %a", str(path)], capture_output=True, text=True)
-        try:
-            acl = se.decode_acl(os.getxattr(path, "system.posix_acl_access"), _user_name)
-        except (OSError, ValueError):
-            acl = {}
-        return se.parse_stat(r.stdout), acl
+        return se.parse_stat(r.stdout)
 
     def _storage_file_check(self, sc: str, when: str) -> None:
+        """storage.xml is in the Hub's state folder, owned like it, mode 644 and read by the web unit's user; and
+        nothing of storage is in /etc."""
         run = self.run
-        f = ETC / "storage.xml"
+        f = STATE / "storage.xml"
         if not wait_for(lambda: f.is_file(), 60, 1, str(f)):
-            run.check(sc, f"{when}: storage.xml exists", False, str(f))
+            run.check(sc, f"{when}: storage.xml exists in {STATE}", False, str(f))
             return
-        (cs, ca), (fs, fa) = self._owner_mode(ETC / "config.json"), self._owner_mode(f)
-        problems = se.owner_mode_problems(cs, fs, ca, fa, "filament-kit-web")
-        run.check(sc, f"{when}: storage.xml exists with config.json's owner, group, mode (640) and web read grant",
-                  not problems, f"{problems}; storage.xml {fs} {fa}; config.json {cs} {ca}")
-        if "filament-kit-web" not in ca:
-            print(f"  SKIP {when}: config.json itself has no read ACL for filament-kit-web here, so the grant on "
-                  f"storage.xml is not proved ({ca})", flush=True)
+        problems = se.state_file_problems(self._owner_mode(STATE), self._owner_mode(f))
+        run.check(sc, f"{when}: storage.xml is in the state folder with its owner and group and mode 644",
+                  not problems, f"{problems}; storage.xml {self._owner_mode(f)}; state {self._owner_mode(STATE)}")
+        r = subprocess.run(["runuser", "-u", "filament-kit-web", "--", "cat", str(f)], capture_output=True, text=True)
+        run.check(sc, f"{when}: the web unit's user can read it", r.returncode == 0 and "<storage" in r.stdout,
+                  r.stderr[-300:])
+        run.check(sc, f"{when}: there is no storage.xml in {ETC}", not (ETC / "storage.xml").exists())
+
+    @staticmethod
+    def _hub_main_pid() -> str:
+        r = subprocess.run(["systemctl", "show", "-p", "MainPID", "--value", "filament-kit.service"],
+                           capture_output=True, text=True)
+        return r.stdout.strip()
+
+    def _hub_did_not_crash_loop(self, sc: str, what: str) -> None:
+        """The upgrade crash-loop: the Hub's user cannot write /etc (read-only to it), and its start must not fail."""
+        run = self.run
+        r = subprocess.run(["runuser", "-u", "filament-kit", "--", "touch", str(ETC / "e2e-probe")],
+                           capture_output=True, text=True)
+        run.check(sc, f"{what}: /etc/filament-kit is not writable by the Hub's user (the case that crash-looped)",
+                  r.returncode != 0, r.stdout + r.stderr)
+        n = subprocess.run(["systemctl", "show", "-p", "NRestarts", "--value", "filament-kit.service"],
+                           capture_output=True, text=True).stdout.strip()
+        run.check(sc, f"{what}: the Hub service has not restarted since its start (no crash loop)", n == "0",
+                  f"NRestarts={n!r}")
+
+    def _root_locations_add(self, sc: str, what: str, auth: dict) -> None:
+        """`sudo spoolwarden locations add`: root writes the file itself, with the Hub's owner and mode, and the
+        RUNNING Hub (same process, no restart) answers with the new location."""
+        run = self.run
+        sw = "/usr/local/bin/spoolwarden"
+        pid = self._hub_main_pid()
+        r = run.sh([sw, "locations", "add", "E2E extra shelf"], name="locations-add-root")
+        run.check(sc, f"{what}: `sudo spoolwarden locations add` succeeds", r.returncode == 0,
+                  r.stdout + r.stderr[-400:])
+        self._storage_file_check(sc, f"{what}: after `locations add` as root")
+        got = wait_for(lambda: (lambda c: c if c[0] == 200 and "E2E extra shelf" in [
+            x["name"] for x in c[1].get("locations", [])] else None)(self._storage_view(auth)), 15, 1)
+        run.check(sc, f"{what}: the running Hub lists the new location at once (GET api/storage, no restart)",
+                  bool(got), str(self._storage_view(auth))[:400])
+        run.check(sc, f"{what}: the Hub is the same process (it was not restarted)",
+                  bool(pid) and pid != "0" and self._hub_main_pid() == pid,
+                  f"before {pid}, after {self._hub_main_pid()}")
+        r = run.sh([sw, "locations", "remove", "E2E extra shelf", "--yes"], name="locations-remove-root")
+        run.check(sc, f"{what}: `locations remove` puts the list back", r.returncode == 0,
+                  r.stdout + r.stderr[-400:])
+
+    def _backup_rollback_checks(self, sc: str, tag: str, what: str, variant: dict, auth: dict, repo: str) -> None:
+        """The backup holds storage.xml; a restore of a backup without it migrates from the restored config; a
+        rollback leaves it and the update after it does not migrate again."""
+        run, fk = self.run, "/usr/local/bin/filament-kit"
+        f = STATE / "storage.xml"
+        out = run.work / f"backup-h-{tag}"
+        out.mkdir(exist_ok=True)
+        r = run.sh([fk, "backup", "create", "--out", str(out)], name=f"storage-backup-with-{tag}")
+        with_zip = sorted(out.glob("filament-kit-backup-*.zip"))
+        names = zipfile.ZipFile(with_zip[-1]).namelist() if with_zip else []
+        run.check(sc, f"{what}: the backup holds storage.xml",
+                  r.returncode == 0 and "files/var/lib/filament-kit/storage.xml" in names, (r.stdout + r.stderr)[-400:])
+        f.unlink()                                                    # a backup made without it, as an older kit's
+        r = run.sh([fk, "backup", "create", "--out", str(out)], name=f"storage-backup-without-{tag}")
+        zips = sorted(set(out.glob("filament-kit-backup-*.zip")) - set(with_zip))
+        names = zipfile.ZipFile(zips[-1]).namelist() if zips else []
+        run.check(sc, f"{what}: a backup made without storage.xml does not hold it",
+                  r.returncode == 0 and bool(zips) and "files/var/lib/filament-kit/storage.xml" not in names,
+                  (r.stdout + r.stderr)[-400:])
+        if not zips:
+            return
+        r = run.sh([fk, "restore", "--yes", str(zips[-1])], name=f"storage-restore-without-{tag}", timeout=3600)
+        run.check(sc, f"{what}: restoring it succeeds", r.returncode == 0 and "Restored." in r.stdout,
+                  (r.stdout + r.stderr)[-800:])
+        self._wait_kit()
+        self._storage_file_check(sc, f"{what}: after restoring a backup without storage.xml (migrated at the start)")
+        code, view = self._storage_view(auth)
+        rows = view.get("locations") if isinstance(view, dict) else None
+        problems = se.structure_problems(rows, variant) if isinstance(rows, list) else ["no list"]
+        run.check(sc, f"{what}: the list migrated from the restored config is the settings' list", not problems,
+                  f"{problems} {str(view)[:600]}")
+        # rollback: the old release ignores the file; the update after it must not migrate again
+        before = f.read_bytes() if f.exists() else b""
+        r = self._update("--rollback", name=f"storage-rollback-{tag}", timeout=3600)
+        run.check(sc, f"{what}: the rollback restores {tag}'s release",
+                  r.returncode == 0 and installed_version() != self.v2, (r.stdout + r.stderr)[-800:])
+        run.check(sc, f"{what}: the rollback leaves storage.xml as it was", f.exists() and f.read_bytes() == before)
+        r = run.sh(["/usr/local/bin/filament-kit", "config", "set", "locations", "Rolled back shelf"],
+                   name=f"storage-old-config-set-{tag}")
+        run.check(sc, f"{what}: the old release still edits its own `locations` key", r.returncode == 0,
+                  (r.stdout + r.stderr)[-300:])
+        cfg = read_cfg()
+        cfg["updates"] = {"api": self.rel.api, "repo": repo}
+        self._save_cfg(cfg)
+        r = self._update(name=f"storage-update-again-{tag}", timeout=3600)
+        run.check(sc, f"{what}: updating again installs {self.v2}",
+                  r.returncode == 0 and installed_version() == self.v2, (r.stdout + r.stderr)[-800:])
+        self._wait_kit()
+        run.check(sc, f"{what}: the update after the rollback did not migrate again (storage.xml unchanged)",
+                  f.exists() and f.read_bytes() == before)
+        code, view = self._storage_view(auth)
+        run.check(sc, f"{what}: the list does not hold the key edited while rolled back",
+                  code == 200 and "Rolled back shelf" not in [x["name"] for x in view.get("locations", [])],
+                  str(view)[:400])
 
     def _storage_view(self, auth: dict) -> tuple[int, object]:
         return jhttp("GET", f"{KIT}/api/storage", headers=auth)
@@ -992,7 +1084,7 @@ class E2E:
         web unit may not write /etc: it answers from the old keys in memory, the same list; the Hub, started after it,
         writes the file."""
         run = self.run
-        f = ETC / "storage.xml"
+        f = STATE / "storage.xml"
         code, before = self._storage_view(auth)
         run.sh(["systemctl", "stop", "filament-kit.service"], name="stop-hub")
         f.unlink(missing_ok=True)
@@ -1005,7 +1097,7 @@ class E2E:
                   wcode == 200 and isinstance(wview, dict), f"{wcode} {str(wview)[:400]}")
         run.check(sc, f"{what}: web unit first: it is the same list the Hub answered (names, roles, how full)",
                   code == 200 and wview == before, f"web {json.dumps(wview)[:900]} hub {json.dumps(before)[:900]}")
-        run.check(sc, f"{what}: web unit first: it wrote no storage.xml (it cannot write /etc)", not f.exists(), str(f))
+        run.check(sc, f"{what}: web unit first: it wrote no storage.xml (it cannot write the state folder)", not f.exists(), str(f))
         run.sh(["systemctl", "start", "filament-kit.service"], name="start-hub")
         self._wait_kit()
         self._storage_file_check(sc, f"{what}: web unit first, then the Hub starts")
@@ -1086,6 +1178,7 @@ class E2E:
         what = f"{tag} -> {self.v2}: {main['name']}"
         # the upgrade itself: the Hub's first start of this version writes the file
         self._storage_file_check(sc, what)
+        self._hub_did_not_crash_loop(sc, what)
         run.check(sc, f"{what}: the six old keys are still in config.json, untouched",
                   se.old_keys_of(read_cfg()) == keys_before, f"{se.old_keys_of(read_cfg())} != {keys_before}")
         code, view = self._storage_view(auth)
@@ -1122,18 +1215,21 @@ class E2E:
         # the spools came through the upgrade; now the list added again on empty shelves
         self._delete_spools(main_ids)
         ids = self._migrated_checks(sc, what, main, auth, old_places[main["name"]])
+        self._root_locations_add(sc, what, auth)
         self._web_unit_first(sc, what, auth)
         self._delete_spools(ids)
         # the other variants: their old keys put back in config.json, no storage.xml, the Hub restarted (first start)
         for v in (x for x in se.VARIANTS if not x["main"]):
             self._save_cfg(se.cfg_with(read_cfg(), v))
-            (ETC / "storage.xml").unlink(missing_ok=True)
+            (STATE / "storage.xml").unlink(missing_ok=True)
             run.sh(["systemctl", "restart", "filament-kit.service"], name=f"restart-hub-{tag}")
             self._wait_kit()
             where = f"{tag} -> {self.v2}: {v['name']}"
             self._storage_file_check(sc, where)
             ids = self._migrated_checks(sc, where, v, auth, old_places[v["name"]])
             self._delete_spools(ids)
+        last = [x for x in se.VARIANTS if not x["main"]][-1]
+        self._backup_rollback_checks(sc, tag, f"{tag} -> {self.v2}: {last['name']}", last, auth, repo)
 
     # ---- g) a backup zip brings the kit back on a wiped, freshly installed machine
     def _kit_state(self, auth: dict) -> dict:

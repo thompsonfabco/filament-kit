@@ -185,12 +185,8 @@ def test_decode_acl_names_the_users_and_their_bits():
         se.decode_acl(b"nope", lambda uid: None)
 
 
-def test_owner_mode_problems():
-    cfg = ("root", "filament-kit", 0o640)
-    acl = {"filament-kit-web": "r--"}
-    assert se.owner_mode_problems(cfg, cfg, acl, dict(acl), "filament-kit-web") == []
-    bad = se.owner_mode_problems(cfg, ("filament-kit", "filament-kit", 0o600), acl, {}, "filament-kit-web")
-    assert len(bad) == 4 and "owner:group" in bad[0] and "config.json has 640" in bad[1] and "not 640" in bad[2]
-    assert "filament-kit-web" in bad[3]
-    # config.json has no grant either (a file system without ACLs): equal, so nothing to report here
-    assert se.owner_mode_problems(cfg, cfg, {}, {}, "filament-kit-web") == []
+def test_state_file_problems():
+    folder = ("filament-kit", "filament-kit", 0o750)
+    assert se.state_file_problems(folder, ("filament-kit", "filament-kit", 0o644)) == []
+    bad = se.state_file_problems(folder, ("root", "root", 0o640))
+    assert len(bad) == 2 and "owner:group root:root" in bad[0] and "not 644" in bad[1]

@@ -168,7 +168,7 @@ def structure_problems(rows: list[dict], variant: dict) -> list[str]:
     return out
 
 
-# ---------------------------------------------------------------- owner, mode and ACL
+# ---------------------------------------------------------------- owner and mode
 
 def parse_stat(text: str) -> tuple[str, str, int]:
     """(owner, group, mode) of `stat -c '%U %G %a' FILE`, the mode as a number (0o640 -> 416)."""
@@ -192,18 +192,12 @@ def decode_acl(data: bytes, name_of) -> dict[str, str]:
     return out
 
 
-def owner_mode_problems(cfg_stat: tuple[str, str, int], file_stat: tuple[str, str, int], cfg_acl: dict[str, str],
-                        file_acl: dict[str, str], web_user: str) -> list[str]:
-    """What differs from the config file's own owner, group, mode and web-unit read grant (the design: the owner and
-    mode of config.json, plus the web unit's read ACL). Whether config.json has the grant at all is the caller's to
-    check: with none on both sides this says nothing about it."""
+def state_file_problems(dir_stat: tuple[str, str, int], file_stat: tuple[str, str, int]) -> list[str]:
+    """What differs from what the Hub's state files are: the owner and group of the state folder (the Hub's user) and
+    mode 644, which the web unit reads through its pass on the folder."""
     out = []
-    if file_stat[:2] != cfg_stat[:2]:
-        out.append(f"owner:group {file_stat[0]}:{file_stat[1]}, config.json has {cfg_stat[0]}:{cfg_stat[1]}")
-    if file_stat[2] != cfg_stat[2]:
-        out.append(f"mode {file_stat[2]:o}, config.json has {cfg_stat[2]:o}")
-    if file_stat[2] != 0o640:
-        out.append(f"mode {file_stat[2]:o}, not 640")
-    if cfg_acl.get(web_user, "") != file_acl.get(web_user, ""):
-        out.append(f"{web_user} gets {file_acl.get(web_user)!r}, config.json gives {cfg_acl.get(web_user)!r}")
+    if file_stat[:2] != dir_stat[:2]:
+        out.append(f"owner:group {file_stat[0]}:{file_stat[1]}, the state folder has {dir_stat[0]}:{dir_stat[1]}")
+    if file_stat[2] != 0o644:
+        out.append(f"mode {file_stat[2]:o}, not 644")
     return out
