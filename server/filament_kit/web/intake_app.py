@@ -32,7 +32,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import __version__, config, intake, inventory, lan, modules, shared_files, tagsources
+from .. import __version__, config, intake, inventory, lan, modules, shared_files, storage, storage_api, tagsources
 from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
@@ -256,6 +256,7 @@ class IntakeApp:
             ("/intake/api/open", self.api(self.open), ["POST"]),
             ("/intake/api/spools/{id:int}", self.api(self.spool_get), ["GET"]),
             ("/intake/api/spools/{id:int}", self.api(self.spool_edit), ["POST"]),
+            ("/intake/api/storage", self.api(self.storage_get), ["GET"]),
             ("/intake/api/presets", self.api(self.presets), ["GET"]),
             ("/intake/api/parents", self.api(self.parents), ["GET"]),
             ("/intake/api/line_add", self.api(self.line_add), ["POST"]),
@@ -413,10 +414,10 @@ class IntakeApp:
 
     def _shell(self, request: Request) -> str:
         cfg = self.tools.cfg()
-        pl = cfg["placement"]
-        data = {"base": self.base, "locations": json.dumps(cfg["locations"]),
-                "sealed": pl.get("sealed_location") or "", "auto": mcp_tools._placement_text(cfg),
-                "picks": json.dumps([pl.get("pla_location") or ""]),
+        st = self.tools.storage_list()
+        data = {"base": self.base, "locations": json.dumps([x.name for x in st.locations]),
+                "sealed": st.sealed_location().name, "auto": mcp_tools._placement_text(st),
+                "picks": json.dumps([x.name for x in st.locations if x.fill == storage.MATERIALS]),
                 # label photos with either reader: Claude (ai_intake) or the local reader (local_intake)
                 "ai": "1" if {"ai_intake", "local_intake"} & modules.enabled(cfg) else "0",
                 "printers": "1" if self.printers else "0",
@@ -685,16 +686,23 @@ class IntakeApp:
                 raise Problem(f"{key} must be true or false", key)
 
         def run() -> dict:
+            st = self.tools.storage_list()
             return inventory.edit_spool(
                 self.tools.sm, request.path_params["id"], gross=_num(b, "gross"), remaining=_num(b, "remaining"),
                 location=loc, empty=bool(b.get("empty")), dry=b.get("dry_run") is not False,
-                locations=inventory.known_locations(self.tools.sm, self.tools.cfg()["locations"]))
+                locations=inventory.known_locations(self.tools.sm, st.choosable()), rules=st)
         try:
             return await anyio.to_thread.run_sync(run)
         except SpoolmanError as e:
             if e.status == 404:
                 return self._no_spool(request)
             raise
+
+    async def storage_get(self, request: Request):
+        """The twin of the app's GET api/storage: the same data (storage_api.view), under this app's base."""
+        def run() -> dict:
+            return storage_api.view(self.tools.storage_list(), inventory._used_locations(self.tools.sm))
+        return await anyio.to_thread.run_sync(run)
 
     async def presets(self, request: Request):
         return await anyio.to_thread.run_sync(self.tools.preset_status)

@@ -19,7 +19,7 @@ from typing import Annotated, Callable
 import anyio
 from pydantic import BaseModel, Field
 
-from .. import config, inventory, modules, storage, tags, tagsources
+from .. import config, inventory, modules, placement, storage, storage_api, tags, tagsources
 from ..inventory import AddFailed, TagConflict
 from ..profiles.errors import ProfileError
 from ..spoolman import Spoolman, SpoolmanError
@@ -91,6 +91,13 @@ class Tools:
         if self._load is config.load:
             return storage.current()
         return storage.migrate(self.cfg())              # a config handed in (tests, a dev copy): its old keys
+
+    def storage_list(self):
+        """The storage list as this unit may read it: storage.xml, never written from here (the web unit's user may
+        not), else the old keys built in memory; a config handed in (tests, a dev copy) is built from its old keys."""
+        if self._load is config.load:
+            return storage.peek()
+        return storage.migrate(self.cfg())
 
     def _need(self, module: str) -> None:
         if module not in modules.enabled(self.cfg()):
@@ -341,27 +348,37 @@ def error_text(e: BaseException) -> str | None:
 
 # ---------- instructions ----------
 
-def _placement_text(cfg: dict) -> str:
-    pl = cfg.get("placement") or {}
-    n = int(pl.get("box_count") or 0)
-    boxes = (f"other materials to the lowest free '{pl.get('box_prefix', '')}NN' (01-{n:02d}), then "
-             f"'{pl.get('overflow')}'") if n else f"other materials to '{pl.get('overflow')}'"
-    return f"PLA goes to '{pl.get('pla_location')}', {boxes}"
+def _place_name(x) -> str:
+    """A place as the connector's text names it: a containers location as its numbered names."""
+    if x.type == storage.CONTAINERS:
+        return f"'{x.container_prefix()}NN' (01-{x.count:02d})"
+    return f"'{x.name}'"
 
 
-def instructions(cfg: dict) -> str:
+def _placement_text(st) -> str:
+    """Where a spool with no location goes, from the storage list: each material a location names, then the rest."""
+    by_name = {x.name: x for x in st.locations}
+    parts = []
+    for m in storage_api.view(st, {})["order_by_material"]:
+        parts.append(f"{m['material']} goes to " + ", then ".join(_place_name(by_name[n]) for n in m["locations"]))
+    rest = ", then ".join(_place_name(by_name[n]) for n in placement.order(st))
+    return "; ".join(parts + [("other materials go to " if parts else "every material goes to ") + rest])
+
+
+def instructions(cfg: dict, st=None) -> str:
+    """The connector's instructions. `st` is the storage list (Tools.storage_list); none = built from cfg's old keys."""
     own = cfg.get("web_instructions")
     if isinstance(own, str) and own.strip():
         return own.strip()
-    pl = cfg.get("placement") or {}
-    sealed = pl.get("sealed_location") or "Sealed stock"
-    locs = ", ".join(f"'{loc}'" for loc in cfg.get("locations") or [])
+    st = st if st is not None else storage.migrate(cfg)
+    sealed = st.sealed_location().name
+    locs = ", ".join(f"'{x.name}'" for x in st.locations)
     hints = (cfg.get("intake") or {}).get("tare_hints") or {}
     hint_text = ", ".join(f"{v} {g}" for v, g in sorted(hints.items(), key=lambda kv: str(kv[0]).lower()))
     tares = (f"Tares: {hint_text}, else the printed or a sibling filament's, else 200 marked as an estimate."
              if hint_text else "Tares: the printed spool weight or a sibling filament's, else 200 marked as an "
                                "estimate.")
-    place = _placement_text(cfg)
+    place = _placement_text(st)
     return "\n".join([
         "Filament inventory (Spoolman) and slicer presets for the user's printers.",
         "NEW SPOOLS from label photos: find_spools first (same vendor + product + colour already there? then reuse "

@@ -2,7 +2,16 @@
 from collections import Counter
 
 from . import storage
-from .storage import ANY, BULK, MATERIALS, Location, Storage
+from .storage import ANY, BULK, CONTAINERS, MATERIALS, Location, Storage
+
+
+class NoFreeContainer(ValueError):
+    """A request named an Individual containers location and every one of its containers is taken. `index` is the
+    item's position in the add (None outside one)."""
+
+    def __init__(self, message: str, index: int | None = None):
+        super().__init__(message)
+        self.index = index
 
 
 def as_storage(rules) -> Storage:
@@ -17,6 +26,18 @@ def sealed_name(rules) -> str:
     return as_storage(rules).sealed_location().name
 
 
+def resolve(st: Storage, location: str, counts: Counter) -> str:
+    """The text a spool's location becomes: the name of an Individual containers location (R79 section 4) means its
+    lowest free container; every other text (a bulk place, a container's own name, any text) stays as given."""
+    loc = st.by_name(location)
+    if loc is None or loc.type != CONTAINERS:
+        return location
+    name = st.lowest_free(loc, counts)
+    if name is None:
+        raise NoFreeContainer(f"Every container in {loc.name} is taken. Choose another location.")
+    return name
+
+
 def place(items: list[dict], used, rules) -> list[dict]:
     """Each item with a location: its own, else the rule's choice, with `placed_by` saying which step chose it
     (sealed | material | any | overflow | overflow_none), so the result can tell the owner where a spool went and why.
@@ -28,6 +49,17 @@ def place(items: list[dict], used, rules) -> list[dict]:
     for item in items:
         n = int(item.get("count", 1))
         if item.get("location"):
+            loc = st.by_name(item["location"])
+            if loc is not None and loc.type == CONTAINERS:      # the set's name: one container for each spool
+                for _ in range(n):
+                    try:
+                        name = resolve(st, item["location"], counts)
+                    except NoFreeContainer as e:
+                        e.index = item.get("_i")
+                        raise
+                    counts[name] += 1
+                    out.append({**item, "count": 1, "location": name})
+                continue
             out.append(dict(item))
             counts[item["location"]] += n
         elif item.get("sealed") is not False:
@@ -81,3 +113,22 @@ def _choose(st: Storage, material: str, counts: Counter) -> tuple[str, str]:
         if (name := _room(st, x, counts)):
             return name, why
     return default.name, why                    # all at their limit: the default takes the spool over it
+
+
+def order(st: Storage, material: str | None = None) -> list[str]:
+    """The names of the places a new spool of `material` is tried at, in order (the rule above, for the "Where a new
+    spool goes" panel and `order_by_material` of GET api/storage): the places that name the material, else the
+    non-overflow Any places (material None = "everything else"), then the overflow places, the default first.
+    Tolerant of a list not saved yet (no default overflow = the first overflow place leads)."""
+    own = [(x, _match(x, material)) for x in st.locations if x.fill == MATERIALS] if material is not None else []
+    best = max((n for _, n in own), default=0)
+    first = ([x for x, n in own if n == best] if best else
+             [x for x in st.locations if not x.overflow and x.fill == ANY])
+    over = [x for x in st.locations if x.overflow]
+    lead = next((x for x in over if x.default_overflow), None)
+    over = ([lead] if lead else []) + [x for x in over if x is not lead]
+    out: list[str] = []
+    for x in [*first, *over]:
+        if x.name not in out:
+            out.append(x.name)
+    return out

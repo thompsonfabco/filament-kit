@@ -22,7 +22,7 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from . import (API_VERSION, __version__, config, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, reader_corrections, setup_page,
-               station_flow, station_requests, storage, tags)
+               station_flow, station_requests, storage, storage_api, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, family, hardware, loading, mapping, pending, registry, usage
 from .bridge.klipper import discovery
@@ -1229,7 +1229,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         out = await run_in_threadpool(functools.partial(
             inventory.edit_spool, sm, request.path_params["id"], gross=_opt(body, "gross", float),
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
-            empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True)))
+            empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True), rules=rules()))
         return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9)
 
     @_authed
@@ -1260,13 +1260,17 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def locations(request: Request):
+        """Today's answer, a list of names (released apps read it): every storage location's name in fill order, then
+        any other text a spool is stored at. A containers location is one name here; its containers are the spools'."""
         def names() -> list[str]:
-            out = list(config.load()["locations"])
-            for loc in sorted({s["location"] for s in sm.get("spool") if s.get("location")}):
-                if loc not in out:
-                    out.append(loc)
-            return out
+            return inventory.known_locations(sm, [x.name for x in storage.current().locations])
         return JSONResponse({"locations": await run_in_threadpool(names)})
+
+    @_authed
+    async def storage_list(request: Request):
+        """The storage locations with how full each is, the order a new spool goes by material, and notices
+        (storage_api.view; the web app's twin and `spoolwarden locations --json` give the same data)."""
+        return JSONResponse(await run_in_threadpool(storage_api.current_view, sm, storage.current()))
 
     @_authed
     async def station_state(request: Request):
@@ -1319,6 +1323,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/spools/{id:int}", spool_get),
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
+            Route("/api/storage", storage_list),
             Route("/app.apk", apk),
             Route("/api/station", station_state),
             Route("/api/station/hello", station_hello),
