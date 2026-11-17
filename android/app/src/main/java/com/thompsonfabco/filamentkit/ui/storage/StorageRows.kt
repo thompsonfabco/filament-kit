@@ -34,8 +34,8 @@ fun StorageLocation.howFullText(): AddText? {
         return if (left <= 0) AddText.of(R.string.storage_how_full_full) else AddText.of(R.string.storage_how_full_free, left)
     }
     val n = used ?: return null
-    // the default overflow and the sealed-spools location take spools whatever their limit says
-    val cap = limit?.takeIf { !defaultOverflow && !sealed }
+    // every bulk limit counts, the default overflow's and the sealed location's too (R79 C1)
+    val cap = limit
     return when {
         cap == null -> AddText.of(R.string.storage_how_full_spools, n)
         n >= cap -> AddText.of(R.string.storage_how_full_full)

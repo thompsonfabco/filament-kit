@@ -30,10 +30,13 @@ class StorageRowsTest {
         assertNull(limited.copy(used = null).howFullText())
     }
 
-    @Test fun theDefaultOverflowAndSealedLocationsIgnoreTheirLimit() {
-        val over = StorageLocation("Overflow", limit = 5, used = 9, defaultOverflow = true)
-        assertEquals(AddText.of(R.string.storage_how_full_spools, 9), over.howFullText())
-        assertEquals(AddText.of(R.string.storage_how_full_spools, 9), over.copy(defaultOverflow = false, sealed = true).howFullText())
+    @Test fun theDefaultOverflowAndSealedLocationsShowTheirLimitLikeAnyBulkLocation() {
+        val over = StorageLocation("Overflow", limit = 20, used = 18, defaultOverflow = true)
+        assertEquals(AddText.of(R.string.storage_how_full_limit, 18, 20), over.howFullText())
+        assertEquals(AddText.of(R.string.storage_how_full_full), over.copy(used = 20).howFullText())
+        val sealed = over.copy(defaultOverflow = false, sealed = true)
+        assertEquals(AddText.of(R.string.storage_how_full_limit, 18, 20), sealed.howFullText())
+        assertEquals(AddText.of(R.string.storage_how_full_spools, 9), over.copy(limit = null, used = 9).howFullText())
     }
 
     @Test fun rowsKeepFillOrderMarkFullAndStayChoosable() {
