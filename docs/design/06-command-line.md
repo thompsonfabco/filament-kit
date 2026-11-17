@@ -536,7 +536,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `presets status` | `GET /setup/api/presets` |
 | `features list` | `state.modules` plus `{"setup": "<setup>"}` |
 | `config show`, `config theme` | the `values` of `GET /setup/api/settings/general`, plus `theme` |
-| `locations` | the answer of `GET api/storage`: `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}` |
+| `locations` | the answer of `GET api/storage`: `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}` |
 | `catalog status` | `GET /setup/api/library` |
 | `backup list` | `{backups: [{name, at, kind, size}], keep_days, folder}` |
 | `update --check` | `GET /setup/api/updates` |
@@ -780,7 +780,9 @@ of the Hub page (`03-hub-page.md` section 10.4). Its keys:
   containers, Filled automatically with (a choice), Materials (for "These materials"; separated by commas), Use as
   overflow, and, on the row that qualifies, Make default overflow (an overflow row) and Sealed spools go here (a Bulk
   storage row). While Use as overflow is yes, the choice "Any material" is not offered for Filled automatically with
-  (an overflow place already takes any material when the other places are full).
+  (an overflow place already takes any material when the other places are full). Setting Use as overflow to yes while
+  "Any material" is chosen sets Filled automatically with to "Nothing, only when you choose it"; setting it back to no
+  does not change it back.
 - `a` adds a location: it asks the same fields one after the other, and the new row goes at the end.
 - `m` moves one: `Move which location? Number:` and then `Put it at position [<now>]:`.
 - `r` removes one: it asks the Hub page's question, `Remove Rack 2? 3 spools are recorded there. They keep that
@@ -1727,8 +1729,10 @@ The places fill in this order. Change them: sudo spoolwarden locations -h
   `Only when chosen`; `MARKS` lists `Overflow`, `Default overflow` and `Sealed spools`. A location over its limit
   shows `22 of 20`. The long column is `NAME`.
 - `--json` prints the answer of `GET api/storage` (6.8): the `locations` with `id, name, type, limit, count, used,
-  free, fill, materials, overflow, default_overflow, sealed, position`, then `order_by_material` and
-  `everything_else`.
+  free, prefix, containers, fill, materials, overflow, default_overflow, sealed, position`, then `order_by_material`
+  and `everything_else`. On a `containers` location, `containers` is `[{name, number, taken}]`, the whole set in number
+  order, and `prefix` is the text before the number; both are `null` for bulk, and `used` and `free` equal the counts
+  of `taken`.
 - When two or more locations are overflow and the default overflow has no limit, a `Note:` line follows the table
   (and follows any change that causes it, such as `locations add` or `locations edit`; not with `--json`):
 
@@ -1776,8 +1780,19 @@ Fix: sudo spoolwarden locations default-overflow <name>
   type.`); fewer containers than the highest number in use (`Error: Storage box 11 and Storage box 12 hold spools.
   Move them first, or keep at least 12.`); `--takes any` with `--overflow`, or on an overflow location
   (`Error: an overflow location cannot take any material automatically.` with `Fix: use --takes none or name the
-  materials`); `--no-overflow` on the last overflow location (the Remove refusal's text). A name that matches no
-  location stops with exit code 2.
+  materials`); `--no-overflow` on the last overflow location (the Remove refusal's text); a name that is the name of
+  a container in a set (`Error: Rack 01 is the name of a container in Rack. Choose another name.`), also when
+  `locations add` or `locations edit` makes a set whose containers would be named like an existing location (the
+  same sentence with that location's name). Only a new clash is refused. A name that matches no location stops with
+  exit code 2.
+- A clash that already exists (a Bulk storage location named like a container in a set, as the migration can leave
+  it) is not refused and may stay: either location can be edited in its other fields, and removing or renaming one of
+  the two ends it. `locations` then adds a `Note:` line under the table, with the same words as the Hub page's row
+  (not with `--json`):
+
+```
+Note: Rack 01: Same name as a container in Rack.
+```
 - Changing a location moves no spool. `locations` shows the result at once; `spoolwarden config` shows the same list
   as a numbered menu (8.3).
 
