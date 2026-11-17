@@ -3,8 +3,9 @@
 // headless Chrome, Edge or Chromium opens it, shows the certificate warning, and the page is taken through it the way a person does
 // it (Advanced, Proceed) or with --ignore-certificate-errors. Headless has no permission prompt (it answers "denied"), so the
 // person's "Allow" is stood in for by Browser.grantPermissions: what is observed is the page's secure context, the permission after
-// the grant, and that a Notification object is created and fires "show". The browser's own prompt is not seen.
-//   node https_notify.mjs --cert cert.pem --key key.pem --mode interstitial|flag [--browser <path>]
+// the grant, that a Notification object is created and has its show handler attached; with --show 1 also that it fires "show" (the OS
+// has to display it, so that part is opt-in). The browser's own prompt is not seen.
+//   node https_notify.mjs --cert cert.pem --key key.pem --mode interstitial|flag [--show 1] [--browser <path>]
 // Prints one JSON object. Exit 0; 2: no browser or the run failed; 3: the browser cannot run headless here.
 import https from "node:https";
 import { spawn } from "node:child_process";
@@ -71,8 +72,14 @@ try {
   const grant = await browser("Browser.grantPermissions", { origin, permissions: ["notifications"] });
   out.grant = grant.error ? grant.error.message : "ok";
   out.permissionAfterGrant = await ev("Notification.permission");
-  out.shown = await ev(`new Promise((res) => { try { const n = new Notification("Test", { body: "body", tag: "t" });
-    n.onshow = () => res("show"); n.onerror = () => res("error"); setTimeout(() => res("created, no event in 3 s"), 3000); } catch (e) { res("threw " + e); } })`);
+  // required: the Notification is CREATED without throwing and the show handler is attached (nothing about the OS is asked)
+  out.created = await ev(`(() => { try { const n = new Notification("Test", { body: "body", tag: "t" }); n.onshow = () => { window.__shown = true; };
+    window.__note = n; return "created"; } catch (e) { return "threw " + e; } })()`);
+  out.wired = await ev("typeof window.__note.onshow === 'function'");
+  // opt-in (--show 1): the browser fires "show"; that needs the OS to display a toast, which some machines (notification or focus settings) do not
+  out.shown = args.show === "1" ? await ev(`new Promise((res) => { const n = window.__note; n.onshow = () => res("show"); n.onerror = () => res("error");
+    if (window.__shown) res("show"); setTimeout(() => res("created, no event in 3 s"), 3000); })`) : "not requested";
+  await ev("try { window.__note.close(); } catch (e) {} 'closed'");
   console.log(JSON.stringify(out));
   browser("Browser.close");
   process.exitCode = 0;

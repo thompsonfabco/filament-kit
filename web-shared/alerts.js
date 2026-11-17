@@ -10,6 +10,21 @@ const { h, t, banner, btn, icon, toast, ask, openModal } = SW;
 const E = (tag, cls, ...kids) => h(tag, { class: cls }, ...kids);
 const DAY = 86400000, WEEK = 7 * DAY, KEEP = "spoolwarden.dismissed.alert.", FLAG = "spoolwarden.alerts.notifications";
 
+// ----- CONTRACT NAMES TO CHECK AGAINST EA3 -----
+// Names this file GUESSES because the design left them open; when EA3 lands, check each against the real event `data`.
+// A list is tried in order, the first one present wins. Also guessed (keys of PLACES and HUB_HREF below): action.place values
+// printer, storage-use (or storage), running-low, devices. Other data names read (settled): job, percent, reason, text, free,
+// total, spool, filament, last_seen; subject.name is the printer or device name.
+const CONTRACT = {
+  data: {
+    others: ["others", "in_stock"],              // spool.low: how many more of the filament are in stock
+    grams: ["grams", "grams_left"],              // spool.low: what is left on the spool
+    pausedWhy: ["reason_text", "stage"],         // print.paused: the sentence after "paused at n %"
+    failedWhy: ["error", "error_text"],          // print.failed: the sentence after "stopped at n %" (reason "cancelled" has its own)
+  },
+};
+const pick = (d, names) => { for (const n of names) if (d[n] != null && d[n] !== "") return d[n]; return null; };
+
 // ----- texts: the stub table (key -> English), replaced by the catalogue's own text once it has the key -----
 const STUB = {
   alert_title_runout: "Filament ran out on {printer}",
@@ -87,15 +102,15 @@ function words(e) {
   const last = num(d.last_seen) != null ? Date.parse(d.last_seen) || at(e) : at(e);
   switch (e.kind) {
     case "print.runout": return [["alert_title_runout", { printer: sub }], [["alert_text_runout", { job: num(d.job), percent: num(d.percent) }]]];
-    case "print.paused": return [["alert_title_paused", { printer: sub }], [["alert_text_paused", { job: num(d.job), percent: num(d.percent) }], d.reason_text || d.stage || null]];
-    case "print.failed": return [["alert_title_failed", { printer: sub }], [["alert_text_failed", { job: num(d.job), percent: num(d.percent) }], d.error || d.error_text || (d.reason === "cancelled" ? tx("alert_cancelled") : null)]];
+    case "print.paused": return [["alert_title_paused", { printer: sub }], [["alert_text_paused", { job: num(d.job), percent: num(d.percent) }], pick(d, CONTRACT.data.pausedWhy)]];
+    case "print.failed": return [["alert_title_failed", { printer: sub }], [["alert_text_failed", { job: num(d.job), percent: num(d.percent) }], pick(d, CONTRACT.data.failedWhy) || (d.reason === "cancelled" ? tx("alert_cancelled") : null)]];
     case "printer.error": return [["alert_title_error", { printer: sub }], [d.text || d.error || null]];
     case "print.finished": return [["alert_title_finished", { printer: sub }], [["alert_text_finished", { job: num(d.job) }]]];
     case "storage.low": return [[bad ? "alert_title_storage_bad" : "alert_title_storage_warn", {}],
       [[bad ? "alert_text_storage_bad" : "alert_text_storage_warn", { free: size(num(d.free)), total: size(num(d.total)), percent: num(d.percent) }]]];
     case "spool.low": {
-      const more = num(d.others != null ? d.others : d.in_stock);
-      return [["alert_title_low", { filament: num(d.filament) }], [["alert_text_low", { id: num(d.spool), grams: num(d.grams != null ? d.grams : d.grams_left) }],
+      const more = num(pick(d, CONTRACT.data.others));
+      return [["alert_title_low", { filament: num(d.filament) }], [["alert_text_low", { id: num(d.spool), grams: num(pick(d, CONTRACT.data.grams)) }],
         more == null ? null : more > 0 ? ["alert_text_low_more", { count: more }] : ["alert_text_low_last", {}]]];
     }
     case "device.down": return [["alert_title_device_down", { device: sub }], [["alert_text_device_down", { time: stamp(last) }]]];
@@ -129,6 +144,8 @@ const HUB_HREF = { printer: "#printers", "storage-use": "#overview/storage-use",
 // ----- state -----
 const state = { cursor: null, events: new Map(), conditions: [], raised: new Set(), first: true, painted: false };
 const opts = { host: null, interval: 10000, href: (a) => HUB_HREF[a.place] || null, open: null, limit: 200 };
+let loaded = 0;                 // the clock when the page started polling; events from before it (less the clock skew allowed) never arrive as new
+const SKEW = 10 * 60000;
 let timer = 0, tick = 0, running = false, polling = false, host = null, dlg = null;
 const shown = new Map();      // banner key -> {ver, el}
 const rank = (s) => (s === "bad" ? 2 : s === "warn" ? 1 : 0);
@@ -231,11 +248,14 @@ function arrive(e) {
 }
 function ingest(res) {
   const first = state.first || res.gap === true, seen = state.events;      // a gap: older events were dropped, so resync from the conditions, no replay
+  const list = (res.events || []).slice().sort((a, b) => a.id - b.id);
+  // the first answers are the backfill of the last 7 days, oldest first: a full one means more follow, and all of it is history
+  const full = state.first && res.gap !== true && list.length >= opts.limit;
   const fresh = [];
-  for (const e of (res.events || []).slice().sort((a, b) => a.id - b.id)) {
+  for (const e of list) {
     if (seen.has(e.id)) continue;
     seen.set(e.id, e);
-    if (!first) fresh.push(e);
+    if (!first && at(e) >= loaded - SKEW) fresh.push(e);          // an event from before the page opened is history, whatever its place in the answer
   }
   if (first && Array.isArray(res.conditions)) state.raised = new Set(res.conditions.filter((c) => c.condition).map((c) => c.condition.key));
   for (const e of fresh) {
@@ -246,6 +266,8 @@ function ingest(res) {
     state.conditions = res.conditions;
     state.raised = new Set(res.conditions.filter((c) => c.condition).map((c) => c.condition.key));
   }
+  for (const e of list) if (e.condition && e.condition.state === "cleared") notifications.close(e.condition.key);
+  notifications.sync(state.raised);
   if (res.gap === true && res.oldest != null) for (const id of [...seen.keys()]) if (id < res.oldest) seen.delete(id);
   if (res.test && (res.test.title || res.test.text)) {        // "Send a test alert": once, to this browser only
     const d = { kind: "ok", title: res.test.title || tx("alert_test_title"), text: res.test.text || "", action: null };
@@ -253,9 +275,10 @@ function ingest(res) {
     notifications.show({ id: "test" }, d, null);
   }
   const top = Math.max(0, ...[...seen.keys()]);
-  state.cursor = Math.max(Number(res.next) || 0, state.cursor || 0, top);
+  if (full) state.cursor = Math.max(state.cursor || 0, list[list.length - 1].id);      // page on from the last id of this answer, not from `next`
+  else state.cursor = Math.max(Number(res.next) || 0, state.cursor || 0, top);
   for (const [id, e] of seen) if (clock() - at(e) > WEEK) seen.delete(id);
-  state.first = false;
+  state.first = full;
   paint();
 }
 // the page's own id (random, kept in this browser; the Hub stores nothing about it)
@@ -271,10 +294,16 @@ async function poll() {
   if (polling) return;
   polling = true;
   try {
-    // the first call asks for the last 7 days by time; the next ones for what is after the cursor; `client` is this browser's own id
-    const from = state.cursor == null ? `since_at=${new Date(clock() - WEEK).toISOString().replace(/\.\d+Z$/, "Z")}&limit=${opts.limit}` : `since=${state.cursor}`;
-    const q = `${from}&alert=1&wait=0&client=${encodeURIComponent(clientId())}`;
-    ingest(await (opts.api || SW.api)("events?" + q));
+    // the first call asks for the last 7 days by time, and pages on (since the last id, same limit) while the answer is full; the
+    // next ones ask for what is after the cursor; `client` is this browser's own id
+    for (let more = true; more;) {
+      const before = state.cursor, lim = `&limit=${opts.limit}`;
+      const from = state.cursor == null ? `since_at=${new Date(clock() - WEEK).toISOString().replace(/\.\d+Z$/, "Z")}${lim}` : `since=${state.cursor}${state.first ? lim : ""}`;
+      const q = `${from}&alert=1&wait=0&client=${encodeURIComponent(clientId())}`;
+      ingest(await (opts.api || SW.api)("events?" + q));
+      more = state.first && state.cursor !== before;
+      if (state.first && !more) state.first = false;          // a full answer that moved nothing: stop paging
+    }
   } catch (err) {
     if (opts.onError) opts.onError(err);
   } finally { polling = false; }
@@ -285,6 +314,8 @@ function start(o = {}) {
   stop();
   Object.assign(opts, { api: null, open: null, onError: null, Notification: null }, o);
   clock = opts.now || (() => Date.now());
+  loaded = clock();
+  notifications.held.clear();
   host = opts.host || doc.querySelector(".alert-host");
   if (!host) {
     const main = doc.querySelector("main");
@@ -324,14 +355,25 @@ const notifications = {
     return p === "denied" ? { text: tx("alert_notify_blocked"), hint: tx("alert_notify_blocked_hint") }
       : p === "unsupported" ? { text: tx("alert_notify_unsupported"), hint: tx("alert_notify_unsupported_hint") } : null;
   },
+  held: new Map(),            // condition key -> its notification, so the clearing event can close it
+  // a raised condition is tagged by its key (the clearing event finds it again), a moment by its event id
   show(e, d, href) {
     if (!this.on()) return null;
+    const key = e.condition && e.condition.state === "raised" ? e.condition.key : null;
     try {
-      const n = new (Note())(d.title, { body: d.text, tag: "sw-event-" + e.id });
+      const n = new (Note())(d.title, { body: d.text, tag: key ? "sw-condition-" + key : "sw-event-" + e.id });
       n.onclick = () => { try { window.focus(); n.close(); } catch (x) { /* none */ } if (href) location.href = href; };
+      if (key) { this.held.set(key, n); n.onclose = () => { if (this.held.get(key) === n) this.held.delete(key); }; }
       return n;
     } catch (err) { return null; }
   },
+  // where the platform allows: close what a cleared condition showed (nothing new is sent)
+  close(key) {
+    const n = this.held.get(key);
+    this.held.delete(key);
+    if (n) try { n.close(); } catch (err) { /* none */ }
+  },
+  sync(raised) { for (const key of [...this.held.keys()]) if (!raised.has(key)) this.close(key); },
 };
 const SW_FLAG = { get() { try { return localStorage.getItem(FLAG) === "1"; } catch (e) { return false; } },
   set(on) { try { on ? localStorage.setItem(FLAG, "1") : localStorage.removeItem(FLAG); } catch (e) { /* none */ } } };

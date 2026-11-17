@@ -183,6 +183,30 @@ const SCENARIOS = {
     await A.poll();
     return { atOpen, later: banners().map((b) => [b.title, b.kind, b.role]) };
   },
+  async backfill() {     // more alert events in the week than `limit`: the first calls page on, all of it history
+    await window.__ready;
+    class Fake { static permission = "granted"; static made = []; constructor(title, o) { this.title = title; this.o = o; Fake.made.push(this); } close() { this.closed = true; } }
+    await fresh({ Notification: Fake, limit: 200 });
+    const out = {};
+    localStorage.setItem("spoolwarden.alerts.notifications", "1");
+    const total = 450;
+    for (let i = 0; i < total; i++) add(ev({ kind: "print.failed", severity: "bad", ago: (total - i) * 20 - 10, data: { job: `old${i}.3mf`, percent: 3 } }));   // 10 min to 6.25 days old, oldest first
+    const lastId = hub.events[total - 1].id;
+    hub.requests = [];
+    await A.start({ now: window.__now, interval: 100000, Notification: Fake, limit: 200 });
+    out.urls = hub.requests.map((u) => u.replace(/since_at=[^&]+/, "since_at=T").replace(/&client=.*/, ""));
+    out.lastId = lastId; out.cursor = A.state().cursor; out.stored = A.state().events.length;
+    out.toasts = toasts().length; out.notified = Fake.made.length;
+    out.banners = banners().map((b) => b.title); out.more = more();
+    A.openList(); await sleep(150); out.rows = list().rows.length; closeList();
+    await A.poll(); out.quiet = [toasts().length, Fake.made.length, hub.requests[hub.requests.length - 1].startsWith(`api/events?since=${lastId}&alert=1`)];
+    add(ev({ kind: "printer.error", severity: "bad", data: { code: "9", text: "Jam." } }));
+    await A.poll(); out.after = [toasts().length, Fake.made.map((n) => n.title)];
+    // an event from long before the page opened is history even when it comes late
+    add(ev({ kind: "print.failed", severity: "bad", ago: 3 * 24 * 60, data: { job: "late.3mf", percent: 1 } }));
+    await A.poll(); out.lateOld = [toasts().length, Fake.made.length];
+    return out;
+  },
   async notifications() {
     await window.__ready;
     const out = {};
@@ -203,6 +227,10 @@ const SCENARIOS = {
     await A.poll(); out.afterRaise = Fake.made.length;
     raise("print.runout", "warn", "print-paused:p-3", { data: { job: "a.3mf", percent: 5 } });
     await A.poll(); out.afterAgain = Fake.made.length;
+    // a raised condition is tagged by its key; its clearing closes that notification and sends nothing new; a moment keeps its event tag
+    out.tags = Fake.made.map((n) => n.o.tag);
+    clear("print.resumed", "print-paused:p-3");
+    await A.poll(); out.afterClear = Fake.made.length; out.closedFlags = Fake.made.map((n) => !!n.closed);
     add(ev({ kind: "storage.low", severity: "warn", alert: false, subject: { type: "hub", id: "hub", name: "Hub" } }));
     await A.poll(); out.afterOff = Fake.made.length;
     await N.set(false); out.offState = [N.on(), N.permission()];
