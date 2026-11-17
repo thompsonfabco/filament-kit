@@ -270,13 +270,15 @@ export default async (p) => {
   await ok(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used") && !document.querySelector(".changes__title")`, "the second answer is dropped and says so");
 
   // an answer held back by a write is released after a newer question was asked: it never replaces the newer suggestion (the Save fails) ...
-  for (const [label, fail] of [["a Save that fails", true], ["a Save that succeeds", false]]) {
+  // the typed values differ from every value saved before (a Save of the same value says "Nothing changed." and shows no "Saved"):
+  // each round has its own pair, not a number taken from the clock, which repeats one time in nine
+  for (const [round, [label, fail]] of [["a Save that fails", true], ["a Save that succeeds", false]].entries()) {
     await net({});
     await p.go("#recent");
     await p.go("#recent/" + ids.local);
     await p.click("button", "Edit by hand");        // a value the Label Reader would change (it answers nozzle 235)
     await p.waitFor(`document.querySelector("input[name=nozzle]")`, "the fields (before " + label + ")");
-    await p.type("input[name=nozzle]", String(300 + (Date.now() % 9)));
+    await p.type("input[name=nozzle]", String(300 + 20 * round));
     await p.click("button[type=submit]", "Save changes");
     await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Saved"))`, "Saved (before " + label + ")");
     await net(fail ? { failSave: 4200 } : { applyDelay: 4200 });
@@ -285,7 +287,7 @@ export default async (p) => {
     await p.click("button", "Ask the Label Reader");
     await p.click("button", "Edit by hand");
     await p.waitFor(`document.querySelector("input[name=nozzle]")`, "the fields (" + label + ")");
-    await p.type("input[name=nozzle]", String(290 + (Date.now() % 9)));
+    await p.type("input[name=nozzle]", String(290 + 20 * round));
     await p.click("button[type=submit]", "Save changes");
     await ok(`window.__proposals.length === 1`, "the first answer has come (" + label + ")");
     await pause(400);
