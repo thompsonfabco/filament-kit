@@ -20,7 +20,9 @@ text, as stored). The catalogue of kinds and value names is event_kinds.py.
 """
 from __future__ import annotations
 
+import copy
 import errno
+import logging
 import os
 import re
 import secrets
@@ -32,6 +34,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import config, event_kinds
+
+log = logging.getLogger("filament_kit.events")
 
 try:
     import fcntl
@@ -49,6 +53,8 @@ _EVENT = re.compile(r"<event\b.*?</event>", re.S)
 _BAD_CHARS = re.compile("[^\u0009\u000a\u000d -퟿-�\U00010000-\U0010ffff]")
 _END = b"</event>\n"
 FILE_MODE = 0o644
+RETRY_REPLACE = os.name == "nt"        # Windows refuses a rename over a file another process has open (a reader)
+REPLACE_TRIES, REPLACE_PAUSE = 40, 0.025
 
 
 def _flag(name: str) -> int:
@@ -104,6 +110,35 @@ def _read_bytes(path: Path) -> bytes:
     """The file's bytes, never through a link (a link raises EventError); OSError as the file system says."""
     with os.fdopen(_open(path, _READ), "rb") as fh:
         return fh.read()
+
+
+def _sync_dir(path: Path) -> None:
+    """fsync the directory, so a new name or a rename survives a power loss (POSIX only)."""
+    if os.name == "nt":
+        return
+    fd = os.open(path, os.O_RDONLY | _flag("O_DIRECTORY") | _flag("O_CLOEXEC"))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _replace(tmp: Path, f: Path) -> None:
+    """os.replace; on Windows a short bounded retry while a reader has `f` open, then a clear error."""
+    tries = REPLACE_TRIES if RETRY_REPLACE else 1
+    for i in range(tries):
+        try:
+            os.replace(tmp, f)
+            return
+        except PermissionError as e:
+            if i == tries - 1:
+                if not RETRY_REPLACE:
+                    raise
+                raise EventError(f"{f.name} could not be replaced: another program keeps it open ({e}).") from None
+            time.sleep(REPLACE_PAUSE)
+
+
+_cache: dict[str, tuple[tuple, list[dict]]] = {}       # month file -> (its size and time, its events)
 
 
 def _utc(now: datetime | None) -> datetime:
@@ -177,9 +212,19 @@ def _parse(raw: bytes) -> list[dict]:
 
 
 def _read_file(path: Path) -> list[dict]:
+    """The events of a month file, parsed again only when its size or time changed (a month is read often, and
+    only the newest one changes)."""
     try:
-        return _parse(_read_bytes(path))
+        st = os.lstat(path)
+        sig = (st.st_size, st.st_mtime_ns, st.st_ino)
+        hit = _cache.get(str(path))
+        if hit and hit[0] == sig:
+            return hit[1]
+        evs = _parse(_read_bytes(path))
+        _cache[str(path)] = (sig, evs)
+        return evs
     except (OSError, EventError):
+        _cache.pop(str(path), None)
         return []
 
 
@@ -289,11 +334,18 @@ class EventStore:
                 return n
         except (OSError, ValueError, EventError):
             pass
-        for p in reversed(self._months()):
-            ids = [e["id"] for e in _read_file(p)]
-            if ids:
-                return max(ids) + 1
-        return 1
+        top = 0
+        for p in self._months():                          # by id, not by name: the clock may have stepped back
+            top = max([top] + [e["id"] for e in _read_file(p)])
+        top = max([top, self._high_water()] + [e["id"] for e in self._load_conditions().values()])
+        return top + 1
+
+    def _high_water(self) -> int:
+        """The highest id ever given, recorded by prune before it deletes a month (so ids are never reused)."""
+        try:
+            return int(_read_bytes(self.root / "high-water").decode("ascii").strip())
+        except (OSError, ValueError, EventError):
+            return 0
 
     def _put_counter(self, n: int) -> None:
         self._atomic(self.root / "next-id", f"{n}\n".encode("ascii"))
@@ -317,7 +369,8 @@ class EventStore:
                 fh.flush()
                 os.fsync(fh.fileno())
                 self._give(fh.fileno())
-            os.replace(tmp, f)
+            _replace(tmp, f)
+            _sync_dir(f.parent)
         except BaseException:
             try:
                 os.unlink(tmp)
@@ -345,6 +398,8 @@ class EventStore:
             fh.write(chunk + b"\n")
             fh.flush()
             os.fsync(fh.fileno())
+        if not existed:
+            _sync_dir(path.parent)
 
     @staticmethod
     def _head(fh, n: int) -> bytes:
@@ -426,23 +481,60 @@ class EventStore:
                 ev["id"] = n
                 self._put_counter(n + 1)
                 self._append(month, ev["at"][:7], _dump(_element(ev)))
-                if ckey:
-                    self._update_conditions(k, ckey, ev)
+                self._conditions_for(ev)
         with cond:
             cond.notify_all()
         return ev
 
-    def _update_conditions(self, k: event_kinds.Kind, ckey: str, ev: dict) -> None:
-        conds = self._load_conditions()
-        if k.condition == event_kinds.RAISES:
-            cur = conds.get(ckey)
+    @staticmethod
+    def _apply(conds: dict[str, dict], ev: dict) -> bool:
+        """Raise or clear the condition of one event in `conds`; True when `conds` changed."""
+        c = ev["condition"]
+        if not c:
+            return False
+        if c["state"] == "raised":
+            cur = conds.get(c["key"])
             if cur is not None and (event_kinds.SEVERITIES.index(ev["severity"])
                                     <= event_kinds.SEVERITIES.index(cur["severity"])):
-                return                                   # raised once: it stays as it was until it gets worse
-            conds[ckey] = ev
-        elif conds.pop(ckey, None) is None:
+                return False                             # raised once: it stays as it was until it gets worse
+            conds[c["key"]] = ev
+            return True
+        return conds.pop(c["key"], None) is not None
+
+    def _conditions_for(self, ev: dict) -> None:
+        """Bring conditions.xml up to the event just appended. The event is committed by now, so a failure here is
+        not the caller's error: it is logged and a marker (conditions-stale, holding the first id not applied) makes
+        the next write or `conditions()` replay the events from the log (`_heal`)."""
+        try:
+            self._heal()
+            if ev["condition"]:
+                conds = self._load_conditions()
+                if self._apply(conds, ev):
+                    self._save_conditions(conds)
+        except (OSError, EventError) as e:
+            log.warning("event %s is written but conditions.xml was not updated (%s); it is repaired at the next "
+                        "write or read", ev["id"], e)
+            try:
+                if not (self.root / "conditions-stale").exists():
+                    self._atomic(self.root / "conditions-stale", f"{ev['id']}\n".encode("ascii"))
+            except (OSError, EventError):
+                pass
+
+    def _heal(self) -> None:
+        """If a marker says conditions.xml missed events, replay those from the month files (in id order), save, and
+        remove the marker. Called under the file lock."""
+        marker = self.root / "conditions-stale"
+        try:
+            first = int(_read_bytes(marker).decode("ascii").strip())
+        except (OSError, EventError):
             return
+        except ValueError:
+            first = 0
+        conds = self._load_conditions()
+        for ev in self._events_after(first - 1, ()):
+            self._apply(conds, ev)
         self._save_conditions(conds)
+        marker.unlink(missing_ok=True)
 
     # ---- read
     def last_id(self) -> int:
@@ -458,11 +550,8 @@ class EventStore:
 
     def _events_after(self, since: int, kinds: tuple[str, ...]) -> list[dict]:
         out: list[dict] = []
-        for path in reversed(self._months()):
-            evs = _read_file(path)
-            out[:0] = [e for e in evs if e["id"] > since and (not kinds or e["kind"].startswith(kinds))]
-            if any(e["id"] <= since for e in evs):
-                break                                    # older months hold only older ids
+        for path in self._months():                      # every month: by id, not by name (the clock can step back)
+            out += [e for e in _read_file(path) if e["id"] > since and (not kinds or e["kind"].startswith(kinds))]
         out.sort(key=lambda e: e["id"])
         return out
 
@@ -483,7 +572,7 @@ class EventStore:
             newest = self.last_id()
             if seen is None or newest > seen:
                 seen = newest
-                evs = self._events_after(since, prefixes)[:limit]
+                evs = copy.deepcopy(self._events_after(since, prefixes)[:limit])
                 if evs:
                     return {"events": evs, "next": evs[-1]["id"]}
             left = deadline - time.monotonic()
@@ -497,6 +586,13 @@ class EventStore:
         """The conditions raised now: the event that raised each, oldest first."""
         tlock, _ = _shared_for(self.root)
         with tlock:
+            self._guard()
+            if (self.root / "conditions-stale").exists():
+                try:
+                    with _FileLock(self.root / ".lock", needed=True, give=self._give):
+                        self._heal()
+                except (OSError, EventError) as e:
+                    log.warning("conditions.xml could not be repaired yet (%s)", e)
             return sorted(self._load_conditions().values(), key=lambda e: e["id"])
 
     def is_raised(self, key: str) -> bool:
@@ -511,14 +607,20 @@ class EventStore:
         gone = []
         tlock, _ = _shared_for(self.root)
         with tlock:
+            old = []
             for path in self._months():
                 y, m = (int(g) for g in _MONTH.match(path.name).groups())
-                if not 1 <= m <= 12:
-                    continue
-                end = datetime(y + (m == 12), m % 12 + 1, 1, tzinfo=timezone.utc)      # the first day after it
-                if end <= cutoff:
-                    path.unlink(missing_ok=True)
-                    gone.append(path.name)
+                if 1 <= m <= 12 and datetime(y + (m == 12), m % 12 + 1, 1, tzinfo=timezone.utc) <= cutoff:
+                    old.append(path)                     # the month ended before the cutoff
+            if old:
+                self._guard()
+                with _FileLock(self.root / ".lock", needed=True, give=self._give):
+                    self._atomic(self.root / "high-water", f"{self._counter() - 1}\n".encode("ascii"))
+                    for path in old:                     # the highest id is recorded first: ids are never reused
+                        path.unlink(missing_ok=True)
+                        _cache.pop(str(path), None)
+                        gone.append(path.name)
+                    _sync_dir(self.root)
         return gone
 
 

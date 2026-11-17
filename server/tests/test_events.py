@@ -1,6 +1,7 @@
 """The event store (R80 section 1): files, ids, torn tails, conditions, cursor, wait, two processes, retention."""
 import multiprocessing
 import os
+import stat
 import threading
 import time
 from datetime import datetime, timezone
@@ -394,3 +395,172 @@ def test_a_link_at_a_month_file_is_not_read_through(store, tmp_path):
     real.rename(moved)
     real.symlink_to(moved)
     assert store.read()["events"] == []
+
+
+# ---------------------------------------------------------------- R464 items 2 to 6
+
+def test_replace_is_retried_while_a_reader_holds_the_file(store, monkeypatch):          # item 2
+    monkeypatch.setattr(events, "RETRY_REPLACE", True)
+    monkeypatch.setattr(events, "REPLACE_PAUSE", 0)
+    real, left = os.replace, [3]
+
+    def flaky(a, b):
+        if left[0] > 0:
+            left[0] -= 1
+            raise PermissionError(13, "in use by another process")
+        return real(a, b)
+    monkeypatch.setattr(os, "replace", flaky)
+    ev = store.write("print.paused", PRINTER, HUB)
+    assert left[0] == 0 and [c["id"] for c in store.conditions()] == [ev["id"]]
+
+
+def test_replace_that_never_works_is_a_clear_error_and_writes_nothing(store, monkeypatch):    # item 2
+    monkeypatch.setattr(events, "RETRY_REPLACE", True)
+    monkeypatch.setattr(events, "REPLACE_PAUSE", 0)
+    monkeypatch.setattr(os, "replace", lambda a, b: (_ for _ in ()).throw(PermissionError(13, "in use")))
+    with pytest.raises(EventError, match="another program keeps it open"):
+        store.write("print.started", PRINTER, HUB)
+    monkeypatch.undo()
+    assert store.read()["events"] == [] and not list(store.root.glob("*.tmp"))
+
+
+def test_without_the_retry_a_permission_error_is_raised_as_it_is(store, monkeypatch):         # item 2: POSIX unchanged
+    monkeypatch.setattr(events, "RETRY_REPLACE", False)
+    calls = []
+    monkeypatch.setattr(os, "replace", lambda a, b: calls.append(1) or (_ for _ in ()).throw(PermissionError(13, "x")))
+    with pytest.raises(PermissionError):
+        store.write("print.started", PRINTER, HUB)
+    assert calls == [1]
+
+
+def test_writers_and_a_reader_never_meet_a_replace_error(store):                             # item 2 (real on Windows)
+    stop, errors = threading.Event(), []
+
+    def reader():
+        while not stop.is_set():
+            try:
+                store.conditions()
+                store.read()
+            except Exception as e:                                    # noqa: BLE001
+                errors.append(e)
+
+    t = threading.Thread(target=reader)
+    t.start()
+    try:
+        for i in range(60):
+            store.write("print.paused", {"type": "printer", "id": f"p{i % 7}"}, HUB)
+    finally:
+        stop.set()
+        t.join()
+    assert errors == [] and store.last_id() == 60
+
+
+def _reader_process(root, stop_file, out):
+    s = EventStore(root)
+    errors = 0
+    while not os.path.exists(stop_file):
+        try:
+            s.conditions()
+            s.read()
+        except Exception:                                             # noqa: BLE001
+            errors += 1
+    out.put(errors)
+
+
+def test_a_reader_in_another_process_never_makes_a_write_fail(store, tmp_path):               # item 2 (real on Windows)
+    store.write("print.paused", PRINTER, HUB)
+    stop = tmp_path / "stop"
+    q = multiprocessing.get_context().Queue()
+    p = multiprocessing.get_context().Process(target=_reader_process, args=(str(store.root), str(stop), q))
+    p.start()
+    try:
+        for i in range(150):
+            store.write("print.paused", {"type": "printer", "id": f"p{i % 7}"}, HUB)
+    finally:
+        stop.write_text("x")
+        p.join(30)
+    assert q.get(timeout=10) == 0 and store.last_id() == 151
+
+
+def test_ids_continue_above_the_old_maximum_after_everything_was_pruned(store):               # item 3
+    for m in (1, 2, 3):
+        store.write("print.started", PRINTER, HUB, now=at(2026, m, 15))
+    assert store.prune(30, at(2026, 11, 17)) == ["2026-01.xml", "2026-02.xml", "2026-03.xml"]
+    (store.root / "next-id").unlink()
+    assert store.write("print.started", PRINTER, HUB, now=at(2026, 11, 17))["id"] == 4
+
+
+def test_a_lost_counter_does_not_repeat_the_id_held_by_a_raised_condition(store):            # item 3
+    ev = store.write("spool.low", {"type": "spool", "id": "7"}, HUB, now=at(2026, 1, 15))
+    for name in ("next-id", "2026-01.xml", "high-water"):
+        (store.root / name).unlink(missing_ok=True)
+    assert store.write("print.started", PRINTER, HUB, now=at(2026, 2, 1))["id"] == ev["id"] + 1
+
+
+def test_a_failed_conditions_update_does_not_hide_the_written_event(store, monkeypatch):      # item 4
+    real, calls = store._save_conditions, []
+
+    def boom(conds):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError(5, "disk trouble")
+        return real(conds)
+    monkeypatch.setattr(store, "_save_conditions", boom)
+    ev = store.write("print.paused", PRINTER, HUB)                  # no error: the event is committed
+    assert ev["id"] == 1 and [e["id"] for e in store.read()["events"]] == [1]
+    assert (store.root / "conditions-stale").exists()
+    assert [c["id"] for c in store.conditions()] == [1]             # repaired from the log
+    assert not (store.root / "conditions-stale").exists()
+
+
+def test_the_next_write_completes_a_missed_conditions_update(store, monkeypatch):             # item 4
+    real, calls = store._save_conditions, []
+
+    def boom(conds):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError(5, "disk trouble")
+        return real(conds)
+    monkeypatch.setattr(store, "_save_conditions", boom)
+    store.write("print.paused", PRINTER, HUB)
+    store.write("spool.low", {"type": "spool", "id": "7"}, HUB)
+    assert sorted(c["condition"]["key"] for c in store.conditions()) == ["print-paused:p-3", "spool-low:7"]
+    store.write("print.resumed", PRINTER, HUB)
+    assert [c["condition"]["key"] for c in store.conditions()] == ["spool-low:7"]
+
+
+@POSIX
+def test_the_directory_is_synced_after_a_new_month_file_and_after_each_replace(store, monkeypatch):   # item 5
+    real, dirs = os.fsync, []
+
+    def spy(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            dirs.append(fd)
+        return real(fd)
+    monkeypatch.setattr(os, "fsync", spy)
+    store.write("print.paused", PRINTER, HUB)               # new month file, next-id and conditions.xml replaced
+    assert len(dirs) >= 3
+    dirs.clear()
+    store.write("print.started", PRINTER, HUB)              # the counter replaced
+    assert len(dirs) >= 1
+
+
+def test_a_clock_step_back_across_a_month_does_not_hide_newer_ids(store):                    # item 6
+    store.write("print.started", PRINTER, HUB, now=at(2026, 12, 1))
+    store.write("print.started", PRINTER, HUB, now=at(2026, 12, 2))
+    store.write("print.started", PRINTER, HUB, now=at(2026, 11, 30))     # the clock stepped back: id 3 in Nov
+    store.write("print.started", PRINTER, HUB, now=at(2026, 11, 30))
+    assert [e["id"] for e in store.read(since=2)["events"]] == [3, 4]
+    assert [e["id"] for e in store.read(since=0)["events"]] == [1, 2, 3, 4]
+
+
+def test_unchanged_months_are_not_parsed_again(store, monkeypatch):                           # item 6 (cost)
+    store.write("print.started", PRINTER, HUB, now=at(2026, 10, 1))
+    store.write("print.started", PRINTER, HUB, now=at(2026, 11, 1))
+    store.read()
+    seen = []
+    real = events._parse
+    monkeypatch.setattr(events, "_parse", lambda raw: seen.append(1) or real(raw))
+    store.read()
+    store.read(since=1)
+    assert seen == []
