@@ -44,4 +44,5 @@ filament_kit = ["web/static/*", "setup_static/*", "shared_static/*", "_vendor/*.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["real_system_paths(reason): a root-only test that works on real system paths on purpose; the system_writes guard leaves it alone"]
+markers = ["real_system_paths(reason): a root-only test that works on real system paths on purpose; the system_writes guard leaves it alone",
+           "browser_audit: starts a headless Chrome through Node (the AUT-5 page audits); tools/testenv runs these as their own 2-worker group"]

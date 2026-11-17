@@ -8,6 +8,10 @@
 # --lint shellcheck. PYTEST-ARGS go to the server suite (for example --durations=30). Every suite runs even after a failure, and
 # the last lines are each suite's counts and wall time; the exit code is non-zero if any of them failed.
 #
+# The server suite is two runs: everything but the tests marked browser_audit (Node + headless Chrome, test_*audit*.py) on
+# --workers N, then those alone on 2 workers: more browsers at once time out starting DevTools. Where Node or a browser is missing
+# they skip. The one command: bash tools/testenv.sh --only server.
+#
 # A test that fails in the crowd of a parallel run gets one more try alone, right after. Each one that passes alone is named as
 # FLAKY: a timing race in a test, or a real one in the code, so it's to be read, not ignored. The suite counts as passed only if
 # all of them did, and only if the first run reached every test: one that stopped early (xdist's limit on crashed workers, for
@@ -114,6 +118,14 @@ run() {
     LAST_COUNTS=$counts
     SUMMARY+=("$(printf '%-5s %-10s %5ss  %s' "$([ "$rc" -eq 0 ] && echo ok || echo FAIL)" "$name" "$((SECONDS - start))" "$counts")")
 }
+# has_selector: PYTEST-ARGS narrow what runs (-k, -m, or a test path), so a group left with nothing is the person's doing, not a fault
+has_selector() {
+    local arg
+    for arg in "${EXTRA[@]}"; do
+        case "$arg" in -k|-k?*|-m|-m?*|--keyword*|*::*|*.py|tests|tests/*) return 0 ;; esac
+    done
+    return 1
+}
 PYTEST=("$VENV/bin/python" -m pytest -q -rfEs -p no:cacheprovider)
 FLAKY=()
 
@@ -154,7 +166,18 @@ parallel() {
 }
 
 if wanted server; then
-    parallel server "$ROOT/server" "${EXTRA[@]}"
+    parallel server "$ROOT/server" -m "not browser_audit" "${EXTRA[@]}"
+    if grep -rqs --include='*.py' browser_audit "$ROOT/server/tests"; then      # a tree without any has nothing to run as a group
+        saved=$WORKERS
+        WORKERS=2
+        parallel server-audit "$ROOT/server" -m browser_audit "${EXTRA[@]}"
+        if [ "${LAST_RC:-0}" -eq 5 ] && has_selector; then       # exit 5 = nothing selected: the person's own -k or path asked for that
+            FAILED=$FAILED_BEFORE
+            unset 'SUMMARY[-1]'
+            SUMMARY+=("$(printf '%-5s %-10s %5ss  %s' ok server-audit "$((SECONDS - SUITE_START))" "no audit test matched your selector")")
+        fi
+        WORKERS=$saved
+    fi
 fi
 if wanted pc-sync; then
     parallel pc-sync "$ROOT/pc-sync"

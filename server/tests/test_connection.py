@@ -360,10 +360,8 @@ def test_real_paho_client_unreachable_printer_is_offline():
 
 
 def _free_port():
-    import socket
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    from fakes import serving
+    return serving.free_port()
 
 
 def test_summary_job_is_none_without_a_job(manager):

@@ -27,6 +27,7 @@ import test_generate as TG
 from fakes import serving
 from test_setup_page import CODE, Helper, FakeManager
 
+pytestmark = pytest.mark.browser_audit      # tools/testenv runs the browser audits as a group of 2 workers
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
 ALLOW = ROOT / "tests" / "allowlists" / "aut5_hub"      # a folder, one file per section

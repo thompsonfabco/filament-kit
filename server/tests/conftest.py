@@ -176,9 +176,8 @@ def old_rows(out: str) -> list[str]:
 
 
 def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    from fakes import serving
+    return serving.free_port()
 
 
 @pytest.fixture

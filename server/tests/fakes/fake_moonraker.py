@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import socket
 import time
 
 from starlette.applications import Starlette
@@ -36,9 +35,8 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 
 def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    from fakes import serving
+    return serving.free_port()
 
 
 def _merge(dst: dict, delta: dict) -> None:

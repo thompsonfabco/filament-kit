@@ -155,3 +155,18 @@ def test_a_suite_name_it_does_not_know_is_refused(only, tmp_path):
                        env={**os.environ, "HOME": str(tmp_path)}, timeout=30)
     assert r.returncode == 2, r.stdout + r.stderr
     assert "--only" in r.stderr
+
+
+AUDIT_FILE = "# browser_audit: a file the recipe sees as holding audits, and no test in it\n"
+
+
+def test_an_audit_group_with_nothing_selected_fails_without_a_selector(recipe):
+    r = recipe({"test_a.py": GOOD, "test_audit.py": AUDIT_FILE})
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "no audit test matched" not in r.stdout
+
+
+def test_an_audit_group_with_nothing_selected_is_accepted_with_a_selector(recipe):
+    r = recipe({"test_a.py": GOOD, "test_audit.py": AUDIT_FILE}, "--", "-k", "test_good")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "no audit test matched your selector" in r.stdout
