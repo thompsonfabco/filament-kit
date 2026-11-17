@@ -338,15 +338,101 @@ def test_a_failed_rename_sent_again_resumes_the_recorded_plan(hub, monkeypatch):
     assert hub.get("/setup/api/settings/storage/job").json()["state"] == "none"
 
 
-def test_a_different_rename_while_one_is_half_done_is_refused_with_error_and_fix(hub, monkeypatch):
-    sm = FakeSm(spools("Rack 1", "Rack 1"))
+def test_an_unrelated_save_after_a_half_done_rename_finishes_the_rename_first(hub, monkeypatch):
+    sm = FakeSm(spools("Rack 1", "Rack 1", "Rack 2"))
     monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
     _failing_once(sm, monkeypatch, after=1)
     assert post(hub, "settings/storage", current_body(hub, lambda rows: rows[1].update(name="PLA rack 1"))).status_code == 502
-    for mutate in (lambda rows: rows[1].update(name="Rack 9"), lambda rows: None):    # another rename; no rename
-        r = post(hub, "settings/storage", current_body(hub, mutate))
-        assert r.status_code == 409 and r.json()["error"].startswith("Error:") and "Fix:" in r.json()["error"]
-    assert [s["location"] for s in sm.spools] == ["PLA rack 1", "Rack 1"]      # nothing moved by the refusals
+    shown = hub.get("/setup/api/settings/storage").json()
+    assert [x["name"] for x in shown["locations"]][1] == "PLA rack 1"       # the page shows the list the save was making
+    out = post(hub, "settings/storage", current_body(hub, lambda rows: rows[2].update(limit=5))).json()
+    assert out["saved"] is True and out["text"] == "Renamed Rack 1 to PLA rack 1. 2 spools updated."
+    assert [s["location"] for s in sm.spools] == ["PLA rack 1", "PLA rack 1", "Rack 2"]
+    st = storage.current()
+    assert st.by_name("PLA rack 1") and st.by_name("Rack 1") is None and st.by_name("Rack 2").limit == 5
+    assert inventory.pending_rename() is None
+
+
+def test_a_swap_resumed_and_a_new_rename_in_the_same_save_say_both(hub, monkeypatch):
+    sm = FakeSm(spools("Rack 1", "Rack 2", "Rack 2", "Storage box 01"))
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
+    _failing_once(sm, monkeypatch, after=1)
+
+    def swap(rows):
+        rows[1]["name"], rows[2]["name"] = "Rack 2", "Rack 1"
+    assert post(hub, "settings/storage", current_body(hub, swap)).status_code == 502
+
+    def more(rows):
+        rows[3]["name"] = "Dry box"
+    out = post(hub, "settings/storage", current_body(hub, more)).json()
+    assert out["saved"] is True and out["updated"] == 4
+    assert out["text"] == ("Renamed Rack 1 to Rack 2, Rack 2 to Rack 1. 3 spools updated. "
+                           "Renamed Storage box to Dry box. 1 spool updated.")
+    assert [s["location"] for s in sm.spools] == ["Rack 2", "Rack 1", "Rack 1", "Dry box 01"]
+    assert [x.name for x in storage.current().locations][1:4] == ["Rack 2", "Rack 1", "Dry box"]
+
+
+def test_a_failed_resume_keeps_the_plan_and_refuses_the_save_with_error_and_fix(hub, monkeypatch):
+    sm = FakeSm(spools("Rack 1", "Rack 1", "Rack 2"))
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
+    _failing_once(sm, monkeypatch, after=1)
+    assert post(hub, "settings/storage", current_body(hub, lambda rows: rows[1].update(name="PLA rack 1"))).status_code == 502
+    plan = inventory.pending_rename()
+    real = sm.patch
+
+    def down(path, body):
+        raise SpoolmanError("down", 500)
+    sm.patch = down
+    r = post(hub, "settings/storage", current_body(hub, lambda rows: rows[2].update(limit=5)))
+    assert r.status_code == 502 and r.json()["error"].startswith("Error:") and "Fix:" in r.json()["error"]
+    assert inventory.pending_rename() == plan and storage.current().by_name("Rack 2").limit is None
+    sm.patch = real                                                    # Spoolman is back: the next save finishes it
+    out = post(hub, "settings/storage", current_body(hub, lambda rows: rows[2].update(limit=5))).json()
+    assert out["saved"] is True and storage.current().by_name("Rack 2").limit == 5
+    assert [s["location"] for s in sm.spools] == ["PLA rack 1", "PLA rack 1", "Rack 2"]
+
+
+def test_after_a_restart_the_next_save_finishes_the_recorded_rename(hub, monkeypatch):
+    sm = FakeSm(spools("Rack 1", "Rack 1"))
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
+    _failing_once(sm, monkeypatch, after=1)
+    post(hub, "settings/storage", current_body(hub, lambda rows: rows[1].update(name="PLA rack 1")))
+    monkeypatch.setattr(storage_api, "_job", None)                    # the Hub restarted: only the plan is left
+    state = hub.get("/setup/api/settings/storage/job").json()
+    assert state["state"] == "failed" and state["error"].startswith("Error:") and "save" in state["error"]
+    out = post(hub, "settings/storage", current_body(hub)).json()
+    assert out["saved"] is True and out["text"] == "Renamed Rack 1 to PLA rack 1. 2 spools updated."
+    assert hub.get("/setup/api/settings/storage/job").json()["state"] == "none"
+
+
+def test_a_resume_of_more_than_20_spools_is_a_job_and_a_save_during_it_is_refused(hub, monkeypatch):
+    sm = FakeSm([{"id": i, "location": "Rack 1"} for i in range(1, 46)])
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
+    _failing_once(sm, monkeypatch, after=0)
+    body = current_body(hub, lambda rows: rows[1].update(name="PLA rack 1"))
+    assert post(hub, "settings/storage", body).json()["saved"] is False       # a job; it fails at the first spool
+    for _ in range(100):
+        if hub.get("/setup/api/settings/storage/job").json()["state"] != "running":
+            break
+        time.sleep(0.05)
+    assert hub.get("/setup/api/settings/storage/job").json()["state"] == "failed"
+    gate = threading.Event()
+    real = sm.patch
+
+    def slow(path, body):
+        gate.wait(5)
+        real(path, body)
+    sm.patch = slow
+    assert post(hub, "settings/storage", current_body(hub)).json() == {"ok": True, "saved": False, "job": {"steps": 3}}
+    busy = post(hub, "settings/storage", current_body(hub))
+    assert busy.status_code == 409 and "still running" in busy.json()["error"]
+    gate.set()
+    for _ in range(100):
+        state = hub.get("/setup/api/settings/storage/job").json()
+        if state["state"] != "running":
+            break
+        time.sleep(0.05)
+    assert state["state"] == "done" and state["text"] == "Renamed Rack 1 to PLA rack 1. 45 spools updated."
 
 
 def test_a_swap_of_two_names_through_the_route_moves_each_spool_once(hub, monkeypatch):
@@ -358,19 +444,9 @@ def test_a_swap_of_two_names_through_the_route_moves_each_spool_once(hub, monkey
         rows[1]["name"], rows[2]["name"] = "Rack 2", "Rack 1"
     body = current_body(hub, swap)
     assert post(hub, "settings/storage", body).status_code == 502
-    out = post(hub, "settings/storage", body).json()
+    out = post(hub, "settings/storage", body).json()                   # the same save again: nothing differs
     assert out["saved"] is True
     assert [s["location"] for s in sm.spools] == ["Rack 2", "Rack 1", "Rack 1"]
-
-
-def test_the_job_state_after_a_restart_says_the_rename_is_unfinished(hub, monkeypatch):
-    sm = FakeSm(spools("Rack 1", "Rack 1"))
-    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: sm)
-    _failing_once(sm, monkeypatch, after=1)
-    post(hub, "settings/storage", current_body(hub, lambda rows: rows[1].update(name="PLA rack 1")))
-    monkeypatch.setattr(storage_api, "_job", None)                    # the Hub restarted: only the plan is left
-    state = hub.get("/setup/api/settings/storage/job").json()
-    assert state["state"] == "failed" and "Fix:" in state["error"]
 
 
 def errors_of(r):

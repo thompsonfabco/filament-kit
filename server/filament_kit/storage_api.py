@@ -17,6 +17,7 @@ import logging
 import threading
 
 from . import inventory, placement, storage
+from .spoolman import SpoolmanError
 from .storage import BULK, CONTAINERS, MATERIALS, Location, Problem, Storage
 
 log = logging.getLogger("filament_kit.storage")
@@ -63,8 +64,36 @@ def view(st: Storage, taken) -> dict:
             "everything_else": placement.order(st), "notices": notices(st)}
 
 
+def _apply_plan(st: Storage, plan: dict) -> Storage:
+    """`st` with the renames of a recorded plan applied to the names (and prefixes) they were planned for, all at once
+    (a swap swaps). The list is only written after its spools were renamed, so while a plan is pending the saved list
+    still has the old names: this is the list the unfinished save was making. An existing set's prefix only follows its
+    name (R79 C3), so a containers rename also renames the set when its prefix was its name plus a space."""
+    out = storage.copy_of(st)
+    for x in out.locations:
+        for old, new, containers in plan["renames"]:
+            if not containers and x.type == BULK and x.name == old:
+                x.name = new
+            elif containers and x.type == CONTAINERS and x.container_prefix() == old:
+                if x.name + " " == old:
+                    x.name = new.rstrip()
+                x.prefix = new
+            else:
+                continue
+            break
+    return out
+
+
+def _base() -> Storage:
+    """The list a page or a save works on: the saved list, with the unfinished rename (if any) applied, so a person
+    never has to retype it and a save does not rename the places back."""
+    st = storage.current()
+    plan = inventory.pending_rename()
+    return _apply_plan(st, plan) if plan is not None else st
+
+
 def current_view(sm, st: Storage | None = None) -> dict:
-    return view(st or storage.current(), inventory._used_locations(sm))
+    return view(st or _base(), inventory._used_locations(sm))
 
 
 # ---------------------------------------------------------------- reading a submitted list
@@ -224,7 +253,7 @@ def _refusal(problems: list[Problem], after: Storage) -> StorageRefused:
 def preview(sm, body) -> dict:
     """The view of an unsaved list with its `errors` (empty = it could be saved): the panel "Where a new spool goes",
     the how-full of each row and the notices, before anything is written. Writes nothing, renames nothing."""
-    before = storage.current()
+    before = _base()
     taken = inventory._used_locations(sm)
     after, shape = parse(body, before)
     problems = problems_of(before, after, shape, taken)
@@ -232,6 +261,9 @@ def preview(sm, body) -> dict:
     return {"ok": not problems, "dry_run": True, **view(after, taken), "errors": errors_of(problems, after),
             "renames": [{"from": r.label[0], "to": r.label[1]} for r in renames]}
 
+
+UNFINISHED = ("Error: a rename of storage locations is not finished.\n"
+              "Fix: save the storage locations again; the Hub finishes the rename first.")
 
 _lock = threading.Lock()          # one save at a time; a running rename job keeps it
 _job: dict | None = None
@@ -244,14 +276,36 @@ def job_state() -> dict:
         return dict(_job)
     if inventory.pending_rename() is not None:      # a rename left half-done (failed, or the Hub restarted)
         return {"state": "failed", "step": None, "progress": None, "text": "",
-                "error": str(inventory.RenamePending())}
+                "error": UNFINISHED}
     return {"state": "none", "step": None, "progress": None, "text": "", "error": None}
+
+
+def _steps_for(sm, items) -> int:
+    """How many job steps the spools under the names of `items` need (0 up to JOB_STEPS_ABOVE spools)."""
+    n = sum(1 for sp in sm.get("spool") if inventory._renamed(sp.get("location") or "", items) is not None)
+    return 0 if n <= JOB_STEPS_ABOVE else -(-n // inventory.RENAME_BATCH)
+
+
+def _finish_recorded(sm, step) -> dict:
+    """Finish the rename a failed save recorded, from the plan alone (no names asked), then write the list it was
+    making. A failure (Spoolman down) keeps the plan and refuses with Error and Fix; the next save tries again."""
+    plan = inventory.pending_rename()
+    try:
+        done = inventory.rename_locations(sm, [], step=step)
+    except SpoolmanError as e:
+        raise StorageRefused("Error: the unfinished rename of storage locations could not be finished "
+                             f"({e if e.status is not None else 'Spoolman is not reachable'}).\n"
+                             "Fix: check that Spoolman is running, then save again. Nothing else was saved.",
+                             [], 502) from None
+    made = _apply_plan(storage.current(), plan)
+    storage.save(made, before=made)
+    log.info("storage locations: unfinished rename finished; %s", done["text"])
+    return done
 
 
 def _write(sm, before: Storage, after: Storage, items, step=None) -> dict:
     """Rename the spools of the renamed locations, then write the list. A rename that fails part-way leaves the list
-    as it was and the plan stays recorded (`inventory.pending_rename`), so the same save sent again resumes it (spools
-    already renamed are not touched twice)."""
+    as it was and the plan stays recorded (`inventory.pending_rename`); the next save finishes it first."""
     done = inventory.rename_locations(sm, items, step=step)
     after.converted = False            # the person has seen the list and saved it: the converted notice is spent
     storage.save(after)
@@ -259,29 +313,53 @@ def _write(sm, before: Storage, after: Storage, items, step=None) -> dict:
     return done
 
 
+def _save_all(sm, body, step=None, resumed: bool = False) -> dict:
+    """The work of one save: finish the recorded rename (if any), then validate and apply the submitted list on the
+    list as it now is saved. Answers {updated, text}: the sentences of every rename done, the resumed one first."""
+    texts, updated = [], 0
+    if inventory.pending_rename() is not None:
+        done = _finish_recorded(sm, step)
+        texts.append(done["text"])
+        updated += done["updated"]
+        resumed = True
+    before = storage.current()
+    taken = inventory._used_locations(sm)
+    after, shape = parse(body, before)
+    problems = problems_of(before, after, shape, taken)
+    if problems:
+        refusal = _refusal(problems, after)
+        if resumed:
+            refusal.args = (refusal.args[0].replace("Nothing was saved.", "Nothing more was saved."),)
+        raise refusal
+    done = _write(sm, before, after, storage.renames(before, after), step)
+    if done["text"]:
+        texts.append(done["text"])
+    return {"updated": updated + done["updated"], "text": " ".join(texts)}
+
+
 def save(sm, body) -> dict:
-    """Save the whole submitted list. Answers {ok, saved: true, text, updated, **view} (`text` is the rename sentence
-    "Renamed Rack 1 to PLA rack 1. 18 spools updated." or ""), or, when more than JOB_STEPS_ABOVE spools are renamed,
-    {ok, saved: false, job: {steps}}: the save is finished by the job (`job_state`), and a second save is refused
-    (409) until it ends. Raises StorageRefused with `errors` per row and field."""
+    """Save the whole submitted list. A rename a failed save left half-done is finished first, from its recorded plan,
+    and the submitted list is applied on the list that rename was making. Answers {ok, saved: true, text, updated,
+    **view} (`text` is the rename sentence "Renamed Rack 1 to PLA rack 1. 18 spools updated." once per rename, or ""),
+    or, when more than JOB_STEPS_ABOVE spools are renamed, {ok, saved: false, job: {steps}}: the save is finished by
+    the job (`job_state`), and a second save is refused (409) while it runs. Raises StorageRefused with `errors` per
+    row and field."""
     global _job
     if not _lock.acquire(blocking=False):
         raise StorageRefused("Another change to the storage locations is still running. Try again when it is done.",
                              [], 409)
     release = True
     try:
-        before = storage.current()
-        taken = inventory._used_locations(sm)
-        after, shape = parse(body, before)
-        problems = problems_of(before, after, shape, taken)
-        if problems:
-            raise _refusal(problems, after)
-        items = storage.renames(before, after)
         plan = inventory.pending_rename()
-        if plan is not None and inventory._keys(items) != plan["renames"]:
-            # a half-done rename is finished by the same save, never re-derived from today's names or replaced
-            raise StorageRefused(str(inventory.RenamePending()), [], 409)
-        steps = inventory.rename_steps(sm, items) if (items or plan is not None) else 0
+        before = _base()
+        after, shape = parse(body, before)
+        if plan is None:
+            problems = problems_of(before, after, shape, inventory._used_locations(sm))
+            if problems:
+                raise _refusal(problems, after)
+        steps = inventory.rename_steps(sm, []) if plan is not None else 0
+        items = storage.renames(before, after)
+        steps += _steps_for(sm, items) if items else 0
         if steps:
             _job = {"state": "running", "step": None, "progress": 0.0, "text": "", "error": None, "steps": steps}
 
@@ -291,9 +369,10 @@ def save(sm, body) -> dict:
 
                 def step(text: str) -> None:
                     n[0] += 1
-                    _job.update(step={"index": n[0], "count": steps, "text": text}, progress=(n[0] - 1) / steps)
+                    _job.update(step={"index": n[0], "count": steps, "text": text},
+                                progress=min(1.0, (n[0] - 1) / steps))
                 try:
-                    done = _write(sm, before, after, items, step)
+                    done = _save_all(sm, body, step, plan is not None)
                     _job.update(state="done", progress=1.0, text=done["text"])
                 except Exception as e:  # noqa: BLE001 - the page gets the reason, the log the trace
                     log.exception("storage rename job")
@@ -304,7 +383,7 @@ def save(sm, body) -> dict:
             release = False
             return {"ok": True, "saved": False, "job": {"steps": steps}}
         _job = None                    # an older job's end is not this save's state
-        done = _write(sm, before, after, items)
+        done = _save_all(sm, body, None, plan is not None)
         return {"ok": True, "saved": True, "text": done["text"], "updated": done["updated"],
                 **current_view(sm, storage.current())}
     finally:
