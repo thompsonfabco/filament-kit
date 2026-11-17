@@ -192,11 +192,8 @@ class _Plan:
         return after.describe(self.taken) != self.before.describe(self.taken)
 
     def spools_at(self, row: dict) -> int:
-        counts = storage.counts_of(self.taken)
         loc = self.before.by_name(row["name"])
-        if loc is not None and loc.type == CONTAINERS:
-            return sum(counts.get(loc.container_name(n), 0) for n in range(1, (loc.count or 0) + 1))
-        return counts.get(row["name"], 0)
+        return self.before.used(loc, self.taken) if loc is not None else storage.counts_of(self.taken).get(row["name"], 0)
 
 
 def _no_such(name: str, plan: _Plan) -> int:
@@ -300,7 +297,7 @@ def _apply_options(row: dict, a, *, adding: bool) -> int | None:
             return output.FAILED
         row["overflow"] = False
     if row["overflow"] and row["fill"] == ANY:
-        output.error("an overflow location cannot take any material automatically.",
+        output.error(text("storage_error_overflow_any"),
                      "use --takes none or name the materials.")
         return output.FAILED
     return None
@@ -596,11 +593,7 @@ class StorageEditor:
                               leave="back", changes=len(self.owner.staged)), fields
 
     def spools_in(self, r: dict) -> int:
-        counts = storage.counts_of(self.taken)
-        if r["type"] == CONTAINERS:
-            loc = storage_of([r], self.before).locations[0]
-            return sum(counts.get(loc.container_name(n), 0) for n in range(1, (loc.count or 0) + 1))
-        return counts.get(r["name"], 0)
+        return self.before.used(storage_of([r], self.before).locations[0], self.taken)
 
     @staticmethod
     def fill_word(fill: str) -> str:

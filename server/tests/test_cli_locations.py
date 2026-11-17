@@ -180,7 +180,7 @@ def test_add_an_overflow_place_prints_the_note_when_the_default_has_no_limit(cap
     (["add", "Bags", "--type", "containers", "--count", "x"], 1, "Error: Enter a whole number, 1 or more.", None),
     (["add", "Rack 2", "--takes", ","], 1, "Error: Enter at least one material, e.g. PLA.", None),
     (["add", "Rack 2", "--takes", "any", "--overflow"], 1,
-     "Error: an overflow location cannot take any material automatically.", "Fix: use --takes none or name the materials."),
+     "Error: An overflow location cannot take any material automatically.", "Fix: use --takes none or name the materials."),
     (["add", "Rack 2", "--type", "containers", "--limit", "5"], 2, "Error: --limit is for Bulk storage.", None),
     (["add", "Rack 2", "--count", "5"], 2, "Error: --count is for Containers.", None),
     (["add", "Storage box 03"], 1, "Error: Storage box 03 is the name of a container in Storage box.", None),
@@ -286,7 +286,7 @@ def test_a_half_done_rename_is_finished_by_any_next_change_and_a_spoolman_failur
     (["edit", "Storage box", "--type", "bulk"], "Error: Move the spools out to change the type."),
     (["edit", "Storage box", "--count", "1"], "Error: Storage box 02 holds spools. Move it first, or keep at least 2."),
     (["edit", "Rack 1", "--name", "Sealed stock"], "Error: There is already a location called Sealed stock."),
-    (["edit", "Rack 1", "--takes", "any", "--overflow"], "Error: an overflow location cannot take any material"),
+    (["edit", "Rack 1", "--takes", "any", "--overflow"], "Error: An overflow location cannot take any material"),
 ])
 def test_edit_refusals_have_error_and_fix_and_exit_code_1(capsys, sm, argv, error):
     before = storage.current().describe(inventory._used_locations(sm))
@@ -549,3 +549,36 @@ def test_the_installer_still_asks_use_the_default_storage_locations_and_n_opens_
     apply.execute([apply.Action("server_setup", "")], run=Recorder(), resources=_res(tmp_path), root=tmp_path / "r")
     assert "Use the default storage locations? [Y/n]: " in capsys.readouterr().out
     assert len(menus) == (1 if opened else 0)
+
+
+# ================================================================ one counting, one sentence (R463)
+
+def test_the_remove_question_counts_spools_as_storage_used_does(capsys):
+    """spools_at (the command) and spools_in (the menu) are Storage.used: containers hold spools by name, a renamed
+    place is counted by its new name, and a spool in a container name that is not in the set is not counted."""
+    from types import SimpleNamespace
+    sm = FakeSm(["Rack 1"] * 3 + ["Storage box 01", "Storage box 05", "Storage box 05", "Storage box 40"]
+                + ["Overflow"] * 2 + ["Sealed stock"])
+    plan = cli.locations_cli._Plan(sm)
+    editor = cli.locations_cli.StorageEditor(SimpleNamespace(embedded=False, staged={}), lambda: sm)
+    for row in plan.rows:
+        want = plan.before.used(plan.before.by_name(row["name"]), plan.taken)
+        assert plan.spools_at(row) == want, row["name"]
+        assert editor.spools_in(row) == want, row["name"]
+    box = next(r for r in plan.rows if r["name"] == "Storage box")
+    assert plan.spools_at(box) == editor.spools_in(box) == 2          # containers in use, as how-full counts them
+
+
+def test_the_overflow_and_any_sentence_is_said_once_by_add_edit_and_default_overflow(capsys, sm):
+    from pathlib import Path
+    from filament_kit.locations_cli import text
+    sentence = text("storage_error_overflow_any")
+    assert run(capsys, sm, "locations", "add", "Shelf", "--takes", "any")[0] == 0
+    seen = [run(capsys, sm, "locations", "add", "Rack 2", "--takes", "any", "--overflow")[2],
+            run(capsys, sm, "locations", "edit", "Shelf", "--takes", "any", "--overflow")[2],
+            run(capsys, sm, "locations", "default-overflow", "Shelf")[2]]
+    for err in seen:
+        assert err.splitlines()[0] == f"Error: {sentence}"
+    catalogue = json.loads((Path(__file__).parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    assert sentence == catalogue["storage_error_overflow_any"]
+    assert sentence in Path(storage.__file__).read_text(encoding="utf-8")          # the server's own message
