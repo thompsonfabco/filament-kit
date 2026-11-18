@@ -7,7 +7,7 @@
 // The texts of this part that the catalogue does not hold yet (only HD2 opens strings/): the catalogue's text wins once it has the key.
 const ACT_TEXT = {
   logs_view: "Logs view", logs_activity: "Activity", logs_service_logs: "Service logs",
-  activity_who: "Who", activity_kind: "What kind",
+  activity_who: "Who", activity_who_unknown: "Unknown", activity_kind: "What kind",
   activity_who_any: "Anyone", activity_who_page: "The Hub page", activity_who_cli: "The command line", activity_who_hub: "The Hub itself",
   activity_who_device: "A paired device", activity_who_connector: "The Claude connector",
   activity_kind_any: "Everything", activity_kind_spools: "Spool changes", activity_kind_usage: "Filament used",
@@ -36,7 +36,7 @@ const ACT_WHO = [["", "activity_who_any"], ["page", "activity_who_page"], ["cli"
   ["device", "activity_who_device"], ["connector", "activity_who_connector"]];
 const ACT_KINDS = {
   "": ["activity_kind_any", ""],
-  spools: ["activity_kind_spools", "spool.weighed,spool.moved,spool.emptied,spool.opened,spool.loaded,spool.unloaded,slot.cleared"],
+  spools: ["activity_kind_spools", "spool.added,spool.weighed,spool.moved,spool.emptied,spool.opened,spool.loaded,spool.unloaded,slot.cleared"],
   usage: ["activity_kind_usage", "usage.recorded,usage.undone"],
   printers: ["activity_kind_printers", "printer.added,printer.changed,printer.removed"],
   devices: ["activity_kind_devices", "device.paired,device.removed"],
@@ -133,6 +133,11 @@ const actWhen = (at) => {
   const d = new Date(at), ok = !Number.isNaN(d.getTime());
   return h("time", { datetime: ok ? d.toISOString() : "", textContent: ok ? d.toLocaleString() : String(at) });
 };
+// who did it: the actor's name, else a plain word for its type, never an empty cell
+const actWho = (actor) => {
+  const type = actor && actor.type;
+  return (actor && actor.name) || actT(ACT_WHO.find(([v]) => v && v === type)?.[1] || "activity_who_unknown");
+};
 const actWhy = (why) => (why && why !== "not_undoable" && ACT_TEXT["activity_why_" + why] ? actT("activity_why_" + why) : "");
 const actNewest = (a, b) => (String(b.at) < String(a.at) ? -1 : String(b.at) > String(a.at) ? 1 : (Number(b.id) || 0) - (Number(a.id) || 0));
 
@@ -159,7 +164,7 @@ function activityView() {
       : null;
     return h("div", { class: "coll__item", role: "rowgroup", "data-id": String(ev.id), tabindex: "-1" }, h("div", { class: "coll__row", role: "row" },
       cell("when", "activity_col_when", actWhen(ev.at)),
-      cell("who", "activity_col_who", (ev.actor && ev.actor.name) || ""),
+      cell("who", "activity_col_who", actWho(ev.actor)),
       cell("what", "activity_col_what", h("span", { textContent: what }), note ? h("span", { class: "coll__sub", textContent: note }) : null),
       cell("thing", "activity_col_thing", href ? h("a", { href, textContent: name || actT("activity_open") }) : name || ""),
       cell("actions", null, undo)));
