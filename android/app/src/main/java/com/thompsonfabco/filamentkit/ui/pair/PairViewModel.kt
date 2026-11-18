@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 const val DEFAULT_PORT = 8710
+private const val HTTPS_PORT = 443
 
 enum class Step { Choose, Address, Confirm, Code, Done }
 
@@ -45,6 +46,8 @@ data class PairUi(
     val step: Step = Step.Choose,
     val host: String = "",
     val port: Int = DEFAULT_PORT,
+    /** What the address screen's Port field starts with: blank on a fresh entry, a typed or probed port otherwise. */
+    val portText: String = "",
     /** Lowercase hex, no spaces; show it with [groupFingerprint]. */
     val fingerprint: String? = null,
     val busy: Boolean = false,
@@ -87,10 +90,10 @@ class PairViewModel(
     private var fromList = false
 
     /** Open the manual flow, optionally prefilled. */
-    fun startManual(host: String = "", port: Int = DEFAULT_PORT) {
+    fun startManual(host: String = "", port: Int? = null) {
         confirmed = false
         fromList = false
-        _state.value = PairUi(step = Step.Address, host = host, port = port)
+        _state.value = PairUi(step = Step.Address, host = host, port = port ?: DEFAULT_PORT, portText = port?.toString().orEmpty())
     }
 
     /** A Hub found on the network: straight to its fingerprint check; if that fails, the first screen says why. */
@@ -99,26 +102,47 @@ class PairViewModel(
     fun submitAddress(hostInput: String, portInput: String) {
         if (_state.value.busy) return
         val host = hostInput.trim()
-        val port = if (portInput.isBlank()) DEFAULT_PORT else portInput.trim().toIntOrNull()
+        val blank = portInput.isBlank()
+        val port = if (blank) DEFAULT_PORT else portInput.trim().toIntOrNull()
         if (host.isEmpty()) return fail(host, DEFAULT_PORT, R.string.pair_address_error_empty, PairField.Address)
         if (port == null || port !in 1..65535) {
             return fail(host, DEFAULT_PORT, R.string.pair_address_error_port, PairField.Port)
         }
-        probe(host, port, Step.Address)
+        // No port typed: a new Hub listens on 443, an existing one on 8710; the one that answers is kept.
+        probe(host, port, Step.Address, tryFirst = if (blank) HTTPS_PORT else null)
     }
 
-    /** Reads the certificate [host]:[port] presents; the screen it was asked from ([from]) shows a failure. */
-    private fun probe(host: String, port: Int, from: Step) {
+    /**
+     * Reads the certificate [host]:[port] presents; the screen it was asked from ([from]) shows a failure.
+     * With [tryFirst], that port is probed first and [port] only if it fails or does not answer as a Hub;
+     * a failure shows the error of [port].
+     */
+    private fun probe(host: String, port: Int, from: Step, tryFirst: Int? = null) {
         if (_state.value.busy) return
         confirmed = false
         fromList = from == Step.Choose
-        _state.value = PairUi(step = from, host = host, port = port, busy = true)
+        _state.value = PairUi(step = from, host = host, port = tryFirst ?: port, busy = true)
         scope.launch {
             try {
-                val fp = backend.probe(host, port)
+                var used = port
+                val fp = if (tryFirst == null) {
+                    backend.probe(host, port)
+                } else {
+                    try {
+                        // Any TLS server answers a probe; only a Hub answering api/info makes it the port.
+                        backend.probe(host, tryFirst).also {
+                            backend.info(host, tryFirst, it, null)
+                            used = tryFirst
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        backend.probe(host, port)
+                    }
+                }
                 confirmed = settings.skipsFingerprintCheck()
                 val next = if (confirmed) Step.Code else Step.Confirm
-                _state.value = PairUi(step = next, host = host, port = port, fingerprint = fp)
+                _state.value = PairUi(step = next, host = host, port = used, fingerprint = fp)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -250,7 +274,7 @@ class PairViewModel(
         confirmed = false
         val toAddress = s.mismatch == null && !fromList && (s.step == Step.Confirm || s.step == Step.Code)
         fromList = false
-        _state.value = if (toAddress) PairUi(step = Step.Address, host = s.host, port = s.port) else PairUi()
+        _state.value = if (toAddress) PairUi(step = Step.Address, host = s.host, port = s.port, portText = s.port.toString()) else PairUi()
     }
 
     /** Another screen hit a changed server certificate: show both fingerprints until the user chooses "Pair again". */

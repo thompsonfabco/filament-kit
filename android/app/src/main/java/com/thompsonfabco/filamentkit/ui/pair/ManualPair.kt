@@ -43,7 +43,7 @@ internal fun PairAddressScreen(
 ) {
     BackHandler(onBack = onBack)
     var host by rememberSaveable { mutableStateOf(ui.host) }
-    var port by rememberSaveable { mutableStateOf(ui.port.toString()) }
+    var port by rememberSaveable { mutableStateOf(ui.portText) }
     val space = SpoolwardenTheme.space
     PairPage {
         PairHeading(stringResource(R.string.pair_address_heading))
@@ -71,6 +71,10 @@ internal fun PairAddressScreen(
             textStyle = SpoolwardenTheme.type.input,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
             modifier = Modifier.width(SpoolwardenTheme.sizes.portField),
+        )
+        Text(
+            stringResource(R.string.pair_address_port_hint), style = MaterialTheme.typography.bodySmall,
+            color = SpoolwardenTheme.colors.muted,
         )
         Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
             SwButton(
