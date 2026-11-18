@@ -213,7 +213,7 @@ out.again = { n: count(), more: !!more() };
     asked = [q for n, q in stub.calls if n == "activity"]
     assert {"limit": "50"} in asked and {"limit": "100"} in asked and {"limit": "150"} in asked
     assert {"limit": "50", "actor": "cli"} in asked
-    assert {"limit": "50", "actor": "cli", "kinds": "spool.weighed,spool.moved,spool.emptied,spool.opened,spool.loaded,spool.unloaded,slot.cleared"} in asked
+    assert {"limit": "50", "actor": "cli", "kinds": "spool.added,spool.weighed,spool.moved,spool.emptied,spool.opened,spool.loaded,spool.unloaded,slot.cleared"} in asked
     assert {"limit": "50", "actor": "device"} in asked
 
 

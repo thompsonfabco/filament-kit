@@ -232,19 +232,23 @@ LOGS_PRELUDE = """
     await until("the page did not finish its first reads", () => !document.querySelector(".chip--lock .skeleton__line")
       && !document.querySelector('[aria-busy="true"]:not(button)'));
     SW.setLock("unlocked", { code: %r });
+    const choice = () => document.querySelector('input[name="logs-view"][value="service"]');
+    await until("no Service logs choice", choice);
+    choice().click();      // Logs opens on Activity: the log is under Service logs
     await until("no Show button", () => show());
   };
 """ % CODE
 
 # It waits on the outcome of Show (the log block, or the error state in its block), not on a fixed time.
 LOGS_UNLOCKED = """(async () => {""" + LOGS_PRELUDE + """
+  const SVC = "div:not(.logs__activity) > .logs__out";      // the Service logs block (Activity has its own .logs__out)
   await unlocked();
   show().click();
-  await until("no outcome after Show", () => document.querySelector(".logs__out .code"), 20000);
-  if (document.querySelector(".logs__out .error-state")) throw new Error("Logs: the read failed: " + document.querySelector(".logs__out").innerText);
-  if (!document.querySelector('.logs__out .code [data-action="copy"]')) throw new Error("Logs: no Copy button");
+  await until("no outcome after Show", () => document.querySelector(SVC + " .code"), 20000);
+  if (document.querySelector(SVC + " .error-state")) throw new Error("Logs: the read failed: " + document.querySelector(SVC).innerText);
+  if (!document.querySelector(SVC + ' .code [data-action="copy"]')) throw new Error("Logs: no Copy button");
   if (document.querySelectorAll(".logs__controls .segmented__input").length !== 3) throw new Error("Logs: Lines is not 50 | 100 | 200");
-  if (!document.querySelector(".logs__out .code__text").textContent.includes("backup started")) throw new Error("Logs: the log text is not shown");
+  if (!document.querySelector(SVC + " .code__text").textContent.includes("backup started")) throw new Error("Logs: the log text is not shown");
 })()"""
 
 # a read still on its way when the page locks is dropped: the log is not written back onto the locked page
