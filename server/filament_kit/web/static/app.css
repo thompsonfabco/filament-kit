@@ -370,7 +370,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .spools__linked:empty { display: none; }
 .spools__find { display: grid; gap: var(--s2); }
 .spools__low { justify-self: start; }
-.spools__low[aria-pressed="true"] { background: var(--surface-3); border-color: var(--accent); }
+.spools__low[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }      /* the chosen chip: 02 5.7 */
 .spools__last { color: var(--warn); font-weight: var(--fw-label); }
 .spools__search .field__box { position: relative; }
 .spools__search .field__box, .spools__search .field__control { width: 100%; }
