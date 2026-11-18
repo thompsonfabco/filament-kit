@@ -1308,7 +1308,7 @@ class LibraryKit(CapKit):
         if path == "/api/hub":
             return {"name": "Workshop hub", "version": "0.6.2", "getting_started": {"done": 4, "total": 8, "hidden": False, "finished": False}}
         if path == "/api/library/local":
-            return {"entries": [{"id": "a1", "brand": "Acme", "name": "Red", "material": "PLA", "added": 1700000000}]}
+            return {"entries": [{"id": "a1", "brand": "Acme", "name": "Red", "material": "PLA", "added": 1700000000}], "materials": ["PLA", "PETG"]}
         return super().get(path)
 
     def post(self, path, body):
