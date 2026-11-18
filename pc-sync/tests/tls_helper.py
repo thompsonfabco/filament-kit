@@ -58,7 +58,7 @@ class _Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(n) if n else b""
         self.server.requests.append({"method": self.command, "path": self.path,
                                      "auth": self.headers.get("Authorization"), "body": body,
-                                     "type": self.headers.get("Content-Type")})
+                                     "type": self.headers.get("Content-Type"), "client": self.headers.get("X-Spoolwarden-Client")})
         status, ctype, payload = self.server.respond(self.command, self.path, body)
         if isinstance(payload, (dict, list)):
             payload = json.dumps(payload).encode()

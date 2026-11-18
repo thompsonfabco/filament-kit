@@ -9,7 +9,7 @@ import pytest
 import orca_fixture
 import studio_fixture
 from fksync import __main__ as cli
-from fksync import store, studio
+from fksync import client, store, studio
 from tls_helper import TlsServer, make_cert
 
 LINK_TOKEN = "LinkToken-Secret-0123456789abcdef"
@@ -310,3 +310,18 @@ def test_pair_show_link_switch_keeps_the_visible_prompt(paths, srv, monkeypatch)
     rc, prompts = _tty_pair(paths, monkeypatch, "unused", typed=_link(srv) + "\n", env={"FKSYNC_SHOW_LINK": "1"})
     assert rc == 0
     assert prompts == []
+
+
+def test_pair_with_a_bare_host_finds_the_hub_on_the_second_port(paths, srv, monkeypatch, capsys):
+    """AF8: no port typed, so the Hub is looked for on 443, then 8710 (here: a closed port, then the Hub); the port found is saved."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    closed = s.getsockname()[1]
+    s.close()
+    monkeypatch.setattr(client, "HUB_PORTS", (closed, srv.port))
+    rc, prompts = _tty_pair(paths, monkeypatch, "", typed="127.0.0.1\ny\n123456\n")
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert f"The Hub at 127.0.0.1:{srv.port} shows this certificate fingerprint" in out
+    cfg = store.load_config(_dirs(paths))
+    assert cfg["host"] == "127.0.0.1" and cfg["port"] == srv.port

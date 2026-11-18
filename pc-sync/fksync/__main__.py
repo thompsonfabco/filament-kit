@@ -55,6 +55,12 @@ def _grouped(fp: str) -> str:
     return " ".join(fp[i:i + 4] for i in range(0, len(fp), 4))
 
 
+def _at(host: str, port: int) -> str:
+    """How an address is written: the web address's own port (443) is left off (R82 1.4); an IPv6 host keeps its brackets with a port."""
+    host = f"[{host}]" if ":" in host else host
+    return host if port == 443 else f"{host}:{port}"
+
+
 def _parse_address(text: str, bare=client.DEFAULT_PORT) -> tuple[str, int | None]:
     """(host, port); `bare` is the port of an address typed without one (None: the caller looks for the Hub's port)."""
     host, port = text.strip(), bare
@@ -104,7 +110,7 @@ def _settle_pair(dirs: store.AppDirs, cfg: dict, token: str, echo) -> tuple[dict
     cfg["device"] = st.get("you")
     store.save_config(dirs, cfg)
     store.drop_pair_aside(dirs)
-    store.log(dirs, f"paired with {info.get('name', 'the Hub')} at {cfg['host']}:{cfg['port']} (device {cfg['device']})")
+    store.log(dirs, f"paired with {info.get('name', 'the Hub')} at {_at(cfg['host'], cfg['port'])} (device {cfg['device']})")
     return cfg, token
 
 
@@ -151,9 +157,9 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | Non
     cfg["device"] = st.get("you")
     store.save_config(dirs, cfg)
     store.drop_pair_aside(dirs)
-    store.log(dirs, f"paired with {info.get('name', 'the Hub')} at {cfg['host']}:{cfg['port']} "
+    store.log(dirs, f"paired with {info.get('name', 'the Hub')} at {_at(cfg['host'], cfg['port'])} "
                     f"(device {cfg['device']})")
-    _out(f"Paired with {info.get('name', 'the Hub')} ({cfg['host']}:{cfg['port']}). "
+    _out(f"Paired with {info.get('name', 'the Hub')} ({_at(cfg['host'], cfg['port'])}). "
          "The sync runs every 10 minutes and waits while Bambu Studio (or Orca Slicer) is open "
          "('filament-kit-sync status' shows a wait).")
     owner = st.get("owner")
@@ -202,7 +208,7 @@ def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.Li
     except client.Offline as e:
         _out(f"Could not reach the Hub: {e}")
         return 1
-    _out(f"The Hub at {host}:{port} shows this certificate fingerprint:")
+    _out(f"The Hub at {_at(host, port)} shows this certificate fingerprint:")
     _out(f"  {_grouped(fp)}")
     if _ask("Does this match the fingerprint shown by 'sudo spoolwarden pair'? [y/N]").lower() not in ("y", "yes"):
         _out("Not paired. Check that you typed the right address.")
@@ -380,7 +386,7 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
     paired = bool(cfg.get("host")) and store.load_token(dirs) is not None
     if cfg.get("host"):
         ips = f" (also {', '.join(cfg['ips'])})" if cfg.get("ips") else ""
-        _out(f"Hub:             {cfg['host']}:{cfg.get('port', client.DEFAULT_PORT)}{ips}"
+        _out(f"Hub:             {_at(cfg['host'], cfg.get('port', client.DEFAULT_PORT))}{ips}"
              f"{'' if paired else ' - not paired'}")
         _out(f"Fingerprint:     {_grouped(str(cfg.get('fp', '')))}")
         if cfg.get("device"):

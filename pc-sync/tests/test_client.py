@@ -239,3 +239,23 @@ def test_a_typed_address_without_a_port_is_left_open_for_the_search():
     assert _parse_address("hub.local:8710", bare=None) == ("hub.local", 8710)
     assert _parse_address("[fe80::1]", bare=None) == ("fe80::1", None)
     assert _parse_address("hub.local") == ("hub.local", 8710)
+
+
+def test_every_call_names_this_program_and_its_version(certs):
+    """The Hub's Devices list shows the kind and version from this header (R83 10.1)."""
+    from fksync import __version__
+    (cert, key, fp), _ = certs
+    with TlsServer(cert, key, respond=HUB) as srv:
+        c = client.Client(_cfg(srv, fp), "a" * 32, timeout=5)
+        c.info()
+        c.state()
+        assert [r["client"] for r in srv.requests] == [f"slicer-sync/{__version__}"] * 2
+        client.find_hub("127.0.0.1", (srv.port,), timeout=5)
+        assert srv.requests[-1]["client"] == f"slicer-sync/{__version__}"
+
+
+@pytest.mark.parametrize("host,port,text", [("hub.local", 443, "hub.local"), ("hub.local", 8710, "hub.local:8710"),
+                                            ("10.0.0.5", 443, "10.0.0.5"), ("fe80::1", 8710, "[fe80::1]:8710"), ("fe80::1", 443, "[fe80::1]")])
+def test_an_address_on_443_is_written_without_the_port(host, port, text):
+    from fksync.__main__ import _at
+    assert _at(host, port) == text
