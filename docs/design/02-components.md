@@ -3325,8 +3325,9 @@ screen of the Hub page and the web app, so a person never takes the made-up data
   has no Dismiss, and it is not one of the two page or global banners the rule above counts: it is drawn first, above
   them, at the top of `main` (global placement), also on the Locked page and on error states.
 - **Leave demo** asks once, in a destructive dialog (9.1): title "Leave the demo?", body "Everything in it is deleted.",
-  buttons Cancel and **Leave demo** (danger). The question is asked on the Hub page, which holds the setup code; in the
-  web app and the app the button opens the Hub page at Settings > General.
+  buttons Cancel and **Leave demo** (danger). The question is asked in place on the Hub page, in the web app and in the
+  app; none of them opens another page for it. Switching the demo on is not offered here (Hub page and command line
+  only).
 - It leaves by itself when the demo is over. It is plain content when the page opens (no announcement).
 - Android: the same `NoticeCard` (kind `info`, the sentence, one `TextButton` **Leave demo**) at the top of every
   screen of the app, above the navigation content and above any other notice.

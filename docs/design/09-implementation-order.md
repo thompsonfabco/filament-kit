@@ -2546,7 +2546,8 @@ the web app's route under `/intake/api/` that passes a kit route on.
 
 ### The contracts
 
-All JSON. Times are ISO 8601 with offset. A field marked `?` may be absent or null. Errors keep each route family's
+All JSON. Times are ISO 8601 with offset; a day (an own catalog entry's `added`) is `YYYY-MM-DD`, with no time and no
+offset. A field marked `?` may be absent or null. Errors keep each route family's
 existing shape.
 
 **Kit routes (new or changed).**
@@ -2593,7 +2594,7 @@ bool}`; `GET device/{id}/photo` (open) answers `image/jpeg`; `POST device/{id}/s
 device/{id}/open` needs the page unlocked, makes the Hub ask the station for a one-time ticket and answers `{address:
 "<own_page>#ticket=<ticket>"}`. The live view's camera has one more: `POST printers/{id}/camera/ticket` with the setup
 code, answering `{ticket, expires_in: 60}`; on a computer that is not trusted the first camera request (the stream, or
-the playlist) takes `?ticket=<ticket>`, spends the ticket within 60 seconds and gets a cookie that is the camera
+the playlist) takes `?ticket=<ticket>`, spends the ticket within 60 seconds and gets a cookie, named `fk_setup_camera`, that is the camera
 session: valid only for that printer's camera routes (`/setup/api/printers/<id>/camera`), HttpOnly, Secure and
 SameSite=Strict, naming a session the Hub keeps in memory for that printer for 10 minutes, moved forward by every
 camera request that carries it (a Bambu Lab printer with an RTSP camera is served as a playlist with many segment
@@ -3186,7 +3187,9 @@ already in XML.
   new texts are English. At install the installer reads `LANG`; if the release has a pack for it, it downloads it,
   makes it the Hub's language and prints one line (06 9.20); no question is asked.
 - **Which language a person gets.** Each interface has "Language: Automatic" by default: the device's language if the
-  Hub has that pack, else the Hub's language; it can be set per device to any installed language (the Hub page: Settings
+  Hub has that pack, else the Hub's language; removing the Hub's own language is refused ("<Language> is the Hub's
+  language. Choose another one for the Hub first."), and removing any other installed language sets the devices that
+  had chosen it back to Automatic at their next visit; it can be set per device to any installed language (the Hub page: Settings
   > Appearance, kept in that browser; the web app: Settings, kept on that phone; the Android app: Settings > Appearance,
   Android's own per-app language; the command line: `--lang <code>` or the shell's `LANG`, else the Hub's). Every text
   the Hub writes (alert titles and texts, Checks rows, refusals) carries `key` and `params` beside `text`; `text` is
@@ -3217,7 +3220,9 @@ already in XML.
 - **Demo mode is always visible, and it ends cleanly.** Every screen of every interface shows the banner "Demo data.
   Nothing here is real." with **Leave demo** (the Hub page and the web app; the Android app's notice card; the command
   line prints "Demo data." above every result), and a test holds that no screen lacks it. Leaving asks once ("Leave
-  the demo? Everything in it is deleted."), deletes the demo's folder and brings the Hub back as it was: empty. Getting
+  the demo? Everything in it is deleted."), in place on the Hub page, in the web app and in the Android app (the apps
+  call `POST /api/demo/leave`; none opens the Hub page; switching the demo on stays on the Hub page and the command
+  line), deletes the demo's folder and brings the Hub back as it was: empty. Getting
   started is not marked by anything done in the demo. Every answer that says what the Hub is (`GET /api/info`,
   `GET /api/hub`, the page's state) carries `demo: true` while it is on.
 - **Spool labels.** A spool has a short address, `https://<hub>/s/<number>`. Opening it in a browser goes to the spool:
@@ -3256,10 +3261,12 @@ All JSON except where the file is named. A field marked `?` may be absent. Times
 | `GET /api/strings/{code}.js` | - | the texts of that language as the web pages load them (English filled in where a translation is empty) | RC2 |
 | every route that answers a text made by the Hub | header `Accept-Language` or `?lang=<code>` | the object gains `key` and `params` beside `text` | RC2 |
 | `GET /api/info`, `GET /api/hub` (changed) | - | gain `demo: bool` and `language: "<code>"` | RC6, RC2 |
+| `POST /api/demo/leave` | - | `{demo: false}`; 409 `{error: "not_in_demo", text}` when the demo is off; any paired phone or PC | RC6 |
 | `GET /s/{id}` | - | a redirect to the spool (`/intake#spools/<number>` when the web app is on, else the Hub page's Spools section); 404 for an unknown number | RC8 |
 | `GET /api/spools/{id}/label.svg` | `size=62x29\|50x30\|sheet24` (default 62x29) | `image/svg+xml` | RC8 |
 
-A web token may call `GET /api/languages`, `GET /api/strings/{code}.js` and `GET /api/spools/{id}/label.svg`.
+A web token may call `GET /api/languages`, `GET /api/strings/{code}.js`, `POST /api/demo/leave` and `GET
+/api/spools/{id}/label.svg`.
 
 **Page routes** (under `/setup/api/`).
 
@@ -3267,13 +3274,13 @@ A web token may call `GET /api/languages`, `GET /api/strings/{code}.js` and `GET
 |---|---|---|---|---|
 | `GET languages` | - | as the kit route, plus `available: [{code, name, reviewed, complete}]` (the release's packs; empty when the list could not be fetched, with `problem: <text>`) | open | RC2 |
 | `POST languages/{code}/install` | - | starts the job | unlocked | RC2 |
-| `POST languages/{code}/remove` | - | `{removed: true}` | unlocked | RC2 |
+| `POST languages/{code}/remove` | - | `{removed: true}`; refused with "<Language> is the Hub's language. Choose another one for the Hub first." for the Hub's own language | unlocked | RC2 |
 | `POST settings/language` | `{hub: "<code>"}` | `{hub}` | unlocked | RC2 |
 | `POST demo` | `{on: true\|false}` | `{demo: bool}`; 409 `{error: "not_empty", text}` | unlocked | RC6 |
 | `GET labels` | `ids=<n,n,...>&size=` | the print page (HTML; the labels as inline SVG) | open | RC8 |
 | `GET spools/{id}/label.svg` | `size` | as the kit route | open | RC8 |
 
-**Twins** (under `/intake/api/`; RC4): `GET languages` and `GET spools/{id}/label.svg`; the web app's print page is
+**Twins** (under `/intake/api/`; RC4): `GET languages`, `POST demo/leave` and `GET spools/{id}/label.svg`; the web app's print page is
 `/intake/labels?ids=&size=`. RC9 mounts all of these.
 
 **The command line** (RC2 for `language`, RC6 for `demo`, RC8 for `label`; all mounted by RC9): `spoolwarden language
@@ -3400,7 +3407,7 @@ Server builder · Depends on: none · Beside: every other RC step except for its
   `bridge/connection.py` and `bridge/klipper/manager.py` only where a printer's connection is made, new `demo_cli.py`.
   Registry file: `__main__.py` (how the Hub starts in demo), after HD1 is merged.
 - **Change:** the demo inventory, the pretend printers, the demo's own folder, the stops of the rules above, the
-  scripted alert, and `demo: true`.
+  scripted alert, `demo: true`, and the route `POST /api/demo/leave`.
 - **Check:** prove first (item 5 of the list below).
 
 ### RC7 Hub: the demo's stops in the modules that reach outside

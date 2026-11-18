@@ -567,8 +567,8 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 - Standard output gets exactly one JSON document followed by a newline: indented by two spaces when standard
   output is a terminal, on one line otherwise. Nothing else is printed to standard output.
 - Field names and values are those of the Hub's own replies where the Hub page reads the same data (table
-  below), so a script and the Hub page see one shape. Times are ISO 8601 with offset; weights in grams, sizes in
-  bytes, temperatures in °C, all as numbers.
+  below), so a script and the Hub page see one shape. Times are ISO 8601 with offset, but a day (an own catalog entry's `added`) is `YYYY-MM-DD`;
+  weights in grams, sizes in bytes, temperatures in °C, all as numbers.
 - Stored secrets never appear: an API key, Access Code, passphrase, catalog token, existing Tag Reader token or
   the current setup code is `{"set": true}` or `{"set": false}`.
 - One exception: a code, link or token that the command was asked to make is in that command's own reply, since
@@ -2520,7 +2520,9 @@ de    Deutsch (machine-translated)  available  100 %
   `Installed Deutsch (machine-translated).`. The Hub checks the pack first; one that fails is not installed:
   `Error: Deutsch was not installed: <the check's first sentence>.` A code the release has no pack for: `Error: this
   release has no language de.` and `Fix: spoolwarden language` (exit code 2).
-- `sudo spoolwarden language remove ru` ends with `Removed Русский.`; `sudo spoolwarden language set ru` with `The Hub's
+- `sudo spoolwarden language remove ru` ends with `Removed Русский.`; when `ru` is the Hub's language it is refused:
+  `Error: Русский is the Hub's language. Choose another one for the Hub first.` (exit code 2). Removing any other
+  installed language sets the devices that had chosen it back to Automatic at their next visit. `sudo spoolwarden language set ru` with `The Hub's
   language is Русский.` and, for a language that is not installed, `Error: Русский is not installed.` and `Fix: sudo
   spoolwarden language add ru` (exit code 2).
 - `spoolwarden language template ru` writes a pack for that language with every English text and empty translations to
@@ -2699,7 +2701,7 @@ this design.
 | Hub report for a problem | N ("Collect a Hub report on the Hub page.") | new | N (the same sentence) | N | new (`report`) | app, web app: remain |
 | Home Assistant: link it | N | new | N | N | new (`pair --home-assistant`) | remains: Hub page and command line only |
 | Language: choose one, install more, make a pack | new (Settings > Appearance; the app carries its languages) | new (Settings > Appearance and General) | new (Settings) | N | new (`language`, `--lang`) | app, web app: no download of packs by the app; making and checking a pack: command line only |
-| Demo mode: look around on made-up data | new (the notice) | new | new (the banner) | N | new (`demo`, the line `Demo data.`) | app, web app: Leave demo opens the Hub page |
+| Demo mode: look around on made-up data | new (the notice) | new | new (the banner) | N | new (`demo`, the line `Demo data.`) | app, web app: Leave demo works in place; switching the demo on: Hub page and command line only |
 | Spool labels: print them, scan one | new (Print a label, Scan a label) | new (Print a label, Print labels) | new (Print a label) | N | new (`spool label` writes the SVG) | app, web app: one label at a time; printing is the browser's or Android's |
 
 Gaps marked "remains" outside the command-line column are specified in the documents of those interfaces.
@@ -2754,8 +2756,8 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
     `home-assistant` (`03-hub-page.md` section 15). Until they exist the commands that need one say `Error: this Hub
     does not offer that yet.` with the Fix `sudo spoolwarden update`.
 12. **Languages, the demo and labels.** The page routes `GET /setup/api/languages`, `POST languages/<code>/install`,
-    `POST languages/<code>/remove` and `POST settings/language`, `POST demo`, and the kit routes `GET api/languages`
-    and `GET api/spools/<id>/label.svg`, with `key` and `params` beside `text` in every answer the Hub writes in words
+    `POST languages/<code>/remove` and `POST settings/language`, `POST demo`, and the kit routes `GET api/languages`,
+    `POST api/demo/leave` and `GET api/spools/<id>/label.svg`, with `key` and `params` beside `text` in every answer the Hub writes in words
     and `Accept-Language` or `?lang=` choosing its language (`03-hub-page.md` section 15). Until they exist `language`,
     `demo` and `spool label` say `Error: this Hub does not offer that yet.` with the Fix `sudo spoolwarden update`;
     `language template` and `language check` need nothing from the Hub.

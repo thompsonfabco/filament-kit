@@ -409,8 +409,9 @@ While the Hub the phone is paired with runs in demo (`demo: true` in the answers
 `03-hub-page.md` 3.9), every screen of the app shows one `NoticeCard` (kind info, `02-components.md` 8.8) at the top of
 its content, above the alert cards of 3.6 and every other notice: "Demo data. Nothing here is real." with the text
 button "Leave demo". It has no Dismiss. The pairing screens come before the app knows what the Hub is and show none.
-"Leave demo" opens the Hub page at Settings > General in the browser (as "Open the Hub page", 12.3), where the Hub asks
-"Leave the demo?"; the app holds no setup code. Whatever the Hub refuses in the demo ("Not in the demo.") shows as the
+"Leave demo" works in place: it asks "Leave the demo? Everything in it is deleted." and calls `POST api/demo/leave`
+(any paired phone may), which answers `{demo: false}`; when the demo is already off (409 `not_in_demo`) the notice goes.
+It does not open the Hub page; switching the demo on stays on the Hub page and the command line. Whatever the Hub refuses in the demo ("Not in the demo.") shows as the
 Hub's text where the person pressed the control (3.5). A test holds that no screen of the app lacks the notice.
 
 ---
@@ -2043,7 +2044,7 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | `POST api/library/local/form` with `{brand, name, material, nozzle_min?, nozzle_max?, bed_min?, bed_max?, density?, max_volumetric_speed?, bambu_parent?, notes?}` (201 `{entry}`; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `GET api/library/local` (`{entries: [{id, brand, name, material, added}]}`), `DELETE api/library/local/{id}` (`{removed: true}`) | 8 | The form and the list are absent. |
 | `spoolman_url` in the answer of `GET api/spools` | 7.1 "Open Spoolman" | The item is absent. |
 | `GET api/spools/{id}/label.svg` with `size` (`62x29`, `50x30` or `sheet24`; `image/svg+xml`) and the short address `GET /s/{id}` that a label's QR code holds (a redirect; the app reads only the number) | 7.1 Scan a label, 7.10 Print a label | "Scan a label" and "Print a label" are absent. |
-| `demo: true` and `language` in the answers of `GET api/info` and `GET api/hub`; `key` and `params` beside `text` in every answer that carries a text the Hub wrote, `text` in the language of the request's `Accept-Language`; `GET api/languages` (`{hub, languages: [{code, name, reviewed, installed, complete}]}`) | 3.7, 12.2 | No demo notice; the Hub's texts arrive in the Hub's language. |
+| `demo: true` and `language` in the answers of `GET api/info` and `GET api/hub`; `POST api/demo/leave` (`{demo: false}`); `key` and `params` beside `text` in every answer that carries a text the Hub wrote, `text` in the language of the request's `Accept-Language`; `GET api/languages` (`{hub, languages: [{code, name, reviewed, installed, complete}]}`) | 3.7, 12.2 | No demo notice; the Hub's texts arrive in the Hub's language. |
 | The header `X-Spoolwarden-Client: android/<version>` on every call, which the Hub keeps with the pairing | 12.8 (the Hub's Devices list names this phone and its version) | The Hub shows the phone without a version. |
 | `GET api/events` with `activity=1`, `subject=<type>:<id>` and `actor`, each event with `undo: {possible, until?, why_not?}`, `undone` and `undo_of?`; `POST api/events/{id}/undo` (200 `{undone: true, event, note?}`; 409 `{error, text}`; 404); `GET api/health` (`days`); `GET api/analytics` (`months`, `printer`); `GET api/printers/{id}/usage` with `by=month` (`{months: [{month, grams, prints, unfinished_prints, top_material?}]}`); `GET api/export/{set}.csv` for `usage`, `recent` and `spoolman-spools` | The spool screen's latest events 7.2, Undo 7.9, the Hub screen's history 12.8, By month 9.10, downloads 7.1, 9.10 and 10.1 | Until it exists the app shows none of them |
 
