@@ -45,9 +45,10 @@ private class ToastVisuals(
  * screen); a result with a control still on screen is a notice line next to it instead. Toasts show one at a time,
  * in the order asked for; each is held [TOAST_MS], or [TOAST_WITH_ACTION_MS] with an action, from the moment it is
  * shown, by a timer that dismisses only that toast. A toast may ask for a longer hold ([show]'s `holdMs`), as the
- * Undo toast does for people whose accessibility settings give more time to act.
+ * Undo toast does for people whose accessibility settings give more time to act. While a touch-exploration service
+ * (TalkBack) is on, a toast with an action has no timer: it stays until dismissed or its action is pressed (R84 3.5).
  */
-internal class SwToastState {
+internal class SwToastState(private val touchExploration: () -> Boolean = { false }) {
     internal val host = SnackbarHostState()
     private val turn = Mutex()
 
@@ -64,7 +65,7 @@ internal class SwToastState {
         turn.withLock {
             // the host is free now, so this toast is the one on screen as soon as showSnackbar runs
             coroutineScope {
-                val timer = launch {
+                val timer = if (actionLabel != null && touchExploration()) null else launch {
                     val usual = if (actionLabel != null) TOAST_WITH_ACTION_MS else TOAST_MS
                     delay(maxOf(usual, holdMs ?: 0L))
                     host.currentSnackbarData?.dismiss()
@@ -72,7 +73,7 @@ internal class SwToastState {
                 try {
                     host.showSnackbar(ToastVisuals(message, actionLabel, kind))
                 } finally {
-                    timer.cancel()
+                    timer?.cancel()
                 }
             }
         }

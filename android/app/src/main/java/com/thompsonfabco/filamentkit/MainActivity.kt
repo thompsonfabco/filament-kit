@@ -206,6 +206,7 @@ import com.thompsonfabco.filamentkit.ui.components.underSectionList
 import com.thompsonfabco.filamentkit.ui.components.contentInsetSides
 import com.thompsonfabco.filamentkit.ui.components.paletteMore
 import com.thompsonfabco.filamentkit.ui.components.SwToastHost
+import android.view.accessibility.AccessibilityManager
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.history.HistoryEditEntry
@@ -326,7 +327,12 @@ class MainActivity : ComponentActivity() {
                 // The next launch follows the choice.
                 LaunchedEffect(appearance) { applyNightMode(appearance) }
                 // the shell's toast queue: screens reach it through LocalToast
-                val toast = remember { SwToastState() }
+                val toastContext = LocalContext.current
+                val toast = remember {
+                    SwToastState(touchExploration = {
+                        toastContext.getSystemService(AccessibilityManager::class.java)?.isTouchExplorationEnabled == true
+                    })
+                }
                 val topBarActions = remember { TopBarActions() }
                 LookedAppFrame(appearance, start, app.settings.lookChoice, app.settings.hubLook) { look ->
                     CompositionLocalProvider(LocalToast provides toast, LocalTopBarActions provides topBarActions) {
