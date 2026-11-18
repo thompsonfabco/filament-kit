@@ -4379,6 +4379,14 @@
     <string name="settings_alerts_recent">Recent alerts</string>
     <string name="settings_alerts_phone_hint">Android shows a small permanent notification while Spoolwarden watches the Hub.</string>
     <string name="alerts_watching_title">Watching the Hub for alerts</string>
+    <string name="settings_alerts_switch">Alerts on this phone</string>
+    <string name="settings_alerts_denied_help">Android is not allowing notifications for Spoolwarden. Allow them in the phone\'s settings, then turn this on.</string>
+    <string name="settings_alerts_local_network_help">Spoolwarden needs the Local network permission to watch the Hub. Allow it, then turn this on.</string>
+    <string name="alerts_unavailable">This Hub does not send alerts yet. Update the Hub to get them.</string>
+    <string name="alerts_action_list">Show alerts</string>
+    <string name="alerts_channel_alerts">Alerts</string>
+    <string name="alerts_channel_watching">Watching the Hub</string>
+    <string name="running_low_empty">Nothing is running low.</string>
     <string name="running_low_title">Running low</string>
     <!-- 1=count -->
     <string name="running_low_show_all">Show all %1$d</string>
