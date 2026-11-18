@@ -141,7 +141,7 @@ section 12, rule 7):
 
 | File pair | Holds | Loaded by |
 |---|---|---|
-| `components.css`, `components.js` (the core) | Shell and navigation, lock, appearance control, buttons, menu, every field (without the photos variant of the file field), form group and saving, collection, detail region, status, confidence, swatch and slot strip, spinner, step progress and bar, inline result, toast, banner, dialogs, sheet, page states, code block, key-value list, change list, revision list, tooltip | Every page |
+| `components.css`, `components.js` (the core) | Shell and navigation, lock, appearance control, buttons, menu, every field (without the photos variant of the file field), form group and saving, collection, detail region, status, confidence, swatch and slot strip, spinner, step progress and bar, inline result, toast, banner (with the alert banner), alerts list, dialogs, sheet, page states, code block, key-value list, change list, revision list, tooltip | Every page |
 | `components-jobs.css`, `components-jobs.js` | Background-job strip (8.4), the Hub is restarting (8.5) | The Hub page (the web app starts no jobs) |
 | `components-media.css`, `components-media.js` | The photos variant of the file field (5.9), photo thumbnail and viewer (7.6), QR block with its expiry (7.8) | Pages that show photos or a pairing code |
 
@@ -1934,7 +1934,7 @@ grouped list is one column.
 
 ### 6.4 Sub-navigation inside Settings
 
-**Purpose.** Settings has about nine groups (Appearance, General, Storage locations, Label Reader, Backups and
+**Purpose.** Settings has about ten groups (Appearance, General, Storage locations, Alerts, Label Reader, Backups and
 restore, Network and addresses, Web passphrase, Filament Catalog, Weigh Station voice). The sub-navigation shows them all, jumps to
 one, shows where you are and which groups hold unsaved edits.
 
@@ -2955,6 +2955,10 @@ gutters (newest at the bottom). Arrives over `--t` (fade and a `--s1` slide; fad
 toast action is also available in the page (Undo of a usage entry is in its list; Show opens the job strip from the
 chip), so nothing depends on catching a toast in time.
 
+An alert that arrives while the Hub page, the web app or the Android app is open also shows a toast with the alert's
+title and the action "Show" (8.8, the alert banner); the toast is only the arrival, the banner and the Alerts list
+(8.9) keep the alert.
+
 **Accessibility.** The toast region is `aria-live="polite"`; each toast's sentence starts with the outcome. Its action
 is a real button with a full name ("Undo: put 12 g back on spool 214").
 
@@ -3020,6 +3024,100 @@ that each screen draws today.
     Studio and Orca Slicer.</p>
   <div class="actions"><a class="btn btn--primary" href="#features">Open Features</a></div>
 </div>
+```
+
+**The alert banner.** The alert banner is this banner bound to a condition or to a moment (an event of the Hub's event
+store, `03-hub-page.md` 2.8). It is one component with one data shape on the Hub page, the phone web app and the
+Android app; no screen draws its own.
+
+- Content: kind (`warn` or `bad`), a bold title, one sentence, the time ("since 14:02", "3 minutes ago"), one action
+  that goes to the fix, and Dismiss.
+- Placement: global (top of `main`, every section or screen of that interface). At most two are shown, the most serious
+  first, then the newest; a third and more become one line "<n> more alerts" that opens the Alerts list (8.9).
+- A condition's banner (a paused print, a full disk, a low spool, a silent device) stays while the condition is raised
+  and leaves by itself when it clears: the Hub clears a condition that is no longer true, also when its printer,
+  device or spool is removed. When the Hub raises the same condition again with another severity, the banner changes
+  to it (a disk that falls from full back to almost full shows "Storage on the Hub is almost full"). Dismiss hides it
+  on that device only; it comes back if it gets worse (warn to bad) or is raised again later.
+- A moment's banner (print failed, printer error) stays until it is dismissed on that device, at most 24 hours. The
+  banners read the events of the last 24 hours with `alert=1`.
+- Titles and sentences, the one table every interface uses (`<...>` is filled from the values of the event):
+
+  | Event | Title | Sentence | Action |
+  |---|---|---|---|
+  | `print.runout` | "Filament ran out on <printer>" | "<job> is paused at <percent> %. Load filament and resume at the printer." | Open the printer |
+  | `print.paused` | "<printer> is paused" | "<job> is paused at <percent> %." plus the printer's reason when it gives one | Open the printer |
+  | `print.failed` | "Print stopped on <printer>" | "<job> stopped at <percent> %." plus the error text (reason `error`) or "It was cancelled." (reason `cancelled`); with reason `unknown` nothing is added | Open the printer |
+  | `printer.error` | "<printer> reports a problem" | the printer's text | Open the printer |
+  | `print.finished` | "Print finished on <printer>" | "<job> is done." | Open the printer |
+  | `storage.low` (warn) | "Storage on the Hub is almost full" | "<free> free of <total> (<percent> % used)." | Show storage use |
+  | `storage.low` (bad) | "Storage on the Hub is full" | "<free> free of <total>. Backups and new photos may fail." | Show storage use |
+  | `spool.low` | "Running low: <filament>" | "Spool <id> has <grams> g left." plus "<n> more in stock." or "It is the last one." | Show running low |
+  | `device.down` (a Weigh Station) | "<device> stopped answering" | "Last answer <time>." | Open Devices |
+  | `printer.offline` | "<printer> is offline" | "Last seen <time>." | Open the printer |
+
+- Android: the same `NoticeCard` (kind `warn` or `bad`, the title as its first line, the time as its last, up to two
+  `TextButton`s: the action and Dismiss); a moment or condition is one card on Home and, for a printer, on the
+  printer's screen.
+- The alert banner is announced when it appears: `role="alert"` for `bad`, `role="status"` for `warn` (as every banner).
+
+```html
+<div class="banner banner--warn" role="status">
+  <svg class="icon" aria-hidden="true"><use href="#i-warning"/></svg>
+  <p class="banner__text"><b>Filament ran out on Workshop X1.</b> bracket_v4.3mf is paused at 41 %. Load filament and
+    resume at the printer. <span class="banner__time">since 14:02</span></p>
+  <div class="actions"><a class="btn btn--primary" href="#printers/p-3">Open the printer</a>
+    <button class="btn btn--quiet" type="button">Dismiss</button></div>
+</div>
+<p class="banner__more"><a href="#alerts">2 more alerts</a></p>
+```
+
+### 8.9 Alerts list
+
+**Purpose.** Show every alert that is raised now and every alert of the last 7 days in one place, so that an alert
+dismissed from its banner, or hidden behind "<n> more alerts", is never lost.
+
+**Anatomy.** A list: first the conditions that are raised now, then the alert events of the last 7 days, newest first.
+Each row has the kind's icon, the title, the sentence, the time and its action (the table of 8.8). Empty: "No alerts
+in the last 7 days." It is a dialog on the Hub page (9.1), a bottom sheet in the web app (9.2) and a screen in the
+Android app. It is opened from "<n> more alerts" and from Settings > Alerts > "Recent alerts".
+
+**Sizes and tokens.** Rows as the rows of a collection (6.1): `--surface`, a `--hairline` between rows, padding
+`var(--s3) var(--s4)`, title `--fs-b` in weight 650, sentence `--fs-m`, time `--fs-m` in `--muted`; the icon in the
+kind's colour. The dialog is as wide as a detail dialog; the sheet and the screen use the full width.
+
+**States.**
+- Default: the rows above.
+- Hover, focus, pressed: a row's action as its button (4.1).
+- Disabled: not applicable.
+- Loading: the skeleton of 10.3 for three rows.
+- Error: the error state of 10.2 with **Try again**; the banners already shown stay.
+
+**Behaviour and keyboard.** The list is the first reader of the Hub's event store (`GET api/events`); it reads the
+conditions raised now and the events of the last 7 days (`since_at` and `alert=1`) that an alert type switched on covers. A raised condition
+that clears leaves the top of the list and stays below as the event that raised it. Choosing an action closes the
+list and goes to the place. Escape or Close returns focus to what opened it. Dismissing a banner does not remove its
+row.
+
+**Accessibility.** A list (`role="list"`); each row's title is a heading of its row, the time is a `<time>` with its
+full date as text; the icon is `aria-hidden` and the kind is said in words ("Warning:", "Problem:") before the title.
+
+**Theme profiles.** No change.
+
+**Android.** A screen of `LazyColumn` rows (a `ListItem`-style row with a leading icon and a trailing `TextButton`
+for the action), reached from the "<n> more alerts" line and from Settings > Alerts; the top app bar's Back returns.
+
+**HTML.**
+```html
+<ul class="alert-list">
+  <li class="alert-list__row">
+    <svg class="icon" aria-hidden="true"><use href="#i-warning"/></svg>
+    <div><b>Running low: Prusament PLA Galaxy Black</b>
+      <p>Spool 214 has 96 g left. 2 more in stock.</p>
+      <time datetime="2026-11-17T04:12:09Z">17 Nov, 14:02</time></div>
+    <a class="btn btn--quiet" href="#spools/low">Show running low</a>
+  </li>
+</ul>
 ```
 
 ---

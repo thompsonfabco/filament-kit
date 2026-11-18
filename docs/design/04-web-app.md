@@ -42,7 +42,7 @@ The Hub writes the page's configuration into `data-*` attributes on `<body>` (as
 |---|---|
 | `data-ai` | Whether the Label Reader is on. Off: section 4.3 shows its "off" state. |
 | `data-printers` | Whether the Printers Feature is on. Off: **Printers** is dimmed (6.10). |
-| `data-push` | Whether print alerts can be offered (9.2, "Print alerts on this phone"). |
+| `data-push` | Whether alerts can be sent to this phone when the app is closed (9.2, "Alerts on this phone"). The alert banners, the toast and the Alerts list (3.8) do not depend on it. |
 | `data-history` | Whether Recently added is served here (home address). Off: 7.4. |
 | `data-locations`, `data-sealed`, `data-picks` | Location names and the sealed-stock location used in Add spools and Spools, until the page has the list below. |
 | (the storage list) | The page reads the list of locations (in fill order, with how full each is, the container sets and the reason texts) from the web twin of `GET api/storage`, under the web app's own base, when Add spools or a spool sheet opens (4.5, 5.4). It is not an attribute because how full a place is changes while the page is open. |
@@ -193,7 +193,7 @@ with the shape and colour given there. The badges this app uses:
 | Offline | hollow circle, `--bad` | A printer that does not answer (6.1, 6.3) |
 | Not configured | hollow circle, `--muted` | A printer the Hub knows but that is not set up (`not_configured`) |
 | Needs a look | triangle, `--warn` | A printer that needs something (`wrong_code`, `cert_changed`, `needs_developer_mode`, other problem states); always followed by a sentence saying what to do (6.3) |
-| On · Off | filled circle `--ok` · hollow circle `--muted` | Print alerts on this phone (9.2) |
+| On · Off | filled circle `--ok` · hollow circle `--muted` | Alerts on this phone (9.2) |
 | Set · Not set | filled circle `--ok` · hollow circle `--muted` | Access Code and Moonraker API key (6.8) |
 | As detected | hollow circle, `--muted` | A Recently added record as the Label Reader read it (7) |
 | Revised by AI | info circle, `--info` | A record corrected by the Label Reader and accepted (7) |
@@ -260,6 +260,26 @@ button. Footer: buttons side by side, each half the width, the main one on the r
 tap on the scrim and the Back gesture all close it, except while a change is being written (then only the footer's
 progress shows). Focus moves into the sheet and returns to the control that opened it. Section 12 lists every sheet
 that replaces a browser dialog.
+
+### 3.8 Alerts
+
+- **Banners.** The alert banners of 02-components 8.8 are mounted once in the shell, as the first thing in the main
+  area of every screen (below the "Cannot reach the Hub" banner of 10.3 when that shows), at most two, the most
+  serious first; a third and more are one line "<n> more alerts" that opens the Alerts list. Titles, sentences and
+  actions are the table of 02-components 8.8. The actions go to `#printers/<id>` (Open the printer) and to `#spools`
+  with the Running low filter on (Show running low, 5.5); "Open Devices" and "Show storage use" have no place in the
+  web app, so they open the Hub page's Devices or Overview on the home address and are left out on the public
+  address. Dismiss hides a banner on this phone only and it
+  comes back when the alert gets worse or is raised again.
+- **Toast.** An alert that arrives while the app is open also shows a toast (02-components 8.7) with its title and
+  the action "Show".
+- **Alerts list.** A sheet (02-components 8.9; 12.3), opened from "<n> more alerts" and from Settings > "Recent
+  alerts" (9.2): the raised conditions first, then the alert events of the last 7 days, newest first. Empty: "No
+  alerts in the last 7 days."
+- **Where the events come from.** GET `events` (the web twin of `GET api/events`: the Hub's route passed on), once at
+  start with `since_at` set to 24 hours ago and `alert=1` (the Alerts list reads 7 days) and then every 10 s with
+  `wait=0` and `since` set to the last `next` while the page is visible, the rhythm of every other poll of this
+  app. While the Hub cannot be reached (10.3) the poll waits for the retry.
 
 ---
 
@@ -695,6 +715,19 @@ Hub has today. When none of the four is available the group is absent and the sh
 | "Move" | A menu with the same entries as the Location select of 4.5, in fill order, each with how full it is (a full one stays choosable and shows "Full"; an Individual containers location is one entry; it sends the set's `name` and gives the lowest free container, and a container the person picks sends its `containers[].name`; the spool's current place is found by matching its location text as in 4.5, and a text that matches nothing is shown as it is, under no location); choosing one moves it at once; inline result "Moved to Dry box 1." with "Undo" for 5 s. |
 | "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." |
 | "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (one row per slot with its current spool), then the automatic preview and "Load", exactly as the load sheet of 6.5. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`. |
+
+### 5.5 Running low
+
+A filter chip at the top of Spools, above the search field: "Running low (<n>)", where `<n>` is the number of spools
+at or under the Hub's running-low threshold (GET `spools/low`, read when Spools opens and every 10 s with the alert
+poll of 3.8). The chip is a toggle with a pressed state; it is not shown when `<n>` is 0. With it on, the list shows
+the rows below instead of the search results:
+
+| Part | Content |
+|---|---|
+| Order | Least filament first |
+| Row (whole row is the button, `--row` tall) | Swatch, filament name, "Spool <id>" (`--mono`), "<grams> g left", the location, and "<n> more in stock" (other spools of the same filament line that are not empty, sealed ones included) or "Last one" (warn triangle) |
+| Action | Opens the spool sheet (5.4) with the address `#spools/<id>` |
 
 ---
 
@@ -1340,10 +1373,11 @@ A sheet on phones with the address `#settings` (2.4), opened over the last place
 | New phones start with the Hub's theme    |
 | for new devices.                         |
 |------------------------------------------|
-| Print alerts on this phone               |
-| (o) On: this phone gets print alerts.    |
+| Alerts on this phone                     |
+| (o) On: this phone gets alerts.          |
 | Notify this phone                  [on]  |
 | [ Send a test alert ]                    |
+| Recent alerts                            |
 |------------------------------------------|
 | This Hub                                 |
 | Workshop                                 |
@@ -1358,11 +1392,13 @@ The segmented control takes the full content width; each theme tile is a radio t
 |---|---|
 | Appearance | The wide segmented control "Light / Dark / System" with sun, moon and half-circle icons (F5). Applies at once; line "Saved on this device: <choice>." |
 | Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this device: <choice>." Helper: "New phones start with the Hub's theme for new devices." |
-| Print alerts on this phone (only when print alerts are offered, `data-push`) | Status: "Off" (hollow circle), "On: this phone gets print alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive print alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). |
+| Alerts on this phone (only when alerts can be sent to the phone, `data-push`) | The same switch, test button and texts for its limits as before; the alerts now cover every alert type the Hub has switched on (filament ran out, print paused, print failed or stopped, printer error, print finished, storage almost full, spool running low, device stopped answering), not only print states. Status: "Off" (hollow circle), "On: this phone gets alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). Link "Recent alerts" opens the Alerts list (3.8). The switch is the push subscription itself: the phone is on while it has one, and the Hub stores no switch for it; the subscriptions are kept by the web unit in `push.xml` in its own folder. The test button keeps today's push test; an alert sent from the command line (`spoolwarden alerts test`) reaches every subscription. The alert types and thresholds are edited on the Hub page or the command line, like every setting. |
 | This Hub | Hub name; the address this page is using (`--mono`); on the home address "Open the Hub page". |
 
-The alert itself (from the service worker) has the Hub's title (default "Printer"), body and tag; tapping it brings
-an open Spoolwarden window forward or opens the web app.
+The alert itself (from the service worker) has the Hub's title (default "Printer"), body and tag: for every alert type
+the title and one-line body of the table in 02-components 8.8, one notification per event (a condition notifies when
+it is raised, not again while it lasts); tapping it brings an open Spoolwarden window forward or opens the web app at
+the place of the alert's action.
 
 ---
 
@@ -1370,9 +1406,9 @@ an open Spoolwarden window forward or opens the web app.
 
 ### 10.1 Installing to the home screen
 
-- **iPhone (Safari).** "Add to Home Screen" (More, and the print-alerts group) opens the sheet "Add Spoolwarden to
+- **iPhone (Safari).** "Add to Home Screen" (More, and the alerts group) opens the sheet "Add Spoolwarden to
   the Home Screen" with three numbered steps: "1. Tap Share in Safari's toolbar (the square with an arrow)." "2.
-  Choose Add to Home Screen." "3. Tap Add." and the line "Print alerts on iPhone work only from the Home Screen."
+  Choose Add to Home Screen." "3. Tap Add." and the line "Alerts on iPhone work only from the Home Screen."
   Button "Done".
 
 ```
@@ -1572,6 +1608,7 @@ until the sheet closes) are kept.
 | Map by loading filament | 6.7.1 |
 | Leave without saving? | 3.5 |
 | More; Settings; Add Spoolwarden to the Home Screen | 9, 10.1 |
+| Alerts list | 3.8 |
 | Appearance menu (Light / Dark / System) | 2.2 |
 
 ---
@@ -1619,6 +1656,7 @@ right column is left out or falls back as described there.
 | New wording in the Hub's own texts: the refusal page (11.1); the `no_preset` refusal ("Slicer presets" instead of "the Presets tab"); the busy-stream text; "internal error (see the server log)"; the sign-in page's title and the command it names | 6.4, 11 | Today's wording appears in those places |
 | The sign-in page served with the web app's stylesheet instead of styles inside the page | 11.2 | Today's look on that page |
 | Optional: the printers list with job progress and slots, so the list needs one request | 6.1 | One state request per printer every 10 s |
+| Web twins, under the web app's own base, that pass the Hub's routes of events and alerts on (the web unit reads them through its token; it opens no file of the Hub): `GET events?since=&since_at=&alert=&wait=&kinds=&limit=` (the events, `next`, `oldest`, `gap` and the raised `conditions`, each with `alert`, built `title` and `text`, and `action: {place, id}`), `GET spools/low` (`{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`), and for completeness `GET alerts`, `GET storage-use` and `POST alerts/test`, which the web app does not use (its test button keeps today's push test); the web unit's own hand-over of spool events to the Hub (`POST api/events/web`) is not a route of the web app | 3.8, 5.5, 9.2 | No alert banners, toast or Alerts list; no Running low chip; the Alerts panel keeps today's push switch and test button |
 
 ---
 
@@ -1793,7 +1831,7 @@ this design.
 | "Skip <position>", "Stop" | Same (6.7.1) |
 | Position list (confirmed / entered by hand) | Positions with status shapes (6.7.1) |
 | Share offer, "Yes, how do I share it?", "No thanks" | Same (6.7.1) |
-| Alerts: "Notify this phone", "Stop", "Test" and their messages | Settings > "Print alerts on this phone": toggle "Notify this phone", "Send a test alert" (9.2) |
+| Alerts: "Notify this phone", "Stop", "Test" and their messages | Settings > "Alerts on this phone": toggle "Notify this phone", "Send a test alert", link "Recent alerts" (9.2) |
 | "Add or change printers" button | Gone: each printer's settings are on its page (6.8); adding is on the list (6.1) |
 | Manage text (Bambu shows up by itself…; "Anyone on the home network can use this page."; read-only from the public address) | List empty state (6.1), the Printer settings description line and the read-only line (6.8) |
 | Manage rows "name · model · address · state" / "no address yet" / "seen on the network, not added" | Printer settings (6.8), with "No address yet"; "Found on the network, not added yet" (6.1) |
