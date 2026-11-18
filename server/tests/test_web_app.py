@@ -1364,3 +1364,12 @@ console.log(JSON.stringify(at));
     out = json.loads(run.stdout)
     same = "2026-11-18T03:05:00.000Z"      # the moment in all forms (the harness shows a time as its ISO text)
     assert out[:6] == [same] * 6 and out[6] == "" and out[7] == "" and out[8] == "last Tuesday", out
+
+
+def test_running_low_draws_only_the_newest_answer():
+    """Gate 1, area 9: the address turned the filter on while an older spools/low question was still out; the older answer came back
+    last and brought the rows back. Each question has a stamp and only the newest answer is drawn."""
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    start = js.index("async function loadLow()")
+    body = js[start:js.index("function setLow(")]
+    assert "const mine = ++lowStamp" in body and body.count("mine !== lowStamp") == 2

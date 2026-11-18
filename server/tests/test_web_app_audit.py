@@ -1432,11 +1432,15 @@ SP_READY = {
   need('the chip is on, the search is out of the way', chip.getAttribute('aria-pressed') === 'true' && search().closest('.hidden'));
   chip.click();
   await until('the search is back', () => !search().closest('.hidden') && chip.getAttribute('aria-pressed') === 'false');
+  const low2 = [{ id: 11, filament: 'Elegoo PLA Red', material: 'PLA', color: 'C0392B', remaining_g: 80, location: 'Rack 1', in_stock: 2, last_one: false }, { id: 12, filament: 'Bambu Lab PETG Orange', material: 'PETG', color: 'F2762E', remaining_g: 140, location: 'Dry bin 1', in_stock: 0, last_one: true }];
+  stub(/^spools\/low$/, () => new Promise((r) => setTimeout(r, 700)).then(() => reply({ threshold_g: 150, spools: low2 })));      // an older question whose answer comes last
   location.hash = '#spools/low';
   await until('the address turns the filter on', () => $$('.spools__row').length === 2 && chip.getAttribute('aria-pressed') === 'true');
   stub(/^spools\/low$/, () => reply({ threshold_g: 150, spools: [] }));
   tabs.spools.enter();
   await until('nothing low', () => text('.spools__none') === 'Nothing is running low.');
+  await sleep(1000);
+  need('the older answer does not bring the rows back', text('.spools__none') === 'Nothing is running low.' && $$('.spools__row').length === 0);
   need('the chip stays while the filter is on', chip.getAttribute('aria-pressed') === 'true');
 """,
     "list": r"""

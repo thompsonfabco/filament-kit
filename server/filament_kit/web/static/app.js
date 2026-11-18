@@ -2244,9 +2244,11 @@ function openTab() {
     resultsBox.replaceChildren(lowRows.length ? h("ul", { class: "spools__rows" }, ...lowRows.map((r) => h("li", {}, lowRow(r))))
       : h("p", { class: "spools__none", textContent: tt("running_low_empty") }));
   }
+  let lowStamp = 0;
   async function loadLow() {
-    try { lowRows = (await api("spools/low")).spools || []; foundAt = Date.now(); }
-    catch (e) { if (lowRows == null && low) { low = false; find(lastQ); } }      // no list on this Hub: back to the search
+    const mine = ++lowStamp;       // answers come back in any order: only the newest question's answer is drawn (an older one would bring back rows that are gone)
+    try { const res = await api("spools/low"); if (mine !== lowStamp) return; lowRows = res.spools || []; foundAt = Date.now(); }
+    catch (e) { if (mine !== lowStamp) return; if (lowRows == null && low) { low = false; find(lastQ); } }      // no list on this Hub: back to the search
     paintLow(); if (low) drawLow();
   }
   function setLow(on) { low = on; paintLow(); if (on) { drawLow(); loadLow(); } else find(lastQ); }
