@@ -30,6 +30,10 @@ TEXT_STATION_CERT_CHANGED = "The Weigh Station's certificate is not the one the 
 TEXT_STATION_CERT_FIX = ("Restart the Weigh Station so it tells the Hub its new certificate "
                          "(sudo systemctl restart filament-kit-station), or pair it again.")
 TEXT_STATION_NOT_HTTPS = "The Weigh Station {name} is not using HTTPS. Update it."
+# the row for a station that said it could not make its certificate (R82 section 2 point 4, "plain by necessity")
+TEXT_STATION_NOT_HTTPS_AT = "The Weigh Station at {address} is not using HTTPS."
+TEXT_STATION_NOT_HTTPS_WHY = "The Weigh Station at {address} is not using HTTPS: it could not make its certificate ({reason})."
+# a pinned station that now answers only plain HTTP or with another certificate: the same Error and Fix, no downgrade
 
 
 class StationUnreachable(Exception):
@@ -180,6 +184,9 @@ class StationClient:
         except PinMismatch as e:
             self._fail()
             raise StationCertChanged(f"station at {self.url}: {e}") from e
+        except ssl.SSLError as e:       # a pinned station that does not speak TLS (plain HTTP only): never called plain
+            self._fail()
+            raise StationCertChanged(f"station at {self.url} does not answer over HTTPS: {e}") from e
         except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
             self._fail()
             raise StationUnreachable(f"station at {self.url}: {e}") from e
@@ -231,3 +238,21 @@ def station_https(url: str | None) -> str | None:
     except StationUnreachable:
         return "unreachable"
     return "https"
+
+
+def station_https_row(url: str | None) -> str | None:
+    """The Checks row text for a Weigh Station that is not on HTTPS, else None: `TEXT_STATION_NOT_HTTPS_WHY` when the
+    station said it could not make its certificate, `TEXT_STATION_NOT_HTTPS_AT` otherwise (an older station that has
+    told the Hub no certificate). Only for a url whose `station_https` is "plain"."""
+    if not url or station_https(url) != "plain":
+        return None
+    from . import pairing
+    try:
+        reason = pairing.station_plain_reason()
+    except (OSError, ValueError):
+        reason = None
+    u = urllib.parse.urlsplit(url)
+    address = f"{u.hostname}:{u.port}" if u.port else str(u.hostname)
+    return (TEXT_STATION_NOT_HTTPS_WHY.format(address=address, reason=reason) if reason
+            else TEXT_STATION_NOT_HTTPS_AT.format(address=address))
+

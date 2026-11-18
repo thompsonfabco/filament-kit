@@ -332,14 +332,19 @@ class ServerApi:
         return self._call("POST", "/api/station/save", json.dumps(body).encode(), "application/json")
 
 
-def hello_values(fp: str, port: int) -> dict:
+def hello_values(fp: str | None, port: int, plain: str | None = None) -> dict:
     """The three values of the hello call (R82 section 2.3): the SHA-256 of the station's certificate, its port, and
-    the station software's version. The Hub keeps them with the station's pairing (pairing.record_station_hello)."""
+    the station software's version. The Hub keeps them with the station's pairing (pairing.record_station_hello).
+    A station that could not make its certificate (`fp` None) sends `plain=<reason>` instead of `fp`: its plain-HTTP
+    port, and why, so the Hub can tell "plain by necessity" from an older station that says nothing."""
     from .. import __version__
-    return {"fp": fp, "port": port, "version": __version__}
+    if fp:
+        return {"fp": fp, "port": port, "version": __version__}
+    return {"port": port, "version": __version__, "plain": " ".join(str(plain or "no certificate").split())[:120]}
 
 
-def announce(api_of, fp: str, port: int, tries: int = 20, wait: float = 30, sleep=time.sleep) -> bool:
+def announce(api_of, fp: str | None, port: int, tries: int = 20, wait: float = 30, sleep=time.sleep,
+             plain: str | None = None) -> bool:
     """Tell the Hub the three values once the station has started (and so after its port or certificate changed). An
     unpaired station does nothing (it tells the Hub when pairing restarts it); a Hub that does not answer is asked
     again every `wait` seconds, `tries` times. `api_of()` gives the current ServerApi. True when the Hub took it."""
@@ -347,7 +352,7 @@ def announce(api_of, fp: str, port: int, tries: int = 20, wait: float = 30, slee
         api = api_of()
         if not api.paired:
             return False
-        status, body = api.hello(hello_values(fp, port))
+        status, body = api.hello(hello_values(fp, port, plain))
         if status == 200:
             return True
         log.info("telling the Hub about this station: %s %s", status, body.get("error") or "")
