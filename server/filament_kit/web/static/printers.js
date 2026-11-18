@@ -241,7 +241,7 @@ function printersTab() {
     printer_clear_action: "Clear slot", printer_clear_title: "Clear slot {slot}?", printer_clear_body: "The Hub forgets the spool recorded here.",
     printer_clear_goes_back: "{name} goes back to {location}.", printer_clear_goes_back_noplace: "{name} goes back to where it was before.",
     printer_clear_line: "Slot {slot} cleared.", printer_clear_waiting_ended: "The spool that was waiting for slot {slot} is not waiting any more.",
-    printer_clear_printer_left: "What the printer shows for the slot was left as it is.",
+    printer_clear_still_shows: "The printer still shows the old filament for this slot until a spool is loaded.",
   };
   function tg(key, vars) {
     const v = t(key, vars);
@@ -749,13 +749,15 @@ function printersTab() {
       if (!plan) return;
       const sp = plan.spool, name = sp ? ((sp.vendor || sp.name) ? `${sp.vendor || ""} ${sp.name || ""}`.trim() : t("spool_title", { id: sp.id })) : "";
       const mv = [plan.moved_back].flat()[0], back = mv && typeof mv === "object" ? mv.location : mv;      // the contract says a place; the unload route's list of {id, location} is read too
-      const text = [tg("printer_clear_body"), sp ? (back ? tg("printer_clear_goes_back", { name, location: back }) : tg("printer_clear_goes_back_noplace", { name })) : ""].filter(Boolean).join(" ");
+      // on a Bambu Lab printer only the Hub's record changes; the Hub's answer carries the ruled sentence in `text` (R83 20:33), in the plan and in the result
+      const still = (r) => (r && r.text) || (r && r.printer_cleared === false && (known(g.id) || {}).family !== "klipper" ? tg("printer_clear_still_shows") : "");
+      const text = [tg("printer_clear_body"), sp ? (back ? tg("printer_clear_goes_back", { name, location: back }) : tg("printer_clear_goes_back_noplace", { name })) : "", still(plan)].filter(Boolean).join(" ");
       const r = await sheetAsk({ kind: "confirm", title: tg("printer_clear_title", { slot: label }), text, opener: button, confirm: tg("printer_clear_action"),
         run: () => pj(`${slotPath(g, label)}/clear`, { dry_run: false }) });
       if (!r) return;
       SW.toast(tg("printer_clear_line", { slot: label }));
       slotSay(label, [tg("printer_clear_line", { slot: label }), ...(r.waiting_ended ? [tg("printer_clear_waiting_ended", { slot: label })] : []),
-        ...(r.printer_cleared === false && (known(g.id) || {}).family !== "klipper" ? [tg("printer_clear_printer_left")] : [])], "ok");
+        ...(still(r) ? [still(r)] : [])], "ok");
     } finally { g.slotBusy = false; }
   }
 

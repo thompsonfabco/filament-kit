@@ -126,7 +126,8 @@ class GuidedKit(ChangingKit):
             return {"ok": False, "text": "no answer"}
         if path.endswith("/clear"):
             return {"slot": path.split("/")[-2], "spool": {"id": 7, "vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black"}, "moved_back": "Rack 1",
-                    "waiting_ended": True, "printer_cleared": False, "dry_run": body["dry_run"]}
+                    "waiting_ended": True, "printer_cleared": False, "dry_run": body["dry_run"],
+                    "text": "The printer still shows the old filament for this slot until a spool is loaded."}      # a Bambu Lab printer: the Hub's own sentence (R83 20:33)
         return super().post(path, body)
 
 
@@ -2044,6 +2045,8 @@ def test_clear_slot_is_on_every_slot_asks_what_goes_back_and_says_what_was_done(
     out = _flow(served_guided, "clear-slot", 375)
     assert out["clearButtons"] == 4 and out["unloadButtons"] == 3, json.dumps(out)           # the empty slot has no Unload, and still Clear slot
     assert "Clear slot A1?" in out["sheet"] and "forgets the spool" in out["sheet"] and "goes back to Rack 1" in out["sheet"], json.dumps(out)
-    assert "Slot A1 cleared." in out["line"] and "not waiting any more" in out["line"] and "left as it is" in out["line"], json.dumps(out)
+    still = "The printer still shows the old filament for this slot until a spool is loaded."
+    assert still in out["sheet"] and still in out["line"], json.dumps(out)                        # in the confirmation AND the result
+    assert "Slot A1 cleared." in out["line"] and "not waiting any more" in out["line"], json.dumps(out)
 
 
