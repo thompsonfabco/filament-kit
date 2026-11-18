@@ -59,6 +59,28 @@
 .logs__out > .code { max-width: 100%; }
 .logs__out .code__text { max-height: calc(var(--s7) * 8); }
 @media (max-width: 600px) { .logs__controls { display: grid; align-items: stretch; } .logs__controls .btn { width: 100%; } }
+/* Logs > Activity (R84 2): when, who, what, where, Undo; the cells shrink and wrap rather than push the page sideways, and Show more sits under the table */
+.logs__activity { display: grid; gap: var(--s2); min-width: 0; }
+.logs__out > .btn { justify-self: start; }
+.coll--activity { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1.4fr) max-content; }
+.coll--activity .coll__cell { overflow-wrap: anywhere; }
+/* where the section is narrow (Panes beside its list, a tablet, a phone) each entry is a small card, as a phone's collections are: the five columns
+   would leave What a sliver. The width is the section's own, not the screen's. */
+.logs__activity { container-type: inline-size; }
+@container (max-width: 44rem) {
+  .coll--activity { display: block; border: 0; background: none; }
+  .coll--activity .coll__head .coll__row { padding: 0; }
+  .coll--activity .coll__head .coll__cell { position: absolute; width: var(--hairline); height: var(--hairline); overflow: hidden; clip-path: inset(50%); }
+  .coll--activity .coll__item, .coll--activity .coll__item + .coll__item { display: block; margin-bottom: var(--s3); border: var(--hairline) solid var(--border); border-radius: var(--r); background: var(--surface); }
+  .coll--activity .coll__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); padding: var(--s3); }
+  .coll--activity .coll__cell { display: block; min-height: 0; padding: 0; }
+  .coll--activity .coll__item .coll__cell:not([data-col="actions"]) { width: 100%; }
+  .coll--activity .coll__key { display: inline; color: var(--muted); }
+  .coll--activity .coll__key::after { content: ": "; }
+}
+/* Collect a Hub report: its sentence, the two buttons and the result under them */
+.logs__report { display: grid; gap: var(--s2); }
+.logs__report > p { margin: 0; }
 /* cards (the group look) */
 .card { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r); padding: var(--s3) var(--s4);
         margin: var(--s3) 0; }
