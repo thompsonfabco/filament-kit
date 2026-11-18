@@ -23,9 +23,10 @@ from __future__ import annotations
 import http.client
 import json
 import re
-import urllib.error
+import socket
+import threading
+import time
 import urllib.parse
-import urllib.request
 
 import anyio
 from starlette.responses import Response
@@ -149,40 +150,62 @@ def rows() -> list[dict]:
 
 
 # ---------- the station: data only, checked ----------
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Never follow a redirect (as local_reader.py): a station could send the Hub's call elsewhere. A 3xx is then an error."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-_OPENER = urllib.request.build_opener(_NoRedirect)
-
-
 def _proof_headers() -> dict:
     """The proof the station wants for a change or a ticket (R83 section 13 item 3); EV3's pinned client gives it."""
     return {}
 
 
 def call_station(url: str, method: str, path: str, body: bytes | None = None, cap: int = MAX_JSON) -> tuple[int, str, bytes]:
-    """(status, content type, body) of one call to the stored address of the station, at a fixed `path`. A redirect, a slow
-    answer or one larger than `cap` is a StationError. The pinned certificate comes with EV3's client, which takes this
-    one's place; the page routes and the tests go through this name only."""
-    target = url.rstrip("/") + "/" + path
+    """(status, content type, body) of one call to the stored address of the station, at a fixed `path`. The whole call
+    (connect, headers, body) has ONE deadline of STATION_TIMEOUT seconds: a station that trickles its answer is cut off, the
+    socket is shut at the deadline. A redirect (any 3xx), a slow answer or one larger than `cap` is a StationError. It
+    is plain http.client, so no proxy of the environment is ever used and nothing is followed. The pinned certificate comes
+    with EV3's client, which takes this one's place; the page routes and the tests go through this name only."""
+    u = urllib.parse.urlsplit(url)
+    secure = u.scheme == "https"
+    conn = (http.client.HTTPSConnection if secure else http.client.HTTPConnection)(u.hostname, u.port, timeout=STATION_TIMEOUT)
+    deadline = time.monotonic() + STATION_TIMEOUT
+
+    def cut():
+        sock = conn.sock
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        conn.close()
+
+    timer = threading.Timer(STATION_TIMEOUT, cut)
+    timer.daemon = True
+    timer.start()
     headers = {"Accept": "*/*", **_proof_headers(), **({"Content-Type": "application/json"} if body is not None else {})}
-    req = urllib.request.Request(target, data=body, method=method, headers=headers)
     try:
-        with _OPENER.open(req, timeout=STATION_TIMEOUT) as r:
-            status, kind, data = r.status, r.headers.get("Content-Type", ""), r.read(cap + 1)
-    except urllib.error.HTTPError as e:
-        if 300 <= e.code < 400:
-            raise StationError(502, "the Weigh Station answered with a redirect") from None
-        status, kind, data = e.code, e.headers.get("Content-Type", ""), e.read(cap + 1)
-    except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
-        raise StationError(502, f"the Weigh Station does not answer ({type(e).__name__})") from None
-    if len(data) > cap:
-        raise StationError(502, "the Weigh Station's answer is too large")
-    return status, kind, data
+        conn.request(method, u.path.rstrip("/") + "/" + path, body=body, headers=headers)
+        resp = conn.getresponse()
+        status, kind = resp.status, resp.getheader("Content-Type", "") or ""
+        if 300 <= status < 400:
+            raise StationError(502, "the Weigh Station answered with a redirect")
+        data = bytearray()
+        while True:
+            chunk = resp.read(8192)
+            if not chunk:
+                break
+            data += chunk
+            if len(data) > cap:
+                raise StationError(502, "the Weigh Station's answer is too large")
+            if time.monotonic() > deadline:
+                raise StationError(502, "the Weigh Station answers too slowly")
+    except StationError:
+        raise
+    except (http.client.HTTPException, OSError, ValueError) as e:
+        slow = time.monotonic() >= deadline - 0.05
+        raise StationError(502, "the Weigh Station answers too slowly" if slow else f"the Weigh Station does not answer ({type(e).__name__})") from None
+    finally:
+        timer.cancel()
+        conn.close()
+    if time.monotonic() > deadline:
+        raise StationError(502, "the Weigh Station answers too slowly")
+    return status, kind, bytes(data)
 
 
 def _station_for(device_id: str) -> str:
@@ -294,7 +317,7 @@ def clean_status(v, depth: int = 0):
     """The station's status as plain data: nested at most three deep, at most 60 entries a level, texts of at most 200
     characters; anything else becomes nothing."""
     if isinstance(v, dict) and depth < 3:
-        return {k[:40]: clean_status(x, depth + 1) for k, x in list(v.items())[:60] if isinstance(k, str)}
+        return {k[:40]: clean_status(x, depth + 1) for k, x in list(v.items())[:60] if isinstance(k, str) and k.strip()}
     if isinstance(v, list) and depth < 3:
         return [clean_status(x, depth + 1) for x in v[:60]]
     if isinstance(v, str):

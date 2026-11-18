@@ -513,3 +513,132 @@ def test_the_web_apps_home_address_drops_the_port_on_443(env_hub):
     cfg["port"] = 443
     config.save(cfg)
     assert c.get("/setup/api/webapp").json()["url"].endswith(".local/intake")
+
+
+# ---------------------------------------------------------------- review R497: one deadline, no proxy, odd keys and ids
+import socket
+import time
+
+
+def _trickle(mode: str):
+    """A station that answers one byte every 2 s: of the body (`body`) or of the status line (`head`)."""
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(4)
+
+    def serve():
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except OSError:
+                return
+            threading.Thread(target=answer, args=(conn,), daemon=True).start()
+
+    def answer(conn):
+        if True:
+            try:
+                conn.settimeout(3)
+                conn.recv(4096)
+                if mode == "body":
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 400\r\n\r\n")
+                    for _ in range(40):
+                        conn.sendall(b" ")
+                        time.sleep(2)
+                else:
+                    for ch in b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{}":
+                        conn.sendall(bytes([ch]))
+                        time.sleep(2)
+            except OSError:
+                pass
+            finally:
+                conn.close()
+    threading.Thread(target=serve, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.getsockname()[1]}"
+
+
+@pytest.mark.parametrize("mode", ["body", "head"])
+def test_a_station_that_trickles_its_answer_is_cut_off_at_one_deadline(mode):
+    srv, url = _trickle(mode)
+    try:
+        t = time.monotonic()
+        with pytest.raises(device_tab.StationError) as e:
+            device_tab.call_station(url, "GET", "state")
+        took = time.monotonic() - t
+        assert 4.5 < took < 6.5 and e.value.status == 502, (took, e.value.message)
+    finally:
+        srv.close()
+
+
+def test_the_photo_and_the_ticket_calls_have_the_same_deadline(env_hub, monkeypatch):
+    c, st = env_hub
+    monkeypatch.setattr(device_tab.station_client, "station_reach", lambda devs, url: {})      # that probe is station_client's own
+    srv, url = _trickle("body")
+    try:
+        cfg = config.load()
+        cfg["station"] = {**cfg["station"], "url": url}
+        config.save(cfg)
+        for call in (lambda: c.get("/setup/api/device/d3/photo"), lambda: SP.post(c, "device/d3/open")):
+            t = time.monotonic()
+            r = call()
+            assert r.status_code == 502 and time.monotonic() - t < 8, r.text
+    finally:
+        srv.close()
+
+
+def test_the_station_call_never_goes_through_a_proxy(env_hub, monkeypatch):
+    c, st = env_hub
+    for k in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY"):
+        monkeypatch.setenv(k, "http://127.0.0.1:9")                 # nothing listens there
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    assert c.get("/setup/api/device/d3").json()["status"]["tag"]["uid"] == "04A1B2"
+    src = open(device_tab.__file__, encoding="utf-8").read()
+    assert "urllib.request" not in src and "build_opener" not in src      # no opener, so no proxy handler
+
+
+def test_an_empty_status_key_is_dropped_and_ids_that_are_properties_of_the_form_collection_are_kept():
+    assert device_tab.clean_status({"": 1, " ": 2, "a": 3, "b_c": {"": 4, "d": 5}}) == {"a": 3, "b_c": {"d": 5}}
+    odd = [{"id": i, "label": i, "kind": "text", "value": "x"} for i in ("length", "item", "nameditem")]
+    kept, dropped = device_tab.clean_settings(odd)
+    assert [s["id"] for s in kept] == ["length", "item", "nameditem"] and dropped is False
+    assert device_tab.clean_settings([dict(odd[0], id="namedItem")])[1] is True        # a capital is not in the id pattern
+
+
+def test_the_script_reads_the_settings_form_by_a_map_not_by_form_elements():
+    src = (SP.STATIC / "setup_devices.js").read_text(encoding="utf-8")
+    assert "form.elements[" not in src and "ctl.get(id)" in src
+
+
+def test_the_label_of_a_status_key_handles_an_empty_or_missing_key():
+    import re
+    import subprocess
+    from test_hub_devices import _missing, _node
+    node = _node()
+    if not node:
+        _missing("needs Node 22 or later")
+    src = (SP.STATIC / "setup_devices.js").read_text(encoding="utf-8")
+    line = re.search(r"^const devLabel = .*$", src, re.M).group(0)
+    run = subprocess.run([node, "-e", "const SW = { t: (k) => k };" + line + "; console.log(JSON.stringify([devLabel(''), devLabel(null), devLabel(undefined), devLabel('  '), devLabel('last_weight')]))"],
+                         capture_output=True, encoding="utf-8", timeout=60)
+    assert run.returncode == 0, run.stderr
+    assert json.loads(run.stdout) == ["common_unknown", "common_unknown", "common_unknown", "common_unknown", "Last weight"]
+
+
+@browser
+def test_settings_ids_that_are_properties_of_the_form_collection_can_be_saved(stub, hub_change, tmp_path):      # BROWSER: not run in this batch
+    _station_url(stub)
+    stub.settings = [{"id": i, "label": i, "kind": "text", "value": "a"} for i in ("length", "item")]
+    pairing._write("devices.json", [{"id": "d3", "name": "Bench station", "hash": "0" * 64, "paired": 1.0, "last_seen": 1.0, "expires": 0, "claimed": 1.0, "scope": "station"}])
+    page = _drive(hub_change + "#devices", tmp_path, DEVICES_PRELUDE + """
+unlock();
+await until(() => $$(".coll--paired .coll__item").length, "the rows");
+$('[data-action="open"]', $(".coll--paired .coll__item")).click();
+await until(() => dlg() && $("form.group", dlg()), "the detail");
+for (const n of ["length", "item"]) { const c = $(`[name="${n}"]`, dlg()); c.value = "b"; c.dispatchEvent(new Event("input", { bubbles: true })); }
+$('[type="submit"]', dlg()).click();
+await until(() => $$("dialog[open]").length === 2, "the preview");
+$$("dialog[open]")[1].querySelector('[data-action="confirm"]').click();
+await until(() => sentTo("device/d3/settings").length === 1, "the save");
+return { sent: sentTo("device/d3/settings") };
+""", 1280, "console")
+    assert page["sent"] == [{"length": "b", "item": "b", "code": CODE}]

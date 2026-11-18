@@ -333,7 +333,7 @@ function pairCard() {
 // ----- a device's detail (R83 9.7), in a dialog: the facts of the row, and for a Weigh Station its status and settings -----
 const devFact = (name, ...value) => h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: name }), h("dd", { class: "kv__value" }, ...value));
 const devSay = (v) => (v == null ? SW.t("common_unknown") : typeof v === "object" ? Object.entries(v).map(([k, x]) => `${k.replace(/_/g, " ")} ${devSay(x)}`).join(" · ") : String(v));
-const devLabel = (k) => { const w = k.replace(/_/g, " "); return w[0].toUpperCase() + w.slice(1); };
+const devLabel = (k) => { const w = String(k == null ? "" : k).replace(/_/g, " ").trim(); return w ? w[0].toUpperCase() + w.slice(1) : SW.t("common_unknown"); };
 function devFacts(d) {
   const ood = devOod(d);
   return [h("dl", { class: "kv" },
@@ -377,9 +377,11 @@ function devSettingsForm(row, list, redo) {
   const reset = SW.btn(devT("devices_settings_reset"), { cls: "btn--ghost", action: "reset", run: () => devResetSettings(row, redo) });
   const form = h("form", { class: "group", novalidate: true, "aria-label": devT("devices_settings_title") },
     h("div", { class: "group__body" }, ...fields), h("div", { class: "group__foot" }, res, reset, save));
-  const shown = (id) => { const c = form.elements[id]; return c.tagName === "SELECT" ? c.selectedOptions[0].textContent : c.value; };
+  // by id from a Map, never through the form's own named collection: ids such as length or item are properties of it
+  const ctl = new Map(list.map((s, i) => [s.id, fields[i]._control]));
+  const shown = (id) => { const c = ctl.get(id); return c.tagName === "SELECT" ? c.selectedOptions[0].textContent : c.value; };
   const was = new Map(list.map((s) => [s.id, shown(s.id)]));
-  const value = (id) => devSettingValue(by.get(id), form.elements[id].value);
+  const value = (id) => devSettingValue(by.get(id), ctl.get(id).value);
   let plan = null;
   const g = SW.formGroup(form, { title: devT("devices_settings_title"), send: async (key) => {
     if (!plan) plan = api(path, { ...Object.fromEntries(g.changed().map((k) => [k, value(k)])), code: theCode() });
