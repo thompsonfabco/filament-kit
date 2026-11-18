@@ -387,3 +387,38 @@ out.afterEmpty = { hub: (await hubSays(3)).state, row: rowOf(3).dataset.state, c
     assert first["remaining_weight"] == 340 and first["location"] == page["target"] and json.loads(first["extra"]["nfc_id"]) == "4:de:ad:be"
     assert json.loads(sealed["extra"]["nfc_id"]) == "4:77:90:e" and inventory.SEALED_COMMENT not in (sealed["comment"] or "") and sealed["first_used"]
     assert emptied["archived"] is True and emptied["remaining_weight"] == 0
+
+
+@pytest.mark.parametrize("look", ["console", "workbench", "palette", "panes"])
+@pytest.mark.parametrize("width", [1280, 390])
+def test_the_section_reads_in_every_look_without_sideways_scrolling_or_clipping(hub, stock, tmp_path, look, width):
+    page = _go(hub, tmp_path, r"""
+const vw = document.documentElement.clientWidth;
+const wide = (root) => $$("*", root).filter((el) => shown(el) && el.getBoundingClientRect().right > vw + 1 && !el.closest(".sr, [aria-hidden=true], .tooltip")).slice(0, 5).map((el) => el.tagName + "." + el.className);
+out.vw = vw;
+out.list = { overflow: document.documentElement.scrollWidth > vw, wide: wide($(".spools")), rows: rows().length, title: shown($(".coll__title", rowOf(1))), search: shown($(".spools-toolbar input")), chips: $$(".spools-chip").every(shown), link: shown($(".spools-link")) };
+out.nav = { item: !!$('.nav__item[href="#spools"]'), inBar: !!$('.nav__item[href="#spools"][data-tab]') };
+out.cols = $$(":scope > .coll__row:first-child > .coll__cell", rowOf(1)).filter(shown).map((c) => c.dataset.col);
+$(".coll__title", rowOf(1)).click();
+await until(() => shown($("#spool-detail-1")), "the detail");
+await sleep(500);
+const d = $("#spool-detail-1");
+out.detail = { overflow: document.documentElement.scrollWidth > vw, wide: wide(d), buttons: $$(".spools-act .btn", d).map((b) => shown(b)), inDialog: !!d.closest("dialog"), facts: $$(".kv__row", d).length, field: shown($('[name="gross"]', d)) };
+""", width=width, look=look)
+    assert page["list"]["overflow"] is False and page["list"]["wide"] == [], page["list"]
+    assert page["list"]["rows"] == 50 and page["list"]["title"] and page["list"]["search"] and page["list"]["chips"] and page["list"]["link"]
+    assert page["nav"]["item"] and not page["nav"]["inBar"]                     # Spools is in the More sheet on a phone, never in the bar
+    assert page["detail"]["overflow"] is False and page["detail"]["wide"] == [], page["detail"]
+    assert page["detail"]["buttons"] == [True] * 4 and page["detail"]["field"] and page["detail"]["facts"] == 11
+    assert page["detail"]["inDialog"] is (look == "palette")                    # Palette's detail is a sheet; the others open it in the row
+    assert {"title", "state", "number"} <= set(page["cols"])
+
+
+@pytest.mark.parametrize("width", [1280, 1776, 1024, 768])
+def test_in_panes_the_spools_summaries_stay_readable_blocks(hub, stock, tmp_path, width):
+    from test_hub_panes_summary_width import MEASURE
+    got = _drive(hub, tmp_path, MEASURE.replace("__SECTIONS__", '["spools"]'), width=width)
+    seen = [(s, c) for s, cells in got["out"].items() for c in cells]
+    assert any(c["label"] == "real" for _, c in seen) and any(c["label"] == "long" for _, c in seen), "no spool summary cell was found to measure"
+    bad = [(c["label"], c["text"], c["w"], c["lines"]) for _, c in seen if c["lines"] > 2 or (c["em"] < 8 and c["lines"] > 1)]
+    assert not bad, (width, "a summary squeezed to a sliver or wrapped past two lines", bad)

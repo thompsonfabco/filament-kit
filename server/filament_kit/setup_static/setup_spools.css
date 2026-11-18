@@ -11,6 +11,8 @@
 .coll--spools { grid-template-columns: auto auto max-content minmax(0, 2fr) minmax(0, 1fr) minmax(calc(var(--s7) * 2), max-content) minmax(0, 1.4fr) minmax(0, 1.4fr); }
 .coll--spools .coll__cell[data-col="state"] { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); }
 .coll--spools .coll__cell[data-col="state"] > .coll__sub { flex: 1 1 100%; }
+/* Panes lists the rows in a narrow pane: the state keeps a block of its own and wraps to the next line instead of squeezing */
+:root[data-look="panes"] .coll--spools .coll__cell[data-col="state"] { min-width: calc(var(--s7) * 3); }
 .spools-expand__label { display: none; }
 .spools-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); margin-top: var(--s3); }
 .spools-shown { margin: 0; }

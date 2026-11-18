@@ -32,13 +32,11 @@ const STUB = {
   spools_untagged: "No tag",
   spools_low: "Running low",
   spools_unnamed: "Unnamed spool",
-  spools_number: "Spool {id}",
   spools_show_more: "Show more",
   spools_shown: "Showing {shown} of {total}",
   spools_more_failed: "Could not read more spools: {reason}",
   spools_error: "Could not read the spools",
   spools_pane_empty: "Choose a spool to see its details.",
-  spools_gone: "Spool {id} is not on the Hub, or is empty.",
   spools_fact_left: "Left",
   spools_fact_state: "State",
   spools_fact_last_use: "Last taken off",
@@ -48,7 +46,6 @@ const STUB = {
   spools_group_empty: "When it is used up",
   spools_weight_hint: "What the scale shows with the empty spool on it, in grams.",
   spools_weight_error: "Enter the weight in grams, a number above 0.",
-  spools_move_error: "Choose a place.",
   spools_link_last: "Link the last tapped tag",
   spools_previewing: "Checking what would change…",
   spools_apply: "Apply",
@@ -63,8 +60,6 @@ const STUB = {
   spools_done_empty: "Marked empty.",
   spools_ask_empty_title: "Mark spool {id} empty?",
   spools_ask_empty_text: "{name} is recorded as used up: 0 g left, and it leaves this list.",
-  spools_tag_read: "Tag {tag}, read {at}.",
-  spools_tag_sentence: "Tag {tag}",
 };
 const tx = (key, vars) => {
   if (window.SW_TEXT && window.SW_TEXT[key] != null) return SW.t(key, vars);
