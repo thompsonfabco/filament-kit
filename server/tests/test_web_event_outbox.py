@@ -68,7 +68,7 @@ def sender(box, hub, **kw):
 
 @pytest.fixture
 def box(tmp_path):
-    return eo.Outbox(tmp_path / "web" / "event-outbox.xml")
+    return eo.Outbox(tmp_path / "web" / "events-outbox.xml")
 
 
 # ---------------------------------------------------------------- the outbox file
@@ -101,7 +101,7 @@ def test_a_broken_file_is_kept_aside_and_the_outbox_starts_empty(box):
     box.path.parent.mkdir(parents=True)
     box.path.write_text("<outbox><event", encoding="utf-8")
     assert box.pending() == []
-    assert box.path.with_name("event-outbox.xml.unreadable").exists()
+    assert box.path.with_name("events-outbox.xml.unreadable").exists()
     add(box, 1)
     assert len(eo.Outbox(box.path)) == 1
 
@@ -293,7 +293,7 @@ def wait_for(pred, secs=10):
 def test_a_spool_change_from_the_phone_reaches_the_hub_once_through_the_outbox(sm, store, lockout, fake, tmp_path):
     sid = _web_spool(sm)
     hub = FakeHub()
-    handover = eo.Handover(hub, eo.Outbox(tmp_path / "ob" / "event-outbox.xml"), idle=0.05, backoff=(0.02, 0.05))
+    handover = eo.Handover(hub, eo.Outbox(tmp_path / "ob" / "events-outbox.xml"), idle=0.05, backoff=(0.02, 0.05))
     app = web_app.build_app(sm=sm, store=store, lockout=lockout, claude=fake, kit_api=hub, handover=handover)
     post = {"headers": {"Origin": ORIGIN}}
     with _client(app) as c:
@@ -318,7 +318,7 @@ def test_a_phone_request_does_not_wait_for_a_hub_that_is_down_and_the_change_is_
     sid = _web_spool(sm)
     hub = FakeHub()
     hub.down = True
-    path = tmp_path / "ob" / "event-outbox.xml"
+    path = tmp_path / "ob" / "events-outbox.xml"
     handover = eo.Handover(hub, eo.Outbox(path), idle=0.05, backoff=(0.02, 0.05))
     app = web_app.build_app(sm=sm, store=store, lockout=lockout, claude=fake, kit_api=hub, handover=handover)
     with _client(app) as c:
