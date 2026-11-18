@@ -1,5 +1,5 @@
 """The Devices section's kind, version, out of date and Open, a device's detail the Hub page draws itself with the station's
-settings, and "Open this station's page" (R83 section 9, 10.2 and the rulings of 2026-11-17 21:18 and 21:22;
+settings, and "Open this device's page" (R83 section 9, 10.2 and the rulings of 2026-11-17 21:18 and 21:22;
 setup_console/device_tab.py). Nothing a station sends is served by the Hub: the checks on what it takes are pinned here.
 
 The Hub's other parts (a pairing's kind and version, the reader's build, the station's own routes and its pinned client) are
@@ -129,7 +129,7 @@ READERS = [{"id": "r1", "name": "Tag Reader for Workshop X1", "created": "2026-1
 @pytest.fixture
 def stub(monkeypatch):
     """The Hub the Devices rows are built on, as the other Hub steps will leave it, and a station (over http: the stub has no
-    certificate, so the https-only rule of Open this station's page is lifted here and tested on its own)."""
+    certificate, so the https-only rule of Open this device's page is lifted here and tested on its own)."""
     st = Station()
     monkeypatch.setattr(device_tab, "_pairings", lambda: [dict(p) for p in PAIRINGS])
     monkeypatch.setattr(device_tab, "_readers", lambda: [dict(r) for r in READERS])
@@ -296,7 +296,7 @@ def test_the_photo_is_a_jpeg_of_at_most_four_mib_or_nothing(env_hub):
     assert c.get("/setup/api/device/d1/photo").status_code == 404 and c.get("/setup/api/device/zz/photo").status_code == 404
 
 
-# ---------------------------------------------------------------- Open this station's page
+# ---------------------------------------------------------------- Open this device's page
 def test_open_gives_the_address_with_the_ticket_in_the_fragment_and_only_when_unlocked(env_hub, stub, caplog):
     c, st = env_hub
     assert c.post("/setup/api/device/d3/open", json={}, headers=SP.H).status_code == 403
@@ -481,8 +481,8 @@ def test_the_rows_open_and_the_station_settings_work_in_every_look_at_both_width
     assert page["phone"]["hash"] == "#devices/d1" and page["hashClosed"] == "#devices"
     assert page["phone"]["link"] is False and page["reader"]["stationLink"] is False        # nothing serves a page: no link
     st = page["station"]
-    assert st["hash"] == "#devices/d3" and st["ownPage"] == f"Its own page: {stub.url}/" and st["button"] == "Open this station's page"
-    assert st["hint"] == "Your browser asks once whether to trust this station's certificate."
+    assert st["hash"] == "#devices/d3" and st["ownPage"] == f"Its own page: {stub.url}/" and st["button"] == "Open this device's page"
+    assert st["hint"] == "Your browser asks once whether to trust this device's certificate."
     assert st["photo"] == ["/setup/api/device/d3/photo", "The last photo of the Weigh Station", 1]
     assert st["injected"] == [False, True, True]                                      # a station's text is text, never markup
     assert page["openSent"] == [{"code": CODE}] and page["clicked"] == [[f"{stub.url}/#ticket={TICKET}", "_blank", "noopener noreferrer"]]

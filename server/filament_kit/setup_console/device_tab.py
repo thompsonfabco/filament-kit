@@ -45,7 +45,7 @@ MAX_JSON = 256 * 1024
 MAX_PHOTO = 4 * 1024 * 1024
 STATION_TIMEOUT = 5
 OPEN_SCHEMES = ("https",)           # the station's own page is opened only over https
-DROPPED_NOTE = "Some of this station's settings could not be shown."
+DROPPED_NOTE = "Some of this device's settings could not be shown."
 
 
 class StationError(Exception):
