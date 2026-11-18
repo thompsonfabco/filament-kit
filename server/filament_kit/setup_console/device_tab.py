@@ -175,7 +175,8 @@ def call_station(url: str, method: str, path: str, body: bytes | None = None, ca
                 sock.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
-        conn.close()
+        # the socket is only SHUT here (the reading thread sees the end and returns); closing the connection from this thread
+        # would pull the response's file out from under a read in progress, and the `finally` below closes it
 
     timer = threading.Timer(STATION_TIMEOUT, cut)
     timer.daemon = True
@@ -200,7 +201,7 @@ def call_station(url: str, method: str, path: str, body: bytes | None = None, ca
                 raise StationError(502, "the Weigh Station answers too slowly")
     except StationError:
         raise
-    except (http.client.HTTPException, OSError, ValueError) as e:
+    except (http.client.HTTPException, OSError, ValueError, AttributeError) as e:      # AttributeError: http.client closing under a shut socket
         slow = time.monotonic() >= deadline - 0.05
         raise StationError(502, "the Weigh Station answers too slowly" if slow else f"the Weigh Station does not answer ({type(e).__name__})") from None
     finally:
