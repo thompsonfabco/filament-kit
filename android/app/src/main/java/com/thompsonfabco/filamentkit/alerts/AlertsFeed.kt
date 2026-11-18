@@ -4,9 +4,13 @@ import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -43,12 +47,17 @@ class AlertsFeed(
     private val store: AlertsStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val onTest: (AlertTest) -> Unit = {},
+    /** The fingerprint of the paired Hub (null while none): the stored cursor and dismissals belong to one Hub, switch on or off. */
+    hub: Flow<String?> = emptyFlow(),
 ) {
     private val _state = MutableStateFlow(AlertsUi())
     val state: StateFlow<AlertsUi> = _state.asStateFlow()
 
     init {
-        store?.let { s -> scope.launch { s.dismissed.collect { d -> _state.update { it.copy(dismissed = d) } } } }
+        store?.let { s ->
+            scope.launch { hub.filterNotNull().distinctUntilChanged().collect { s.useHub(it) } }
+            scope.launch { s.dismissed.collect { d -> _state.update { it.copy(dismissed = d) } } }
+        }
     }
 
     /** Reads the last [days] days. Failures other than "no such route" leave the last answer on screen. */

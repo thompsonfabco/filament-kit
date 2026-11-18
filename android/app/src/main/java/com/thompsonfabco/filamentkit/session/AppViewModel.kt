@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -81,6 +82,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val alerts = AlertsFeed(
         viewModelScope, { session.api.value }, alertsStore,
         onTest = { AlertNotifier(app).act(listOf(NotifyAction.ShowTest(it))) },
+        hub = session.config.map { c -> c?.takeIf { it.isPaired() }?.fingerprint },
     )
 
     private val _alertTap = MutableStateFlow<AlertTarget?>(null)
