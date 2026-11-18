@@ -148,6 +148,14 @@ class HubModelTest {
         )
     }
 
+    @Test fun aDeviceWithoutAKindShowsItsNameAndDetailsWithNoLeadingSeparator() {
+        val d = hubSections(
+            answer().copy(devices = listOf(HubDevice("Old box", "", "0.6.0", null, outOfDate = false, thisOne = false))),
+            time,
+        ).first { it.group == HubGroup.Devices }
+        assertEquals(listOf(HubLine.Field("Old box", "0.6.0")), d.lines)
+    }
+
     @Test fun anUnknownDeviceKindIsShownAsTheHubWroteIt() {
         assertEquals("gadget", deviceKindText("gadget"))
         assertEquals("Tag Reader", deviceKindText("reader"))

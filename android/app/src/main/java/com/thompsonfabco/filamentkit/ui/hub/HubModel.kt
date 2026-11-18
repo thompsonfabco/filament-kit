@@ -122,7 +122,7 @@ fun hubSections(h: HubAnswer, time: (String?) -> String? = { hubTime(it) }): Lis
     if (h.devices.isNotEmpty()) {
         add(HubSection(HubGroup.Devices, h.devices.map { d ->
             val parts = buildList {
-                add(deviceKindText(d.kind))
+                if (d.kind.isNotBlank()) add(deviceKindText(d.kind))
                 add(d.version ?: HubTexts.VERSION_NOT_KNOWN)
                 time(d.lastSeen)?.let { add("${HubTexts.LAST_SEEN} $it") }
                 if (d.outOfDate) add(HubTexts.OUT_OF_DATE)
