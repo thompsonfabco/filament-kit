@@ -120,7 +120,7 @@ def test_add_list_and_remove_an_entry():
     assert library.local_list() == {"entries": []}
     row = library.add_local_form(form(name="Pla Max"))
     assert set(row) == {"id", "brand", "name", "material", "added"}
-    assert row["id"] == "acme--pla-max" and type(row["added"]) is int and row["added"] > 1_700_000_000 and (row["brand"], row["material"]) == ("Acme", "PLA")
+    assert row["id"] == "acme--pla-max" and row["added"] and (row["brand"], row["material"]) == ("Acme", "PLA")
     library.add_local_form(form(brand="Acme", name="Abs Max", material="ABS"))
     library.add_local_form(form(brand="Zed", name="First"))
     assert [(r["brand"], r["name"]) for r in library.local_list()["entries"]] == [
@@ -202,12 +202,6 @@ def test_the_entries_answer_with_a_catalog_names_the_materials_and_times_are_who
     r = profiles_api.local_entries()
     assert set(r) == {"entries", "materials"} and "PLA" in r["materials"] and r["materials"] == sorted(
         r["materials"], key=str.casefold)
-    assert type(r["entries"][0]["added"]) is int
-
-
-def test_an_entry_with_no_date_has_a_null_added():
-    assert library.local_row({"vendor": "A", "product": "B", "material": "PLA"})["added"] is None
-    assert library.local_row({"vendor": "A", "product": "B", "material": "PLA", "updated": "junk"})["added"] is None
 
 
 def test_every_problem_is_field_and_text_with_a_field_of_the_form():

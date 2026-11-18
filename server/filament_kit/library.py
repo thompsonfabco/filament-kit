@@ -694,19 +694,9 @@ def build_entry(form: dict, lib: "Library | None" = None) -> dict:
     return canonical(entry)
 
 
-def _day_epoch(day) -> int | None:
-    """'2026-11-17' as whole seconds since 1970 (midnight UTC), None when it is not a date."""
-    try:
-        d = datetime.date.fromisoformat(day)
-    except (TypeError, ValueError):
-        return None
-    return int(datetime.datetime(d.year, d.month, d.day, tzinfo=datetime.timezone.utc).timestamp())
-
-
 def local_row(entry: dict, line: str | None = None) -> dict:
-    """{id, brand, name, material, added}: `added` is the entry's day as whole seconds since 1970 (null without one)."""
     return {"id": line or line_id(entry["vendor"], entry["product"]), "brand": entry["vendor"],
-            "name": entry["product"], "material": entry["material"], "added": _day_epoch(entry.get("updated"))}
+            "name": entry["product"], "material": entry["material"], "added": entry.get("updated")}
 
 
 def add_local_form(form: dict) -> dict:

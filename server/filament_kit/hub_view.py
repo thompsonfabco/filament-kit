@@ -5,9 +5,6 @@
      backup: {last_at?, nightly}, reader: {engine, key_set}, devices: [{name, kind, version?, last_seen?,
      out_of_date, this}], records_kept, spoolman_url?, hub_page?}
 
-Every time (`checked_at`, `last_at`, `last_seen`) is ONE type: whole seconds since 1970 (an integer), null or absent
-when not known; no ISO text.
-
 Everything is redacted as the Overview is for a locked page (`redact`): no addresses, serial numbers or secrets; a
 check's text and fix are cleaned, the devices are names only. Looking costs no network call but the checks' own (the
 Overview's rows). A source that cannot be read leaves its part out or at its empty value: the answer never fails for
@@ -32,27 +29,22 @@ BACKUP_PAGES = 20                                               # pages of 1000 
 _HOST = re.compile(r"[A-Za-z0-9.\-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\]")
 
 
-def epoch(t) -> int | None:
-    """A time as whole seconds since 1970, the one type every time of the answer has: an epoch number is cut to whole
-    seconds, an ISO 8601 text (a missing offset is UTC) is converted; None when it is neither or not a real time."""
+def iso(t) -> str | None:
+    """An epoch number or an ISO text as ISO 8601 with an offset (UTC for a number); None when it is neither."""
     if isinstance(t, bool):
         return None
     if isinstance(t, (int, float)):
         try:
-            datetime.datetime.fromtimestamp(float(t), datetime.timezone.utc)
+            return datetime.datetime.fromtimestamp(float(t), datetime.timezone.utc).isoformat(timespec="seconds")
         except (OverflowError, OSError, ValueError):
             return None
-        return int(t)
     if isinstance(t, str) and t.strip():
         try:
             d = datetime.datetime.fromisoformat(t.strip().replace("Z", "+00:00"))
         except ValueError:
             return None
-        return int((d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)).timestamp())
+        return (d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)).isoformat(timespec="seconds")
     return None
-
-
-iso = epoch          # the earlier name of this function; the answer carries no ISO text
 
 
 def version_tuple(v) -> tuple[int, ...] | None:

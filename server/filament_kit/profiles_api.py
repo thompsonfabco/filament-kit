@@ -542,7 +542,7 @@ def restore_deleted(device, what: str) -> dict:
 
 def local_entries() -> dict:
     """`GET /api/library/local`: {entries: [{id, brand, name, material, added}], materials: [name]}: the owner's own
-    catalog entries (`added` in seconds since 1970) and the materials the catalog knows (none: an empty list), so
+    catalog entries (`added` is the entry's date) and the materials the catalog knows (none: an empty list), so
     every form offers the same Material choice."""
     return {**library_mod.local_list(), "materials": library_mod.load().materials()}
 
