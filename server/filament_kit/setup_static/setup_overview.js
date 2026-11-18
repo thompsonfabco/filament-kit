@@ -137,6 +137,7 @@ function checkItems(rows) {
 }
 // the fix column: the row's action button, else its fix (a command as a code block)
 function fixCell(r) {
+  if (r.action === "storage_use") return ovStorageFix();      // the Storage row's panel, whatever its state (setup_overview_alerts.js)
   if (r.state === "ok") return null;
   if (r.action === "ensure_fields") {
     const box = boxFor("check:" + r.action);
@@ -233,7 +234,7 @@ function overviewTab() {
   const head = h("div", { class: "page-head__actions" }, again);      // Run the checks again, in the section header
   pageHead(null, head);
   whenOpen(body, (now) => { open = now; return read(now); });
-  return [banner, todoCard(), tiles(),
+  return [banner, todoCard(), ovLowCard(), tiles(),
     h("section", { class: "card overview__checks", "aria-labelledby": "overview-checks-title" },
       h("div", { class: "overview__head" }, h("h2", { id: "overview-checks-title", textContent: SW.t("overview_checks_title") }), badges),
       body), note];

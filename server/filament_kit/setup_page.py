@@ -74,7 +74,7 @@ log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "setup_static"
 # one stylesheet per section, linked after setup.css (the shell) in this order, which is the cascade order: a section adds
 # its own file here and never appends to another's
-CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings", "flash", "intake"))
+CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings", "flash", "intake", "alerts"))
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
                                "connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
@@ -299,7 +299,7 @@ class SetupPage:
         self.static = {n: (STATIC / n).read_bytes()
                        for n in ("setup.js", "setup_tabs.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
                                  "setup_settings.js", "setup_devices.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
-                                 "setup_backup.js", "setup_storage.js",
+                                 "setup_backup.js", "setup_storage.js", "setup_alertbar.js", "setup_overview_alerts.js", "setup_alerts.js",
                                  "setup_logs.js", "setup_intake.js", "setup_flash.js",
                                  # esptool-js 0.7.0 as published (THIRD-PARTY.md): only the Flash a device tab
                                  # loads it, when the owner writes a board from the browser
@@ -343,6 +343,9 @@ class SetupPage:
                  Route("/setup/setup_presets.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_backup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_storage.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_alertbar.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_overview_alerts.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_alerts.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_logs.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_intake.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_flash.js", self.asset, methods=["GET"]),
@@ -516,13 +519,13 @@ class SetupPage:
             f"<meta name=theme-color content='{colours['dark'][0]}' media='(prefers-color-scheme: dark)'>"
             "<script src='/setup/shared/theme-init.js'></script><script defer src='/setup/shared/strings.js'></script>"
             "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
-            "<script defer src='/setup/shared/components-jobs.js'></script>"
+            "<script defer src='/setup/shared/components-jobs.js'></script><script defer src='/setup/shared/alerts.js'></script>"
             # the shell turns the title into "<Page title> · <Hub name>" (03 1.2); the Hub name is all it needs from here
             f"<title>{name}</title><link rel=stylesheet href='/setup/shared/tokens.css'>"
-            "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/shared/components-jobs.css'>"
+            "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/shared/components-jobs.css'><link rel=stylesheet href='/setup/shared/alerts.css'>"
             "<link rel=stylesheet href='/setup/setup.css'>"
             + "".join(f"<link rel=stylesheet href='/setup/{n}'>" for n in CSS_SECTIONS) +
-            f"<body>{shared_files.sprite_inline(self.shared)}<div id=app></div><script src='/setup/setup.js'></script>"
+            f"<body>{shared_files.sprite_inline(self.shared)}<div id=app></div><script src='/setup/setup.js'></script><script src='/setup/setup_alertbar.js'></script><script src='/setup/setup_overview_alerts.js'></script><script src='/setup/setup_alerts.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_overview.js'></script><script src='/setup/setup_features.js'></script><script src='/setup/setup_updates.js'></script><script src='/setup/setup_settings.js'></script><script src='/setup/setup_devices.js'></script><script src='/setup/setup_printers.js'></script>"
             "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_storage.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",
             headers=HEADERS)

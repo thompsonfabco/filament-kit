@@ -1,8 +1,7 @@
 // Spoolwarden shared alerts (DECISIONS R80 sections 3 to 5 and 8; docs/design/02-components.md 8.8): the alert banner host, the
 // Alerts list, the events poller and the browser-notification helper. Loaded after components.js (window.SW) and, with
 // alerts.css, by every interface that shows alerts. It adds window.SW_ALERTS. It reads GET api/events (R80 section 8) with
-// SW.api; nothing here writes to the Hub. Texts: the keys `alert_*` are a stub table until the string catalogue holds them
-// (only the server step that opens strings/ adds them); a key the catalogue already has wins.
+// SW.api; nothing here writes to the Hub. Texts: the `alert_*` keys of the string catalogue.
 (() => {
 "use strict";
 const SW = window.SW, doc = document;
@@ -25,63 +24,17 @@ const CONTRACT = {
 };
 const pick = (d, names) => { for (const n of names) if (d[n] != null && d[n] !== "") return d[n]; return null; };
 
-// ----- texts: the stub table (key -> English), replaced by the catalogue's own text once it has the key -----
-const STUB = {
-  alert_title_runout: "Filament ran out on {printer}",
-  alert_text_runout: "{job} is paused at {percent} %. Load filament and resume at the printer.",
-  alert_title_paused: "{printer} is paused",
-  alert_text_paused: "{job} is paused at {percent} %.",
-  alert_title_failed: "Print stopped on {printer}",
-  alert_text_failed: "{job} stopped at {percent} %.",
-  alert_cancelled: "It was cancelled.",
-  alert_title_error: "{printer} reports a problem",
-  alert_title_finished: "Print finished on {printer}",
-  alert_text_finished: "{job} is done.",
-  alert_title_storage_warn: "Storage on the Hub is almost full",
-  alert_text_storage_warn: "{free} free of {total} ({percent} % used).",
-  alert_title_storage_bad: "Storage on the Hub is full",
-  alert_text_storage_bad: "{free} free of {total}. Backups and new photos may fail.",
-  alert_title_low: "Running low: {filament}",
-  alert_text_low: "Spool {id} has {grams} g left.",
-  alert_text_low_more: { one: "{count} more in stock.", other: "{count} more in stock." },
-  alert_text_low_last: "It is the last one.",
-  alert_title_device_down: "{device} stopped answering",
-  alert_text_device_down: "Last answer {time}.",
-  alert_title_offline: "{printer} is offline",
-  alert_text_offline: "Last seen {time}.",
-  alert_open_printer: "Open the printer",
-  alert_show_storage: "Show storage use",
-  alert_show_low: "Show running low",
-  alert_open_devices: "Open Devices",
-  alert_since: "since {time}",
-  alert_just_now: "just now",
-  alert_minutes_ago: { one: "{count} minute ago", other: "{count} minutes ago" },
-  alert_hours_ago: { one: "{count} hour ago", other: "{count} hours ago" },
-  alert_days_ago: { one: "{count} day ago", other: "{count} days ago" },
-  alert_more: { one: "{count} more alert", other: "{count} more alerts" },
-  alert_list_title: "Alerts",
-  alert_list_raised: "Happening now",
-  alert_list_earlier: "Last 7 days",
-  alert_list_empty: "No alerts in the last 7 days.",
-  alert_notify_blocked: "Blocked in this browser's settings",
-  alert_notify_blocked_hint: "Allow notifications for this address in the browser's site settings, then switch this on again.",
-  alert_notify_unsupported: "This browser cannot show notifications",
-  alert_notify_hint: "With the tab in the background they can arrive up to a minute late.",
-  alert_test_title: "Test alert",
-  alert_notify_unsupported_hint: "Open the Hub at its public address, which has a certificate this browser trusts.",
-};
-const plural = new Intl.PluralRules("en");
-function tx(key, vars) {
-  if (window.SW_TEXT && window.SW_TEXT[key] != null) return t(key, vars);
-  let v = STUB[key];
-  if (v == null) return key;
-  if (typeof v === "object") v = v[plural.select(vars && vars.count != null ? Number(vars.count) : 0)] || v.other;
-  return vars ? v.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : v;
-}
+// ----- texts: the catalogue's own (strings/en.json holds every alert_* key) -----
+const tx = t;
 
 // ----- what an event says: title, sentence and the place that fixes it (R80 section 5's table) -----
 const num = (n) => (n == null || n === "" ? null : n);
-const size = (n) => (typeof n === "number" ? (n >= 1e9 ? (n / 1e9).toFixed(1) + " GB" : n >= 1e6 ? Math.round(n / 1e6) + " MB" : Math.round(n / 1e3) + " kB") : n);
+const size = (n) => {
+  const v = typeof n === "string" && /^\d+(\.\d+)?$/.test(n.trim()) ? Number(n) : n;          // a stored value is text
+  if (typeof v !== "number") return n;
+  for (const [unit, step] of [["TB", 1e12], ["GB", 1e9], ["MB", 1e6], ["kB", 1e3]]) if (v >= step) { const x = v / step; return (x >= 10 || step < 1e9 ? x.toFixed(0) : x.toFixed(1)) + " " + unit; }
+  return v.toFixed(0) + " B";          // as the Hub writes a size (alerts_api.size_text)
+};
 const pad = (n) => String(n).padStart(2, "0");
 let clock = () => Date.now();
 const at = (e) => Date.parse(e.at) || 0;
@@ -243,7 +196,7 @@ function arrive(e) {
   if (e.alert !== true) return;
   if (e.condition && e.condition.state === "raised" && state.raised.has(e.condition.key)) return;
   const d = describe(e), a = d.action, href = a && hrefOf(a);
-  toast(d.title, d.kind, a && (opts.open || href) ? { action: { label: a.label, name: `${a.label}: ${d.title}`, run: () => { if (opts.open) opts.open(a); else location.href = href; } } } : {});
+  toast(d.title, d.kind, a && (opts.open || href) ? { action: { label: t("common_show"), name: `${a.label}: ${d.title}`, run: () => { if (opts.open) opts.open(a); else location.href = href; } } } : {});
   notifications.show(e, d, href);
 }
 function ingest(res) {
@@ -385,6 +338,6 @@ const notifications = {
 const SW_FLAG = { get() { try { return localStorage.getItem(FLAG) === "1"; } catch (e) { return false; } },
   set(on) { try { on ? localStorage.setItem(FLAG, "1") : localStorage.removeItem(FLAG); } catch (e) { /* none */ } } };
 
-window.SW_ALERTS = Object.freeze({ start, stop, poll, ingest, paint, openList, describe, notifications, state: () => ({
+window.SW_ALERTS = Object.freeze({ start, stop, poll, ingest, paint, openList, describe, notifications, clientId, state: () => ({
   cursor: state.cursor, events: [...state.events.values()], conditions: state.conditions.slice() }) });
 })();
