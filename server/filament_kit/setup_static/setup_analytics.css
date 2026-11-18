@@ -1,0 +1,46 @@
+/* Analytics (R84 5): insights, filament used per month as bars or a table, a table per material for one month */
+.an { display: grid; gap: var(--s3); }
+.an__main { display: grid; gap: var(--s3); }
+.an__gate:empty { display: none; }
+.an__main > .card { margin: 0; min-width: 0; }
+.an__list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.an__controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3) var(--s5); margin-bottom: var(--s3); }
+.an__controls > .field { flex: 0 1 calc(var(--s7) * 5); min-width: 0; }
+.an__by-material > .field { max-width: calc(var(--s7) * 5); margin-bottom: var(--s3); }
+.an__notes { list-style: none; margin: var(--s3) 0 0; padding: 0; display: grid; gap: var(--s1); }
+.an__notes:empty { display: none; }
+
+/* the bars: upright, 12 across; lengthwise, one under the other, when the room is narrow (a container query: the room is
+   the card's, not the window's, so Panes and the phone are read the same way) */
+.an-chartbox, .an-tablebox { container-type: inline-size; }
+.an-chart { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s2); }
+.an-bar { display: grid; grid-template-rows: auto calc(var(--s7) * 3) auto; gap: var(--s1); justify-items: center; min-width: 0; }
+.an-bar__grams, .an-bar__month { font-size: var(--fs-s); text-align: center; overflow-wrap: anywhere; }
+.an-bar__month { color: var(--muted); }
+.an-bar__plot { display: flex; align-items: flex-end; justify-content: center; width: 100%; border-bottom: var(--hairline) solid var(--border); }
+.an-bar__svg { display: block; width: 70%; height: calc(var(--level, 0) * 100%); }
+.an-bar:not([data-empty]) .an-bar__svg { min-height: var(--s1); }
+.an-bar__rect { fill: var(--accent-text); }
+@container (max-width: 800px) {
+  .an-chart { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+  .an-bar { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; grid-template-areas: "month grams" "plot plot"; gap: var(--s1) var(--s3); justify-items: stretch; }
+  .an-bar__month { grid-area: month; text-align: start; }
+  .an-bar__grams { grid-area: grams; text-align: end; }
+  .an-bar__plot { grid-area: plot; justify-content: flex-start; align-items: stretch; height: var(--s2); border-bottom: 0; border-radius: calc(var(--s1) / 2); background: var(--surface-3); overflow: hidden; }
+  .an-bar__svg { width: calc(var(--level, 0) * 100%); height: 100%; }
+  .an-bar:not([data-empty]) .an-bar__svg { min-height: 0; min-width: var(--s1); }
+}
+
+/* the tables: columns when there is room, a labelled block for each row when there is not */
+.an-table { width: 100%; border-collapse: collapse; }
+.an-table :is(th, td) { padding: var(--s2) var(--s3); text-align: start; border-bottom: var(--hairline) solid var(--border); overflow-wrap: anywhere; }
+.an-table thead th { font-size: var(--fs-s); font-weight: var(--fw-label); color: var(--muted); }
+.an-table tbody th { font-weight: var(--fw-label); }
+@container (max-width: 600px) {
+  .an-table thead { display: none; }
+  .an-table, .an-table tbody, .an-table tr { display: block; }
+  .an-table tr { padding: var(--s2) 0; border-bottom: var(--hairline) solid var(--border); }
+  .an-table :is(th, td) { display: flex; justify-content: space-between; gap: var(--s3); padding: var(--s1) 0; border-bottom: 0; text-align: end; }
+  .an-table tbody th { text-align: start; font-weight: var(--fw-title); }
+  .an-table td::before { content: attr(data-label); color: var(--muted); text-align: start; }
+}
