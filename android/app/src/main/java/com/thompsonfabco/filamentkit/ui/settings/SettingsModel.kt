@@ -7,7 +7,7 @@ import com.thompsonfabco.filamentkit.update.UpdateFailure
 import com.thompsonfabco.filamentkit.update.UpdateUi
 
 /** The groups of 05-android-app 12.1, in the order the list shows them. */
-internal enum class SettingsGroup { Appearance, Hub, Updates, Licences, Developer }
+internal enum class SettingsGroup { Appearance, Hub, Alerts, Updates, Licences, Developer }
 
 /** The paired Hub as the Hub connection group shows it (12.3). */
 internal class SettingsHub(val name: String, val address: String, val fingerprint: String, val version: String?)
@@ -24,6 +24,16 @@ internal class SettingsFacts(
     val developer: Boolean,
     /** The theme in use: the phone's choice, else the Hub's default, else Console. */
     val look: Look = Look.Console,
+    /** Alerts on this phone (R80); the default is the switch off with nothing to ask. */
+    val alerts: AlertsFacts = AlertsFacts(),
+)
+
+/** What the Alerts group shows: the phone's switch, whether the Hub has alerts at all, and the local network permission. */
+internal class AlertsFacts(
+    val on: Boolean = false,
+    /** False when the Hub answered that it has no alerts (an older Hub). */
+    val available: Boolean = true,
+    val localNetworkGranted: Boolean = true,
 )
 
 /** The groups the list shows: Developer only in a debug build. */

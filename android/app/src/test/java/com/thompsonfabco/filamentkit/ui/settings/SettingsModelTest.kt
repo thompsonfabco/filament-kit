@@ -10,7 +10,7 @@ import org.junit.Test
 class SettingsModelTest {
     @Test fun developerIsOnlyInDebugBuilds() {
         assertEquals(
-            listOf(SettingsGroup.Appearance, SettingsGroup.Hub, SettingsGroup.Updates, SettingsGroup.Licences),
+            listOf(SettingsGroup.Appearance, SettingsGroup.Hub, SettingsGroup.Alerts, SettingsGroup.Updates, SettingsGroup.Licences),
             settingsGroups(developer = false),
         )
         assertEquals(SettingsGroup.Developer, settingsGroups(developer = true).last())

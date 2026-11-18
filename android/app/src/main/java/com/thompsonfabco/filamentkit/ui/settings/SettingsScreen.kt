@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.alerts.AlertTexts
 import com.thompsonfabco.filamentkit.nav.HubState
 import com.thompsonfabco.filamentkit.ui.components.label
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -56,7 +57,7 @@ private fun SettingsList(facts: SettingsFacts, onOpen: (SettingsGroup) -> Unit, 
         settingsGroups(facts.developer).forEach { group ->
             SettingsRow(
                 icon = group.icon,
-                title = stringResource(group.title),
+                title = group.titleText(),
                 summary = summary(group, facts),
                 onClick = { onOpen(group) },
                 selected = group == selected,
@@ -71,20 +72,27 @@ internal val SettingsGroup.icon: Int
     get() = when (this) {
         SettingsGroup.Appearance -> R.drawable.sw_ic_half_circle
         SettingsGroup.Hub -> R.drawable.sw_ic_plug
+        SettingsGroup.Alerts -> R.drawable.sw_ic_warning
         SettingsGroup.Updates -> R.drawable.sw_ic_updates
         SettingsGroup.Licences -> R.drawable.sw_ic_info
         SettingsGroup.Developer -> R.drawable.sw_ic_tag
     }
 
+/** The catalogue title of a group; null for Alerts, whose text is in [AlertTexts] until the catalogue has it. */
 @get:StringRes
-internal val SettingsGroup.title: Int
+internal val SettingsGroup.title: Int?
     get() = when (this) {
         SettingsGroup.Appearance -> R.string.appearance_title
         SettingsGroup.Hub -> R.string.hub_sheet_title
+        SettingsGroup.Alerts -> null
         SettingsGroup.Updates -> R.string.settings_updates_title
         SettingsGroup.Licences -> R.string.settings_licences_title
         SettingsGroup.Developer -> R.string.settings_developer_title
     }
+
+/** The title a group shows. */
+@Composable
+internal fun SettingsGroup.titleText(): String = title?.let { stringResource(it) } ?: AlertTexts.SETTINGS_TITLE
 
 /** The live summary under a group's title. */
 @Composable
@@ -95,6 +103,7 @@ private fun summary(group: SettingsGroup, facts: SettingsFacts): String = when (
     SettingsGroup.Hub -> facts.hub?.let { hub ->
         stringResource(R.string.settings_summary_hub, hub.name, stringResource(facts.hubState.word))
     } ?: stringResource(R.string.settings_hub_none)
+    SettingsGroup.Alerts -> stringResource(if (facts.alerts.on) R.string.settings_hub_check_on else R.string.settings_hub_check_off)
     SettingsGroup.Updates -> when (val s = updatesSummary(facts.update)) {
         is UpdatesSummary.Ready -> stringResource(R.string.settings_updates_ready, s.version)
         UpdatesSummary.UpToDate -> stringResource(R.string.settings_updates_current, facts.appVersion)

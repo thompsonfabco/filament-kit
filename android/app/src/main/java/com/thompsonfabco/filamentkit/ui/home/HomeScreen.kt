@@ -49,11 +49,15 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.alerts.AlertTexts
+import com.thompsonfabco.filamentkit.alerts.BannerState
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.Connection
+import com.thompsonfabco.filamentkit.ui.alerts.AlertBannerActions
+import com.thompsonfabco.filamentkit.ui.alerts.AlertBanners
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
@@ -130,6 +134,12 @@ internal fun HomeScreen(
     localNetworkPanel: @Composable () -> Unit = {},
     /** The time the ages count from; null: the clock, read again every half minute. */
     nowMillis: Long? = null,
+    /** The alert banners (R80 section 5): at most two, then "<n> more alerts"; none by default. */
+    alertBanner: BannerState = BannerState.None,
+    alertActions: AlertBannerActions = AlertBannerActions(),
+    /** The Hub's running-low count: a line "<n> spools running low" that opens Spools with the filter on; 0 shows nothing. */
+    lowCount: Int = 0,
+    onOpenLow: () -> Unit = {},
     extra: @Composable () -> Unit = {},
 ) {
     val space = SpoolwardenTheme.space
@@ -182,6 +192,10 @@ internal fun HomeScreen(
             )
         }
         UpdateNotice(update, onInstallUpdate, onConfirmInstall)
+        AlertBanners(alertBanner, now, alertActions)
+        if (lowCount > 0) {
+            SwButton(AlertTexts.spoolsRunningLow(lowCount), onOpenLow, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_warning)
+        }
         if (SpoolwardenTheme.window == WindowClass.Phone) {
             left()
             right()
