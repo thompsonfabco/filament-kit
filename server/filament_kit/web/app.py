@@ -15,6 +15,7 @@ passphrases at /login count in its Lockout. State: `FK_STATE/web/oauth.json`; th
 """
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -23,9 +24,9 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
-from .. import __version__, config
+from .. import __version__, config, event_sink
 from ..spoolman import Spoolman
-from . import auth, mcp_tools, reader
+from . import auth, event_outbox, mcp_tools, reader
 from .intake_app import IntakeApp
 
 ALLOWED_ORIGINS = ["https://claude.ai", "https://claude.com"]
@@ -59,7 +60,7 @@ def transport_security(public: str) -> TransportSecuritySettings:
 
 def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=None, store: auth.Store | None = None,
               lockout: auth.Lockout | None = None, tools: mcp_tools.Tools | None = None, kit_api=None,
-              reader_queue=None):
+              reader_queue=None, handover: event_outbox.Handover | None = None):
     live = cfg is None
     cfg = cfg if cfg is not None else config.load()
     public = public_url(cfg)
@@ -83,9 +84,36 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
               *reader.Reader(tools, sm, lan_cidrs=lan, queue=reader_queue).routes()]
     mcp.custom_route("/health", methods=["GET"])(health)
     for r in routes:
-        mcp.custom_route(r.path, methods=sorted(r.methods - {"HEAD"} if r.methods else ["GET"]))(r.endpoint)
+        mcp.custom_route(r.path, methods=sorted(r.methods - {"HEAD"} if r.methods else ["GET"]))(
+            as_phone(r.endpoint) if r.path.startswith("/intake/api/") and "POST" in (r.methods or ()) else r.endpoint)
     app = mcp.streamable_http_app(transport_security=transport_security(public))
+    handover = handover if handover is not None else event_outbox.Handover(kit_api)
+    with_handover(app, handover)
     return auth.lan_only(with_root_path(app, urlparse(public).path.rstrip("/")), lan)
+
+
+def as_phone(endpoint):
+    """The phone web app's changes: the spool events written while `endpoint` runs are the phone's (R80 E5); the
+    connector's tools, which run outside it, are handed over without an actor and the Hub names its pairing."""
+    async def acting(request: Request):
+        with event_sink.acting(event_outbox.ACTOR_PHONE):
+            return await endpoint(request)
+    return acting
+
+
+def with_handover(app, handover: event_outbox.Handover) -> None:
+    """Start the hand-over of spool events to the Hub (the sink and its sender) with the app, stop it with it."""
+    inner = app.router.lifespan_context
+
+    @contextlib.asynccontextmanager
+    async def lifespan(a):
+        handover.start()
+        try:
+            async with inner(a) as state:
+                yield state
+        finally:
+            handover.stop()
+    app.router.lifespan_context = lifespan
 
 
 def with_root_path(app, prefix: str):
