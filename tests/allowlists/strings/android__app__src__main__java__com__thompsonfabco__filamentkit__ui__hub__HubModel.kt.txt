@@ -1,0 +1,7 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HubModel.kt | ${} $it | wire value or text of the Hub screen (EV7a); texts move to the string catalogue with EV2, proposed keys in the EV7a report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HubModel.kt | builtin | wire value or text of the Hub screen (EV7a); texts move to the string catalogue with EV2, proposed keys in the EV7a report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HubModel.kt | pc | wire value or text of the Hub screen (EV7a); texts move to the string catalogue with EV2, proposed keys in the EV7a report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HubModel.kt | phone | wire value or text of the Hub screen (EV7a); texts move to the string catalogue with EV2, proposed keys in the EV7a report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HubModel.kt | reader | wire value or text of the Hub screen (EV7a); texts move to the string catalogue with EV2, proposed keys in the EV7a report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HubModel.kt | station | wire value or text of the Hub screen (EV7a); texts move to the string catalogue with EV2, proposed keys in the EV7a report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HubModel.kt | web | wire value or text of the Hub screen (EV7a); texts move to the string catalogue with EV2, proposed keys in the EV7a report
