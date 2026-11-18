@@ -2296,8 +2296,9 @@ station's hello call, the found Bambu Lab printers and the remote reader's HTTPS
   At every start it tells the Hub `fp`, `port` and `version` on `GET /api/station/hello`, over the connection it already
   has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain
   HTTP. A station that has not been updated sends no fingerprint and is called over plain HTTP as before; so is a
-  station that cannot make its certificate, which serves plain HTTP as before and logs why; the Checks show a row for
-  either. The Hub never goes back to plain HTTP for a station whose certificate it has pinned: for such a station a
+  station that cannot make its certificate, which serves plain HTTP as before, logs why and says so in its start call;
+  the Checks show a row for each case ("The Weigh Station at <address> is not using HTTPS." and "... is not using
+  HTTPS: it could not make its certificate (<reason>)."). The Hub never goes back to plain HTTP for a station whose certificate it has pinned: for such a station a
   missing or changed certificate is an error row, never a reason to downgrade. The printer-side tag service is pinned
   the first time the Hub reads its address (trust on first use). A Label Reader on another machine is the exception
   until its own software can serve HTTPS: an `http://` address of it is accepted and used as today, an `https://`
@@ -2604,7 +2605,7 @@ existing shape.
 | `PATCH /api/spools/{id}` (changed) | one kind of change per call: `gross`, `remaining`, `location`, `empty`, or new `{"auto_location": true, "dry_run": ...}` | as today; for `auto_location` the Hub moves the spool where its placement rule puts it |
 | `POST /api/printers/{id}/slots/{label}/unload` (changed) | as today | as today plus `waiting_ended: bool` |
 | `POST /api/printers/{id}/slots/{label}/load` (unchanged) | | already answers `pending: true` for a waiting load; clients must read it |
-| `GET /api/printers`, `GET /api/printers/{id}` (changed) | - | the printer gains `auto_possible: bool`; each slot gains `watchable: bool`; `GET /api/printers/{id}` also gains `auto: {spool_id, spool: {id, name, material, color_hex}, state: "waiting"\|"choose", slots?: [<labels to choose from>], text, expires_at}?` |
+| `GET /api/printers`, `GET /api/printers/{id}` (changed) | - | the printer gains `auto_possible: bool`; each slot gains `watchable: bool`; a printer that has an Auto assignment also gains `auto: {spool_id, spool: {id, name, material, color_hex}, state: "waiting"\|"choose", slots?: [<labels to choose from>], text, expires_at}?`, in every answer and stream that carries the printer's state, the web app's live stream included |
 | `POST /api/printers/{id}/slots/auto/load` (new) | `{spool_id, dry_run}` (default true) | dry run: `{auto: true, watching: [<labels>], replaces?: {spool_id, name}, dry_run: true}`; real: `{auto: true, pending: true, confirmed: null, expires_in: 900, message}`; 409 `{error: "auto_not_possible", text}` |
 | `POST /api/printers/{id}/auto/choose` (new) | `{slot: <label>}` | the answer of a named load into that slot; 409 `{error: "nothing_to_choose", text}` |
 | `POST /api/printers/{id}/auto/cancel` (new) | - | `{cancelled: true}`; 409 `{error: "not_waiting", text}` |
@@ -3516,7 +3517,8 @@ Server builder · Depends on: none · Beside: every other RC step except for its
   `tools/make_release.sh` (packs as release files), tests. Registry file: the string catalogue, after HD2 is merged; it
   changes the file's form, so every other holder must be merged first.
 - **Change:** the catalogue as XML and the generator (also Android's resources per language); packs: template, check,
-  download, install; `key` and `params`; the routes of the contracts above for languages.
+  download, install; `key` and `params`; the routes of the contracts above for languages. The form of 08 section 12 is
+  not final: this step does not fix it, and it is confirmed before the first language pack is made.
 - **Other interfaces:** every other step builds against these routes with stubs.
 - **Check:** prove first (item 3 of the list below).
 
