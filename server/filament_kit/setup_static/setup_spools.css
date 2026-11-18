@@ -1,0 +1,34 @@
+/* Spools (R83 section 1; 03 section 5a) */
+/* the header: the count, and the way to Spoolman's own page */
+.spools-head { justify-content: space-between; margin: 0 0 var(--s3); }
+.spools-count { font-weight: var(--fw-label); color: var(--text); }
+/* the search field and the four chips */
+.spools-toolbar { align-items: flex-end; }
+.spools-toolbar > .field { flex: 1 1 calc(var(--s7) * 5); min-width: 0; }
+.spools-chips { display: flex; flex-wrap: wrap; gap: var(--s2); padding-bottom: var(--s1); }
+.spools-chip[aria-pressed="true"] { border-color: var(--accent-text); background: var(--accent-soft); color: var(--accent-text); }
+/* the collection: Expand, Colour, Number, Spool, Material, Left, Where, State; the tablet drops Where into the expansion */
+.coll--spools { grid-template-columns: auto auto max-content minmax(0, 2fr) minmax(0, 1fr) minmax(calc(var(--s7) * 2), max-content) minmax(0, 1.4fr) minmax(0, 1.4fr); }
+.coll--spools .coll__cell[data-col="state"] { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); }
+.coll--spools .coll__cell[data-col="state"] > .coll__sub { flex: 1 1 100%; }
+/* Panes lists the rows in a narrow pane: the state keeps a block of its own and wraps to the next line instead of squeezing */
+:root[data-look="panes"] .coll--spools .coll__cell[data-col="state"] { min-width: calc(var(--s7) * 3); }
+.spools-expand__label { display: none; }
+.spools-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); margin-top: var(--s3); }
+.spools-shown { margin: 0; }
+/* the detail: the facts, then a panel for each change with its result under it */
+.spools-act { display: grid; gap: var(--s2); }
+.spools-act__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s2) var(--s3); }
+.spools-act__row > .field { flex: 1 1 calc(var(--s7) * 3); min-width: 0; }
+.detail .spools-act .btn { white-space: normal; text-align: left; }
+@media (max-width: 1024px) {
+  .coll--spools { grid-template-columns: auto auto max-content minmax(0, 2fr) minmax(0, 1fr) minmax(calc(var(--s7) * 2), max-content) minmax(0, 1.4fr); }
+}
+@media (max-width: 600px) {
+  .spools-expand__label { display: inline; margin-left: var(--s1); }
+  .coll--spools .coll__item .coll__cell[data-col="expand"] { order: 1; width: 100%; }
+  .coll--spools .coll__expand { width: auto; padding: 0 var(--s3); }
+  .spools-head > .btn { margin-left: auto; }
+  .spools-chips { width: 100%; }
+  .spools-act__row > .btn { flex: 1 1 100%; }
+}
