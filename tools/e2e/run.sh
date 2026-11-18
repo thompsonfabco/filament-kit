@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end run of filament-kit on a disposable Ubuntu 24.04+ host, made for WSL Ubuntu (docs/testing-e2e.md):
 #
-#   wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh [--only a,d,c,b,e,f,g,h] [--results FILE]
+#   wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh [--only a,d,c,b,e,f,g,h,i] [--results FILE]
 #                                                                 [--keep-work] [--previous vX.Y.Z]
 #                                                                 [--storage-previous vX.Y.Z[,vX.Y.Z]]
 #
@@ -13,7 +13,8 @@
 # checkout; the same fixed spool list must go to the same places (FK_E2E_GIT_DIR names the .git to read tags from
 # when this checkout is a git worktree).
 # Needs: root, internet (apt, PyPI, the Spoolman release on GitHub), python3 with python3-cryptography, a host
-# with no filament-kit on it (it refuses otherwise) and ports 7912, 8101, 8710, 8883 free.
+# with no filament-kit on it (it refuses otherwise) and ports 443, 7912, 8101, 8710, 8883 free. The run holds
+# 443 itself (another web server) so every Hub installs on 8710; scenario i lets it go to see the installer take 443.
 #
 # Afterwards the host is put back as it was: the kit is uninstalled with --purge, the station's system changes
 # are undone (sleep targets unmasked, ALSA state restored), packages the run installed are purged, and the work
@@ -35,7 +36,7 @@ while [ $# -gt 0 ]; do
         --keep-work) KEEP_WORK=1; shift ;;
         --previous) PREVIOUS=(--previous "$2"); shift 2 ;;
         --storage-previous) STORAGE_PREVIOUS=(--storage-previous "$2"); shift 2 ;;
-        *) echo "usage: sudo bash tools/e2e/run.sh [--only a,d,c,b,e,f,g,h] [--results FILE] [--keep-work] [--previous vX.Y.Z] [--storage-previous vX.Y.Z,...]" >&2; exit 2 ;;
+        *) echo "usage: sudo bash tools/e2e/run.sh [--only a,d,c,b,e,f,g,h,i] [--results FILE] [--keep-work] [--previous vX.Y.Z] [--storage-previous vX.Y.Z,...]" >&2; exit 2 ;;
     esac
 done
 
@@ -50,7 +51,7 @@ for p in /etc/filament-kit /opt/filament-kit /var/lib/filament-kit /var/lib/spoo
          /usr/local/bin/filament-kit /usr/local/bin/spoolwarden; do
     [ ! -e "$p" ] || die "$p exists: this host already has filament-kit (data) on it; the e2e run needs a clean host"
 done
-for port in 7912 8101 8710 8883; do
+for port in 443 7912 8101 8710 8883; do
     if ss -Hltn "sport = :$port" | grep -q .; then die "port $port is in use"; fi
 done
 

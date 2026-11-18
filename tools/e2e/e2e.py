@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The end-to-end scenarios of tools/e2e/run.sh (docs/testing-e2e.md). Run by run.sh as root; not on its own.
 
-  python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e,f,g,h] [--previous vX.Y.Z] [--storage-previous vX.Y.Z,...]
+  python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e,f,g,h,i] [--previous vX.Y.Z] [--storage-previous vX.Y.Z,...]
 
 Builds two signed releases of this checkout with a throwaway ed25519 key, serves them from a fake GitHub releases
 API (`python3 -m http.server` on 127.0.0.1) and drives the real install, the reader API, the manual add and the
@@ -355,6 +355,36 @@ class Releases:
 
 # ---------------------------------------------------------------- scenarios
 
+def parse_proc_status(text: str) -> dict[str, int]:
+    """The capability sets and NoNewPrivs of a process, from /proc/<pid>/status: {"CapEff": 0x400, "NoNewPrivs": 1}."""
+    out: dict[str, int] = {}
+    for line in text.splitlines():
+        m = re.match(r"(Cap(?:Inh|Prm|Eff|Bnd|Amb)):\s*([0-9a-fA-F]+)\s*$", line)
+        if m:
+            out[m.group(1)] = int(m.group(2), 16)
+        m = re.match(r"(NoNewPrivs):\s*(\d+)\s*$", line)
+        if m:
+            out[m.group(1)] = int(m.group(2))
+    return out
+
+
+CAP_NET_BIND_SERVICE_BIT = 1 << 10
+
+
+def ss_listening(port: int) -> bool:
+    r = subprocess.run(["ss", "-Hltn", f"sport = :{port}"], capture_output=True, text=True)
+    return bool(r.stdout.strip())
+
+
+def hub_caps() -> dict[str, int]:
+    """The capability sets of the running Hub unit's main process ({} when it has none)."""
+    pid = subprocess.run(["systemctl", "show", "-p", "MainPID", "--value", "filament-kit.service"],
+                         capture_output=True, text=True).stdout.strip()
+    if not pid.isdigit() or pid == "0":
+        return {}
+    return parse_proc_status(Path(f"/proc/{pid}/status").read_text())
+
+
 def nothing_installed() -> list[str]:
     return [str(p) for p in (OPT, ETC, STATE, Path("/usr/local/bin/spoolwarden"), Path("/usr/local/bin/filament-kit")) if p.exists()]
 
@@ -413,6 +443,22 @@ class E2E:
         # own (main still says 0.5.2 after v0.5.2 is tagged), so the version alone cannot tell the known state: after f
         # the next scenario always reinstalls it (and forgets the pairing, the spool and the printer of the old one).
         self.foreign_install = False
+        # Another web server on this machine, holding 443 the whole run: a first install then takes 8710, which is where
+        # every scenario but i looks for the Hub (KIT). Scenario i lets go of it to see the installer take 443.
+        self._port443: socket.socket | None = None
+
+    def hold443(self) -> None:
+        if self._port443 is None:
+            s = socket.socket()
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("0.0.0.0", 443))
+            s.listen()
+            self._port443 = s
+
+    def release443(self) -> None:
+        if self._port443 is not None:
+            self._port443.close()
+            self._port443 = None
 
     # ---- a) fake release server and get.sh
     def a_install(self, sc="a") -> None:
@@ -1314,6 +1360,79 @@ class E2E:
             run.check(sc, "after the restore: the printer is back in the kit", code_ == 200 and
                       SERIAL in [p.get("id") for p in plist.get("printers", [])], str(plist)[:400])
 
+    # ---- i) the installer's port (R82 section 1): 443 when free, 8710 when taken
+    def i_install_port(self, sc="i") -> None:
+        rel, run = self.rel, self.run
+        self._v1_on_server()
+        args = ["--repo", OWNER_REPO, "--version", self.v1, "--modules", "spoolman,server,printers"]
+        dropin = Path("/etc/systemd/system/filament-kit.service.d/port.conf")
+        self.release443()
+        try:
+            self._i_scenario(sc, args, dropin)
+        finally:
+            self.hold443()
+
+    def _i_scenario(self, sc: str, args: list[str], dropin: Path) -> None:
+        rel, run = self.rel, self.run
+
+        # 1. a fresh install, 443 free: the Hub takes 443, with the capability drop-in
+        r = rel.get_sh(args, "port-free-install")
+        run.check(sc, "443 free: get.sh installs the Hub with no question", r.returncode == 0,
+                  r.stdout[-1500:] + r.stderr[-800:])
+        if r.returncode:
+            raise Fail("install failed; see the log")
+        self.installed = True
+        cfg = read_cfg()
+        run.check(sc, "443 free: config.json holds port 443", cfg.get("port") == 443, str(cfg.get("port")))
+        run.check(sc, "443 free: the unit's capability drop-in is written",
+                  dropin.is_file() and "AmbientCapabilities=CAP_NET_BIND_SERVICE" in dropin.read_text(), str(dropin))
+        code, info = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(jhttp("GET", "https://127.0.0.1:443/api/info")),
+                              90, 2, "the kit API on 443") or (0, None)
+        run.check(sc, "443 free: the Hub answers on https://127.0.0.1:443", code == 200, str(info))
+        caps = hub_caps()
+        run.check(sc, "443 free: the Hub has only CAP_NET_BIND_SERVICE and NoNewPrivileges",
+                  caps.get("CapEff") == caps.get("CapBnd") == caps.get("CapAmb") == CAP_NET_BIND_SERVICE_BIT
+                  and caps.get("NoNewPrivs") == 1, str(caps))
+        fr = STATE / "firstrun.xml"
+        run.check(sc, "443 free: firstrun.xml is in the state folder, owned by the Hub's user, panel not hidden",
+                  fr.is_file() and 'hidden="false"' in fr.read_text() and _user_name(fr.stat().st_uid) == "filament-kit",
+                  fr.read_text() if fr.is_file() else "missing")
+        advert = Path("/etc/avahi/services/filament-kit.service")
+        run.check(sc, "443 free: the network advert carries port 443",
+                  advert.is_file() and "<port>443</port>" in advert.read_text(), str(advert))
+        code, _ = http("GET", "https://127.0.0.1:443/setup")
+        run.check(sc, "443 free: the setup page is served on 443", code == 200, str(code))
+
+        # 2. a fresh install with 443 taken: 8710, no drop-in, and the line that says so
+        uninstall(run, rel, "port-free-uninstall")
+        run.check(sc, "443 free: the uninstall leaves nothing", not nothing_installed(), ", ".join(nothing_installed()))
+        self.hold443()                               # another web server on this machine
+        r = rel.get_sh(args, "port-taken-install")
+        run.check(sc, "443 taken: get.sh installs the Hub with no question", r.returncode == 0,
+                  r.stdout[-1500:] + r.stderr[-800:])
+        if r.returncode:
+            raise Fail("install failed; see the log")
+        out = r.stdout + r.stderr
+        run.check(sc, "443 taken: the installer says the Hub uses 8710",
+                  "Port 443 is in use on this machine, so the Hub uses port 8710." in out, out[-800:])
+        cfg = read_cfg()
+        run.check(sc, "443 taken: config.json holds port 8710", cfg.get("port") == 8710, str(cfg.get("port")))
+        run.check(sc, "443 taken: no capability drop-in", not dropin.exists(), str(dropin))
+        code, info = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(jhttp("GET", f"{KIT}/api/info")),
+                              90, 2, "the kit API on 8710") or (0, None)
+        run.check(sc, "443 taken: the Hub answers on 8710", code == 200, str(info))
+        caps = hub_caps()
+        run.check(sc, "443 taken: the Hub keeps empty capability sets and NoNewPrivileges",
+                  caps.get("CapEff") == caps.get("CapBnd") == caps.get("CapAmb") == 0
+                  and caps.get("NoNewPrivs") == 1, str(caps))
+        run.check(sc, "443 taken: the other listener still holds 443", ss_listening(443), "443 is not listening")
+        self.release443()
+
+        # 3. an apply does not move an existing Hub: the port stays 8710 although 443 is free now
+        r = run.sh(["/usr/local/bin/spoolwarden", "modules", "apply"], name="port-reapply", timeout=1800)
+        run.check(sc, "an apply with 443 free does not move an existing Hub",
+                  r.returncode == 0 and read_cfg().get("port") == 8710, r.stdout[-800:] + r.stderr[-400:])
+
 CT_PRINTER_SERIAL, CT_PRINTER_NAME, CT_PRINTER_IP = "E2E00000000099", "E2E Example Printer", "192.0.2.77"
 CT_HISTORY_KEEP = 7                       # a non-default General setting (the default is 20)
 
@@ -1324,7 +1443,7 @@ SEED_ITEM = {"vendor": "E2E Test Co", "name": "E2E PLA Red", "material": "PLA", 
 # The state each scenario starts from (E2E.prepare): "clean" no kit; "release" v1 on the fake release server;
 # "server" this checkout's v1 installed by get.sh with spoolman,server,printers,web; "seeded" that plus the
 # e2e pairing and the spool with its tag (what d leaves); None: the scenario sets itself up (f).
-NEEDS = {"a": "clean", "d": "server", "c": "seeded", "b": "server", "e": "release", "f": None, "g": "seeded", "h": None}
+NEEDS = {"a": "clean", "d": "server", "c": "seeded", "b": "server", "e": "release", "f": None, "g": "seeded", "h": None, "i": "clean"}
 
 SCENARIOS = {
     "a": ("a) fake release server: get.sh install, tampered tarball, bad signature", "a_install"),
@@ -1335,6 +1454,7 @@ SCENARIOS = {
     "f": ("f) the last released tag: real update from it, real rollback to it", "f_cross_tag"),
     "g": ("g) backup zip, wipe, fresh install, restore: the same kit comes back", "g_backup_restore"),
     "h": ("h) storage locations: the old release's settings, upgraded to this checkout", "h_storage"),
+    "i": ("i) the installer's port: 443 when free with the capability drop-in, 8710 when taken", "i_install_port"),
 }
 
 
@@ -1353,6 +1473,7 @@ def main() -> int:
     run = Run(Path(args.work))
     rel = Releases(run)
     e2e = E2E(run, rel, args.previous, storage_tags)
+    e2e.hold443()
     want = [s for s in args.only.split(",") if s]
     if args.previous and "f" not in want:
         want.append("f")
@@ -1366,7 +1487,7 @@ def main() -> int:
         for key in want:
             title, meth = SCENARIOS[key]
             print(f"\n==> {title}", flush=True)
-            if key not in ("a", "f", "h") and "a" in want and not e2e.installed:     # f and h install their own
+            if key not in ("a", "f", "h", "i") and "a" in want and not e2e.installed:     # f and h install their own
                 status[key] = "skip: the install (a) failed"
                 print(f"  SKIP {status[key]}")
                 continue
@@ -1385,6 +1506,7 @@ def main() -> int:
     finally:
         if e2e.printer is not None:
             e2e.printer.close()
+        e2e.release443()
         rel.stop()
         (run.work / "results.json").write_text(json.dumps({"scenarios": status, "checks": run.results}, indent=2),
                                                encoding="utf-8")
