@@ -1,0 +1,20 @@
+/* Spoolwarden shared alerts (DECISIONS R80 section 5): the banner host at the top of the main area and the Alerts list, loaded
+after components.css by every interface that shows alerts. The banner, the toast and the dialog are components.css's own. */
+.alert-host{margin-bottom:var(--s4)}
+.alert-host:empty{display:none}
+.alert__time{white-space:nowrap}
+.alert-more{margin-top:var(--s2)}
+.alert-list{display:grid;gap:var(--s4);min-width:0}
+.alert-list__heading{font-size:var(--fs-m);font-weight:var(--fw-title)}
+.alert-list__items{display:grid;gap:var(--s2);margin:0;padding:0;list-style:none}
+.alert-list__empty{color:var(--muted)}
+.alert-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:var(--s2) var(--s3);padding:var(--s3);border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface-2)}
+.alert-row>.icon{flex:none}
+.alert-row--bad>.icon{color:var(--bad)}
+.alert-row--warn>.icon{color:var(--warn)}
+.alert-row--ok>.icon{color:var(--ok)}
+.alert-row--info>.icon{color:var(--info)}
+.alert-row__body{display:grid;flex:1 1 calc(var(--s7) * 4);gap:var(--s1);min-width:0;overflow-wrap:anywhere}
+.alert-row__text{min-width:0}
+.alert-row__time{color:var(--muted);font-size:var(--fs-s)}
+.alert-row__title{font-weight:var(--fw-title)}

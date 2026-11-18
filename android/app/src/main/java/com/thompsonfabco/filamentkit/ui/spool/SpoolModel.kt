@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.StorageAnswer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -24,6 +25,9 @@ interface SpoolBackend {
     suspend fun update(spoolId: Int, gross: Double?, location: String?, empty: Boolean, dryRun: Boolean): JsonObject
     suspend fun locations(): List<String>
 
+    /** The locations with how full each is (`GET api/storage`); the default is the names alone, so older fakes compile. */
+    suspend fun storage(): StorageAnswer = StorageAnswer.ofNames(locations())
+
     companion object {
         /** Calls go to whatever [current] returns at that moment, so a re-pair or a trusted certificate reaches the screen. */
         fun of(current: () -> Api): SpoolBackend = object : SpoolBackend {
@@ -37,6 +41,7 @@ interface SpoolBackend {
                 current().update(spoolId, gross, null, location, empty, dryRun)
 
             override suspend fun locations() = current().locations()
+            override suspend fun storage() = current().locationList()
         }
     }
 }

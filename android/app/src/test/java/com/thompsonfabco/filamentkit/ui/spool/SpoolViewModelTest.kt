@@ -184,6 +184,17 @@ class SpoolViewModelTest {
 
     // ---- Move ----
 
+    @Test fun theMoveSheetCarriesHowFullEachLocationIs() = runTest(dispatcher) {
+        backend.storageAnswer = com.thompsonfabco.filamentkit.net.StorageWire.parse(
+            kotlinx.serialization.json.Json.parseToJsonElement("""{"locations":[{"name":"Rack 1","limit":20,"used":18}]}"""),
+        )
+        val vm = vm()
+        vm.openMove()
+        advanceUntilIdle()
+        assertEquals(listOf("Rack 1"), vm.state.value.move!!.locations)
+        assertEquals(18, vm.state.value.move!!.storage!!.locations.single().used)
+    }
+
     @Test fun movingToAnotherLocationSavesAtOnceAndOffersUndo() = runTest(dispatcher) {
         backend.updateAnswer = { _, location, _, _ -> spoolJson(214, location = location) }
         val vm = vm()

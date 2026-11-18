@@ -649,7 +649,7 @@ def test_density_lookup_matches_by_prefix():
     fn = re.search(r"^function densityFor\(.*?^}$", src, re.M | re.S).group(0)
     probe = ["PLA", "pla+", "PLA Silk", "PETG-CF", "PA6-GF", "ASA", "Wood", "", " petg ", "PCTG", "pctg-cf", "PC"]
     js = f"{table}\n{fn}\nconsole.log(JSON.stringify({json.dumps(probe)}.map(densityFor)));"
-    out = subprocess.run([_node(), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
+    out = subprocess.run([_node(), "-e", js], capture_output=True, encoding="utf-8", timeout=30, check=True).stdout
     assert json.loads(out) == [1.24, 1.24, 1.24, 1.27, 1.14, 1.07, None, None, 1.27, 1.23, 1.23, 1.2]
 
 
@@ -985,7 +985,7 @@ def test_spools_keeps_every_action_of_today_and_the_requests():
                  'body = { spool: id, gross: num(weight), location: loc._control.value, humidity: num(hum), ...tap, dry_run: true };',
                  'body = { ...shot.body, dry_run: false };', 'api("open", { body })',      # Link sends what was previewed
                  "add_summary_error_preview", "add_summary_preview_ok", "spool_sheet_opened_toast", "spool_sheet_link",
-                 "[...new Set([...PICKS, ...LOCATIONS])]"):                        # Last tag, search, Preview (Check) and Link tag and open
+                 "const entries = placeEntries()", "PICKS.filter("):   # the place suggestions: the list with how full each is, and the extra picks                        # Last tag, search, Preview (Check) and Link tag and open
         assert call in src, call
     for call in ("api(`spools/${id}`)", "{ body: { gross: value, dry_run: dry } }", "value = wShot.value;", "{ body: { location: l, dry_run: false } }",
                  "{ body: { empty: true, dry_run: false } }"):                      # the S3.9 routes: weight, move, mark empty

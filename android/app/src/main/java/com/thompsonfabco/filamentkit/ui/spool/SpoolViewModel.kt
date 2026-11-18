@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.spool
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.net.StorageAnswer
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -47,6 +48,8 @@ data class WeightUi(
 /** The Move sheet (05 7.4): [locations] null while they load; [movingTo] is the row being saved, [lastTry] the one that failed. */
 data class MoveUi(
     val locations: List<String>? = null,
+    /** The same locations with how full each is; names only from an older Hub. */
+    val storage: StorageAnswer? = null,
     val movingTo: String? = null,
     val failure: HubFailure? = null,
     val lastTry: String? = null,
@@ -253,8 +256,9 @@ class SpoolViewModel(
 
     private fun loadLocations() {
         run(onFailure = { f -> _state.update { it.copy(move = it.move?.copy(failure = f)) } }) {
-            val all = backend.locations()
-            _state.update { it.copy(move = it.move?.copy(locations = all, failure = null), failure = it.failure.afterSuccess()) }
+            val found = backend.storage()
+            val all = found.names
+            _state.update { it.copy(move = it.move?.copy(locations = all, storage = found, failure = null), failure = it.failure.afterSuccess()) }
         }
     }
 

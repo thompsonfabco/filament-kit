@@ -19,9 +19,12 @@ import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.net.Proposal
 import com.thompsonfabco.filamentkit.net.ReadResult
+import com.thompsonfabco.filamentkit.net.StorageAnswer
 import com.thompsonfabco.filamentkit.net.VendorChoice
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.ui.isValidWeight
+import com.thompsonfabco.filamentkit.ui.storage.Place
+import com.thompsonfabco.filamentkit.ui.storage.autoPlacesOf
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -63,6 +66,9 @@ interface IntakeApi {
     suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String?): AddResult
     suspend fun locations(): List<String>
 
+    /** The locations with how full each is (`GET api/storage`); the default is the names alone, so older fakes compile. */
+    suspend fun storage(): StorageAnswer = StorageAnswer.ofNames(locations())
+
     /** The line and Bambu parent the server would use; the defaults keep older fakes compiling (no proposal). */
     suspend fun propose(vendor: String, line: String, material: String): Proposal =
         throw ApiError(0, "not_supported", "No proposals")
@@ -86,6 +92,7 @@ interface IntakeApi {
             override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String?) =
                 api().add(items, dryRun, tag, readId)
             override suspend fun locations() = api().locations()
+            override suspend fun storage() = api().locationList()
             override suspend fun propose(vendor: String, line: String, material: String) = api().propose(vendor, line, material)
             override suspend fun parents(material: String) = api().parents(material)
             override suspend fun filaments(q: String) = api().filaments(q)
@@ -99,6 +106,7 @@ interface IntakeApi {
             override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?, readId: String?) =
                 api.add(items, dryRun, tag, readId)
             override suspend fun locations() = api.locations()
+            override suspend fun storage() = api.locationList()
             override suspend fun propose(vendor: String, line: String, material: String) = api.propose(vendor, line, material)
             override suspend fun parents(material: String) = api.parents(material)
             override suspend fun filaments(q: String) = api.filaments(q)
@@ -181,6 +189,10 @@ data class AddUiState(
     val spoolIds: List<Int> = emptyList(),
     val resultLines: List<String> = emptyList(),
     val locations: List<String> = emptyList(),
+    /** The locations with how full each is; names only from an older Hub. */
+    val storage: StorageAnswer = StorageAnswer(),
+    /** Per item index: where "Automatic" put the spools in the last preview, and why; dropped by any edit. */
+    val autoPlaces: Map<Int, List<Place>> = emptyMap(),
     val error: AddError? = null,
     /** Bumped when items or fields are replaced wholesale (read, restore, remove), so screens reset their text. */
     val generation: Int = 0,
@@ -302,8 +314,8 @@ class AddViewModel(
         scope.launch { taps.collect { setTag(it) } }
         scope.launch {
             try {
-                val names = api.locations()
-                _state.update { it.copy(locations = names) }
+                val found = api.storage()
+                _state.update { it.copy(locations = found.names, storage = found) }
                 hubOk()
             } catch (e: CancellationException) {
                 throw e
@@ -763,7 +775,10 @@ class AddViewModel(
      */
     private fun AddUiState.invalidated() =
         (if (stage == Stage.Preview) copy(stage = Stage.Review, previewLines = emptyList(), previewItems = emptyList()) else this)
-            .copy(error = null, parentError = null, fieldErrors = emptyMap(), previewFailed = false, problems = emptyList())
+            .copy(
+            error = null, parentError = null, fieldErrors = emptyMap(), previewFailed = false, problems = emptyList(),
+            autoPlaces = emptyMap(),
+        )
 
     /** "Preview": the Hub's check (`dry_run`) runs on entry to the Preview step. */
     fun preview() {
@@ -850,8 +865,12 @@ class AddViewModel(
                 val res = api.add(JsonArray(s.items.map(::forAdd)), dryRun, s.tag, readId)
                 hubOk()
                 if (dryRun) {
+                    val hubItems = res.items.mapNotNull { x -> x as? JsonObject }
                     _state.update {
-                        it.copy(stage = Stage.Preview, previewLines = res.lines, previewItems = res.items.mapNotNull { x -> x as? JsonObject })
+                        it.copy(
+                            stage = Stage.Preview, previewLines = res.lines, previewItems = hubItems,
+                            autoPlaces = autoPlacesOf(it.items, hubItems),
+                        )
                     }
                 } else {
                     val id = draft?.id
@@ -951,10 +970,10 @@ class AddViewModel(
         _state.update {
             if (it.manual) {
                 AddUiState(
-                    stage = Stage.Review, manual = true, locations = it.locations, vendors = it.vendors,
+                    stage = Stage.Review, manual = true, locations = it.locations, storage = it.storage, vendors = it.vendors,
                     filamentQuery = it.filamentQuery, generation = it.generation + 1,
                 )
-            } else AddUiState(locations = it.locations, generation = it.generation + 1)
+            } else AddUiState(locations = it.locations, storage = it.storage, generation = it.generation + 1)
         }
         if (manual) findFilaments(_state.value.filamentQuery) // spool counts changed
     }

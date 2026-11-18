@@ -94,7 +94,7 @@ async function main() {
     await send("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width <= 600 });
     const load = async (hash) => {
       await send("Page.navigate", { url: base + hash });
-      for (let i = 0; i < 100 && (await evaluate("document.readyState")) !== "complete"; i++) await sleep(50);
+      for (let i = 0; i < 600 && (await evaluate("document.readyState")) !== "complete"; i++) await sleep(50);
     };
     // what the page does with its address: every popstate and hashchange, in order
     const watch = `window.__ev = []; for (const k of ["popstate", "hashchange"]) addEventListener(k, () => __ev.push(k + ":" + location.hash)); 1`;
@@ -111,7 +111,7 @@ async function main() {
       const serial = await evaluate(`new Promise((r) => { const l = setInterval(() => { const a = document.querySelector(".pcard__name"); if (a) { clearInterval(l); r(decodeURIComponent(a.getAttribute("href").split("/")[1] || "")); } }, 50); })`);
       facts.serial = serial;
       await evaluate(`localStorage.setItem("spoolwarden.printer", ${JSON.stringify(serial)})`);
-      if (width > 600) { await send("Page.reload"); await sleep(300); for (let i = 0; i < 100 && (await evaluate("document.readyState")) !== "complete"; i++) await sleep(50); }
+      if (width > 600) { await send("Page.reload"); await sleep(300); for (let i = 0; i < 600 && (await evaluate("document.readyState")) !== "complete"; i++) await sleep(50); }
       else await load("#printers/" + serial);
     }
     await until(`!!document.querySelector(".pcard")`);

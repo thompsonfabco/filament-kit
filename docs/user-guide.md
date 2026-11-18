@@ -312,7 +312,7 @@ This has not been tried on a Linux machine with the slicers running.
 The Hub has a web page for setup at `https://<computer name>.local:8710/setup`, on the home network only.
 It does what the Terminal's `config` menu, `pair` and the key commands do: the Anthropic key, printers and their
 Access Codes, the web passphrase and Catalog token, pairing a phone, Slicer Sync or a Weigh Station, Tag Reader
-tokens, and switching Features on or off. How to find the code, what it asks for, the lock-out after wrong codes
+tokens, the storage locations, and switching Features on or off. How to find the code, what it asks for, the lock-out after wrong codes
 and the full list: [Install the Hub, The Hub page](install-server.md#the-setup-page-v040).
 
 `sudo spoolwarden setup-code` shows the page's address and its 8-digit setup code (at a Terminal);
@@ -385,8 +385,15 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `features units` | The service files the features need, one per line | (none) |
 | `config [--numbered]` | The settings menu | Settings |
 | `config show` | All settings, in menu order | Settings |
-| `config set <key> <value>` | Change one setting | Settings, one field |
+| `config set <key> <value>` | Change one setting (not the storage locations: they are a list, see `locations`) | Settings, one field |
 | `config theme [<theme>]` | Show or set the theme for new devices | Settings > Appearance > Theme for new devices |
+| `locations` (same as `locations list`) | The storage locations in fill order | Settings > Storage locations |
+| `locations add <name> [--type bulk\|containers] [--limit N] [--count N] [--takes any\|none\|MATERIALS] [--overflow]` | Add a location | Add a location |
+| `locations edit <name> [--name NEW] [same options as add] [--no-overflow]` | Change a location; a new name also renames it on its spools; `--no-overflow` switches overflow off | Edit |
+| `locations move <name> (--first \| --last \| --before <other>)` | Change the fill order | Move up, Move down |
+| `locations remove <name>` | Remove a location (asks) | Remove |
+| `locations default-overflow <name>` | Make it the default overflow (a Bulk storage location that is not overflow becomes overflow as well) | Make default overflow |
+| `locations sealed <name>` | Sealed spools go here | Sealed spools go here |
 | `label-reader status` | Label Reader engines and their health | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
 | `catalog status` | Filament Catalog version and last check | Settings > Filament Catalog |
@@ -436,6 +443,132 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
 `http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type
 `hostname` in a Terminal to see it). The installer prints this address at the end.
+
+## Storage locations
+
+A **location** is a place where spools are kept: a shelf, a rack, a drawer, a row of boxes. Spoolwarden keeps one
+ordered list of them. When you add a spool and do not say where it goes, the Hub walks that list and puts the spool in
+the first place that suits it and has room. The name of the place is saved as the spool's location in Spoolman.
+
+Each location has:
+
+- **Name.** Up to 100 characters; no two locations share a name (capitals are ignored).
+- **Type.** **Bulk storage** is a shelf, rack or drawer that holds many spools, for example `Rack 1`. Its **Spool
+  limit** is the most spools it takes; leave it empty for no limit. **Individual containers** are boxes or bags that
+  hold one spool each, for example `Dry box`: you give the **Number of containers** (1 to 999) and the Hub names them
+  `Dry box 01`, `Dry box 02`, and so on. A container with a spool in it is taken; the next spool goes to the lowest
+  free one.
+- **Filled automatically with.** **Nothing, only when you choose it**, **Any material**, or **These materials**
+  (separated by commas, for example `PLA, PETG`). A material also takes its variants: PLA takes PLA+ and PLA-CF.
+- **Use as overflow.** The location takes spools when their own places are full. Exactly one overflow location is the
+  **Default overflow**.
+- **Sealed spools go here.** Exactly one Bulk storage location takes the spools that are still sealed.
+
+A fresh install starts with four Bulk storage locations: **Sealed stock** (takes the sealed spools), **Rack 1** (takes
+PLA), **Storage box** (only when you choose it) and **Overflow** (the default overflow). Change, add or remove them as
+you like.
+
+### Where a new spool goes
+
+For a spool you gave no location, the Hub decides in this order:
+
+1. A spool that is **still sealed** goes to the location for sealed spools. Its limit does not apply. (A spool you add
+   as opened is placed by the steps below.)
+2. A location whose materials name the spool's material comes next. If several do, the one with the longest matching
+   name wins (a PLA-CF spool goes to a `PLA-CF` location before a `PLA` one), and among equals the first in the list
+   with room.
+3. When no location names the material, the first location set to **Any material** that has room takes it.
+4. When there is no room there, or the places that name the material are full, the spool goes to an overflow
+   location: the default overflow first, then the other overflow locations in list order. When all are full, the
+   default overflow takes it anyway, over its limit.
+
+Example: **PLA rack 1** takes PLA and has a limit of 20; **PLA rack 2** takes PLA too. The first 20 PLA spools go to
+rack 1. The 21st goes to rack 2, because rack 1 is full. A PETG spool is not named by either rack, so it goes to the
+first place set to **Any material**, or to the overflow when there is none. Put the racks in the order you want them to
+fill.
+
+A location with a limit counts the spools whose location is its name, and the default overflow's limit counts too. If
+there are two or more overflow locations and the default overflow has no limit, the others are never reached; the Hub
+says so under the list.
+
+### Choosing a place yourself
+
+The location field of the add screens and **Move** on a spool offer the same list. **Automatic** (an empty location)
+lets the Hub choose as above; the preview shows where each spool would go and why, for example `Rack 1 (the first
+place for PLA with room)`. Choosing a place by hand works even when it is full: the limit only steers the automatic
+choice. The name of an Individual containers location means its lowest free container; the lists offer the location
+as one entry, not each container. To put a spool in one particular container, type that container's name (for example
+`Dry box 04`) in the app's location field; the web app's list has no entry for a single container.
+
+### What an upgrade does to the old settings
+
+Earlier versions had five settings: **Locations**, **PLA rack**, **Box location prefix**, **Number of storage boxes**
+and **Overflow location**. The first time the Hub starts on this version, it builds the list from them, so that spools
+are placed where they were before. Nothing is lost, and spools already stored keep their place.
+
+- The old locations become Bulk storage locations in their order. The PLA rack takes PLA. The storage boxes become one
+  Individual containers location that takes any material. The overflow location becomes the default overflow, and
+  the sealed-stock location takes the sealed spools.
+- The old settings stay in `/etc/filament-kit/config.json`, untouched, but are no longer read. The list lives in
+  `/var/lib/filament-kit/storage.xml`, which is part of a backup. After `sudo spoolwarden update --rollback` the older
+  release reads its old settings again; changes you made to the list do not go back with it.
+- When one name had two jobs, the upgrade keeps the two apart and shows **Storage locations were converted. Check
+  them.** under the list on the Hub page and in `sudo spoolwarden locations`. This happens when the box prefix is also
+  the name of the PLA rack, the overflow or the sealed location (the boxes are then called `<name> (containers)`),
+  when the prefix is empty (the boxes are called `Container`), or when the PLA rack, the overflow or the sealed
+  location is the name of one of the boxes. Look at the list and save it; the notice then goes.
+
+If the Hub cannot save or read `storage.xml`, it keeps running and places spools with the list the old settings give. It
+says so as a **Hub** row (**Needs a look**) in `spoolwarden status` and in the Hub page's Overview, for example
+`Storage locations could not be saved (...)`, with the folder to check or the file to restore.
+
+### Edit the list on the Hub page
+
+Open **Settings**, then **Storage locations**. The list shows each location's **Location**, **How full** and **Takes**, with
+the marks **Overflow**, **Default overflow** and **Sealed spools**. Use **Add a location** and a row's **Edit**; the up
+and down arrows move a row (the list is the fill order); the menu at the end of a row has **Make default overflow**,
+**Sealed spools go here** and **Remove**. **Where a new spool goes** under the list shows the order for each material
+and follows your edits. Nothing is saved until you tap **Save storage locations**, which takes the setup code, or a
+trusted computer.
+
+The page enforces some rules. You cannot change a location's type while spools are stored in it. You cannot lower the
+number of containers below the highest one that holds a spool. A new name cannot be the name of one of a set's containers (a clash that an upgrade carried over may stay).
+Individual containers cannot be overflow or take the sealed spools, and an overflow location cannot take **Any
+material** (it already takes any material when the other places are full). **Remove** asks first: the spools recorded
+there keep that location until you move them, and the place is no longer offered for new spools. You cannot remove the
+default overflow or the location for sealed spools; name another one first.
+
+Renaming a location renames it on its spools in Spoolman (`Renamed Rack 1 to Shelf A. 3 spools updated.`); a large
+rename runs as a short job. Spoolman has to be running for that.
+
+### Edit the list on the command line
+
+`spoolwarden locations` prints the list in fill order: position, name, type, how full, what it takes and its marks.
+Anything that changes the list needs `sudo`.
+
+```bash
+sudo spoolwarden locations add "Rack 2" --limit 20 --takes PLA
+sudo spoolwarden locations add "Dry box" --type containers --count 6 --takes any
+sudo spoolwarden locations edit "Rack 2" --name "Shelf B"
+sudo spoolwarden locations move "Shelf B" --before "Rack 1"
+sudo spoolwarden locations default-overflow Overflow
+sudo spoolwarden locations sealed "Sealed stock"
+sudo spoolwarden locations remove "Dry box"
+```
+
+`--takes` is `any`, `none` or a comma list of materials; `--overflow` (and, for `edit`, `--no-overflow`) sets overflow.
+`remove` asks first; `-y` answers yes for a script. The rows are in the [command table](#everyday-commands). The
+`sudo spoolwarden config` menu has the same screen under **Storage locations**, and `config set` refuses the old
+settings and points to `locations`.
+
+### In the apps
+
+The app and the web app both list the places in fill order and show how full each is. The web app writes it in the
+choice itself (`Rack 1 · 18 of 20`, `Rack 1 · 7 spools` when there is no limit, `Dry box · 3 free`, `Rack 1 · Full`).
+The app writes it under the name (`18 of 20 spools`, `7 spools`, `3 free`, `Full`). A full place can still be chosen.
+The location field of the add screen starts at **Automatic**; after **Check** (web app) or **Preview** (app) the line
+under it says where the spools would go and why. **Move** on a spool offers the same list. The list itself is edited on
+the Hub page or the command line, not in the apps.
 
 ## Bambu Lab printers
 

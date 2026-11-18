@@ -550,7 +550,9 @@ for (const look of ["console", "workbench", "palette", "panes"]) {
     await sleep(400);
     const group = $("#set-storage").getBoundingClientRect(), coll = $("#set-storage .coll--storage").getBoundingClientRect();
     const edit = $(".btn:not(.btn--icon)", rowOf("Rack 2")).getBoundingClientRect();
-    widths.push({ look, what, group: Math.round(group.width), coll: Math.round(coll.width), editH: Math.round(edit.height), visible: group.width > 0 });
+    const list = $(".settings__list"), back = $(".settings__back");
+    widths.push({ look, what, group: Math.round(group.width), coll: Math.round(coll.width), editH: Math.round(edit.height), visible: group.width > 0,
+                  list: Math.round(list.getBoundingClientRect().width), back: getComputedStyle(back).display !== "none" });
     $(".btn--ghost:not(.detail__close):not(.detail__back)", form()).click();
     await until(() => !form() && !$("dialog[open]"), "the form to close");
     await sleep(200);
@@ -570,3 +572,5 @@ def test_the_list_keeps_a_readable_width_with_the_add_or_edit_form_open(hub, tmp
         floor = (480, 300) if w["look"] == "panes" else (700, 600)
         assert w["group"] >= floor[0] and w["coll"] >= floor[1], (width, w, "the group is squeezed beside the open form")
         assert w["editH"] <= 48, (width, w, "the Edit button wrapped")
+        if w["look"] == "panes":  # the list of groups stays while the group keeps its width, and gives way to Back only when it would not
+            assert (w["list"] > 0) == (width >= 1776) and w["back"] == (width < 1776), (width, w, "the Settings list shows or hides wrongly")

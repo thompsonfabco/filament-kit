@@ -92,6 +92,7 @@ const WIDEST = `(() => {
 const BUSY_LIMIT = 10000;
 const COUNTS = (args.count || "").split(";").filter(Boolean).map((c) => { const [view, sel, n] = c.split("|"); return { view, sel, n: Number(n) }; });
 const CALL_TIMEOUT = 30000;
+const LOAD_TIMEOUT = 30000;      // a deadline measured in time, not in polls: a loaded machine can take longer than 5 s to finish a load
 const PROFILE_PREFIX = "aut5-";
 const AUDIT = readFileSync(join(HERE, "page_audit.js"), "utf8");
 
@@ -233,11 +234,14 @@ async function main() {
       return r.result.value;
     };
     const loaded = async () => {
-      for (let i = 0; i < 100; i++) {
-        if (await evaluate("document.readyState") === "complete") return;
+      const t0 = Date.now();
+      let state = "";
+      while (Date.now() - t0 < LOAD_TIMEOUT) {
+        state = await evaluate("document.readyState");
+        if (state === "complete") return;
         await sleep(50);
       }
-      throw new Error("the page did not finish loading");
+      throw new Error(`the page did not finish loading (readyState "${state}" after ${LOAD_TIMEOUT} ms)`);
     };
     // wait until no region is aria-busy (two looks 100 ms apart), so a section that loads its data is ready; the bound
     // only stops a region that never finishes (the audit then reports it)

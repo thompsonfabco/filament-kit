@@ -120,7 +120,7 @@ async function main() {
     const fonts = args["font-dir"] || process.env.AUT5_FONT_DIR;
     if (fonts) await send("Page.addScriptToEvaluateOnNewDocument", { source: dejavuScript(fonts) });
     await send("Page.navigate", { url: args.url });
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 600; i++) {
       if ((await send("Runtime.evaluate", { expression: "document.readyState", returnByValue: true })).result.value === "complete") break;
       await sleep(50);
     }

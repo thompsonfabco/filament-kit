@@ -1,125 +1,38 @@
-# 0.6.1 release notes in progress: the design upgrade (not yet a release)
+# Next release: notes in progress
 
-This file collects what the redesign of the setup page, the phone web app, the Android app and the command line
-changes for you, as the parts merge. These are the notes for version 0.6.1; it is not released yet, and the release's text is taken from here.
+This file collects what the next release changes for you, and the release's text is taken from here.
 
-## Already merged: the groundwork
+## Storage locations
 
-Nothing on the screens looks different yet. The pieces below are in the code so the interfaces can share them:
+Where your spools are kept is now one ordered list of **storage locations** that you edit, instead of five fixed
+settings. Each location has a name and a type: **Bulk storage** (a shelf, rack or drawer, with an optional spool limit)
+or **Individual containers** (boxes or bags that hold one spool each; the Hub numbers them, for example `Dry box 01`).
+It is filled automatically with nothing, any material or the materials you name, and it can be overflow. One overflow
+location is the default overflow, and one Bulk storage location takes the sealed spools.
 
-- **One set of design values.** The colours, sizes, radii and fonts of the four themes (Console, Workbench, Palette and
-  Panes) live in one folder, `tokens/`, and the pages and the Android app are generated from it. The contrast between
-  every text colour and its background is checked in both light and dark.
-- **One catalogue of texts and one icon set** for the interfaces to share, so the same sentence reads the same on the
-  setup page, in the phone web app, in the Android app and on the command line.
-- **The Spool theme is called Palette.**
+A spool you add without a location goes to the sealed location when it is still sealed. Otherwise it goes to the first
+place for its material that has room, then to the first place that takes any material, then to an overflow location.
+With PLA rack 1 limited to 20 spools and PLA rack 2 behind it, the 21st PLA spool goes to rack 2. Choosing a place by
+hand still works when it is full.
 
-## Long jobs report their steps
+**What happens when you upgrade.** The first time the Hub starts, it builds the list from your old settings (Locations,
+PLA rack, Box location prefix, Number of storage boxes, Overflow location), so every new spool is placed where it was
+before. Nothing is lost, and spools already stored keep their place. The old settings stay in the configuration file and
+are no longer read. The list is saved in `/var/lib/filament-kit/storage.xml`, which backups include. If the old
+settings gave one name two jobs, the Hub page and `sudo spoolwarden locations` say **Storage locations were converted.
+Check them.** Look at the list and save it, and the notice goes. If the Hub cannot save or read the list, it keeps
+running and says so as a **Needs a look** row in `spoolwarden status` and on the Overview.
 
-The nine long jobs now say which step they are on: backup, restore, update, rollback, applying modules, a library update
-and its rollback, setting up a reader, and pairing a station. Each prints lines such as `==> step 2 of 3 <what it is
-doing>` as a step starts, on the command line and in the setup page's job log. The setup page can use them to show
-"Step 2 of 3" and a progress bar that fills step by step; until the new pages arrive, the bar behaves as before.
+**Where to edit it.** On the Hub page, **Settings**, **Storage locations**: add, edit, reorder and remove locations,
+mark the default overflow and the sealed location, and see where a new spool of each material would go before you save.
+At a Terminal, `sudo spoolwarden locations` lists the list and has `add`, `edit`, `move`, `remove`, `default-overflow`
+and `sealed`; `sudo spoolwarden config` has the same screen. `config set` no longer takes the old settings and points to
+`locations`. Renaming a location renames it on the spools stored there.
 
-Setting up the Label Reader on this Hub no longer waits forever when the reader's own installer hangs: after 15
-minutes without any output (or 4 hours in all) Spoolwarden stops it, says so in the log, and leaves its settings as they were.
+**In the apps.** The phone web app and the Android app show how full each place is in the **Location** choice and in
+**Move**, mark a full place as **Full** (it can still be chosen), and after a preview say where a spool on **Automatic**
+would go and why. The list itself is edited on the Hub page or the command line.
 
-## The setup page and the phone web app are on the new look
+## The command is `spoolwarden`
 
-- **The setup page uses the shared design values and components.** Its colours, sizes and buttons come from the same tokens as the other interfaces.
-- **Light, dark or system.** A switch in the page header picks Light, Dark or System (the default, which follows the device); the choice is kept in that browser.
-- **A new page shell.** A top bar and navigation: a side list on wide screens, and on a phone a bottom bar (Overview, Printers, Recent, Settings) with a More sheet for the other sections.
-- **The setup code can be checked without changing anything.** A right code costs no try, a wrong one says how many tries are left, and an error about a form names the field it is about (the address, the code). The setup page also reports when a trusted computer's trust expires.
-- **The phone web app** has light and dark manifests, and its theme colour follows the appearance.
-
-## The phone web app is on the new look
-
-- **The web app uses the shared design values and components**, the same as the setup page.
-- **A new shell.** A top bar and a bottom bar (a side rail on tablets), with Add, Spools, Printers, Recent, Slicer presets and Settings; a **More** sheet holds the places that do not fit. A place whose feature is switched off says so instead of showing an empty page.
-- **The page shown outside the home network, and the sign-in page,** use the same styles and the shared texts.
-- **Slicer presets** on the phone: build the presets and see the result in place; add a new filament to a line, or start a new line with a search for its parent; Updates and Restore work as on the setup page.
-- **Recently added** on the phone: each addition with its badges, where it came from and when; open one for its photos and fields, correct it by hand or ask the Label Reader, and undo a revision.
-- **Printers** on the phone: the printer list and one printer's page with its status, slots, filament used, slot mapping and settings; a printer you add opens at once with "Added."
-- **Add spools** on the phone: find a filament you already have or read the label photos, check each spool card with the Label Reader's confidence marks, Preview, then Add; an unfinished add is kept as a draft in that browser.
-- **Spools** on the phone: the last tag read, a search that remembers Sealed only, and a spool sheet to link a tag and open the spool, update its weight, move it (with Undo), mark it empty or load it into a printer; nothing is written that was not previewed.
-- **Home screen and offline.** The Add to Home Screen sheet lists the three iPhone steps (other browsers offer their own install); the app opens without the Hub, and when the Hub does not answer it shows an Offline chip and a banner, tries again every 10 s, and says when it is connected again.
-
-## The Android app is on the new look
-
-- The app draws in the Console theme from the shared design values, with an app shell (bottom bar, side rail on wide screens, top bar), 44 dp controls and a new launcher icon. Its name and texts come from the shared catalogue. The shared parts every screen uses (page states such as loading and empty, dialogs) now exist, with tests for their accessibility semantics.
-
-## More of the new design is merged
-
-- **Android app:** Settings, app updates and licences; pairing with one screen per step; Home; the Printers list, adding and finding Klipper printers; adding a line to the Filament Catalog; Recently added (what was read, how sure the Label Reader was, a record's changes, editing and undo); One printer (progress, controls with their results, loading a spool and mapping by loading, sharing a printer report); Spools and the spool screen (loading and linking tags, with a tag read during a load held until it finishes); Add spools with one screen per step (Photos, where a photo opens full screen; Check the spools, Preview, Done), where every add is kept as a draft on the phone and a read or add carries on when you leave the screen. All in the new design.
-- **Phone web app:** sheets replace the browser's own confirm and prompt boxes; results, errors and reasons appear in place; the add preview works per item with colour finding and paging; spools can be read and edited from the phone, with the usage source shown; the offline helper (service worker) is always served.
-- **The Hub:** every printer's state comes in one read; the status shows groups and section summaries; the label reader's confidence and engine are reported; a settings group saves at once, and the last backup time is shown; an address you enter for the Hub can be tested before it is saved. A reader that gives no per-field numbers (the Cloud reader, for one) is shown as not rated instead of as sure.
-- **The setup page:** a lock chip in the header shows whether the page is unlocked and opens an unlock dialog; Hub dialogs replace the browser's own confirm and prompt boxes; the result of a button appears beside it, with short toasts for what finished; a job strip shows a background job, with restarting and not-answering states; loading, empty, error and switched-off pages look the same everywhere.
-- **Overview and Features** on the setup page are in the new look: Overview has summary tiles (printers connected or offline, Tag Readers, recent additions) with a badge for what needs a look; Features can be turned on and off by name and says when a setting is needed first.
-- **Setup page sections:** Slicer presets (the last build, each product line with its parents, the updates that wait), Updates (what is held back or failed before, how often it checks) and Logs are in the new look.
-- **Flash a device** on the setup page writes the firmware that comes with the Hub to a Tag Reader or a Weigh Station display over USB. You choose the device and where it is plugged in (this computer, or the Hub), press Connect and write, and see each step and its result. A Tag Reader's token is made only with the setup code, and writing through the Hub needs it too.
-- **A phone cannot flash a board over USB.** On a phone the page says so: plug the board into the Hub and choose The Hub, or open the page on a computer.
-- **Printers on the setup page** is in the new look: each printer shows its state, with a count of how many are connected or offline. You can test the connection to a printer (the result says what it found, for example a Bambu certificate that differs from the pinned one, or Moonraker asking for an API key), use a detected printer, dismiss it, see its slot mapping, and collect a report. Saved reports show once the page is unlocked. You can also add a printer from the page: it can scan the Hub's own network for Klipper printers, and it offers the Klipper add-on's install commands to copy.
-- **Settings on the setup page** are regrouped in the new look. Network has a Remote access part; the Label Reader group shows whether a reader is installed on this machine, checks what an install or an upgrade needs, tests the reader and takes a reader token; Backups lists the backups (made, size) with a download for each and sets how many days they are kept (1 to 365); Restore is a set of steps; Voice and the other groups follow.
-- **Devices on the setup page** is in the new look: paired devices (pair a phone, Slicer Sync or a Weigh Station; rename; revoke), Weigh Stations asking to pair, Tag Reader tokens and trusted computers.
-- **Recently added on the setup page** is in the new look: a list of the newest additions with the photo, what was added, when, where it came from, whether it was changed, and how sure the Label Reader was, with a **To check** filter for the ones to look at.
-- **One addition opens as a record:** its photos (tap one to enlarge), its values shown before you edit them, **Edit by hand** with **Save changes**, and **Ask the Label Reader to correct it**, which shows a before-and-after list of what it would change and waits for **Accept**. Every correction is listed with **Undo**.
-- **QR codes:** the Hub now draws its QR codes itself, on the Hub page (the pairing code and the phone web app's address) and in the terminal, so the `qrencode` package is no longer needed (the pairing link is shown when it cannot fit one).
-- **Setup names:** `hub`, `weigh-station` and `hub-with-weigh-station` are accepted beside `server`, `station` and `all-in-one`, and `--hub` beside `--server` in `spoolwarden modules set` and `modules enable`; what is stored does not change. Feature titles use the names of the new Hub page.
-- **Android printer screens:** the printer screens use whole sentences for their texts, tapping a tag on Pick a spool picks that spool, and taps made during a load are kept.
-- **Hub page, Printers:** pressing Add again while the Hub is still adding a printer says "Still working. Wait for it to finish.", the same words as the app.
-- **Hub page fixes:** the Trusted computers card no longer shows a stray `null` line and its switch is drawn in full, a failed read of the Weigh Stations asking to pair no longer shows an internal error name, the header name stays on one line on a 320 px phone, the setup command box wraps instead of cutting the command, and the Updates title, Logs service list and Devices card pairs line up with the other sections.
-- **Slicer presets from a phone:** a paired phone can now list the filaments that have no preset line, create a line, add filaments to a line and ask for a build; the Android app's Slicer presets screen uses these. The phone web app's own routes are unchanged.
-- **Theme picker:** the setup page (Settings > Appearance) and the phone web app (its own Theme group in Settings) now have a Theme choice, with Console (dense and technical) the one theme so far. Choosing it is kept on this device and the phone's status bar takes its colour, also when you switch the phone between light and dark. A device that has not chosen shows the Hub's theme for new devices.
-- **Workbench theme:** the Theme choice now also offers Workbench (calm cards), in light and dark. The phone web app takes Workbench's colours, text, corners and font and its navigation (its narrow side bar stays on wide screens). The setup page also gets a labelled side list on wide screens, cards for lists, and a card that opens in place for details. Console looks as before.
-- **Collection sort label and switched-off mark:** sortable card, tile and row collections now show a "Sort by" label before their sort chips (Console's table is unchanged), and the setup page navigation marks switched-off sections with a hollow circle and a ", switched off" label for screen readers.
-- **Palette sheets:** in Palette, opening a printer or slicer preset line now slides in a full-height detail sheet (returning focus to the row on close), and numbered steps inside a detail sheet show the current step open while collapsing finished and later steps to their title line.
-- **Panes details and Settings:** in Panes, at most one detail opens at a time with its actions and hidden fields inside the pane, an empty-pane message appears on wide screens when nothing is chosen, Back appears in the detail head on tablets and phones, Escape returns focus to the row, and Settings shows one group per pane.
-- **Android late text changes:** the last printer and design texts are whole sentences, including those for ids added before and unknown spools, and Replace this spool's tag is offered when the spool already has a tag.
-
-## The command line speaks one way
-
-- **One status vocabulary, Error and Fix lines.** Every command reports with the same state words and glyphs, and a failure is `Error: ...` with a `Fix: ...` line on standard error, with the command to run kept whole on one line (on its own line when it does not fit).
-- **Progress for waits, documented exit codes, plain output.** A wait longer than 2 seconds shows a progress line, each command ends with a documented exit code, and `--plain`, `--color` and `NO_COLOR` control the look for screen readers and pipes.
-- **Orca Slicer parents for a phone:** a paired phone can list the Orca Slicer parents a new preset line can use, as the setup page and the phone web app do.
-
-- **The command line asks before destructive commands.** Commands that delete, replace or overwrite something (forgetting a printer, unpairing a phone, flashing a board, updating, rolling back, removing Spoolwarden) now ask for a yes first. Answering no changes nothing and exits with 5. Scripts and anything run without a terminal need `--yes` from this version on; without it the command stops with exit 2 and says so.
-- **`--json` and `--quiet` on the command line.** Every command that prints data or a result takes `--json` (one JSON document on standard output, the Hub's own field names; errors as `{"ok": false, "error", "fix"}`; it never asks, so a command that would ask needs `--yes`) and `-q` / `--quiet` (only errors, lists you asked for and answers; no result lines, notes or progress).
-- **Menus and checklists with one set of keys.** `spoolwarden config` is now the Hub page's Settings in the same nine groups: you change values, they wait as staged changes, `s` saves them together and `q` leaves (asking first when changes would be lost; saying no stays, saying yes leaves with exit code 5). Printers and Features open their own screens, the Features checklist shows what a row needs before you switch it, and Map by loading filament follows the Hub's walkthrough. Numbers choose items and letters choose actions on every screen; `--numbered` (implied by `--plain`) gives the same screens as numbered lines. A menu needs a terminal, or `--numbered` with the answers on standard input.
-- **`printer` commands on the command line.** `printer list`, `show`, `test`, `add [--klipper]`, `use`, `dismiss`, `rename`, `address`, `access-code`, `api-key`, `lane-data`, `detect`, `scan`, `map`, `report`, `reports`, `forget-certificate`, `forget`, `live` and `menu` do what the Hub page's Printers does, and `klipper add-on` prints the add-on's install commands. A printer is named by its name, serial or id, or the start of its name; a name that fits two printers stops with exit 2 and lists the close matches. The old `klipper add|scan|detect|set|api-key|pack`, `printer unpin` and `printer map --manual` still work.
-- **Palette theme:** the Theme choice now also offers Palette (colourful and roomy), in light and dark, with a rounded system font. On the setup page and in the phone web app the section links become a row of pills under the top bar on tablets and wide screens, staying in view as you scroll; a phone keeps its bottom bar. On a tablet the light/dark switch stays on one row of the top bar. On the setup page, lists such as Printers become tiles that show only their main fields (about five across at 1280 px, three at 768 px), and a printer you open takes the full width under the tiles. The slide-in sheet is built but no screen opens one yet. Console and Workbench look as before.
-- **Panes theme:** the Theme choice now also offers Panes (simple lists), in light and dark. On the setup page and in the phone web app the sections become a list on the left of tablets and wide screens (360 px wide at 1280 px), and lists such as Printers become rows with a chevron. A printer you open appears in a column at the right of a wide screen; on a tablet or phone it takes the place of the list. On a phone the page opens on the list of sections: choose one to open it, and Back returns to the list. Console, Workbench and Palette look as before.
-- **Theme picker in the Android app:** Settings > Appearance has a Theme group with a tile for each theme; Console is the one that can be chosen today, the others say "Not available yet". A phone that has not chosen follows the Hub's theme for new devices; its own choice always wins.
-- **Android Slicer presets screen:** the Slicer presets panel on Home opens a screen with the build status, Build now, the filaments without a preset line (add to a line or start one) and the Product lines panel. The product lines and "Change parent" moved there from the Filament Catalog screen, and "Change parent" opens a sheet with a search over the parents Slicer Sync reported.
-- **Orca Slicer parent in the Android new-line form:** starting a preset line from a filament now offers an optional "Orca Slicer parent" (the Orca parents of its material; the Hub chooses when none is picked, and the form says so when no Orca library has been uploaded yet).
-- **`recent`, `devices` and `pair` on the command line.** `recent` lists Recently added like the Hub page (`recent show`, `revise`, `edit` and `undo` read and change one record, with the Label Reader's confidence marks), `devices` lists the paired devices and `devices forget` unpairs one after asking, and `pair` shows the QR code, pairing code, fingerprint and expiry, then waits for the device (`--json` does not wait). `pair --slicer-sync` and `--weigh-station` print a link to paste. `intake`, `unpair`, `pair --pc` and `pair --station` still work. `recent edit` and `recent revise` count `--item` from 1, as the Hub page does (`intake edit --item 1` used to mean the second item, so change old scripts). A revision by the Label Reader counts against the daily read limit, as on the Hub page.
-- **`presets`, `features`, `weigh-station` and `tag-reader` on the command line.** `presets` shows the Slicer presets like the Hub page (`status`, `build`, `lines`, `set-parent`, `restore-deleted`, `updates`, and `accept-updates`, which now asks first); `features` lists every Feature with its key, switches one with `on` or `off` (asking one question for each other Feature that goes with it), and sets up the Hub, the Weigh Station or both with `setup`; `weigh-station` pairs, writes the display and tells its pairing state; `tag-reader` makes, lists and revokes the reader's tokens and writes its firmware (`--password -` reads the Wi-Fi password from standard input). The old `profiles`, `modules`, `station` and `reader` commands keep working.
-- **Theme picker in the Android app:** Settings > Appearance has a Theme group with a tile for each theme; Console and Workbench can be chosen; the others say "Not available yet" and arrive in later releases. A phone that has not chosen follows the Hub's theme for new devices when the app has it (Console or Workbench today); its own choice always wins.
-- **Theme picker in the Android app:** Settings > Appearance has a Theme group with a tile for each theme; Console, Workbench and Palette can be chosen; Panes says "Not available yet" and arrives in a later release. A phone that has not chosen follows the Hub's theme for new devices when the app has it (Console, Workbench or Palette today); its own choice always wins.
-- **Workbench theme in the Android app:** the calm indigo look with a sidebar on wide screens (the rail on a tablet), and the lists of spools, printers and records as cards, in a grid on wide screens. The screens and routes are the same as in Console.
-- **Palette theme in the Android app:** the warm orange look with the five destinations as a row of pills under the top bar on a tablet and wider (the bottom bar on a phone), and the lists of spools, printers and records as tiles, in a grid of several to a line on wide screens. The screens and routes are the same as in Console.
-- **Theme picker in the Android app:** Settings > Appearance has a Theme group with a tile for each theme; all four themes can be chosen. A phone that has not chosen follows the Hub's theme for new devices when the app has it; its own choice always wins.
-- **Workbench theme in the Android app:** the calm indigo look with a sidebar on wide screens (the rail on a tablet), and the lists of spools, printers and records as cards, in a grid on wide screens whose cards grow with the text size. On tablets and larger screens, opening a spool, printer, recently added record or preset line expands its card in place across the grid; phones keep opening the detail as its own screen.
-- **Palette theme in the Android app:** the warm amber look with the five destinations as a row of pills under the top bar on a tablet and wider (the bottom bar on a phone), and the lists of spools, printers and records as tiles, in a grid of several to a line on wide screens. Opening a spool, printer, recently added record or preset line opens a full-height sheet that closes on Back.
-- **Panes theme in the Android app:** the simple grey-and-green look where the five destinations are a list of sections: the first page on a phone (choosing one opens it, and Back returns to the list with focus on its row, for a keyboard and for a screen reader; Back on the list leaves the app as it does in the other themes), a pane beside the page on a tablet and wider. Lists of spools, printers and records are plain rows with a chevron, and the section list shows a one-line summary for Printers, Recently added and Slicer presets from data the app already holds. Opening a spool, printer, recently added record or preset line opens beside the list on wide screens (with an empty-pane state when nothing is chosen) and over the list on tablets; phones keep drilling in as before.
-
-- **The System commands on the command line.** `config show` and `config set <key> <value>` read and change the settings the menu has; `label-reader status` and `test` check and try the Label Reader; `catalog` (the old `library`) has `token`; `backup keep`, `logs`, `spoolman address`, `certificate` and `remote get-certificate` do what the Hub page does; `add` and `spool` say where to do what needs a camera or NFC; `help aliases` lists the old spellings, `help --markdown` prints the command table, and `spoolwarden` alone prints the commands in groups. `update`, `uninstall`, `restore` and `setup-code` say the Hub page's words. The old spellings keep working. `migrate-ops` and `migrate-scanner` were removed in 0.5.3 and are not listed.
-- **Phone web app without the Hub:** while the Hub cannot be reached, Add spools, Spools, Recently added, Slicer presets and Printers keep their last data with "Last update <age>: the Hub did not answer." Buttons that need the Hub are greyed with "Needs the Hub." ("Read labels" and "Preview" say "The Hub cannot be reached."), and everything comes back when the Hub answers. Photos, cards and fields in Add spools keep working.
-- **The documents use the new names.** The README, the user guide and the install guides now say Hub, Hub page, web app, app, Features, Weigh Station, Tag Reader, Label Reader, Filament Catalog, Slicer presets and Slicer Sync, and show the commands in their new spellings (the old spellings still work). The user guide's command table is the one `spoolwarden help` prints.
-- **The last old names are gone from the texts.** The Android app's messages and the Hub's own words now say Hub, Hub page, Label Reader, Slicer presets and Slicer Sync.
-- **Theme for new devices:** Settings > Appearance on the Hub page has a "Theme for new devices" field with its own Save button, and `spoolwarden config theme [<theme>]` shows or sets the same setting. Devices that already chose a theme keep theirs.
-
-## Ready for the new name
-
-The updater, the backup reader, the pairing link readers, the Klipper lane check and the Bambu calibration check now also
-accept the second set of names a later release will use (update download, backup, link, lane source and calibration
-job), and the Hub announces itself on the network under both service types. Everything Spoolwarden makes is named as before.
 - **The command is now `spoolwarden`.** Install and update put `spoolwarden` where `filament-kit` was; `spoolwarden --version` prints `Spoolwarden <version>`, and the help, messages and Fix lines name it. `filament-kit` still works for a time: it runs `spoolwarden` with the same arguments, input, output and exit code, and prints one line on standard error saying the name changed.
-
-- **The product is called Spoolwarden.** The Hub page, the installer and the update messages now say Spoolwarden; commands, folders and links stay as they are.
-
-## Still to come
-
-Notes for the visible changes (the new Hub page shell, the section pages, the phone web app, the Android app, the
-command line's wording and the other themes) are added here when each one merges.
-- **Spoolwarden Vision v0.2.2 local label reader:** the Hub now installs, upgrades, and removes Spoolwarden Vision (`thompsonfabco/spoolwarden-vision`, API 1.1, minimum v0.2.1), supports legacy `filament-kit-vision` upgrades/removals, refuses conflicting `filament-vision-server` installs, and handles the v0.2.1+ async `202` feedback upload flow and `/v1/feedback/<id>/image` endpoint.
-- **Uninstall knows the reader's new name:** `uninstall.sh` removes Spoolwarden Vision (`/opt/spoolwarden-vision`, its data and user with `--purge`) as well as the old `filament-kit-vision` set.

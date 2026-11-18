@@ -646,6 +646,18 @@ def pending_code():
     return pairing._read("pending.json")[-1]["code"]
 
 
+class CliTime:
+    """What `cli.time` is while a test watches the sleeps of cli.py: its own `sleep`, everything else the real `time`. The
+    process's `time.sleep` is left alone: the standard library sleeps on the test thread too (subprocess.Popen.wait polls with
+    it while a child such as `hostname -I` is still closing), and on a busy machine such a sleep was counted as a look."""
+
+    def __init__(self, sleep):
+        self.sleep = sleep
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
 @pytest.fixture
 def waiting(monkeypatch):
     """`pair` waits by sleeping; `steps` are what happens at each look (a callable), the sleeps themselves take no time."""
@@ -653,7 +665,7 @@ def waiting(monkeypatch):
     real_sleep, test_thread = time.sleep, threading.get_ident()
 
     def sleep(seconds):
-        if threading.get_ident() != test_thread:    # time.sleep is the process's: another thread's sleep is not a look
+        if threading.get_ident() != test_thread:    # another thread's sleep is not a look
             return real_sleep(seconds)
         state["looks"] += 1
         assert state["looks"] < 200, "pair keeps waiting for a device nobody pairs"
@@ -661,8 +673,21 @@ def waiting(monkeypatch):
             state["steps"].pop(0)()
         else:                                   # nothing planned: the device pairs now
             pairing.redeem_code(pending_code())
-    monkeypatch.setattr(cli.time, "sleep", sleep)
+    monkeypatch.setattr(cli, "time", CliTime(sleep))
     return state
+
+
+def test_a_sleep_inside_the_standard_library_is_not_a_look_of_pair(capsys, monkeypatch, waiting):
+    """Popen.wait sleeps while a child is still closing (`hostname -I` in pairing.issue): that is not the wait for the device."""
+    real_ips = pairing._candidate_ips
+
+    def slow_child():
+        time.sleep(0.001)            # what Popen.wait does when the child has not been reaped at its first look
+        return real_ips()
+    monkeypatch.setattr(pairing, "_candidate_ips", slow_child)
+    waiting["steps"] = [lambda: pairing.redeem_code(pending_code())]
+    rc, out, _ = run(capsys, "pair", "--text")
+    assert rc == 0 and out.splitlines()[-1] == "Paired: phone." and waiting["looks"] == 1
 
 
 def test_pair_prints_the_qr_the_instruction_the_code_the_fingerprint_and_the_expiry_in_that_order(capsys, waiting):
@@ -795,7 +820,7 @@ def test_ctrl_c_stops_the_wait_says_until_when_the_code_works_and_leaves_it_vali
 def test_a_code_that_runs_out_is_an_error_with_the_command_to_make_a_new_one(capsys, monkeypatch):
     monkeypatch.setattr(pairing, "TOKEN_TTL", 1)
     real_sleep = time.sleep
-    monkeypatch.setattr(cli.time, "sleep", lambda s: real_sleep(1.1))
+    monkeypatch.setattr(cli, "time", CliTime(lambda s: real_sleep(1.1)))
     rc, out, err = run(capsys, "pair", "--text")
     assert rc == 1 and "Paired" not in out
     assert err.splitlines()[0] == "Error: the pairing code expired before a device paired."
@@ -804,7 +829,7 @@ def test_a_code_that_runs_out_is_an_error_with_the_command_to_make_a_new_one(cap
 
 
 def test_json_does_not_wait_and_prints_the_link_code_fingerprint_and_expiry(capsys, monkeypatch):
-    monkeypatch.setattr(cli.time, "sleep", lambda s: pytest.fail("pair --json must not wait"))
+    monkeypatch.setattr(cli, "time", CliTime(lambda s: pytest.fail("pair --json must not wait")))
     rc, out, err = run(capsys, "pair", "--json")
     got = doc(out)
     assert rc == 0 and set(got) == {"ok", "code", "link", "fingerprint", "expires"} and got["ok"] is True
@@ -816,7 +841,7 @@ def test_json_does_not_wait_and_prints_the_link_code_fingerprint_and_expiry(caps
 
 
 def test_no_wait_prints_and_ends(capsys, monkeypatch):
-    monkeypatch.setattr(cli.time, "sleep", lambda s: pytest.fail("--no-wait must not wait"))
+    monkeypatch.setattr(cli, "time", CliTime(lambda s: pytest.fail("--no-wait must not wait")))
     rc, out, _ = run(capsys, "pair", "--text", "--no-wait")
     assert rc == 0 and re.fullmatch(r"The code works until \d\d:\d\d\.", out.splitlines()[-1]), out
     assert out.splitlines()[-2].startswith("Expires at ") and "Waiting" not in out
