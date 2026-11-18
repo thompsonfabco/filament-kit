@@ -52,10 +52,17 @@ fun notifyActions(answer: EventsAnswer, nowMillis: Long): List<NotifyAction> {
     return out
 }
 
-/** What the watching service asks first and next: the stored cursor `since`, else the time it started watching. */
+/**
+ * What the watching service asks first and next: the stored cursor `since`, else the time it started watching. Without
+ * the `alert` filter: the events that clear a condition are no alert type, and the Cancel of [notifyActions] needs them.
+ */
 internal fun nextQuery(since: Long?, startedAtMillis: Long, waitS: Int): EventsQuery =
-    if (since != null) EventsQuery(since = since, sinceAt = null, waitS = waitS)
-    else EventsQuery(since = null, sinceAt = AlertParsing.formatTime(startedAtMillis), waitS = waitS)
+    if (since != null) EventsQuery(since = since, sinceAt = null, waitS = waitS, alertOnly = false)
+    else EventsQuery(since = null, sinceAt = AlertParsing.formatTime(startedAtMillis), waitS = waitS, alertOnly = false)
+
+/** An answer whose `next` is below the `since` we sent comes from a new or restored store: its ids start again. */
+internal fun isNewStore(since: Long?, answer: EventsAnswer): Boolean =
+    since != null && answer.next != null && answer.next < since
 
 /** The cursor after [answer]: its `next`, else the highest id it carried, else the one we had. A `gap` changes nothing. */
 internal fun advance(since: Long?, answer: EventsAnswer): Long? {
