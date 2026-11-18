@@ -716,6 +716,7 @@ adds its row in the same change. The rule is written in the comment beside the s
 | Where | Edge | How it is derived |
 |---|---|---|
 | Settings in the Panes theme, with a form open (the list of groups hides and a Back button shows below the edge) | 800 px | The list of groups (296 px) + the gap (24 px) + the least width of a group with a form (480 px) |
+| Settings, the backup password warning (`.backup-password`, all looks) | 344 px | The least column that holds the sentence in 3 lines in the widest font (288 = 6 x 48) + the icon (20 px) + the gap (12 px) + the banner's padding (2 x 12 px); below it the sentence takes the banner's full width with the icon above |
 
 Each edge has a browser test on both sides of it, at real widths, as the Panes row has: the list shown at 1776 and 2560
 px, hidden at 1280 and 1440 px, and no sideways page scroll at any of them. The window's own edges stay 600 and

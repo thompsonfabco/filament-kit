@@ -2295,10 +2295,14 @@ station's hello call, the found Bambu Lab printers and the remote reader's HTTPS
   `127.0.0.1` stays as it is. The Weigh Station makes its own certificate with the Hub's existing `pairing.make_cert`.
   At every start it tells the Hub `fp`, `port` and `version` on `GET /api/station/hello`, over the connection it already
   has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain
-  HTTP. A station that has not been updated sends no fingerprint and is called over plain HTTP as before; so is a
-  station that cannot make its certificate, which serves plain HTTP as before, logs why and says so in its start call;
-  the Checks show a row for each case ("The Weigh Station at <address> is not using HTTPS." and "... is not using
-  HTTPS: it could not make its certificate (<reason>)."). The Hub never goes back to plain HTTP for a station whose certificate it has pinned: for such a station a
+  HTTP. A station on the Hub's own machine has one listener, which serves HTTPS once it has its certificate, also to the
+  Hub on 127.0.0.1, and is called the way it answers: over HTTPS with the pinned certificate when it has given the Hub
+  its fingerprint, over plain HTTP when it has none. A station that has not been updated sends no fingerprint and is
+  called over plain HTTP as before; so is a station that cannot make its certificate, which serves plain HTTP as
+  before, logs why and says so in its start call; the Checks show a row for each case ("The Weigh Station at <address>
+  is not using HTTPS." and "... is not using HTTPS: it could not make its certificate (<reason>)."), never for a
+  station whose address is 127.0.0.1 or another loopback address. The Hub never goes back to plain HTTP for a station
+  whose certificate it has pinned: for such a station a
   missing or changed certificate is an error row, never a reason to downgrade. The printer-side tag service is pinned
   the first time the Hub reads its address (trust on first use). A Label Reader on another machine is the exception
   until its own software can serve HTTPS: an `http://` address of it is accepted and used as today, an `https://`
@@ -2384,7 +2388,7 @@ Server builder · Depends on: AF1's `hubport` (free-port test, drop-in)
   Test and its Checks rows (03 10.5). The reader's own side (a certificate at the remote install, HTTPS on port 7915) is
   a request to the reader's repository; until it ships, the Hub accepts the reader's `http://` address as before and
   shows the Note row. The refusal of such an address comes with the release that has a reader version that serves HTTPS.
-- **Keep:** the allow-list of caller addresses; `http://127.0.0.1:5003` for a station on the Hub's own machine.
+- **Keep:** the allow-list of caller addresses; `127.0.0.1:5003` for a station on the Hub's own machine, called over HTTPS with its pinned certificate or, when it has none, over plain HTTP.
 - **Other interfaces:** AF5 words the rows this step makes possible.
 - **Check:** prove first (items 5 and 6 of the list below). Then the tests of each listener and of the pin.
 
