@@ -632,17 +632,57 @@ def state_of(s: dict) -> str:
     return "sealed" if SEALED_COMMENT in (s.get("comment") or "") else "opened"
 
 
-def spool_view(s: dict) -> dict:
+FILTERS = ("sealed", "opened", "loaded", "low")
+
+
+class ViewContext:
+    """What `spool_view` needs beyond the spool: the running-low threshold and the printers a slot location can
+    name. Build one per list (`view_context()`), so a list reads the registry and the alert settings once."""
+
+    def __init__(self, low_g: float, printers: list[tuple[str, str, str, str]]):
+        self.low_g = low_g
+        self.printers = printers            # (location prefix, printer id, printer name, family), longest prefix first
+
+    def slot_of(self, location) -> dict | None:
+        """`{printer_id, printer, slot}` when `location` is a printer's slot ("<name> – AMS <label>" on a Bambu Lab
+        printer, "<name> – <label>" on a Klipper one), else None."""
+        loc = location or ""
+        for prefix, pid, name, family in self.printers:
+            if loc.startswith(prefix) and len(loc) > len(prefix) and family in ("bambu", "klipper"):
+                return {"printer_id": pid, "printer": name, "slot": loc[len(prefix):]}
+        return None
+
+
+def view_context() -> ViewContext:
+    from . import alerts
+    from .bridge import registry, status
+    rows = []
+    for pid, p in registry.load().items():
+        name = registry.display_name(p)
+        rows.append((f"{name} {status.DASH} " + ("" if p.family == "klipper" else "AMS "), pid, name, p.family))
+    rows.sort(key=lambda r: -len(r[0]))
+    return ViewContext(alerts.load()["running_low_g"], rows)
+
+
+def spool_view(s: dict, ctx: ViewContext | None = None) -> dict:
     """One spool as the phones read it (GET spools/{id}, and `view` / `before` of an edit): location, remaining, net and
-    empty spool weight, tag, state, filament (number, brand, name, material, colour) and lot. Weights are grams."""
+    empty spool weight, tag, state, filament (number, brand, name, material, colour) and lot, and two more: `loaded`
+    ({printer_id, printer, slot} when the spool is recorded in a printer's slot, else None) and `low` (opened and at
+    or under the running-low threshold). Weights are grams. Give `ctx` (`view_context()`) when viewing a list."""
+    ctx = ctx or view_context()
     f = s.get("filament") or {}
     tare = s.get("spool_weight")
     if tare is None:
         tare = f.get("spool_weight")
-    return {"id": s.get("id"), "location": s.get("location"), "remaining_g": s.get("remaining_weight"),
-            "net_g": f.get("weight"), "tare_g": tare, "tag": tags.stored(s) or None, "state": state_of(s),
+    state = state_of(s)
+    left = s.get("remaining_weight")
+    low = (state == "opened" and isinstance(left, (int, float)) and not isinstance(left, bool)
+           and left <= ctx.low_g)
+    return {"id": s.get("id"), "location": s.get("location"), "remaining_g": left,
+            "net_g": f.get("weight"), "tare_g": tare, "tag": tags.stored(s) or None, "state": state,
             "filament_id": f.get("id"), "vendor": (f.get("vendor") or {}).get("name"), "name": f.get("name"),
-            "material": f.get("material"), "color_hex": f.get("color_hex"), "lot": s.get("lot_nr")}
+            "material": f.get("material"), "color_hex": f.get("color_hex"), "lot": s.get("lot_nr"),
+            "loaded": ctx.slot_of(s.get("location")), "low": low}
 
 
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
@@ -720,9 +760,10 @@ def with_spools(entries: list[dict], sm: Spoolman) -> list[dict]:
     A Spoolman that cannot be read leaves `spool` None, so the log still lists."""
     found: dict = {}
     down = False
+    ctx = view_context()
     for sid in {e.get("spool_id") for e in entries if _is_int(e.get("spool_id"))}:
         try:
-            found[sid] = None if down else spool_view(sm.get(f"spool/{sid}"))
+            found[sid] = None if down else spool_view(sm.get(f"spool/{sid}"), ctx)
         except SpoolmanError as e:
             if e.status != 404:
                 log.warning("usage: cannot name spool %s: %s", sid, e)
@@ -740,10 +781,37 @@ def find(sm: Spoolman, q: str, sealed_only: bool) -> list[dict]:
         if sealed_only and SEALED_COMMENT not in (s.get("comment") or ""):
             continue
         f = s.get("filament") or {}
-        hay = " ".join([(f.get("vendor") or {}).get("name") or "", f.get("name") or "",
+        hay = " ".join([(f.get("vendor") or {}).get("name") or "", f.get("name") or "", f.get("material") or "",
                         s.get("location") or "", tags.stored(s) or ""]).lower()
-        if all(w in hay for w in words):
+        if all(w in hay or w.lstrip("#") == str(s.get("id")) for w in words):
             out.append(s)
+    return out
+
+
+class FilterError(ValueError):
+    """`filter` is not one of FILTERS."""
+
+
+def search(sm: Spoolman, q: str, sealed_only: bool, flt: str | None = None) -> list[dict]:
+    """`find`, narrowed by `flt` (GET /api/spools `filter`): sealed, opened, loaded (recorded in a printer slot) or
+    low (running low). None: every spool that is not empty. Each row is Spoolman's spool plus `view`, its
+    `spool_view`."""
+    if flt not in (None, "") and flt not in FILTERS:
+        raise FilterError(f"filter must be one of {', '.join(FILTERS)}")
+    ctx = view_context()
+    out = []
+    for sp in find(sm, q, sealed_only):
+        v = spool_view(sp, ctx)
+        if flt in (None, ""):
+            keep = v["state"] != "empty"
+        elif flt in ("sealed", "opened"):
+            keep = v["state"] == flt
+        elif flt == "loaded":
+            keep = v["loaded"] is not None and v["state"] != "empty"
+        else:
+            keep = v["low"]
+        if keep:
+            out.append({**sp, "view": v})
     return out
 
 

@@ -822,3 +822,79 @@ def test_open_spool_weight_is_capped_at_a_full_spool_like_the_edit(sm):
     dry = inventory.open_spool(sm, s["id"], UID, RULES, gross=4800, dry=True)
     assert dry["remaining_weight"] == 1000
     assert inventory.open_spool(sm, s["id"], UID, RULES, remaining=4000, dry=False)["remaining_weight"] == 1000
+
+
+# ---------- the spool view's `loaded` and `low`, the search `filter` (R83 s10.1) ----------
+
+@pytest.fixture
+def printers(tmp_path, monkeypatch):
+    from filament_kit.bridge import registry
+    from filament_kit.bridge.registry import Printer
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "state"))
+    registry.upsert(Printer("S1", "Office H2D", "O1D", "10.0.0.5", "13572468", True))
+    registry.upsert(Printer("K1", "Big Sovol", family="klipper", host="sv.local"))
+    return registry
+
+
+def _opened(sm, remaining, **kw):
+    s = _spool(sm, **kw)
+    inventory.link_tag(sm, s["id"], f"a:b:c:d:e:f:{s['id']:02x}", force=False, dry=False)
+    return sm.patch(f"spool/{s['id']}", {"remaining_weight": remaining, "location": "Rack 1"})
+
+
+def test_the_view_says_where_a_spool_is_loaded_and_whether_it_is_low(sm, printers):
+    a = _opened(sm, 500, name="PLA Red")
+    b = _opened(sm, 90, name="PLA Blue")
+    c = _opened(sm, 800, name="PLA Green")
+    sm.patch(f"spool/{b['id']}", {"location": "Office H2D \u2013 AMS A2"})
+    sm.patch(f"spool/{c['id']}", {"location": "Big Sovol \u2013 T0"})
+    va, vb, vc = (inventory.spool_view(sm.get(f"spool/{s['id']}")) for s in (a, b, c))
+    assert (va["loaded"], va["low"]) == (None, False)
+    assert vb["loaded"] == {"printer_id": "S1", "printer": "Office H2D", "slot": "A2"} and vb["low"] is True
+    assert vc["loaded"] == {"printer_id": "K1", "printer": "Big Sovol", "slot": "T0"} and vc["low"] is False
+
+
+def test_a_sealed_or_empty_spool_is_never_low_and_a_shelf_is_not_a_slot(sm, printers):
+    s = _spool(sm)
+    sm.patch(f"spool/{s['id']}", {"remaining_weight": 10, "location": "Office H2D shelf"})
+    v = inventory.spool_view(sm.get(f"spool/{s['id']}"))
+    assert v["loaded"] is None and v["low"] is False and v["state"] == "sealed"
+    o = _opened(sm, 0, name="Used up")
+    assert inventory.spool_view(sm.get(f"spool/{o['id']}"))["low"] is False
+
+
+def test_the_low_threshold_is_the_alert_setting(sm, printers):
+    from filament_kit import alerts
+    s = _opened(sm, 300)
+    assert inventory.spool_view(sm.get(f"spool/{s['id']}"))["low"] is False
+    alerts.save({"running_low_g": 400})
+    assert inventory.spool_view(sm.get(f"spool/{s['id']}"))["low"] is True
+
+
+def test_search_filters(sm, printers):
+    sealed = _spool(sm, name="Sealed one")
+    opened = _opened(sm, 700, name="Opened one")
+    low = _opened(sm, 50, name="Low one")
+    loaded = _opened(sm, 600, name="Loaded one")
+    empty = _opened(sm, 0, name="Empty one")
+    sm.patch(f"spool/{loaded['id']}", {"location": "Office H2D \u2013 AMS A1"})
+
+    def ids(flt=None, q=""):
+        return {s["id"] for s in inventory.search(sm, q, False, flt)}
+    assert ids() == {sealed["id"], opened["id"], low["id"], loaded["id"]}            # every spool not empty
+    assert ids("sealed") == {sealed["id"]}
+    assert ids("opened") == {opened["id"], low["id"], loaded["id"]}
+    assert ids("loaded") == {loaded["id"]} and ids("low") == {low["id"]}
+    assert ids("low", "one") == {low["id"]} and ids(None, "loaded") == {loaded["id"]}
+    assert empty["id"] not in ids("opened")
+    row = next(iter(inventory.search(sm, "Loaded", False, "loaded")))
+    assert row["view"]["loaded"]["slot"] == "A1" and row["id"] == loaded["id"] and "filament" in row
+    with pytest.raises(inventory.FilterError):
+        inventory.search(sm, "", False, "everything")
+
+
+def test_search_matches_material_and_spool_number(sm, printers):
+    a, b = _spool(sm), _spool(sm, material="PETG", name="Other")
+    assert {s["id"] for s in inventory.find(sm, "petg", False)} == {b["id"]}
+    assert [s["id"] for s in inventory.find(sm, f"#{a['id']}", False)] == [a["id"]]
+    assert [s["id"] for s in inventory.find(sm, str(b["id"]), False)] == [b["id"]]
