@@ -708,6 +708,18 @@ Reduced motion:
 - One CSS pixel is treated as one dp. On phones and tablets the two match closely; this is what lets one set of
   numbers serve both.
 
+**Container edges.** A region whose width does not follow the window (foundations section 7) changes with a container
+query at an edge that is the sum of stated sizes, not a breakpoint. The table lists each one; a new container query
+adds its row in the same change. The rule is written in the comment beside the stylesheet's rule as the same sum.
+
+| Where | Edge | How it is derived |
+|---|---|---|
+| Settings in the Panes theme, with a form open (the list of groups hides and a Back button shows below the edge) | 800 px | The list of groups (296 px) + the gap (24 px) + the least width of a group with a form (480 px) |
+
+Each edge has a browser test on both sides of it, at real widths, as the Panes row has: the list shown at 1776 and 2560
+px, hidden at 1280 and 1440 px, and no sideways page scroll at any of them. The window's own edges stay 600 and
+1024 px.
+
 ## 8. Appearance switch per platform
 
 The choice, its default and where its controls sit are in foundations section 5. This section says how each

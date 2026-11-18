@@ -27,7 +27,7 @@ on screen change.
 
 | Address | Served by | Differences on screen |
 |---|---|---|
-| `https://<hub>:8710/intake` (the **home address**) | the Hub itself | Everything in this document. |
+| `https://<hub>/intake` (the **home address**; `https://<hub>:<port>/intake` on a Hub that was moved to another port) | the Hub itself | Everything in this document. |
 | `<public address>/intake` (the **public address**, when the web Feature is on) | the Hub's web service behind its reverse proxy | **Recent** is dimmed and opens the notice in 7.4. **Printer settings** are read-only unless the owner allowed printer changes from the public address (6.8). **Open the Hub page** is not offered (9.1). |
 
 Both addresses are refused to anyone outside the home network (section 11.1). Neither asks for a setup code: the
@@ -1381,7 +1381,7 @@ A sheet on phones with the address `#settings` (2.4), opened over the last place
 |------------------------------------------|
 | This Hub                                 |
 | Workshop                                 |
-| https://192.0.2.10:8710/intake           |
+| https://192.0.2.10/intake                |
 | [ Open the Hub page ]                    |
 +------------------------------------------+
 ```

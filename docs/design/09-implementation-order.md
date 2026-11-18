@@ -10,7 +10,7 @@ Contents: 1 Rules of the road · 2 How a step is written · 3 Stage 0: groundwor
 the Hub page · 5 Stage 2: Hub page sections · 6 Stage 3: the web app · 7 Stage 4: the app · 8 Stage 5: the command
 line · 9 Stage 6: Themes · 10 Stage 7: wording · 11 Hub API additions · 12 Dependencies and the first ten steps ·
 13 Open points · 14 Coverage · 15 Stage 8: Share corrections · 16 Stage 9: Storage locations · 17 Stage 10: Events
-and alerts
+and alerts · 18 Stage 11: Address and first run
 
 ---
 
@@ -1379,6 +1379,11 @@ Stage 10  EA1 > EA2 > EA3 > EA4      EA5 from the start      EA3 + EA5 > EA6    
           EA3 to EA8 > EA9
           (Stage 10 starts after Stage 9 is merged: EA2 and EA6 open files that SL steps change; EA5 and EA8 may start
           at once against the contract in 03 section 15; EA8 merges after EA3)
+
+Stage 11  AF1 > AF2      AF7, AF8 from the start      AF1 + AF2 + EA3 merged > AF5      AF5 > AF3, AF4
+          AF1 + AF5 + EA6 merged > AF6      AF1 to AF8 > AF9
+          (AF5 opens files that EA3 opens and AF6 files that EA6 opens, so each starts after that step is merged;
+          AF1, AF7 and AF8 open no file of Stage 10)
 ```
 
 Stages 3 and 4 do not wait for Stages 1 and 2: once Stage 0 is done they run beside them, each needing only the Hub
@@ -1430,7 +1435,7 @@ Things the design parts leave open. Each needs a decision before the step named;
 10. **A printer's id and its serial.** 06 writes `/api/printers/<serial>/…`, 05 `api/printers/{id}/…`; whether they
     are the same value is not stated. Needed by S5.5 (naming a printer by serial or id).
 11. **"The web app answers on this Hub (port 8101)" in 06 9.12.** Whether this is the web service's own port behind
-    the Hub's address or the Hub's 8710 is not stated. Needed by S5.8 (`web status`).
+    the Hub's address or the Hub's own port is not stated. Needed by S5.8 (`web status`).
 12. **Settled: the name on screen and the rename.** The product's name is one catalogue entry (`app_name`, also the
     app's label) and the command's name another (`command_name`); 08 12. Until the code is renamed they hold the
     old name; the rename changes the two entries. The application id stays with the rename.
@@ -2191,3 +2196,222 @@ role.
 **Out of scope:** the activity log, undo, health history and analytics (the store is ready for them); the Hub page's
 Spools section and "the Hub at a glance" in the apps; running low inside the slicer; the Home Assistant integration
 itself; e-mail, chat or other outside notification services; quiet hours; alerts per printer or per filament line.
+
+---
+
+## 18. Stage 11: Address and first run
+
+A new Hub answers on port 443, so its address has no port; the Weigh Station, the printer-side tag service and a Label
+Reader on another machine serve HTTPS only; the installer's first question lets the Hub page take over the rest of the
+setup (Guided Setup), and that page leads the owner through what is left (Getting started, the guided printer add, the
+Label Reader lead-in). The parts that specify it are 03 4.2, 5.6, 7.3, 9.4, 10.5, 10.7, 10.11 and 15, 06 3.1, 3.2, 9.1,
+9.2, 9.6, 9.19 and 9.20, 02 6.5, and the typed address of 04 1 and 05 4.5. The contract the interface steps build against
+is the rows "`GET start`", "The Hub's port", the three values of the station's hello call, the found Bambu Lab printers
+and the remote reader's HTTPS in 03 section 15.
+
+### The rules of the stage
+
+- **The code's fallback stays 8710.** `config.py` is not changed. A first install writes `port` into the configuration
+  file itself (443, or the port the installer's question gives). An install whose file has no `port` key keeps 8710
+  whatever happens, and no update ever moves an existing Hub; `spoolwarden port` and Settings > Network and addresses are
+  the only ways to move one.
+- **Binding below 1024.** The Hub's unit has empty capability sets, so for a port below 1024 the installer writes a
+  drop-in that gives exactly `CAP_NET_BIND_SERVICE` (ambient and bounding); for a port of 1024 or more it removes the
+  drop-in. The unit file itself does not change. The Weigh Station's unit gets the same drop-in.
+- **Remote access and 443 cannot share one machine.** Switching Remote access on while the Hub holds 443 is refused
+  before anything is changed, and the Hub never moves by itself. Sharing 443 by name through nginx was looked at and
+  dropped: the Hub would see every caller as `127.0.0.1`, which breaks its home-network limit and the per-address lock
+  on wrong setup codes.
+- **HTTPS on the satellites.** A listener of ours that another machine can reach serves HTTPS only; a listener on
+  `127.0.0.1` stays as it is. The Weigh Station makes its own certificate with the Hub's existing `pairing.make_cert`.
+  At every start it tells the Hub `fp`, `port` and `version` on `GET /api/station/hello`, over the connection it already
+  has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain HTTP.
+  A station that has not been updated sends no fingerprint and is called over plain HTTP as before; the Checks show it.
+  The printer-side tag service is pinned the first time the Hub reads its address (trust on first use). Spoolman is not
+  ours: its page stays `http://<host>:7912`. Nothing listens on port 80, so a bare name typed without `https://` shows
+  nothing.
+- **Existing satellites keep their ports** (5003 for the Weigh Station, 5002 for the printer-side tag service) and switch
+  to HTTPS on update; only new installs take 443. "The printer station" in the code is that tag service, because the
+  Printer Station / Tag Reader device itself listens on nothing.
+- **Typed addresses.** The Android app's manual entry and Slicer Sync's bare host try 443 first and 8710 second and keep
+  the one that answered with the fingerprint of the pairing; a typed port is used as typed.
+- **Guided Setup is the installer's first question** and its default answer is Yes; after Yes the installer asks nothing
+  more. The Hub page's Getting started panel is that setup, and an updated Hub starts with it hidden.
+- **Texts.** The installer's sentences stay literals in `install/install.sh` and `apply.py`, as all its texts are. Every
+  other new text goes into the string catalogue in ONE step (AF5); the client steps name their keys to it and add none
+  themselves.
+- **What this stage does not change:** existing Hubs' ports; the `/setup` address, kept beside the base address; the setup
+  code and how it is shown; the installer's questions on its No path; pairing; the phone web app; the Tag Reader
+  firmware; Spoolman's port.
+
+### Which files the stage shares with Stage 10
+
+The events and alerts steps open, among others: `config.py`, `__main__.py`, `inventory.py`, `storage.py`, `backup.py`,
+`api.py`, `cli.py`, `status.py`, the string catalogue and its copies, `setup_page.py`, `setup_console/overview.py`,
+`setup_static/setup.js`, `setup_overview.js`, `setup_settings.js`, `shared_static/components.*`, the web app's `app.js`,
+`printers.js`, `sw.js`, Android's manifest, `NoticeCard.kt`, `HomeScreen.kt`, the Spools and Settings screens and the
+API client. This stage avoids them where it can: the default stays in `config.py`, the Getting started panel is its own
+files, and the apps wait for a later stage.
+
+**Seven of those files cannot be avoided**, because each is the one place where a command, a text, a page route or a
+Checks row is registered: `cli.py`, `status.py`, `api.py`, the string catalogue, `setup_page.py`, `setup_overview.js` and
+`setup_settings.js`. Each is opened by exactly one AF step, and that step starts only after the EA step that has the file
+open is merged:
+
+| Shared files | Opened by | Opened in Stage 10 by | Merge first |
+|---|---|---|---|
+| `cli.py`, `status.py`, `api.py` (only `station_hello`), the string catalogue and its copies | AF5 | EA3 | EA3 |
+| `setup_page.py`, `setup_overview.js`, `setup_settings.js` | AF6 | EA6 | EA6 |
+
+So the map has two parts.
+
+**Part A: no file of Stage 10; can start now, beside it.**
+
+### AF0 Design text
+Depends on: none · Beside: AF1, AF7, AF8
+- **Files today:** `docs/design/*.md`, stacked on the events and alerts text.
+- **Change:** the design of this stage: 03 (4 Overview, 5.6 the add drawer, 7.3, 9 Features, 10.5, 10.7, 10.11, 15 routes),
+  06 (the installer, `port`, `status`, `printer add`), 09 (this stage), 02 (the panel), and the container-query text
+  that was owed (01 section 7, 08 section 7).
+- **Keep:** every other part.
+- **Other interfaces:** AF1 to AF9 read it.
+- **Check:** the design's own tests; every `8710` that states a default is gone from the documents.
+
+### AF1 Hub: installer and port
+Depends on: none · Beside: AF0, AF7, AF8
+- **Files today:** new `server/filament_kit/hubport.py`, new `server/filament_kit/firstrun.py`, `install/install.sh`,
+  `server/filament_kit/apply.py`, `server/filament_kit/modules.py`, `server/filament_kit/setup_code.py` (the address
+  line), `install/avahi/filament-kit.service` if its template must change, `tools/e2e/e2e.py`, `tools/e2e/run.sh`, new
+  tests and the installer's tests.
+- **Change:** 06 9.20 and 9.19: the first question, detect and offer, the port written at first install, the capability
+  drop-ins for the Hub and the station units, the station's port question, the closing lines, the address without a port,
+  the first-run file `firstrun.xml` and its rules (what is done, hidden, finished; written by the installer as root and by
+  the Hub process, never through the root helper), the port-change function, and the refusal of Remote access on 443.
+- **Keep:** `config.py`; the unit files; the installer's questions on its No path.
+- **Other interfaces:** AF2 reads `hubport.py` (the free-port test, the drop-in); AF5 and AF6 read `firstrun.py` and the
+  port-change function.
+- **Check:** prove first (items 1 and 2 of the list below). Then the installer's tests; the tests that name 8710 and
+  assert a default are changed to the new rule (which of them do was not read).
+
+### AF2 Hub: HTTPS on the satellites
+Depends on: AF1's `hubport` (free-port test, drop-in)
+- **Files today:** `server/filament_kit/station/__main__.py`, `station/http.py`, `station/state.py`,
+  `station/server_api.py`, `station/pair_request.py`, `server/filament_kit/station_client.py`,
+  `server/filament_kit/pairing.py` (the three values kept with a station's pairing), `server/filament_kit/tagsources.py`,
+  `server/filament_kit/local_reader.py`, `printer-pack/lasttag/*`, new tests.
+- **Change:** the station's certificate and HTTPS listener, the three values on its hello call, the Hub's pinned calls to a
+  station, the tag service's HTTPS and its pin on first use, the remote reader's https rule and its pin at Test (03 10.5).
+  The reader's own side (a certificate at the remote install, HTTPS on port 7915) is a request to the reader's repository;
+  until it ships, the Hub accepts the reader's `http://` address as before and shows the Checks row.
+- **Keep:** the allow-list of caller addresses; `http://127.0.0.1:5003` for a station on the Hub's own machine.
+- **Other interfaces:** AF5 words the rows this step makes possible.
+- **Check:** prove first (items 5 and 6 of the list below). Then the tests of each listener and of the pin.
+
+### AF7 Android: a typed address without a port
+Depends on: none · Beside: AF0, AF1, AF8
+- **Files today:** `android/.../ui/pair/PairViewModel.kt`, its tests (`PairViewModelTest`, `PairScreensTest`).
+- **Change:** 05 4.5: an address typed without a port tries 443, then 8710.
+- **Keep:** scanned links and discovery, which already carry the port.
+- **Other interfaces:** none.
+- **Check:** the two test classes; prove first (item 3 of the list below).
+
+### AF8 Slicer Sync: a bare host
+Depends on: none · Beside: AF0, AF1, AF7
+- **Files today:** `pc-sync/fksync/client.py`, `pc-sync/fksync/__main__.py`, `pc-sync/tests/test_client.py`.
+- **Change:** a bare host tries 443, then 8710, and keeps the one that answered with the fingerprint of the pairing.
+- **Keep:** a typed port, used as typed.
+- **Other interfaces:** none.
+- **Check:** `pc-sync/tests/test_client.py`; prove first (item 3 of the list below).
+
+**Part B: opens a file that a Stage 10 step also opens; starts after that step is merged.**
+
+### AF5 Hub: command line, Checks rows, hello values and the texts
+Depends on: AF1, AF2; EA3 merged (it has `api.py`, `cli.py`, `status.py` and the catalogue)
+- **Files today:** `server/filament_kit/cli.py`, `server/filament_kit/klipper_cli.py`, `server/filament_kit/status.py`,
+  `server/filament_kit/api.py` (only `station_hello`), `strings/en.json` and its generated copies, tests.
+- **Change:** `spoolwarden port`, the Getting started block and `getting_started` in `status`, `printer add` in the guided
+  order with the test, the `Next:` line after switching the Label Reader on, the rows of 03 4.2 (the satellites and the
+  reader), the three values on the hello route, and ALL catalogue texts of this stage.
+- **Keep:** the other routes and commands.
+- **Other interfaces:** AF3, AF4 and AF6 name the keys they need to this step before it is filed.
+- **Check:** the command tests; the route tests; the catalogue and wording tests (08 test 7).
+
+### AF3 Hub page: the guided add drawer
+Depends on: AF5 (texts) · Beside: AF4
+- **Files today:** `setup_static/setup_printers.js`, `setup_static/setup_printers_add.css`,
+  `setup_console/printers_tab.py`, `server/tests/test_hub_printers.py`.
+- **Change:** 03 5.6: the guided add drawer and the Klipper test before saving.
+- **Keep:** the printer rows and their other dialogs.
+- **Other interfaces:** none.
+- **Check:** prove first (item 4 of the list below). Then the drawer's browser tests and AUT-5 on it.
+
+### AF4 Hub page: the Label Reader lead-in
+Depends on: AF5 (texts) · Beside: AF3
+- **Files today:** `setup_static/setup_features.js`, `setup_static/setup_features.css`.
+- **Change:** 03 9.4 and 9.5: the line in the preview drawer, the arrival in Settings, the row's "Not installed yet".
+- **Keep:** the other features' rows and drawers.
+- **Other interfaces:** none.
+- **Check:** the feature's browser tests; a failed job changes nothing.
+
+### AF6 Hub page: Getting started, the Hub port, the arrival state
+Depends on: AF1, AF5; EA6 merged (it has `setup_page.py`, `setup_overview.js`, `setup_settings.js`)
+- **Files today:** new `setup_static/setup_start.js`, new `setup_static/setup_start.css`, new
+  `setup_console/start_tab.py`, `server/filament_kit/setup_page.py`, `setup_static/setup_overview.js`,
+  `setup_static/setup_settings.js` and its CSS, `server/filament_kit/setup_helper.py` (the port change as a root job),
+  `setup_console/general_tab.py` (the port in the group's answer).
+- **Change:** 03 4.2 and 15: the Getting started panel and its routes, the Overview's mount, Label Reader tile and banner;
+  10.7 and 10.11: Settings > Network "Hub port" with its job; 10.5: the Label Reader group's arrival state.
+- **Keep:** `shared_static/components.js` and `.css`, which the panel is built from as they are (EA5 has them).
+- **Other interfaces:** none.
+- **Check:** AUT-5 on Overview with the panel in each state; the unsaved-changes guard; the port change run on a real
+  systemd.
+
+### AF9 Documents
+Depends on: AF1 to AF8 merged; after EA9 if that is open then
+- **Files today:** `docs/*.md`, `README.md`, `release-notes/next.md`.
+- **Change:** the install guide (the first question, the port, the address without a port), the user guide, the app
+  documents' pairing parts, the release notes.
+- **Keep:** the wording of the other sections.
+- **Other interfaces:** none.
+- **Check:** the documents tests; the words lint.
+
+**Order.** AF0, AF1, AF7 and AF8 now. AF2 when AF1's `hubport.py` is filed (it can stack on AF1). AF5 after AF1, AF2 and
+EA3's merge. AF3 and AF4 after AF5. AF6 after AF5 and EA6's merge. AF9 last. No file is opened by two AF steps: a step
+that finds it needs another step's file stops and says so. The panel is built from the shared components as they are; it
+adds nothing to `shared_static/components.js` or `.css`.
+
+**How far the map is checked.** It is built from reads of the code and of the registry places, not from opening every
+file. Not looked at: the exact test files that pin the installer's lines and 8710 (23 server test files and 7 Android
+test files name 8710; which of them assert a default and must change was not read), whether `setup_code.py:333` is the
+only place that builds the page address, the CSS a Network row needs, and the installer of `printer-pack/lasttag`.
+
+**Later work, so that no file is opened twice for the same reason.** A later stage opens the web app's and the Android
+app's printer and home screens once for the guided order, the one-line Getting started summary, the slot features and the
+satellites' version prompt (it reads the `version` AF2 stores); the satellites' own web pages are served by the HTTPS
+listeners AF2 builds.
+
+### To prove first, in the step that meets it
+
+Each has a fallback.
+
+1. **AF1: the capability drop-in.** Assumed: `AmbientCapabilities=CAP_NET_BIND_SERVICE` with the same bounding set lets
+   the unit bind 443 while `NoNewPrivileges=yes` and the rest of its hardening stay. Proved by the upgrade and install
+   runs on a real systemd. Fallback: systemd socket activation for the Hub's listener.
+2. **AF1: "taken" is detected the same way for every case** (another web server, the Hub's own nginx, an IPv6-only
+   listener). Fallback: the question is asked whenever the test is unsure.
+3. **AF1 with AF7 and AF8: paired phones and the PC find a Hub whose port changed.** Assumed from the app browsing the
+   network for the Hub (`Discovery.kt:121`); not read further. If they do not, the sentence "Pair your phones and the
+   Slicer Sync PC again." replaces the first sentence of the port-change message in 06 9.19 and 03 10.11, and nothing
+   else changes.
+4. **AF3: found Bambu Lab printers.** Assumed: the Hub's announcement listener (`bridge/discovery.py`) is running in the
+   Hub and can give the page a list. If not, the found list is Klipper only.
+5. **AF2: the printer-side host can make a certificate and serve HTTPS** with what a Klipper host has installed.
+   Fallback: the tag service stays on plain HTTP on that host and the Checks row says so; the owner is told in the release
+   notes.
+6. **AF2: the remote Label Reader's HTTPS** needs its own repository's change first. Until then the Hub accepts its
+   `http://` address as today and shows the row "The Label Reader at <address> is not using HTTPS."
+
+**Out of scope:** a listener on port 80; Spoolman over HTTPS; a real (publicly trusted) certificate for the home address;
+the satellites' own web pages, their version prompt and a regular check-in (only the stored `version` is added here); the
+guided printer and the Getting started line in the web app and the Android app; loading a spool from the Hub page;
+anything on the Tag Reader firmware.
