@@ -5,6 +5,8 @@
 export default async (p) => {
   const { ids, code } = JSON.parse(p.arg);
   const ok = (js, what) => p.waitFor(`(() => { try { return ${js}; } catch { return false; } })()`, what, 10000);
+  // an answer of the Label Reader: the page waits up to a minute for it, so a test that waits for it does too (10 s fails on a loaded machine)
+  const answered = (js, what) => p.waitFor(`(() => { try { return ${js}; } catch { return false; } })()`, what, 60000);
   const unlock = async () => {
     await p.waitFor(`document.querySelector("dialog[open] input[name=code]")`, "the unlock dialog");
     await p.type("dialog[open] input[name=code]", code);
@@ -82,7 +84,7 @@ export default async (p) => {
   await p.click("button", "Cancel");
   await p.waitFor(`document.querySelector("textarea[name=note]")`, "the note box again");
   await p.click("button", "Ask the Label Reader");
-  await ok(`document.querySelector(".changes__title")`, "the suggestion in the record drawn again");
+  await answered(`document.querySelector(".changes__title")`, "the suggestion in the record drawn again");
   await pause(500);
   if ((await count("/revise")) !== 1) throw new Error("Ask, Edit by hand, Ask again sent " + (await count("/revise")) + " requests");
   await ok(`document.querySelector(".changes").textContent.includes("second look at the label")`, "the Label Reader's own note");
@@ -96,7 +98,7 @@ export default async (p) => {
   await p.click("button", "Edit by hand");
   await p.waitFor(`document.querySelector("input[name=nozzle]")`, "the fields while asking");
   await p.type("input[name=nozzle]", "999");
-  await ok(`document.querySelector(".changes__title")`, "the late answer");
+  await answered(`document.querySelector(".changes__title")`, "the late answer");
   await ok(`document.querySelector("input[name=nozzle]").value === "999"`, "the typed value after the late answer");
   await ok(`document.activeElement === document.querySelector("input[name=nozzle]")`, "the focus stays in the form after the late answer");
 
@@ -124,7 +126,7 @@ export default async (p) => {
   await p.type("textarea[name=note]", "second note");
   await p.click("button", "Ask the Label Reader");
   await ok(`[...document.querySelectorAll(".result__text")].some((e) => e.textContent.includes("Still working. Wait for it to finish."))`, "the busy text");
-  await ok(`document.querySelector(".changes__title")`, "the first answer");
+  await answered(`document.querySelector(".changes__title")`, "the first answer");
   if ((await count("/revise")) !== 1 || JSON.parse(await p.eval(`window.__reqs.find(([u]) => u.endsWith("/revise"))[1]`)).note !== "first note") throw new Error("one question, with the first note");
 
   // Accept while the edit form is open is not offered: what was typed is not replaced without a word
@@ -137,7 +139,7 @@ export default async (p) => {
   await p.waitFor(`document.querySelector("input[name=vendor]")`, "the fields while asking (accept)");
   await p.type("input[name=vendor]", "PROBEVENDOR");
   await p.type("input[name=nozzle]", "999");
-  await ok(`document.querySelector(".changes__title")`, "the answer while the form is open");
+  await answered(`document.querySelector(".changes__title")`, "the answer while the form is open");
   await ok(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Accept").getAttribute("aria-disabled") === "true"`, "Accept is not offered while editing");
   await ok(`document.querySelector(".recent__suggestion").textContent.includes("Save or cancel your edit first")`, "the reason is shown");
   await p.click("button", "Accept");
@@ -152,7 +154,7 @@ export default async (p) => {
   await p.go("#recent/" + ids.local);
   await p.type("textarea[name=note]", "first");
   await p.click("button", "Ask the Label Reader");
-  await ok(`document.querySelector(".changes__title")`, "the first answer");
+  await answered(`document.querySelector(".changes__title")`, "the first answer");
   await p.type("textarea[name=note]", "second");
   await p.click("button", "Ask the Label Reader");
   await p.click("button", "Accept");
@@ -189,7 +191,7 @@ export default async (p) => {
   await p.click("button[type=submit]", "Save changes");
   await p.click("button", "Ask the Label Reader");
   await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Saved"))`, "Saved (slow reply)");
-  await ok(`document.querySelector(".changes__title")`, "the answer of an Ask sent during a Save");
+  await answered(`document.querySelector(".changes__title")`, "the answer of an Ask sent during a Save");
 
   // an answer that arrives BEFORE a slow Save reply is kept (the Save was sent before the Ask)
   await p.go("#recent");
@@ -201,10 +203,10 @@ export default async (p) => {
   await net({ applyDelay: 2600 });
   await p.click("button[type=submit]", "Save changes");
   await p.click("button", "Ask the Label Reader");
-  await ok(`document.querySelector(".changes__title")`, "the answer before the Save reply");
+  await answered(`document.querySelector(".changes__title")`, "the answer before the Save reply");
   await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Saved"))`, "Saved (slow reply)");
   await pause(500);
-  await ok(`document.querySelector(".changes__title")`, "the answer is still there after the Save reply");
+  await answered(`document.querySelector(".changes__title")`, "the answer is still there after the Save reply");
 
   // a write that failed changed nothing: a pending answer is kept
   await p.go("#recent");
@@ -216,7 +218,7 @@ export default async (p) => {
   await p.type("input[name=material]", "x".repeat(101));
   await p.click("button[type=submit]", "Save changes");
   await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.includes("material"))`, "the Hub refuses the Save");
-  await ok(`document.querySelector(".changes__title")`, "the answer is kept after a refused Save");
+  await answered(`document.querySelector(".changes__title")`, "the answer is kept after a refused Save");
 
   // a Save that fails, an Ask sent while it is out, then an Undo that succeeds: the answer is out of date (the failed Save counted as nothing)
   await net({});
@@ -246,7 +248,7 @@ export default async (p) => {
   await p.go("#recent/" + ids.local);
   await p.type("textarea[name=note]", "the hub forgets this");
   await p.click("button", "Ask the Label Reader");
-  await ok(`document.querySelector(".changes__title")`, "the suggestion to be refused");
+  await answered(`document.querySelector(".changes__title")`, "the suggestion to be refused");
   await p.eval(`fetch("/setup/api/intake/history/${ids.local}/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item: 0, values: { bed: ${61 + (Date.now() % 9)} }, code: SW.lock.code }) }).then((r) => r.status)`);
   await p.click("button", "Accept");
   await ok(`[...document.querySelectorAll(".result__text")].some((e) => e.textContent.includes("so its answer was not used"))`, "the refusal in words");
@@ -259,7 +261,7 @@ export default async (p) => {
   await p.go("#recent/" + ids.local);
   await p.type("textarea[name=note]", "first for a slow accept");
   await p.click("button", "Ask the Label Reader");
-  await ok(`document.querySelector(".changes__title")`, "the suggestion for a slow Accept");
+  await answered(`document.querySelector(".changes__title")`, "the suggestion for a slow Accept");
   await net({ applyDelay: 3000 });
   await p.type("textarea[name=note]", "second for a slow accept");
   await p.click("button", "Ask the Label Reader");
