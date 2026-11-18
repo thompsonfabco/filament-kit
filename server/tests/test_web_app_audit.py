@@ -942,7 +942,7 @@ READY = {
   await waitPage();
   const card = await newFilament('', '', '');
   const sel = () => field('Location', card).querySelector('select'), labels = () => $$('option', sel()).map((o) => o.textContent);
-  need('the Hub\'s own list shows how full each place is', labels().some((l) => l.includes(' · ')));
+  await until('the Hub\'s own list shows how full each place is', () => labels().some((l) => l.includes(' · ')));    // the list comes from the startup fetch, which the page's load does not wait for
   stub('storage', () => reply({ error: 'not found' }, 404)); await refreshStorage();
   need('a Hub with no storage list shows the plain names', labels().length > 1 && labels()[0].startsWith('Automatic') && !labels().some((l) => l.includes(' \u00b7 ')));
   const STORE = { locations: [
