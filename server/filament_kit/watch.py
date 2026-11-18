@@ -472,8 +472,8 @@ def check_devices(sink, station_url: str | None, devices: list[dict]) -> None:
 
 
 def row_key(row) -> str:
-    """The key of a Checks row: its own `key` when it has one (EA3 may give Row one), else the group and the
-    first two words of its text without digits (the text of a row changes with its numbers, its key must not)."""
+    """The key of a Checks row: its own `key` (every status.Row has one: the same whether the row is OK or needs a
+    look). A row-like object without one (a test's) gets the group and the first two words of its text without digits."""
     k = getattr(row, "key", "")
     if k:
         return k
@@ -488,7 +488,9 @@ def check_rows(sink, rows) -> None:
     seen = {}
     for r in rows:
         if r.state in ("ok", "fail"):
-            seen[row_key(r)] = r
+            k = row_key(r)
+            if not (k in seen and seen[k].state == "fail"):      # one key, one row: a row that needs a look is not hidden
+                seen[k] = r
     raised = _raised(sink, "check")
     hub = {"type": "hub"}
     for key, r in seen.items():

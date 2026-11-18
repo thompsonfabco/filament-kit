@@ -100,7 +100,7 @@ def test_status_json_is_the_overviews_rows_and_a_summary(capsys):
     page = types.SimpleNamespace(client_factory=None, overview_cache=types.SimpleNamespace(get=lambda key, fn: fn()))
     hub = overview._rows(page, None)             # the Hub page's own rows (GET /setup/api/overview)
     assert got["rows"] == hub
-    assert set(got["rows"][0]) == {"state", "text", "fix", "action", "group"}
+    assert set(got["rows"][0]) == {"state", "text", "fix", "action", "group", "key"}
     assert got["summary"] == status.summary_counts(status.Row(r["state"], r["text"]) for r in hub)
     assert rc == (1 if got["summary"]["needs_a_look"] else 0)
 

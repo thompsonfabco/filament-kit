@@ -5758,7 +5758,7 @@ def cmd_local_intake_status() -> int:
             rows += list(status_rows._key_rows(_default_client, True))
             rows.append(status_rows.Row(status_rows.INFO,
                                         f"Reads used today: {_reads_today()} of {cfg['reads_per_day']}",
-                                        group="Label Reader"))
+                                        group="Label Reader", key="label-reader.reads-today"))
         if "local_intake" in on:
             rows += [r for r in status_rows.local_reader_rows(cfg) if not r.text.startswith("label reading:")]
     engine = ", then ".join(_ENGINE_NAMES[r] for r in order)
