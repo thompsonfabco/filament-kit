@@ -886,6 +886,8 @@ data class ClearResult(
     /** The slot's setting on the printer was cleared too (Klipper, printer online). */
     val printerCleared: Boolean,
     val dryRun: Boolean,
+    /** The Hub's own sentence about what the printer still shows (Bambu Lab, R83); absent on older answers. */
+    val text: String? = null,
 )
 
 /** One row of Status: [state] is how the Hub rates it, [fix] the line that says what to do. */
@@ -978,6 +980,7 @@ object KitWire {
             waitingEnded = o.bool("waiting_ended") ?: false,
             printerCleared = o.bool("printer_cleared") ?: false,
             dryRun = o.bool("dry_run") ?: true,
+            text = o.str("text")?.takeIf { it.isNotBlank() },
         )
     }
 

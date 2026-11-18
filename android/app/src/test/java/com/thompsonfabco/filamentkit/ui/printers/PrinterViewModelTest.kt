@@ -45,8 +45,8 @@ class PrinterViewModelTest {
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun printer(state: String = "connected", configured: Boolean = true, name: String = "Garage H2D") =
-        Printer(id = "0948AB", name = name, model = "H2D", serial = "0948AB", configured = configured, state = state,
+    private fun printer(state: String = "connected", configured: Boolean = true, name: String = "Garage H2D", family: String = "bambu") =
+        Printer(id = "0948AB", name = name, model = "H2D", serial = "0948AB", configured = configured, state = state, family = family,
             camera = PrinterCamera("hls"), summary = PrinterSummary("RUNNING", 42, 31))
 
     private fun status(gcode: String = "RUNNING", light: String? = "on") =
@@ -477,8 +477,8 @@ class PrinterViewModelTest {
     private val a1 = AmsSlot(0, "A1", "PLA", "CC2222", spool = SlotSpool(7, "Acme Basic Black", "PLA", "cc2222", 812.0))
     private val ext = AmsSlot(0, "Ext", "PETG", "00FF00", spool = SlotSpool(5, "Acme PETG Green", "PETG", "00ff00", 300.0))
 
-    private fun withSlots() {
-        backend.detail = PrinterDetail(printer(), status(gcode = "IDLE").copy(ams = listOf(
+    private fun withSlots(family: String = "bambu") {
+        backend.detail = PrinterDetail(printer(family = family), status(gcode = "IDLE").copy(ams = listOf(
             AmsUnit(0, "A", "ams", listOf(a1, AmsSlot(1, "A2"))),
             AmsUnit(254, "Ext", "ext", listOf(ext)),
         )))
@@ -555,7 +555,7 @@ class PrinterViewModelTest {
     private val recorded = buildJsonObject { put("id", 7); put("vendor", "Acme"); put("name", "Basic Black") }
 
     @Test fun clearSlotAsksFirstWithTheDryRunThenClears() = runTest(dispatcher) {
-        withSlots()
+        withSlots(family = "klipper")
         backend.clearResult = backend.clearResult.copy(spool = recorded, movedBack = "Shelf 2", waitingEnded = true, printerCleared = true)
         val vm = vm()
         vm.start(); runCurrent()
@@ -574,12 +574,57 @@ class PrinterViewModelTest {
         vm.stop()
     }
 
+    private val stillShows = "The printer still shows the old filament for this slot until a spool is loaded."
+
+    @Test fun clearSlotOnABambuPrinterSaysThePrinterStillShowsTheOldFilament() = runTest(dispatcher) {
+        withSlots()
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askClear(a1); runCurrent()
+        assertEquals(stillShows, vm.state.value.clearAsk?.note)
+        vm.confirmClear(); runCurrent()
+        assertEquals(Note(Say.FromHub("Cleared slot A1. $stillShows")), vm.state.value.slotNote)
+        vm.stop()
+    }
+
+    @Test fun clearSlotOnABambuPrinterUsesTheHubsOwnTextWhenGiven() = runTest(dispatcher) {
+        withSlots()
+        backend.clearResult = backend.clearResult.copy(text = "The Hub's words.")
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askClear(a1); runCurrent()
+        assertEquals("The Hub's words.", vm.state.value.clearAsk?.note)
+        vm.confirmClear(); runCurrent()
+        assertEquals(Note(Say.FromHub("Cleared slot A1. The Hub's words.")), vm.state.value.slotNote)
+        vm.stop()
+    }
+
+    @Test fun clearSlotOnAKlipperPrinterHasNoSuchSentence() = runTest(dispatcher) {
+        withSlots(family = "klipper")
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askClear(a1); runCurrent()
+        assertNull(vm.state.value.clearAsk?.note)
+        assertFalse(PrinterTexts.clearBody(null, null, vm.state.value.clearAsk?.note).contains("still shows"))
+        vm.confirmClear(); runCurrent()
+        assertEquals(Note(Say.FromHub("Cleared slot A1.")), vm.state.value.slotNote)
+        vm.stop()
+    }
+
+    @Test fun theClearTextsCarryTheNoteLast() {
+        assertEquals("Clear slot A1? The Hub forgets the spool recorded here. $stillShows",
+            PrinterTexts.clearQuestion("A1", null, null, PrinterTexts.clearNote(null, bambu = true)))
+        assertEquals("Cleared slot A1. $stillShows", PrinterTexts.clearDone("A1", null, null, false, false, PrinterTexts.CLEAR_BAMBU_NOTE))
+        assertNull(PrinterTexts.clearNote(null, bambu = false))
+        assertNull(PrinterTexts.clearNote(" ", bambu = false))
+    }
+
     @Test fun clearSlotIsOfferedOnASlotWithNoSpoolAndAsksOnlyWhatTheHubForgets() = runTest(dispatcher) {
         withSlots()
         val vm = vm()
         vm.start(); runCurrent()
         vm.askClear(AmsSlot(1, "A2")); runCurrent()
-        assertEquals(ClearAsk("A2", null, null), vm.state.value.clearAsk)
+        assertEquals(ClearAsk("A2", null, null, stillShows), vm.state.value.clearAsk)
         vm.cancelClear()
         vm.confirmClear(); runCurrent()
         assertEquals("cancelling sends only the dry run", listOf("A2" to true), backend.clears)

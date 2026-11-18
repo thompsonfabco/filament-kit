@@ -47,7 +47,7 @@ class ApiPhase3Test {
     @Test fun clearSlotSendsDryRunAndReadsEveryField() = runBlocking {
         hub.handler = { _ ->
             200 to """{"slot": "A1", "spool": {"id": 7, "location": "Shelf"}, "moved_back": "Shelf", "waiting_ended": true,
-                "printer_cleared": true, "dry_run": false, "future": 1}"""
+                "printer_cleared": true, "dry_run": false, "text": "Said.", "future": 1}"""
         }
         val r = api.clearSlot("p-3", "A1", dryRun = false)
         assertEquals("POST", hub.requests[0].method)
@@ -59,6 +59,7 @@ class ApiPhase3Test {
         assertTrue(r.waitingEnded)
         assertTrue(r.printerCleared)
         assertFalse(r.dryRun)
+        assertEquals("Said.", r.text)
     }
 
     @Test fun clearSlotWithNoSpoolAndMissingFieldsReadsAsDefaults() = runBlocking {
@@ -68,6 +69,7 @@ class ApiPhase3Test {
         assertNull(r.movedBack)
         assertFalse(r.waitingEnded)
         assertFalse(r.printerCleared)
+        assertNull(r.text)
         assertTrue(r.dryRun)
         assertTrue(body(0)["dry_run"]!!.jsonPrimitive.content.toBoolean())
     }

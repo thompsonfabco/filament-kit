@@ -32,28 +32,41 @@ object PrinterTexts {
     private const val CLEAR_PRINTER_CLEARED = "The slot's setting on the printer is cleared too."
     private const val PREVIOUS_PLACE = "its previous place"
 
+    /** R83 point 2: on a Bambu Lab printer Clear slot changes only the Hub's record. Proposed key `printer_clear_bambu_note`. */
+    const val CLEAR_BAMBU_NOTE = "The printer still shows the old filament for this slot until a spool is loaded."
+
     fun clearTitle(label: String): String = "Clear slot $label?"
 
     /**
-     * The question after its title: what the Hub forgets and, only with a recorded [spool], where it goes back to
-     * ([place] blank: its previous place).
+     * The sentence for the question and the result: the Hub's own [hubText] when it gives one, else the app's own on a
+     * Bambu Lab printer, else none (Klipper).
      */
-    fun clearBody(spool: String?, place: String?): String {
+    fun clearNote(hubText: String?, bambu: Boolean): String? = hubText?.ifBlank { null } ?: CLEAR_BAMBU_NOTE.takeIf { bambu }
+
+    /**
+     * The question after its title: what the Hub forgets and, only with a recorded [spool], where it goes back to
+     * ([place] blank: its previous place), then the printer [note] when there is one.
+     */
+    fun clearBody(spool: String?, place: String?, note: String? = null): String {
         val forgets = "The Hub forgets the spool recorded here."
-        if (spool == null) return forgets
-        return "$forgets $spool goes back to ${place?.ifBlank { null } ?: PREVIOUS_PLACE}."
+        val first = if (spool == null) forgets else "$forgets $spool goes back to ${place?.ifBlank { null } ?: PREVIOUS_PLACE}."
+        return listOfNotNull(first, note).joinToString(" ")
     }
 
     /** The whole question as one text: "Clear slot A1? The Hub forgets ... goes back to Shelf B." */
-    fun clearQuestion(label: String, spool: String?, place: String?): String = "${clearTitle(label)} ${clearBody(spool, place)}"
+    fun clearQuestion(label: String, spool: String?, place: String?, note: String? = null): String =
+        "${clearTitle(label)} ${clearBody(spool, place, note)}"
 
-    /** The result of the real call. [spool] and [place] are what the question said. */
-    fun clearDone(label: String, spool: String?, place: String?, waitingEnded: Boolean, printerCleared: Boolean): String =
+    /** The result of the real call. [spool] and [place] are what the question said; [note] ends it. */
+    fun clearDone(
+        label: String, spool: String?, place: String?, waitingEnded: Boolean, printerCleared: Boolean, note: String? = null,
+    ): String =
         listOfNotNull(
             "Cleared slot $label.",
             spool?.let { "$it is back on ${place?.ifBlank { null } ?: PREVIOUS_PLACE}." },
             CLEAR_WAITING_ENDED.takeIf { waitingEnded },
             CLEAR_PRINTER_CLEARED.takeIf { printerCleared },
+            note,
         ).joinToString(" ")
 
     /** A spool view (`inventory.spool_view`) as a person names it: brand and name, else "spool #id". */

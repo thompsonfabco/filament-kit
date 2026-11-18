@@ -663,7 +663,7 @@ private fun ClearDialog(ask: ClearAsk, state: PrinterUiState, viewModel: Printer
         cancelEnabled = !state.clearing,
     ) {
         BusyBack(state.clearing, say)
-        Text(PrinterTexts.clearBody(ask.spool, ask.place), style = MaterialTheme.typography.bodyMedium)
+        Text(PrinterTexts.clearBody(ask.spool, ask.place, ask.note), style = MaterialTheme.typography.bodyMedium)
     }
 }
 

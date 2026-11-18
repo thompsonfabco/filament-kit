@@ -247,7 +247,7 @@ data class UnloadAsk(val label: String, val spool: String, val spoolId: Int?, va
  * The question before Clear slot, asked after its dry run said what would happen: [spool] is the recorded spool as the
  * question names it (null: none is recorded) and [place] where it goes back to.
  */
-data class ClearAsk(val label: String, val spool: String?, val place: String?)
+data class ClearAsk(val label: String, val spool: String?, val place: String?, val note: String? = null)
 
 /** A result line: what it says and whether it is good news. */
 data class Note(val say: Say, val ok: Boolean = true)
@@ -412,7 +412,8 @@ class PrinterViewModel(
                 try {
                     val r = backend.clearSlot(id, slot.label, dryRun = true)
                     val spool = r.spool?.let(PrinterTexts::spoolName)
-                    _state.update { it.copy(clearAsk = ClearAsk(slot.label, spool, r.movedBack)) }
+                    val note = PrinterTexts.clearNote(r.text, bambu = isBambu())
+                    _state.update { it.copy(clearAsk = ClearAsk(slot.label, spool, r.movedBack, note)) }
                 } catch (e: ApiError) {
                     if (e.status != NOT_FOUND) throw e
                     _state.update { it.copy(slotNote = Note(Say.FromHub(PrinterTexts.CLEAR_UPDATE_HUB), ok = false)) }
@@ -421,6 +422,9 @@ class PrinterViewModel(
             _state.update { it.copy(slotBusy = null) }
         }
     }
+
+    /** The printer on screen is a Bambu Lab one (its family, not the slot label); unknown until the printer is loaded. */
+    private fun isBambu(): Boolean = _state.value.printer?.family == "bambu"
 
     /** Leaving the question is refused while the clear is being written. */
     fun cancelClear() = _state.update { if (it.clearing) it else it.copy(clearAsk = null) }
@@ -433,7 +437,8 @@ class PrinterViewModel(
             var done = false
             guard(onError = { p -> _state.update { it.copy(slotNote = Note(p.say(), ok = false)) } }) {
                 val r = backend.clearSlot(id, ask.label, dryRun = false)
-                val text = PrinterTexts.clearDone(ask.label, ask.spool, r.movedBack ?: ask.place, r.waitingEnded, r.printerCleared)
+                val note = PrinterTexts.clearNote(r.text, bambu = isBambu())
+                val text = PrinterTexts.clearDone(ask.label, ask.spool, r.movedBack ?: ask.place, r.waitingEnded, r.printerCleared, note)
                 _state.update { it.copy(slotNote = Note(Say.FromHub(text))) }
                 done = true
             }

@@ -49,6 +49,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | already_undone | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | ams_ht | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | api_key | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | bambu | Hub identifier (printer family), not a text (EV7b)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | camera_unavailable | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | cert_changed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | connected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
