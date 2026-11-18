@@ -32,6 +32,11 @@ self.addEventListener("push", (event) => {
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = {}; }
   // one notification per alert (R80 section 4): the Hub builds the title and the line, names the place that fixes it in `url`, and tags a
   // lasting condition by its key so it is shown once; an older Hub's print alert has the same fields
+  // a clearing push ({clear: true, tag}, EA4) closes what that tag shows and shows nothing: the condition is over
+  if (d.clear) {
+    if (d.tag) event.waitUntil(self.registration.getNotifications({ tag: d.tag }).then((open) => open.forEach((n) => n.close())));
+    return;
+  }
   event.waitUntil(self.registration.showNotification(d.title || "Alert", { body: d.body || "", tag: d.tag || d.kind || "alert", data: { url: d.url || "./" } }));
 });
 self.addEventListener("notificationclick", (event) => {
