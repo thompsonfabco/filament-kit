@@ -159,9 +159,9 @@ fun PrinterScreen(
             )
         }
     }
-    // the slot sheet closes when the unload question opens
+    // the slot sheet closes when the unload or clear question opens
     var sheetSlot by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(state.unloadAsk) { if (state.unloadAsk != null) sheetSlot = null }
+    LaunchedEffect(state.unloadAsk, state.clearAsk) { if (state.unloadAsk != null || state.clearAsk != null) sheetSlot = null }
 
     if (!embedded) {
         ScreenTopBarActions {
@@ -223,6 +223,7 @@ fun PrinterScreen(
         if (state.confirmStop) StopDialog(printer, state, viewModel)
         if (toolsState.confirmMap) MapDialog(printer, toolsState, tools)
         state.unloadAsk?.let { UnloadDialog(it, state, viewModel) }
+        state.clearAsk?.let { ClearDialog(it, state, viewModel) }
         toolsState.undoTarget?.let { UndoDialog(it, toolsState, tools) }
         sheetSlot?.let { label ->
             val slot = state.status?.ams.orEmpty().flatMap { it.slots }.firstOrNull { it.label == label }
@@ -230,6 +231,7 @@ fun PrinterScreen(
                 slot, printer, state,
                 onDismiss = { sheetSlot = null },
                 onUnload = { viewModel.askUnload(slot) },
+                onClear = { viewModel.askClear(slot) },
                 onLoad = { sheetSlot = null; onPickSlot(slot.label) },
                 onOpenSpool = { sp -> sheetSlot = null; onOpenSpool(sp) },
             )
@@ -509,7 +511,7 @@ private fun SlotsPanel(printer: Printer, state: PrinterUiState, onSlot: (AmsSlot
             )
         }
         units.forEach { unit -> UnitGroup(unit, onSlot) }
-        state.slotNote?.let { Box(Modifier.padding(SpoolwardenTheme.space.s3)) { ResultLine(it) } }
+        state.slotNote?.let { Box(Modifier.padding(SpoolwardenTheme.space.s3)) { SlotResult(it, state.slotAlso) } }
     }
 }
 
@@ -573,6 +575,7 @@ private fun SlotSheet(
     state: PrinterUiState,
     onDismiss: () -> Unit,
     onUnload: () -> Unit,
+    onClear: () -> Unit,
     onLoad: () -> Unit,
     onOpenSpool: (SlotSpool) -> Unit,
 ) {
@@ -609,6 +612,7 @@ private fun SlotSheet(
                         stringResource(R.string.common_unload), onUnload, Modifier.fillMaxWidth(),
                         enabled = state.slotBusy == null && !state.unloading, busy = state.slotBusy == slot.label,
                     )
+                    ClearButton(onClear, state, slot)
                 }
                 else -> {
                     Text(
@@ -619,10 +623,47 @@ private fun SlotSheet(
                     )
                     SwButton(stringResource(R.string.printer_slot_load), onLoad, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = connected)
                     if (!connected) Reason(R.string.slot_load_disabled)
+                    ClearButton(onClear, state, slot)
                 }
             }
-            state.slotNote?.takeIf { !it.ok }?.let { ResultLine(it) }
+            state.slotNote?.takeIf { !it.ok }?.let { SlotResult(it, null) }
         }
+    }
+}
+
+/** Clear slot is offered on every slot, with or without a spool recorded (R83 section 3.1). */
+@Composable
+private fun ClearButton(onClear: () -> Unit, state: PrinterUiState, slot: AmsSlot) {
+    SwButton(
+        PrinterTexts.CLEAR_SLOT, onClear, Modifier.fillMaxWidth(),
+        enabled = state.slotBusy == null && !state.unloading && !state.clearing, busy = state.slotBusy == slot.label && state.clearAsk == null,
+    )
+}
+
+/** The result of an unload or clear: its sentence and, when the Hub ended a waiting spool, the second one. */
+@Composable
+private fun SlotResult(note: Note, also: String?, modifier: Modifier = Modifier) {
+    if (also == null) {
+        ResultLine(note, modifier)
+    } else {
+        NoticeCard(if (note.ok) NoticeKind.Ok else NoticeKind.Bad, sayText(note.say) + " " + also, modifier)
+    }
+}
+
+@Composable
+private fun ClearDialog(ask: ClearAsk, state: PrinterUiState, viewModel: PrinterViewModel) {
+    val say = rememberBusySay()
+    SwDialog(
+        title = PrinterTexts.clearTitle(ask.label),
+        onClose = { if (state.clearing) say() else viewModel.cancelClear() },
+        confirm = SwDialogButton(
+            PrinterTexts.CLEAR_SLOT, viewModel::confirmClear, kind = SwButtonKind.Main, busy = state.clearing,
+        ),
+        cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelClear),
+        cancelEnabled = !state.clearing,
+    ) {
+        BusyBack(state.clearing, say)
+        Text(PrinterTexts.clearBody(ask.spool, ask.place), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
