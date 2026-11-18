@@ -1002,9 +1002,7 @@ function startAlerts() {
   SW_ALERTS.start({ host: alertHost, interval: 10000, href: alertHref,
     api: async (path) => {
       if (document.hidden) throw new Error("hidden");                                      // nothing is asked while the page is hidden
-      const res = await api(path), have = SW_ALERTS.state().cursor;
-      // a Hub whose ids are lower than the cursor was restored or reinstalled: ask again from the start (the cursor is kept only in the page)
-      if (res && res.next != null && have != null && Number(res.next) < have) setTimeout(startAlerts, 0);
+      const res = await api(path);          // a Hub whose ids went back (restored, reinstalled) is handled by the shared poll (alerts.js)
       if (res && Array.isArray(res.conditions)) closeStaleNotifications(res.conditions);
       return res;
     },
