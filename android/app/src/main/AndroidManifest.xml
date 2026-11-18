@@ -8,6 +8,11 @@
     <!-- API 37+: needed to reach the server on the LAN and to browse for it without the system device picker. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Alerts on this phone: the notifications (API 33+), the foreground service that watches the Hub, and its restart after a boot or an update. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -33,6 +38,23 @@
         <receiver
             android:name=".update.InstallResultReceiver"
             android:exported="false" />
+        <!-- specialUse has no system time limit (dataSync stops after 6 hours); it is on only while the person has turned alerts on. -->
+        <service
+            android:name=".alerts.AlertsService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps one waiting connection to the person's own Hub, on their network or at the address they set, to show its print and storage alerts as notifications. No push service of the phone maker or Google is used." />
+        </service>
+        <receiver
+            android:name=".alerts.AlertsBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- Printer reports only (cache/reports): the share sheet reads the file through a granted content URI. -->
         <provider
             android:name="androidx.core.content.FileProvider"

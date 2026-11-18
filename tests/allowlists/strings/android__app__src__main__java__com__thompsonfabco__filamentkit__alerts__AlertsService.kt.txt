@@ -1,0 +1,4 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertsService.kt | [$h] | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertsService.kt | https://${}:${} | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertsService.kt | offline | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertsService.kt | unpaired.invalid | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)

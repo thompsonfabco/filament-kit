@@ -70,4 +70,51 @@ class ManifestTest {
         assertFalse("android.permission.CHANGE_WIFI_MULTICAST_STATE" in asked)
         assertTrue("the test must see the real manifest", "android.permission.INTERNET" in asked)
     }
+
+    @Test fun alertsAskTheNotificationAndForegroundServicePermissions() {
+        val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        val asked = info.requestedPermissions?.toList().orEmpty()
+        for (permission in listOf(
+            "android.permission.POST_NOTIFICATIONS", "android.permission.FOREGROUND_SERVICE",
+            "android.permission.FOREGROUND_SERVICE_SPECIAL_USE", "android.permission.RECEIVE_BOOT_COMPLETED",
+        )) {
+            assertTrue("$permission is not asked", permission in asked)
+        }
+        assertFalse("dataSync stops after 6 hours: not used", "android.permission.FOREGROUND_SERVICE_DATA_SYNC" in asked)
+    }
+
+    /** The watching service is a foreground service of type specialUse (no time limit) with its subtype property. */
+    @Test fun theWatchingServiceIsSpecialUseWithItsSubtypeProperty() {
+        val ns = "http://schemas.android.com/apk/res/android"
+        val manifest = context.assets.openXmlResourceParser("AndroidManifest.xml")
+        var inService = false
+        var type = -1
+        var subtype: String? = null
+        var exported: Boolean? = null
+        while (manifest.next() != XmlPullParser.END_DOCUMENT) {
+            if (manifest.eventType == XmlPullParser.START_TAG && manifest.name == "service" &&
+                manifest.getAttributeValue(ns, "name").endsWith("alerts.AlertsService")
+            ) {
+                inService = true
+                type = manifest.getAttributeIntValue(ns, "foregroundServiceType", -1)
+                exported = manifest.getAttributeBooleanValue(ns, "exported", true)
+            } else if (inService && manifest.eventType == XmlPullParser.START_TAG && manifest.name == "property" &&
+                manifest.getAttributeValue(ns, "name") == "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+            ) {
+                subtype = manifest.getAttributeValue(ns, "value")
+            } else if (manifest.eventType == XmlPullParser.END_TAG && manifest.name == "service") {
+                inService = false
+            }
+        }
+        assertEquals("specialUse is 0x40000000", 0x40000000, type)
+        assertEquals(false, exported)
+        assertTrue("the subtype property is missing", !subtype.isNullOrBlank())
+    }
+
+    @Test fun theBootReceiverRestartsTheWatchingService() {
+        val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_RECEIVERS)
+        val receiver = info.receivers.orEmpty().firstOrNull { it.name.endsWith("alerts.AlertsBootReceiver") }
+        assertTrue("the boot receiver is not declared", receiver != null)
+        assertFalse(receiver!!.exported)
+    }
 }
