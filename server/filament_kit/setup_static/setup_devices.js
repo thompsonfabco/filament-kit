@@ -19,6 +19,30 @@ let devMetaEl = null;            // the line under the title, kept to change its
 let devTrusted = null;           // trusted computers listed, once read (null: not read, locked or off)
 let devQrUrls = [];
 
+// The words of this section's kind, version, Open and device detail (R83 section 9). Until the catalogue holds them (EV2 files
+// them) the English shows here through devT; a catalogue text of the same key wins as soon as there is one.
+const DEV_EN = {
+  devices_kind_phone: "Phone", devices_kind_pc: "Slicer Sync PC", devices_kind_station: "Weigh Station", devices_kind_web: "Web app", devices_kind_reader: "Tag Reader",
+  devices_version: "Version {version}", devices_version_unknown: "Version not known", devices_kind_version: "{kind} · {version}",
+  devices_ood_station: "Out of date ({version}; the Hub is {newest}). On that machine: sudo spoolwarden update",
+  devices_ood_pc: "Out of date ({version}). Install the current Slicer Sync on that PC.",
+  devices_ood_phone: "Out of date. The app offers the update when it is opened.",
+  devices_ood_reader: "Out of date. Hold the knob for 4 seconds to update.",
+  devices_open: "Open", devices_open_named: "Open {name}", devices_settings: "Settings", devices_settings_named: "Settings of {name}",
+  devices_detail_kind: "Kind", devices_detail_version: "Version", devices_detail_paired: "Paired", devices_detail_last_seen: "Last seen",
+  devices_detail_build: "Build", devices_detail_error: "Could not read the device. {reason}",
+  devices_reader_settings: "Its settings are changed in {link}.",
+  devices_status_title: "Status", devices_settings_title: "Settings", devices_down: "The Weigh Station is not answering. Its status and settings are shown when it answers.",
+  devices_settings_save: "Save", devices_settings_reset: "Back to the installed values",
+  devices_settings_reset_title: "Go back to the installed values?", devices_settings_reset_body: "The Weigh Station's own settings are removed. It uses the values the installer wrote.",
+  devices_settings_preview_title: "Save these settings?", devices_settings_change: "{name}: {from} to {to}",
+  devices_setting_number: "Enter a number from {min} to {max}.", devices_setting_number_any: "Enter a number.",
+};
+const devT = (key, vars) => {
+  const v = SW.t(key, vars);
+  return v !== key ? v : (DEV_EN[key] || key).replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
+};
+
 const devPad = (n) => String(n).padStart(2, "0");
 const devStamp = (t) => { if (!t) return null; const d = new Date(t * 1000); return `${d.getFullYear()}-${devPad(d.getMonth() + 1)}-${devPad(d.getDate())} ${devPad(d.getHours())}:${devPad(d.getMinutes())}`; };
 const devGroup = (code) => (code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code);
@@ -249,31 +273,176 @@ function devPairDialog(kind, first, known) {
   if (first1) first1.focus();
 }
 
-// ----- Paired devices (03 7.2) -----
+// ----- Paired devices (03 7.2; R83 section 9): kind, version and out of date, Open, and the Tag Readers as rows -----
+// the sentence of an out-of-date row, from the table of R83 section 9.4 (the Hub gives the same one as `advice`)
+const devOod = (d) => (d.out_of_date && d.kind ? devT("devices_ood_" + d.kind, { version: d.version, newest: d.newest }) : null);
+// the line under a name: the kind and the version, "Version not known" when the device has not said; none for a pairing without a kind
+function devKindLine(d) {
+  if (!d.kind || d.kind === "builtin") return d.kind === "builtin" && d.version ? devT("devices_version", { version: d.version }) : null;
+  return devT("devices_kind_version", { kind: devT("devices_kind_" + d.kind), version: d.version ? devT("devices_version", { version: d.version }) : devT("devices_version_unknown") });
+}
+// what `G devices` knows (kind, version, out of date, page) laid over the paired devices of the state; a Tag Reader is a row of its own
+function devMerge(info) {
+  const by = new Map((info || []).map((r) => [r.id, r]));
+  const own = S.devices.map((d) => { const r = by.get(d.id) || {}; return { ...d, kind: r.kind, version: r.version, newest: r.newest, out_of_date: !!r.out_of_date, advice: r.advice, page: !!r.page }; });
+  return [...own, ...(info || []).filter((r) => r.kind === "reader")];
+}
+function devRowFor(d) {
+  const at = boxFor("device:" + d.id);
+  const isReader = d.kind === "reader";
+  const unpair = d.built_in || isReader ? null : SW.btn(SW.t("devices_unpair"), { cls: "btn--ghost", name: SW.t("devices_unpair_named", { name: d.name }), action: "unpair",
+    run: () => asking(at, `devices/${encodeURIComponent(d.id)}/revoke`, destroy("devices_unpair_title", "devices_unpair_body", "devices_unpair", { name: d.name }),
+      undefined, () => say(at, SW.t("devices_unpaired", { name: d.name }), true)) });
+  // Open: a Weigh Station's page is the Hub's pass-through of it in a new tab; every other row shows its detail here (9.6, 9.7)
+  const open = d.page ? h("a", { class: "btn", href: `/setup/device/${encodeURIComponent(d.id)}/`, target: "_blank", rel: "noopener",
+    "aria-label": devT("devices_open_named", { name: d.name }), "data-action": "open", textContent: devT("devices_open") })
+    : SW.btn(devT("devices_open"), { name: devT("devices_open_named", { name: d.name }), action: "open", run: () => devDetail(d) });
+  const settings = d.page ? SW.btn(devT("devices_settings"), { cls: "btn--ghost", name: devT("devices_settings_named", { name: d.name }), action: "settings", run: () => devDetail(d) }) : null;
+  const kindLine = devKindLine(d), ood = devOod(d);
+  return devRow(d.id, at, 4,
+    devCell("title", 1, null, h("span", { class: "devices__name", textContent: d.name }),
+      d.built_in ? [" ", SW.status("note", { text: SW.t("devices_built_in"), small: true }), h("span", { class: "coll__sub muted", textContent: SW.t("devices_built_in_line") })] : null,
+      kindLine ? h("span", { class: "coll__sub muted", textContent: kindLine }) : null,
+      ood ? h("span", { class: "coll__sub" }, SW.status("needs_look", { text: ood, small: true })) : null),
+    devCell("paired", 2, SW.t("devices_col_paired"), d.paired || SW.t("common_unknown")),
+    // a station calls the Hub every few minutes, so its time says it is running; the answer beside it says whether it is up now
+    devCell("last_seen", 1, SW.t("devices_col_last_seen"), d.last_seen || SW.t("common_never"),
+      d.reachable === true ? SW.status("ok", { text: SW.t("devices_reach_ok"), small: true })
+        : d.reachable === false ? SW.status("offline", { text: SW.t("devices_reach_down"), small: true }) : null),
+    devCell("actions", 1, null, h("div", { class: "actions" }, open, settings, unpair)));
+}
+function devPairedTable(list) {
+  return list.length
+    ? devTable("coll--paired", SW.t("devices_paired_title"), [devHead("title", SW.t("devices_col_device")), devHead("paired", SW.t("devices_col_paired"), 2),
+      devHead("last_seen", SW.t("devices_col_last_seen"), 1), devActionsHead()], list.map(devRowFor))
+    : SW.empty({ icon: "devices", title: SW.t("devices_empty"), level: 3 });
+}
 function pairCard() {
   devHeader();
-  const box = boxFor("pair");
-  const rows = S.devices.map((d) => {
-    const at = boxFor("device:" + d.id);
-    const unpair = d.built_in ? null : SW.btn(SW.t("devices_unpair"), { cls: "btn--ghost", name: SW.t("devices_unpair_named", { name: d.name }), action: "unpair",
-      run: () => asking(at, `devices/${encodeURIComponent(d.id)}/revoke`, destroy("devices_unpair_title", "devices_unpair_body", "devices_unpair", { name: d.name }),
-        undefined, () => say(at, SW.t("devices_unpaired", { name: d.name }), true)) });
-    return devRow(d.id, at, 5,
-      devCell("title", 1, null, h("span", { class: "devices__name", textContent: d.name }),
-        d.built_in ? [" ", SW.status("note", { text: SW.t("devices_built_in"), small: true }), h("span", { class: "coll__sub muted", textContent: SW.t("devices_built_in_line") })] : null,
-        d.type === "station" ? h("span", { class: "coll__sub muted", textContent: SW.t("devices_type_station") }) : null),
-      devCell("paired", 2, SW.t("devices_col_paired"), d.paired || SW.t("common_unknown")),
-      // a station only calls the Hub when it is used, so its time is its last intake, and the answer beside it says whether it is up
-      devCell("last_seen", 1, SW.t("devices_col_last_seen"), !d.last_seen ? SW.t("common_never")
-        : d.type === "station" ? SW.t("devices_last_intake", { time: d.last_seen }) : d.last_seen),
-      devCell("status", 1, SW.t("devices_col_status"), d.reachable === true ? SW.status("ok", { text: SW.t("devices_reach_ok"), small: true })
-        : d.reachable === false ? SW.status("offline", { text: SW.t("devices_reach_down"), small: true }) : null),
-      devCell("actions", 1, null, h("div", { class: "actions" }, unpair)));
-  });
-  return card(SW.t("devices_paired_title"), box, S.devices.length
-    ? devTable("coll--paired", SW.t("devices_paired_title"), [devHead("title", SW.t("devices_col_device")), devHead("paired", SW.t("devices_col_paired"), 2),
-      devHead("last_seen", SW.t("devices_col_last_seen"), 1), devHead("status", SW.t("devices_col_status"), 1), devActionsHead()], rows)
-    : SW.empty({ icon: "devices", title: SW.t("devices_empty"), level: 3 }));
+  const box = boxFor("pair"), body = h("div");
+  const read = () => {
+    const L = SW.loading(body, { thing: SW.t("devices_paired_title"), items: 3, onTry: devRetry(() => read()), title: SW.t("devices_paired_title") });
+    // a Hub that cannot say kinds and versions still lists the pairings, as before
+    return api("devices").then((r) => { L.done(); fill(body, devPairedTable(devMerge(r.devices))); },
+      (e) => { L.done(); if (e.locked) throw e; fill(body, devPairedTable(devMerge(null))); });
+  };
+  later(read());
+  return card(SW.t("devices_paired_title"), box, body);
+}
+
+// ----- a device's detail (R83 9.7), in a dialog: the facts of the row, and for a Weigh Station its status and settings -----
+const devFact = (name, ...value) => h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: name }), h("dd", { class: "kv__value" }, ...value));
+const devSay = (v) => (v == null ? SW.t("common_unknown") : typeof v === "object" ? Object.entries(v).map(([k, x]) => `${k.replace(/_/g, " ")} ${devSay(x)}`).join(" · ") : String(v));
+const devLabel = (k) => { const w = k.replace(/_/g, " "); return w[0].toUpperCase() + w.slice(1); };
+function devFacts(d) {
+  const ood = devOod(d);
+  return [h("dl", { class: "kv" },
+    devFact(devT("devices_detail_kind"), d.kind === "builtin" ? SW.t("devices_built_in") : d.kind ? devT("devices_kind_" + d.kind) : SW.t("common_unknown")),
+    devFact(devT(d.kind === "reader" ? "devices_detail_build" : "devices_detail_version"), d.version || devT("devices_version_unknown")),
+    devFact(devT("devices_detail_paired"), d.paired || SW.t("common_unknown")),
+    devFact(devT("devices_detail_last_seen"), d.last_seen || SW.t("common_never"))),
+  ood ? SW.banner({ kind: "warn", inline: true, text: ood }) : null];
+}
+// the sentence of a Tag Reader's detail, with Flash a device as its link; the link closes the detail it is in
+function devReaderLine() {
+  const parts = devT("devices_reader_settings", { link: "\u0001" }).split("\u0001");
+  const link = h("a", { href: "#flash", textContent: SW.t("nav_flash_device") });
+  link.addEventListener("click", () => { const dlg = link.closest("dialog"); if (dlg) dlg.close(); });
+  return h("p", {}, parts[0], link, parts[1]);
+}
+
+// one setting of the station's page as a field of the field component
+function devSettingField(s) {
+  const o = { row: true, label: s.label, name: s.id, attrs: { "aria-required": "false" } };
+  if (s.kind === "switch") return SW.field({ ...o, type: "select", value: s.value ? "on" : "off", options: [{ value: "on", label: SW.t("status_on") }, { value: "off", label: SW.t("status_off") }] });
+  if (s.kind === "choice") {
+    const options = (s.choices || []).map((c) => (typeof c === "object" ? { value: String(c.value), label: c.label || c.text || String(c.value) } : { value: String(c), label: String(c) }));
+    return SW.field({ ...o, type: "select", value: String(s.value), options });
+  }
+  if (s.kind === "number") {
+    const lo = s.min, hi = s.max;
+    const check = (v) => (/^-?\d+(\.\d+)?$/.test(v.trim()) && (lo == null || +v >= lo) && (hi == null || +v <= hi) ? null
+      : lo != null && hi != null ? devT("devices_setting_number", { min: lo, max: hi }) : devT("devices_setting_number_any"));
+    return SW.field({ ...o, type: "number", value: s.value, check });
+  }
+  return SW.field({ ...o, value: s.value == null ? "" : s.value });
+}
+const devSettingValue = (s, v) => (s.kind === "switch" ? v === "on" : s.kind === "number" ? Number(v) : v);
+
+// the form of a station's settings: Save previews the changes first, then goes through the lock; "Back to the installed values" asks
+function devSettingsForm(row, list, redo) {
+  const path = `device/${encodeURIComponent(row.id)}/settings`, by = new Map(list.map((s) => [s.id, s]));
+  const fields = list.map(devSettingField), res = h("p", { class: "result", role: "status" });
+  const save = h("button", { class: "btn btn--primary", type: "submit", textContent: devT("devices_settings_save") });
+  const reset = SW.btn(devT("devices_settings_reset"), { cls: "btn--ghost", action: "reset", run: () => devResetSettings(row, redo) });
+  const form = h("form", { class: "group", novalidate: true, "aria-label": devT("devices_settings_title") },
+    h("div", { class: "group__body" }, ...fields), h("div", { class: "group__foot" }, res, reset, save));
+  const shown = (id) => { const c = form.elements[id]; return c.tagName === "SELECT" ? c.selectedOptions[0].textContent : c.value; };
+  const was = new Map(list.map((s) => [s.id, shown(s.id)]));
+  const value = (id) => devSettingValue(by.get(id), form.elements[id].value);
+  let plan = null;
+  const g = SW.formGroup(form, { title: devT("devices_settings_title"), send: async (key) => {
+    if (!plan) plan = api(path, { ...Object.fromEntries(g.changed().map((k) => [k, value(k)])), code: theCode() });
+    try { await plan; } catch (e) { plan = null; e.text = () => hubText(e.message); throw e; }
+    was.set(key, shown(key));
+    return {};
+  } });
+  const save0 = g.save;
+  g.save = async () => {
+    const keys = g.changed();
+    if (keys.length && !(await SW.ask({ kind: "confirm", title: devT("devices_settings_preview_title"), confirm: devT("devices_settings_save"),
+      body: h("ul", {}, keys.map((k) => h("li", { textContent: devT("devices_settings_change", { name: by.get(k).label, from: was.get(k), to: shown(k) }) }))) }))) return;
+    plan = null;
+    const done = await save0();
+    plan = null;
+    return done;
+  };
+  return form;
+}
+// back to the installed values: a question, the lock, then the form is drawn again from what the station answers
+function devResetSettings(row, redo) {
+  return SW.ask({ kind: "confirm", title: devT("devices_settings_reset_title"), text: devT("devices_settings_reset_body"), confirm: devT("devices_settings_reset"), write: true,
+    run: async (v, { result }) => {
+      let r = null;
+      await needCode(async () => {
+        try { r = await api(`device/${encodeURIComponent(row.id)}/settings`, { reset: true, code: theCode() }); } catch (e) {
+          if (e.locked) throw e;
+          SW.result(result, "bad", e.message);
+        }
+      });
+      if (!r) return false;
+      redo(r.settings);
+      return r;
+    } });
+}
+
+function devDetail(d) {
+  const body = h("div", { class: "devdetail" }), id = encodeURIComponent(d.id);
+  SW.ask({ kind: "info", title: d.name, body, confirm: SW.t("common_close"), wide: true });
+  const read = () => {
+    const L = SW.loading(body, { thing: d.name, items: 2, onTry: devRetry(() => read()), title: devT("devices_detail_error", { reason: "" }).trim() });
+    return api("device/" + id).then((r) => {
+      L.done();
+      const row = { ...d, ...r.device };
+      const kids = [...devFacts(row)];
+      if (row.kind === "reader") kids.push(devReaderLine());
+      if (row.page && !r.status && !r.settings) kids.push(SW.banner({ kind: "warn", inline: true, text: devT("devices_down") }));
+      if (r.status) kids.push(h("h3", { class: "detail__heading", textContent: devT("devices_status_title") }),
+        h("dl", { class: "kv" }, Object.entries(r.status).map(([k, v]) => devFact(devLabel(k), devSay(v)))));
+      if (r.settings) {
+        const slot = h("div");
+        const draw = (list) => slot.replaceChildren(devSettingsForm(row, list, draw));
+        draw(r.settings);
+        kids.push(h("h3", { class: "detail__heading", textContent: devT("devices_settings_title") }), slot);
+      }
+      fill(body, ...kids);
+    }, (e) => {
+      L.done();
+      if (e.locked) throw e;
+      fill(body, SW.errorState({ title: devT("devices_detail_error", { reason: "" }).trim(), text: hubText(e.message), level: 3, onTry: devRetry(() => read()) }));
+    });
+  };
+  return read();
 }
 
 // one answer per request at a time: pressed again while it is out, Pair or Refuse sends nothing more

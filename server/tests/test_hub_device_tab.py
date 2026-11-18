@@ -16,7 +16,7 @@ import httpx
 import pytest
 from starlette.testclient import TestClient
 
-from filament_kit import config, pairing, reader_tokens, setup_console, setup_page
+from filament_kit import config, pairing, setup_console, setup_page
 from filament_kit.setup_console import device_tab
 from filament_kit.web.slots import INTAKE_DEVICE
 
@@ -259,3 +259,146 @@ return { out: document.getElementById("out").textContent, settings: document.get
             "/setup/device/d3/settings"} <= set(page["seen"]), page["seen"]
     assert page["locked"] == 403 and page["open"] == ["beep", "voice", "volume", "lamp.weigh"]
     assert all(p.startswith("/setup/device/d3/") for p in page["seen"] if "api" not in p and "d3" in p)
+
+
+# ---------------------------------------------------------------- the page: rows, Open, detail, settings, in the four looks
+def _drive(url: str, tmp_path, script: str, width: int, look: str) -> dict:
+    import subprocess
+    from test_hub_devices import DRIVER, _missing, _node
+    node = _node()
+    if not node:
+        _missing("the page driver needs Node 22 or later")
+    (tmp_path / "drive.js").write_text(script.replace("__CODE__", CODE), encoding="utf-8")
+    (tmp_path / "init.js").write_text(f'try {{ localStorage.setItem("spoolwarden.look", "{look}"); }} catch (e) {{}}', encoding="utf-8")
+    run = subprocess.run([node, str(DRIVER), "--url", url, "--script", str(tmp_path / "drive.js"), "--width", str(width),
+                          "--init", str(tmp_path / "init.js")], capture_output=True, encoding="utf-8", timeout=300)
+    if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
+        _missing("the page driver needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
+    if run.returncode == 3:
+        _missing("page driver: " + run.stderr.strip().replace("AUT-5: ", "", 1))
+    assert run.returncode == 0, run.stdout + run.stderr
+    return json.loads(run.stdout)
+
+
+ROWS_SCRIPT = DEVICES_PRELUDE + """
+unlock();
+await until(() => $$(".coll--paired .coll__item").length >= 8 && !$("[aria-busy=true]:not(button)"), "the rows with their kinds");
+const row = (n) => $$(".coll--paired .coll__item").find((i) => text($(".devices__name", i)) === n);
+const names = $$(".coll--paired .coll__item").map((i) => text($(".devices__name", i)));
+const overflow = () => { const b = $("dialog[open] .dialog__body"); return { page: document.documentElement.scrollWidth - innerWidth,
+  table: $(".coll--paired") ? $(".coll--paired").scrollWidth - $(".coll--paired").clientWidth : 0, dialog: b ? b.scrollWidth - b.clientWidth : 0 }; };
+const info = (n) => { const i = row(n); return { subs: $$(".coll__sub", i).map(text), actions: $$(".actions > *", i).map((e) => e.tagName.toLowerCase() + ":" + e.dataset.action),
+  name: Math.round($(".coll__cell[data-col=title]", i).getBoundingClientRect().width), cut: $$(".actions .btn", i).some((b) => b.getBoundingClientRect().right > $(".coll--paired").getBoundingClientRect().right + 1) }; };
+out.rows = Object.fromEntries(names.map((n) => [n, info(n)]));
+const open = $('a[data-action="open"]', row("Bench station"));
+out.link = { href: open.getAttribute("href"), target: open.target, rel: open.rel, label: open.getAttribute("aria-label") };
+out.overflowRows = overflow();
+// Open on a row that serves nothing: its detail in a dialog
+$('[data-action="open"]', row("Kitchen phone")).click();
+await until(() => dlg() && $$(".kv__row", dlg()).length, "the phone's detail");
+out.phone = { title: text($(".dialog__title", dlg())), facts: $$(".kv__row", dlg()).map(text), banner: text($(".banner", dlg())) };
+out.overflowPhone = overflow();
+$('.dialog__foot [data-action="confirm"]').click();
+await until(closed, "Close");
+// a Tag Reader's detail points to Flash a device
+$('[data-action="open"]', row("Tag Reader for Workshop X1")).click();
+await until(() => dlg() && $$(".kv__row", dlg()).length, "the reader's detail");
+out.reader = { facts: $$(".kv__row", dlg()).map(text), line: text($(".dialog__body > .devdetail > p", dlg())), link: $('a[href="#flash"]', dlg()).textContent };
+$('a[href="#flash"]', dlg()).click();
+await until(() => closed() && location.hash === "#flash", "the link to Flash a device");
+location.hash = "#devices";
+await until(() => $$(".coll--paired .coll__item").length >= 8, "the section again");
+// a Weigh Station's settings: change three, preview, cancel, then the lock, then save
+$('[data-action="settings"]', row("Bench station")).click();
+await until(() => dlg() && $("form.group", dlg()), "the station's settings");
+out.station = { facts: $$(".kv__row", dlg()).map(text), fields: $$(".field__label", dlg()).map(text), overflow: overflow() };
+const form = () => $("form.group", dlg());
+const set = (name, value) => { const c = form().elements[name]; c.value = value; c.dispatchEvent(new Event("input", { bubbles: true })); c.dispatchEvent(new Event("change", { bubbles: true })); };
+set("beep", "off"); set("volume", "40"); set("lamp.weigh", "red");
+const save = () => $('[type="submit"]', form()).click();
+const open2 = () => $$("dialog[open]")[1];
+save();
+await until(() => $$("dialog[open]").length === 2 && /Save these settings/.test(text(open2())), "the preview");
+out.preview = $$("li", open2()).map(text);
+open2().querySelector('[data-action="cancel"]').click();
+await until(() => $$("dialog[open]").length === 1, "Cancel of the preview");
+out.afterCancel = { sent: sentTo("device/d3/settings").length, dirty: form().dataset.state };
+save();
+await until(() => $$("dialog[open]").length === 2, "the preview again");
+open2().querySelector('[data-action="confirm"]').click();
+await until(() => sentTo("device/d3/settings").length === 1, "the save to be sent");
+out.sent = sentTo("device/d3/settings");
+await until(() => text($(".group__foot .result", form())), "the result");
+out.saved = text($(".group__foot .result", form()));
+out.values = ["beep", "volume", "lamp.weigh"].map((n) => form().elements[n].value);
+// back to the installed values
+$('[data-action="reset"]', form()).click();
+await until(() => $$("dialog[open]").length === 2, "the question");
+open2().querySelector('[data-action="confirm"]').click();
+await until(() => sentTo("device/d3/settings").length === 2, "the reset to be sent");
+await until(() => form() && form().elements["beep"].value === "on", "the form drawn again");
+out.reset = { sent: sentTo("device/d3/settings")[1], values: ["beep", "volume", "lamp.weigh"].map((n) => form().elements[n].value) };
+out.overflowEnd = overflow();
+// locked: the preview, then the unlock dialog asks, and nothing is sent
+SW.setLock("locked");
+set("beep", "off");
+save();
+await until(() => $$("dialog[open]").length === 2 && /Save these settings/.test(text(open2())), "the preview while locked");
+open2().querySelector('[data-action="confirm"]').click();
+await until(() => $$("dialog[open]").length === 2 && !/Save these settings/.test(text(open2())), "the unlock dialog");
+await sleep(300);
+out.locked = { sent: sentTo("device/d3/settings").length, state: SW.lock.state };
+return out;
+"""
+
+
+@browser
+@pytest.mark.parametrize("look,width", [(lk, w) for lk in ("console", "workbench", "palette", "panes") for w in (1280, 390)])
+def test_the_rows_open_and_the_station_settings_work_in_every_look_at_both_widths(stub, hub_change, tmp_path, look, width):
+    _station_url(stub)
+    pairing._write("devices.json", [{"id": p["id"], "name": p["name"], "hash": "0" * 64, "paired": 1.0, "last_seen": 1.0, "expires": 0, "claimed": 1.0,
+                                     **({"scope": "station"} if p["type"] == "station" else {})} for p in PAIRINGS])
+    page = _drive(hub_change + "#devices", tmp_path, ROWS_SCRIPT, width, look)
+    rows = page["rows"]
+    # the kind and version line, the out-of-date sentence, "Version not known", the name alone
+    assert rows["Kitchen phone"]["subs"] == ["Phone · Version 1.4.0", "Out of date. The app offers the update when it is opened."]
+    assert rows["Shop PC"]["subs"] == ["Slicer Sync PC · Version 0.5.0", "Out of date (0.5.0). Install the current Slicer Sync on that PC."]
+    assert rows["Bench station"]["subs"] == ["Weigh Station · Version 0.5.0",
+                                             "Out of date (0.5.0; the Hub is 0.7.0). On that machine: sudo spoolwarden update"]
+    assert rows["Garage tablet"]["subs"] == ["Web app · Version not known"]
+    assert rows["Old phone"]["subs"] == []
+    assert rows["Tag Reader for Workshop X1"]["subs"] == ["Tag Reader · Version 5", "Out of date. Hold the knob for 4 seconds to update."]
+    assert rows["Tag Reader for Garage Voron"]["subs"] == ["Tag Reader · Version not known"]
+    assert rows[INTAKE_DEVICE]["subs"][0] == _T("devices_built_in_line")
+    # Open: a link to the pass-through for a station, a button for the rest; Unpair only where a pairing can be undone
+    assert rows["Bench station"]["actions"] == ["a:open", "button:settings", "button:unpair"]
+    assert rows["Kitchen phone"]["actions"] == ["button:open", "button:unpair"]
+    assert rows["Tag Reader for Workshop X1"]["actions"] == ["button:open"] and rows[INTAKE_DEVICE]["actions"] == ["button:open"]
+    assert page["link"] == {"href": "/setup/device/d3/", "target": "_blank", "rel": "noopener", "label": "Open Bench station"}
+    assert all(not r["cut"] and r["name"] >= 120 for r in rows.values()), rows
+    assert max(page["overflowRows"].values()) <= 1 and page["overflowPhone"]["dialog"] <= 1 and page["overflowEnd"]["page"] <= 1
+    # the details
+    assert page["phone"]["title"] == "Kitchen phone" and len(page["phone"]["facts"]) == 4
+    assert page["phone"]["facts"][:2] == ["KindPhone", "Version1.4.0"]
+    assert "Out of date. The app offers the update" in page["phone"]["banner"]
+    assert page["reader"]["facts"][:2] == ["KindTag Reader", "Build5"] and page["reader"]["line"] == "Its settings are changed in Flash a device."
+    assert page["reader"]["link"] == _T("nav_flash_device")
+    assert "Version0.5.0" in page["station"]["facts"] and "Tag{\"uid\": \"04A1B2\"}" not in page["station"]["facts"]
+    assert page["station"]["fields"] == ["Beep", "Voice", "Volume", "Lamp for weighing"]
+    assert page["station"]["overflow"]["dialog"] <= 1
+    # the settings: a preview first, cancelling sends nothing, the lock asks, then the station gets only what changed
+    assert page["preview"] == ["Beep: On to Off", "Volume: 60 to 40", "Lamp for weighing: yellow to red"]
+    assert page["afterCancel"] == {"sent": 0, "dirty": "dirty"} and page["locked"] == {"sent": 2, "state": "locked"}
+    assert page["sent"] == [{"beep": False, "volume": 40, "lamp.weigh": "red", "code": CODE}]
+    assert page["values"] == ["off", "40", "red"] and page["saved"]
+    assert page["reset"] == {"sent": {"reset": True, "code": CODE}, "values": ["on", "60", "yellow"]}
+    assert stub.posts() == [{"beep": False, "volume": 40, "lamp.weigh": "red"}, {"reset": True}]
+
+
+def test_the_web_apps_home_address_drops_the_port_on_443(env_hub):
+    c, _ = env_hub
+    cfg = config.load()
+    assert c.get("/setup/api/webapp").json()["url"].endswith(".local:8710/intake")
+    cfg["port"] = 443
+    config.save(cfg)
+    assert c.get("/setup/api/webapp").json()["url"].endswith(".local/intake")
