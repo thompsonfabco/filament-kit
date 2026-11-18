@@ -53,6 +53,7 @@ const STUB = {
   spools_nothing: "Nothing would change.",
   spools_preview_weight: "Preview: {left} g left becomes {after} g.",
   spools_preview_move: "Preview: it moves from {before} to {after}.",
+  spools_preview_move_why: "Preview: it moves from {before} to {after}: {why}.",
   spools_preview_link: "Preview: tag {tag} is linked to this spool.",
   spools_preview_link_opens: "It then counts as opened.",
   spools_preview_empty: "Preview: {left} g left becomes 0 g and the spool is marked empty.",
@@ -322,7 +323,7 @@ function detail(v0, view, id) {
   places().then((names) => { for (const n of names) move._control.append(X("option", { value: n, text: n })); if (v0.location && names.includes(v0.location)) move._control.value = v0.location; });
   const moveGo = SW.btn(tx("spool_move"), { cls: "btn--primary", name: `${tx("spool_move")}: ${name(v0)}` });
   moveGo.addEventListener("click", change(view, moveBox, { label: tx("spool_move"), body: () => (move._control.value ? { location: move._control.value } : { auto_location: true }),
-    say: (r) => (r.spool.location === r.before.location ? null : tx("spools_preview_move", { before: r.before.location || tx("spools_no_place"), after: r.spool.location })),
+    say: (r) => (r.spool.location === r.before.location ? null : tx(r.placed_text ? "spools_preview_move_why" : "spools_preview_move", { before: r.before.location || tx("spools_no_place"), after: r.spool.location, why: r.placed_text })),
     done: (r) => tx("spool_result_moved", { location: r.spool.location }) }));
 
   // Link the last tapped tag

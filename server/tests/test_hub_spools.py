@@ -387,7 +387,7 @@ out.afterEmpty = { hub: (await hubSays(3)).state, row: rowOf(3).dataset.state, c
     assert [(b["auto_location"], "location" in b, b["dry_run"]) for b in page["autoBodies"]] == [(True, False, True)] + ([(True, False, False)] if page["moveAuto"]["kind"] == "info" else [])
     if page["moveAuto"]["kind"] == "info":
         assert page["moveAuto"]["text"].startswith("Preview: it moves from ") and page["moveAutoDone"]["text"] == T("spool_result_moved", location=page["autoAfter"])
-        assert page["moveAuto"]["text"].endswith(f"to {page['autoAfter']}.")
+        assert f"to {page['autoAfter']}: " in page["moveAuto"]["text"]          # the kit's own words say why (placed_text)
     assert page["linkNone"] == {"kind": "warn", "text": T("spool_sheet_no_tag"), "action": None}
     assert page["linkPreview"] == {"kind": "info", "text": "Preview: tag 4:de:ad:be is linked to this spool.", "action": "Apply"} and page["tagBefore"] is None
     assert page["linkDone"]["text"] == T("spool_result_tag_linked") and page["afterLink"]["hub"] == "4:de:ad:be" and page["afterLink"]["facts"] == "4:de:ad:be" and "Tagged" in page["afterLink"]["state"]

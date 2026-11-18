@@ -7,7 +7,7 @@ changes the page makes to one (weight, place, tag, empty), each as a dry run fir
                                          No code
     GET  spools/{id}                     {spool: view, last_use: {at, printer, grams}?}. No code
     POST spools/{id} {code, gross | remaining | location | auto_location | empty, dry_run}   a new weight, a place
-                                         (`auto_location: true`: where the Hub's storage rules put it), or empty; answers {spool, before, dry}. dry_run is
+                                         (`auto_location: true`: the kit places it by its state and the storage rule; `placed_text` says why), or empty; answers {spool, before, dry}. dry_run is
                                          true unless it is sent as false. 400 with `field` for a refusal, 404 for no such spool
     GET  spools/last-tag                 {tag: {uid, read_at, source}?}: the newest tag any reader knows. No code
     POST spools/{id}/link {code, tag, dry_run}   link the tag to the spool; answers {spool, before, dry}. 409 when the
@@ -20,13 +20,12 @@ from __future__ import annotations
 
 import json
 import time
-from collections import Counter
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import anyio
 
-from .. import alerts, config, inventory, placement, storage, tagsources, tags
+from .. import alerts, config, inventory, storage, tagsources, tags
 from ..bridge import registry, status
 from ..spoolman import Spoolman, SpoolmanError
 
@@ -107,8 +106,6 @@ def routes(page) -> list[tuple]:
             raise Refused(400, str(e), field=e.field) from None
         except inventory.TagConflict as e:
             raise Refused(409, str(e), reason=e.reason) from None
-        except placement.NoFreeContainer as e:
-            raise Refused(400, str(e), field="location") from None
         except SpoolmanError as e:
             if e.status == 404:
                 raise Refused(404, "no such spool") from None
@@ -151,19 +148,16 @@ def routes(page) -> list[tuple]:
         if auto and location is not None:
             raise inventory.SpoolEditError("give only one of location or auto_location", "auto_location")
         rules = storage.current()
-        if auto:
-            used = Counter(x["location"] for x in client.get("spool") if x.get("location") and x["id"] != spool_id)
-            material = (before.get("filament") or {}).get("material") or ""
-            location = placement.place([{"material": material, "sealed": False}], used, rules)[0]["location"]
         num = lambda k: b.get(k) if isinstance(b.get(k), (int, float)) and not isinstance(b.get(k), bool) else None  # noqa: E731
         for key in ("gross", "remaining"):
             if b.get(key) is not None and num(key) is None:
                 raise inventory.SpoolEditError(f"{key} must be a number of grams", key)
         out = inventory.edit_spool(client, spool_id, gross=num("gross"), remaining=num("remaining"), location=location,
-                                   empty=bool(b.get("empty")), dry=b.get("dry_run") is not False,
+                                   empty=bool(b.get("empty")), dry=b.get("dry_run") is not False, auto_location=bool(auto),
                                    locations=inventory.known_locations(client, rules.choosable()), rules=rules)
         low = low_g()
-        return {"spool": view(out["spool"], low), "before": view(before, low), "dry": out["dry"]}
+        return {"spool": view(out["spool"], low), "before": view(before, low), "dry": out["dry"],
+                **({"placed_text": out["placed_text"]} if "placed_text" in out else {})}
 
     def last_tag() -> dict:
         found = tagsources.latest(config.load())
