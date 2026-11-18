@@ -21,11 +21,11 @@ class AlertNotifier(private val context: Context) {
     fun ensureChannels() {
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL_ALERTS, NotificationManagerCompat.IMPORTANCE_HIGH)
-                .setName(AlertTexts.CHANNEL_ALERTS).build(),
+                .setName(context.getString(R.string.alerts_channel_alerts)).build(),
         )
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL_WATCHING, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName(AlertTexts.CHANNEL_WATCHING).build(),
+                .setName(context.getString(R.string.alerts_channel_watching)).build(),
         )
     }
 
@@ -37,7 +37,7 @@ class AlertNotifier(private val context: Context) {
         ensureChannels()
         return NotificationCompat.Builder(context, CHANNEL_WATCHING)
             .setSmallIcon(R.drawable.sw_ic_spool)
-            .setContentTitle(AlertTexts.WATCHING_TITLE)
+            .setContentTitle(context.getString(R.string.alerts_watching_title))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

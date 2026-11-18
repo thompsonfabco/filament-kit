@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.thompsonfabco.filamentkit.R
-import com.thompsonfabco.filamentkit.alerts.AlertTexts
 import com.thompsonfabco.filamentkit.nav.HubState
 import com.thompsonfabco.filamentkit.ui.components.label
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -78,13 +77,13 @@ internal val SettingsGroup.icon: Int
         SettingsGroup.Developer -> R.drawable.sw_ic_tag
     }
 
-/** The catalogue title of a group; null for Alerts, whose text is in [AlertTexts] until the catalogue has it. */
+/** The catalogue title of a group. */
 @get:StringRes
-internal val SettingsGroup.title: Int?
+internal val SettingsGroup.title: Int
     get() = when (this) {
         SettingsGroup.Appearance -> R.string.appearance_title
         SettingsGroup.Hub -> R.string.hub_sheet_title
-        SettingsGroup.Alerts -> null
+        SettingsGroup.Alerts -> R.string.settings_group_alerts
         SettingsGroup.Updates -> R.string.settings_updates_title
         SettingsGroup.Licences -> R.string.settings_licences_title
         SettingsGroup.Developer -> R.string.settings_developer_title
@@ -92,7 +91,7 @@ internal val SettingsGroup.title: Int?
 
 /** The title a group shows. */
 @Composable
-internal fun SettingsGroup.titleText(): String = title?.let { stringResource(it) } ?: AlertTexts.SETTINGS_TITLE
+internal fun SettingsGroup.titleText(): String = stringResource(title)
 
 /** The live summary under a group's title. */
 @Composable

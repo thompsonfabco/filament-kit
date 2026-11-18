@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.lifecycle.Lifecycle
@@ -45,7 +46,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
-import com.thompsonfabco.filamentkit.alerts.AlertTexts
 import com.thompsonfabco.filamentkit.alerts.LowSpool
 import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.SwButton
@@ -294,7 +294,7 @@ fun SearchScreen(
                         ToggleChip(stringResource(R.string.spools_sealed_only), ui.sealedOnly) { vm.setSealedOnly(!ui.sealedOnly) }
                         // the Hub's running-low list (R80 section 7); no chip for a Hub that has none
                         if (lowCount != null || ui.lowOnly) {
-                            ToggleChip(AlertTexts.runningLowChip(lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
+                            ToggleChip(stringResource(R.string.running_low_chip, lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
                         }
                     }
                     val openOrToggle: (SpoolSummary) -> Unit = { spool ->
@@ -457,7 +457,7 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
         loaded = ui.lowLoaded,
         loading = ui.busy,
         isEmpty = ui.lowLoaded && ui.low.isEmpty(),
-        empty = { Text(AlertTexts.spoolsRunningLow(0), style = MaterialTheme.typography.bodyLarge) },
+        empty = { Text(pluralStringResource(R.plurals.running_low_home, 0, 0), style = MaterialTheme.typography.bodyLarge) },
         error = ui.failure?.let { hubFailureText(it) },
         onTryAgain = onTryAgain,
         offline = !online,
@@ -468,7 +468,11 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
                 Column {
                     SpoolRow(spool.toSummary(), onClick = { onOpen(spool.toSummary()) })
                     Text(
-                        if (spool.lastOne) AlertTexts.LAST_ONE else AlertTexts.moreInStock(spool.inStock),
+                        if (spool.lastOne) {
+                            stringResource(R.string.running_low_last_one)
+                        } else {
+                            pluralStringResource(R.plurals.running_low_in_stock, spool.inStock, spool.inStock)
+                        },
                         color = if (spool.lastOne) colors.warn else colors.muted,
                         style = MaterialTheme.typography.bodySmall,
                     )

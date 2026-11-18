@@ -1,15 +1,16 @@
 package com.thompsonfabco.filamentkit.ui.alerts
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.alerts.AlertItem
 import com.thompsonfabco.filamentkit.alerts.AlertSeverity
 import com.thompsonfabco.filamentkit.alerts.AlertTarget
-import com.thompsonfabco.filamentkit.alerts.AlertTexts
 import com.thompsonfabco.filamentkit.alerts.BannerState
 import com.thompsonfabco.filamentkit.alerts.alertTarget
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
@@ -35,6 +36,14 @@ internal fun AlertSeverity.noticeKind(): NoticeKind = when (this) {
 }
 
 internal fun AlertItem.target(): AlertTarget = alertTarget(event.action.place, event.action.id)
+
+/** The label of the one action of an alert, by where it goes. */
+@StringRes
+internal fun AlertTarget.labelRes(): Int = when (this) {
+    is AlertTarget.Printer -> R.string.alert_open_printer
+    AlertTarget.RunningLow -> R.string.alert_show_low
+    AlertTarget.AlertsList -> R.string.alerts_action_list
+}
 
 /** The sentence and, after it, how long ago it was ("3 min ago"); [nowMillis] is the time ages count from. */
 @Composable
@@ -63,12 +72,14 @@ internal fun AlertBanners(
             NoticeCard(
                 item.severity.noticeKind(), item.sentenceFor(nowMillis), title = item.event.title,
                 actions = listOf(
-                    SwAction(AlertTexts.actionLabel(target)) { actions.onAction(target) },
+                    SwAction(stringResource(target.labelRes())) { actions.onAction(target) },
                     SwAction(stringResource(R.string.common_dismiss)) { actions.onDismiss(item) },
                 ),
             )
         }
-        if (state.more > 0) SwButton(AlertTexts.moreAlerts(state.more), actions.onMore, kind = SwButtonKind.Quiet)
+        if (state.more > 0) {
+            SwButton(pluralStringResource(R.plurals.alert_more, state.more, state.more), actions.onMore, kind = SwButtonKind.Quiet)
+        }
     }
 }
 
