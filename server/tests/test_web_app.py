@@ -1296,3 +1296,47 @@ const reg = { getNotifications: async () => [n("sw-condition-print-paused:p-3"),
     run = subprocess.run([node, str(tmp_path / "h.js")], capture_output=True, encoding="utf-8", timeout=60)
     assert run.returncode == 0, run.stderr
     assert json.loads(run.stdout) == ["sw-condition-print-paused:p-3"]
+
+class LibraryKit(CapKit):
+    """The kit's Hub overview and own-entry routes (R83 10.1), recording what the twins pass on."""
+
+    def __init__(self):
+        self.calls = []
+
+    def get(self, path):
+        self.calls.append(("GET", path, None))
+        if path == "/api/hub":
+            return {"name": "Workshop hub", "version": "0.6.2", "getting_started": {"done": 4, "total": 8, "hidden": False, "finished": False}}
+        if path == "/api/library/local":
+            return {"entries": [{"id": "a1", "brand": "Acme", "name": "Red", "material": "PLA", "added": 1700000000}]}
+        return super().get(path)
+
+    def post(self, path, body):
+        self.calls.append(("POST", path, body))
+        if path == "/api/library/local/form":
+            return {"entry": {"id": "a2", "brand": body["brand"], "name": body["name"], "material": body["material"], "added": 1700000100}}
+        return super().post(path, body)
+
+    def delete(self, path):
+        self.calls.append(("DELETE", path, None))
+        return {"removed": True}
+
+
+def test_the_twins_pass_the_hub_overview_and_the_own_catalog_entries_on(sm):
+    """R83 10.3: GET hub, GET and POST library/local (the form) and library/local/<id>/remove reach the kit routes unchanged."""
+    from starlette.applications import Starlette
+    from filament_kit.web import mcp_tools
+    from filament_kit.web.intake_app import IntakeApp
+    kit = LibraryKit()
+    tools = mcp_tools.Tools(sm, kit_api=kit, kit_writes=True)
+    routes = IntakeApp(tools, public_url=None, lan_cidrs=["192.168.1.0/24"], push=False, host_ok=lambda r: True, kit_api=kit).routes()
+    origin = {"origin": "https://hub.local:8710"}
+    with TestClient(Starlette(routes=routes), base_url="https://hub.local:8710", client=HOME) as c:
+        assert c.get("/intake/api/hub").json()["getting_started"]["done"] == 4
+        assert c.get("/intake/api/library/local").json()["entries"][0]["id"] == "a1"
+        form = {"brand": "Acme", "name": "Blue", "material": "PETG", "nozzle_min": 230}
+        assert c.post("/intake/api/library/local", json=form, headers=origin).json()["entry"]["id"] == "a2"
+        assert c.post("/intake/api/library/local/a%201/remove", json={}, headers=origin).json() == {"removed": True}
+        assert c.post("/intake/api/library/local", json=form).status_code == 403          # a change needs the page's own origin
+    assert kit.calls == [("GET", "/api/hub", None), ("GET", "/api/library/local", None),
+                         ("POST", "/api/library/local/form", form), ("DELETE", "/api/library/local/a%201", None)]

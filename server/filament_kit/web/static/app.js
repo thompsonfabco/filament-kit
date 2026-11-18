@@ -855,12 +855,17 @@ moreBtn.addEventListener("click", () => {
   const standalone = installed();
   let rec = null;
   const to = (hash) => (e) => { e.preventDefault(); goFrom(rec, hash); };
+  const gsRow = moreRow("overview", "", "", { hidden: true }, () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); hubSheet(moreBtn, true); });
+  const spoolmanRow = moreRow("spool", tt("hub_open_spoolman"), "", { href: "#", hidden: true, target: "_blank", rel: "noopener" });
   const rows = [
     moreRow("presets", SW.t("nav_slicer_presets"), "", { href: "#presets", "aria-current": cur("presets"),
       ...(PRESETS ? {} : { "data-state": "off", "aria-label": SW.t("nav_slicer_presets") + SW.t("nav_off_suffix") }) }, to("#presets")),
     moreRow("settings", SW.t("nav_settings"), SW.t("nav_more_settings_summary"), { href: "#settings" }, to("#settings")),
     standalone ? null : moreRow("plus", SW.t(installPrompt ? "nav_more_install" : "nav_more_home_screen"), SW.t("nav_more_home_screen_summary", { product: PRODUCT }), {},
       () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); if (installPrompt) { installPrompt.prompt(); installPrompt = null; settling++; history.back(); } else installSheet(moreBtn, true); }),
+    HUB_PAGE ? moreRow("overview", tt("hub_screen_title"), "", {}, () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); hubSheet(moreBtn, true); })
+      : h("p", { class: "more__row more__row--off muted" }, SW.icon("overview", "more__icon"), h("span", { class: "more__name" }, tt("hub_screen_title")), h("span", { class: "more__summary" }, tt("hub_only_at_home"))),
+    gsRow, spoolmanRow,
     HUB_PAGE ? moreRow("overview", SW.t("common_open_hub_page"), SW.t("nav_more_hub_page_summary"),
       { href: HUB_PAGE, ...(standalone ? { target: "_blank", rel: "noopener" } : {}) }) : null,
   ];
@@ -870,6 +875,12 @@ moreBtn.addEventListener("click", () => {
   moreBtn.setAttribute("aria-expanded", "true");
   const first = dlg.querySelector(".more__row");
   if (first) first.focus();
+  hubInfo().then((d) => {                                    // the Getting started line and Open Spoolman, once the Hub has answered
+    if (!d) return;
+    const line = gettingStartedText(d.getting_started);
+    if (line) { gsRow.querySelector(".more__name").textContent = line; gsRow.hidden = false; }
+    if (d.spoolman_url) { spoolmanRow.href = d.spoolman_url; spoolmanRow.hidden = false; }
+  }).catch(() => {});
 });
 function paintMore() {                                       // More is current while Slicer presets or the Settings sheet is
   const key = settingsRec ? "settings" : place === "presets" ? "presets" : null, name = key ? SW.t(TITLES[key]) : "";
@@ -884,7 +895,8 @@ function topBar() {
   return h("header", { class: "topbar" },
     h("div", { class: "topbar__brand" }, SW.h("svg", { class: "topbar__mark", "aria-hidden": "true", focusable: "false" }, SW.h("use", { href: "#i-spoolwarden" })),
       h("span", { class: "topbar__name" }, PRODUCT), " ", hub),
-    h("div", { class: "topbar__tools" }, appearanceControl({ name: "appearance" }), appearanceButton()));
+    h("div", { class: "topbar__tools" }, HUB_PAGE ? h("a", { class: "topbar__hubpage", href: HUB_PAGE }, tt("topbar_hub_page")) : null,
+      appearanceControl({ name: "appearance" }), appearanceButton()));
 }
 function navItem([key, name, icon], tab) {
   const label = key === "recent"                             // the bar shows the short name; the full one is read (02 2.4)
@@ -931,6 +943,22 @@ function tt(key, vars) {
     running_low_in_stock: { one: "{count} more in stock", other: "{count} more in stock" },
     running_low_last_one: "Last one",
     running_low_empty: "Nothing is running low.",
+    topbar_hub_page: "Hub page",
+    hub_screen_title: "Hub", hub_only_at_home: "Only at home.", hub_change_on_page: "Change this on the Hub page.", hub_unavailable: "This Hub does not show its overview here yet.",
+    hub_group_status: "Status", hub_status_none: "Nothing to report.", hub_group_getting_started: "Getting started",
+    hub_getting_started_line: "Getting started on the Hub: {done} of {total} done", hub_group_version: "Version", hub_version_installed: "Installed: {version}",
+    hub_version_newest: "Newest: {version}, checked {when}", hub_update_available: "Update available", hub_group_features: "Features", hub_on: "On", hub_off: "Off",
+    hub_group_catalog: "Filament Catalog", hub_catalog_version: "Version {version}, checked {when}", hub_catalog_none: "Not checked yet.",
+    hub_group_backups: "Backups", hub_backup_last: "Last backup {when}", hub_backup_none: "No backup yet", hub_nightly_on: "nightly backup on", hub_nightly_off: "nightly backup off",
+    hub_group_reader: "Label Reader", hub_reader_key_set: "key set", hub_reader_key_missing: "key not set", hub_group_devices: "Devices", hub_this_device: "this device",
+    hub_out_of_date: "out of date", hub_group_recent: "Recently added", hub_records_kept: "Records kept: {count}", hub_open_spoolman: "Open Spoolman",
+    catalog_form_title: "Your own filament entries", catalog_form_intro: "Add a filament the catalog does not have. Slicer presets are rebuilt in a minute.",
+    catalog_brand: "Brand", catalog_name: "Name", catalog_material: "Material", catalog_material_other: "Other", catalog_material_other_text: "Material (other)",
+    catalog_more: "More (optional)", catalog_nozzle_min: "Nozzle temperature from", catalog_nozzle_max: "Nozzle temperature to", catalog_bed_min: "Bed temperature from",
+    catalog_bed_max: "Bed temperature to", catalog_density: "Density", catalog_max_volumetric_speed: "Maximum volumetric speed", catalog_bambu_parent: "Bambu Studio parent",
+    catalog_notes: "Notes", catalog_add: "Add", catalog_added: "Added. Slicer presets are rebuilt in a minute.", catalog_required: "{field} is required.",
+    catalog_see: "See custom entries", catalog_list_title: "Your own entries", catalog_none: "No entries of your own yet.", catalog_entry_added: "added {date}",
+    catalog_remove: "Remove", catalog_remove_confirm: "Remove {brand} {name} from your own entries? Slicer presets are rebuilt.", catalog_removed: "Removed.",
   };
   const v = SW.t(key, vars);
   if (v !== key) return v;
@@ -984,6 +1012,122 @@ function alertsGroup(group) {
   const panel = PUSH && typeof alertsPanel === "function" ? alertsPanel(() => installSheet()) : null;
   const recent = window.SW_ALERTS ? SW.btn(tt("settings_alerts_recent"), { cls: "btn--ghost", action: "alerts-recent", run: (e) => SW_ALERTS.openList(e.currentTarget) }) : null;
   return panel || recent ? group(SW.t("settings_alerts_title"), panel, recent) : null;
+}
+
+// ----- The Hub at a glance (R83 5), Open Spoolman (R83 7), the Hub page link (R83 8). GET hub is the kit's overview of the Hub; a Hub
+// that does not have the route yet answers 404 and every place below says nothing. Only at home: the public address has no Hub page link. -----
+let hubCache = null;                                         // {at, data}: one answer is kept for 30 s, so the More sheet and its screens ask once
+async function hubInfo(fresh) {
+  if (!HUB_PAGE) return null;
+  if (!fresh && hubCache && Date.now() - hubCache.at < 30000) return hubCache.data;
+  try { const data = await api("hub"); hubCache = { at: Date.now(), data }; return data; }
+  catch (e) { if (e instanceof SW.HubError && e.status === 404) { hubCache = { at: Date.now(), data: null }; return null; } throw e; }
+}
+// a time from the Hub: seconds since 1970 (as every kit route gives one), or text
+function whenText(v) {
+  if (v == null || v === "") return "";
+  const d = typeof v === "number" ? new Date(v < 1e12 ? v * 1000 : v) : new Date(v);
+  return isNaN(d) ? String(v) : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+const gettingStartedText = (g) => (g && !g.hidden && !g.finished && g.total > g.done) ? tt("hub_getting_started_line", { done: g.done, total: g.total }) : "";
+function spoolmanLink(url, cls) {
+  return url ? h("a", { class: cls || "btn btn--ghost", href: url, target: "_blank", rel: "noopener", "data-action": "open-spoolman" }, tt("hub_open_spoolman")) : null;
+}
+function hubSheet(opener, reuse) {
+  const body = h("div", { class: "hubglance" });
+  const dlg = SW.sheet({ title: tt("hub_screen_title"), body,
+    foot: SW.btn(SW.t("status_done"), { cls: "btn--primary", action: "done", run: () => dlg.close() }) });
+  openHere(dlg, opener, reuse);
+  fill(body, tt("hub_screen_title"), async () => {
+    const d = await hubInfo(true);
+    if (!d) return h("p", { class: "muted" }, tt("hub_unavailable"));
+    const group = (title, ...kids) => h("section", { class: "settings__group" }, h("h2", { class: "settings__title" }, title), ...kids.filter(Boolean),
+      h("p", { class: "muted hubglance__change" }, tt("hub_change_on_page")));
+    const list = (rows) => h("ul", { class: "hubglance__list" }, ...rows.map((r) => h("li", {}, r)));
+    const checks = (d.checks || []).map((c) => [c.text, c.fix ? " " + c.fix : "", c.state && c.state !== "ok" ? " (" + c.state + ")" : ""].join(""));
+    const gs = gettingStartedText(d.getting_started);
+    const dev = (x) => [x.name, x.kind, x.version, x.last_seen ? whenText(x.last_seen) : "", x.out_of_date ? tt("hub_out_of_date") : "", x.this ? tt("hub_this_device") : ""].filter(Boolean).join(" · ");
+    return [
+      group(tt("hub_group_status"), checks.length ? list(checks) : h("p", { class: "muted" }, tt("hub_status_none"))),
+      gs ? group(tt("hub_group_getting_started"), h("p", {}, gs)) : null,
+      group(tt("hub_group_version"), h("p", {}, tt("hub_version_installed", { version: d.version || "" })),
+        d.newest ? h("p", { class: "muted" }, tt("hub_version_newest", { version: d.newest.version || "", when: whenText(d.newest.checked_at) })) : null,
+        d.update_available ? h("p", {}, tt("hub_update_available")) : null),
+      group(tt("hub_group_features"), list((d.features || []).map((f) => f.name + " · " + tt(f.on ? "hub_on" : "hub_off")))),
+      group(tt("hub_group_catalog"), h("p", {}, d.catalog && d.catalog.version ? tt("hub_catalog_version", { version: d.catalog.version, when: whenText(d.catalog.checked_at) }) : tt("hub_catalog_none"))),
+      group(tt("hub_group_backups"), h("p", {}, (d.backup && d.backup.last_at ? tt("hub_backup_last", { when: whenText(d.backup.last_at) }) : tt("hub_backup_none")) + " · "
+        + tt(d.backup && d.backup.nightly ? "hub_nightly_on" : "hub_nightly_off"))),
+      group(tt("hub_group_reader"), h("p", {}, [d.reader && d.reader.engine, tt(d.reader && d.reader.key_set ? "hub_reader_key_set" : "hub_reader_key_missing")].filter(Boolean).join(" · "))),
+      group(tt("hub_group_devices"), list((d.devices || []).map(dev))),
+      d.records_kept != null ? group(tt("hub_group_recent"), h("p", {}, tt("hub_records_kept", { count: d.records_kept }))) : null,
+      h("p", { class: "hubglance__links" }, h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")), " ", spoolmanLink(d.spoolman_url)),
+    ];
+  });
+}
+// The own entries of the Filament Catalog (R83 4): one form (Brand, Name, Material; the rest under "More (optional)") and the list with Remove.
+const CATALOG_MATERIALS = ["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "PC", "PA", "PA-CF", "PVA", "HIPS"];   // until the Hub lists the materials it knows (contract request)
+function catalogGroup() {
+  const res = resultLine(), listBox = h("div", { class: "catalog__list" });
+  const brand = SW.field({ label: tt("catalog_brand"), name: "brand" }), name = SW.field({ label: tt("catalog_name"), name: "name" });
+  const known = [...CATALOG_MATERIALS, tt("catalog_material_other")];
+  const material = SW.field({ type: "select", label: tt("catalog_material"), options: known.map((m, i) => ({ value: i === known.length - 1 ? "" : m, label: m })) });
+  const other = SW.field({ label: tt("catalog_material_other_text"), name: "material_other" });
+  other.hidden = true;
+  material._control.addEventListener("change", () => { other.hidden = material._control.value !== ""; if (!other.hidden) other._control.focus(); });
+  const num = (label, key) => ({ key, field: SW.field({ type: "number", decimal: true, label: tt(label), optional: true, hint: "" }) });
+  const nums = [num("catalog_nozzle_min", "nozzle_min"), num("catalog_nozzle_max", "nozzle_max"), num("catalog_bed_min", "bed_min"), num("catalog_bed_max", "bed_max"),
+    num("catalog_density", "density"), num("catalog_max_volumetric_speed", "max_volumetric_speed")];
+  const parent = SW.field({ label: tt("catalog_bambu_parent"), optional: true, hint: "" }), notes = SW.field({ type: "textarea", label: tt("catalog_notes"), optional: true, max: 2000 });
+  const fields = { brand, name, material, material_other: other, bambu_parent: parent, notes, ...Object.fromEntries(nums.map((n) => [n.key, n.field])) };
+  const clearErrors = () => Object.values(fields).forEach((f) => SW.fieldError(f, null));
+  const more = h("details", { class: "disclosure" }, h("summary", {}, h("span", { textContent: tt("catalog_more") }), SW.icon("chevron", "icon--s disclosure__chevron")),
+    h("div", { class: "disclosure__body" }, ...nums.map((n) => n.field), parent, notes));
+  const add = needsHub(SW.btn(tt("catalog_add"), { cls: "btn--primary", action: "catalog-add", run: (e) => {
+    clearErrors();
+    const mat = material._control.value || other._control.value.trim();
+    const body = { brand: brand._control.value.trim(), name: name._control.value.trim(), material: mat };
+    let bad = null;
+    for (const [key, f, what] of [["brand", brand, "catalog_brand"], ["name", name, "catalog_name"], ["material", material._control.value === "" ? other : material, "catalog_material"]]) {
+      if (!body[key]) { SW.fieldError(f, tt("catalog_required", { field: tt(what) })); bad = bad || f; }
+    }
+    if (bad) { bad._control.focus(); return; }
+    for (const n of nums) { const v = n.field._control.value.trim().replace(",", "."); if (v) body[n.key] = Number(v); }
+    if (parent._control.value.trim()) body.bambu_parent = parent._control.value.trim();
+    if (notes._control.value.trim()) body.notes = notes._control.value.trim();
+    return act(res, SW.t("common_adding"), async () => {
+      try { await api("library/local", { body }); }
+      catch (err) {                                          // the Hub names the fields it refused (R83 10.1)
+        const problems = err instanceof SW.HubError && err.data && Array.isArray(err.data.problems) ? err.data.problems : [];
+        for (const p of problems) { const f = (p.field === "material" && !other.hidden ? other : fields[p.field]); if (f) SW.fieldError(f, p.text); }
+        throw err;
+      }
+      for (const f of [brand, name, other, parent, notes, ...nums.map((n) => n.field)]) f._control.value = "";
+      loadList(true);
+      return tt("catalog_added");
+    }, { button: e.currentTarget });
+  } }));
+  async function loadList(quiet) {
+    await fill(listBox, tt("catalog_list_title"), async () => {
+      const r = await api("library/local"), entries = r.entries || [];
+      if (!entries.length) return h("p", { class: "muted" }, tt("catalog_none"));
+      return h("ul", { class: "catalog__entries" }, ...entries.map((en) => h("li", { class: "catalog__entry" },
+        h("span", {}, [en.brand, en.name, en.material].filter(Boolean).join(" · "), en.added ? " " : "", en.added ? h("span", { class: "muted" }, tt("catalog_entry_added", { date: whenText(en.added) })) : null),
+        needsHub(SW.btn(tt("catalog_remove"), { cls: "btn--ghost", action: "catalog-remove", run: async (e) => {
+          const opener = e.currentTarget;
+          const done = await SW.ask({ open: openHere, kind: "destructive", title: tt("catalog_remove"), text: tt("catalog_remove_confirm", { brand: en.brand, name: en.name }),
+            confirm: tt("catalog_remove"), opener, run: async () => {
+              try { await api(`library/local/${encodeURIComponent(en.id)}/remove`, { body: {} }); return true; }
+              catch (err) { throw Object.assign(err, { text: () => says(err) }); }
+            } });
+          if (done) { SW.toast(tt("catalog_removed")); loadList(true); }
+        } })))));
+    }, { quiet });
+  }
+  const see = h("details", { class: "disclosure" }, h("summary", {}, h("span", { textContent: tt("catalog_see") }), SW.icon("chevron", "icon--s disclosure__chevron")),
+    h("div", { class: "disclosure__body" }, listBox));
+  see.addEventListener("toggle", () => { if (see.open) loadList(); });
+  return h("div", { class: "group" }, h("div", { class: "group__head" }, h("h2", { class: "group__title", textContent: tt("catalog_form_title") }), h("p", { class: "group__desc", textContent: tt("catalog_form_intro") })),
+    h("div", { class: "group__body" }, brand, name, material, other, more, h("div", {}, add), res, see));
 }
 
 // ----- the shell kept by sw.js, and "Cannot reach the Hub" (04 10.2, 10.3) -----
@@ -2369,8 +2513,9 @@ function openTab() {
       ...PICKS.filter((p) => p && !names.has(p)).map((p) => h("option", { value: p })));
   };
   paintLocs(); storageWatchers.push(paintLocs);
+  const spoolmanBox = h("p", { class: "spools__spoolman", hidden: true });
   const el = h("section", { class: "hidden" }, h("div", { class: "spools" },
-    h("p", { class: "muted", textContent: SW.t("spools_intro") }),
+    h("p", { class: "muted", textContent: SW.t("spools_intro") }), spoolmanBox,
     group(SW.t("spools_last_tag"), tagBody, tagLine),
     h("div", { class: "spools__find" }, searchField, sealedBox, lowBtn, findLine), resultsBox,
     locsList));
@@ -2378,6 +2523,7 @@ function openTab() {
     el,
     enter() {
       shown = true; refreshStorage();
+      hubInfo().then((d) => { const a = d && spoolmanLink(d.spoolman_url); spoolmanBox.replaceChildren(...(a ? [a] : [])); spoolmanBox.hidden = !a; }).catch(() => {});
       if (!tagLoad && tagAt == null && !tagFirst.dataset.state) {   // the first time: a skeleton and the line, until the first answer
         tagLoad = SW.loading(tagBody, { thing: SW.t("spools_last_tag"), items: 1 });
         const run = resultLine(); SW.result(run, "run", SW.t("spools_last_tag_loading")); tagBody.append(run);
@@ -2423,9 +2569,10 @@ function presetsTab() {
         ...(st.problems || []).map((p) => note("bad", String(p))),
         st.note ? h("p", { class: "muted", textContent: st.note }) : null,
         buildBtn, gen.el);
-      if (!st.uncovered_filaments.length) return [status, note("ok", SW.t("presets_all_done"))];
+      const own = catalogGroup();
+      if (!st.uncovered_filaments.length) return [status, note("ok", SW.t("presets_all_done")), own];
       return [status, h("h2", {}, SW.t("presets_without_line"), " ", h("span", { class: "muted mono", textContent: String(st.uncovered_filaments.length) })),
-        h("div", { class: "cards" }, ...st.uncovered_filaments.map(lineCard))];
+        h("div", { class: "cards" }, ...st.uncovered_filaments.map(lineCard)), own];
     }, { quiet });
   }
   function lineCard(f) {
