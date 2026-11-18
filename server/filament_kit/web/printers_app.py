@@ -208,13 +208,18 @@ class PrintersApp:
 
     async def usage(self, request: Request):
         serial = self._serial(request)
-        days = request.query_params.get("days")
+        days, by = request.query_params.get("days"), request.query_params.get("by")
         path = f"/api/printers/{serial}/usage"
+        q = []
         if days is not None:
             if not re.fullmatch(r"\d{1,3}(\.\d{1,2})?", days):
                 raise Problem("days must be a number")
-            path += f"?days={days}"
-        return await self._kit_call(self.kit.get, path)
+            q.append(f"days={days}")
+        if by is not None:                  # R84 9.5: the entries grouped by month
+            if by != "month":
+                raise Problem("by must be month")
+            q.append("by=month")
+        return await self._kit_call(self.kit.get, path + ("?" + "&".join(q) if q else ""))
 
     async def map_get(self, request: Request):
         return await self._kit_call(self.kit.get, f"/api/printers/{self._serial(request)}/map")

@@ -1513,6 +1513,24 @@ SP_READY = {
   $('dialog[open] [aria-label="Close"]').click();
   await until('back to the list', () => location.hash === '#spools' && !$('dialog[open]'));
 """,
+    "sheet_history": r"""
+  await waitPage();
+  stub(/^activity/, () => reply({ events: [
+    { id: 31, at: '2026-11-17T20:00:00Z', kind: 'spool.moved', text: 'Moved Polymaker PLA to Shelf B.', actor: { type: 'device', name: 'Pat phone' }, undo: { possible: true }, undone: false },
+    { id: 30, at: '2026-11-16T09:30:00Z', kind: 'spool.weighed', text: 'Weighed: 640 g left.', actor: { type: 'cli', name: 'command line' }, undo: { possible: false, why_not: 'changed_since' }, undone: true }] }));
+  $('.spools__row').click();
+  const d = await sheetReady();
+  await until('the last events', () => $$('dialog[open] .history__row').length === 2);
+  need('the text and who did it', text('dialog[open] .history__row').includes('Moved Polymaker PLA to Shelf B.') && text('dialog[open] .history__row').includes('by Pat phone'));
+  need('a put back one says so', $$('dialog[open] .history__row')[1].textContent.includes('(put back)'));
+""",
+    "sheet_history_none": r"""
+  await waitPage();
+  $('.spools__row').click();
+  const d = await sheetReady();
+  await new Promise((r) => setTimeout(r, 300));
+  need('a Hub with no activity route shows no list and no error', !$('dialog[open] .history__row') && !$('dialog[open] .history__list'));
+""",
     "sheet_open": r"""
   const d = await sheetReady();
   need('titled by the spool', text('dialog[open] .sheet__title') === 'Spool __ID__' && document.title.startsWith('Spool __ID__ · '));
@@ -1865,7 +1883,7 @@ SP_READY = {
   need('the Hub text, and nothing to act on', text('dialog[open]').includes('spool 99999 was not found') && !seen('Preview') && !seen('Mark empty'));
 """,
 }
-SP_AT = {"sheet_from_row": "#spools", "sheet_unread": "#spools", "sheet_read_failed": "#spools", "sheet_missing": "#spools/99999", "sheet_empty_ask": 3, "sheet_empty_done": 2}   # the view, or which spool's sheet it opens
+SP_AT = {"sheet_history": "#spools", "sheet_history_none": "#spools", "sheet_from_row": "#spools", "sheet_unread": "#spools", "sheet_read_failed": "#spools", "sheet_missing": "#spools/99999", "sheet_empty_ask": 3, "sheet_empty_done": 2}   # the view, or which spool's sheet it opens
 SP_PAGED = {
     "paging": r"""
   await waitPage();

@@ -242,12 +242,20 @@ function printersTab() {
     printer_clear_goes_back: "{name} goes back to {location}.", printer_clear_goes_back_noplace: "{name} goes back to where it was before.",
     printer_clear_line: "Slot {slot} cleared.", printer_clear_waiting_ended: "The spool that was waiting for slot {slot} is not waiting any more.",
     printer_clear_still_shows: "The printer still shows the old filament for this slot until a spool is loaded.",
+    printer_used_by_month: "By month", printer_used_show_list: "Show the list", printer_used_month_none: "No months to show yet.",
+    printer_used_col_month: "Month", printer_used_col_grams: "Grams", printer_used_col_prints: "Prints", printer_used_col_unfinished: "Did not finish",
+    printer_used_col_material: "Most used material", printer_used_download: "Download as CSV",
   };
   function tg(key, vars) {
     const v = t(key, vars);
     if (v !== key) return v;
     const f = GUIDED[key];
     return f == null ? key : vars ? f.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
+  }
+  // After a load, unload or clear the toast offers Undo when the Hub can put the spool's last action back (R84 3); else it is the plain toast
+  function undoToast(spoolId, text, eventId) {
+    const h2 = window.SW_HISTORY;
+    return (h2 && spoolId != null ? h2.offerUndo(spoolId, text, () => { if (page) pollStates(); }, eventId) : Promise.resolve(false)).then((offered) => { if (!offered) SW.toast(text); });
   }
   function guidedAdd(opener, seed) {
     const st = { step: "which", family: null, scan: "idle", klipperFound: [] };
@@ -705,7 +713,7 @@ function printersTab() {
           disabled(go, null);
         } else {
           dlg.close();
-          SW.toast(t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_toast", { slot: label }));
+          undoToast(s.id, t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_toast", { slot: label }), r.event_id);
           slotSay(label, [t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_line", { slot: label }), ...moved, ...(r.problems || [])], "ok");
         }
       } catch (e) {
@@ -731,7 +739,7 @@ function printersTab() {
         text: where ? t("printer_unload_body", { name, slot: label, location: where }) : t("printer_unload_body_noplace", { name, slot: label }), confirm: t("common_unload"),
         run: () => pj(`${slotPath(g, label)}/unload`, { dry_run: false }) });
       if (!r) return;
-      SW.toast(t("printer_unload_line", { name, slot: label }));
+      undoToast(sp.id, t("printer_unload_line", { name, slot: label }), r.event_id);
       slotSay(label, [t("printer_unload_line", { name, slot: label }),
         ...(r.moved_back || []).map((m) => (m.location ? t("printer_unload_moved_back", { id: m.id ?? "?", location: m.location }) : t("printer_unload_moved_back_noplace", { id: m.id ?? "?" })))], "ok");
     } finally { g.slotBusy = false; }
@@ -755,7 +763,7 @@ function printersTab() {
       const r = await sheetAsk({ kind: "confirm", title: tg("printer_clear_title", { slot: label }), text, opener: button, confirm: tg("printer_clear_action"),
         run: () => pj(`${slotPath(g, label)}/clear`, { dry_run: false }) });
       if (!r) return;
-      SW.toast(tg("printer_clear_line", { slot: label }));
+      undoToast(sp ? sp.id : null, tg("printer_clear_line", { slot: label }), r.event_id);
       slotSay(label, [tg("printer_clear_line", { slot: label }), ...(r.waiting_ended ? [tg("printer_clear_waiting_ended", { slot: label })] : []),
         ...(still(r) ? [still(r)] : [])], "ok");
     } finally { g.slotBusy = false; }
@@ -767,10 +775,21 @@ function printersTab() {
     const g = page;
     if (!g) return;
     await fill(g.usageBox, t("printer_group_used"), async () => {
+      const bar = h("div", { class: "pused__bar" }, SW.btn(tg(g.byMonth ? "printer_used_show_list" : "printer_used_by_month"), { cls: "btn--ghost", action: "usage-by-month", run: () => { g.byMonth = !g.byMonth; loadUsage(); } }),
+        window.SW_HISTORY ? window.SW_HISTORY.downloadLink("usage", tg("printer_used_download"), `printer=${enc(g.id)}`) : null);
+      if (g.byMonth) {                                   // R84 5.7: the months as a table (R84 9.5: {months: [{month, grams, prints, unfinished_prints, top_material?}]})
+        const r = await pj(`${enc(g.id)}/usage?by=month`);
+        if (page !== g) return null;
+        const months = r.months || [];
+        const th = (k) => h("th", { scope: "col" }, tg("printer_used_col_" + k));
+        return [bar, months.length ? h("table", { class: "pused__months" }, h("thead", {}, h("tr", {}, th("month"), th("grams"), th("prints"), th("unfinished"), th("material"))),
+          h("tbody", {}, months.map((m) => h("tr", {}, h("td", {}, m.month), h("td", { class: "mono" }, t("common_grams", { grams: m.grams ?? "?" })), h("td", {}, m.prints ?? ""),
+            h("td", {}, m.unfinished_prints ?? ""), h("td", {}, m.top_material || ""))))) : h("p", { class: "muted" }, tg("printer_used_month_none"))];
+      }
       const r = await pj(`${enc(g.id)}/usage?days=7`);
       if (page !== g) return null;
       const list = [...(r.entries || [])].sort((a, b) => String(b.at || "").localeCompare(String(a.at || ""))).slice(0, 20);
-      return list.length ? h("ul", { class: "pused" }, list.map((e) => usageRow(g, e))) : h("p", { class: "muted" }, t("printer_used_empty"));
+      return [bar, list.length ? h("ul", { class: "pused" }, list.map((e) => usageRow(g, e))) : h("p", { class: "muted" }, t("printer_used_empty"))];
     }, { quiet: g.usageBox.childElementCount > 0 });    // a refresh after a job keeps what is shown until the new list arrives
   }
   function usageRow(g, e) {
