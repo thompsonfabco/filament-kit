@@ -137,6 +137,26 @@ class _PinnedConnection(http.client.HTTPSConnection):
             raise _Mismatch(actual)
 
 
+HUB_PORTS = (443, DEFAULT_PORT)     # a bare host: the web address's own port first, then the Hub's older one
+
+
+def find_hub(host: str, ports=HUB_PORTS, timeout: float = 10) -> tuple[int, str, str]:
+    """(port, fingerprint, IP connected to) of the first port where a Hub answers. Only a Hub counts: a TLS answer alone does not
+    (the Remote access proxy owns 443 on a machine whose Hub sits on 8710), so each port is asked /api/info and must answer as a Hub."""
+    tried = []
+    for port in ports:
+        try:
+            fp, ip = fetch_peer(host, port, timeout)
+            info = Client({"host": host, "port": port, "fp": fp, "ips": [ip]}, None, timeout=timeout).info()
+        except (Offline, CertChanged, ApiError, ValueError) as e:
+            tried.append(f"{port}: {e}")
+            continue
+        if isinstance(info, dict) and isinstance(info.get("api"), int) and isinstance(info.get("name"), str):
+            return port, fp, ip
+        tried.append(f"{port}: not a Hub")
+    raise Offline(f"could not reach a Hub at {host} on port {' or '.join(str(p) for p in ports)} ({'; '.join(tried)})")
+
+
 class Client:
     def __init__(self, cfg: dict, token: str | None, timeout: float = 60,
                  log: Callable[[str], None] | None = None):

@@ -184,3 +184,58 @@ def test_heartbeat_and_fresh_upload(certs):
         assert json.loads(srv.requests[-1]["body"]) == {"outcome": "up_to_date", "waiting_since": None, "app": None}
         assert c.upload("live", b"zip", user_id="123", fresh=True)["fresh"] is True
         assert srv.requests[-1]["path"] == "/api/sync/live?user_id=123&fresh=1"
+
+
+# --- a bare host: the Hub's port is found (443, then 8710) -------------------------------------------------------------------
+
+HUB = lambda m, p, b: (200, "application/json", {"name": "Workshop hub", "api": 1})                # noqa: E731
+PROXY = lambda m, p, b: (404, "text/html", b"<html>nginx</html>")                                    # noqa: E731
+NOT_A_HUB = lambda m, p, b: (200, "application/json", {"hello": "world"})                            # noqa: E731
+
+
+def _closed_port():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def test_find_hub_takes_the_first_port_when_a_hub_answers_there(certs):
+    (cert, key, fp), _ = certs
+    with TlsServer(cert, key, respond=HUB) as a, TlsServer(cert, key, respond=HUB) as b:
+        assert client.find_hub("127.0.0.1", (a.port, b.port), timeout=5) == (a.port, fp, "127.0.0.1")
+
+
+def test_find_hub_falls_to_the_next_port_when_the_first_is_closed(certs):
+    (cert, key, fp), _ = certs
+    with TlsServer(cert, key, respond=HUB) as b:
+        assert client.find_hub("127.0.0.1", (_closed_port(), b.port), timeout=5)[0] == b.port
+
+
+@pytest.mark.parametrize("answer", [PROXY, NOT_A_HUB], ids=["a proxy's page", "json that is no Hub"])
+def test_find_hub_does_not_count_a_tls_answer_that_is_not_a_hub(certs, answer):
+    """Remote access's nginx owns 443 on a Hub that sits on 8710: its certificate answers, the Hub does not."""
+    (cert, key, _), (cert2, key2, fp2) = certs
+    with TlsServer(cert, key, respond=answer) as proxy, TlsServer(cert2, key2, respond=HUB) as hub:
+        assert client.find_hub("127.0.0.1", (proxy.port, hub.port), timeout=5) == (hub.port, fp2, "127.0.0.1")
+
+
+def test_find_hub_names_both_ports_when_none_answers(certs):
+    (cert, key, _), _ = certs
+    a, b = _closed_port(), _closed_port()
+    with pytest.raises(client.Offline) as e:
+        client.find_hub("127.0.0.1", (a, b), timeout=2)
+    assert f"{a} or {b}" in str(e.value)
+    with TlsServer(cert, key, respond=NOT_A_HUB) as proxy, pytest.raises(client.Offline) as e:
+        client.find_hub("127.0.0.1", (proxy.port,), timeout=5)
+    assert "not a Hub" in str(e.value)
+
+
+def test_a_typed_address_without_a_port_is_left_open_for_the_search():
+    from fksync.__main__ import _parse_address
+    assert _parse_address("hub.local", bare=None) == ("hub.local", None)
+    assert _parse_address("https://hub.local/", bare=None) == ("hub.local", None)
+    assert _parse_address("hub.local:8710", bare=None) == ("hub.local", 8710)
+    assert _parse_address("[fe80::1]", bare=None) == ("fe80::1", None)
+    assert _parse_address("hub.local") == ("hub.local", 8710)

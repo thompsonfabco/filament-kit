@@ -55,8 +55,9 @@ def _grouped(fp: str) -> str:
     return " ".join(fp[i:i + 4] for i in range(0, len(fp), 4))
 
 
-def _parse_address(text: str) -> tuple[str, int]:
-    host, port = text.strip(), client.DEFAULT_PORT
+def _parse_address(text: str, bare=client.DEFAULT_PORT) -> tuple[str, int | None]:
+    """(host, port); `bare` is the port of an address typed without one (None: the caller looks for the Hub's port)."""
+    host, port = text.strip(), bare
     if host.lower().startswith("https://"):
         host = host[8:].rstrip("/")
     p = None
@@ -189,12 +190,15 @@ def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.Li
             return 1
 
     try:
-        host, port = _parse_address(text)
+        host, port = _parse_address(text, bare=None)
     except ValueError as e:
         _out(f"That address does not work: {e}.")
         return 1
     try:
-        fp, ip = client.fetch_peer(host, port)
+        if port is None:                  # no port typed: 443, then 8710, whichever answers as a Hub
+            port, fp, ip = client.find_hub(host)
+        else:
+            fp, ip = client.fetch_peer(host, port)
     except client.Offline as e:
         _out(f"Could not reach the Hub: {e}")
         return 1
