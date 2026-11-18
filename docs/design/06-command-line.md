@@ -1097,12 +1097,12 @@ Getting started: 4 of 8 done
   ● done          Name this Hub
   ● done          Check storage locations
   ● done          Choose features
-  ● done          Make a first backup
   ◆ next          Add a printer
                   sudo spoolwarden printer add
   ○ not yet       Map its slots
   ○ not yet       Use a phone
   ○ not yet       Add your first spool
+  ● done          Make a first backup
 
 Hub
   ● OK            Services running: 6 of 6
