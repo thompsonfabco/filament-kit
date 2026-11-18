@@ -78,7 +78,7 @@ Everyday
   klipper          The Klipper add-on
   recent           Recently added spools: show, correct, undo
   spools           Find spools; spools running low
-  spool            One spool: show, weigh, move, empty
+  spool            One spool: show, weigh, move, empty, label
   events           What happened on the Hub: show, follow
   activity         What was done on the Hub: who, what, when
   undo             Put back the last change made here
@@ -110,9 +110,11 @@ System
   uninstall        Remove Spoolwarden from this machine
   logs             The end of a service's log
   report           Collect a Hub report for a problem
+  language         Languages: list, add, remove, set, make and check a pack
+  demo             The demo: made-up data to look around in
 
 Every command: -h  --json  -q/--quiet  -y/--yes  --color auto|always|never
-               --plain  --no-progress
+               --plain  --no-progress  --lang <code>
 ```
 
 ### 3.2 Every command
@@ -160,6 +162,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `spool weigh <n> <grams>` | Record the weight with the spool (previews, asks) | Update weight |
 | `spool move <n> <location \| auto>` | Move a spool (previews, asks) | Move |
 | `spool empty <n>` | Mark a spool empty (asks) | Mark empty |
+| `spool label <number>... [--size 62x29\|50x30\|sheet24] --out <file.svg>` | Write the labels of these spools as one SVG file (9.21) | Print a label, Print labels |
 | `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones (9.16) | Settings > Alerts > Recent alerts (alerts only) |
 | `activity [--spool <n>] [--who <name>] [--days 7]` | What was done: time, who, what, newest first (9.22) | Logs > Activity |
 | `undo [<event id>] [-y]` | Put back the last change made from the command line, or the named event (shows it, asks) (9.23) | Undo in the toast and in Logs > Activity |
@@ -240,8 +243,16 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
 | `report [--out <file>]` | Collect a Hub report and print where it is (9.26) | Logs > Collect a Hub report |
+| `language` (same as `language list`) | The languages: built in, installed and available (9.27) | Settings > General, Language |
+| `language add <code>` | Download and install a language (9.27) | Get more languages, Install |
+| `language remove <code>` | Remove an installed language (9.27) | Get more languages, Remove |
+| `language set <code>` | Choose the Hub's language (9.27) | Settings > General, Language |
+| `language template <code> [--out <file>]` | Write a language pack with every English text and empty translations (9.27) | (none) |
+| `language check <file>` | Check a language pack and say what is wrong in plain sentences (9.27) | (none) |
+| `demo` (same as `demo status`) | Says whether the demo is on (9.28) | Settings > General, Demo |
+| `demo on` / `demo off` | Start the demo, or leave it and delete what is in it (asks) (9.28) | Try the demo / Leave demo |
 | `add` | Prints where spools are added (section 10) | (none) |
-| `spool` | Prints the four spool commands and where tags are linked and spools are added (section 10) | (none) |
+| `spool` | Prints the five spool commands and where tags are linked and spools are added (section 10) | (none) |
 | `help [<command> \| aliases \| --markdown]` | Help; `--markdown` prints the command table for the user guide | (none) |
 
 `--version` prints `Spoolwarden 0.5.2`. `spoolwarden help --markdown` is the source of the user guide's command
@@ -450,6 +461,16 @@ Plain output contains no escape sequences and no carriage returns.
   time: `last checked 2026-11-12 03:10 (2 hours ago)`; a terminal has no hover, so the exact time is never
   left out.
 - Sizes: `KiB` and `MB` as the Hub page shows them, with thousands separators (`4,812 KiB`).
+- **Language.** The results that come from the string catalogue are in the language of `--lang <code>`, which every
+  command accepts, else of the shell's `LANG` when the Hub has that language, else the Hub's language
+  (`03-hub-page.md` 10.3). The texts the Hub writes (its refusals, the rows of `status`) come in the same language: the
+  command asks for it with `Accept-Language`. Not translated: the option help (`-h`), the installer's lines (9.20),
+  and the words `Error:`, `Fix:` and `Note:` as typed. An unknown or not installed code: `Error: there is no language
+  <code> on this Hub.` and `Fix: spoolwarden language` (exit code 2). Dates and numbers keep the forms of this
+  section.
+- **Demo data.** While the Hub runs in demo (9.28), every command that prints a result prints the line `Demo data.`
+  first, above the result, also with `--quiet`. With `--json` the line goes to standard error, so that standard
+  output stays the one JSON document of section 6.8.
 - One term per thing, the shared wording table of `08-platform-mapping.md` section 12: `Weight with spool` (never
   gross weight), `Try again` (never retry, in prompts and Fix lines), `Slicer presets` (never profile), drafts
   (never unfinished adds), and "Leave empty to choose automatically." as the hint of an optional prompt the Hub
@@ -546,8 +567,8 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 - Standard output gets exactly one JSON document followed by a newline: indented by two spaces when standard
   output is a terminal, on one line otherwise. Nothing else is printed to standard output.
 - Field names and values are those of the Hub's own replies where the Hub page reads the same data (table
-  below), so a script and the Hub page see one shape. Times are ISO 8601 with offset; weights in grams, sizes in
-  bytes, temperatures in °C, all as numbers.
+  below), so a script and the Hub page see one shape. Times are ISO 8601 with offset, but a day (an own catalog entry's `added`) is `YYYY-MM-DD`;
+  weights in grams, sizes in bytes, temperatures in °C, all as numbers.
 - Stored secrets never appear: an API key, Access Code, passphrase, catalog token, existing Tag Reader token or
   the current setup code is `{"set": true}` or `{"set": false}`.
 - One exception: a code, link or token that the command was asked to make is in that command's own reply, since
@@ -604,6 +625,12 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `export` (with `--out`) | `{"ok": true, "set", "file", "rows"}` |
 | `import spools` (needs `--yes`) | `{rows: [{n, ok, problems: [{column, text}], line}], add, dry, spool_ids?}`; `import locations`: `{rows, add, change, dry}` |
 | `report` | `{"ok": true, "file"}` |
+| `language`, `language list` | the answer of `GET /setup/api/languages`: `{hub, languages: [{code, name, reviewed, installed, complete}], available: [{code, name, reviewed, complete}], problem?}` |
+| `language add`, `language remove`, `language set` | `{"ok": true, "code"}` |
+| `language template` | `{"ok": true, "file", "texts"}` |
+| `language check` | `{"ok": true or false, "texts", "translated", "problems": [{"line"?, "text"}]}` |
+| `demo`, `demo on`, `demo off` (`off` needs `--yes`) | `{"demo": true or false}`; `demo on` and `demo off` add `"ok": true` |
+| `spool label` | `{"ok": true, "file", "size", "labels"}` |
 | `update --check` | `GET /setup/api/updates` |
 | `logs` | `{unit, text, truncated}` |
 | `weigh-station pairing-state` | `{"state": "paired" \| "unpaired" \| "unchecked", "address": ...}` |
@@ -1207,6 +1234,7 @@ Filament Catalog
 | Hub | `Storage: <free> free of <total> (<percent> % used)` / the same words, needs a look past a limit (warn at 85 % used, bad at 95 % used, always bad under 1 GB free; the limits are in the Alerts group of `config`) | `Show storage use (Hub page, Overview)` |
 | Hub | note `Running low: <n> spools` (`Running low: 1 spool`; no row when none is low) | `spoolwarden spools low` |
 | Hub | note `Display name: <name>` (only when not set: needs a look, `Display name not set`) | `sudo spoolwarden config` |
+| Hub | needs a look `<What it is> could not be converted (<reason>).` (one row for each of the Hub's own JSON files that the first start with this version could not move to XML; `The list of paired devices could not be converted (the file is damaged).`) | the Fix the Hub can name |
 | Spoolman | `Reachable at <url> (v<version>)` / `Not reachable at <url>` | for Spoolman on this machine `sudo systemctl start <its service>`, else `check that Spoolman is running at <url>` |
 | Spoolman | `Spoolwarden's extra fields are in place` / `Spoolwarden's extra fields are missing` | `sudo spoolwarden spoolman fields` |
 | Label Reader | `Cloud (Claude): the API key works` / `Cloud (Claude): no API key` / `Cloud (Claude): the API key was refused` | `sudo spoolwarden config` (Label Reader) |
@@ -1218,7 +1246,8 @@ Filament Catalog
 | Label Reader | note `Share corrections: on, 12 waiting` (only while it is on, or while corrections still wait: `Share corrections: off, 12 still waiting`) | `spoolwarden label-reader corrections` |
 | Weigh Station | `Answering at <url>`, `Tag reader seen`, `Scale seen`, `Paired with <address>` / `… not seen`, `Not paired` | per row: check the cable; `sudo spoolwarden pair --weigh-station` |
 | Devices | note `Paired devices: N` | (none) |
-| Devices | needs a look `The Weigh Station <name> is not using HTTPS. Update it.` (a Weigh Station that sent the Hub no fingerprint, which the Hub still calls over plain HTTP) | `sudo spoolwarden update`, run on the Weigh Station's machine |
+| Devices | needs a look `The Weigh Station <name> is not using HTTPS. Update it.` (a Weigh Station that sent the Hub no fingerprint, because it has not been updated or because it could not make its certificate and logged why; the Hub still calls it over plain HTTP, and only if it has no pinned certificate) | `sudo spoolwarden update`, run on the Weigh Station's machine; if it is already updated, `sudo spoolwarden logs` there says why |
+| Devices | needs a look `The Weigh Station <name> does not show the certificate the Hub saved for it.` (a station whose certificate the Hub has pinned and which now sends none or another one; the Hub never calls it over plain HTTP) | `Unpair it in Devices, then link it again.` |
 | Devices | needs a look `<n> devices are out of date.` (`1 device is out of date.`) | `spoolwarden devices` |
 | Devices | needs a look `The tag source <address> is not using HTTPS.` (a printer-side tag service that answers only on plain HTTP) | (none) |
 | Devices | needs a look `The certificate of the tag source <address> has changed.` | `Save the tag source again to trust the new certificate.` |
@@ -1235,7 +1264,8 @@ Filament Catalog
   `spoolwarden add` for the first spool, `sudo spoolwarden backup create`; the command for installing the Label Reader is the
   one of 9.6). While no step is done, one quiet line above the steps, "Moving from another computer? Restore its
   backup", names `sudo spoolwarden restore <zip>`; it is not a step, has no state word and is not counted in
-  "<n> of <m>". The block is not printed when the list is hidden or
+  "<n> of <m>". On a Hub with no spool and no printer a second quiet line, "Just looking? Try the demo", names `sudo
+  spoolwarden demo on`, and is not a step either. The block is not printed when the list is hidden or
   finished, and not with `--quiet`. Hiding, showing and the Keep buttons are on the Hub page only.
 - A group whose feature is switched off prints one row: `○ off  Switched off in Features.` (no Fix; it is not a
   problem).
@@ -2240,7 +2270,7 @@ this machine, and whether the chosen features include Remote access, which owns 
 | 443 is taken, at a terminal | `Port 443 is already in use on this machine.` (followed by ` Remote access uses it for the public address.` when that is the reason), then `Port for the Hub [8710]: `. Enter takes 8710. A typed port must be 1024 to 65535 and free; otherwise the reason is said and the question repeats. When 8710 is itself taken, the port offered is the next free one above it |
 | 443 is taken, no terminal or Guided Setup chosen | The Hub takes 8710 (or the next free port above it) without a question and prints `Port 443 is in use on this machine, so the Hub uses port 8710.` |
 
-The chosen port is written into the configuration file at the first install. An install whose configuration has no
+The chosen port is written into the settings file (`config.xml`) at the first install. An install whose settings have no
 port keeps 8710 whatever happens, and no update moves an existing Hub. When the port is below 1024 the installer writes
 the unit drop-in that gives the Hub exactly the right to bind it; for a port of 1024 or more the drop-in is removed. The
 pairing link carries the real port and so does the network advert; the firewall line names the real port. To change the
@@ -2253,6 +2283,17 @@ install and serves HTTPS only; its unit gets the same drop-in when its port is b
 already installed keeps its port (5003) on update and switches to HTTPS. The printer-side tag service installs the same
 way: a new install takes 443 when it is free and allowed, otherwise 5002, asked like the others; an existing one keeps
 5002.
+
+**The language.** The installer reads the system's language (`LANG`). When the release has a language pack for it, the
+installer downloads the pack, makes it the Hub's language and says so in one line, and asks nothing:
+
+```
+Language: Deutsch (machine-translated). Change it in Settings > General.
+```
+
+When the release has no pack for the system's language, nothing is installed and no line is printed: the Hub's language
+is English. The installer's own lines and questions stay English (not in the catalogue, 6.4), this one included; only
+the language's name is its own.
 
 ### 9.21 `spools` and `spool`
 
@@ -2278,7 +2319,8 @@ Spoolman: http://192.0.2.10:7912
 - Nothing matches: `No spools match.` No spools at all: `No spools yet. Add your first one from your phone.`
 - `--json`: the answer of `GET api/spools` (6.8).
 
-`spool` has four commands. Each changing one shows what would change, asks (section 7), and takes `-y`.
+`spool` has five commands. Each changing one shows what would change, asks (section 7), and takes `-y`; `label` changes
+nothing.
 
 ```
 $ spoolwarden spool show 214
@@ -2311,8 +2353,25 @@ Marked empty.
 | `spool weigh <n> <grams with the spool>` | Records a scale reading with the spool | Grams above 0, or `Error: enter grams above 0.` |
 | `spool move <n> <location\|auto>` | Moves it; `auto` sends `{"auto_location": true}` and the Hub moves the spool where its placement rule puts it | An unknown location stops with exit code 2 and its Fix line lists the Hub's locations |
 | `spool empty <n>` | Marks it as used up | |
+| `spool label <number>... --out <file.svg>` | Writes the labels of these spools as SVG (below) | Needs no sudo and changes nothing; `--json`: `{"ok": true, "file", "size", "labels"}` |
 
-`spool` with no word prints these four commands and the line of section 10 for what still needs a phone: a tag is linked
+**`spool label`** draws the labels the Hub page's **Print a label** prints (`02-components.md` 7.13) and writes them to
+the file `--out` names; the printing is then the person's (open the file in a browser, or in a program that prints
+SVG). `--size` is `62x29` (the default, a 62 mm roll), `50x30` or `sheet24` (24 to a sheet, A4 or Letter by the
+printer). The one file holds a label for each number, in the order given.
+
+```
+$ spoolwarden spool label 214 213 --size 62x29 --out labels.svg
+Wrote 2 labels (62 x 29 mm) to labels.svg.
+Note: the codes hold this Hub's address (https://spoolwarden.local/s/214). If the Hub is renamed or moves to another
+      port, old labels stop opening from a phone's camera; the Spoolwarden app's scanner still reads them.
+```
+
+- Without `--out`: `Error: say where to write the file.` and `Fix: add --out <file.svg>.` (exit code 2). A number the
+  Hub does not know: `Error: spool 999 was not found.` and `Fix: spoolwarden spools lists the numbers.` (exit code 2). A
+  size that is not one of the three: `Error: the size must be 62x29, 50x30 or sheet24.` (exit code 2).
+
+`spool` with no word prints these five commands and the line of section 10 for what still needs a phone: a tag is linked
 by tapping it, and spools are added from photos or by hand.
 
 ### 9.22 `activity`
@@ -2435,6 +2494,88 @@ are named printer-1, device-2 and location-3, and the Hub hub.
 ```
 
 - The newest three reports are kept beside the backups. `--json`: `{"ok": true, "file": "<path>"}`.
+
+### 9.27 `language`
+
+`spoolwarden language` lists the languages of this Hub; `add`, `remove` and `set` change what the Hub keeps and need
+sudo (`language set` is the Hub page's Settings > General > Language). `template` and `check` work on a file, need
+neither the Hub nor sudo, and are for the person who translates. The packs come with each release
+(`08-platform-mapping.md` section 12); English is always inside the product.
+
+```
+$ spoolwarden language
+Hub language: English
+CODE  LANGUAGE                      STATE      TRANSLATED
+en    English                       in use     100 %
+ru    Русский                       installed   96 %
+de    Deutsch (machine-translated)  available  100 %
+```
+
+- `STATE` is `in use` (the Hub's language), `built in` (English when it is not in use), `installed` or `available` (a
+  pack of this release that is not installed yet). `TRANSLATED` is how much of the English the pack has translated.
+  When the list of the release's packs could not be fetched, the installed languages are listed and `Note: the list of
+  languages could not be fetched (<reason>).` goes to standard error. `--json`: the answer of `GET api/languages` plus
+  `available` (6.8).
+- `sudo spoolwarden language add de` starts the job of the Hub page's **Install** (a progress line, 6.6) and ends with
+  `Installed Deutsch (machine-translated).`. The Hub checks the pack first; one that fails is not installed:
+  `Error: Deutsch was not installed: <the check's first sentence>.` A code the release has no pack for: `Error: this
+  release has no language de.` and `Fix: spoolwarden language` (exit code 2).
+- `sudo spoolwarden language remove ru` ends with `Removed Русский.`; when `ru` is the Hub's language it is refused:
+  `Error: Русский is the Hub's language. Choose another one for the Hub first.` (exit code 2). Removing any other
+  installed language sets the devices that had chosen it back to Automatic at their next visit. `sudo spoolwarden language set ru` with `The Hub's
+  language is Русский.` and, for a language that is not installed, `Error: Русский is not installed.` and `Fix: sudo
+  spoolwarden language add ru` (exit code 2).
+- `spoolwarden language template ru` writes a pack for that language with every English text and empty translations to
+  `ru.xml` in the current folder, or to `--out <file>`: `Wrote ru.xml: 1,640 texts, none translated.` When the file
+  `--out` names is already a pack of that language, its translations are kept, the texts that are new are added and the
+  texts whose English changed are marked `changed="yes"`: `Updated ru.xml: 12 new texts, 3 changed.`
+- `spoolwarden language check ru.xml` reads the file and says in plain sentences what is wrong, with the line, and how
+  much is translated. It prints nothing but the result, and exits with code 0 when nothing is wrong and 1 when
+  something is.
+
+```
+$ spoolwarden language check ru.xml
+ru.xml: Русский, made for 0.7.0.
+Line 88: the tag <ru> is not closed: a ">" is missing after "</ru".
+Line 120: {kolichestvo} is not a placeholder of this text. The English has {count}: keep it as it is.
+Line 161: the text has a "&". Write it as "&amp;".
+Line 212: the plural form <many> is empty while <one>, <few> and <other> are filled. Fill it, or empty all four.
+1,402 of 1,640 texts are translated (85 %). 4 problems.
+```
+
+- A missing or extra `{placeholder}`, a broken tag, a plural form left empty where others are filled and a form the
+  language does not have are the problems it names; an empty translation is not a problem (the English is used).
+  `--json`: `{"ok": true or false, "texts", "translated", "problems": [{"line"?, "text"}]}` (6.8).
+
+### 9.28 `demo`
+
+`spoolwarden demo` says whether the demo is on; `sudo spoolwarden demo on` and `sudo spoolwarden demo off` start and end
+it. The demo is the whole product on made-up data with pretend printers (`03-hub-page.md` 3.9).
+
+```
+$ spoolwarden demo
+The demo is off.
+
+$ sudo spoolwarden demo on
+The demo is on. Look around on the Hub page: https://spoolwarden.local/setup
+Leave it with: sudo spoolwarden demo off
+
+$ spoolwarden printer list
+Demo data.
+NAME           TYPE     ID               ADDRESS             STATE
+Workshop X1    Bambu    00M00A000000001  192.0.2.40          ● connected
+...
+```
+
+- `demo on` works only on an empty Hub, one with no spool and no printer; otherwise
+  `Error: The demo is for an empty Hub. This Hub has real data.` (exit code 1).
+- `demo off` asks once, with the dialog's words (section 7): `Leave the demo? Everything in it is deleted. [y/N]`, and
+  takes `-y`. It deletes the demo's folder and the Hub is empty again: `The demo is off.`
+- While the demo is on, every command that prints a result prints `Demo data.` above it (6.4). A command that would
+  reach outside the Hub (a printer, Spoolman, the Label Reader's cloud, GitHub, a push, a backup, a flash, the root
+  helper) stops with `Error: Not in the demo.` (exit code 1); `printer live` still says where the camera is, and the
+  camera says "No camera in the demo."
+- `--json`: `{"demo": true or false}`; `demo on` and `demo off` add `"ok": true` (6.8).
 
 ## 10. What the command line cannot do
 
@@ -2559,6 +2700,9 @@ this design.
 | Backup password: set, change, remove; restore with it | N | new | N | N | new (`backup password`, `restore`) | remains: Hub page and command line only; showing it again: command line only |
 | Hub report for a problem | N ("Collect a Hub report on the Hub page.") | new | N (the same sentence) | N | new (`report`) | app, web app: remain |
 | Home Assistant: link it | N | new | N | N | new (`pair --home-assistant`) | remains: Hub page and command line only |
+| Language: choose one, install more, make a pack | new (Settings > Appearance; the app carries its languages) | new (Settings > Appearance and General) | new (Settings) | N | new (`language`, `--lang`) | app, web app: no download of packs by the app; making and checking a pack: command line only |
+| Demo mode: look around on made-up data | new (the notice) | new | new (the banner) | N | new (`demo`, the line `Demo data.`) | app, web app: Leave demo works in place; switching the demo on: Hub page and command line only |
+| Spool labels: print them, scan one | new (Print a label, Scan a label) | new (Print a label, Print labels) | new (Print a label) | N | new (`spool label` writes the SVG) | app, web app: one label at a time; printing is the browser's or Android's |
 
 Gaps marked "remains" outside the command-line column are specified in the documents of those interfaces.
 
@@ -2611,3 +2755,9 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
     and `POST api/import/locations`, the backup password and the encrypted backups, the Hub report, and the pairing kind
     `home-assistant` (`03-hub-page.md` section 15). Until they exist the commands that need one say `Error: this Hub
     does not offer that yet.` with the Fix `sudo spoolwarden update`.
+12. **Languages, the demo and labels.** The page routes `GET /setup/api/languages`, `POST languages/<code>/install`,
+    `POST languages/<code>/remove` and `POST settings/language`, `POST demo`, and the kit routes `GET api/languages`,
+    `POST api/demo/leave` and `GET api/spools/<id>/label.svg`, with `key` and `params` beside `text` in every answer the Hub writes in words
+    and `Accept-Language` or `?lang=` choosing its language (`03-hub-page.md` section 15). Until they exist `language`,
+    `demo` and `spool label` say `Error: this Hub does not offer that yet.` with the Fix `sudo spoolwarden update`;
+    `language template` and `language check` need nothing from the Hub.

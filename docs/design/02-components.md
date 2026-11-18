@@ -2759,6 +2759,54 @@ is a `TextButton`.
 </figure>
 ```
 
+### 7.13 Spool label
+
+**Purpose.** A label a person prints and sticks on a spool, so that scanning it opens that spool. The Hub draws it as
+SVG (`GET api/spools/{id}/label.svg`); the pages and the app show it and print it and never draw a label of their own.
+
+**Anatomy.** The QR code of the spool's short address (`https://<name>.local[:port]/s/<number>`) · the spool's number,
+large · the brand · the filament's name · the material · a box in the filament's colour with its hex value beside it ·
+the lot · the date the spool was added · the net weight · the nozzle and bed temperatures when the filament has them
+(left out, with no empty caption, when it has none). A name too long for its line ends in "…".
+
+**Sizes and tokens.** Three sizes, the same contents on each, drawn to the real size in millimetres: **62 x 29 mm** (a
+62 mm label roll; the default), **50 x 30 mm**, and **a sheet of 24** labels laid out for the paper the browser prints
+on (A4 or Letter). The label uses no token: it is black on white whatever the theme and the appearance, because it is
+printed, and the colour box is the only colour on it. The hex value beside the box tells the colour on a printer that
+prints in black and white.
+
+**States.**
+- Default: as above.
+- Hover, focus, pressed, disabled: not applicable (it is an image).
+- Loading: a skeleton of the label's shape in its preview (10.3).
+- Error: the preview is replaced by the error state (10.2): "Could not draw the label. <Hub's text>" with **Try again**;
+  a number the Hub does not know gives "Spool <number> was not found."
+
+**Behaviour and keyboard.** The label appears in the print page's preview (`03-hub-page.md` 16.3) and is printed by
+the browser's own print dialog; no label printer is driven directly and no PDF is made. The print page hides
+everything but the labels when it prints.
+
+**Accessibility.** The preview is an `img` with `role="img"` and an `aria-label` that says what is on it ("Label of
+spool 214: Polymaker PolyTerra PLA Charcoal Black, PLA, 620 g"); the QR code has no text of its own, because the number
+is written on the label.
+
+**Theme profiles.** No change.
+
+**Android.** The app hands the Hub's label to Android's print service and draws none itself.
+
+**HTML.**
+```html
+<svg class="label" viewBox="0 0 62 29" width="62mm" height="29mm" role="img"
+     aria-label="Label of spool 214: Polymaker PolyTerra PLA Charcoal Black, PLA, 620 g">
+  <rect width="62" height="29" fill="#fff"/>
+  <path class="label__qr" d="…" fill="#000"/>
+  <text x="29" y="9" font-size="7" font-weight="700">214</text>
+  <text x="29" y="14" font-size="2.6">Polymaker PolyTerra PLA Charcoal Black</text>
+  <rect x="29" y="22" width="4" height="4" fill="#2B2B2E" stroke="#000" stroke-width="0.15"/>
+  <text x="34.5" y="25.4" font-size="2.4">#2B2B2E</text>
+</svg>
+```
+
 ---
 
 ## 8. Progress and feedback
@@ -3270,6 +3318,28 @@ Android app; no screen draws its own.
 <p class="banner__more"><a href="#alerts">2 more alerts</a></p>
 ```
 
+**The demo banner.** While the Hub runs in demo (`03-hub-page.md` 3.9), this banner is drawn in one fixed form on every
+screen of the Hub page and the web app, so a person never takes the made-up data for real.
+
+- Content: kind `info`, no title, the sentence "Demo data. Nothing here is real." and one action, **Leave demo**. It
+  has no Dismiss, and it is not one of the two page or global banners the rule above counts: it is drawn first, above
+  them, at the top of `main` (global placement), also on the Locked page and on error states.
+- **Leave demo** asks once, in a destructive dialog (9.1): title "Leave the demo?", body "Everything in it is deleted.",
+  buttons Cancel and **Leave demo** (danger). The question is asked in place on the Hub page, in the web app and in the
+  app; none of them opens another page for it. Switching the demo on is not offered here (Hub page and command line
+  only).
+- It leaves by itself when the demo is over. It is plain content when the page opens (no announcement).
+- Android: the same `NoticeCard` (kind `info`, the sentence, one `TextButton` **Leave demo**) at the top of every
+  screen of the app, above the navigation content and above any other notice.
+
+```html
+<div class="banner banner--info banner--demo">
+  <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+  <p class="banner__text">Demo data. Nothing here is real.</p>
+  <div class="actions"><button class="btn btn--default" type="button">Leave demo</button></div>
+</div>
+```
+
 ### 8.9 Alerts list
 
 **Purpose.** Show every alert that is raised now and every alert of the last 7 days in one place, so that an alert
@@ -3637,3 +3707,5 @@ here applies.
 | `GET api/health` answering the checks with their stretches and the changes (`03-hub-page.md` section 15) | History strip (7.11) | The strips are left out and the Checks show as they did |
 | `GET api/analytics` answering the months and the insights (`03-hub-page.md` section 15) | Monthly bars (7.12) | The Analytics section shows the error state "Could not read the usage. <Hub's text>" with **Try again** |
 | `POST api/events/{id}/undo` and the `undo` field of every served event | Toast with Undo (8.7) | The toast carries no button |
+| `demo: true` in `GET api/info` and `GET api/hub` (`03-hub-page.md` section 15) | Demo banner (8.8) | No demo can be started, so no banner is drawn |
+| `GET api/spools/{id}/label.svg` with `size` (`03-hub-page.md` section 15) | Spool label (7.13) | No label is offered |

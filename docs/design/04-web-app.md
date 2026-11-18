@@ -51,6 +51,17 @@ The Hub writes the page's configuration into `data-*` attributes on `<body>` (as
 Further attributes the design needs (Hub name, Hub page address, Slicer presets on/off, spool editing) are listed in
 section 14.
 
+**The page's language and the demo.** The page's `lang`, its texts and its plural rules come from one language (9.2):
+the choice kept on the phone, else the phone's language when the Hub has that pack, else the Hub's language, read from
+the web twin of `GET api/languages` (14). While the Hub runs in demo (`demo: true` in the answer of `GET hub`, read when
+the page opens) every screen shows the demo banner of `02-components.md` 8.8: "Demo data. Nothing here is real." at the
+top of the page, above the alert banners and the page header, with **Leave demo**. It has no Dismiss. The web app holds
+no setup code and needs none: **Leave demo** asks in place "Leave the demo? Everything in it is deleted."
+(`03-hub-page.md` 3.9) and calls `POST api/demo/leave` (14), which answers `{demo: false}`; when the demo is already
+off (409 `not_in_demo`) the banner goes. It does not open the Hub page; switching the demo on stays on the Hub page and
+the command line. Whatever the Hub refuses in the demo shows its text "Not in the demo." where the person pressed the
+control.
+
 ---
 
 ## 2. Navigation
@@ -134,6 +145,9 @@ sheets of 12.2, Map by loading filament) open in the side drawer (420 px, F7).
 ### 2.4 Addresses and remembered state
 
 - The address reflects the place (F8). Back and forward work; a reload returns to the same place.
+- A label's short address, `https://<hub>/s/<number>`, is answered by the Hub with a redirect to
+  `/intake#spools/<number>` while the web app is on, so the spool sheet (5.4) opens; a number the Hub does not know gets
+  the Hub's 404.
 - Today's addresses keep working: `#add`, `#printers` and `#presets` open their pages; `#open` opens `#spools`;
   `#history` opens `#recent`.
 - No address, or an unknown one: the last place, read from `localStorage` key `spoolwarden.place`; if none, `#add`.
@@ -150,7 +164,8 @@ sheets of 12.2, Map by loading filament) open in the side drawer (420 px, F7).
   closes the sheet first; a reload closes it.
 - `localStorage` keys, every read and write in try/catch: `spoolwarden.place`, `spoolwarden.printer` (the last
   printer opened, expanded when the printers list opens on tablets), `spoolwarden.sealedOnly` (section 5),
-  `spoolwarden.draft.add` (the unfinished add, 4.7), plus the appearance and theme keys of F5 and F6.
+  `spoolwarden.draft.add` (the unfinished add, 4.7), `spoolwarden.language` (9.2), plus the appearance and theme keys
+  of F5 and F6.
 - The document title follows the place as `<Page title> · <Hub name>` (F9): "Add spools · Workshop", "Spool 214 ·
   Workshop", "Printers · Workshop". Until the Hub reports its name (section 14), "Spoolwarden" stands in for it. The
   refusal and sign-in pages are the exception (section 11).
@@ -707,6 +722,7 @@ same content expands in place under the spool's row in the results (2.3).
 | Other actions                            |
 | [ Update weight ] [ Move ]               |
 | [ Load into a printer ]                  |
+| [ Print a label ]                        |
 |                          [ Mark empty ]  |
 +------------------------------------------+
 ```
@@ -729,12 +745,14 @@ without one.
 
 **Other actions.** "Update weight", "Move" and "Mark empty" are shown when the Hub offers spool editing to the web
 app (section 14). "Load into a printer" is shown whenever the Printers Feature is on, because it uses endpoints the
-Hub has today. When none of the four is available the group is absent and the sheet ends after "Link tag and open".
+Hub has today. "Print a label" is always shown. When none of the first four is available the group holds "Print a label"
+alone.
 
 | Action | How it works |
 |---|---|
 | "Update weight" | Opens a small form in place: "Weight with spool"; "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight", with the toast "Updated Polymaker PolyTerra PLA Charcoal Black (214): 812 g left." and "Undo" (3.9). |
 | "Move" | A menu with the same entries as the Location select of 4.5, in fill order, each with how full it is (a full one stays choosable and shows "Full"; an Individual containers location is one entry; it sends the set's `name` and gives the lowest free container, and a container the person picks sends its `containers[].name`; the spool's current place is found by matching its location text as in 4.5, and a text that matches nothing is shown as it is, under no location); choosing one moves it at once; inline result "Moved to Dry box 1." and the toast of 3.9 with "Undo" for 10 s. |
+| "Print a label" | Opens the web app's print page, `/intake/labels?ids=<spool id>&size=62x29`, in a new tab: the size choice ("62 x 29 mm", "50 x 30 mm", "Sheet of 24"), the preview of the label (`02-components.md` 7.13, drawn by the Hub: GET `spools/<id>/label.svg`, 14), the one line about the printed address and **Print**, which opens the browser's own print dialog; all as `03-hub-page.md` 16.5 gives them. It changes nothing, so it asks for nothing and leaves no event. |
 | "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." and the toast "Marked Polymaker PETG Teal (77) empty." with "Undo" (3.9). |
 | "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (one row per slot with its current spool), then the automatic preview and "Load", exactly as the load sheet of 6.5. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`. |
 
@@ -1500,6 +1518,10 @@ A sheet on phones with the address `#settings` (2.4), opened over the last place
 | New phones start with the Hub's theme    |
 | for new devices.                         |
 |------------------------------------------|
+| Language                                 |
+| [ Automatic                        v ]   |
+| Saved on this device: Automatic.         |
+|------------------------------------------|
 | Alerts on this phone                     |
 | (o) On: this phone gets alerts.          |
 | Notify this phone                  [on]  |
@@ -1519,8 +1541,13 @@ The segmented control takes the full content width; each theme tile is a radio t
 |---|---|
 | Appearance | The wide segmented control "Light / Dark / System" with sun, moon and half-circle icons (F5). Applies at once; line "Saved on this device: <choice>." |
 | Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this device: <choice>." Helper: "New phones start with the Hub's theme for new devices." |
+| Language | A select: **Automatic** (the default) and every language installed on the Hub, each named as that language names it ("English", "Русский", "Deutsch (machine-translated)"). Applies at once: the app loads that language's texts (GET `api/strings/<code>.js`, 14) and draws itself again; line "Saved on this device: <choice>." Automatic is the phone's language when the Hub has that pack, otherwise the Hub's language (helper "Automatic uses this phone's language if the Hub has it, otherwise the Hub's language."). Kept in `localStorage` `spoolwarden.language`. The page's `lang`, its plural forms, dates and numbers follow the language in use; right-to-left languages are not supported. |
 | Alerts on this phone (only when alerts can be sent to the phone, `data-push`) | The same switch, test button and texts for its limits as before; the alerts now cover every alert type the Hub has switched on (filament ran out, print paused, print failed or stopped, printer error, print finished, storage almost full, spool running low, device stopped answering), not only print states. Status: "Off" (hollow circle), "On: this phone gets alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). Link "Recent alerts" opens the Alerts list (3.8). The switch is the push subscription itself: the phone is on while it has one, and the Hub stores no switch for it; the subscriptions are kept by the web unit in `push.xml` in its own folder. The test button keeps today's push test; an alert sent from the command line (`spoolwarden alerts test`) reaches every subscription. The alert types and thresholds are changed on the Hub page and with `spoolwarden alerts` only; the sheet shows them read-only with the line "Change this on the Hub page." |
 | This Hub | Hub name; the address this page is using (`--mono`); on the home address "Open the Hub page" and, on tablets, the rows "Hub" (9.3) and "Open Spoolman" (5.6). |
+
+**The language of an alert.** The phone's push subscription carries the language in use on that phone (the choice above,
+or what Automatic gives), and the Hub writes the title and the one-line body of each alert push in it, falling back to
+the Hub's language and then to English; a phone that is switched to another language sends its subscription again.
 
 The alert itself (from the service worker) has the Hub's title (default "Printer"), body and tag: for every alert type
 the title and one-line body of the table in 02-components 8.8, one notification per event (a condition notifies when
@@ -1856,6 +1883,8 @@ right column is left out or falls back as described there.
 | Web twins, under the web app's own base, that pass the Hub's routes of events and alerts on (the web unit reads them through its token; it opens no file of the Hub): `GET events?since=&since_at=&alert=&wait=&kinds=&limit=` (the events, `next`, `oldest`, `gap` and the raised `conditions`, each with `alert`, built `title` and `text`, and `action: {place, id}`), `GET spools/low` (`{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`), and for completeness `GET alerts`, `GET storage-use` and `POST alerts/test`, which the web app does not use (its test button keeps today's push test); the web unit's own hand-over of spool events to the Hub (`POST api/events/web`) is not a route of the web app | 3.8, 5.5, 9.2 | No alert banners, toast or Alerts list; no Running low chip; the Alerts panel keeps today's push switch and test button |
 | The Hub screen: a twin of the kit route `GET api/hub` under the web app's own base (`GET hub`), answering `{name, version, newest: {version, checked_at}?, update_available, checks: [{group, state: "ok", "look", "note" or "off", text, fix?}], getting_started: {done, total, hidden, finished}, features: [{id, name, on}], catalog: {version?, checked_at?}, backup: {last_at?, nightly}, reader: {engine, key_set}, devices: [{name, kind, version?, last_seen?, out_of_date, this}], records_kept, spoolman_url?, hub_page?}`; `hub_page` and `spoolman_url` are built from the host the caller used and are absent where the thing cannot be reached | 5.6, 9.1, 9.3 | No Hub screen, no Getting started line and no Open Spoolman; "Open the Hub page" uses the page attribute |
 | Twins for the catalog form and for adding a printer: `GET library/local`, `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `POST library/local/{id}/remove`, `POST printers/scan` with `{subnet?}` and `POST printers/{id}/slots/{label}/clear` (`{dry_run}`; answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`, and `event_id`, absent on a dry run); each passes the kit route on unchanged, with the guards the neighbouring twins have; the unload answer gains `waiting_ended` | 6.5, 6.9, 8 | No form and no list under Slicer presets; "Search" and "Clear slot" are not offered |
+| Web twins, under the web app's own base, for languages and labels: `GET languages` (the kit route `GET api/languages` unchanged: `{hub: "<code>", languages: [{code, name, reviewed, installed, complete}]}`) and `GET spools/{id}/label.svg` (`size` one of `62x29`, `50x30`, `sheet24`; `image/svg+xml`), the print page `/intake/labels?ids=&size=` (HTML, the labels as inline SVG), and the kit route `GET api/strings/{code}.js` (the texts of a language as the page loads them; a web token may call it) | 1.2, 5.4, 9.2 | No Language group (the app is in English); no "Print a label" |
+| `key` and `params` beside `text` in every answer that carries a text the Hub wrote, `text` being in the language the web app asks for (`Accept-Language`, or `?lang=<code>`); `language` and `demo` in the Hub's object (`GET hub`); `POST api/demo/leave` (the web twin, `{demo: false}`); the language in the push subscription | 1.2, 3.6, 3.8, 9.2 | The Hub's texts are shown as sent; no demo banner; alerts are in the Hub's language |
 | The header `X-Spoolwarden-Client: web/<version>` on every call of the web app | 9.3 | The Hub shows the web app without a version |
 | The kit route `POST api/readers/web/seen` (a web token only), `{readers: [{id, build?, seen_at}]}`, answered `{ok: true}`: the web unit sends a Tag Reader's build when it changes and otherwise its last call at most once a minute per reader, and while the Hub does not answer keeps only the newest value per reader in memory | 9.3 | The Hub shows a Tag Reader without a build or a last seen |
 | Web twins, under the web app's own base, that pass the kit routes of history and data on unchanged: `GET activity` (`GET api/events` with `activity=1`, `subject` and `actor`; each event also carries `undo: {possible, until?, why_not?}`, `undone` and `undo_of?`), `POST events/{id}/undo` (200 `{undone: true, event, note?}`; 409 `{error, text}`; 404), `GET health` (`days`), `GET analytics` (`months`, `printer`) and `GET export/{set}.csv` for `usage`, `recent` and `spoolman-spools` only; `GET printers/{id}/usage` takes `by=month` and answers `{months: [{month, grams, prints, unfinished_prints, top_material?}]}` | 3.9, 5.4, 5.6, 6.6, 7.1, 9.3 | No Undo button, no latest events, no By month, no history table and no downloads |
@@ -1951,6 +1980,7 @@ this design.
 | "Link tag and open" (disabled without explanation) | "Link tag and open" with its reasons (5.4) |
 | "Searching…", "Checking…", "Linking…" | Working shapes and the same verbs (5.3, 5.4) |
 | (new) | Update weight, Move, Mark empty, Load into a printer (5.4); the menu with Open Spoolman (5.6) |
+| (new) | Print a label (5.4) |
 
 ### 15.4 Presets
 

@@ -35,10 +35,11 @@ in section 3.4).
 | `tokens/check_contrast.py` | Contrast check (section 3.3) | Exists | A person | Run by a developer and by the project's test run |
 | `icons/src/<name>.svg` | Source, one file per icon | Proposed | A person | The extended generator; the tests |
 | `icons/status/<shape>.svg` | Source, one file per status shape | Proposed | A person | The extended generator; the tests |
-| `strings/en.json` | Source, the string catalogue | Proposed | A person | The extended generator; the tests |
+| `strings/en.xml` | Source, the string catalogue, in XML (section 12; it replaces `strings/en.json`) | Proposed | A person | The extended generator; the tests |
+| `strings/packs/<code>.xml` | A language pack: the catalogue's form with the English beside each text (section 12) | To write | A translator | `spoolwarden language`; the Hub, which installs it; the generator, for Android's resources |
 | `tokens/theme-init.js` | Generated (it lists the theme keys) | Proposed | `build_tokens.py`, extended | Hub page and web app (first script in `<head>`) |
 | `icons/sprite.svg` | Generated | Proposed | `build_tokens.py`, extended | The Hub, which places it inline at the top of each page's `<body>` |
-| `strings/strings.js` | Generated | Proposed | `build_tokens.py`, extended | Hub page and web app |
+| `strings/strings.js` | Generated, the English texts; another language's script is built by the Hub (section 12) | Proposed | `build_tokens.py`, extended | Hub page and web app |
 | `web-shared/components.css` | Hand-written, the shared component stylesheet, core (`02-components.md` section 1, "Files") | Exists | A person | Hub page and web app (after `tokens.css`) |
 | `web-shared/components.js` | Hand-written, the shared component script, core (`02-components.md` 1.4) | Exists | A person | Hub page and web app (after `strings.js`) |
 | `web-shared/components-jobs.css`, `components-jobs.js` | Hand-written, the job strip and the Hub-restarting state | To write | A person | Hub page |
@@ -47,7 +48,7 @@ in section 3.4).
 | `android/app/src/main/java/<app package>/ui/theme/SpoolwardenTheme.kt` | Hand-written | To write | A person | Every screen |
 | `android/app/src/main/res/drawable/sw_ic_<name>.xml` | Generated, one per icon | Proposed | `build_tokens.py`, extended | `SwIcon` |
 | `android/app/src/main/res/drawable/sw_st_<shape>.xml` | Generated, one per status shape | Proposed | `build_tokens.py`, extended | `StatusLabel` |
-| `android/app/src/main/res/values/strings.xml` | Generated | Proposed | `build_tokens.py`, extended | Every screen (`stringResource`) |
+| `android/app/src/main/res/values/strings.xml` | Generated, English; `values-<code>/strings.xml` for every language pack of the release | Proposed | `build_tokens.py`, extended | Every screen (`stringResource`) |
 | `android/app/src/main/res/values/sw_window.xml` and `values-night/sw_window.xml` | Generated | Proposed | `build_tokens.py`, extended | The window theme in `res/values/themes.xml` (first frame only) |
 | `tests/test_design_sources.py` | Tests beyond the two existing checks | Proposed | A person | The project's normal test run |
 | `tests/literal_allowlist.txt`, `tests/strings_allowlist.txt` | Reviewed exceptions for proposed tests 5 and 7 | Proposed | A person | The tests |
@@ -360,7 +361,7 @@ files marked "proposed" in section 1; `--check` then covers every output.
 | `SpoolwardenTokens.kt` | Below |
 | `sw_window.xml` | Below |
 | `icons/sprite.svg`, `sw_ic_<name>.xml`, `sw_st_<shape>.xml` | Section 11 |
-| `strings/strings.js`, `strings.xml` | Section 12 |
+| `strings/strings.js`, `strings.xml` (one per language for Android) | Section 12; the generator reads `strings/en.xml` and the packs |
 
 **`SpoolwardenTokens.kt`.** One `ThemeTokens` value per theme, built from plain constructors, and a lookup
 function. The conversion:
@@ -461,7 +462,7 @@ given: it is one test, implemented here, not a second copy.
 | 4 | **Every token a component uses is a token.** Scans the web stylesheets and scripts for `var(--name)` and the hand-written Kotlin for `SpoolwardenTheme.<group>.<field>`; checks that every width in a web media query is an edge of foundations section 7 or one more than an edge (600, 601, 1024, 1025); checks that each `/* profile: <key>=<choice> */` group of the component stylesheet is keyed on exactly the themes whose profile has that choice (section 9). | A component uses a name that is not a token of foundations section 4 (the `size` entries and the names of 2.5 included). A name that only `extra` defines fails, although `tokens.css` declares it. Also when a stylesheet uses a breakpoint of its own, or a profile group names the wrong themes. |
 | 5 | **No literal values in components** (the token half of AUT-2 and of AUT-8's `Color(0x…)` rule). Web component CSS: no colour literal (`#…`, `rgb(`, `hsl(`, named colours other than `transparent` and `currentColor`); no `font-size`, `line-height` or duration that is not a token; no length literal except `0`, `1px`, `2px` and `3px` (hairline, focus ring and its offset, active mark: the literal values `02-components.md` section 1.2 lists), a length inside a `calc()`, `min()` or `max()` together with a token, and the `rem` limits of `02-components.md` section 1.2. Kotlin outside `SpoolwardenTokens.kt`: no `Color(0x…)` and no `Color.` constant other than `Color.Transparent` and `Color.Unspecified`; no `<number>.sp`; no `<number>.dp` other than `0.dp`, `1.dp`, `2.dp` and `3.dp`; no `<number>.em` other than the table-header letter spacing `0.05.em` (foundations section 9). Reviewed exceptions are listed in `tests/literal_allowlist.txt`, one per line with file, the literal and the reason. | A literal outside the allow-list is found (file and line are named). |
 | 6 | **Icons.** Each `icons/src/*.svg` has `viewBox="0 0 24 24"`, only `<path>` elements, `fill="none"`, `stroke-width="1.75"`, round caps and joins (the product mark, `spoolwarden.svg`, is exempt from the fill rule); each `icons/status/*.svg` has `viewBox="0 0 24 24"` and only `<path>` elements; the two folders hold exactly the names of the lists in section 11; the sprite and the drawables contain exactly the source names. | An icon is missing, malformed or extra on one side. |
-| 7 | **Words.** Parses `strings.xml` and `strings/strings.js`; both have exactly the keys of `strings/en.json`, the same text after placeholder conversion (section 12), and the same placeholders per key. Hand-written Kotlin under `ui/` contains no string literal with a letter in it, and the page scripts assign no such literal to `textContent`, `ariaLabel`, `title` or `placeholder` and pass none to `announce(` or `toast(`; routes, keys, log tags and MIME types are listed in `tests/strings_allowlist.txt` (file, literal, reason). | A key or a text differs, or a literal outside the allow-list could put text on screen without the catalogue. |
+| 7 | **Words.** Parses `strings.xml` and `strings/strings.js`; both have exactly the keys of `strings/en.xml`, the same text after placeholder conversion (section 12), and the same placeholders per key. Hand-written Kotlin under `ui/` contains no string literal with a letter in it, and the page scripts assign no such literal to `textContent`, `ariaLabel`, `title` or `placeholder` and pass none to `announce(` or `toast(`; routes, keys, log tags and MIME types are listed in `tests/strings_allowlist.txt` (file, literal, reason). | A key or a text differs, or a literal outside the allow-list could put text on screen without the catalogue. |
 | 8 | **Theme names agree.** `themes.<key>.label` equals the string `theme_<key>_name`. | They differ. |
 
 Checks 1 and 7 are the equality tests: with them it is impossible to ship a web page and an app built from
@@ -1059,25 +1060,32 @@ One string catalogue serves the web pages and the app, so the same thing is call
 (foundations principles 5 and 6). The catalogue and its generated files are proposed additions to the tooling
 (section 3.4).
 
-**Source: `strings/en.json`.** A flat object, keys in lower snake case, grouped by a prefix for the place
-(`nav_printers`, `printers_forget`, `appearance_system`, `theme_console_line`). A value is a text, or for a
-text that depends on a count an object `{ "one": "…", "other": "…" }`. Placeholders are written `{name}` in lower
-snake case; `{count}` is the number a plural depends on.
+**Source: `strings/en.xml`.** One XML file, one `<text key="…">` element per text, keys in lower snake case, grouped
+by a prefix for the place (`nav_printers`, `printers_forget`, `appearance_system`, `theme_console_line`). The root
+`<strings>` carries `language` (the code), `name` (the language's own name for itself) and `for` (the release the texts
+belong to). A text is the element's text, or for a text that depends on a count the child elements `<one>` and
+`<other>` (and, in a language that has them, `<few>` and `<many>`). Placeholders are written `{name}` in lower snake
+case; `{count}` is the number a plural depends on. A text may carry `note="…"`, a line for the translator (where a word
+is a button, where space is short). The characters `&` and `<` in a text are written `&amp;` and `&lt;`. Nothing a
+person sees changes when the source changes its form: the texts are the same.
 
-```json
-{
-  "app_name": "Spoolwarden",
-  "appearance_light": "Light",
-  "appearance_dark": "Dark",
-  "appearance_system": "System",
-  "printers_forget": "Forget printer",
-  "printers_forget_question": "Forget {printer}?",
-  "command_name": "spoolwarden",
-  "printers_forget_body_bambu": "{product} stops connecting to it and deletes its Access Code. To use it again, add it again.",
-  "printers_forget_body_klipper": "{product} stops connecting to it and deletes its Moonraker API key, if one is saved.",
-  "status_fix_run": "Run {command} status on the Hub.",
-  "spools_added": { "one": "{count} spool added", "other": "{count} spools added" }
-}
+```xml
+<strings language="en" name="English" for="0.7.0">
+  <text key="app_name">Spoolwarden</text>
+  <text key="appearance_light">Light</text>
+  <text key="appearance_dark">Dark</text>
+  <text key="appearance_system">System</text>
+  <text key="printers_forget">Forget printer</text>
+  <text key="printers_forget_question">Forget {printer}?</text>
+  <text key="command_name">spoolwarden</text>
+  <text key="printers_forget_body_bambu">{product} stops connecting to it and deletes its Access Code. To use it again, add it again.</text>
+  <text key="printers_forget_body_klipper">{product} stops connecting to it and deletes its Moonraker API key, if one is saved.</text>
+  <text key="status_fix_run">Run {command} status on the Hub.</text>
+  <text key="spools_added">
+    <one>{count} spool added</one>
+    <other>{count} spools added</other>
+  </text>
+</strings>
 ```
 
 **The product's name is held once.** `app_name` is the only entry whose text contains the product's name, and
@@ -1096,9 +1104,10 @@ storage keys, file and package names) are not part of the catalogue and do not f
 | | Web: `strings/strings.js` | Android: `res/values/strings.xml` |
 |---|---|---|
 | Form | `window.SW_TEXT = Object.freeze({ … })`, keys and texts as in the source | `<string name="key">…</string>`; plurals as `<plurals name="key">` with `<item quantity="one">` and `<item quantity="other">` |
-| Placeholders | Kept as `{name}`; the shared page script's `t(key, values)` replaces them and picks the plural form with `Intl.PluralRules("en")` | Numbered in order of first appearance: `{count}` becomes `%n$d`, every other placeholder `%n$s`; a comment above the string lists the order (`<!-- 1=printer -->`); read with `stringResource` / `pluralStringResource` |
-| Escaping | JSON string escaping | `'` and `"` escaped with a backslash, `&` and `<` as XML entities, a leading `@` or `?` escaped, a backslash and a line break escaped, leading, trailing and double spaces kept by quoting. A literal `%` is written `%%` in a string that has placeholders; a string without placeholders keeps the bare `%` and is marked `formatted="false"`, because Android reads it without formatting |
-| Loaded | With `<script src defer>` after `theme-init.js` | Bundled; it is the app's only string file, so every text the app shows, including the app's name, comes from it |
+| Placeholders | Kept as `{name}`; the shared page script's `t(key, values)` replaces them and picks the plural form with `Intl.PluralRules(<the page's language>)`, not with "en" | Numbered in order of first appearance: `{count}` becomes `%n$d`, every other placeholder `%n$s`; a comment above the string lists the order (`<!-- 1=printer -->`); read with `stringResource` / `pluralStringResource` |
+| Escaping | JavaScript string escaping | `'` and `"` escaped with a backslash, `&` and `<` as XML entities, a leading `@` or `?` escaped, a backslash and a line break escaped, leading, trailing and double spaces kept by quoting. A literal `%` is written `%%` in a string that has placeholders; a string without placeholders keeps the bare `%` and is marked `formatted="false"`, because Android reads it without formatting |
+| Loaded | With `<script src defer>` after `theme-init.js` | Bundled; it is the app's string file, so every text the app shows, including the app's name, comes from it |
+| Another language | The Hub builds the language's script from the catalogue and the pack, English filled in where a translation is empty, and serves it at `GET /api/strings/<code>.js`; a page whose language is not English loads that script in place of `strings.js` | One `res/values-<code>/strings.xml` per pack of the release, generated beside the English file; Android picks it by the phone's or the app's language |
 
 - Proposed test 7 of section 3.4 parses both generated files and compares them with the source: same keys, same
   texts after undoing the placeholder and escaping rules, same placeholder names per key. It also fails on any string literal
@@ -1108,7 +1117,49 @@ storage keys, file and package names) are not part of the catalogue and do not f
   `tests/strings_allowlist.txt`, so text reaches the screen without the catalogue only through a reviewed entry
   there.
 - Text that arrives from the Hub while running (a printer's name, a message about one specific failure) is shown as
-  it arrives and is not in the catalogue.
+  it arrives and is not in the catalogue. A text the Hub writes itself (an alert's title and text, a Checks row, a
+  refusal) is in the catalogue under a key; the Hub's answer carries that `key` and its `params` beside the `text`, and
+  `text` is in the language the caller asked for.
+
+**Languages.** The catalogue's form is also the form of a language pack, so the generator reads both the same way.
+
+- **A pack is one XML file** in the catalogue's form with the English beside each text, so that a translator needs
+  nothing but a text editor. Each `<text>` holds an `<en>` element (the English, copied from the catalogue) and one
+  element named for the language (`<ru>`, `<de>`) that the translator fills in; the root's `reviewed` says `yes` or `no`
+  and `name` is the language's own name ("Русский", "Deutsch").
+
+  ```xml
+  <strings language="ru" name="Русский" for="0.7.0" reviewed="no">
+    <text key="devices_title">
+      <en>Devices</en>
+      <ru>Устройства</ru>
+    </text>
+    <text key="spools_count" note="count is a number">
+      <en><one>{count} spool</one><other>{count} spools</other></en>
+      <ru><one></one><few></few><many></many><other></other></ru>
+    </text>
+  </strings>
+  ```
+
+- **An empty translation means "use the English",** and so does a key the pack does not hold. The plural forms a pack
+  offers are the ones that language has (Russian: one, few, many, other; German: one, other); the page's plural rule
+  and Android's come from the language, so a count picks the right form. `{name}` placeholders are copied unchanged:
+  a translated or missing placeholder is a mistake the check names.
+- **Making and checking a pack.** `spoolwarden language template <code>` writes a pack for a language with every
+  English text and empty translations; for an existing pack it adds the new texts and marks changed ones
+  `changed="yes"`. `spoolwarden language check <file>` says in plain sentences what is wrong (a missing or extra
+  `{placeholder}`, a broken tag with its line, a plural form left empty where others are filled) and how much is
+  translated (`06-command-line.md` section 9.27).
+- **Where packs live.** In the project's repository as `strings/packs/<code>.xml`, and with each release as a file of
+  that release, `spoolwarden-lang-<code>.xml`. English is always inside the product. A Hub keeps the packs it has
+  installed in its state folder, `languages/<code>.xml`; the Android app carries the packs of its own release as
+  generated resources and does not download any.
+- **Machine-translated.** A pack whose `reviewed` is `no` and that was not translated by a person who speaks the
+  language is shown everywhere as "<name> (machine-translated)", until a speaker of the language has read it and the
+  pack is marked reviewed.
+- **Not in the catalogue, and so not translated:** the installer's lines and the command line's option help, the Weigh
+  Station's spoken and panel texts, the Tag Reader's display, and the documents. The command line's results that come
+  from the catalogue are translated. Right-to-left languages are not supported.
 
 **One key per meaning, one text per key.** Where two interfaces show the same thing they read the same key, so
 no key carries an interface in its name (`_hub`, `_web`, `_app`). Two keys may hold the same text only when they
@@ -1139,8 +1190,8 @@ cannot drift apart; the words lint (`07-accessibility.md` AUT-7) lists the words
 | The filament presets built for Bambu Studio and Orca Slicer | "Slicer presets"; recording a product line's values is "Add a line to the Filament Catalog" | "profile", "Add profile" |
 | An add kept on the device before its spools are added | "Draft" / "Drafts" | "Unfinished add", "Unfinished adds" |
 
-Every text the app shows is in `strings.xml` (none in Kotlin), and test 7 checks the catalogue and both generated
-files against each other.
+Every text the app shows is in `strings.xml` (none in Kotlin, in every language the release carries), and test 7 checks
+the catalogue and both generated files against each other.
 
 ## 13. iPhone specifics of the web app
 
@@ -1223,3 +1274,5 @@ What the design needs from the Hub that it does not offer today.
 | 4 | Build the light and the dark web app manifest from `tokens.json` and the product name: `name`, `short_name`, `theme_color`, `background_color` as in section 13 | One manifest; name "Spool intake", colours fixed (`intake_app.py`) |
 | 5 | Report its default theme to the app as a field `look` of `GET api/info` (for example `"look": "console"`), which the app already calls when it connects | No such field |
 | 6 | Store a default theme and let the Hub page's Settings > Appearance > "Theme for new devices" change it (the command `spoolwarden config theme <name>` of foundations section 6.2 writes the same setting) | No such setting and no way to save it from the Hub page |
+| 7 | Serve the texts of every installed language to the pages (`GET api/strings/<code>.js`, built from the catalogue and the pack with the English filled in) and set each page's `lang` and plural rule from the language in use | One language, "en", from `strings.js` |
+| 8 | Answer the texts the Hub writes (alerts, Checks rows, refusals) with `key` and `params` beside `text`, in the language the caller asks for (`Accept-Language` or `?lang=`) | The Hub's texts are English only |

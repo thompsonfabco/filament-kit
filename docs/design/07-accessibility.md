@@ -293,7 +293,7 @@ iPhone, TalkBack with Chrome on Android (for the web app on Android). The Androi
 
 | ID | Where | Requirement | Check |
 |---|---|---|---|
-| SR-1 | H W | `<html lang="en">` on every page, including the refusal page for addresses outside the home network and the Claude sign-in page (`/login`). | Auto: AUT-5. |
+| SR-1 | H W | `<html lang="<code>">` on every page, where `<code>` is the code of the language in use (`en` until another is chosen; the Hub's language on the refusal page for addresses outside the home network and on the Claude sign-in page (`/login`), which have no choice of their own). A screen reader reads the page in that language. | Auto: AUT-5. |
 | SR-2 | H W | Each view sets a unique document title (KEY-6). The refusal page's title says what it is ("Only on the home network · Spoolwarden"). | Auto: AUT-5 (title not empty and changes between two views). |
 | SR-3 | H W | Landmarks: the top bar is `<header>` (banner); the navigation is one `<nav aria-label="Sections">`; the content is `<main id="main">`; the Settings sub-navigation is `<nav aria-label="Settings groups">`; breadcrumbs are `<nav aria-label="Breadcrumb">`; the "More" sheet holds `<nav aria-label="More sections">`. No other `nav`. Everything visible is inside a landmark except the skip link, the toast region and open layers. | Auto: AUT-5. Manual: NVDA landmark list (Insert+F7, Landmarks). |
 | SR-4 | H W | Exactly one `h1` per view: the place's name (foundations 9), for example "Printers" or "Workshop X1". In the Panes theme, with two or three panes side by side, the `h1` is the section name and each pane's title is an `h2`. Dialogs and sheets have their own title (`h2`), which does not count as a second `h1`. | Auto: AUT-5 counts `h1` outside open layers. |
@@ -467,7 +467,8 @@ who read with effort.
 | LNG-4 | H W A C | The same thing has the same name, the same icon and the same status words in all four interfaces (foundations 1.6). | Review against the names table of foundations 2 and the status badge vocabulary. |
 | LNG-5 | H W A C | Instructions never depend on colour, shape or position alone ("press the green button", "the box on the right" are not allowed); they name the control. | Review. |
 | LNG-6 | H W A C | Messages keep sentences under 25 words and one idea per sentence. Product terms that must stay (Access Code, AMS, Moonraker) are explained once in the hint of the field or place that uses them. | Review. |
-| LNG-7 | H W A C | One spelling throughout, the one the foundations use ("colour"); numbers, units and dates as in foundations 2. | Auto: AUT-7 bans "color" in UI strings. Code identifiers and command-line flag names (such as `--color`) are not UI strings. |
+| LNG-7 | H W A C | One spelling throughout, the one the foundations use ("colour"); numbers, units and dates as in foundations 2. This is the English catalogue's rule: a language pack follows its own spelling. | Auto: AUT-7 bans "color" in UI strings. Code identifiers and command-line flag names (such as `--color`) are not UI strings. |
+| LNG-8 | H W A C | Every interface uses one language at a time. The page's `lang` (SR-1), its plural forms, dates and numbers follow it, and the plural rule comes from the language and not from English. A language that has not been read by a speaker of it shows "(machine-translated)" after its name wherever it is named. Right-to-left languages are not supported. Where a pack has no translation for a text the English shows, never an empty control. | Auto: AUT-5 (`lang` present). Review of the rest. |
 
 ---
 
