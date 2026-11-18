@@ -18,6 +18,8 @@ internal class SettingsActions(
     val onSimulateTag: (String) -> Unit,
     val onLook: (Look) -> Unit = {},
     val alerts: AlertsActions = AlertsActions(),
+    /** Opens the Hub at a glance screen (R83 section 5). */
+    val onOpenHubGlance: () -> Unit = {},
 )
 
 /** The page of one group: the route of a narrow window, and the right pane of a wide one. */
@@ -33,6 +35,7 @@ internal fun SettingsGroupPage(group: SettingsGroup, facts: SettingsFacts, actio
             onPairAgain = actions.onPairAgain,
             onForget = actions.onForget,
             setupUrl = actions.setupUrl,
+            onOpenGlance = actions.onOpenHubGlance,
             modifier = modifier,
         )
         SettingsGroup.Alerts -> AlertsSettings(facts.alerts, actions.alerts, modifier)

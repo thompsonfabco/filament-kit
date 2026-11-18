@@ -34,6 +34,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
+import com.thompsonfabco.filamentkit.ui.hub.HubTexts
 import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
@@ -52,6 +53,8 @@ internal fun HubSettings(
     onForget: () -> Unit,
     setupUrl: () -> String?,
     modifier: Modifier = Modifier,
+    /** Opens the Hub at a glance screen; null hides the button. */
+    onOpenGlance: (() -> Unit)? = null,
 ) {
     val space = SpoolwardenTheme.space
     var confirmForget by remember { mutableStateOf(false) }
@@ -93,6 +96,7 @@ internal fun HubSettings(
                 )
                 openProblem?.let { NoticeCard(NoticeKind.Bad, stringResource(it)) }
             }
+            if (onOpenGlance != null) SwButton(HubTexts.OPEN_SCREEN, onOpenGlance, Modifier.fillMaxWidth())
             SwButton(stringResource(R.string.common_pair_again), onPairAgain, Modifier.fillMaxWidth())
         }
         GroupTitle(stringResource(R.string.settings_hub_security_title))

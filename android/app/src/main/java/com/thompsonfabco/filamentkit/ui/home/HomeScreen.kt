@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CardDefaults
@@ -140,6 +142,9 @@ internal fun HomeScreen(
     /** The Hub's running-low count: a line "<n> spools running low" that opens Spools with the filter on; 0 shows nothing. */
     lowCount: Int = 0,
     onOpenLow: () -> Unit = {},
+    /** "Getting started on the Hub: 4 of 8 done" (R83 5.4), a quiet line that opens the Hub screen; null shows nothing. */
+    gettingStarted: String? = null,
+    onOpenHub: () -> Unit = {},
     extra: @Composable () -> Unit = {},
 ) {
     val space = SpoolwardenTheme.space
@@ -196,6 +201,7 @@ internal fun HomeScreen(
         if (lowCount > 0) {
             SwButton(AlertTexts.spoolsRunningLow(lowCount), onOpenLow, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_warning)
         }
+        if (gettingStarted != null) GettingStartedLine(gettingStarted, onOpenHub)
         if (SpoolwardenTheme.window == WindowClass.Phone) {
             left()
             right()
@@ -534,3 +540,13 @@ fun showLabelPhotos(info: ServerInfo?): Boolean = info?.labelReading == true
 
 /** Home hides the photo button only when the Hub said so: unknown ([info] null) is not off. */
 fun labelReaderOff(info: ServerInfo?): Boolean = info?.labelReading == false
+
+/** The quiet Getting started line: muted words that open the Hub screen, at least a row high to tap. */
+@Composable
+private fun GettingStartedLine(text: String, onClick: () -> Unit) {
+    Text(
+        text, color = SpoolwardenTheme.colors.accentText, style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = SpoolwardenTheme.sizes.row)
+            .clickable(role = Role.Button, onClick = onClick).wrapContentHeight(Alignment.CenterVertically),
+    )
+}

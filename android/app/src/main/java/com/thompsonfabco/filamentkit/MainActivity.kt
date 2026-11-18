@@ -213,6 +213,11 @@ import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
+import com.thompsonfabco.filamentkit.ui.hub.HubGlanceRoute
+import com.thompsonfabco.filamentkit.ui.hub.HubScreen
+import com.thompsonfabco.filamentkit.ui.hub.HubViewModel
+import com.thompsonfabco.filamentkit.ui.hub.gettingStartedLine
+import com.thompsonfabco.filamentkit.ui.hub.hubPlaceTitle
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
 import com.thompsonfabco.filamentkit.ui.home.labelReaderOff
@@ -440,6 +445,12 @@ internal fun FilamentKitApp(
     var hubBefore by rememberSaveable { mutableStateOf<String?>(null) }
     // screens ask for the client at each call, so a trusted certificate or a re-pair reaches them with their state intact
     fun currentApi(): Api = app.session.api.value ?: throw ApiError.noHubPaired()
+    // The Hub at a glance (R83 5): one read per Api, shared by Home's Getting started line and the Hub screen
+    val hubVm: HubViewModel = viewModel(key = "hub-glance-${System.identityHashCode(api)}", factory = viewModelFactory {
+        initializer { HubViewModel(load = { currentApi().hub() }) }
+    })
+    val hubUi by hubVm.state.collectAsStateWithLifecycle()
+    fun openHubGlance() = nav.navigate(HubGlanceRoute) { launchSingleTop = true }
     fun pushPairing() {
         if (nav.leaveSettingsForPairing()) return
         hubBefore = hubIdentity(config)
@@ -599,6 +610,15 @@ internal fun FilamentKitApp(
                 return@composable
             }
             AlertsScreen(alertsUi, System.currentTimeMillis(), onAction = ::openAlertTarget)
+        }
+
+        composable<HubGlanceRoute> {
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            LaunchedEffect(api, online) { if (online) hubVm.refresh() }
+            HubScreen(hubUi, online, onTryAgain = hubVm::refresh)
         }
 
         composable<SpoolRoute> { e ->
@@ -863,7 +883,7 @@ internal fun FilamentKitApp(
                 // the pills of Palette are a row under the top bar on a tablet and wider; nothing on a phone or in another look
                 Column {
                     if (!scanning) SwTopBar(
-                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: alertsPlaceTitle(destination) ?: placeTitle(destination, entry, storedCertificate),
+                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: alertsPlaceTitle(destination) ?: hubPlaceTitle(destination) ?: placeTitle(destination, entry, storedCertificate),
                         subtitle = if (destination?.hasRoute(HomeRoute::class) == true && !sectionPage) config?.name?.takeIf { it.isNotBlank() } else null,
                         onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                         scrollBehavior = scroll,
@@ -1022,6 +1042,8 @@ internal fun FilamentKitApp(
                                 }
                             }
                         }
+                        // read each time Home is shown while online; an older Hub (404) or a failed read shows no line
+                        LaunchedEffect(api, online) { if (online && api != null) hubVm.refresh() }
                         HomeScreen(
                             connection = connection,
                             drafts = drafts,
@@ -1048,6 +1070,8 @@ internal fun FilamentKitApp(
                             ),
                             lowCount = alertsUi.lowCount ?: 0,
                             onOpenLow = { openAlertTarget(AlertTarget.RunningLow) },
+                            gettingStarted = gettingStartedLine(hubUi.hub?.gettingStarted),
+                            onOpenHub = ::openHubGlance,
                             onRefreshPrinters = printersVm::refresh,
                             onReviewCertificate = app.router::pairAgain,
                             onPairAgain = app.router::pairAgain,
@@ -1405,6 +1429,7 @@ internal fun FilamentKitApp(
                             }
                         },
                         setupUrl = { HubPage.url(app.session.baseUrl()) },
+                        onOpenHubGlance = ::openHubGlance,
                         update = UpdateActions(
                             install = { updater?.install() },
                             cancel = { updater?.cancel() },
@@ -1468,6 +1493,10 @@ internal fun FilamentKitApp(
                 hubSettings = {
                     sheetOpen = false
                     tabTapped(Tab.Settings)
+                },
+                openHubGlance = {
+                    sheetOpen = false
+                    openHubGlance()
                 },
             ),
             onDismiss = { sheetOpen = false },

@@ -18,6 +18,10 @@ import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -534,6 +538,8 @@ data class LoadResult(
     val problems: List<String> = emptyList(),
     /** Spools now in that slot that go back to their previous place (not in the contract; shown when sent). */
     @SerialName("moved_back") val movedBack: List<MovedBack> = emptyList(),
+    /** A Bambu Lab load that has not happened yet: the spool is assigned to the slot and waits for it (phase 3, R83 3.5). */
+    @Serializable(with = LenientBool::class) val pending: Boolean = false,
 )
 
 @Serializable
@@ -559,6 +565,8 @@ data class UnloadResult(
     val slot: LoadSlot,
     val location: String = "",
     @SerialName("moved_back") val movedBack: List<MovedBack> = emptyList(),
+    /** A spool that was waiting for this slot is waiting no more (phase 3); false from an older Hub. */
+    @Serializable(with = LenientBool::class) @SerialName("waiting_ended") val waitingEnded: Boolean = false,
 )
 
 /**
@@ -861,3 +869,199 @@ data class ManualMapState(
 /** `POST .../manual-map/offer`: the server's sentence for the owner's answer. */
 @Serializable
 data class ManualOfferAnswer(val share: Boolean = false, val message: String = "")
+
+// ---- phase 3 (R83 section 10.1): clear a slot, the Hub at a glance, the owner's own catalog entries, spools --------
+// Read leniently: unknown keys are ignored and an absent or null optional part is its default, so an older or newer Hub
+// never crashes the app.
+
+/** `POST /api/printers/{id}/slots/{label}/clear`. A dry run only says what would happen ([dryRun] true). */
+data class ClearResult(
+    val slot: String,
+    /** The spool that was recorded in the slot (its view), or null when none was. */
+    val spool: JsonObject?,
+    /** Where that spool goes back to. */
+    val movedBack: String?,
+    /** A spool that was waiting for this slot is waiting no more. */
+    val waitingEnded: Boolean,
+    /** The slot's setting on the printer was cleared too (Klipper, printer online). */
+    val printerCleared: Boolean,
+    val dryRun: Boolean,
+)
+
+/** One row of Status: [state] is how the Hub rates it, [fix] the line that says what to do. */
+data class HubCheck(val group: String, val state: HubCheckState, val text: String, val fix: String?)
+
+/** A check's `state`: `ok`, `look` (needs a look), `note`, `off`; anything else reads as a note. */
+enum class HubCheckState {
+    Ok, Look, Note, Off;
+
+    companion object {
+        fun of(wire: String?): HubCheckState = when (wire) {
+            "ok" -> Ok
+            "look" -> Look
+            "off" -> Off
+            else -> Note
+        }
+    }
+}
+
+/** The Getting started counts of `GET /api/hub`. */
+data class GettingStarted(val done: Int, val total: Int, val hidden: Boolean, val finished: Boolean)
+
+data class HubFeature(val id: String, val name: String, val on: Boolean)
+
+/** A device by name only (no addresses); [kind] is `phone`, `pc`, `station`, `web`, `reader` or `builtin`. */
+data class HubDevice(
+    val name: String,
+    val kind: String,
+    val version: String?,
+    val lastSeen: String?,
+    val outOfDate: Boolean,
+    /** The device that asked. */
+    val thisOne: Boolean,
+)
+
+data class HubNewest(val version: String, val checkedAt: String?)
+
+data class HubCatalogFacts(val version: String?, val checkedAt: String?)
+
+data class HubBackupFacts(val lastAt: String?, val nightly: Boolean)
+
+/** The Label Reader: its engine, and whether a key is set (the key itself is never sent). */
+data class HubReaderFacts(val engine: String, val keySet: Boolean)
+
+/** `GET /api/hub`. The optional groups are null when the Hub left them out; [hubPage] and [spoolmanUrl] when unreachable. */
+data class HubAnswer(
+    val name: String,
+    val version: String,
+    val newest: HubNewest?,
+    val updateAvailable: Boolean,
+    val checks: List<HubCheck>,
+    val gettingStarted: GettingStarted?,
+    val features: List<HubFeature>,
+    val catalog: HubCatalogFacts?,
+    val backup: HubBackupFacts?,
+    val reader: HubReaderFacts?,
+    val devices: List<HubDevice>,
+    val recordsKept: Long?,
+    val spoolmanUrl: String?,
+    val hubPage: String?,
+)
+
+/** One of the owner's own Filament Catalog entries (`GET /api/library/local`). [added] is the Hub's time text. */
+data class LocalEntry(val id: String, val brand: String, val name: String, val material: String, val added: String?)
+
+/** One refused field of the catalog form: 400 `invalid_entry`, `problems: [{field, text}]`. */
+data class EntryProblem(val field: String, val text: String)
+
+/** `GET /api/spools` with its `spoolman_url` (absent when Spoolman cannot be reached from where the phone is). */
+data class SpoolsAnswer(val spools: List<JsonObject>, val spoolmanUrl: String?)
+
+/** Where a spool is loaded: the `loaded` field of the spool view. */
+data class SpoolLoaded(val printerId: String, val printer: String, val slot: String)
+
+/** The `filter` values of `GET /api/spools`; one at a time, none = every spool that is not empty. */
+object SpoolFilter {
+    const val SEALED = "sealed"
+    const val OPENED = "opened"
+    const val LOADED = "loaded"
+    const val LOW = "low"
+}
+
+object KitWire {
+    fun clear(root: JsonElement): ClearResult {
+        val o = root as? JsonObject ?: JsonObject(emptyMap())
+        return ClearResult(
+            slot = o.str("slot").orEmpty(),
+            spool = o["spool"] as? JsonObject,
+            movedBack = o.str("moved_back")?.takeIf { it.isNotBlank() },
+            waitingEnded = o.bool("waiting_ended") ?: false,
+            printerCleared = o.bool("printer_cleared") ?: false,
+            dryRun = o.bool("dry_run") ?: true,
+        )
+    }
+
+    fun hub(root: JsonElement): HubAnswer {
+        val o = root as? JsonObject ?: JsonObject(emptyMap())
+        return HubAnswer(
+            name = o.str("name").orEmpty(),
+            version = o.str("version").orEmpty(),
+            newest = (o["newest"] as? JsonObject)?.let { n ->
+                n.str("version")?.takeIf { it.isNotBlank() }?.let { HubNewest(it, n.str("checked_at")) }
+            },
+            updateAvailable = o.bool("update_available") ?: false,
+            checks = o.objects("checks").map { c ->
+                HubCheck(c.str("group").orEmpty(), HubCheckState.of(c.str("state")), c.str("text").orEmpty(), c.str("fix")?.takeIf { it.isNotBlank() })
+            },
+            gettingStarted = (o["getting_started"] as? JsonObject)?.let { g ->
+                GettingStarted(
+                    done = g.long("done")?.toInt() ?: 0,
+                    total = g.long("total")?.toInt() ?: 0,
+                    hidden = g.bool("hidden") ?: false,
+                    finished = g.bool("finished") ?: false,
+                )
+            },
+            features = o.objects("features").map { HubFeature(it.str("id").orEmpty(), it.str("name").orEmpty(), it.bool("on") ?: false) },
+            catalog = (o["catalog"] as? JsonObject)?.let { HubCatalogFacts(it.str("version"), it.str("checked_at")) },
+            backup = (o["backup"] as? JsonObject)?.let { HubBackupFacts(it.str("last_at"), it.bool("nightly") ?: false) },
+            reader = (o["reader"] as? JsonObject)?.let { HubReaderFacts(it.str("engine").orEmpty(), it.bool("key_set") ?: false) },
+            devices = o.objects("devices").map { d ->
+                HubDevice(
+                    name = d.str("name").orEmpty(),
+                    kind = d.str("kind").orEmpty(),
+                    version = d.str("version"),
+                    lastSeen = d.str("last_seen"),
+                    outOfDate = d.bool("out_of_date") ?: false,
+                    thisOne = d.bool("this") ?: false,
+                )
+            },
+            recordsKept = o.long("records_kept"),
+            spoolmanUrl = o.str("spoolman_url")?.takeIf { it.isNotBlank() },
+            hubPage = o.str("hub_page")?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    fun localEntries(root: JsonElement): List<LocalEntry> =
+        ((root as? JsonObject)?.get("entries") as? JsonArray).orEmpty().mapNotNull { localEntry(it) }
+
+    /** Null for an element without an id (it could not be removed). */
+    fun localEntry(element: JsonElement): LocalEntry? {
+        val o = element as? JsonObject ?: return null
+        val id = o.str("id")?.takeIf { it.isNotBlank() } ?: return null
+        return LocalEntry(id, o.str("brand").orEmpty(), o.str("name").orEmpty(), o.str("material").orEmpty(), o.str("added"))
+    }
+
+    /** The refused fields of a 400 `invalid_entry`; empty for any other error. */
+    fun problems(e: ApiError): List<EntryProblem> =
+        if (e.code != "invalid_entry") emptyList()
+        else (e.extra["problems"] as? JsonArray).orEmpty().mapNotNull { p ->
+            val o = p as? JsonObject ?: return@mapNotNull null
+            EntryProblem(o.str("field").orEmpty(), o.str("text").orEmpty())
+        }
+
+    fun spools(root: JsonElement): SpoolsAnswer {
+        val o = root as? JsonObject ?: JsonObject(emptyMap())
+        return SpoolsAnswer(
+            spools = (o["spools"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject },
+            spoolmanUrl = o.str("spoolman_url")?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    /** The spool view of a row of `GET /api/spools`: its `view` object when it has one, else the row itself. */
+    fun spoolView(row: JsonObject): JsonObject = row["view"] as? JsonObject ?: row
+
+    /** The view's `loaded` (null when the spool is in no slot or the Hub is older). */
+    fun spoolLoaded(row: JsonObject): SpoolLoaded? {
+        val l = spoolView(row)["loaded"] as? JsonObject ?: return null
+        val slot = l.str("slot")?.takeIf { it.isNotBlank() } ?: return null
+        return SpoolLoaded(l.str("printer_id").orEmpty(), l.str("printer").orEmpty(), slot)
+    }
+
+    /** The view's `low`: running low. */
+    fun spoolLow(row: JsonObject): Boolean = spoolView(row).bool("low") ?: false
+
+    private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
+    private fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.let { it.longOrNull ?: it.doubleOrNull?.toLong() }
+    private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
+    private fun JsonObject.objects(key: String): List<JsonObject> = (this[key] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+}
