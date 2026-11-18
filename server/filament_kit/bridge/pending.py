@@ -9,6 +9,7 @@ then keeps watching: when the AMS wipes the slot again (type empty) it is sent a
 Ends (one log line each: pending / applied / dropped):
 - TTL (15 min) after it was made;
 - a newer assignment for the same slot (loaded at once or waiting) replaces it;
+- the slot is unloaded or cleared (`unload`, `clear_slot`);
 - the slot loads with a spool whose own RFID identifies it (`rfid`): that is not overridden;
 - after it was applied: the filament is taken out, or another setting is on the slot (the user set it);
 - a refusal waiting does not change (no preset, unknown spool, write refused).
@@ -238,6 +239,35 @@ def load_or_wait(manager, sm, serial: str, label: str, spool_id, dry: bool, *, s
     store.add(manager, sm, serial, lab, spool_id, **kw)
     return {**plan, "dry_run": False, "pending": True, "confirmed": None,
             "message": f"waiting for the spool to load in slot {lab}"}
+
+
+def _end_for(serial: str, label: str, dry: bool, why: str, store: Store) -> bool:
+    """End the slot's assignment (a dry run: leave it); True when one was still waiting for its filament. An
+    applied one that is only watched the slot ends too, but is not "waiting"."""
+    waiting = label in store.waiting_for(serial)
+    if not dry:
+        store.cancel(serial, label, why)
+    return waiting
+
+
+def unload(manager, sm, serial: str, label: str, dry: bool, *, store: Store | None = None, **kw) -> dict:
+    """`loading.unload`, which also ends the slot's waiting assignment: the result gains `waiting_ended` (on a dry
+    run: the assignment would end)."""
+    store = store or STORE
+    lab = loading._label(serial, label)
+    r = loading.unload(manager, sm, serial, label, dry, **kw)
+    ended = _end_for(serial, lab, dry, "the slot was unloaded", store)
+    return {**r, "waiting_ended": ended}
+
+
+def clear_slot(manager, sm, serial: str, label: str, dry: bool, *, store: Store | None = None, **kw) -> dict:
+    """Clear slot `label` (`loading.clear`): a waiting assignment for it ends, then the recorded spool goes back
+    where it was. The answer of the kit route (`loading.clear_view`). A refused clear (slot in use) ends nothing."""
+    store = store or STORE
+    lab = loading._label(serial, label)
+    r = loading.clear(manager, sm, serial, label, dry, **kw)
+    ended = _end_for(serial, lab, dry, "the slot was cleared", store)
+    return loading.clear_view(r, ended)
 
 
 def annotate(serial: str, st: dict | None, store: Store | None = None) -> dict | None:

@@ -228,3 +228,44 @@ def test_dry_run_and_a_missing_preset_do_not_queue(rig, sm, store, monkeypatch):
     with pytest.raises(loading.NoPreset):
         assign(rig, sm, store)
     assert store.jobs() == {}
+
+
+def test_unload_ends_a_waiting_assignment_and_says_so(rig, sm, store):
+    m, _, _ = rig
+    sm.patch(f"spool/{sm.sp2['id']}", {"location": "Office H2D – AMS A3"})     # the spool the slot records
+    assign(rig, sm, store)
+    assert (SERIAL, "A3") in store.jobs()
+    d = pending.unload(m, sm, SERIAL, "A3", True, store=store)
+    assert d["waiting_ended"] is True and (SERIAL, "A3") in store.jobs()                  # a dry run ends nothing
+    r = pending.unload(m, sm, SERIAL, "A3", False, store=store)
+    assert r["waiting_ended"] is True and store.jobs() == {}
+    assert sm.get(f"spool/{sm.sp2['id']}")["location"] == "Sealed stock"
+    sm.patch(f"spool/{sm.sp2['id']}", {"location": "Office H2D – AMS A3"})
+    assert pending.unload(m, sm, SERIAL, "A3", False, store=store)["waiting_ended"] is False
+
+
+def test_clear_slot_ends_a_waiting_assignment_with_no_spool_recorded(rig, sm, store):
+    m, _, c = rig
+    assign(rig, sm, store)
+    r = pending.clear_slot(m, sm, SERIAL, "A3", False, store=store)
+    assert store.jobs() == {} and r["waiting_ended"] is True and r["spool"] is None and r["moved_back"] is None
+    assert r["slot"] == "A3" and r["printer_cleared"] is False and r["dry_run"] is False
+    assert sends(c) == []                                  # nothing is written to the printer
+
+
+def test_clear_slot_of_an_applied_assignment_stops_the_watch_but_is_not_waiting(rig, sm, store):
+    m, _, _ = rig
+    assign(rig, sm, store)
+    store.jobs()[(SERIAL, "A3")].applied = True
+    r = pending.clear_slot(m, sm, SERIAL, "A3", False, store=store)
+    assert r["waiting_ended"] is False and store.jobs() == {}
+
+
+def test_a_refused_clear_leaves_the_waiting_assignment(rig, sm, store, monkeypatch):
+    m, _, _ = rig
+    assign(rig, sm, store)
+    monkeypatch.setattr(loading, "in_use", lambda *a, **k: "A3 feeds the running print")
+    monkeypatch.setattr(loading, "_address", lambda *a, **k: (0, 2, "ams", None))
+    with pytest.raises(loading.SlotInUse):
+        pending.clear_slot(m, sm, SERIAL, "A3", False, store=store)
+    assert (SERIAL, "A3") in store.jobs()

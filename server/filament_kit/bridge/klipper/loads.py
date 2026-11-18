@@ -336,6 +336,48 @@ class LoadsMixin:
         return {"spool": spool, "slot": {"label": label, "location": loc}, "preset": None, "dry_run": bool(dry),
                 "moved_back": moved, "problems": problems, **({"command": {"gcode": gcode}} if dry and gcode else {})}
 
+    def clear(self, sm, pid: str, label: str, dry: bool, *, sealed_location: str = loading.SEALED) -> dict:
+        """Clear slot `label`: the Hub forgets its spool (it goes back as `unload` moves it) and, when the printer is
+        online and can do it, the slot's setting on the printer is cleared (`printer_cleared`). No spool recorded is
+        not an error; a printer that is offline or cannot clear leaves the slot's setting (a Spoolman-only clear).
+        The kit route's answer (`loading.clear_view`)."""
+        p = registry.load().get(pid)
+        if p is None:
+            raise loading.NotFound(f"no printer {pid}")
+        loc = self._location(pid, label)
+        c = self._conn(pid)
+        online = c is not None and c.state in ("connected", "unknown_model")
+        gcode = None
+        if online:
+            c, model, system, adapter, st, plabel = self._target(pid, label)
+            if (st.get("print_stats") or {}).get("state") == "printing":
+                raise loading.SlotInUse(f"{registry.display_name(p)} is printing; clear {label} once it is done")
+            try:
+                gcode = adapter.clear_gcode(plabel, model, system, self.hw(), st)
+            except NotSupported:
+                gcode = None
+            except UnknownSlot as e:
+                raise loading.NotFound(f"{label}: {e}") from e
+        cleared = False
+        with self._slot_lock(pid, label):
+            here = loading.occupants(sm, loc)
+            if gcode and not dry:
+                try:
+                    c.client.gcode(gcode)
+                    cleared = True
+                except MoonrakerError as e:
+                    log.warning("klipper %s: cannot clear %s on the printer (%s)", pid, label, e)
+            moved = loading.send_back(sm, here, sealed_location, dry) if here else []
+            if not dry:
+                self._seen.setdefault(pid, {})[label] = None
+                self.forget_spools()
+                self._publish(pid)
+            first = min(here, key=lambda s: s["id"]) if here else None
+            spool = (None if first is None else {**first, "location": moved[0]["location"]} if dry
+                     else sm.get(f"spool/{first['id']}"))
+        return loading.clear_view({"slot": {"label": label, "location": loc}, "spool": spool, "moved_back": moved,
+                                   "printer_cleared": cleared if not dry else bool(gcode), "dry_run": dry}, False)
+
     def _publish(self, pid: str) -> None:
         """Write the printer's slots to Moonraker lane_data when its setting says so (lanes.should_publish)."""
         p, c = registry.load().get(pid), self._conn(pid)

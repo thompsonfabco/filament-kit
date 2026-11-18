@@ -484,6 +484,34 @@ def test_unload_sends_back_and_clears(printer, sm, fil):
         fam.unload(sm, pid, "T0", False, sealed_location="Sealed stock")
 
 
+def test_clear_sends_back_clears_the_printer_and_shapes_the_answer(printer, sm, fil):
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 1")
+    assert fam.load(sm, pid, "T0", s["id"], False, sealed_location="Sealed stock")["confirmed"] is True
+    d = fam.clear(sm, pid, "T0", True, sealed_location="Sealed stock")
+    assert d["dry_run"] is True and loc_of(sm, s["id"]) == LOC and d["printer_cleared"] is True
+    r = fam.clear(sm, pid, "T0", False, sealed_location="Sealed stock")
+    assert fake.gcode_log[-1] == "CLEAR_ACTIVE_SPOOL"
+    assert (r["slot"], r["moved_back"], r["waiting_ended"], r["printer_cleared"]) == ("T0", "Shelf 1", False, True)
+    assert r["spool"]["id"] == s["id"] and loc_of(sm, s["id"]) == "Shelf 1"
+    again = fam.clear(sm, pid, "T0", False, sealed_location="Sealed stock")      # nothing recorded: not an error
+    assert again["spool"] is None and again["moved_back"] is None
+
+
+def test_clear_offline_is_spoolman_only(sm, fil):
+    pid = registry.add_klipper("Gone", "127.0.0.1", 9).serial
+    s = spool(sm, fil, "Gone – T0", prev="Shelf 4")
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        fam.wait_settled(pid, 5)
+        r = fam.clear(sm, pid, "T0", False, sealed_location="Sealed stock")
+        assert r["moved_back"] == "Shelf 4" and r["printer_cleared"] is False
+        assert loc_of(sm, s["id"]) == "Shelf 4"
+    finally:
+        fam.stop()
+
+
 def test_unload_of_a_slot_with_no_safe_gcode_is_a_not_found(printer, sm, fil, monkeypatch):
     from filament_kit.bridge.klipper.adapters.base import UnknownSlot
     fam, pid, fake = printer

@@ -1,7 +1,8 @@
 """The Printer Station reader API (firmware: reader/README.md, whose contract this file follows exactly).
 
 Routes of the web process, under `<public path>/reader` (nginx strips the public path), LAN only (`auth.lan_only`
-and a check here), every one with the reader token in `X-Auth-Token`:
+and a check here), every one with the reader token in `X-Auth-Token` (and, when it tells, its firmware build
+in `X-Reader-Build`: kept with when it last called, reader_tokens.SeenStore):
 
     GET  /reader/healthz                  200 "ok" (the reader keeps a fresh firmware update only if this answers,
                                           so an image built with a revoked token rolls itself back)
@@ -63,8 +64,8 @@ from starlette.routing import Route
 from .. import config, inventory, tags
 from ..spoolman import SpoolmanError
 from . import auth, slots
-from ..reader_tokens import (MAX_FILE, MAX_TOKENS, SHA256, TOKEN_ID, TokenFileError,  # noqa: F401
-                             TokenStore, _clean_name, _hash, parse_tokens, render_tokens, token_file)
+from ..reader_tokens import (MAX_FILE, MAX_TOKENS, SHA256, TOKEN_ID, SeenStore, TokenFileError,  # noqa: F401
+                             TokenStore, _clean_name, _hash, parse_build, parse_tokens, render_tokens, token_file)
 from .errors import Problem
 
 log = logging.getLogger(__name__)
@@ -346,10 +347,12 @@ def cap_slots(rows: list[dict], printer: str = "") -> list[dict]:
 
 
 class Reader:
-    def __init__(self, tools, sm, *, lan_cidrs=(), tokens: TokenStore | None = None, queue: LoadQueue | None = None):
+    def __init__(self, tools, sm, *, lan_cidrs=(), tokens: TokenStore | None = None, queue: LoadQueue | None = None,
+                 seen: SeenStore | None = None):
         self.tools, self.sm = tools, sm
         self.nets = auth.parse_lan(lan_cidrs)
         self.tokens = tokens if tokens is not None else TokenStore()
+        self.seen = seen if seen is not None else SeenStore()
         self.queue = queue if queue is not None else LoadQueue(tools.kit_bridge)
         if self.queue.kit_fn is None:
             self.queue.kit_fn = tools.kit_bridge
@@ -365,8 +368,10 @@ class Reader:
         async def wrapper(request: Request):
             if not self._lan(request):
                 return reply(403, "error", "home network only")
-            if not await run_in_threadpool(self.tokens.check, request.headers.get("x-auth-token")):
+            tid = await run_in_threadpool(self.tokens.identify, request.headers.get("x-auth-token"))
+            if tid is None:
                 return reply(401, "error", "unauthorized: run spoolwarden reader token")
+            await run_in_threadpool(self._seen, tid, request.headers.get("x-reader-build"))
             try:
                 return await fn(request)
             except slots.SlotError as e:
@@ -376,6 +381,14 @@ class Reader:
             except SpoolmanError as e:
                 return reply(502, "error", "Spoolman is not reachable" if e.status is None else str(e))
         return wrapper
+
+    def _seen(self, tid: str, build_header) -> None:
+        """Note this reader's call and the build it sent (`X-Reader-Build`; none or not a number: not known). Never
+        fails the call."""
+        try:
+            self.seen.record(tid, parse_build(build_header))
+        except Exception:  # noqa: BLE001 - a reader is served whether or not we could note it
+            log.exception("reader: cannot note a reader's call")
 
     def routes(self) -> list[Route]:
         return [Route("/reader/healthz", self._gated(self.healthz), methods=["GET"]),

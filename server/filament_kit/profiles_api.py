@@ -540,6 +540,42 @@ def restore_deleted(device, what: str) -> dict:
     return {"ok": True}
 
 
+def local_entries() -> dict:
+    """`GET /api/library/local`: {entries: [{id, brand, name, material, added}]}, the owner's own catalog entries."""
+    return library_mod.local_list()
+
+
+def local_materials() -> list[str]:
+    """The materials the catalog knows, for the form's Material choice (it also takes "Other" and a text)."""
+    return library_mod.load().materials()
+
+
+def add_local_form(body: dict, device, what: str) -> dict:
+    """`POST /api/library/local/form` (answer 201): {entry: {id, brand, name, material, added}}, the entry built
+    from the form's values by `library.build_entry`; slicer presets are rebuilt. ProfileError 400 `invalid_entry`
+    with `problems` [{field, text}] for values that are not an entry."""
+    def run() -> dict:
+        try:
+            row = library_mod.add_local_form(body)
+        except library_mod.FormError as e:
+            raise ProfileError(400, "invalid_entry", str(e), problems=e.problems) from None
+        except ValueError as e:          # add_local's own check, after the form's
+            raise ProfileError(400, "invalid_entry", str(e), problems=[{"field": "brand", "text": str(e)}]) from None
+        builds.request_rebuild("library local")
+        return row
+    return {"entry": _audit(what, device, run)}
+
+
+def remove_local(entry_id: str, device, what: str) -> dict:
+    """`DELETE /api/library/local/{id}`: {removed: true}, slicer presets are rebuilt. ProfileError 404 when unknown."""
+    def run() -> None:
+        if not library_mod.remove_local(entry_id):
+            raise ProfileError(404, "not_found", "no such entry of your own")
+        builds.request_rebuild("library local removed")
+    _audit(what, device, run)
+    return {"removed": True}
+
+
 def _phone_field(field: str, check, body: dict, *key_and_required):
     """`check(body, ...)` for a phone route, a refusal carrying the `field` the app shows it on."""
     try:
