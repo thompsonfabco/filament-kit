@@ -62,7 +62,7 @@ await sleep(300);
 out.hash = location.hash;
 """)
     assert page["toastsAtOpen"] == 0 and page["history"] == {"banners": 1, "toasts": 0}
-    assert page["toast"] == {"text": "Workshop X1 is paused", "action": "Open the printer", "count": 1} and page["once"] == 1
+    assert page["toast"] == {"text": "Workshop X1 is paused", "action": "Show", "count": 1} and page["once"] == 1
     assert page["banners"] == ["Workshop X1 is paused", "Filament ran out on Workshop X1"]
     assert page["href"] == ["#printers/00M00A000000001"] * 2 and page["hash"] == "#printers/00M00A000000001"
 

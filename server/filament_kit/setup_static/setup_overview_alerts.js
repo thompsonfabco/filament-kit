@@ -13,7 +13,7 @@ function lowRow(s) {
   return h("li", { class: "low__row", "data-spool": s.id },
     SW.swatch(lowHex(s.color)),
     h("div", { class: "low__text" },
-      h("span", { class: "low__name", textContent: s.filament || "" }),
+      h("span", { class: "low__name", textContent: s.filament || "", title: s.filament || "" }),
       h("span", { class: "low__meta muted" },
         h("span", { textContent: SW.t("running_low_spool", { id: s.id }) }),
         h("span", { class: "mono", textContent: SW.t("running_low_left", { grams: s.remaining_g }) }),

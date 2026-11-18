@@ -4413,7 +4413,7 @@
     <string name="storage_use_free">%1$s free</string>
     <string name="storage_use_where_backups">Open Backups</string>
     <!-- 1=count -->
-    <string name="storage_use_where_photos">Recently added keeps the last %1$d</string>
+    <string name="storage_use_where_photos">Recently added keeps the last %1$d.</string>
     <string name="storage_use_where_reader">Settings > Label Reader</string>
     <!-- 1=reason -->
     <string name="storage_use_unreadable">Could not read the storage use. %1$s</string>

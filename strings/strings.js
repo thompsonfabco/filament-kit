@@ -3100,7 +3100,7 @@ window.SW_TEXT = Object.freeze({
   "storage_use_title": "Storage use",
   "storage_use_free": "{free} free",
   "storage_use_where_backups": "Open Backups",
-  "storage_use_where_photos": "Recently added keeps the last {count}",
+  "storage_use_where_photos": "Recently added keeps the last {count}.",
   "storage_use_where_reader": "Settings > Label Reader",
   "storage_use_unreadable": "Could not read the storage use. {reason}",
 });

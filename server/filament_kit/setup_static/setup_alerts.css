@@ -4,7 +4,7 @@
 .low__row { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-top: var(--hairline) solid var(--border); min-width: 0; }
 .low__row:first-child { border-top: 0; }
 .low__text { flex: 1 1 0; min-width: 0; display: grid; gap: var(--s1); }
-.low__name { overflow-wrap: anywhere; font-weight: var(--fw-label); }
+.low__name { overflow-wrap: anywhere; font-weight: var(--fw-label); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 .low__meta { display: flex; flex-wrap: wrap; gap: 0 var(--s3); font-size: var(--fs-s); }
 .low__meta > span { overflow-wrap: anywhere; }
 .low__stock { flex: none; font-size: var(--fs-s); text-align: right; }

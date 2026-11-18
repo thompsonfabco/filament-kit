@@ -177,7 +177,7 @@ await until(() => $("dialog[open] .stuse__item"), "the parts after Try again");
 out.retry = $$("dialog[open] .stuse__item").length;
 """)
     assert page["skeleton"] == "Loading Storage use…" and page["hash"] == "#overview/storage-use" and page["title"] == "Storage use"
-    assert page["bar"] == {"label": "Hub state", "now": "91", "line": "9.0 GB free of 100 GB (91 % used)"}
+    assert page["bar"] == {"label": "The Hub's disk", "now": "91", "line": "9.0 GB free of 100 GB (91 % used)"}
     keep = page["keep"]
     assert page["items"] == [
         {"title": "Backups", "size": "4.2 GB", "where": "Open Backups", "link": "#settings/backups"},
@@ -240,6 +240,7 @@ out.page1 = pageW();
 $('[data-action="low-show-all"]').click();
 const d1 = await until(() => $("dialog[open] .low__row") && $("dialog[open]"), "the list");
 out.list = measure(d1, "list");
+out.titled = $$(".low__name", d1).length > 0 && $$(".low__name", d1).every((n) => n.title && n.title === n.textContent.trim());
 const b1 = d1.getBoundingClientRect();
 out.listBox = [Math.round(b1.left), Math.round(b1.right), Math.round(b1.top), Math.round(b1.bottom), innerWidth, innerHeight];
 $('[data-action="confirm"]', d1).click();
@@ -256,6 +257,7 @@ out.page2 = pageW();
     bad = [(c["label"], c["text"], c["w"], c["lines"]) for c in seen if c["lines"] > 3 or (c["w"] < 60 and c["lines"] > 1)]
     assert not bad, (look, width, "a text squeezed to a sliver or wrapped past three lines", bad)
     assert all(c["inside"] for c in seen), (look, width, [c for c in seen if not c["inside"]])
+    assert page["titled"], (look, width, "a clamped name carries its whole text as a title")
     assert page["row"]["inside"] and page["row"]["w"] >= 32, page["row"]
     assert page["page1"]["sw"] <= page["page1"]["cw"] and page["page2"]["sw"] <= page["page2"]["cw"], (look, width, "the page scrolls sideways")
     assert page["cardBox"][0] >= 0 and page["cardBox"][1] <= page["cardBox"][2] + 1
